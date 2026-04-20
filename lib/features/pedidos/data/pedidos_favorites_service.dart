@@ -1,10 +1,12 @@
 /// Pedidos Favorites Service
 /// =========================
 /// Hive-based local storage for product favorites
+library;
 
-import 'package:hive_flutter/hive_flutter.dart';
 import 'dart:convert';
+
 import 'package:crypto/crypto.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 class PedidosFavoritesService {
   static const _boxName = 'pedidos_favorites';
@@ -17,7 +19,7 @@ class PedidosFavoritesService {
   }
 
   static List<int> _generateEncryptionKey() {
-    final seed = 'gmp_app_pedidos_favorites_key_v1';
+    const seed = 'gmp_app_pedidos_favorites_key_v1';
     return sha256.convert(utf8.encode(seed)).bytes;
   }
 

@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../entregas/providers/entregas_provider.dart';
-import '../widgets/entrega_card.dart';
-import '../widgets/entregas_header.dart';
-import 'albaran_detail_page.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../../../core/widgets/shimmer_skeleton.dart';
-import '../../../../core/widgets/error_state_widget.dart';
-import '../../../../core/widgets/optimized_list.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/widgets/optimized_list.dart';
+import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
+import 'package:gmp_app_mobilidad/features/entregas/presentation/pages/albaran_detail_page.dart';
+import 'package:gmp_app_mobilidad/features/entregas/presentation/widgets/entrega_card.dart';
+import 'package:gmp_app_mobilidad/features/entregas/presentation/widgets/entregas_header.dart';
+import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 
 /// Página principal de entregas para el repartidor
 class EntregasPage extends ConsumerStatefulWidget {
@@ -52,7 +52,7 @@ class _EntregasPageState extends ConsumerState<EntregasPage>
             const EntregasHeader(),
 
             // Tabs
-            Container(
+            ColoredBox(
               color: AppTheme.surfaceColor,
               child: TabBar(
                 controller: _tabController,
@@ -99,7 +99,7 @@ class _EntregasPageState extends ConsumerState<EntregasPage>
               child: Builder(
                 builder: (context) {
                   if (state.isLoading) {
-                    return const SkeletonList(itemCount: 5, itemHeight: 100);
+                    return const SkeletonList(itemHeight: 100);
                   }
 
                   if (state.error != null) {

@@ -1,25 +1,23 @@
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../data/pedidos_service.dart';
-import '../utils/pedidos_formatters.dart';
-import 'promotion_detail_page.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/promotion_detail_page.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 
 class PromotionsListPage extends StatefulWidget {
+
+  const PromotionsListPage({
+    required this.promotions, required this.onProductTap, super.key,
+    this.onAddGift,
+    this.hasStockResolver,
+    this.qtyInOrderResolver,
+  });
   final List<PromotionItem> promotions;
   final Future<void> Function(String code, String name) onProductTap;
   final Future<String?> Function(String code, String name, double qty)?
       onAddGift;
   final bool? Function(String code)? hasStockResolver;
   final double Function(String code)? qtyInOrderResolver;
-
-  const PromotionsListPage({
-    Key? key,
-    required this.promotions,
-    required this.onProductTap,
-    this.onAddGift,
-    this.hasStockResolver,
-    this.qtyInOrderResolver,
-  }) : super(key: key);
 
   @override
   State<PromotionsListPage> createState() => _PromotionsListPageState();
@@ -301,7 +299,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                     color: Colors.white.withOpacity(0.04),
                     borderRadius: BorderRadius.circular(999),
                     border: Border.all(
-                        color: AppTheme.borderColor.withOpacity(0.5)),
+                        color: AppTheme.borderColor.withOpacity(0.5),),
                   ),
                   child: const Text(
                     'Ver detalle',
@@ -352,11 +350,11 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                   if (group.items.length > 8)
                     Chip(
                       backgroundColor: AppTheme.darkSurface,
-                      side: BorderSide(color: AppTheme.borderColor),
+                      side: const BorderSide(color: AppTheme.borderColor),
                       label: Text(
                         '+${group.items.length - 8} más',
                         style: const TextStyle(
-                            color: Colors.white54, fontSize: 11),
+                            color: Colors.white54, fontSize: 11,),
                       ),
                     ),
                 ],
@@ -404,7 +402,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
     final q = _search.toLowerCase();
     if (group.promoDesc.toLowerCase().contains(q)) return true;
     if (group.items.any((i) =>
-        i.code.toLowerCase().contains(q) || i.name.toLowerCase().contains(q))) {
+        i.code.toLowerCase().contains(q) || i.name.toLowerCase().contains(q),)) {
       return true;
     }
     return false;
@@ -412,13 +410,13 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
 }
 
 class _PromotionGroup {
-  final String key;
-  final List<PromotionItem> items;
 
   _PromotionGroup({
     required this.key,
     required this.items,
   });
+  final String key;
+  final List<PromotionItem> items;
 
   String get promoType => items.first.promoType;
   String get promoCode => items.first.promoCode;

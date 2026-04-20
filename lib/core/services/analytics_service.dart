@@ -1,13 +1,13 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import '../api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 
 /// Analytics service for tracking user actions during closed testing.
 /// Sends data to backend server (no Firebase dependency).
 class AnalyticsService {
-  static final AnalyticsService _instance = AnalyticsService._internal();
   factory AnalyticsService() => _instance;
   AnalyticsService._internal();
+  static final AnalyticsService _instance = AnalyticsService._internal();
 
   String? _userId;
   String? _userEmail;

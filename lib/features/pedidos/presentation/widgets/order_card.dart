@@ -1,15 +1,25 @@
 /// Order Card
 /// ==========
 /// Premium card showing order info with gradient by status, swipe actions.
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../data/pedidos_service.dart';
-import '../utils/pedidos_formatters.dart';
-import 'order_status_badge.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_status_badge.dart';
 
 class OrderCard extends StatelessWidget {
+
+  const OrderCard({
+    required this.order, required this.onTap, super.key,
+    this.onDuplicate,
+    this.onCancel,
+    this.onViewAlbaran,
+    this.onResend,
+    this.onDelete,
+  });
   final OrderSummary order;
   final VoidCallback onTap;
   final VoidCallback? onDuplicate;
@@ -17,17 +27,6 @@ class OrderCard extends StatelessWidget {
   final VoidCallback? onViewAlbaran;
   final VoidCallback? onResend;
   final VoidCallback? onDelete;
-
-  const OrderCard({
-    Key? key,
-    required this.order,
-    required this.onTap,
-    this.onDuplicate,
-    this.onCancel,
-    this.onViewAlbaran,
-    this.onResend,
-    this.onDelete,
-  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -68,7 +67,7 @@ class OrderCard extends StatelessWidget {
                     OrderStatusBadge(estado: order.estado, fontSize: 10),
                     const Spacer(),
                     Icon(Icons.calendar_today_outlined,
-                        size: 12, color: Colors.white.withOpacity(0.4)),
+                        size: 12, color: Colors.white.withOpacity(0.4),),
                     const SizedBox(width: 4),
                     Text(
                       order.fechaFormatted.isNotEmpty

@@ -1,21 +1,18 @@
 /// SIGNATURE MODAL WIDGET
 /// Pantalla completa para captura de firma digital del cliente
 /// Utiliza el paquete 'signature' para canvas-based drawing
+library;
 
 import 'dart:convert';
-import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:signature/signature.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
 
 /// Modal de firma digital para captura de firma del cliente
 /// Retorna la firma como base64 string o null si se cancela
 class SignatureModal extends StatefulWidget {
-  final String title;
-  final String subtitle;
-  final VoidCallback? onCancel;
-  final Function(String base64Signature)? onConfirm;
 
   const SignatureModal({
     super.key,
@@ -24,6 +21,10 @@ class SignatureModal extends StatefulWidget {
     this.onCancel,
     this.onConfirm,
   });
+  final String title;
+  final String subtitle;
+  final VoidCallback? onCancel;
+  final Function(String base64Signature)? onConfirm;
 
   /// Muestra el modal y retorna la firma como base64 o null
   static Future<String?> show(BuildContext context, {
@@ -50,8 +51,6 @@ class _SignatureModalState extends State<SignatureModal> {
   void initState() {
     super.initState();
     _controller = SignatureController(
-      penStrokeWidth: 3,
-      penColor: Colors.black,
       exportBackgroundColor: Colors.white,
     );
     
@@ -83,10 +82,10 @@ class _SignatureModalState extends State<SignatureModal> {
 
     try {
       // Exportar firma como PNG bytes
-      final Uint8List? signatureBytes = await _controller.toPngBytes();
+      final signatureBytes = await _controller.toPngBytes();
       if (signatureBytes != null) {
         // Convertir a base64
-        final String base64Signature = base64Encode(signatureBytes);
+        final base64Signature = base64Encode(signatureBytes);
         
         if (widget.onConfirm != null) {
           widget.onConfirm!(base64Signature);
@@ -116,7 +115,7 @@ class _SignatureModalState extends State<SignatureModal> {
   Widget build(BuildContext context) {
     return Container(
       // Responsive: use more height in landscape where screen is shorter
-      height: Responsive.modalHeight(context, portraitFraction: 0.85, landscapeFraction: 0.95),
+      height: Responsive.modalHeight(context),
       decoration: const BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -260,7 +259,7 @@ class _SignatureModalState extends State<SignatureModal> {
                   child: OutlinedButton.icon(
                     onPressed: () {
                       widget.onCancel?.call();
-                      Navigator.of(context).pop(null);
+                      Navigator.of(context).pop();
                     },
                     icon: const Icon(Icons.close),
                     label: const Text('Cancelar'),

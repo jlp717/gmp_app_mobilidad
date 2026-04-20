@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Provider para gestionar el tema de la aplicación
 /// Permite cambiar entre tema claro y oscuro
 class ThemeProvider extends ChangeNotifier {
-  bool _isDarkMode = false;
-
-  bool get isDarkMode => _isDarkMode;
 
   ThemeProvider() {
     _loadThemeFromPrefs();
   }
+  bool _isDarkMode = false;
+
+  bool get isDarkMode => _isDarkMode;
 
   /// Carga la preferencia de tema desde SharedPreferences
   Future<void> _loadThemeFromPrefs() async {
@@ -35,3 +36,8 @@ class ThemeProvider extends ChangeNotifier {
     notifyListeners();
   }
 }
+
+/// Riverpod provider for ThemeProvider
+final themeProvider = ChangeNotifierProvider<ThemeProvider>((ref) {
+  return ThemeProvider();
+});

@@ -1,24 +1,13 @@
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 /// Swipeable action card for client/delivery items
 /// Left swipe: Mark as collected (green action)
 /// Right swipe: Add note (blue action)
 class SwipeActionCard extends StatefulWidget {
-  final Widget child;
-  final VoidCallback? onSwipeLeft; // Mark collected
-  final VoidCallback? onSwipeRight; // Add note
-  final String leftLabel;
-  final String rightLabel;
-  final IconData leftIcon;
-  final IconData rightIcon;
-  final Color leftColor;
-  final Color rightColor;
-  final bool enabled;
 
   const SwipeActionCard({
-    super.key,
-    required this.child,
+    required this.child, super.key,
     this.onSwipeLeft,
     this.onSwipeRight,
     this.leftLabel = 'Cobrado',
@@ -29,6 +18,16 @@ class SwipeActionCard extends StatefulWidget {
     this.rightColor = AppTheme.neonBlue,
     this.enabled = true,
   });
+  final Widget child;
+  final VoidCallback? onSwipeLeft; // Mark collected
+  final VoidCallback? onSwipeRight; // Add note
+  final String leftLabel;
+  final String rightLabel;
+  final IconData leftIcon;
+  final IconData rightIcon;
+  final Color leftColor;
+  final Color rightColor;
+  final bool enabled;
 
   @override
   State<SwipeActionCard> createState() => _SwipeActionCardState();
@@ -165,18 +164,17 @@ class _SwipeActionCardState extends State<SwipeActionCard>
 
 /// Mini bar chart for weekly visualization
 class WeeklyMiniChart extends StatelessWidget {
-  final List<int> dailyCounts;
-  final int maxValue;
-  final int selectedIndex;
-  final Function(int)? onDayTap;
 
   const WeeklyMiniChart({
-    super.key,
-    required this.dailyCounts,
+    required this.dailyCounts, super.key,
     this.maxValue = 0,
     this.selectedIndex = -1,
     this.onDayTap,
   });
+  final List<int> dailyCounts;
+  final int maxValue;
+  final int selectedIndex;
+  final Function(int)? onDayTap;
 
   @override
   Widget build(BuildContext context) {

@@ -1,8 +1,9 @@
 /// Objectives Service - centralizes objectives-related API calls
 /// Used by objectives_page
+library;
 
-import '../../../core/api/api_client.dart';
-import '../../../core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 
 class ObjectivesService {
   /// Fetch list of distinct populations/cities
@@ -16,7 +17,7 @@ class ObjectivesService {
     required String vendedorCodes,
     required List<int> years,
   }) async {
-    return await ApiClient.get(
+    return ApiClient.get(
       ApiConfig.objectivesEvolution,
       queryParameters: {
         'vendedorCodes': vendedorCodes,
@@ -53,7 +54,7 @@ class ObjectivesService {
       params['limit'] = limit.toString();
     }
 
-    return await ApiClient.get(
+    return ApiClient.get(
       ApiConfig.objectivesByClient,
       queryParameters: params,
     );

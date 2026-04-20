@@ -1,5 +1,5 @@
 import 'dart:math';
-import 'dart:collection';
+
 import 'package:collection/collection.dart';
 
 /// **HNSW (Hierarchical Navigable Small World) Vector Search**
@@ -13,6 +13,12 @@ import 'package:collection/collection.dart';
 /// - Múltiples capas de navegación (skip-list style)
 /// - Distancia coseno para similitud semántica
 class HNSWVectorStore {
+  
+  HNSWVectorStore({
+    this.maxConnections = 16,
+    this.maxLayers = 8,
+    this.expansionFactor = 200.0,
+  });
   final int maxConnections;
   final int maxLayers;
   final double expansionFactor;
@@ -23,12 +29,6 @@ class HNSWVectorStore {
   
   /// Embeddings cache para acceso rápido
   final Map<String, List<double>> _embeddingCache = {};
-  
-  HNSWVectorStore({
-    this.maxConnections = 16,
-    this.maxLayers = 8,
-    this.expansionFactor = 200.0,
-  });
   
   /// Inserta un vector con su identificador y metadata
   void insert({
@@ -52,7 +52,7 @@ class HNSWVectorStore {
     }
 
     var currentEntryPoint = _entryPoint!;
-    var currentLayer = currentEntryPoint.layer;
+    final currentLayer = currentEntryPoint.layer;
     final newLayer = _getRandomLayer();
     newNode.layer = newLayer;
 
@@ -148,7 +148,7 @@ class HNSWVectorStore {
               id: node.id,
               distance: _cosineDistance(queryVector, node.vector),
               metadata: node.metadata,
-            ))
+            ),)
         .where((result) => threshold == null || result.distance >= threshold)
         .toList();
     
@@ -281,11 +281,6 @@ class HNSWVectorStore {
 
 /// Nodo en el grafo HNSW
 class HNSWNode {
-  final String id;
-  final List<double> vector;
-  final Map<String, dynamic>? metadata;
-  int layer = 0;
-  final List<List<String>> links;
   
   HNSWNode({
     required this.id,
@@ -293,19 +288,24 @@ class HNSWNode {
     this.metadata,
     int maxLayers = 8,
   }) : links = List.generate(maxLayers, (_) => []);
+  final String id;
+  final List<double> vector;
+  final Map<String, dynamic>? metadata;
+  int layer = 0;
+  final List<List<String>> links;
 }
 
 /// Resultado de búsqueda vectorial
 class VectorSearchResult {
-  final String id;
-  final double distance; // 0-1, donde 1 es idéntico
-  final Map<String, dynamic>? metadata;
   
   VectorSearchResult({
     required this.id,
     required this.distance,
     this.metadata,
   });
+  final String id;
+  final double distance; // 0-1, donde 1 es idéntico
+  final Map<String, dynamic>? metadata;
   
   @override
   String toString() => 'VectorSearchResult(id: $id, distance: ${distance.toStringAsFixed(3)})';

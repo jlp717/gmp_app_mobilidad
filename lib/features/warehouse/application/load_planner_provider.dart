@@ -3,8 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../data/warehouse_data_service.dart';
-import '../domain/models/load_planner_models.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
 
 /// Riverpod provider for LoadPlannerProvider.
 final loadPlannerProvider =
@@ -73,7 +73,7 @@ class LoadPlannerProvider extends ChangeNotifier {
   List<ClientSummary> get clientSummaries {
     final map = <String, _ClientAcc>{};
     for (final b in _placedBoxes) {
-      final acc = map.putIfAbsent(b.clientCode, () => _ClientAcc());
+      final acc = map.putIfAbsent(b.clientCode, _ClientAcc.new);
       acc.count++;
       acc.weight += b.weight;
       acc.volume += b.volume;
@@ -84,7 +84,7 @@ class LoadPlannerProvider extends ChangeNotifier {
               boxCount: e.value.count,
               totalWeight: e.value.weight,
               totalVolume: e.value.volume,
-            ))
+            ),)
         .toList()
       ..sort((a, b) => b.totalWeight.compareTo(a.totalWeight));
   }
@@ -175,7 +175,7 @@ class LoadPlannerProvider extends ChangeNotifier {
               'w': freshBox.w,
               'd': freshBox.d,
               'h': freshBox.h,
-            }));
+            }),);
           }
         }
 
@@ -193,7 +193,7 @@ class LoadPlannerProvider extends ChangeNotifier {
                   'w': b.w,
                   'd': b.d,
                   'h': b.h,
-                }))
+                }),)
             .toList();
 
         _recalculateMetrics();
@@ -253,7 +253,7 @@ class LoadPlannerProvider extends ChangeNotifier {
               w: b.w,
               d: b.d,
               h: b.h,
-            ))
+            ),)
         .toList();
 
     _overflowBoxes = result.overflow
@@ -270,7 +270,7 @@ class LoadPlannerProvider extends ChangeNotifier {
               w: b.w,
               d: b.d,
               h: b.h,
-            ))
+            ),)
         .toList();
 
     _metrics = PlannerMetrics.fromJson({
@@ -495,8 +495,8 @@ class LoadPlannerProvider extends ChangeNotifier {
       final id = (s['id'] as num?)?.toInt();
       if (id != null) idToPos[id] = s;
     }
-    bool changed = false;
-    for (int i = 0; i < _placedBoxes.length; i++) {
+    var changed = false;
+    for (var i = 0; i < _placedBoxes.length; i++) {
       final pos = idToPos[_placedBoxes[i].id];
       if (pos == null) continue;
       final newZ = (pos['z'] as num?)?.toDouble();
@@ -531,7 +531,7 @@ class LoadPlannerProvider extends ChangeNotifier {
     }
 
     // Update placed box positions
-    for (int i = 0; i < _placedBoxes.length; i++) {
+    for (var i = 0; i < _placedBoxes.length; i++) {
       final pos = idToNew[_placedBoxes[i].id];
       if (pos != null) {
         _placedBoxes[i] = _placedBoxes[i].copyWith(
@@ -733,7 +733,7 @@ class LoadPlannerProvider extends ChangeNotifier {
 
   bool _hasCollision(int boxIndex) {
     final box = _placedBoxes[boxIndex];
-    for (int i = 0; i < _placedBoxes.length; i++) {
+    for (var i = 0; i < _placedBoxes.length; i++) {
       if (i == boxIndex) continue;
       if (_boxesOverlap(box, _placedBoxes[i])) return true;
     }
@@ -771,7 +771,7 @@ class LoadPlannerProvider extends ChangeNotifier {
   void _scheduleAutoSave() {
     _autoSaveTimer?.cancel();
     _saveState = SaveState.unsaved;
-    _autoSaveTimer = Timer(const Duration(seconds: 2), () => saveLayout());
+    _autoSaveTimer = Timer(const Duration(seconds: 2), saveLayout);
   }
 
   Future<void> saveLayout() async {
@@ -817,14 +817,14 @@ class LoadPlannerProvider extends ChangeNotifier {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class _Snapshot {
-  final List<LoadBox> placed;
-  final List<LoadBox> overflow;
-  final Set<int> excluded;
   _Snapshot({
     required this.placed,
     required this.overflow,
     required this.excluded,
   });
+  final List<LoadBox> placed;
+  final List<LoadBox> overflow;
+  final Set<int> excluded;
 }
 
 class _ClientAcc {

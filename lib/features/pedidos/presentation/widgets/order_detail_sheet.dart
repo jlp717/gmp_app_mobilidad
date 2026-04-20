@@ -1,16 +1,17 @@
 /// Order Detail Sheet
 /// ==================
 /// Bottom sheet showing full order details: header info, lines, totals, and actions
+library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../data/pedidos_service.dart';
-import '../../providers/pedidos_provider.dart';
-import 'order_pdf_generator.dart';
-import '../utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_pdf_generator.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
 class OrderDetailSheet {
   /// Show order detail as a draggable bottom sheet
@@ -40,13 +41,13 @@ class OrderDetailSheet {
 }
 
 class _OrderDetailBody extends ConsumerStatefulWidget {
-  final int orderId;
-  final ScrollController scrollController;
 
   const _OrderDetailBody({
     required this.orderId,
     required this.scrollController,
   });
+  final int orderId;
+  final ScrollController scrollController;
 
   @override
   ConsumerState<_OrderDetailBody> createState() => _OrderDetailBodyState();
@@ -72,17 +73,19 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     });
     try {
       final detail = await PedidosService.getOrderDetail(widget.orderId);
-      if (mounted)
+      if (mounted) {
         setState(() {
           _detail = detail;
           _isLoading = false;
         });
+      }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = e.toString();
           _isLoading = false;
         });
+      }
     }
   }
 
@@ -111,7 +114,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Si, anular',
-                style: TextStyle(color: AppTheme.error)),
+                style: TextStyle(color: AppTheme.error),),
           ),
         ],
       ),
@@ -190,7 +193,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Center(
-          child: CircularProgressIndicator(color: AppTheme.neonBlue));
+          child: CircularProgressIndicator(color: AppTheme.neonBlue),);
     }
 
     if (_error != null) {
@@ -204,13 +207,13 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                 style: TextStyle(
                     color: Colors.white,
                     fontSize:
-                        Responsive.fontSize(context, small: 14, large: 16))),
+                        Responsive.fontSize(context, small: 14, large: 16),),),
             const SizedBox(height: 8),
             TextButton.icon(
               onPressed: _loadDetail,
               icon: const Icon(Icons.refresh, color: AppTheme.neonBlue),
               label: const Text('Reintentar',
-                  style: TextStyle(color: AppTheme.neonBlue)),
+                  style: TextStyle(color: AppTheme.neonBlue),),
             ),
           ],
         ),
@@ -230,7 +233,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-                color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+                color: Colors.white24, borderRadius: BorderRadius.circular(2),),
           ),
         ),
         // Header
@@ -241,7 +244,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           child: detail.lines.isEmpty
               ? const Center(
                   child: Text('Sin lineas',
-                      style: TextStyle(color: Colors.white38)))
+                      style: TextStyle(color: Colors.white38),),)
               : ListView.builder(
                   controller: widget.scrollController,
                   padding:
@@ -292,28 +295,28 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                   style: TextStyle(
                       color: statusColor,
                       fontSize: 12,
-                      fontWeight: FontWeight.w600),
+                      fontWeight: FontWeight.w600,),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
           _buildInfoRow(Icons.storefront_outlined,
-              '${header.clienteName} (${header.clienteCode})'),
+              '${header.clienteName} (${header.clienteCode})',),
           const SizedBox(height: 4),
           Row(
             children: [
               Expanded(
                   child: _buildInfoRow(
-                      Icons.calendar_today_outlined, header.fecha)),
+                      Icons.calendar_today_outlined, header.fecha,),),
               _buildInfoRow(
-                  Icons.sell_outlined, _saleTypeLabel(header.tipoVenta)),
+                  Icons.sell_outlined, _saleTypeLabel(header.tipoVenta),),
             ],
           ),
           if (header.vendedorCode.isNotEmpty) ...[
             const SizedBox(height: 4),
             _buildInfoRow(
-                Icons.badge_outlined, 'Vendedor: ${header.vendedorCode}'),
+                Icons.badge_outlined, 'Vendedor: ${header.vendedorCode}',),
           ],
         ],
       ),
@@ -331,7 +334,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             text,
             style: TextStyle(
                 color: Colors.white70,
-                fontSize: Responsive.fontSize(context, small: 12, large: 14)),
+                fontSize: Responsive.fontSize(context, small: 12, large: 14),),
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -373,7 +376,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                       style: const TextStyle(
                           color: AppTheme.neonBlue,
                           fontSize: 11,
-                          fontWeight: FontWeight.bold),
+                          fontWeight: FontWeight.bold,),
                     ),
                   ),
                 ),
@@ -397,16 +400,16 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
               line.codigoArticulo,
               style: TextStyle(
                   color: Colors.white54,
-                  fontSize: Responsive.fontSize(context, small: 11, large: 12)),
+                  fontSize: Responsive.fontSize(context, small: 11, large: 12),),
             ),
             const SizedBox(height: 8),
             Row(
               children: [
                 _buildChip('${line.cantidadEnvases.toStringAsFixed(0)} c',
-                    Icons.all_inbox_outlined),
+                    Icons.all_inbox_outlined,),
                 const SizedBox(width: 6),
                 _buildChip('${line.cantidadUnidades.toStringAsFixed(0)} u',
-                    Icons.widgets_outlined),
+                    Icons.widgets_outlined,),
                 const SizedBox(width: 6),
                 _buildChip(line.unidadMedida, Icons.straighten),
                 const Spacer(),
@@ -475,7 +478,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           Icon(icon, color: Colors.white54, size: 12),
           const SizedBox(width: 3),
           Text(label,
-              style: const TextStyle(color: Colors.white54, fontSize: 11)),
+              style: const TextStyle(color: Colors.white54, fontSize: 11),),
         ],
       ),
     );
@@ -518,11 +521,11 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildTotalItem(
-                  'Lineas', '${detail.lines.length}', AppTheme.neonBlue),
+                  'Lineas', '${detail.lines.length}', AppTheme.neonBlue,),
               _buildTotalItem(
-                  'Cajas', totalEnvases.toStringAsFixed(0), Colors.white70),
+                  'Cajas', totalEnvases.toStringAsFixed(0), Colors.white70,),
               _buildTotalItem(
-                  'Uds', totalUnidades.toStringAsFixed(0), Colors.white70),
+                  'Uds', totalUnidades.toStringAsFixed(0), Colors.white70,),
             ],
           ),
           const SizedBox(height: 10),
@@ -534,10 +537,10 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
               _buildTotalItem(
                   'Total',
                   PedidosFormatters.money(
-                      header.total > 0 ? header.total : totalImporte),
-                  AppTheme.neonGreen),
+                      header.total > 0 ? header.total : totalImporte,),
+                  AppTheme.neonGreen,),
               _buildTotalItem('Margen', PedidosFormatters.money(totalMargen),
-                  Colors.white70),
+                  Colors.white70,),
               _buildTotalItem(
                   '% Margen',
                   '${pctMargen.toStringAsFixed(1)}%',
@@ -545,7 +548,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                       ? AppTheme.neonGreen
                       : pctMargen >= 5
                           ? Colors.orange
-                          : AppTheme.error),
+                          : AppTheme.error,),
             ],
           ),
         ],
@@ -558,12 +561,12 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(label,
-            style: const TextStyle(color: Colors.white54, fontSize: 11)),
+            style: const TextStyle(color: Colors.white54, fontSize: 11),),
         const SizedBox(height: 2),
         Text(
           value,
           style: TextStyle(
-              color: color, fontWeight: FontWeight.bold, fontSize: 16),
+              color: color, fontWeight: FontWeight.bold, fontSize: 16,),
         ),
       ],
     );
@@ -612,14 +615,14 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white))
+                            strokeWidth: 2, color: Colors.white,),)
                     : const Icon(Icons.check_circle_outline),
                 label: Text(_isConfirming ? 'Confirmando...' : 'Confirmar'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.neonGreen,
                   foregroundColor: Colors.black,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   elevation: 0,
                 ),
@@ -637,14 +640,14 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: AppTheme.error))
+                            strokeWidth: 2, color: AppTheme.error,),)
                     : const Icon(Icons.cancel_outlined),
                 label: Text(_isCancelling ? 'Anulando...' : 'Anular'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppTheme.error,
                   side: const BorderSide(color: AppTheme.error),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),

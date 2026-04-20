@@ -1,8 +1,9 @@
 /// Clients Service - centralizes client-related API calls
 /// Used by client_detail_page and simple_client_list_page
+library;
 
-import '../../../core/api/api_client.dart';
-import '../../../core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 
 class ClientsService {
   /// Fetch client list with optional search and vendor filter
@@ -39,7 +40,7 @@ class ClientsService {
     required String clientCode,
     required String vendedorCodes,
   }) async {
-    return await ApiClient.get(
+    return ApiClient.get(
       '${ApiConfig.clientDetail}/$clientCode',
       queryParameters: {'vendedorCodes': vendedorCodes},
     );
@@ -84,7 +85,7 @@ class ClientsService {
     required String clientCode,
     required String vendedorCodes,
   }) async {
-    return await ApiClient.get(
+    return ApiClient.get(
       '/sales-history/summary',
       queryParameters: {
         'clientCode': clientCode,

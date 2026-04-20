@@ -10,34 +10,27 @@
 /// 
 /// @agent Flutter Riverpod - AsyncNotifier + code generation ready
 /// @agent Security - Secure token storage, no plaintext credentials
+library;
+
+import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/models/user_model.dart';
+import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/services/cache_prewarmer.dart';
+import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:convert';
-import 'dart:async';
-
-import '../../core/api/api_client.dart';
-import '../../core/api/api_config.dart';
-import '../../core/models/user_model.dart';
-import '../../core/cache/cache_service.dart';
-import '../../core/services/cache_prewarmer.dart';
-import '../../core/services/secure_storage.dart';
-import 'filter_provider.dart';
 
 // ============================================================
 // STATE
 // ============================================================
 
 class AuthState {
-  final UserModel? user;
-  final List<String> vendedorCodes;
-  final bool isLoading;
-  final String? error;
-  final bool isInitialized;
-  final bool updateAvailable;
-  final bool isMandatoryUpdate;
-  final String updateMessage;
 
   const AuthState({
     this.user,
@@ -49,6 +42,14 @@ class AuthState {
     this.isMandatoryUpdate = false,
     this.updateMessage = '',
   });
+  final UserModel? user;
+  final List<String> vendedorCodes;
+  final bool isLoading;
+  final String? error;
+  final bool isInitialized;
+  final bool updateAvailable;
+  final bool isMandatoryUpdate;
+  final String updateMessage;
 
   bool get isAuthenticated => user != null;
   bool get isDirector => user?.isDirector ?? false;
@@ -165,8 +166,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
     try {
       if (username.isEmpty || password.isEmpty) {
-        state = AsyncValue.data(
-          const AuthState(isInitialized: true, error: 'Usuario y contraseña requeridos'),
+        state = const AsyncValue.data(
+          AuthState(isInitialized: true, error: 'Usuario y contraseña requeridos'),
         );
         return false;
       }
@@ -177,8 +178,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       );
 
       if (response == null) {
-        state = AsyncValue.data(
-          const AuthState(
+        state = const AsyncValue.data(
+          AuthState(
             isInitialized: true,
             error: 'No se pudo conectar con el servidor',
           ),
@@ -204,8 +205,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         final token = response['token'] as String?;
         
         if (token == null || token.isEmpty) {
-          state = AsyncValue.data(
-            const AuthState(
+          state = const AsyncValue.data(
+            AuthState(
               isInitialized: true,
               error: 'Respuesta inválida del servidor: token faltante',
             ),
@@ -275,8 +276,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       );
 
       if (response == null || response['user'] == null) {
-        state = AsyncValue.data(
-          const AuthState(isInitialized: true, error: 'Credenciales inválidas'),
+        state = const AsyncValue.data(
+          AuthState(isInitialized: true, error: 'Credenciales inválidas'),
         );
         return false;
       }
@@ -284,8 +285,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       final user = UserModel.fromJson(response['user'] as Map<String, dynamic>);
       final token = response['token'] as String?;
       if (token == null) {
-        state = AsyncValue.data(
-          const AuthState(isInitialized: true, error: 'Token faltante'),
+        state = const AsyncValue.data(
+          AuthState(isInitialized: true, error: 'Token faltante'),
         );
         return false;
       }
@@ -359,7 +360,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     final currentState = state.value;
     if (currentState?.user == null) return false;
 
-    state = AsyncValue.data(currentState!.copyWith(isLoading: true, error: null));
+    state = AsyncValue.data(currentState!.copyWith(isLoading: true));
 
     try {
       final response = await ApiClient.post(
@@ -417,7 +418,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   void clearError() {
     final currentState = state.value;
     if (currentState != null) {
-      state = AsyncValue.data(currentState.copyWith(error: null));
+      state = AsyncValue.data(currentState.copyWith());
     }
   }
 }

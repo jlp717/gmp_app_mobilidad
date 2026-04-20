@@ -2,33 +2,33 @@
 /// ====================
 /// Bottom sheet showing full product information: data, image, tariffs,
 /// client price, stock by warehouse, and a link to purchase history.
+library;
 
 import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/product_history_sheet.dart';
 import 'package:path_provider/path_provider.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/api/api_config.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../data/pedidos_service.dart';
-import 'product_history_sheet.dart';
-import '../utils/pedidos_formatters.dart';
-import '../../../../core/widgets/smart_product_image.dart';
 
 class ProductDetailSheet extends StatefulWidget {
+
+  const ProductDetailSheet({
+    required this.productCode, required this.productName, super.key,
+    this.clientCode,
+    this.clientName,
+  });
   final String productCode;
   final String productName;
   final String? clientCode;
   final String? clientName;
-
-  const ProductDetailSheet({
-    Key? key,
-    required this.productCode,
-    required this.productName,
-    this.clientCode,
-    this.clientName,
-  }) : super(key: key);
 
   static Future<void> show(
     BuildContext context, {
@@ -149,7 +149,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
           filePath: filePath,
           title: 'Ficha Técnica - $code',
         ),
-      ));
+      ),);
     } catch (e) {
       if (navigator.canPop()) navigator.pop();
       final msg = e.toString().contains('404')
@@ -340,7 +340,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         _DataRow('Uds. Fraccion (Bandeja)', p.unitsFraction.toStringAsFixed(0)),
       if (p.unitsRetractil > 0)
         _DataRow(
-            'Uds. Retractil (Estuche)', p.unitsRetractil.toStringAsFixed(0)),
+            'Uds. Retractil (Estuche)', p.unitsRetractil.toStringAsFixed(0),),
       if (p.presentacion.isNotEmpty) _DataRow('Presentacion', p.presentacion),
       if (p.formato.isNotEmpty) _DataRow('Formato', p.formato),
       if (p.calibre.isNotEmpty) _DataRow('Calibre', p.calibre),
@@ -354,14 +354,14 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       if (p.grados.isNotEmpty) _DataRow('Grados', p.grados),
       // Flags
       _DataRow('IVA', ivaLabel(p.codigoIva)),
-      if (p.productoPesado) _DataRow('Producto Pesado', 'Si'),
-      if (p.trazable) _DataRow('Trazable', 'Si'),
+      if (p.productoPesado) const _DataRow('Producto Pesado', 'Si'),
+      if (p.trazable) const _DataRow('Trazable', 'Si'),
       // Dates
       if (p.fechaAlta != null && p.fechaAlta!.isNotEmpty)
         _DataRow('Fecha Alta', p.fechaAlta!),
       if (p.isDiscontinued)
         _DataRow('Fecha Baja',
-            '${p.mesBaja.toString().padLeft(2, '0')}/${p.anoBaja}'),
+            '${p.mesBaja.toString().padLeft(2, '0')}/${p.anoBaja}',),
       // Observations
       if (p.observacion1.isNotEmpty) _DataRow('Obs. 1', p.observacion1),
       if (p.observacion2.isNotEmpty) _DataRow('Obs. 2', p.observacion2),
@@ -371,7 +371,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       title: 'Datos del Producto',
       icon: Icons.info_outline,
       child: Column(
-        children: rows.map((r) => _dataRowWidget(r)).toList(),
+        children: rows.map(_dataRowWidget).toList(),
       ),
     );
   }
@@ -428,7 +428,6 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                 headers: ApiClient.authHeaders,
                 fit: BoxFit.contain,
                 borderRadius: BorderRadius.circular(8),
-                showCodeOnFallback: true,
               ),
             ),
           ),
@@ -576,10 +575,10 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       child: Column(
         children: [
           // Header row
-          Padding(
-            padding: const EdgeInsets.only(bottom: 6),
+          const Padding(
+            padding: EdgeInsets.only(bottom: 6),
             child: Row(
-              children: const [
+              children: [
                 Expanded(
                   flex: 3,
                   child: Text(
@@ -739,16 +738,16 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
 }
 
 class _DataRow {
+  const _DataRow(this.label, this.value);
   final String label;
   final String value;
-  const _DataRow(this.label, this.value);
 }
 
 class _PdfViewerPage extends StatelessWidget {
-  final String filePath;
-  final String title;
 
   const _PdfViewerPage({required this.filePath, required this.title});
+  final String filePath;
+  final String title;
 
   @override
   Widget build(BuildContext context) {
@@ -761,10 +760,6 @@ class _PdfViewerPage extends StatelessWidget {
       ),
       body: PDFView(
         filePath: filePath,
-        enableSwipe: true,
-        swipeHorizontal: false,
-        autoSpacing: true,
-        pageFling: true,
         onError: (error) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Error al abrir PDF: $error')),

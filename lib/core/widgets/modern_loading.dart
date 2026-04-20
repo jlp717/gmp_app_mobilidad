@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class ModernLoading extends StatelessWidget {
-  final String? message;
-  final double size;
 
   const ModernLoading({
     super.key,
     this.message,
     this.size = 80,
   });
+  final String? message;
+  final double size;
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +33,6 @@ class ModernLoading extends StatelessWidget {
                     shape: BoxShape.circle,
                     border: Border.all(
                       color: AppTheme.neonBlue.withOpacity(0.1),
-                      width: 1,
                     ),
                     boxShadow: [
                       BoxShadow(

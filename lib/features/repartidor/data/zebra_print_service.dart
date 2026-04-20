@@ -4,10 +4,9 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_printer/flutter_bluetooth_printer.dart';
+import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 
 /// Service for printing delivery notes on Zebra ZQ520
 /// via Bluetooth Classic (SPP/RFCOMM) using raw ZPL commands.
@@ -172,7 +171,7 @@ class ZebraPrintService {
       final image = frame.image;
 
       final byteData = await image.toByteData(
-        format: ui.ImageByteFormat.rawRgba,
+        
       );
       if (byteData == null) return null;
 
@@ -191,10 +190,10 @@ class ZebraPrintService {
       final totalBytes = bytesPerRow * outH;
       final hex = StringBuffer();
 
-      for (int row = 0; row < outH; row++) {
-        for (int col = 0; col < bytesPerRow; col++) {
-          int byte = 0;
-          for (int bit = 0; bit < 8; bit++) {
+      for (var row = 0; row < outH; row++) {
+        for (var col = 0; col < bytesPerRow; col++) {
+          var byte = 0;
+          for (var bit = 0; bit < 8; bit++) {
             final x = col * 8 + bit;
             if (x < outW) {
               final srcX = (x / scale).round().clamp(0, srcW - 1);
@@ -205,7 +204,7 @@ class ZebraPrintService {
               final b = pixels[pixelIdx + 2];
               // Luminance < 128 = black (ink on paper)
               if ((r * 299 + g * 587 + b * 114) ~/ 1000 < 128) {
-                byte |= (0x80 >> bit);
+                byte |= 0x80 >> bit;
               }
             }
           }
@@ -213,7 +212,7 @@ class ZebraPrintService {
         }
       }
 
-      return '^GFA,$totalBytes,$totalBytes,$bytesPerRow,${hex.toString()}';
+      return '^GFA,$totalBytes,$totalBytes,$bytesPerRow,$hex';
     } catch (e) {
       debugPrint('[ZEBRA] GRF conversion error: $e');
       return null;
@@ -248,7 +247,7 @@ class ZebraPrintService {
     DateTime? fechaFirma,
   }) {
     final buf = StringBuffer();
-    int y = 25;
+    var y = 25;
 
     buf.writeln('^XA');
     buf.writeln('^CI28'); // UTF-8 for Spanish chars
@@ -293,7 +292,7 @@ class ZebraPrintService {
     if (albaran.ordenPreparacion != null) {
       buf.writeln('^CF0,18');
       buf.writeln(
-          '^FO$_xLeft,$y^FDOrden Prep.: ${albaran.ordenPreparacion!}^FS');
+          '^FO$_xLeft,$y^FDOrden Prep.: ${albaran.ordenPreparacion!}^FS',);
       y += 24;
     }
 
@@ -336,8 +335,8 @@ class ZebraPrintService {
     y += 6;
 
     // ═══ PRODUCT LINES ═══
-    int totalBultos = 0;
-    for (int i = 0; i < items.length; i++) {
+    var totalBultos = 0;
+    for (var i = 0; i < items.length; i++) {
       final item = items[i];
       final partida = '${i + 1}';
       // Use CANTIDADENVASES (bultos) for the Bultos column, not CANTIDADUNIDADES
@@ -529,7 +528,7 @@ class ZebraPrintService {
       final bytes = Uint8List.fromList(utf8.encode(zplData));
 
       // Attempt with 1 automatic retry on failure
-      for (int attempt = 0; attempt < 2; attempt++) {
+      for (var attempt = 0; attempt < 2; attempt++) {
         try {
           final ok = await FlutterBluetoothPrinter.printBytes(
             address: addr,

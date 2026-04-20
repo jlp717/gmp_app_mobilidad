@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
 /// [MetricsCards] - Tarjetas de métricas principales del dashboard
 ///
@@ -11,10 +11,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 /// - Pedidos (33 pendientes, 2,613.77 €)
 class MetricsCards extends StatelessWidget {
   const MetricsCards({
-    super.key,
-    required this.vencimientos,
-    required this.cobros,
-    required this.pedidos,
+    required this.vencimientos, required this.cobros, required this.pedidos, super.key,
   });
 
   final VencimientosMetrics vencimientos;

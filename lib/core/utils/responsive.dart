@@ -55,7 +55,7 @@ class Responsive {
   /// Returns a shrinking factor when a horizontal device has a very small height.
   /// Phones in landscape have little vertical space (< 500px), so we shrink everything.
   static double landscapeScale(BuildContext ctx) {
-    if (!isLandscapeCompact(ctx)) return 1.0;
+    if (!isLandscapeCompact(ctx)) return 1;
     
     final h = MediaQuery.of(ctx).size.height;
     // For heights between 250 and 500, return a value between 0.5 and 0.95
@@ -101,7 +101,7 @@ class Responsive {
 
   /// Clamp a desired width so it never exceeds [maxPercent] of screen width.
   static double clampWidth(BuildContext ctx, double desired,
-      {double maxPercent = 0.9}) {
+      {double maxPercent = 0.9,}) {
     final screenW = MediaQuery.of(ctx).size.width;
     final max = screenW * maxPercent;
     return desired > max ? max : desired;
@@ -109,7 +109,7 @@ class Responsive {
 
   /// Clamp a desired height so it never exceeds [maxPercent] of screen height.
   static double clampHeight(BuildContext ctx, double desired,
-      {double maxPercent = 0.9}) {
+      {double maxPercent = 0.9,}) {
     final screenH = MediaQuery.of(ctx).size.height;
     final max = screenH * maxPercent;
     return desired > max ? max : desired;
@@ -128,7 +128,7 @@ class Responsive {
 
   /// Returns [large] on big screens, [small] on phones, interpolated on medium.
   static double fontSize(BuildContext ctx,
-      {required double small, required double large}) {
+      {required double small, required double large,}) {
     final w = MediaQuery.of(ctx).size.shortestSide;
     final factor = landscapeScale(ctx);
     if (w >= 1200) return large * factor;
@@ -148,7 +148,7 @@ class Responsive {
 
   /// Returns [large] on big screens, [small] on phones.
   static double padding(BuildContext ctx,
-      {required double small, required double large}) {
+      {required double small, required double large,}) {
     final w = MediaQuery.of(ctx).size.shortestSide;
     final factor = landscapeScale(ctx);
     if (w >= 1200) return large * factor;

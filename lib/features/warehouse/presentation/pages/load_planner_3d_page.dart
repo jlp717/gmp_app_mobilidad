@@ -1,14 +1,15 @@
 /// TETRIS LOGISTICO 3D v2 — Premium multi-view load planner
 /// Features: 3D/Top/Front views, improved gestures, color legend
+library;
 
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../data/warehouse_data_service.dart';
-import '../painters/projection_3d.dart';
-import '../painters/truck_3d_painter.dart';
-import '../widgets/load_planner_panel.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/painters/projection_3d.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/painters/truck_3d_painter.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/load_planner_panel.dart';
 
 enum ViewMode { perspective, top, front }
 
@@ -17,16 +18,15 @@ enum ViewMode { perspective, top, front }
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class LoadPlanner3DPage extends StatefulWidget {
-  final String vehicleCode;
-  final String vehicleName;
-  final DateTime date;
-
   const LoadPlanner3DPage({
-    super.key,
     required this.vehicleCode,
     required this.vehicleName,
     required this.date,
+    super.key,
   });
+  final String vehicleCode;
+  final String vehicleName;
+  final DateTime date;
 
   @override
   State<LoadPlanner3DPage> createState() => _LoadPlanner3DPageState();
@@ -49,10 +49,10 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
   Timer? _debounce;
 
   // 3D Camera
-  double _rotX = -0.45, _rotY = 0.6, _zoom = 1.0;
+  double _rotX = -0.45, _rotY = 0.6, _zoom = 1;
   Offset _panOffset = Offset.zero;
   Offset _lastFocalPoint = Offset.zero;
-  double _baseZoom = 1.0;
+  double _baseZoom = 1;
 
   // Color mode
   ColorMode _colorMode = ColorMode.product;
@@ -67,8 +67,9 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
   void initState() {
     super.initState();
     _glowCtrl = AnimationController(
-        vsync: this, duration: const Duration(milliseconds: 1500))
-      ..repeat(reverse: true);
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat(reverse: true);
     _loadPlan();
   }
 
@@ -133,16 +134,20 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
           .where((e) => !_excludedIndices.contains(e.key))
           .map((e) => e.value);
       final items = active
-          .map((o) => <String, dynamic>{
-                'articleCode': o.articleCode,
-                'quantity': o.boxes > 0 ? o.boxes.round() : 1,
-                'orderNumber': o.orderNumber,
-                'clientCode': o.clientCode,
-                'label': o.articleName,
-              })
+          .map(
+            (o) => <String, dynamic>{
+              'articleCode': o.articleCode,
+              'quantity': o.boxes > 0 ? o.boxes.round() : 1,
+              'orderNumber': o.orderNumber,
+              'clientCode': o.clientCode,
+              'label': o.articleName,
+            },
+          )
           .toList();
       final r = await WarehouseDataService.planLoadManual(
-          vehicleCode: widget.vehicleCode, items: items);
+        vehicleCode: widget.vehicleCode,
+        items: items,
+      );
       if (mounted) {
         setState(() {
           _result = r;
@@ -225,24 +230,32 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
     try {
       final r = _result!;
       final m = r.metrics;
-      final placedMaps = r.placed.map((b) => {
-        'clientCode': b.clientCode,
-        'clientName': b.label,
-        'articleCode': b.articleCode,
-        'label': b.label,
-        'weight': b.weight,
-        'importeEur': b.importeEur,
-        'margenEur': b.margenEur,
-      }).toList();
-      final overflowMaps = r.overflow.map((b) => {
-        'clientCode': b.clientCode,
-        'clientName': b.label,
-        'articleCode': b.articleCode,
-        'label': b.label,
-        'weight': b.weight,
-        'importeEur': b.importeEur,
-        'margenEur': b.margenEur,
-      }).toList();
+      final placedMaps = r.placed
+          .map(
+            (b) => {
+              'clientCode': b.clientCode,
+              'clientName': b.label,
+              'articleCode': b.articleCode,
+              'label': b.label,
+              'weight': b.weight,
+              'importeEur': b.importeEur,
+              'margenEur': b.margenEur,
+            },
+          )
+          .toList();
+      final overflowMaps = r.overflow
+          .map(
+            (b) => {
+              'clientCode': b.clientCode,
+              'clientName': b.label,
+              'articleCode': b.articleCode,
+              'label': b.label,
+              'weight': b.weight,
+              'importeEur': b.importeEur,
+              'margenEur': b.margenEur,
+            },
+          )
+          .toList();
 
       await WarehouseDataService.saveLoad(
         vehicleCode: widget.vehicleCode,
@@ -288,24 +301,18 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
 
   void _showTruckFullModal(LoadPlanResult r) {
     final m = r.metrics;
-    final isFull =
-        m.volumeOccupancyPct > 85 || m.weightOccupancyPct > 85;
+    final isFull = m.volumeOccupancyPct > 85 || m.weightOccupancyPct > 85;
     final sc = _statusColor(m.status);
 
     // Calculate balance
     final t = r.truck;
-    final cL = t != null
-        ? math.max(t.interior.lengthCm, 250.0)
-        : 250.0;
-    final cW = t != null
-        ? math.max(t.interior.widthCm, 160.0)
-        : 160.0;
-    final axle =
-        AxleBalanceHelper.axleDistribution(r.placed, cL);
-    final lat =
-        AxleBalanceHelper.lateralDistribution(r.placed, cW);
-    final balanced =
-        AxleBalanceHelper.isBalanced(r.placed, cL, cW);
+    final double cL =
+        t != null ? math.max(t.interior.lengthCm, 250).toDouble() : 250.0;
+    final double cW =
+        t != null ? math.max(t.interior.widthCm, 160).toDouble() : 160.0;
+    final axle = AxleBalanceHelper.axleDistribution(r.placed, cL);
+    final lat = AxleBalanceHelper.lateralDistribution(r.placed, cW);
+    final balanced = AxleBalanceHelper.isBalanced(r.placed, cL, cW);
     final bc = balanced ? AppTheme.neonGreen : Colors.amber;
 
     showModalBottomSheet<void>(
@@ -326,17 +333,13 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              isFull
-                  ? Icons.check_circle_rounded
-                  : Icons.auto_awesome_rounded,
+              isFull ? Icons.check_circle_rounded : Icons.auto_awesome_rounded,
               color: sc,
               size: 48,
             ),
             const SizedBox(height: 12),
             Text(
-              isFull
-                  ? 'CAMION OPTIMIZADO'
-                  : 'OPTIMIZACION COMPLETADA',
+              isFull ? 'CAMION OPTIMIZADO' : 'OPTIMIZACION COMPLETADA',
               style: TextStyle(
                 color: sc,
                 fontSize: 18,
@@ -353,17 +356,13 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
             _optimizeStatRow(
               'Volumen ocupado',
               '${m.volumeOccupancyPct.toStringAsFixed(1)}%',
-              m.volumeOccupancyPct > 85
-                  ? Colors.amber
-                  : AppTheme.neonGreen,
+              m.volumeOccupancyPct > 85 ? Colors.amber : AppTheme.neonGreen,
             ),
             _optimizeStatRow(
               'Peso cargado',
               '${m.totalWeightKg.toStringAsFixed(0)}/'
                   '${m.maxPayloadKg.toStringAsFixed(0)} kg',
-              m.weightOccupancyPct > 85
-                  ? Colors.amber
-                  : AppTheme.neonGreen,
+              m.weightOccupancyPct > 85 ? Colors.amber : AppTheme.neonGreen,
             ),
             if (m.overflowCount > 0)
               _optimizeStatRow(
@@ -450,9 +449,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                   _balanceItem(
                     'Trasero',
                     '${axle['rearPct']!.round()}%',
-                    axle['rearPct']! > 65
-                        ? Colors.redAccent
-                        : bc,
+                    axle['rearPct']! > 65 ? Colors.redAccent : bc,
                   ),
                   _balanceItem(
                     'Izquierda',
@@ -543,10 +540,10 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
     _loadAnimCtrl = AnimationController(
       vsync: this,
       duration: Duration(
-          milliseconds: math.min(3000, _result!.placed.length * 60)),
+        milliseconds: math.min(3000, _result!.placed.length * 60),
+      ),
     )..addListener(() {
-        final count =
-            (_loadAnimCtrl!.value * _result!.placed.length).round();
+        final count = (_loadAnimCtrl!.value * _result!.placed.length).round();
         if (count != _animatedBoxCount) {
           setState(() => _animatedBoxCount = count);
         }
@@ -569,13 +566,19 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
   void _handleTap(TapUpDetails details) {
     if (_result == null || _result!.placed.isEmpty) return;
     final t = _result!.truck!;
-    final cW = math.max(t.interior.widthCm, 160.0);
-    final cD = math.max(t.interior.lengthCm, 250.0);
-    final cH = math.max(t.interior.heightCm, 150.0);
-    final ox = -cW / 2, oy = -cD / 2, oz = -cH / 2;
+    final cW = math.max(t.interior.widthCm, 160);
+    final cD = math.max(t.interior.lengthCm, 250);
+    final cH = math.max(t.interior.heightCm, 150);
+    final ox = -cW / 2;
+    final oy = -cD / 2;
+    final oz = -cH / 2;
 
     final proj = Projection3D(
-        rotX: _rotX, rotY: _rotY, zoom: _zoom, panOffset: _panOffset);
+      rotX: _rotX,
+      rotY: _rotY,
+      zoom: _zoom,
+      panOffset: _panOffset,
+    );
     final canvasSize = context.size ?? Size.zero;
 
     final hit = HitTester.hitTest(
@@ -601,7 +604,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
   // ─── Box modal ────────────────────────────────────────────────────────
 
   void _showBoxModal(PlacedBox box) {
-    String client = box.clientCode;
+    var client = box.clientCode;
     for (final o in _allOrders) {
       if (o.clientCode == box.clientCode && o.clientName.isNotEmpty) {
         client = o.clientName;
@@ -626,44 +629,62 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                    color: cc.withValues(alpha: 0.2), shape: BoxShape.circle),
-                child: Icon(Icons.inventory_2_rounded, color: cc, size: 28),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: cc.withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.inventory_2_rounded, color: cc, size: 28),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                          box.label.isNotEmpty
-                              ? box.label
-                              : box.articleCode,
-                          style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold)),
+                        box.label.isNotEmpty ? box.label : box.articleCode,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       const SizedBox(height: 4),
-                      Text('Pedido #${box.orderNumber}',
-                          style: const TextStyle(
-                              color: AppTheme.neonBlue,
-                              fontWeight: FontWeight.w600)),
-                    ]),
-              ),
-            ]),
+                      Text(
+                        'Pedido #${box.orderNumber}',
+                        style: const TextStyle(
+                          color: AppTheme.neonBlue,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
             const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Divider(color: Colors.white24)),
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(color: Colors.white24),
+            ),
             _modalRow(Icons.business_center_rounded, 'Cliente', client),
-            _modalRow(Icons.straighten_rounded, 'Dimensiones',
-                '${box.w.toInt()} x ${box.d.toInt()} x ${box.h.toInt()} cm'),
-            _modalRow(Icons.scale_rounded, 'Peso',
-                '${box.weight.toStringAsFixed(1)} kg'),
-            _modalRow(Icons.location_on_rounded, 'Posicion',
-                'X:${box.x.toInt()} Y:${box.y.toInt()} Z:${box.z.toInt()} cm'),
+            _modalRow(
+              Icons.straighten_rounded,
+              'Dimensiones',
+              '${box.w.toInt()} x ${box.d.toInt()} x ${box.h.toInt()} cm',
+            ),
+            _modalRow(
+              Icons.scale_rounded,
+              'Peso',
+              '${box.weight.toStringAsFixed(1)} kg',
+            ),
+            _modalRow(
+              Icons.location_on_rounded,
+              'Posicion',
+              'X:${box.x.toInt()} Y:${box.y.toInt()} Z:${box.z.toInt()} cm',
+            ),
             const SizedBox(height: 20),
             Center(
               child: ElevatedButton.icon(
@@ -684,22 +705,33 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
     );
   }
 
-  Widget _modalRow(IconData icon, String label, String value,
-      {Color color = Colors.white70}) {
+  Widget _modalRow(
+    IconData icon,
+    String label,
+    String value, {
+    Color color = Colors.white70,
+  }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: Row(children: [
-        Icon(icon, color: Colors.white54, size: 20),
-        const SizedBox(width: 12),
-        Text('$label:', style: const TextStyle(color: Colors.white54, fontSize: 14)),
-        const SizedBox(width: 8),
-        Expanded(
-            child: Text(value,
-                style: TextStyle(
-                    color: color,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600))),
-      ]),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white54, size: 20),
+          const SizedBox(width: 12),
+          Text('$label:',
+              style: const TextStyle(color: Colors.white54, fontSize: 14)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -722,21 +754,30 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
         backgroundColor: AppTheme.darkBase,
         elevation: 0,
         leading: IconButton(
-            icon: const Icon(Icons.arrow_back_rounded, color: Colors.white70),
-            onPressed: () => Navigator.pop(context)),
-        title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('TETRIS LOGISTICO 3D',
+          icon: const Icon(Icons.arrow_back_rounded, color: Colors.white70),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'TETRIS LOGISTICO 3D',
               style: TextStyle(
-                  color: AppTheme.neonBlue,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.5)),
-          Text(
-            '${widget.vehicleCode} · ${widget.vehicleName}',
-            style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-          ),
-        ]),
+                color: AppTheme.neonBlue,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.5,
+              ),
+            ),
+            Text(
+              '${widget.vehicleCode} · ${widget.vehicleName}',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.5),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
         actions: [
           // Color mode toggle
           PopupMenuButton<ColorMode>(
@@ -754,54 +795,75 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
             itemBuilder: (_) => [
               PopupMenuItem(
                 value: ColorMode.product,
-                child: Row(children: [
-                  Icon(Icons.palette_rounded,
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.palette_rounded,
                       color: _colorMode == ColorMode.product
                           ? AppTheme.neonBlue
                           : Colors.white54,
-                      size: 18),
-                  const SizedBox(width: 8),
-                  Text('Por Producto',
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Por Producto',
                       style: TextStyle(
-                          color: _colorMode == ColorMode.product
-                              ? AppTheme.neonBlue
-                              : Colors.white70,
-                          fontSize: 13)),
-                ]),
+                        color: _colorMode == ColorMode.product
+                            ? AppTheme.neonBlue
+                            : Colors.white70,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               PopupMenuItem(
                 value: ColorMode.client,
-                child: Row(children: [
-                  Icon(Icons.people_rounded,
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.people_rounded,
                       color: _colorMode == ColorMode.client
                           ? AppTheme.neonBlue
                           : Colors.white54,
-                      size: 18),
-                  const SizedBox(width: 8),
-                  Text('Por Cliente',
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Por Cliente',
                       style: TextStyle(
-                          color: _colorMode == ColorMode.client
-                              ? AppTheme.neonBlue
-                              : Colors.white70,
-                          fontSize: 13)),
-                ]),
+                        color: _colorMode == ColorMode.client
+                            ? AppTheme.neonBlue
+                            : Colors.white70,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
               ),
               PopupMenuItem(
                 value: ColorMode.heatmap,
-                child: Row(children: [
-                  Icon(Icons.thermostat_rounded,
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.thermostat_rounded,
                       color: _colorMode == ColorMode.heatmap
                           ? AppTheme.neonBlue
                           : Colors.white54,
-                      size: 18),
-                  const SizedBox(width: 8),
-                  Text('Mapa de Peso',
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Mapa de Peso',
                       style: TextStyle(
-                          color: _colorMode == ColorMode.heatmap
-                              ? AppTheme.neonBlue
-                              : Colors.white70,
-                          fontSize: 13)),
-                ]),
+                        color: _colorMode == ColorMode.heatmap
+                            ? AppTheme.neonBlue
+                            : Colors.white70,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
@@ -812,11 +874,16 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
               color: AppTheme.darkCard.withValues(alpha: 0.6),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              _viewModeBtn(ViewMode.perspective, Icons.view_in_ar_rounded, '3D'),
-              _viewModeBtn(ViewMode.top, Icons.grid_on_rounded, 'Sup'),
-              _viewModeBtn(ViewMode.front, Icons.view_agenda_rounded, 'Front'),
-            ]),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _viewModeBtn(
+                    ViewMode.perspective, Icons.view_in_ar_rounded, '3D'),
+                _viewModeBtn(ViewMode.top, Icons.grid_on_rounded, 'Sup'),
+                _viewModeBtn(
+                    ViewMode.front, Icons.view_agenda_rounded, 'Front'),
+              ],
+            ),
           ),
           // Smart optimize button
           IconButton(
@@ -840,20 +907,25 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
           // Play animation
           IconButton(
             onPressed: _playLoadAnimation,
-            icon: const Icon(Icons.play_circle_outline_rounded,
-                color: AppTheme.neonPurple, size: 22),
+            icon: const Icon(
+              Icons.play_circle_outline_rounded,
+              color: AppTheme.neonPurple,
+              size: 22,
+            ),
             tooltip: 'Animacion de carga',
           ),
           if (_isManualMode)
             IconButton(
-                onPressed: _resetOrders,
-                icon: const Icon(Icons.restart_alt_rounded,
-                    color: Colors.amber, size: 22)),
+              onPressed: _resetOrders,
+              icon: const Icon(
+                Icons.restart_alt_rounded,
+                color: Colors.amber,
+                size: 22,
+              ),
+            ),
           // Save to DB button
           IconButton(
-            onPressed: (_saving || _result == null)
-                ? null
-                : _saveLoad,
+            onPressed: (_saving || _result == null) ? null : _saveLoad,
             icon: _saving
                 ? const SizedBox(
                     width: 18,
@@ -871,19 +943,28 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
             tooltip: 'Guardar carga en BBDD',
           ),
           IconButton(
-              onPressed: _loadPlan,
-              icon: const Icon(Icons.refresh_rounded,
-                  color: AppTheme.neonGreen)),
+            onPressed: _loadPlan,
+            icon: const Icon(
+              Icons.refresh_rounded,
+              color: AppTheme.neonGreen,
+            ),
+          ),
         ],
       ),
       body: _loading
           ? const Center(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-              CircularProgressIndicator(color: AppTheme.neonBlue),
-              SizedBox(height: 16),
-              Text('Calculando carga...',
-                  style: TextStyle(color: Colors.white54, fontSize: 14)),
-            ]))
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(color: AppTheme.neonBlue),
+                  SizedBox(height: 16),
+                  Text(
+                    'Calculando carga...',
+                    style: TextStyle(color: Colors.white54, fontSize: 14),
+                  ),
+                ],
+              ),
+            )
           : _error != null
               ? _buildError()
               : _buildContent(),
@@ -904,321 +985,346 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
         : 0.0;
 
     // 3D Canvas with DragTarget
-    final canvas3D = Stack(children: [
-      Positioned.fill(
-        child: DragTarget<TruckOrder>(
-          onAcceptWithDetails: (details) => _onDragAccepted(details.data),
-          onWillAcceptWithDetails: (_) => true,
-          builder: (context, candidateData, rejectedData) {
-            return Stack(children: [
-              Positioned.fill(
-                child: GestureDetector(
-                  // FIXED: Use only onScale* to avoid gesture arena conflict
-                  onScaleStart: (d) {
-                    _lastFocalPoint = d.localFocalPoint;
-                    _baseZoom = _zoom;
-                  },
-                  onScaleUpdate: (d) {
-                    setState(() {
-                      if (d.pointerCount == 1) {
-                        // Single finger: rotate
-                        final delta = d.localFocalPoint - _lastFocalPoint;
-                        _rotY += delta.dx * 0.008;
-                        _rotX =
-                            (_rotX + delta.dy * 0.008).clamp(-1.2, 0.2);
-                      } else if (d.pointerCount >= 2) {
-                        // Two fingers: zoom + pan
-                        _zoom = (_baseZoom * d.scale).clamp(0.3, 3.0);
-                        final delta = d.localFocalPoint - _lastFocalPoint;
-                        _panOffset += delta * 0.5;
-                      }
-                      _lastFocalPoint = d.localFocalPoint;
-                    });
-                  },
-                  onTapUp: _viewMode == ViewMode.perspective ? _handleTap : null,
-                  onDoubleTap: () => setState(() {
-                    _rotX = -0.45; _rotY = 0.6; _zoom = 1.0;
-                    _panOffset = Offset.zero;
-                  }),
-                  child: AnimatedBuilder(
-                    animation: _glowCtrl,
-                    builder: (_, __) => RepaintBoundary(
-                      child: CustomPaint(
-                        painter: _buildCurrentPainter(r, sc),
-                        size: Size.infinite,
+    final canvas3D = Stack(
+      children: [
+        Positioned.fill(
+          child: DragTarget<TruckOrder>(
+            onAcceptWithDetails: (details) => _onDragAccepted(details.data),
+            onWillAcceptWithDetails: (_) => true,
+            builder: (context, candidateData, rejectedData) {
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    child: GestureDetector(
+                      // FIXED: Use only onScale* to avoid gesture arena conflict
+                      onScaleStart: (d) {
+                        _lastFocalPoint = d.localFocalPoint;
+                        _baseZoom = _zoom;
+                      },
+                      onScaleUpdate: (d) {
+                        setState(() {
+                          if (d.pointerCount == 1) {
+                            // Single finger: rotate
+                            final delta = d.localFocalPoint - _lastFocalPoint;
+                            _rotY += delta.dx * 0.008;
+                            _rotX = (_rotX + delta.dy * 0.008).clamp(-1.2, 0.2);
+                          } else if (d.pointerCount >= 2) {
+                            // Two fingers: zoom + pan
+                            _zoom = (_baseZoom * d.scale).clamp(0.3, 3.0);
+                            final delta = d.localFocalPoint - _lastFocalPoint;
+                            _panOffset += delta * 0.5;
+                          }
+                          _lastFocalPoint = d.localFocalPoint;
+                        });
+                      },
+                      onTapUp:
+                          _viewMode == ViewMode.perspective ? _handleTap : null,
+                      onDoubleTap: () => setState(() {
+                        _rotX = -0.45;
+                        _rotY = 0.6;
+                        _zoom = 1.0;
+                        _panOffset = Offset.zero;
+                      }),
+                      child: AnimatedBuilder(
+                        animation: _glowCtrl,
+                        builder: (_, __) => RepaintBoundary(
+                          child: CustomPaint(
+                            painter: _buildCurrentPainter(r, sc),
+                            size: Size.infinite,
+                          ),
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ),
-              // Drop zone highlight
-              if (candidateData.isNotEmpty)
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        border: Border.all(
-                            color: AppTheme.neonGreen.withValues(alpha: 0.6),
-                            width: 2),
-                        color: AppTheme.neonGreen.withValues(alpha: 0.05),
+                  // Drop zone highlight
+                  if (candidateData.isNotEmpty)
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(
+                              color: AppTheme.neonGreen.withValues(alpha: 0.6),
+                              width: 2,
+                            ),
+                            color: AppTheme.neonGreen.withValues(alpha: 0.05),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-            ]);
-          },
+                ],
+              );
+            },
+          ),
         ),
-      ),
-      // Recalculating overlay
-      if (_recomputing)
-        Positioned(
-          top: 8,
-          right: 8,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
+        // Recalculating overlay
+        if (_recomputing)
+          Positioned(
+            top: 8,
+            right: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
                 color: AppTheme.darkCard.withValues(alpha: 0.9),
-                borderRadius: BorderRadius.circular(8)),
-            child: const Row(mainAxisSize: MainAxisSize.min, children: [
-              SizedBox(
-                  width: 12,
-                  height: 12,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: AppTheme.neonBlue)),
-              SizedBox(width: 6),
-              Text('Recalculando...',
-                  style: TextStyle(color: Colors.white54, fontSize: 10)),
-            ]),
-          ),
-        ),
-      // Selected box info overlay
-      if (_selectedBoxId != null)
-        Positioned(
-            left: 8, right: 8, bottom: 8, child: _buildSelectedBox()),
-      // Live metrics overlay with dynamic status
-      Positioned(
-        left: 8,
-        top: 8,
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: AppTheme.darkCard.withValues(alpha: 0.92),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
-              color: sc.withValues(alpha: 0.4),
-              width: 1.5,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: sc.withValues(alpha: 0.15),
-                blurRadius: 12,
-                spreadRadius: 1,
+                borderRadius: BorderRadius.circular(8),
               ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Large status badge
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12, vertical: 5,
-                ),
-                margin: const EdgeInsets.only(bottom: 8),
-                decoration: BoxDecoration(
-                  color: sc.withValues(alpha: 0.18),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: sc.withValues(alpha: 0.4),
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      m.status == 'EXCESO'
-                          ? Icons.warning_rounded
-                          : m.status == 'OPTIMO'
-                              ? Icons.check_circle_rounded
-                              : Icons.verified_rounded,
-                      color: sc,
-                      size: 16,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      m.status,
-                      style: TextStyle(
-                        color: sc,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              // Circular progress indicators row
-              Row(
+              child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _circularMetric(
-                    'Vol',
-                    volPct.toDouble(),
-                    volPct > 90
-                        ? Colors.redAccent
-                        : volPct > 70
-                            ? Colors.amber
-                            : AppTheme.neonGreen,
-                  ),
-                  const SizedBox(width: 10),
-                  _circularMetric(
-                    'Peso',
-                    wgtPct.toDouble(),
-                    wgtPct > 90
-                        ? Colors.redAccent
-                        : wgtPct > 70
-                            ? Colors.amber
-                            : AppTheme.neonGreen,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Quick stats row
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.inventory_2_rounded,
-                    color: AppTheme.neonBlue,
-                    size: 11,
-                  ),
-                  const SizedBox(width: 3),
-                  Text(
-                    '${m.placedCount}/${m.totalBoxes}',
-                    style: const TextStyle(
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
                       color: AppTheme.neonBlue,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
                     ),
                   ),
-                  if (m.overflowCount > 0) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 5, vertical: 1,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.redAccent.withValues(
-                          alpha: 0.15,
-                        ),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        '${m.overflowCount} exceso',
-                        style: const TextStyle(
-                          color: Colors.redAccent,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
+                  SizedBox(width: 6),
+                  Text(
+                    'Recalculando...',
+                    style: TextStyle(color: Colors.white54, fontSize: 10),
+                  ),
                 ],
               ),
-              // EUR value prominent
-              if (m.totalImporteEur > 0) ...[
-                const SizedBox(height: 8),
+            ),
+          ),
+        // Selected box info overlay
+        if (_selectedBoxId != null)
+          Positioned(
+            left: 8,
+            right: 8,
+            bottom: 8,
+            child: _buildSelectedBox(),
+          ),
+        // Live metrics overlay with dynamic status
+        Positioned(
+          left: 8,
+          top: 8,
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.darkCard.withValues(alpha: 0.92),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: sc.withValues(alpha: 0.4),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: sc.withValues(alpha: 0.15),
+                  blurRadius: 12,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Large status badge
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 5,
+                    horizontal: 12,
+                    vertical: 5,
                   ),
+                  margin: const EdgeInsets.only(bottom: 8),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFF4CAF50).withValues(
-                          alpha: 0.15,
-                        ),
-                        const Color(0xFF2E7D32).withValues(
-                          alpha: 0.08,
-                        ),
-                      ],
-                    ),
+                    color: sc.withValues(alpha: 0.18),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: const Color(0xFF4CAF50).withValues(
-                        alpha: 0.25,
-                      ),
+                      color: sc.withValues(alpha: 0.4),
                     ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.euro_rounded,
-                            color: Color(0xFF4CAF50),
-                            size: 14,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            '${m.totalImporteEur.toStringAsFixed(0)}',
-                            style: const TextStyle(
-                              color: Color(0xFF4CAF50),
-                              fontSize: 16,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                          const Text(
-                            ' EUR',
-                            style: TextStyle(
-                              color: Color(0xFF66BB6A),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
+                      Icon(
+                        m.status == 'EXCESO'
+                            ? Icons.warning_rounded
+                            : m.status == 'OPTIMO'
+                                ? Icons.check_circle_rounded
+                                : Icons.verified_rounded,
+                        color: sc,
+                        size: 16,
                       ),
-                      if (m.totalMargenEur > 0)
-                        Padding(
-                          padding: const EdgeInsets.only(
-                            top: 2,
-                          ),
-                          child: Text(
-                            'Margen: ${m.totalMargenEur.toStringAsFixed(0)} EUR',
-                            style: TextStyle(
-                              color: const Color(0xFF66BB6A)
-                                  .withValues(alpha: 0.8),
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                      const SizedBox(width: 6),
+                      Text(
+                        m.status,
+                        style: TextStyle(
+                          color: sc,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1,
                         ),
+                      ),
                     ],
                   ),
                 ),
+                // Circular progress indicators row
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _circularMetric(
+                      'Vol',
+                      volPct.toDouble(),
+                      volPct > 90
+                          ? Colors.redAccent
+                          : volPct > 70
+                              ? Colors.amber
+                              : AppTheme.neonGreen,
+                    ),
+                    const SizedBox(width: 10),
+                    _circularMetric(
+                      'Peso',
+                      wgtPct.toDouble(),
+                      wgtPct > 90
+                          ? Colors.redAccent
+                          : wgtPct > 70
+                              ? Colors.amber
+                              : AppTheme.neonGreen,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Quick stats row
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.inventory_2_rounded,
+                      color: AppTheme.neonBlue,
+                      size: 11,
+                    ),
+                    const SizedBox(width: 3),
+                    Text(
+                      '${m.placedCount}/${m.totalBoxes}',
+                      style: const TextStyle(
+                        color: AppTheme.neonBlue,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    if (m.overflowCount > 0) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withValues(
+                            alpha: 0.15,
+                          ),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          '${m.overflowCount} exceso',
+                          style: const TextStyle(
+                            color: Colors.redAccent,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                // EUR value prominent
+                if (m.totalImporteEur > 0) ...[
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          const Color(0xFF4CAF50).withValues(
+                            alpha: 0.15,
+                          ),
+                          const Color(0xFF2E7D32).withValues(
+                            alpha: 0.08,
+                          ),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF4CAF50).withValues(
+                          alpha: 0.25,
+                        ),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(
+                              Icons.euro_rounded,
+                              color: Color(0xFF4CAF50),
+                              size: 14,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              m.totalImporteEur.toStringAsFixed(0),
+                              style: const TextStyle(
+                                color: Color(0xFF4CAF50),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const Text(
+                              ' EUR',
+                              style: TextStyle(
+                                color: Color(0xFF66BB6A),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (m.totalMargenEur > 0)
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              top: 2,
+                            ),
+                            child: Text(
+                              'Margen: ${m.totalMargenEur.toStringAsFixed(0)} EUR',
+                              style: TextStyle(
+                                color: const Color(0xFF66BB6A)
+                                    .withValues(alpha: 0.8),
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
-      ),
-      // Color legend
-      if (_result != null && _result!.placed.isNotEmpty)
-        Positioned(
-          right: 8,
-          bottom: _selectedBoxId != null ? 70 : 8,
-          child: _buildColorLegend(),
-        ),
-      // Axle balance indicator
-      if (_result != null && _result!.placed.isNotEmpty && _result!.truck != null)
-        Positioned(
-          left: 8,
-          bottom: _selectedBoxId != null ? 70 : 8,
-          child: _buildAxleBalance(),
-        ),
-    ]);
+        // Color legend
+        if (_result != null && _result!.placed.isNotEmpty)
+          Positioned(
+            right: 8,
+            bottom: _selectedBoxId != null ? 70 : 8,
+            child: _buildColorLegend(),
+          ),
+        // Axle balance indicator
+        if (_result != null &&
+            _result!.placed.isNotEmpty &&
+            _result!.truck != null)
+          Positioned(
+            left: 8,
+            bottom: _selectedBoxId != null ? 70 : 8,
+            child: _buildAxleBalance(),
+          ),
+      ],
+    );
 
     // Interactive order panel
     final orderPanel = LoadPlannerPanel(
@@ -1250,15 +1356,19 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
     );
 
     if (isWide) {
-      return Row(children: [
-        Expanded(flex: 6, child: canvas3D),
-        SizedBox(width: 280, child: orderPanel),
-      ]);
+      return Row(
+        children: [
+          Expanded(flex: 6, child: canvas3D),
+          SizedBox(width: 280, child: orderPanel),
+        ],
+      );
     } else {
-      return Column(children: [
-        Expanded(flex: 5, child: canvas3D),
-        Expanded(flex: 4, child: orderPanel),
-      ]);
+      return Column(
+        children: [
+          Expanded(flex: 5, child: canvas3D),
+          Expanded(flex: 4, child: orderPanel),
+        ],
+      );
     }
   }
 
@@ -1270,29 +1380,42 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
         : pct > 70
             ? Colors.amber
             : color;
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      SizedBox(
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
           width: 32,
-          child: Text(label,
-              style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.4),
-                  fontSize: 8))),
-      SizedBox(
-        width: 60,
-        height: 4,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(2),
-          child: LinearProgressIndicator(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.4),
+              fontSize: 8,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: 60,
+          height: 4,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: LinearProgressIndicator(
               value: pct / 100,
               backgroundColor: Colors.white10,
-              color: c),
+              color: c,
+            ),
+          ),
         ),
-      ),
-      const SizedBox(width: 4),
-      Text('${pct.toStringAsFixed(0)}%',
+        const SizedBox(width: 4),
+        Text(
+          '${pct.toStringAsFixed(0)}%',
           style: TextStyle(
-              color: c, fontSize: 8, fontWeight: FontWeight.w700)),
-    ]);
+            color: c,
+            fontSize: 8,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _circularMetric(String label, double pct, Color color) {
@@ -1312,8 +1435,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                   tween: Tween(begin: 0, end: pct / 100),
                   duration: const Duration(milliseconds: 800),
                   curve: Curves.easeOutCubic,
-                  builder: (_, v, __) =>
-                      CircularProgressIndicator(
+                  builder: (_, v, __) => CircularProgressIndicator(
                     value: v,
                     strokeWidth: 3.5,
                     backgroundColor: Colors.white10,
@@ -1347,23 +1469,26 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
   }
 
   Widget _buildSelectedBox() {
-    final box = _result?.placed.firstWhere((b) => b.id == _selectedBoxId,
-        orElse: () => PlacedBox(
-            id: -1,
-            label: '',
-            orderNumber: 0,
-            clientCode: '',
-            articleCode: '',
-            weight: 0,
-            x: 0,
-            y: 0,
-            z: 0,
-            w: 0,
-            d: 0,
-            h: 0));
+    final box = _result?.placed.firstWhere(
+      (b) => b.id == _selectedBoxId,
+      orElse: () => PlacedBox(
+        id: -1,
+        label: '',
+        orderNumber: 0,
+        clientCode: '',
+        articleCode: '',
+        weight: 0,
+        x: 0,
+        y: 0,
+        z: 0,
+        w: 0,
+        d: 0,
+        h: 0,
+      ),
+    );
     if (box == null || box.id == -1) return const SizedBox.shrink();
 
-    String client = box.clientCode;
+    var client = box.clientCode;
     for (final o in _allOrders) {
       if (o.clientCode == box.clientCode && o.clientName.isNotEmpty) {
         client = o.clientName;
@@ -1379,81 +1504,114 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: cc.withValues(alpha: 0.4)),
       ),
-      child: Row(children: [
-        Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
               color: cc.withValues(alpha: 0.2),
-              borderRadius: BorderRadius.circular(8)),
-          child: Center(
-              child: Text(CargoColors.sizeLabel(box.weight),
-                  style: TextStyle(
-                      color: cc, fontSize: 14, fontWeight: FontWeight.w900))),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(box.label.isNotEmpty ? box.label : box.articleCode,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-              Text('$client · Pedido #${box.orderNumber}',
-                  style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.4),
-                      fontSize: 10),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
-            ],
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Center(
+              child: Text(
+                CargoColors.sizeLabel(box.weight),
+                style: TextStyle(
+                  color: cc,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
           ),
-        ),
-        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Text('${box.weight.toStringAsFixed(1)} kg',
-              style: const TextStyle(
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  box.label.isNotEmpty ? box.label : box.articleCode,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  '$client · Pedido #${box.orderNumber}',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.4),
+                    fontSize: 10,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${box.weight.toStringAsFixed(1)} kg',
+                style: const TextStyle(
                   color: Colors.amber,
                   fontSize: 12,
-                  fontWeight: FontWeight.w700)),
-          Text('${box.w.toInt()}x${box.d.toInt()}x${box.h.toInt()} cm',
-              style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              Text(
+                '${box.w.toInt()}x${box.d.toInt()}x${box.h.toInt()} cm',
+                style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.3),
-                  fontSize: 10)),
-        ]),
-        const SizedBox(width: 6),
-        GestureDetector(
-          onTap: () => setState(() => _selectedBoxId = null),
-          child:
-              const Icon(Icons.close_rounded, color: Colors.white30, size: 18),
-        ),
-      ]),
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(width: 6),
+          GestureDetector(
+            onTap: () => setState(() => _selectedBoxId = null),
+            child: const Icon(Icons.close_rounded,
+                color: Colors.white30, size: 18),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildError() => Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const Icon(Icons.error_outline_rounded,
-              color: Colors.redAccent, size: 48),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text(_error ?? 'Error',
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.error_outline_rounded,
+              color: Colors.redAccent,
+              size: 48,
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                _error ?? 'Error',
                 style: const TextStyle(color: Colors.white70, fontSize: 14),
-                textAlign: TextAlign.center),
-          ),
-          const SizedBox(height: 16),
-          ElevatedButton.icon(
-            onPressed: _loadPlan,
-            icon: const Icon(Icons.refresh, size: 18),
-            label: const Text('Reintentar'),
-            style: ElevatedButton.styleFrom(
+                textAlign: TextAlign.center,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: _loadPlan,
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text('Reintentar'),
+              style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.2),
-                foregroundColor: AppTheme.neonBlue),
-          ),
-        ]),
+                foregroundColor: AppTheme.neonBlue,
+              ),
+            ),
+          ],
+        ),
       );
 
   // ─── View mode toggle button ────────────────────────────────────────
@@ -1470,17 +1628,25 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
               : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
               color: isActive ? AppTheme.neonBlue : Colors.white38,
-              size: 14),
-          const SizedBox(width: 3),
-          Text(label,
+              size: 14,
+            ),
+            const SizedBox(width: 3),
+            Text(
+              label,
               style: TextStyle(
-                  color: isActive ? AppTheme.neonBlue : Colors.white38,
-                  fontSize: 9,
-                  fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
-        ]),
+                color: isActive ? AppTheme.neonBlue : Colors.white38,
+                fontSize: 9,
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1522,8 +1688,8 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
   Widget _buildAxleBalance() {
     final placed = _result!.placed;
     final t = _result!.truck!;
-    final cL = math.max(t.interior.lengthCm, 250.0);
-    final cW = math.max(t.interior.widthCm, 160.0);
+    final double cL = math.max(t.interior.lengthCm, 250).toDouble();
+    final double cW = math.max(t.interior.widthCm, 160).toDouble();
 
     final axle = AxleBalanceHelper.axleDistribution(placed, cL);
     final lat = AxleBalanceHelper.lateralDistribution(placed, cW);
@@ -1550,9 +1716,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                balanced
-                    ? Icons.balance_rounded
-                    : Icons.warning_amber_rounded,
+                balanced ? Icons.balance_rounded : Icons.warning_amber_rounded,
                 color: bc,
                 size: 12,
               ),
@@ -1596,7 +1760,7 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
     final maxW = _result!.placed.map((b) => b.weight).reduce(math.max);
 
     // Collect unique items for legend (max 8)
-    final Map<String, Color> legendItems = {};
+    final legendItems = <String, Color>{};
     for (final b in _result!.placed) {
       final key = _colorMode == ColorMode.product
           ? b.articleCode
@@ -1627,16 +1791,21 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(modeLabel,
-              style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 8,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1)),
+          Text(
+            modeLabel,
+            style: const TextStyle(
+              color: Colors.white54,
+              fontSize: 8,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1,
+            ),
+          ),
           const SizedBox(height: 4),
-          ...legendItems.entries.map((e) => Padding(
-                padding: const EdgeInsets.only(bottom: 3),
-                child: Row(children: [
+          ...legendItems.entries.map(
+            (e) => Padding(
+              padding: const EdgeInsets.only(bottom: 3),
+              child: Row(
+                children: [
                   Container(
                     width: 10,
                     height: 10,
@@ -1650,17 +1819,24 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
                     child: Text(
                       e.key,
                       style: const TextStyle(
-                          color: Colors.white60, fontSize: 8),
+                        color: Colors.white60,
+                        fontSize: 8,
+                      ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                ]),
-              )),
+                ],
+              ),
+            ),
+          ),
           if (legendItems.length >= 8)
-            Text('+ ${_result!.placed.length - 8} más',
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.3),
-                    fontSize: 7)),
+            Text(
+              '+ ${_result!.placed.length - 8} más',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.3),
+                fontSize: 7,
+              ),
+            ),
         ],
       ),
     );
@@ -1672,9 +1848,6 @@ class _LoadPlanner3DPageState extends State<LoadPlanner3DPage>
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class _BalanceDiagramPainter extends CustomPainter {
-  final double frontPct, rearPct, leftPct, rightPct;
-  final bool balanced;
-
   _BalanceDiagramPainter({
     required this.frontPct,
     required this.rearPct,
@@ -1682,14 +1855,17 @@ class _BalanceDiagramPainter extends CustomPainter {
     required this.rightPct,
     required this.balanced,
   });
+  final double frontPct;
+  final double rearPct;
+  final double leftPct;
+  final double rightPct;
+  final bool balanced;
 
   @override
   void paint(Canvas canvas, Size size) {
     final cx = size.width / 2;
     final cy = size.height / 2;
-    final accent = balanced
-        ? const Color(0xFF6BCB77)
-        : const Color(0xFFFFE66D);
+    final accent = balanced ? const Color(0xFF6BCB77) : const Color(0xFFFFE66D);
 
     // Truck outline (simplified top-down)
     final truckRect = RRect.fromRectAndRadius(
@@ -1745,18 +1921,38 @@ class _BalanceDiagramPainter extends CustomPainter {
     );
 
     // Labels
-    _drawLabel(canvas, '${frontPct.round()}%',
-        Offset(cx, cy - size.height * 0.38), accent);
-    _drawLabel(canvas, '${rearPct.round()}%',
-        Offset(cx, cy + size.height * 0.38), accent);
-    _drawLabel(canvas, '${leftPct.round()}%',
-        Offset(cx - size.width * 0.28, cy), accent);
-    _drawLabel(canvas, '${rightPct.round()}%',
-        Offset(cx + size.width * 0.28, cy), accent);
+    _drawLabel(
+      canvas,
+      '${frontPct.round()}%',
+      Offset(cx, cy - size.height * 0.38),
+      accent,
+    );
+    _drawLabel(
+      canvas,
+      '${rearPct.round()}%',
+      Offset(cx, cy + size.height * 0.38),
+      accent,
+    );
+    _drawLabel(
+      canvas,
+      '${leftPct.round()}%',
+      Offset(cx - size.width * 0.28, cy),
+      accent,
+    );
+    _drawLabel(
+      canvas,
+      '${rightPct.round()}%',
+      Offset(cx + size.width * 0.28, cy),
+      accent,
+    );
   }
 
   void _drawLabel(
-      Canvas canvas, String text, Offset pos, Color color) {
+    Canvas canvas,
+    String text,
+    Offset pos,
+    Color color,
+  ) {
     final tp = TextPainter(
       text: TextSpan(
         text: text,

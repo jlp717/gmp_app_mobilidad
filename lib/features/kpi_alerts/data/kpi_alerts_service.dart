@@ -15,9 +15,7 @@ class KpiAlert {
     required this.type,
     required this.severity,
     required this.message,
-    this.rawData,
-    required this.sourceFile,
-    required this.createdAt,
+    required this.sourceFile, required this.createdAt, this.rawData,
     this.typeExplanation = '',
     this.title = '',
     this.summary = '',
@@ -49,7 +47,7 @@ class KpiAlert {
       detail: json['detail']?.toString() ?? '',
       actions: (json['actions'] is List)
           ? List<String>.from(
-              (json['actions'] as List).map((a) => a.toString()))
+              (json['actions'] as List).map((a) => a.toString()),)
           : const [],
       meta: json['meta'] is Map
           ? Map<String, dynamic>.from(json['meta'] as Map)

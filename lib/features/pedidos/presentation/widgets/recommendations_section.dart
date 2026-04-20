@@ -1,21 +1,21 @@
 /// Recommendations Section
 /// =======================
 /// Collapsible horizontal scrollable sections for "Productos habituales" and "Otros clientes compran"
+library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../providers/pedidos_provider.dart';
-import '../../data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
 class RecommendationsSection extends ConsumerStatefulWidget {
-  final void Function(String code, String name) onProductTap;
 
   const RecommendationsSection({
-    Key? key,
-    required this.onProductTap,
-  }) : super(key: key);
+    required this.onProductTap, super.key,
+  });
+  final void Function(String code, String name) onProductTap;
 
   @override
   ConsumerState<RecommendationsSection> createState() => _RecommendationsSectionState();
@@ -64,7 +64,7 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(Icons.recommend,
-                          color: AppTheme.neonBlue, size: 16),
+                          color: AppTheme.neonBlue, size: 16,),
                       const SizedBox(width: 6),
                       Text(
                         'Recomendaciones ($totalCount)',
@@ -72,7 +72,7 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
                           color: AppTheme.neonBlue,
                           fontWeight: FontWeight.w600,
                           fontSize: Responsive.fontSize(context,
-                              small: 12, large: 14),
+                              small: 12, large: 14,),
                         ),
                       ),
                     ],
@@ -125,7 +125,7 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
       children: [
         Padding(
           padding: EdgeInsets.only(
-              left: pad.left, right: pad.right, top: 4, bottom: 4),
+              left: pad.left, right: pad.right, top: 4, bottom: 4,),
           child: Row(
             children: [
               Icon(icon, color: Colors.white54, size: 14),
@@ -160,7 +160,7 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
   }
 
   Widget _buildRecoCard(
-      BuildContext context, Recommendation item, String badge) {
+      BuildContext context, Recommendation item, String badge,) {
     return InkWell(
       onTap: () => widget.onProductTap(item.code, item.name),
       borderRadius: BorderRadius.circular(10),

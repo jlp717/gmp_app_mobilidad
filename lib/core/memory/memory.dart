@@ -13,7 +13,7 @@
 library memory;
 
 export 'agent_database.dart';
-export 'vector_store_hnsw.dart';
+export 'data_migration.dart';
 export 'reasoning_bank.dart';
 export 'unified_memory_layer.dart';
-export 'data_migration.dart';
+export 'vector_store_hnsw.dart';

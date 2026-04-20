@@ -2,22 +2,19 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../domain/models/load_planner_models.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
 
 /// Premium floating glassmorphism info card for the selected box.
 /// Features: backdrop blur, dimension visualization, action buttons, smooth entry.
 class BoxInfoOverlay extends StatefulWidget {
+
+  const BoxInfoOverlay({
+    required this.box, required this.index, required this.onClose, super.key,
+  });
   final LoadBox box;
   final int index;
   final VoidCallback onClose;
-
-  const BoxInfoOverlay({
-    super.key,
-    required this.box,
-    required this.index,
-    required this.onClose,
-  });
 
   @override
   State<BoxInfoOverlay> createState() => _BoxInfoOverlayState();
@@ -74,7 +71,6 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
                     color: AppTheme.neonBlue.withOpacity(0.25),
-                    width: 1,
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -224,10 +220,6 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
 // =============================================================================
 
 class _InfoRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color? valueColor;
 
   const _InfoRow({
     required this.icon,
@@ -235,6 +227,10 @@ class _InfoRow extends StatelessWidget {
     required this.value,
     this.valueColor,
   });
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color? valueColor;
 
   @override
   Widget build(BuildContext context) {
@@ -272,15 +268,15 @@ class _InfoRow extends StatelessWidget {
 // =============================================================================
 
 class _DimensionBars extends StatelessWidget {
-  final double w;
-  final double d;
-  final double h;
 
   const _DimensionBars({
     required this.w,
     required this.d,
     required this.h,
   });
+  final double w;
+  final double d;
+  final double h;
 
   @override
   Widget build(BuildContext context) {
@@ -300,10 +296,6 @@ class _DimensionBars extends StatelessWidget {
 }
 
 class _DimBar extends StatelessWidget {
-  final String label;
-  final double value;
-  final double maxDim;
-  final Color color;
 
   const _DimBar({
     required this.label,
@@ -311,6 +303,10 @@ class _DimBar extends StatelessWidget {
     required this.maxDim,
     required this.color,
   });
+  final String label;
+  final double value;
+  final double maxDim;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -344,7 +340,7 @@ class _DimBar extends StatelessWidget {
           ),
           const SizedBox(height: 1),
           Text(
-            '${value.toStringAsFixed(0)}',
+            value.toStringAsFixed(0),
             style: TextStyle(
               color: AppTheme.textTertiary.withOpacity(0.6),
               fontSize: 8,

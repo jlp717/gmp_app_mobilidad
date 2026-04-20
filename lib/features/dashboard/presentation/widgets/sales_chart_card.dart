@@ -1,8 +1,8 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
 /// [SalesChartCard] - Tarjeta con gráfica de ventas y unidades
 ///
@@ -13,8 +13,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 /// - Gráfica de barras con fl_chart
 class SalesChartCard extends StatelessWidget {
   const SalesChartCard({
-    super.key,
-    required this.salesSummary,
+    required this.salesSummary, super.key,
   });
 
   final SalesSummary salesSummary;
@@ -215,7 +214,7 @@ class SalesChartCard extends StatelessWidget {
           enabled: true,
           touchTooltipData: BarTouchTooltipData(
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              final day = data[group.x.toInt()];
+              final day = data[group.x];
               return BarTooltipItem(
                 '${day.dayLabel}\n',
                 theme.textTheme.bodySmall!.copyWith(
@@ -241,7 +240,6 @@ class SalesChartCard extends StatelessWidget {
           ),
         ),
         titlesData: FlTitlesData(
-          show: true,
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -272,14 +270,13 @@ class SalesChartCard extends StatelessWidget {
             ),
           ),
           topTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
+            
           ),
           rightTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
+            
           ),
         ),
         gridData: FlGridData(
-          show: true,
           drawVerticalLine: false,
           horizontalInterval: maxY / 5,
           getDrawingHorizontalLine: (value) {

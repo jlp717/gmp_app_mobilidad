@@ -1,24 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 
 class KPICard extends StatelessWidget {
+
+  const KPICard({
+    required this.title, required this.value, required this.icon, super.key,
+    this.color,
+    this.isPositive = true,
+    this.subtitle,
+  });
   final String title;
   final String value;
   final IconData icon;
   final Color? color;
   final bool isPositive;
   final String? subtitle;
-
-  const KPICard({
-    super.key,
-    required this.title,
-    required this.value,
-    required this.icon,
-    this.color,
-    this.isPositive = true,
-    this.subtitle,
-  });
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +29,7 @@ class KPICard extends StatelessWidget {
         side: BorderSide(color: AppColors.cardColor.withOpacity(0.5)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [

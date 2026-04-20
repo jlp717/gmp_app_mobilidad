@@ -3,9 +3,11 @@
  * ===========================
  * Service for invoice operations for commercial profile
  * Ported from src/services/facturas.service.ts
+ * 
+ * SECURITY: All queries use parameterized queries (queryWithParams) to prevent SQL injection
  */
 
-const { query } = require('../config/db');
+const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
 const { CircuitBreaker } = require('./circuit-breaker');
 
@@ -39,8 +41,7 @@ class FacturasService {
         }
 
         const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
-        const vendorList = isAll ? null : vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
-
+        
         let sql = `
       SELECT
         TRIM(CAC.SERIEFACTURA) as SERIE,
@@ -59,71 +60,85 @@ class FacturasService {
       WHERE CAC.NUMEROFACTURA > 0 AND CAC.NUMEROFACTURA < 900000
     `;
 
+        const queryParams = [];
+
         if (!isAll) {
-            sql += ` AND TRIM(CAC.CODIGOVENDEDOR) IN (${vendorList})`;
+            const vendors = vendedorCodes.split(',').map(v => v.trim());
+            const placeholders = vendors.map(() => '?').join(',');
+            sql += ` AND TRIM(CAC.CODIGOVENDEDOR) IN (${placeholders})`;
+            queryParams.push(...vendors);
         }
 
         // Date Filtering Logic
         let dateFilterApplied = false;
 
         if (dateFrom && dateTo) {
-            // dateFrom/To expected as 'YYYY-MM-DD'
             const fromInt = parseInt(dateFrom.replace(/-/g, ''));
             const toInt = parseInt(dateTo.replace(/-/g, ''));
             if (!isNaN(fromInt) && !isNaN(toInt)) {
-                sql += ` AND (CAC.ANOFACTURA * 10000 + CAC.MESFACTURA * 100 + CAC.DIAFACTURA) BETWEEN ${fromInt} AND ${toInt}`;
+                sql += ` AND (CAC.ANOFACTURA * 10000 + CAC.MESFACTURA * 100 + CAC.DIAFACTURA) BETWEEN ? AND ?`;
+                queryParams.push(fromInt, toInt);
                 dateFilterApplied = true;
             }
         }
 
         if (!dateFilterApplied) {
             const currentYear = year || new Date().getFullYear();
-            sql += ` AND CAC.EJERCICIOFACTURA = ${currentYear}`;
+            sql += ` AND CAC.EJERCICIOFACTURA = ?`;
+            queryParams.push(currentYear);
 
             if (month) {
-                sql += ` AND CAC.MESFACTURA = ${month}`;
+                sql += ` AND CAC.MESFACTURA = ?`;
+                queryParams.push(month);
             }
         }
 
         if (clientId) {
-            sql += ` AND TRIM(CAC.CODIGOCLIENTEFACTURA) = '${clientId.trim()}'`;
+            sql += ` AND TRIM(CAC.CODIGOCLIENTEFACTURA) = ?`;
+            queryParams.push(clientId.trim());
         }
 
         // Specific Client Search
         if (clientSearch) {
-            const safeClientSearch = clientSearch.toUpperCase().replace(/'/g, "''");
-            sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${safeClientSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${safeClientSearch}%')`;
+            const safeClientSearch = `%${clientSearch.toUpperCase()}%`;
+            sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ?)`;
+            queryParams.push(safeClientSearch, safeClientSearch);
         }
 
         // Specific Doc Search (Factura/Client Code)
         if (docSearch) {
-            const safeDocSearch = docSearch.toUpperCase().replace(/'/g, "''");
+            const safeDocSearch = `%${docSearch.toUpperCase()}%`;
             const searchNum = parseFloat(docSearch);
             const isNum = !isNaN(searchNum);
-            sql += ` AND (
-                TRIM(CAC.SERIEFACTURA) LIKE '%${safeDocSearch}%' OR 
-                TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE '%${safeDocSearch}%'
-                ${isNum ? `OR CAC.NUMEROFACTURA = ${searchNum}` : ''}
-            )`;
+            
+            if (isNum) {
+                sql += ` AND (TRIM(CAC.SERIEFACTURA) LIKE ? OR TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE ? OR CAC.NUMEROFACTURA = ?)`;
+                queryParams.push(safeDocSearch, safeDocSearch, searchNum);
+            } else {
+                sql += ` AND (TRIM(CAC.SERIEFACTURA) LIKE ? OR TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE ?)`;
+                queryParams.push(safeDocSearch, safeDocSearch);
+            }
         }
 
         // Legacy Global Search (if provided)
         if (search) {
-            const safeSearch = search.toUpperCase().replace(/'/g, "''");
+            const safeSearch = `%${search.toUpperCase()}%`;
             const searchNum = parseFloat(search);
             const isNum = !isNaN(searchNum);
-            sql += ` AND (
-        UPPER(CLI.NOMBRECLIENTE) LIKE '%${safeSearch}%' OR
-        UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${safeSearch}%' OR
-        ${isNum ? `CAC.NUMEROFACTURA = ${searchNum} OR` : ''} 
-        TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE '%${safeSearch}%'
-      )`;
+            
+            if (isNum) {
+                sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR CAC.NUMEROFACTURA = ? OR TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE ?)`;
+                queryParams.push(safeSearch, safeSearch, searchNum, safeSearch);
+            } else {
+                sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE ?)`;
+                queryParams.push(safeSearch, safeSearch, safeSearch);
+            }
         }
 
         sql += ` ORDER BY CAC.ANOFACTURA DESC, CAC.MESFACTURA DESC, CAC.DIAFACTURA DESC, CAC.NUMEROFACTURA DESC`;
 
         try {
-            const rows = await query(sql);
+            const rows = await queryWithParams(sql, queryParams);
 
             // FIX: Aggregate CAC records by invoice key (SERIE-NUMERO-EJERCICIO).
             // A single invoice can span multiple albaranes (delivery notes),
@@ -176,20 +191,25 @@ class FacturasService {
         }
 
         const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
-        const vendorList = isAll ? null : vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
-
+        
         let sql = `
       SELECT DISTINCT EJERCICIOFACTURA as YEAR
       FROM DSEDAC.CAC
       WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
     `;
+        
+        const queryParams = [];
+        
         if (!isAll) {
-            sql += ` AND TRIM(CODIGOVENDEDOR) IN (${vendorList})`;
+            const vendors = vendedorCodes.split(',').map(v => v.trim());
+            const placeholders = vendors.map(() => '?').join(',');
+            sql += ` AND TRIM(CODIGOVENDEDOR) IN (${placeholders})`;
+            queryParams.push(...vendors);
         }
         sql += ` ORDER BY YEAR DESC`;
 
         try {
-            const rows = await query(sql);
+            const rows = await queryWithParams(sql, queryParams);
             return rows.map(r => r.YEAR);
         } catch (error) {
             logger.error(`Error fetching available years: ${error.message}`);
@@ -205,8 +225,7 @@ class FacturasService {
         }
 
         const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
-        const vendorList = isAll ? null : vendedorCodes.split(',').map(v => `'${v.trim()}'`).join(',');
-
+        
         let sql = `
       SELECT
         COUNT(DISTINCT TRIM(SERIEFACTURA) || '-' || NUMEROFACTURA) as NUM_FACTURAS,
@@ -217,8 +236,13 @@ class FacturasService {
       WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
     `;
 
+        const queryParams = [];
+
         if (!isAll) {
-            sql += ` AND TRIM(CODIGOVENDEDOR) IN (${vendorList})`;
+            const vendors = vendedorCodes.split(',').map(v => v.trim());
+            const placeholders = vendors.map(() => '?').join(',');
+            sql += ` AND TRIM(CODIGOVENDEDOR) IN (${placeholders})`;
+            queryParams.push(...vendors);
         }
 
         // FIX #2: Support dateFrom/dateTo in summary (was missing - caused wrong totals)
@@ -227,22 +251,25 @@ class FacturasService {
             const fromInt = parseInt(dateFrom.replace(/-/g, ''));
             const toInt = parseInt(dateTo.replace(/-/g, ''));
             if (!isNaN(fromInt) && !isNaN(toInt)) {
-                sql += ` AND (ANOFACTURA * 10000 + MESFACTURA * 100 + DIAFACTURA) BETWEEN ${fromInt} AND ${toInt}`;
+                sql += ` AND (ANOFACTURA * 10000 + MESFACTURA * 100 + DIAFACTURA) BETWEEN ? AND ?`;
+                queryParams.push(fromInt, toInt);
                 dateFilterApplied = true;
             }
         }
 
         if (!dateFilterApplied) {
             const currentYear = year || new Date().getFullYear();
-            sql += ` AND EJERCICIOFACTURA = ${currentYear}`;
+            sql += ` AND EJERCICIOFACTURA = ?`;
+            queryParams.push(currentYear);
 
             if (month) {
-                sql += ` AND MESFACTURA = ${month}`;
+                sql += ` AND MESFACTURA = ?`;
+                queryParams.push(month);
             }
         }
 
         try {
-            const rows = await query(sql);
+            const rows = await queryWithParams(sql, queryParams);
             const stats = rows[0] || {};
 
             return {
@@ -291,14 +318,14 @@ class FacturasService {
         SUM(CAC.IMPORTEIVA3) as IMPORTEIVA3
       FROM DSEDAC.CAC CAC
       LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CAC.CODIGOCLIENTEFACTURA
-      WHERE TRIM(CAC.SERIEFACTURA) = '${serie}'
-        AND CAC.NUMEROFACTURA = ${numero}
-        AND CAC.EJERCICIOFACTURA = ${ejercicio}
+      WHERE TRIM(CAC.SERIEFACTURA) = ?
+        AND CAC.NUMEROFACTURA = ?
+        AND CAC.EJERCICIOFACTURA = ?
       GROUP BY CAC.NUMEROFACTURA, CAC.EJERCICIOFACTURA
     `;
 
         try {
-            const headers = await query(headerSql);
+            const headers = await queryWithParams(headerSql, [serie, numero, ejercicio]);
 
             if (!headers || headers.length === 0) {
                 throw new Error('Factura no encontrada'); // This string must match the check in routes
@@ -320,13 +347,13 @@ class FacturasService {
           AND LAC.SERIEALBARAN = CAC.SERIEALBARAN
           AND LAC.TERMINALALBARAN = CAC.TERMINALALBARAN
           AND LAC.NUMEROALBARAN = CAC.NUMEROALBARAN
-        WHERE TRIM(CAC.SERIEFACTURA) = '${serie}'
-          AND CAC.NUMEROFACTURA = ${numero}
-          AND CAC.EJERCICIOFACTURA = ${ejercicio}
+        WHERE TRIM(CAC.SERIEFACTURA) = ?
+          AND CAC.NUMEROFACTURA = ?
+          AND CAC.EJERCICIOFACTURA = ?
         ORDER BY LAC.SECUENCIA
       `;
 
-            const lines = await query(linesSql);
+            const lines = await queryWithParams(linesSql, [serie, numero, ejercicio]);
 
             const bases = [
                 { base: parseFloat(header.IMPORTEBASEIMPONIBLE1) || 0, pct: header.PORCENTAJEIVA1 || 0, iva: parseFloat(header.IMPORTEIVA1) || 0 },

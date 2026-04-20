@@ -5,8 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 // ── State ────────────────────────────────────────────────────────────────────
 
 class FilterState {
-  final String? selectedVendor;
   const FilterState({this.selectedVendor});
+  final String? selectedVendor;
 
   FilterState copyWith({Object? selectedVendor = _sentinel}) {
     return FilterState(

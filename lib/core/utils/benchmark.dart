@@ -33,6 +33,8 @@ import 'package:flutter/foundation.dart';
 /// benchmark.printResults();
 /// ```
 class Benchmark {
+  
+  Benchmark(this.name);
   final String name;
   DateTime? _startTime;
   DateTime? _endTime;
@@ -43,8 +45,6 @@ class Benchmark {
   int? _endMemory;
   
   static final List<BenchmarkResult> _results = [];
-  
-  Benchmark(this.name);
   
   /// Start the benchmark
   void start() {
@@ -141,7 +141,7 @@ ${trackMemory && memoryDifference != null ? '║  Memory Delta:    ${memoryDiffe
       debugPrint('  Average: ${result.formattedAverage}');
       if (result.startMemory != null && result.endMemory != null) {
         final delta = result.endMemory! - result.startMemory!;
-        debugPrint('  Memory: ${delta > 0 ? '+' : ''}${delta} KB');
+        debugPrint('  Memory: ${delta > 0 ? '+' : ''}$delta KB');
       }
       debugPrint('');
     }
@@ -174,11 +174,6 @@ ${trackMemory && memoryDifference != null ? '║  Memory Delta:    ${memoryDiffe
 
 /// Benchmark result data class
 class BenchmarkResult {
-  final String name;
-  final Duration duration;
-  final int iterations;
-  final int? startMemory;
-  final int? endMemory;
   
   BenchmarkResult({
     required this.name,
@@ -187,6 +182,11 @@ class BenchmarkResult {
     this.startMemory,
     this.endMemory,
   });
+  final String name;
+  final Duration duration;
+  final int iterations;
+  final int? startMemory;
+  final int? endMemory;
   
   String get formattedDuration => '${duration.inMilliseconds} ms';
   
@@ -264,14 +264,6 @@ class PerformanceProfiler {
 
 /// Profile statistics
 class ProfileStats {
-  final String label;
-  final int count;
-  final Duration min;
-  final Duration max;
-  final Duration average;
-  final Duration median;
-  final Duration p95;
-  final Duration p99;
   
   ProfileStats({
     required this.label,
@@ -283,6 +275,14 @@ class ProfileStats {
     required this.p95,
     required this.p99,
   });
+  final String label;
+  final int count;
+  final Duration min;
+  final Duration max;
+  final Duration average;
+  final Duration median;
+  final Duration p95;
+  final Duration p99;
   
   @override
   String toString() {
@@ -307,15 +307,15 @@ class LoadTester {
     int totalTasks = 100,
   }) async {
     final start = DateTime.now();
-    int completed = 0;
-    int failed = 0;
+    var completed = 0;
+    var failed = 0;
     
     final tasks = <Future<void>>[];
     
-    for (int i = 0; i < totalTasks; i += concurrentTasks) {
+    for (var i = 0; i < totalTasks; i += concurrentTasks) {
       final batch = <Future<void>>[];
       
-      for (int j = 0; j < concurrentTasks && (i + j) < totalTasks; j++) {
+      for (var j = 0; j < concurrentTasks && (i + j) < totalTasks; j++) {
         batch.add(
           task().catchError((_) => failed++),
         );
@@ -341,12 +341,6 @@ class LoadTester {
 
 /// Load test result
 class LoadTestResult {
-  final String name;
-  final int totalTasks;
-  final int completed;
-  final int failed;
-  final Duration duration;
-  final double tasksPerSecond;
   
   LoadTestResult({
     required this.name,
@@ -356,6 +350,12 @@ class LoadTestResult {
     required this.duration,
     required this.tasksPerSecond,
   });
+  final String name;
+  final int totalTasks;
+  final int completed;
+  final int failed;
+  final Duration duration;
+  final double tasksPerSecond;
   
   @override
   String toString() {

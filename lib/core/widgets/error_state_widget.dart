@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 /// Shared error state widget used across multiple pages.
 /// Displays an error icon, message, and optional retry button.
 class ErrorStateWidget extends StatelessWidget {
-  final String message;
-  final VoidCallback? onRetry;
-  final String retryLabel;
 
   const ErrorStateWidget({
-    super.key,
-    required this.message,
+    required this.message, super.key,
     this.onRetry,
     this.retryLabel = 'Reintentar',
   });
+  final String message;
+  final VoidCallback? onRetry;
+  final String retryLabel;
 
   @override
   Widget build(BuildContext context) {

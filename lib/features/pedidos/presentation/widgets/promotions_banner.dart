@@ -2,26 +2,28 @@
 /// ========================
 /// Horizontal scrollable banner showing products with active promotions.
 /// Handles PRICE promos (price reduction) and GIFT promos (buy X get Y free).
+library;
 
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../../../core/api/api_client.dart';
-import '../../data/pedidos_service.dart';
-import '../../providers/pedidos_provider.dart';
-import '../utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
 class PromotionsBanner extends StatefulWidget {
-  final void Function(String code, String name)? onProductTap;
-  final List<PromotionItem>? promotions;
 
   const PromotionsBanner({
-    Key? key,
+    super.key,
     this.onProductTap,
     this.promotions,
-  }) : super(key: key);
+  });
+  final void Function(String code, String name)? onProductTap;
+  final List<PromotionItem>? promotions;
 
   @override
   State<PromotionsBanner> createState() => _PromotionsBannerState();
@@ -143,13 +145,13 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                     ),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                        color: AppTheme.neonGreen.withValues(alpha: 0.4)),
+                        color: AppTheme.neonGreen.withValues(alpha: 0.4),),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       const Icon(Icons.local_offer,
-                          color: AppTheme.neonGreen, size: 16),
+                          color: AppTheme.neonGreen, size: 16,),
                       const SizedBox(width: 6),
                       Text(
                         'Ofertas activas (${_promotions.length})',
@@ -157,7 +159,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                           color: AppTheme.neonGreen,
                           fontWeight: FontWeight.w600,
                           fontSize: Responsive.fontSize(context,
-                              small: 12, large: 14),
+                              small: 12, large: 14,),
                         ),
                       ),
                     ],

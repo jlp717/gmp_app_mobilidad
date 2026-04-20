@@ -4,7 +4,36 @@ import 'package:equatable/equatable.dart';
 enum UserRole { jefe, comercial, repartidor }
 
 /// User model aligned with backend response
-class UserModel extends Equatable {
+class UserModel extends Equatable { // NEW: DB-driven visibility
+
+  const UserModel({
+    required this.id,
+    required this.code,
+    required this.name,
+    required this.company,
+    required this.role, this.delegation,
+    this.vendedorCode,
+    this.isJefeVentas = false,
+    this.tipoVendedor,
+    this.codigoConductor,
+    this.showCommissions = true, // Default true
+  });
+
+  factory UserModel.fromJson(Map<String, dynamic> json) {
+    return UserModel(
+      id: json['id'].toString(),
+      code: json['code']?.toString() ?? '',
+      name: (json['name'] as String?) ?? '',
+      company: (json['company'] as String?) ?? 'GMP',
+      delegation: json['delegation'] as String?,
+      vendedorCode: json['vendedorCode'] as String?,
+      isJefeVentas: _parseBool(json['isJefeVentas']),
+      tipoVendedor: json['tipoVendedor'] as String?,
+      role: (json['role'] as String?) ?? 'COMERCIAL',
+      codigoConductor: json['codigoConductor'] as String?,
+      showCommissions: (json['showCommissions'] as bool?) ?? true,
+    );
+  }
   final String id;
   final String code; // CODIGOUSUARIO
   final String name; // NOMBREUSUARIO
@@ -15,21 +44,7 @@ class UserModel extends Equatable {
   final String? tipoVendedor; // TIPOVENDEDOR
   final String role; // JEFE, COMERCIAL, REPARTIDOR
   final String? codigoConductor; // Para repartidores
-  final bool showCommissions; // NEW: DB-driven visibility
-
-  const UserModel({
-    required this.id,
-    required this.code,
-    required this.name,
-    required this.company,
-    this.delegation,
-    this.vendedorCode,
-    this.isJefeVentas = false,
-    this.tipoVendedor,
-    required this.role,
-    this.codigoConductor,
-    this.showCommissions = true, // Default true
-  });
+  final bool showCommissions;
 
   // Role helpers
   UserRole get userRole {
@@ -48,22 +63,6 @@ class UserModel extends Equatable {
   bool get isDirector => userRole == UserRole.jefe;
   bool get isSales => userRole == UserRole.comercial;
   bool get isRepartidor => userRole == UserRole.repartidor;
-
-  factory UserModel.fromJson(Map<String, dynamic> json) {
-    return UserModel(
-      id: json['id'].toString(),
-      code: json['code']?.toString() ?? '',
-      name: (json['name'] as String?) ?? '',
-      company: (json['company'] as String?) ?? 'GMP',
-      delegation: json['delegation'] as String?,
-      vendedorCode: json['vendedorCode'] as String?,
-      isJefeVentas: _parseBool(json['isJefeVentas']),
-      tipoVendedor: json['tipoVendedor'] as String?,
-      role: (json['role'] as String?) ?? 'COMERCIAL',
-      codigoConductor: json['codigoConductor'] as String?,
-      showCommissions: (json['showCommissions'] as bool?) ?? true,
-    );
-  }
 
   Map<String, dynamic> toJson() {
     return {

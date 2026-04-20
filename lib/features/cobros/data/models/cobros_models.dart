@@ -1,5 +1,6 @@
 /// COBROS MODELS
 /// Modelos de datos para el módulo de cobros y entregas
+library;
 
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
@@ -71,24 +72,13 @@ enum TipoModoCobro {
 
 /// Cobro pendiente de un cliente
 class CobroPendiente {
-  final String id;
-  final String referencia;
-  final TipoCobro tipo;
-  final DateTime fecha;
-  final DateTime? fechaVencimiento;
-  final double importeTotal;
-  final double importePendiente;
-  final String? formaPago;
-  final bool esCTR;
 
   CobroPendiente({
     required this.id,
     required this.referencia,
     required this.tipo,
     required this.fecha,
-    this.fechaVencimiento,
-    required this.importeTotal,
-    required this.importePendiente,
+    required this.importeTotal, required this.importePendiente, this.fechaVencimiento,
     this.formaPago,
     this.esCTR = false,
   });
@@ -111,6 +101,15 @@ class CobroPendiente {
       esCTR: json['esCTR'] == true,
     );
   }
+  final String id;
+  final String referencia;
+  final TipoCobro tipo;
+  final DateTime fecha;
+  final DateTime? fechaVencimiento;
+  final double importeTotal;
+  final double importePendiente;
+  final String? formaPago;
+  final bool esCTR;
 
   static TipoCobro _parseTipoCobro(String value) {
     switch (value.toLowerCase()) {
@@ -130,12 +129,6 @@ class CobroPendiente {
 
 /// Item de un albarán para entrega
 class EntregaItem {
-  final String itemId;
-  final String codigoArticulo;
-  final String descripcion;
-  final int cantidadPedida;
-  int cantidadEntregada;
-  EstadoEntrega estado;
 
   EntregaItem({
     required this.itemId,
@@ -157,6 +150,12 @@ class EntregaItem {
           EstadoEntrega.fromString((json['estado'] as String?) ?? 'PENDIENTE'),
     );
   }
+  final String itemId;
+  final String codigoArticulo;
+  final String descripcion;
+  final int cantidadPedida;
+  int cantidadEntregada;
+  EstadoEntrega estado;
 
   double get porcentajeEntregado =>
       cantidadPedida > 0 ? (cantidadEntregada / cantidadPedida) : 0;
@@ -164,19 +163,6 @@ class EntregaItem {
 
 /// Albarán pendiente de entrega
 class Albaran {
-  final String id;
-  final int numeroAlbaran;
-  final String codigoCliente;
-  final String nombreCliente;
-  final String direccion;
-  final DateTime fecha;
-  final double importeTotal;
-  EstadoEntrega estado;
-  final List<EntregaItem> items;
-  final String? formaPago;
-  final bool esCTR;
-  String? firmaBase64;
-  List<String> fotos;
 
   Albaran({
     required this.id,
@@ -214,6 +200,19 @@ class Albaran {
       fotos: List<String>.from(json['fotos'] as List? ?? []),
     );
   }
+  final String id;
+  final int numeroAlbaran;
+  final String codigoCliente;
+  final String nombreCliente;
+  final String direccion;
+  final DateTime fecha;
+  final double importeTotal;
+  EstadoEntrega estado;
+  final List<EntregaItem> items;
+  final String? formaPago;
+  final bool esCTR;
+  String? firmaBase64;
+  List<String> fotos;
 
   static DateTime _parseDate(dynamic date) {
     if (date == null) return DateTime.now();
@@ -245,13 +244,6 @@ class Albaran {
 
 /// Estado del cliente (moroso, activo, etc)
 class EstadoCliente {
-  final String codigo;
-  final String nombre;
-  final double limiteCredito;
-  final double totalPendiente;
-  final int diasMora;
-  final String estado; // ACTIVO, EN_ROJO, BLOQUEADO
-  final String? motivo;
 
   EstadoCliente({
     required this.codigo,
@@ -274,6 +266,13 @@ class EstadoCliente {
       motivo: json['motivo'] as String?,
     );
   }
+  final String codigo;
+  final String nombre;
+  final double limiteCredito;
+  final double totalPendiente;
+  final int diasMora;
+  final String estado; // ACTIVO, EN_ROJO, BLOQUEADO
+  final String? motivo;
 
   bool get isActivo => estado == 'ACTIVO';
   bool get isEnRojo => estado == 'EN_ROJO';
@@ -295,12 +294,6 @@ class EstadoCliente {
 
 /// Resumen de cobros de un cliente
 class ResumenCobros {
-  final double totalPendiente;
-  final int numFacturas;
-  final int numAlbaranes;
-  final int numPedidos;
-  final int diasMoraMaximo;
-  final List<CobroPendiente> cobros;
 
   ResumenCobros({
     this.totalPendiente = 0,
@@ -333,4 +326,10 @@ class ResumenCobros {
           [],
     );
   }
+  final double totalPendiente;
+  final int numFacturas;
+  final int numAlbaranes;
+  final int numPedidos;
+  final int diasMoraMaximo;
+  final List<CobroPendiente> cobros;
 }

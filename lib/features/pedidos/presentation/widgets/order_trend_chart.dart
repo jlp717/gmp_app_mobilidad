@@ -2,38 +2,38 @@
 /// =================
 /// Custom-painted line chart showing 7-day order trend.
 /// No external dependencies — pure CustomPainter.
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class TrendDataPoint {
-  final String date;
-  final int orders;
-  final double amount;
 
   const TrendDataPoint({
     required this.date,
     required this.orders,
     required this.amount,
   });
+  final String date;
+  final int orders;
+  final double amount;
 }
 
 class OrderTrendChart extends StatelessWidget {
-  final List<TrendDataPoint> data;
-  final double height;
 
   const OrderTrendChart({
-    Key? key,
-    required this.data,
+    required this.data, super.key,
     this.height = 80,
-  }) : super(key: key);
+  });
+  final List<TrendDataPoint> data;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
     if (data.isEmpty) {
       return SizedBox(
         height: height,
-        child: Center(
+        child: const Center(
           child: Text(
             'Sin datos de tendencia',
             style: TextStyle(color: Colors.white38, fontSize: 11),
@@ -53,9 +53,9 @@ class OrderTrendChart extends StatelessWidget {
 }
 
 class _TrendChartPainter extends CustomPainter {
-  final List<TrendDataPoint> data;
 
   _TrendChartPainter(this.data);
+  final List<TrendDataPoint> data;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -97,7 +97,7 @@ class _TrendChartPainter extends CustomPainter {
 
     // Build points
     final points = <Offset>[];
-    for (int i = 0; i < data.length; i++) {
+    for (var i = 0; i < data.length; i++) {
       final x = padding +
           (i / (data.length - 1).clamp(1, double.infinity)) * chartWidth;
       final y =
@@ -109,7 +109,7 @@ class _TrendChartPainter extends CustomPainter {
     if (points.length > 1) {
       final fillPath = Path();
       fillPath.moveTo(points.first.dx, points.first.dy);
-      for (int i = 1; i < points.length; i++) {
+      for (var i = 1; i < points.length; i++) {
         fillPath.lineTo(points[i].dx, points[i].dy);
       }
       fillPath.lineTo(points.last.dx, size.height - padding);
@@ -122,7 +122,7 @@ class _TrendChartPainter extends CustomPainter {
     if (points.length > 1) {
       final linePath = Path();
       linePath.moveTo(points.first.dx, points.first.dy);
-      for (int i = 1; i < points.length; i++) {
+      for (var i = 1; i < points.length; i++) {
         linePath.lineTo(points[i].dx, points[i].dy);
       }
       canvas.drawPath(linePath, linePaint);
@@ -139,9 +139,9 @@ class _TrendChartPainter extends CustomPainter {
       textAlign: TextAlign.center,
       textDirection: TextDirection.ltr,
     );
-    final labelStyle = TextStyle(color: Colors.white54, fontSize: 8);
+    const labelStyle = TextStyle(color: Colors.white54, fontSize: 8);
 
-    for (int i = 0; i < data.length; i++) {
+    for (var i = 0; i < data.length; i++) {
       final x = padding +
           (i / (data.length - 1).clamp(1, double.infinity)) * chartWidth;
       final dateStr =
@@ -149,7 +149,7 @@ class _TrendChartPainter extends CustomPainter {
       labelPaint.text = TextSpan(text: dateStr, style: labelStyle);
       labelPaint.layout();
       labelPaint.paint(
-          canvas, Offset(x - labelPaint.width / 2, size.height - 14));
+          canvas, Offset(x - labelPaint.width / 2, size.height - 14),);
     }
   }
 

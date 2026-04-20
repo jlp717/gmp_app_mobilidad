@@ -1,24 +1,23 @@
 /// ALBARAN CARD WIDGET
 /// Tarjeta premium para mostrar un albarán/entrega
+library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../data/models/cobros_models.dart';
-
 class AlbaranCard extends StatelessWidget {
-  final Albaran albaran;
-  final VoidCallback? onTap;
-  final VoidCallback? onQuickComplete;
 
   const AlbaranCard({
-    super.key,
-    required this.albaran,
+    required this.albaran, super.key,
     this.onTap,
     this.onQuickComplete,
   });
+  final Albaran albaran;
+  final VoidCallback? onTap;
+  final VoidCallback? onQuickComplete;
 
   @override
   Widget build(BuildContext context) {

@@ -1,10 +1,9 @@
 import 'dart:typed_data';
 
+import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
-
-import '../domain/models/load_planner_models.dart';
 
 /// PDF Export Service for the Load Planner.
 ///
@@ -47,7 +46,7 @@ class PdfExportService {
     const textSecondary = PdfColor.fromInt(0xFFB0B8D4);
     const textTertiary = PdfColor.fromInt(0xFF6B7280);
 
-    PdfColor _statusColor() {
+    PdfColor statusColor() {
       switch (metrics.status) {
         case LoadStatus.seguro:
           return successColor;
@@ -58,7 +57,7 @@ class PdfExportService {
       }
     }
 
-    String _statusLabel() {
+    String statusLabel() {
       switch (metrics.status) {
         case LoadStatus.seguro:
           return 'SEGURO';
@@ -84,7 +83,7 @@ class PdfExportService {
           child: pw.ClipRRect(
             horizontalRadius: 8,
             verticalRadius: 8,
-            child: pw.Image(image, fit: pw.BoxFit.contain),
+            child: pw.Image(image),
           ),
         );
       } catch (_) {
@@ -142,7 +141,7 @@ class PdfExportService {
                   children: [
                     pw.Text(
                       vehicleCode,
-                      style: pw.TextStyle(
+                      style: const pw.TextStyle(
                         color: textSecondary,
                         fontSize: 11,
                       ),
@@ -150,7 +149,7 @@ class PdfExportService {
                     pw.SizedBox(height: 2),
                     pw.Text(
                       'Fecha: $dateStr',
-                      style: pw.TextStyle(
+                      style: const pw.TextStyle(
                         color: textSecondary,
                         fontSize: 11,
                       ),
@@ -162,11 +161,11 @@ class PdfExportService {
                         vertical: 3,
                       ),
                       decoration: pw.BoxDecoration(
-                        color: _statusColor(),
+                        color: statusColor(),
                         borderRadius: pw.BorderRadius.circular(4),
                       ),
                       child: pw.Text(
-                        _statusLabel(),
+                        statusLabel(),
                         style: pw.TextStyle(
                           color: darkBg,
                           fontSize: 10,
@@ -244,14 +243,14 @@ class PdfExportService {
               mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
               children: [
                 _truckDim('Largo', '${truck.lengthCm.toStringAsFixed(0)} cm',
-                    textPrimary, textTertiary),
+                    textPrimary, textTertiary,),
                 _truckDim('Ancho', '${truck.widthCm.toStringAsFixed(0)} cm',
-                    textPrimary, textTertiary),
+                    textPrimary, textTertiary,),
                 _truckDim('Alto', '${truck.heightCm.toStringAsFixed(0)} cm',
-                    textPrimary, textTertiary),
+                    textPrimary, textTertiary,),
                 _truckDim('Carga Max',
                     '${truck.maxPayloadKg.toStringAsFixed(0)} kg',
-                    accentColor, textTertiary),
+                    accentColor, textTertiary,),
               ],
             ),
           ),
@@ -280,7 +279,7 @@ class PdfExportService {
           pw.SizedBox(height: 6),
 
           _boxTable(placedBoxes, darkSurface, textPrimary, textSecondary,
-              textTertiary, accentColor),
+              textTertiary, accentColor,),
 
           // ═══════════════════════════════════════════════════
           // OVERFLOW BOXES TABLE (if any)
@@ -297,7 +296,7 @@ class PdfExportService {
             ),
             pw.SizedBox(height: 6),
             _boxTable(overflowBoxes, darkSurface, textPrimary, textSecondary,
-                textTertiary, errorColor),
+                textTertiary, errorColor,),
           ],
 
           pw.SizedBox(height: 20),
@@ -307,7 +306,7 @@ class PdfExportService {
             alignment: pw.Alignment.center,
             child: pw.Text(
               'Generado por GMP Load Planner · $dateStr',
-              style: pw.TextStyle(
+              style: const pw.TextStyle(
                 color: textTertiary,
                 fontSize: 8,
               ),
@@ -464,7 +463,7 @@ class PdfExportService {
         b.weight.toStringAsFixed(1),
         '${b.w.toStringAsFixed(0)}×${b.d.toStringAsFixed(0)}×${b.h.toStringAsFixed(0)}',
         'X:${b.x.toStringAsFixed(0)} Y:${b.y.toStringAsFixed(0)} Z:${b.z.toStringAsFixed(0)}',
-      ]).toList(),
+      ],).toList(),
     );
   }
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../theme/app_theme.dart';
-import '../utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 /// 📱 WHATSAPP FORM MODAL
@@ -24,22 +24,22 @@ import '../utils/responsive.dart';
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class WhatsAppFormResult {
-  final String phone;
-  final String message;
 
   const WhatsAppFormResult({
     required this.phone,
     required this.message,
   });
+  final String phone;
+  final String message;
 }
 
 class WhatsAppFormModal extends StatefulWidget {
-  final String defaultMessage;
 
   const WhatsAppFormModal({
     super.key,
     this.defaultMessage = '',
   });
+  final String defaultMessage;
 
   /// Show the modal and return the form result, or null if cancelled
   static Future<WhatsAppFormResult?> show(
@@ -48,7 +48,6 @@ class WhatsAppFormModal extends StatefulWidget {
   }) {
     return showDialog<WhatsAppFormResult>(
       context: context,
-      barrierDismissible: true,
       builder: (ctx) => WhatsAppFormModal(defaultMessage: defaultMessage),
     );
   }

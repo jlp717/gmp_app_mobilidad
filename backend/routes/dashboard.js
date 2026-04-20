@@ -16,7 +16,8 @@ const {
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
     getBSales,
-    sanitizeForSQL
+    sanitizeForSQL,
+    handleRouteError
 } = require('../utils/common');
 
 // =============================================================================
@@ -147,8 +148,7 @@ router.get('/metrics', async (req, res) => {
         res.json(responseData);
 
     } catch (error) {
-        logger.error(`Metrics error: ${error.message}`);
-        res.status(500).json({ error: 'Error calculating metrics', details: error.message });
+        handleRouteError(error, res, 'Error calculating metrics', 500);
     }
 });
 
@@ -472,8 +472,7 @@ router.get('/sales-evolution', async (req, res) => {
         res.json({ evolution: limitedData });
 
     } catch (error) {
-        logger.error(`Evolution error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo evolución', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo evolución', 500);
     }
 });
 
@@ -525,8 +524,7 @@ router.get('/recent-sales', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error(`Recent sales error: ${error.message} `);
-        res.status(500).json({ error: 'Error obteniendo ventas', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo ventas', 500);
     }
 });
 
@@ -565,7 +563,7 @@ router.get('/products-search', async (req, res) => {
 
     } catch (error) {
         logger.error(`Product search error: ${error.message}`);
-        res.status(500).json({ error: 'Error searching products', details: error.message });
+        handleRouteError(error, res, 'Error searching products', 500);
     }
 });
 

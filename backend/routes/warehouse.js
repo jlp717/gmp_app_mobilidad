@@ -11,7 +11,7 @@ const logger = require('../middleware/logger');
 const { query, queryWithParams, getPool } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
-const { sanitizeForSQL } = require('../utils/common');
+const { sanitizeForSQL, handleRouteError } = require('../utils/common');
 const loadPlanner = require('../services/loadPlanner');
 const estimateBoxDimensions = loadPlanner.estimateBoxDimensions;
 const { CircuitBreaker } = require('../services/circuit-breaker');
@@ -347,8 +347,7 @@ router.get('/dashboard', async (req, res) => {
         if (isTableNotFound(error)) {
             return res.json({ date: { year, month, day }, totalTrucks: 0, trucks: [] });
         }
-        logger.error(`Warehouse dashboard error: ${error.message}`);
-        res.status(500).json({ error: 'Error cargando dashboard almacén', details: error.message });
+        handleRouteError(error, res, 'Error cargando dashboard almacén', 500);
     }
 });
 
@@ -459,7 +458,7 @@ router.post('/load-plan', async (req, res) => {
         const odbcDetail = (error.odbcErrors || []).map(e => `[${e.code}/${e.state}] ${e.message}`).join('; ');
         logger.error(`Load plan error: ${odbcDetail || error.message}`);
         logger.error(`Load plan stack: ${error.stack}`);
-        res.status(500).json({ error: 'Error planificando carga', details: odbcDetail || error.message });
+        handleRouteError(error, res, 'Error planificando carga', 500);
     }
 });
 
@@ -482,8 +481,7 @@ router.post('/load-plan/optimize', async (req, res) => {
         const result = await loadPlanner.optimizeForProfit(vehicleCode, y, m, d);
         res.json(result);
     } catch (error) {
-        logger.error(`Optimize load error: ${error.message}`);
-        res.status(500).json({ error: 'Error optimizando carga', details: error.message });
+        handleRouteError(error, res, 'Error optimizando carga', 500);
     }
 });
 
@@ -507,7 +505,7 @@ router.post('/load-plan/smart-optimize', async (req, res) => {
         res.json(result);
     } catch (error) {
         logger.error(`Smart optimize error: ${error.message}`);
-        res.status(500).json({ error: 'Error en optimización inteligente', details: error.message });
+        handleRouteError(error, res, 'Error en optimización inteligente', 500);
     }
 });
 
@@ -526,7 +524,7 @@ router.post('/load-plan/axle-balance', async (req, res) => {
         res.json(result);
     } catch (error) {
         logger.error(`Axle balance error: ${error.message}`);
-        res.status(500).json({ error: 'Error calculando equilibrio de ejes', details: error.message });
+        handleRouteError(error, res, 'Error calculando equilibrio de ejes', 500);
     }
 });
 
@@ -545,7 +543,7 @@ router.post('/load-plan-manual', async (req, res) => {
         res.json(result);
     } catch (error) {
         logger.error(`Manual load plan error: ${error.message}`);
-        res.status(500).json({ error: 'Error en simulación de carga', details: error.message });
+        handleRouteError(error, res, 'Error en simulación de carga', 500);
     }
 });
 
@@ -625,7 +623,7 @@ router.get('/vehicles', async (req, res) => {
         });
     } catch (error) {
         logger.error(`Vehicles error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo vehículos', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo vehículos', 500);
     }
 });
 
@@ -639,7 +637,7 @@ router.get('/truck-config/:vehicleCode', async (req, res) => {
         res.json(config);
     } catch (error) {
         logger.error(`Truck config error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo config camión', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo config camión', 500);
     }
 });
 
@@ -694,7 +692,7 @@ router.put('/truck-config/:vehicleCode', async (req, res) => {
         res.json(updated);
     } catch (error) {
         logger.error(`Update truck config error: ${error.message}`);
-        res.status(500).json({ error: 'Error actualizando config', details: error.message });
+        handleRouteError(error, res, 'Error actualizando config', 500);
     }
 });
 
@@ -736,7 +734,7 @@ router.get('/personnel', async (req, res) => {
             return res.json({ personnel: [] });
         }
         logger.error(`Personnel error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo personal', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo personal', 500);
     }
 });
 
@@ -763,7 +761,7 @@ router.post('/personnel', async (req, res) => {
         res.json({ success: true, message: 'Operario añadido' });
     } catch (error) {
         logger.error(`Add personnel error: ${error.message}`);
-        res.status(500).json({ error: 'Error añadiendo operario', details: error.message });
+        handleRouteError(error, res, 'Error añadiendo operario', 500);
     }
 });
 
@@ -790,7 +788,7 @@ router.put('/personnel/:id', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         logger.error(`Update personnel error: ${error.message}`);
-        res.status(500).json({ error: 'Error actualizando operario', details: error.message });
+        handleRouteError(error, res, 'Error actualizando operario', 500);
     }
 });
 
@@ -804,7 +802,7 @@ router.post('/personnel/:id/delete', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         logger.error(`Delete personnel error: ${error.message}`);
-        res.status(500).json({ error: 'Error eliminando operario', details: error.message });
+        handleRouteError(error, res, 'Error eliminando operario', 500);
     }
 });
 
@@ -921,7 +919,7 @@ router.get('/articles', async (req, res) => {
         });
     } catch (error) {
         logger.error(`Articles list error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo artículos', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo artículos', 500);
     }
 });
 
@@ -965,7 +963,7 @@ router.get('/article-dimensions/:code', async (req, res) => {
         });
     } catch (error) {
         logger.error(`Article dims error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo dimensiones', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo dimensiones', 500);
     }
 });
 
@@ -1000,7 +998,7 @@ router.put('/article-dimensions/:code', async (req, res) => {
         res.json({ success: true, message: 'Dimensiones actualizadas' });
     } catch (error) {
         logger.error(`Update article dims error: ${error.message}`);
-        res.status(500).json({ error: 'Error actualizando dimensiones', details: error.message });
+        handleRouteError(error, res, 'Error actualizando dimensiones', 500);
     }
 });
 
@@ -1015,7 +1013,7 @@ router.post('/article-dimensions/:code/delete', async (req, res) => {
         res.json({ success: true, message: 'Dimensiones eliminadas, vuelve a estimado' });
     } catch (error) {
         logger.error(`Delete article dims error: ${error.message}`);
-        res.status(500).json({ error: 'Error eliminando dimensiones', details: error.message });
+        handleRouteError(error, res, 'Error eliminando dimensiones', 500);
     }
 });
 
@@ -1033,7 +1031,7 @@ router.post('/articles/reset-all-dimensions', async (req, res) => {
         res.json({ success: true, deleted: total, message: `${total} dimensiones reales eliminadas` });
     } catch (error) {
         logger.error(`Reset all dims error: ${error.message}`);
-        res.status(500).json({ error: 'Error reseteando dimensiones', details: error.message });
+        handleRouteError(error, res, 'Error reseteando dimensiones', 500);
     }
 });
 
@@ -1102,7 +1100,7 @@ router.get('/vehicle-photo/:code', async (req, res) => {
         });
     } catch (error) {
         logger.error(`Vehicle photo proxy error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo foto', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo foto', 500);
     }
 });
 
@@ -1121,7 +1119,7 @@ router.post('/personnel/cleanup-test', async (req, res) => {
         res.json({ success: true, message: 'Entradas de test desactivadas' });
     } catch (error) {
         logger.error(`Cleanup test personnel error: ${error.message}`);
-        res.status(500).json({ error: 'Error limpiando personal test', details: error.message });
+        handleRouteError(error, res, 'Error limpiando personal test', 500);
     }
 });
 
@@ -1161,7 +1159,7 @@ router.post('/articles/bulk-estimate', async (req, res) => {
         res.json({ success: true, estimated: saved, total: rows.length });
     } catch (error) {
         logger.error(`Bulk estimate error: ${error.message}`);
-        res.status(500).json({ error: 'Error en estimacion masiva', details: error.message });
+        handleRouteError(error, res, 'Error en estimacion masiva', 500);
     }
 });
 
@@ -1236,7 +1234,7 @@ router.get('/truck/:vehicleCode/orders', async (req, res) => {
     } catch (error) {
         const odbcDetail = (error.odbcErrors || []).map(e => `[${e.code}/${e.state}] ${e.message}`).join('; ');
         logger.error(`Truck orders error: ${odbcDetail || error.message}`);
-        res.status(500).json({ error: 'Error obteniendo órdenes', details: odbcDetail || error.message });
+        handleRouteError(error, res, 'Error obteniendo órdenes', 500);
     }
 });
 
@@ -1444,7 +1442,7 @@ router.post('/manual-layout', async (req, res) => {
             return res.status(503).json({ error: 'Tabla ALMACEN_CARGA_MANUAL no disponible. Reinicia el servidor para crearla.' });
         }
         logger.error(`Save manual layout error: ${error.message}`);
-        res.status(500).json({ error: 'Error guardando layout manual', details: error.message });
+        handleRouteError(error, res, 'Error guardando layout manual', 500);
     }
 });
 
@@ -1464,7 +1462,7 @@ router.post('/manual-layout/:id/delete', async (req, res) => {
             return res.json({ success: true }); // nothing to delete
         }
         logger.error(`Delete manual layout error: ${error.message}`);
-        res.status(500).json({ error: 'Error eliminando layout', details: error.message });
+        handleRouteError(error, res, 'Error eliminando layout', 500);
     }
 });
 
@@ -1492,7 +1490,7 @@ router.get('/config', async (req, res) => {
             return res.json({ config: {} });
         }
         logger.error(`Config get error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo configuración', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo configuración', 500);
     }
 });
 
@@ -1540,7 +1538,7 @@ router.put('/config', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         logger.error(`Config update error: ${error.message}`);
-        res.status(500).json({ error: 'Error actualizando configuración', details: error.message });
+        handleRouteError(error, res, 'Error actualizando configuración', 500);
     }
 });
 
@@ -1578,7 +1576,7 @@ router.post('/config/seed', async (req, res) => {
             return res.status(503).json({ error: 'Tabla ALMACEN_CONFIG_GLOBAL no disponible. Reinicia el servidor.' });
         }
         logger.error(`Config seed error: ${error.message}`);
-        res.status(500).json({ error: 'Error sembrando configuración', details: error.message });
+        handleRouteError(error, res, 'Error sembrando configuración', 500);
     }
 });
 
@@ -1673,7 +1671,7 @@ router.post('/save-load', async (req, res) => {
             return res.status(503).json({ error: 'Tabla de histórico no disponible. Reinicia el servidor.' });
         }
         logger.error(`Save load error: ${error.message}`);
-        res.status(500).json({ error: 'Error guardando carga', details: error.message });
+        handleRouteError(error, res, 'Error guardando carga', 500);
     }
 });
 

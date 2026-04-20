@@ -14,7 +14,8 @@ const {
     LACLAE_SALES_FILTER,
     getBSales,
     sanitizeForSQL,
-    sanitizeCodeList
+    sanitizeCodeList,
+    handleRouteError
 } = require('../utils/common');
 const { getClientCodesFromCache } = require('../services/laclae');
 const { redisCache, TTL } = require('../services/redis-cache');
@@ -331,8 +332,7 @@ router.get('/', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error(`Objectives error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo objetivos', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo objetivos', 500);
     }
 });
 
@@ -627,8 +627,7 @@ router.get('/evolution', async (req, res) => {
         res.json(responseData);
 
     } catch (error) {
-        logger.error(`Objectives evolution error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo evolución de objetivos', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo evolución de objetivos', 500);
     }
 });
 
@@ -1632,8 +1631,7 @@ router.get('/matrix', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error(`Objectives matrix error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo matriz de cliente', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo matriz de cliente', 500);
     }
 });
 
@@ -1944,7 +1942,7 @@ router.get('/by-client', async (req, res) => {
 
     } catch (error) {
         logger.error(`Objectives by-client error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo objetivos por cliente', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo objetivos por cliente', 500);
     }
 });
 

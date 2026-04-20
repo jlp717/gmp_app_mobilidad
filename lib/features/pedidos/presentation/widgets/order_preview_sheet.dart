@@ -3,13 +3,14 @@
 /// Premium DraggableScrollableSheet showing full order details
 /// before confirmation. Includes IVA breakdown, margin info,
 /// stock warnings, and sale type selector.
+library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../data/pedidos_service.dart';
-import '../../providers/pedidos_provider.dart';
-import '../utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
 /// Shows the order preview as a centered dialog. Returns true if confirmed.
 Future<bool?> showOrderPreviewSheet({
@@ -30,15 +31,15 @@ Future<bool?> showOrderPreviewSheet({
 }
 
 class _OrderPreviewSheet extends StatefulWidget {
-  final PedidosProvider provider;
-  final String vendedorCode;
-  final Future<Map<String, dynamic>?> Function(String observaciones) onConfirm;
 
   const _OrderPreviewSheet({
     required this.provider,
     required this.vendedorCode,
     required this.onConfirm,
   });
+  final PedidosProvider provider;
+  final String vendedorCode;
+  final Future<Map<String, dynamic>?> Function(String observaciones) onConfirm;
 
   @override
   State<_OrderPreviewSheet> createState() => _OrderPreviewSheetState();
@@ -97,7 +98,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                   _buildSectionLabel('PRODUCTOS (${lines.length})'),
                   const SizedBox(height: 8),
                   ...lines.asMap().entries.map((entry) =>
-                      _buildLineItem(entry.key, entry.value, hasDiscount, provider)),
+                      _buildLineItem(entry.key, entry.value, hasDiscount, provider),),
                   const SizedBox(height: 16),
                   _buildTotalsCard(provider, hasDiscount, total, margin),
                   const SizedBox(height: 16),
@@ -234,7 +235,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 Text(
                   provider.clientName ?? 'Sin cliente',
                   style: const TextStyle(
-                      color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                      color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600,),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -260,7 +261,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                   Text(
                     PedidosFormatters.money(provider.clientSaldoPendiente),
                     style: const TextStyle(
-                        color: AppTheme.warning, fontSize: 13, fontWeight: FontWeight.w700),
+                        color: AppTheme.warning, fontSize: 13, fontWeight: FontWeight.w700,),
                   ),
                 ],
               ),
@@ -331,7 +332,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             child: Text(
               '${index + 1}',
               style: const TextStyle(
-                  color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.w600),
+                  color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.w600,),
             ),
           ),
           const SizedBox(width: 12),
@@ -365,7 +366,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
   }
 
   Widget _buildTotalsCard(
-      PedidosProvider provider, bool hasDiscount, double total, double margin) {
+      PedidosProvider provider, bool hasDiscount, double total, double margin,) {
     final marginColor = margin >= 15
         ? AppTheme.neonGreen
         : margin >= 5
@@ -382,7 +383,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         children: [
           // Subtotal
           _buildTotalRow('Subtotal (${provider.lineCount} líneas)',
-              PedidosFormatters.money(provider.totalImporte)),
+              PedidosFormatters.money(provider.totalImporte),),
 
           // Discount
           if (hasDiscount) ...[
@@ -415,13 +416,13 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             children: [
               const Text('TOTAL',
                   style: TextStyle(
-                      color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
+                      color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700,),),
               Text(
                 PedidosFormatters.money(total),
                 style: const TextStyle(
                     color: AppTheme.neonGreen,
                     fontSize: 22,
-                    fontWeight: FontWeight.w800),
+                    fontWeight: FontWeight.w800,),
               ),
             ],
           ),
@@ -453,7 +454,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 child: Text(
                   'Margen ${margin.toStringAsFixed(1)}%',
                   style: TextStyle(
-                      color: marginColor, fontSize: 12, fontWeight: FontWeight.w600),
+                      color: marginColor, fontSize: 12, fontWeight: FontWeight.w600,),
                 ),
               ),
             ],
@@ -468,12 +469,12 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(label,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),),
         Text(value,
             style: TextStyle(
                 color: valueColor ?? Colors.white,
                 fontSize: 14,
-                fontWeight: FontWeight.w500)),
+                fontWeight: FontWeight.w500,),),
       ],
     );
   }
@@ -500,9 +501,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('IVA $pct%',
-                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),),
                   Text(PedidosFormatters.money(e.value),
-                      style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                      style: const TextStyle(color: Colors.white70, fontSize: 12),),
                 ],
               ),
             );
@@ -536,11 +537,11 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text('Total a confirmar',
-                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),),
                   Text(
                     PedidosFormatters.money(total),
                     style: const TextStyle(
-                        color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800),
+                        color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800,),
                   ),
                 ],
               ),
@@ -574,12 +575,12 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: AppTheme.darkBase))
+                              strokeWidth: 2, color: AppTheme.darkBase,),)
                       : const Icon(Icons.check_circle_outline, size: 20),
                   label: Text(
                     _isConfirming ? 'Confirmando...' : 'CONFIRMAR PEDIDO',
                     style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+                        fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5,),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.neonGreen,
@@ -587,7 +588,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                     disabledBackgroundColor: AppTheme.neonGreen.withOpacity(0.4),
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
+                        borderRadius: BorderRadius.circular(16),),
                     elevation: 0,
                   ),
                 ),

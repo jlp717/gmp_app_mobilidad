@@ -1,19 +1,17 @@
 /// WAREHOUSE DASHBOARD PAGE
 /// Vista principal del Jefe de Almacén / Expediciones
 /// Muestra los camiones del día con KPIs de carga
+library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../../../../core/config/feature_flags.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../application/load_planner_provider.dart';
-import '../../data/warehouse_data_service.dart';
-import 'load_planner_3d_page.dart';
-import 'load_planner_v2_page.dart';
-import '../../../../core/widgets/shimmer_skeleton.dart';
-import '../../../../core/widgets/error_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/config/feature_flags.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/load_planner_3d_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/load_planner_v2_page.dart';
 
 class WarehouseDashboardPage extends StatefulWidget {
   const WarehouseDashboardPage({super.key});
@@ -89,10 +87,11 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
         children: [
           _buildHeader(),
           _buildDateSelector(),
-          if (!_loading && _error == null && _trucks.isNotEmpty) _buildKpiStrip(),
+          if (!_loading && _error == null && _trucks.isNotEmpty)
+            _buildKpiStrip(),
           Expanded(
             child: _loading
-                ? const SkeletonList(itemCount: 4, itemHeight: 120)
+                ? const SkeletonList(itemCount: 4)
                 : _error != null
                     ? ErrorStateWidget(
                         message: _error!,
@@ -109,7 +108,11 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
 
   Widget _buildHeader() {
     return Container(
-      padding: EdgeInsets.fromLTRB(Responsive.padding(context, small: 14, large: 20), 12, Responsive.padding(context, small: 14, large: 20), 8),
+      padding: EdgeInsets.fromLTRB(
+          Responsive.padding(context, small: 14, large: 20),
+          12,
+          Responsive.padding(context, small: 14, large: 20),
+          8),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -128,10 +131,14 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
               color: AppTheme.neonBlue.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+                color: AppTheme.neonBlue.withValues(alpha: 0.3),
+              ),
             ),
-            child: Icon(Icons.warehouse_rounded,
-                color: AppTheme.neonBlue, size: Responsive.iconSize(context, phone: 22, desktop: 28)),
+            child: Icon(
+              Icons.warehouse_rounded,
+              color: AppTheme.neonBlue,
+              size: Responsive.iconSize(context, phone: 22, desktop: 28),
+            ),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -142,7 +149,8 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
                   'CENTRO DE EXPEDICIONES',
                   style: TextStyle(
                     color: AppTheme.neonBlue,
-                    fontSize: Responsive.fontSize(context, small: 14, large: 18),
+                    fontSize:
+                        Responsive.fontSize(context, small: 14, large: 18),
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.5,
                   ),
@@ -159,8 +167,11 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
           ),
           IconButton(
             onPressed: _loadDashboard,
-            icon: const Icon(Icons.refresh_rounded,
-                color: AppTheme.neonGreen, size: 24),
+            icon: const Icon(
+              Icons.refresh_rounded,
+              color: AppTheme.neonGreen,
+              size: 24,
+            ),
           ),
         ],
       ),
@@ -169,8 +180,19 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
 
   Widget _buildDateSelector() {
     final months = [
-      '', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-      'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
+      '',
+      'Ene',
+      'Feb',
+      'Mar',
+      'Abr',
+      'May',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dic',
     ];
     final days = ['', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
     final dayName = days[_selectedDate.weekday];
@@ -185,15 +207,19 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
         color: AppTheme.darkCard,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-            color: AppTheme.neonBlue.withValues(alpha: 0.2)),
+          color: AppTheme.neonBlue.withValues(alpha: 0.2),
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           IconButton(
             onPressed: () => _changeDate(-1),
-            icon: const Icon(Icons.chevron_left_rounded,
-                color: Colors.white70, size: 28),
+            icon: const Icon(
+              Icons.chevron_left_rounded,
+              color: Colors.white70,
+              size: 28,
+            ),
           ),
           GestureDetector(
             onTap: () async {
@@ -205,8 +231,9 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
                 builder: (ctx, child) => Theme(
                   data: ThemeData.dark().copyWith(
                     colorScheme: const ColorScheme.dark(
-                        primary: AppTheme.neonBlue,
-                        surface: AppTheme.darkCard),
+                      primary: AppTheme.neonBlue,
+                      surface: AppTheme.darkCard,
+                    ),
                   ),
                   child: child!,
                 ),
@@ -218,8 +245,11 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
             },
             child: Row(
               children: [
-                const Icon(Icons.calendar_today_rounded,
-                    color: AppTheme.neonBlue, size: 18),
+                const Icon(
+                  Icons.calendar_today_rounded,
+                  color: AppTheme.neonBlue,
+                  size: 18,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   '$dayName ${_selectedDate.day} ${months[_selectedDate.month]} ${_selectedDate.year}',
@@ -238,11 +268,14 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
                       color: AppTheme.neonGreen.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Text('HOY',
-                        style: TextStyle(
-                            color: AppTheme.neonGreen,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800)),
+                    child: const Text(
+                      'HOY',
+                      style: TextStyle(
+                        color: AppTheme.neonGreen,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
                 ],
               ],
@@ -250,8 +283,11 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
           ),
           IconButton(
             onPressed: () => _changeDate(1),
-            icon: const Icon(Icons.chevron_right_rounded,
-                color: Colors.white70, size: 28),
+            icon: const Icon(
+              Icons.chevron_right_rounded,
+              color: Colors.white70,
+              size: 28,
+            ),
           ),
         ],
       ),
@@ -265,7 +301,11 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
       child: GridView.builder(
         padding: const EdgeInsets.all(12),
         gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: MediaQuery.of(context).size.width > 900 ? 3 : MediaQuery.of(context).size.width < 400 ? 1 : 2,
+          crossAxisCount: MediaQuery.of(context).size.width > 900
+              ? 3
+              : MediaQuery.of(context).size.width < 400
+                  ? 1
+                  : 2,
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
           childAspectRatio: 1.15,
@@ -279,25 +319,28 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
   Widget _buildTruckCard(TruckSummary truck) {
     return GestureDetector(
       onTap: () {
-        Navigator.of(context).push(MaterialPageRoute<void>(
-          builder: (_) => FeatureFlags.newLoadPlanner
-              ? LoadPlannerV2Page(
-                  vehicleCode: truck.vehicleCode,
-                  vehicleName: truck.description,
-                  date: _selectedDate,
-                )
-              : LoadPlanner3DPage(
-                  vehicleCode: truck.vehicleCode,
-                  vehicleName: truck.description,
-                  date: _selectedDate,
-                ),
-        ));
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => FeatureFlags.newLoadPlanner
+                ? LoadPlannerV2Page(
+                    vehicleCode: truck.vehicleCode,
+                    vehicleName: truck.description,
+                    date: _selectedDate,
+                  )
+                : LoadPlanner3DPage(
+                    vehicleCode: truck.vehicleCode,
+                    vehicleName: truck.description,
+                    date: _selectedDate,
+                  ),
+          ),
+        );
       },
       child: AnimatedBuilder(
         animation: _pulseController,
         builder: (ctx, child) {
           return Container(
-            padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 14)),
+            padding: EdgeInsets.all(
+                Responsive.padding(context, small: 10, large: 14)),
             decoration: BoxDecoration(
               color: AppTheme.darkCard,
               borderRadius: BorderRadius.circular(16),
@@ -324,8 +367,11 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
                         color: AppTheme.neonBlue.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Icon(Icons.local_shipping_rounded,
-                          color: AppTheme.neonBlue, size: 22),
+                      child: const Icon(
+                        Icons.local_shipping_rounded,
+                        color: AppTheme.neonBlue,
+                        size: 22,
+                      ),
                     ),
                     const SizedBox(width: 10),
                     Expanded(
@@ -371,9 +417,11 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
                 // Driver
                 Row(
                   children: [
-                    Icon(Icons.person_outline_rounded,
-                        color: AppTheme.neonGreen.withValues(alpha: 0.7),
-                        size: 14),
+                    Icon(
+                      Icons.person_outline_rounded,
+                      color: AppTheme.neonGreen.withValues(alpha: 0.7),
+                      size: 14,
+                    ),
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
@@ -424,8 +472,7 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
                 // 3D Button
                 Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(vertical: 8),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
@@ -435,13 +482,17 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
                     ),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                        color: AppTheme.neonBlue.withValues(alpha: 0.4)),
+                      color: AppTheme.neonBlue.withValues(alpha: 0.4),
+                    ),
                   ),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.view_in_ar_rounded,
-                          color: AppTheme.neonBlue, size: 16),
+                      Icon(
+                        Icons.view_in_ar_rounded,
+                        color: AppTheme.neonBlue,
+                        size: 16,
+                      ),
                       SizedBox(width: 6),
                       Text(
                         'TETRIS LOGÍSTICO 3D',
@@ -499,22 +550,35 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
       decoration: BoxDecoration(
         color: AppTheme.neonBlue.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.1))),
-      child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-        _kpiItem('$totalPedidos', 'Pedidos', AppTheme.neonBlue),
-        _kpiItem('$totalLineas', 'Lineas', AppTheme.neonPurple),
-        _kpiItem('$totalCamiones', 'Vehiculos', AppTheme.neonGreen),
-        _kpiItem('${totalPeso.toStringAsFixed(0)}', 'kg cap.', Colors.amber),
-      ]),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.1)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _kpiItem('$totalPedidos', 'Pedidos', AppTheme.neonBlue),
+          _kpiItem('$totalLineas', 'Lineas', AppTheme.neonPurple),
+          _kpiItem('$totalCamiones', 'Vehiculos', AppTheme.neonGreen),
+          _kpiItem(totalPeso.toStringAsFixed(0), 'kg cap.', Colors.amber),
+        ],
+      ),
     );
   }
 
   Widget _kpiItem(String value, String label, Color color) {
-    return Column(mainAxisSize: MainAxisSize.min, children: [
-      Text(value, style: TextStyle(color: color, fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.w800)),
-      const SizedBox(height: 2),
-      Text(label, style: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 9)),
-    ]);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(value,
+            style: TextStyle(
+                color: color,
+                fontSize: Responsive.fontSize(context, small: 14, large: 18),
+                fontWeight: FontWeight.w800)),
+        const SizedBox(height: 2),
+        Text(label,
+            style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.35), fontSize: 9)),
+      ],
+    );
   }
 
   Widget _buildError() {
@@ -522,11 +586,16 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.error_outline_rounded,
-              color: Colors.redAccent, size: 48),
+          const Icon(
+            Icons.error_outline_rounded,
+            color: Colors.redAccent,
+            size: 48,
+          ),
           const SizedBox(height: 12),
-          Text(_error ?? 'Error desconocido',
-              style: const TextStyle(color: Colors.white70, fontSize: 14)),
+          Text(
+            _error ?? 'Error desconocido',
+            style: const TextStyle(color: Colors.white70, fontSize: 14),
+          ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
             onPressed: _loadDashboard,
@@ -547,13 +616,18 @@ class _WarehouseDashboardPageState extends State<WarehouseDashboardPage>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.local_shipping_outlined,
-              color: Colors.white.withValues(alpha: 0.3), size: 64),
+          Icon(
+            Icons.local_shipping_outlined,
+            color: Colors.white.withValues(alpha: 0.3),
+            size: 64,
+          ),
           const SizedBox(height: 12),
           Text(
             'Sin expediciones para esta fecha',
             style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5), fontSize: 16),
+              color: Colors.white.withValues(alpha: 0.5),
+              fontSize: 16,
+            ),
           ),
         ],
       ),

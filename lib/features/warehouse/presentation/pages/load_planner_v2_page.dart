@@ -3,30 +3,27 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../application/load_planner_provider.dart';
-import '../../domain/models/load_planner_models.dart';
-import '../widgets/box_info_overlay.dart';
-import '../widgets/load_canvas.dart';
-import '../widgets/metrics_bar.dart';
-import '../widgets/orders_panel_v2.dart';
-import '../widgets/planner_toolbar.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/application/load_planner_provider.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/box_info_overlay.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/load_canvas.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/metrics_bar.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/orders_panel_v2.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/planner_toolbar.dart';
 
 /// Load Planner V2 — Premium redesign.
 ///
 /// Layout: Header → Toolbar → MetricsBar → [Canvas (70%) | Panel (30%)]
 /// Responsive: tablet = side-by-side, phone = canvas + bottom sheet.
 class LoadPlannerV2Page extends ConsumerStatefulWidget {
+
+  const LoadPlannerV2Page({
+    required this.vehicleCode, required this.vehicleName, required this.date, super.key,
+  });
   final String vehicleCode;
   final String vehicleName;
   final DateTime date;
-
-  const LoadPlannerV2Page({
-    super.key,
-    required this.vehicleCode,
-    required this.vehicleName,
-    required this.date,
-  });
 
   @override
   ConsumerState<LoadPlannerV2Page> createState() => _LoadPlannerV2PageState();
@@ -149,7 +146,6 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
         border: Border(
           bottom: BorderSide(
             color: AppTheme.neonBlue.withOpacity(0.2),
-            width: 1,
           ),
         ),
         boxShadow: [
@@ -268,8 +264,6 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
               ShaderMask(
                 shaderCallback: (bounds) {
                   return LinearGradient(
-                    begin: Alignment.centerLeft,
-                    end: Alignment.centerRight,
                     colors: [
                       AppTheme.neonBlue.withOpacity(0.3),
                       AppTheme.neonBlue,
@@ -366,7 +360,6 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
                                 color: AppTheme.error.withOpacity(0.6),
-                                width: 1,
                               ),
                               boxShadow: [
                                 BoxShadow(
@@ -375,7 +368,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                                 ),
                               ],
                             ),
-                            child: Row(
+                            child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
@@ -383,7 +376,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                                   color: AppTheme.error,
                                   size: 16,
                                 ),
-                                const SizedBox(width: 8),
+                                SizedBox(width: 8),
                                 Text(
                                   'Colisión detectada',
                                   style: TextStyle(
@@ -474,7 +467,6 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.5,
         minChildSize: 0.3,
         maxChildSize: 0.85,
         expand: false,
@@ -487,7 +479,6 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
               border: Border(
                 top: BorderSide(
                   color: AppTheme.neonBlue.withOpacity(0.2),
-                  width: 1,
                 ),
               ),
               boxShadow: [
@@ -537,7 +528,6 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                 color: AppTheme.error.withOpacity(0.1),
                 border: Border.all(
                   color: AppTheme.error.withOpacity(0.3),
-                  width: 1,
                 ),
               ),
               child: Icon(
@@ -599,10 +589,6 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
 // =============================================================================
 
 class _GlassIconButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onPressed;
-  final bool isActive;
-  final String? tooltip;
 
   const _GlassIconButton({
     required this.icon,
@@ -610,6 +596,10 @@ class _GlassIconButton extends StatelessWidget {
     this.isActive = false,
     this.tooltip,
   });
+  final IconData icon;
+  final VoidCallback onPressed;
+  final bool isActive;
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -628,7 +618,6 @@ class _GlassIconButton extends StatelessWidget {
             color: isActive
                 ? AppTheme.neonBlue.withOpacity(0.4)
                 : AppTheme.borderColor.withOpacity(0.3),
-            width: 1,
           ),
           boxShadow: isActive
               ? [
@@ -648,7 +637,7 @@ class _GlassIconButton extends StatelessWidget {
     );
 
     if (tooltip != null) {
-      return Tooltip(message: tooltip!, child: child);
+      return Tooltip(message: tooltip, child: child);
     }
     return child;
   }

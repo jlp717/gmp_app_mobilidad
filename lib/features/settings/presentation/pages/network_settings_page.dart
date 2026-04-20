@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../../core/services/network_service.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/api/api_config.dart';
-import '../../../../core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/services/network_service.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// Pantalla de configuración de red
 /// Permite ver y cambiar el servidor activo manualmente
@@ -107,7 +107,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
     final url = _customUrlController.text.trim();
     if (url.isEmpty) return;
 
-    String baseUrl = url;
+    var baseUrl = url;
     if (!baseUrl.startsWith('http')) {
       baseUrl = 'http://$baseUrl';
     }
@@ -199,7 +199,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 style: TextStyle(
                   fontSize: Responsive.fontSize(context, small: 18, large: 24),
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF22D3EE),
+                  color: const Color(0xFF22D3EE),
                 ),
               ),
               const SizedBox(height: 8),
@@ -366,7 +366,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                         ),
                 ),
               );
-            }).toList(),
+            }),
           ],
         ),
       ),
@@ -529,7 +529,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                           ],
                         ),
                       );
-                    }).toList(),
+                    }),
                 ],
               ),
             ),

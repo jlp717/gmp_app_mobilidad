@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/features/authentication/domain/entities/user.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
+import 'package:gmp_app_mobilidad/features/authentication/domain/entities/user.dart';
 
 /// [DashboardHeader] - Header del dashboard con saludo y último acceso
 ///

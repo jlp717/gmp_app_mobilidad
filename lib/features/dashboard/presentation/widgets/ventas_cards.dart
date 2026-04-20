@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
+import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
 /// [VentasCards] - Tarjetas de métricas de ventas del vendedor
 ///
@@ -11,12 +11,7 @@ import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 /// - Clientes Atendidos (hoy, mes)
 class VentasCards extends StatelessWidget {
   const VentasCards({
-    super.key,
-    required this.ventasHoy,
-    required this.ventasMes,
-    required this.ventasAnio,
-    required this.clientesAtendidos,
-    required this.pedidosPendientes,
+    required this.ventasHoy, required this.ventasMes, required this.ventasAnio, required this.clientesAtendidos, required this.pedidosPendientes, super.key,
   });
 
   final VentasMetrics ventasHoy;

@@ -1,20 +1,21 @@
 /// Order Empty State
 /// =================
 /// Contextual empty state with illustration and CTA.
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 class OrderEmptyState extends StatelessWidget {
-  final bool hasActiveFilters;
-  final VoidCallback? onClearFilters;
 
   const OrderEmptyState({
-    Key? key,
+    super.key,
     this.hasActiveFilters = false,
     this.onClearFilters,
-  }) : super(key: key);
+  });
+  final bool hasActiveFilters;
+  final VoidCallback? onClearFilters;
 
   @override
   Widget build(BuildContext context) {

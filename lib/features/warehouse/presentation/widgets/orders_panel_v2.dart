@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../application/load_planner_provider.dart';
-import '../../domain/models/load_planner_models.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/application/load_planner_provider.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
 
 /// Sort options for boxes/orders
 enum BoxSortMode { none, weightDesc, weightAsc, volumeDesc, client, order }
@@ -46,7 +46,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
     if (_searchQuery.isEmpty) return true;
     final tokens = _searchQuery.split(RegExp(r'\s+'));
     final lower = text.toLowerCase();
-    return tokens.every((t) => lower.contains(t));
+    return tokens.every(lower.contains);
   }
 
   /// Check if a box passes weight filter
@@ -76,7 +76,6 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
             border: Border(
               left: BorderSide(
                 color: AppTheme.neonBlue.withOpacity(0.15),
-                width: 1,
               ),
             ),
           ),
@@ -103,7 +102,6 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: AppTheme.borderColor.withOpacity(0.15),
-                    width: 1,
                   ),
                 ),
                 child: TabBar(
@@ -115,7 +113,6 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
                       color: AppTheme.neonBlue.withOpacity(0.25),
-                      width: 1,
                     ),
                   ),
                   indicatorSize: TabBarIndicatorSize.tab,
@@ -208,7 +205,6 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: AppTheme.neonBlue.withOpacity(0.1),
-            width: 1,
           ),
           boxShadow: [
             BoxShadow(
@@ -250,7 +246,6 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(
                 color: AppTheme.neonBlue.withOpacity(0.3),
-                width: 1,
               ),
             ),
           ),
@@ -320,7 +315,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
               Navigator.pop(ctx);
               action();
             },
-            child: Text('Confirmar', style: TextStyle(color: AppTheme.error)),
+            child: const Text('Confirmar', style: TextStyle(color: AppTheme.error)),
           ),
         ],
       ),
@@ -425,7 +420,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
   // ═══════════════════════════════════════════════════════════════════════════
 
   List<MapEntry<int, List<LoadBox>>> _sortOrders(
-      List<MapEntry<int, List<LoadBox>>> orders) {
+      List<MapEntry<int, List<LoadBox>>> orders,) {
     switch (_sortMode) {
       case BoxSortMode.weightDesc:
         orders.sort((a, b) {
@@ -447,7 +442,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
         });
       case BoxSortMode.client:
         orders.sort(
-            (a, b) => a.value.first.clientCode.compareTo(b.value.first.clientCode));
+            (a, b) => a.value.first.clientCode.compareTo(b.value.first.clientCode),);
       case BoxSortMode.order:
         orders.sort((a, b) => a.key.compareTo(b.key));
       case BoxSortMode.none:
@@ -615,7 +610,6 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
               color: AppTheme.darkCard.withOpacity(0.2),
               border: Border.all(
                 color: AppTheme.borderColor.withOpacity(0.15),
-                width: 1,
               ),
             ),
             child: Icon(
@@ -644,10 +638,6 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class _MiniActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final Color color;
-  final VoidCallback? onPressed;
 
   const _MiniActionButton({
     required this.icon,
@@ -655,6 +645,10 @@ class _MiniActionButton extends StatelessWidget {
     required this.color,
     this.onPressed,
   });
+  final IconData icon;
+  final String label;
+  final Color color;
+  final VoidCallback? onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -678,7 +672,6 @@ class _MiniActionButton extends StatelessWidget {
             color: isEnabled
                 ? color.withOpacity(0.25)
                 : AppTheme.borderColor.withOpacity(0.08),
-            width: 1,
           ),
           boxShadow: isEnabled
               ? [
@@ -717,10 +710,6 @@ class _MiniActionButton extends StatelessWidget {
 }
 
 class _FilterChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final Color color;
-  final ValueChanged<bool> onSelected;
 
   const _FilterChip({
     required this.label,
@@ -728,6 +717,10 @@ class _FilterChip extends StatelessWidget {
     required this.color,
     required this.onSelected,
   });
+  final String label;
+  final bool selected;
+  final Color color;
+  final ValueChanged<bool> onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -746,7 +739,6 @@ class _FilterChip extends StatelessWidget {
             color: selected
                 ? color.withOpacity(0.4)
                 : AppTheme.borderColor.withOpacity(0.2),
-            width: 1,
           ),
           boxShadow: selected
               ? [
@@ -772,11 +764,11 @@ class _FilterChip extends StatelessWidget {
 }
 
 class _ClientRow extends StatelessWidget {
+
+  const _ClientRow({required this.summary, this.truck, this.onExclude});
   final ClientSummary summary;
   final TruckDimensions? truck;
   final VoidCallback? onExclude;
-
-  const _ClientRow({required this.summary, this.truck, this.onExclude});
 
   @override
   Widget build(BuildContext context) {
@@ -793,7 +785,6 @@ class _ClientRow extends StatelessWidget {
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: AppTheme.borderColor.withOpacity(0.1),
-            width: 1,
           ),
         ),
         child: Row(
@@ -901,13 +892,6 @@ class _ClientRow extends StatelessWidget {
 }
 
 class _OrderRow extends StatelessWidget {
-  final int orderNumber;
-  final String label;
-  final String clientCode;
-  final int boxCount;
-  final double totalWeight;
-  final bool isExcluded;
-  final VoidCallback onToggle;
 
   const _OrderRow({
     required this.orderNumber,
@@ -918,6 +902,13 @@ class _OrderRow extends StatelessWidget {
     required this.isExcluded,
     required this.onToggle,
   });
+  final int orderNumber;
+  final String label;
+  final String clientCode;
+  final int boxCount;
+  final double totalWeight;
+  final bool isExcluded;
+  final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -937,7 +928,6 @@ class _OrderRow extends StatelessWidget {
               color: isExcluded
                   ? AppTheme.error.withOpacity(0.25)
                   : AppTheme.borderColor.withOpacity(0.1),
-              width: 1,
             ),
           ),
           child: Row(
@@ -976,7 +966,7 @@ class _OrderRow extends StatelessWidget {
                 child: Switch(
                   value: !isExcluded,
                   onChanged: (_) => onToggle(),
-                  activeColor: AppTheme.neonGreen,
+                  activeThumbColor: AppTheme.neonGreen,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),

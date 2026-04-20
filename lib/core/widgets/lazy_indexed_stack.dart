@@ -4,20 +4,18 @@ import 'package:flutter/material.dart';
 /// Una vez que un hijo es instanciado, se mantiene en el árbol de widgets
 /// (gracias al `IndexedStack` interno), preservando su estado para siempre.
 class LazyIndexedStack extends StatefulWidget {
+
+  const LazyIndexedStack({
+    required this.index, required this.children, super.key,
+    this.alignment = AlignmentDirectional.topStart,
+    this.textDirection,
+    this.sizing = StackFit.loose,
+  });
   final int index;
   final List<Widget> children;
   final AlignmentGeometry alignment;
   final TextDirection? textDirection;
   final StackFit sizing;
-
-  const LazyIndexedStack({
-    super.key,
-    required this.index,
-    required this.children,
-    this.alignment = AlignmentDirectional.topStart,
-    this.textDirection,
-    this.sizing = StackFit.loose,
-  });
 
   @override
   State<LazyIndexedStack> createState() => _LazyIndexedStackState();

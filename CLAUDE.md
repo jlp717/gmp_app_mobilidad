@@ -83,12 +83,56 @@ nc localhost 3197
 ## Key Architecture Notes
 
 - Navigation: `lib/features/dashboard/presentation/pages/main_shell.dart`
-- Tab routing must stay in sync between `_getNavItems` and `_buildCurrentPage`
-- Vendor code 'ALL' must be handled specially in backend services
+- Tab routing must stay in sync between `_getNavItems` AND `_buildCurrentPage` in main_shell.dart
+- Vendor code 'ALL' requires special handling: query all vendors, not WHERE VENDEDOR='ALL'
 - `showCommissions` DB flag controls Comisiones tab visibility
 - Delivery detail UI: `rutero_detail_modal.dart` (NOT albaran_detail_page.dart)
 - Receipt endpoints MUST include `signaturePath` field
 - RUTERO_CONFIG queries MUST filter `ORDEN >= 0` to exclude blocking entries
+
+## Performance Optimization Notes
+
+### Providers con select() aplicados:
+- `authProvider` → `select((s) => s.value)` en repartidor_rutero_page.dart
+- `cobrosProvider` → `select((p) => p.pendingSummary)` en cobros_page.dart
+- `entregasProvider` → 10 select() individuales para isLoading, error, albaranes, resumen*, filter*, sortBy en repartidor_rutero_page.dart
+
+### NO agregar autoDispose a:
+- `pedidosProvider` - Usa patrón addListener/removeListener, timers periódicos, y 39 ref.read() en pedidos_page.dart. Refactor completo necesario antes de autoDispose.
+
+### Optimizado:
+- `repartidor_rutero_page.dart` - refactorizado con select() para evitar rebuilds innecesarios
+
+## Testing Coverage
+
+### Widget Tests Creados (sesión actual):
+- `test/widgets/order_status_badge_test.dart` - 23 tests ✅
+- `test/widgets/smart_product_image_test.dart` - 13 tests ✅
+- `test/widgets/coming_soon_placeholder_test.dart` - 9 tests ✅
+- `test/widgets/skeleton_widgets_test.dart` - 8 tests ✅
+- `test/widgets/kpi_card_test.dart` - tests de KPICard (varios passing)
+
+### Core Widgets con tests:
+- ErrorStateWidget, EmptyStateWidget, ModernLoading (pre-existing)
+- ShimmerLoading, SkeletonCard, SkeletonList, SkeletonSummary
+- OrderStatusBadge, SmartProductImage, ComingSoonPlaceholder
+
+### Tests Totales (esta sesión):
+- 11/11 Flutter navigation tests ✅
+- 76/76 Backend tests ✅
+- ~60+ Widget tests passing
+
+## Color Centralization
+
+### AppColors (`lib/core/theme/app_colors.dart`):
+- 40+ colores centralizados
+- Incluye: base colors, neon accents, glow intensities, status colors, text colors, gradients
+- Reemplaza duplicación entre AppTheme y AppColors
+
+### Archivos Pendientes de Refactor:
+- `rutero_detail_modal.dart` (3517 líneas) - requiere extracción de widgets (complex, compartir estado)
+- 30 archivos >500 líneas
+- 1 archivo >3500 líneas
 
 ## Security Rules
 

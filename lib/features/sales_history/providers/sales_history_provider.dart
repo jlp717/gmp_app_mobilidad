@@ -1,20 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../data/sales_history_service.dart';
-import '../domain/product_history_item.dart';
+import 'package:gmp_app_mobilidad/features/sales_history/data/sales_history_service.dart';
+import 'package:gmp_app_mobilidad/features/sales_history/domain/product_history_item.dart';
 
 // ── State ────────────────────────────────────────────────────────────────────
 
 class SalesHistoryState {
-  final List<ProductHistoryItem> items;
-  final Map<String, dynamic>? summary;
-  final bool isLoading;
-  final String? error;
-  final int totalCount;
-  final String? clientCode;
-  final String? productSearch;
-  final String? startDate;
-  final String? endDate;
-  final String? vendedorCodes;
 
   const SalesHistoryState({
     this.items = const [],
@@ -28,6 +18,16 @@ class SalesHistoryState {
     this.endDate,
     this.vendedorCodes,
   });
+  final List<ProductHistoryItem> items;
+  final Map<String, dynamic>? summary;
+  final bool isLoading;
+  final String? error;
+  final int totalCount;
+  final String? clientCode;
+  final String? productSearch;
+  final String? startDate;
+  final String? endDate;
+  final String? vendedorCodes;
 
   SalesHistoryState copyWith({
     List<ProductHistoryItem>? items,
@@ -99,8 +99,6 @@ class SalesHistoryNotifier extends Notifier<SalesHistoryState> {
           productSearch: state.productSearch,
           startDate: state.startDate,
           endDate: state.endDate,
-          limit: 100,
-          offset: 0,
         ),
         _service.getSalesHistorySummary(
           vendedorCodes: state.vendedorCodes,

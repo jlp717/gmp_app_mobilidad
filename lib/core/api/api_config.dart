@@ -1,5 +1,5 @@
-import '../services/network_service.dart';
 import 'package:flutter/foundation.dart';
+import 'package:gmp_app_mobilidad/core/services/network_service.dart';
 
 /// API Configuration and Constants
 /// 
@@ -29,7 +29,7 @@ class ApiConfig {
   // -----------------------------------------------------------------------------
   // DESARROLLO (solo para testing en oficina)
   // -----------------------------------------------------------------------------
-  static String _developmentIp = '192.168.1.52';
+  static const String _developmentIp = '192.168.1.52';
 
   // =============================================================================
   // MÉTODOS PÚBLICOS
@@ -86,7 +86,7 @@ class ApiConfig {
         'isReady': true,
       };
     }
-    return await NetworkService.getDiagnostics();
+    return NetworkService.getDiagnostics();
   }
 
   /// Actualiza la URL de producción (solo si es necesario)

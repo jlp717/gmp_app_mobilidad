@@ -1,113 +1,66 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 /// Ultra-modern, minimalist, futuristic theme for tablet app
 /// Dark theme with neon blue/green accents
 /// Optimized for tablets (10+ inches)
 class AppTheme {
+  AppTheme._();
+
   // ============================================================================
-  // COLOR PALETTE - Futuristic Dark with Neon Accents
+  // COLOR PALETTE - Re-exports from AppColors for compatibility
   // ============================================================================
 
-  // Base colors - SLIGHTLY LIGHTER FOR BETTER DEPTH (Senior Redesign)
-  static const Color darkBase = Color(0xFF0F172A);
-  static const Color darkSurface = Color(0xFF1E293B);
-  static const Color darkCard = Color(0xFF334155);
-  static const Color borderColor = Color(0xFF475569);
+  static const Color darkBase = AppColors.darkBase;
+  static const Color darkSurface = AppColors.darkSurface;
+  static const Color darkCard = AppColors.darkCard;
+  static const Color borderColor = AppColors.borderColor;
 
-  // Added for compatibility
-  static const Color surfaceColor = darkSurface;
+  static const Color surfaceColor = AppColors.surfaceColor;
 
-  // Neon accents (Primary palette - cian/azul)
-  static const Color neonBlue = Color(0xFF00D4FF);
-  static const Color neonGreen = Color(0xFF00FF88);
-  static const Color neonPurple = Color(0xFFBB86FC);
-  static const Color neonPink = Color(0xFFFF6B9D);
+  static const Color neonBlue = AppColors.neonBlue;
+  static const Color neonGreen = AppColors.neonGreen;
+  static const Color neonPurple = AppColors.neonPurple;
+  static const Color neonPink = AppColors.neonPink;
 
-  // NEW: Extended Neon palette for futuristic UI
-  static const Color neonCyan = Color(0xFF00FFFF);
-  static const Color neonTeal = Color(0xFF00CED1);
-  static const Color neonElectric = Color(0xFF7DF9FF);
-  static const Color holoBlue = Color(0xFF1E90FF);
+  static const Color neonCyan = AppColors.neonCyan;
+  static const Color neonTeal = AppColors.neonTeal;
+  static const Color neonElectric = AppColors.neonElectric;
+  static const Color holoBlue = AppColors.holoBlue;
 
-  // NEW: Glow intensities
-  static const Color glowIntense = Color(0xFF00D4FF);
-  static const Color glowMedium = Color(0xFF0099CC);
-  static const Color glowSubtle = Color(0xFF006699);
+  static const Color glowIntense = AppColors.glowIntense;
+  static const Color glowMedium = AppColors.glowMedium;
+  static const Color glowSubtle = AppColors.glowSubtle;
 
-  // Status colors
-  static const Color success = Color(0xFF00FF88); // Green for positive
-  static const Color error = Color(0xFFFF3B5C); // Red for negative
-  static const Color warning = Color(0xFFFFAA00);
-  static const Color info = Color(0xFF00D4FF);
+  static const Color success = AppColors.success;
+  static const Color error = AppColors.error;
+  static const Color warning = AppColors.warning;
+  static const Color info = AppColors.info;
 
-  // Aliases for compatibility
-  static const Color successColor = success;
-  static const Color errorColor = error;
-  static const Color warningColor = warning;
-  static const Color infoColor = info;
+  static const Color successColor = AppColors.successColor;
+  static const Color errorColor = AppColors.errorColor;
+  static const Color warningColor = AppColors.warningColor;
+  static const Color infoColor = AppColors.infoColor;
 
-  // NEW: Payment status colors
-  static const Color obligatorio = Color(0xFFFF3B5C); // Red - must collect
-  static const Color opcional = Color(0xFFFFAA00); // Orange - optional
-  static const Color cobrado = Color(0xFF00FF88); // Green - paid
-  static const Color credito = Color(0xFF00D4FF); // Blue - credit
+  static const Color obligatorio = AppColors.obligatorio;
+  static const Color opcional = AppColors.opcional;
+  static const Color cobrado = AppColors.cobrado;
+  static const Color credito = AppColors.credito;
 
-  // Text colors
-  static const Color textPrimary = Color(0xFFFFFFFF);
-  static const Color textSecondary = Color(0xFFB0B8D4);
-  static const Color textTertiary = Color(0xFF6B7280);
+  static const Color textPrimary = AppColors.textPrimary;
+  static const Color textSecondary = AppColors.textSecondary;
+  static const Color textTertiary = AppColors.textTertiary;
 
-  // Chart colors
-  static const List<Color> chartColors = [
-    neonBlue,
-    neonGreen,
-    neonPurple,
-    Color(0xFFFF6B9D),
-    Color(0xFFFFC233),
-    Color(0xFF8B5CF6),
-    Color(0xFF10B981),
-    Color(0xFFF59E0B),
-  ];
+  static const List<Color> chartColors = AppColors.chartColors;
 
   // ============================================================================
   // GRADIENTS - Holographic & Futuristic
   // ============================================================================
 
-  /// Primary brand gradient (neon blue)
-  static LinearGradient get primaryGradient => LinearGradient(
-        begin: Alignment.centerLeft,
-        end: Alignment.centerRight,
-        colors: [
-          neonBlue.withOpacity(0.3),
-          neonBlue.withOpacity(0.1),
-        ],
-      );
-
-  /// Holographic gradient for premium cards
-  static LinearGradient get holoGradient => LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [
-          neonCyan.withOpacity(0.15),
-          neonBlue.withOpacity(0.1),
-          neonPurple.withOpacity(0.1),
-          neonCyan.withOpacity(0.15),
-        ],
-        stops: const [0.0, 0.35, 0.65, 1.0],
-      );
-
-  /// Scanner effect gradient (for animated elements)
-  static LinearGradient get scannerGradient => const LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          Colors.transparent,
-          neonCyan,
-          Colors.transparent,
-        ],
-        stops: [0.0, 0.5, 1.0],
-      );
+  static const LinearGradient primaryGradient = AppColors.primaryGradient;
+  static const LinearGradient holoGradient = AppColors.holoGradient;
+  static const LinearGradient scannerGradient = AppColors.scannerGradient;
 
   /// Card gradient for delivery cards
   static LinearGradient get cardGradient => LinearGradient(
@@ -121,8 +74,6 @@ class AppTheme {
 
   /// Urgent indicator gradient (red pulse)
   static LinearGradient get urgentGradient => LinearGradient(
-        begin: Alignment.centerLeft,
-        end: Alignment.centerRight,
         colors: [
           error.withOpacity(0.3),
           error.withOpacity(0.1),
@@ -131,8 +82,6 @@ class AppTheme {
 
   /// Success indicator gradient
   static LinearGradient get successGradient => LinearGradient(
-        begin: Alignment.centerLeft,
-        end: Alignment.centerRight,
         colors: [
           success.withOpacity(0.3),
           success.withOpacity(0.1),
@@ -153,16 +102,13 @@ class AppTheme {
       scaffoldBackgroundColor: darkBase,
 
       // Color scheme
-      colorScheme: ColorScheme.dark(
+      colorScheme: const ColorScheme.dark(
         primary: neonBlue,
         secondary: neonGreen,
         surface: darkSurface,
-        background: darkBase,
         error: error,
         onPrimary: darkBase,
         onSecondary: darkBase,
-        onSurface: textPrimary,
-        onBackground: textPrimary,
         onError: textPrimary,
       ),
 
@@ -172,51 +118,51 @@ class AppTheme {
               displayLarge: const TextStyle(
                   fontSize: 57,
                   fontWeight: FontWeight.w300,
-                  color: textPrimary),
+                  color: textPrimary,),
               displayMedium: const TextStyle(
                   fontSize: 45,
                   fontWeight: FontWeight.w300,
-                  color: textPrimary),
+                  color: textPrimary,),
               displaySmall: const TextStyle(
                   fontSize: 36,
                   fontWeight: FontWeight.w400,
-                  color: textPrimary),
+                  color: textPrimary,),
               headlineLarge: const TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.w400,
-                  color: textPrimary),
+                  color: textPrimary,),
               headlineMedium: const TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w400,
-                  color: textPrimary),
+                  color: textPrimary,),
               headlineSmall: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w400,
-                  color: textPrimary),
+                  color: textPrimary,),
               titleLarge: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w500,
-                  color: textPrimary),
+                  color: textPrimary,),
               titleMedium: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w500,
-                  color: textPrimary),
+                  color: textPrimary,),
               titleSmall: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
-                  color: textPrimary),
+                  color: textPrimary,),
               bodyLarge: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w400,
-                  color: textPrimary),
+                  color: textPrimary,),
               bodyMedium: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w400,
-                  color: textSecondary),
+                  color: textSecondary,),
               bodySmall: const TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w400,
-                  color: textTertiary),
+                  color: textTertiary,),
             ),
       ),
 
@@ -253,10 +199,10 @@ class AppTheme {
         fillColor: darkSurface,
         border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(20),
-            borderSide: BorderSide.none),
+            borderSide: BorderSide.none,),
         focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(20),
-            borderSide: BorderSide(color: neonBlue, width: 2)),
+            borderSide: const BorderSide(color: neonBlue, width: 2),),
       ),
 
       // DatePicker Theme for dark mode visibility
@@ -276,7 +222,7 @@ class AppTheme {
         }),
         todayForegroundColor: WidgetStateProperty.all(neonBlue),
         todayBackgroundColor: WidgetStateProperty.all(Colors.transparent),
-        todayBorder: BorderSide(color: neonBlue, width: 1),
+        todayBorder: const BorderSide(color: neonBlue),
         yearForegroundColor: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) return darkBase;
           return Colors.white;
@@ -298,20 +244,20 @@ class AppTheme {
   static BoxDecoration glassMorphism({Color? color}) => BoxDecoration(
         color: (color ?? darkCard).withOpacity(0.7),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: neonBlue.withOpacity(0.2), width: 1),
+        border: Border.all(color: neonBlue.withOpacity(0.2)),
         boxShadow: [
-          BoxShadow(color: neonBlue.withOpacity(0.1), blurRadius: 20)
+          BoxShadow(color: neonBlue.withOpacity(0.1), blurRadius: 20),
         ],
       );
 
   static BoxDecoration neonGlow({required Color color}) => BoxDecoration(
         color: darkCard,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color, width: 1),
+        border: Border.all(color: color),
         boxShadow: [
           BoxShadow(color: color.withOpacity(0.3), blurRadius: 20),
           BoxShadow(
-              color: color.withOpacity(0.1), blurRadius: 40, spreadRadius: 5),
+              color: color.withOpacity(0.1), blurRadius: 40, spreadRadius: 5,),
         ],
       );
 
@@ -391,7 +337,7 @@ class AppTheme {
   /// NEW: Floating action button glow
   static BoxDecoration fabGlow() => BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [neonBlue, neonCyan],
@@ -412,17 +358,17 @@ class AppTheme {
         neonBlue.withOpacity(0.3),
       ];
 
-  // Spacing constants (tablet-optimized)
-  static const double paddingS = 12.0;
-  static const double paddingM = 16.0;
-  static const double paddingL = 24.0;
-  static const double paddingXL = 32.0;
+  // Spacing constants (tablet-optimized) - re-export from AppColors
+  static const double paddingS = AppColors.paddingS;
+  static const double paddingM = AppColors.paddingM;
+  static const double paddingL = AppColors.paddingL;
+  static const double paddingXL = AppColors.paddingXL;
 
-  // Animation durations
-  static const Duration animFast = Duration(milliseconds: 150);
-  static const Duration animNormal = Duration(milliseconds: 300);
-  static const Duration animSlow = Duration(milliseconds: 500);
-  static const Duration animPulse = Duration(milliseconds: 1500);
+  // Animation durations - re-export from AppColors
+  static const Duration animFast = AppColors.animFast;
+  static const Duration animNormal = AppColors.animNormal;
+  static const Duration animSlow = AppColors.animSlow;
+  static const Duration animPulse = AppColors.animPulse;
 
   // ============================================================================
   // GLASSMORPHISM HELPERS
@@ -483,7 +429,6 @@ class AppTheme {
       borderRadius: BorderRadius.circular(borderRadius),
       border: Border.all(
         color: startColor.withOpacity(borderOpacity),
-        width: 1,
       ),
       boxShadow: [
         BoxShadow(

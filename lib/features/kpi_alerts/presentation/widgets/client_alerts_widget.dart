@@ -3,8 +3,8 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
 
 /// Widget que muestra las alertas KPI Glacius de un cliente.
@@ -12,8 +12,7 @@ import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.da
 /// COMERCIAL ve alertas de acción sin datos sensibles.
 class ClientAlertsWidget extends StatefulWidget {
   const ClientAlertsWidget({
-    super.key,
-    required this.clientId,
+    required this.clientId, super.key,
     this.compact = false,
   });
 
@@ -120,7 +119,6 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: AppTheme.neonPurple.withValues(alpha: 0.2),
-          width: 1,
         ),
       ),
       child: Row(
@@ -401,26 +399,26 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                   // Severity counters
                   if (criticalCount > 0)
                     _buildSeverityChip(
-                        criticalCount, _severityColor('critical'), 'URG'),
+                        criticalCount, _severityColor('critical'), 'URG',),
                   if (warningCount > 0)
                     _buildSeverityChip(
-                        warningCount, _severityColor('warning'), 'ATEN'),
+                        warningCount, _severityColor('warning'), 'ATEN',),
                   if (infoCount > 0)
                     _buildSeverityChip(
-                        infoCount, _severityColor('info'), 'INFO'),
+                        infoCount, _severityColor('info'), 'INFO',),
                   const SizedBox(width: 8),
                   // Refresh + expand
                   InkWell(
                     onTap: _loadAlerts,
                     child: const Icon(Icons.refresh_rounded,
-                        size: 16, color: AppTheme.textTertiary),
+                        size: 16, color: AppTheme.textTertiary,),
                   ),
                   const SizedBox(width: 4),
                   AnimatedRotation(
                     turns: _expanded ? 0.0 : -0.25,
                     duration: const Duration(milliseconds: 200),
                     child: const Icon(Icons.expand_more_rounded,
-                        size: 18, color: AppTheme.textTertiary),
+                        size: 18, color: AppTheme.textTertiary,),
                   ),
                 ],
               ),
@@ -436,11 +434,11 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                 ),
                 child: Padding(
                   padding: const EdgeInsets.only(
-                      left: 8, right: 8, bottom: 10, top: 4),
+                      left: 8, right: 8, bottom: 10, top: 4,),
                   child: Column(
                     children: sortedTypes.map((type) {
                       return _buildAlertGroupCollapsible(
-                          type, grouped[type]!, isJefe);
+                          type, grouped[type]!, isJefe,);
                     }).toList(),
                   ),
                 ),
@@ -497,7 +495,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
           initiallyExpanded: alerts.any((a) => a.severity == 'critical'),
-          tilePadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+          tilePadding: const EdgeInsets.symmetric(horizontal: 10),
           childrenPadding: const EdgeInsets.only(bottom: 8),
           iconColor: accentColor,
           collapsedIconColor: accentColor.withValues(alpha: 0.7),
@@ -547,8 +545,8 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
 
     // Preparar texto: si tenemos compact fields de la API, usarlos
     // Si no, separar el mensaje original de forma provisional
-    String summary = '';
-    String detailInfo = '';
+    var summary = '';
+    var detailInfo = '';
 
     if (alert.hasCompactFields) {
       summary = alert.summary;
@@ -650,7 +648,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
         'Desv.',
         '${val >= 0 ? '+' : ''}${_formatNum(val)}€',
         val < 0 ? AppTheme.error : AppTheme.success,
-      ));
+      ),);
     }
     if (raw.containsKey('desviacionPct') && raw['desviacionPct'] != null) {
       final val = (raw['desviacionPct'] as num).toDouble();
@@ -658,7 +656,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
         '%',
         '${val >= 0 ? '+' : ''}${val.toStringAsFixed(0)}%',
         val < 0 ? AppTheme.error : AppTheme.success,
-      ));
+      ),);
     }
 
     if (items.isEmpty) return const SizedBox.shrink();
@@ -683,7 +681,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
         children: [
           Text(
             '$label ',
-            style: TextStyle(fontSize: 10, color: AppTheme.textTertiary),
+            style: const TextStyle(fontSize: 10, color: AppTheme.textTertiary),
           ),
           Text(
             value,
@@ -735,43 +733,43 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
   _AlertTypeConfig _typeConfig(String type) {
     switch (type) {
       case 'DESVIACION_VENTAS':
-        return _AlertTypeConfig(
+        return const _AlertTypeConfig(
           label: 'Ventas vs Objetivo',
           icon: Icons.trending_down_rounded,
           color: AppTheme.error,
         );
       case 'CUOTA_SIN_COMPRA':
-        return _AlertTypeConfig(
+        return const _AlertTypeConfig(
           label: 'Sin Compras',
           icon: Icons.remove_shopping_cart_rounded,
           color: AppTheme.warning,
         );
       case 'DESVIACION_REFERENCIACION':
-        return _AlertTypeConfig(
+        return const _AlertTypeConfig(
           label: 'Productos Pendientes',
           icon: Icons.inventory_2_rounded,
-          color: const Color(0xFFFF6B9D),
+          color: Color(0xFFFF6B9D),
         );
       case 'PROMOCION':
-        return _AlertTypeConfig(
+        return const _AlertTypeConfig(
           label: 'Promociones',
           icon: Icons.local_offer_rounded,
           color: AppTheme.neonGreen,
         );
       case 'ALTA_CLIENTE':
-        return _AlertTypeConfig(
+        return const _AlertTypeConfig(
           label: 'Cliente Nuevo',
           icon: Icons.person_add_rounded,
           color: AppTheme.neonBlue,
         );
       case 'AVISO':
-        return _AlertTypeConfig(
+        return const _AlertTypeConfig(
           label: 'Avisos',
           icon: Icons.campaign_rounded,
           color: AppTheme.neonPurple,
         );
       case 'MEDIOS_CLIENTE':
-        return _AlertTypeConfig(
+        return const _AlertTypeConfig(
           label: 'Equipamiento',
           icon: Icons.kitchen_rounded,
           color: AppTheme.neonTeal,
@@ -790,15 +788,15 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
 // Config model for alert type visual properties
 // ============================================================
 class _AlertTypeConfig {
-  final String label;
-  final IconData icon;
-  final Color color;
 
   const _AlertTypeConfig({
     required this.label,
     required this.icon,
     required this.color,
   });
+  final String label;
+  final IconData icon;
+  final Color color;
 }
 
 // ============================================================

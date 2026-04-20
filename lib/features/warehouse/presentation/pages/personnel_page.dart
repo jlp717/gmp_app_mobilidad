@@ -1,12 +1,13 @@
 /// WAREHOUSE PERSONNEL PAGE
 /// Gestión de operarios de almacén / preparadores de pedidos
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../data/warehouse_data_service.dart';
-import '../../../../core/widgets/shimmer_skeleton.dart';
-import '../../../../core/widgets/optimized_list.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/optimized_list.dart';
+import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
 
 class PersonnelPage extends StatefulWidget {
   const PersonnelPage({super.key});
@@ -39,7 +40,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
     final nameCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
-    String selectedRole = 'PREPARADOR';
+    var selectedRole = 'PREPARADOR';
 
     showDialog<void>(
       context: context,
@@ -51,7 +52,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
             side: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
           ),
           title: const Text('Nuevo Operario',
-              style: TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.w700)),
+              style: TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.w700),),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -59,7 +60,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
                 _field(nameCtrl, 'Nombre completo', Icons.person_outline),
                 const SizedBox(height: 12),
                 DropdownButtonFormField<String>(
-                  value: selectedRole,
+                  initialValue: selectedRole,
                   dropdownColor: AppTheme.darkCard,
                   style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
@@ -93,7 +94,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: Text('Cancelar',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -178,11 +179,11 @@ class _PersonnelPageState extends State<PersonnelPage> {
                               color: AppTheme.neonPurple,
                               fontSize: Responsive.fontSize(context, small: 13, large: 16),
                               fontWeight: FontWeight.w800,
-                              letterSpacing: 1.2)),
+                              letterSpacing: 1.2,),),
                       Text('${_personnel.length} operarios activos',
                           style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.5),
-                              fontSize: 12)),
+                              fontSize: 12,),),
                     ],
                   ),
                 ),
@@ -196,7 +197,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
                         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                           content: Text('Entradas de test limpiadas'),
                           backgroundColor: Colors.amber,
-                        ));
+                        ),);
                         _load();
                       }
                     } catch (e) {
@@ -204,7 +205,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                           content: Text('Error: $e'),
                           backgroundColor: Colors.redAccent,
-                        ));
+                        ),);
                       }
                     }
                   },
@@ -229,10 +230,10 @@ class _PersonnelPageState extends State<PersonnelPage> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(Icons.person_off_outlined,
-                                color: Colors.white.withValues(alpha: 0.3), size: 48),
+                                color: Colors.white.withValues(alpha: 0.3), size: 48,),
                             const SizedBox(height: 12),
                             Text('Sin personal registrado',
-                                style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+                                style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),),
                           ],
                         ),
                       )
@@ -282,17 +283,17 @@ class _PersonnelPageState extends State<PersonnelPage> {
                   Row(children: [
                     Expanded(child: Text(person.name,
                         style: const TextStyle(
-                            color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600))),
+                            color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600,),),),
                     if (!isCustom)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(4)),
+                          borderRadius: BorderRadius.circular(4),),
                         child: Text('ERP', style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.2), fontSize: 8, fontWeight: FontWeight.w600)),
+                            color: Colors.white.withValues(alpha: 0.2), fontSize: 8, fontWeight: FontWeight.w600,),),
                       ),
-                  ]),
+                  ],),
                   const SizedBox(height: 2),
                   Row(
                     children: [
@@ -303,14 +304,14 @@ class _PersonnelPageState extends State<PersonnelPage> {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(person.role,
-                            style: TextStyle(color: roleColor, fontSize: 10, fontWeight: FontWeight.w700)),
+                            style: TextStyle(color: roleColor, fontSize: 10, fontWeight: FontWeight.w700),),
                       ),
                       if (person.phone.isNotEmpty) ...[
                         const SizedBox(width: 8),
                         Icon(Icons.phone_outlined, color: Colors.white.withValues(alpha: 0.3), size: 12),
                         const SizedBox(width: 4),
                         Text(person.phone,
-                            style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 11)),
+                            style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 11),),
                       ],
                       if (person.email.isNotEmpty) ...[
                         const SizedBox(width: 8),
@@ -349,7 +350,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
             title: const Text('Eliminar', style: TextStyle(color: Colors.redAccent)),
             onTap: () { Navigator.pop(ctx); _confirmDelete(person); },
           ),
-        ]),
+        ],),
       ),
     );
   }
@@ -358,7 +359,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
     final nameCtrl = TextEditingController(text: person.name);
     final phoneCtrl = TextEditingController(text: person.phone);
     final emailCtrl = TextEditingController(text: person.email);
-    String selectedRole = person.role;
+    var selectedRole = person.role;
 
     showDialog<void>(
       context: context,
@@ -370,13 +371,13 @@ class _PersonnelPageState extends State<PersonnelPage> {
             side: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
           ),
           title: const Text('Editar Operario',
-              style: TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.w700)),
+              style: TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.w700),),
           content: SingleChildScrollView(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
               _field(nameCtrl, 'Nombre completo', Icons.person_outline),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                value: selectedRole,
+                initialValue: selectedRole,
                 dropdownColor: AppTheme.darkCard,
                 style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
@@ -384,10 +385,10 @@ class _PersonnelPageState extends State<PersonnelPage> {
                   labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15))),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: AppTheme.neonBlue)),
+                    borderSide: const BorderSide(color: AppTheme.neonBlue),),
                 ),
                 items: const [
                   DropdownMenuItem(value: 'PREPARADOR', child: Text('Preparador')),
@@ -401,7 +402,7 @@ class _PersonnelPageState extends State<PersonnelPage> {
               _field(phoneCtrl, 'Teléfono', Icons.phone_outlined),
               const SizedBox(height: 12),
               _field(emailCtrl, 'Email', Icons.email_outlined),
-            ]),
+            ],),
           ),
           actions: [
             TextButton(
@@ -424,14 +425,14 @@ class _PersonnelPageState extends State<PersonnelPage> {
                 } catch (e) {
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent));
+                      SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),);
                   }
                 }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.3),
                 foregroundColor: AppTheme.neonBlue,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),),
               child: const Text('Guardar'),
             ),
           ],
@@ -462,13 +463,13 @@ class _PersonnelPageState extends State<PersonnelPage> {
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent));
+                    SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),);
                 }
               }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.redAccent.withValues(alpha: 0.3),
-              foregroundColor: Colors.redAccent),
+              foregroundColor: Colors.redAccent,),
             child: const Text('Eliminar'),
           ),
         ],

@@ -1,21 +1,21 @@
 /// Analytics Dashboard Widget
 /// ==========================
 /// Mini-dashboard showing order KPIs, trends, and top products
+library;
 
-import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
+import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 class AnalyticsDashboard extends StatelessWidget {
-  final Map<String, dynamic> analytics;
-  final bool isLoading;
 
   const AnalyticsDashboard({
-    Key? key,
-    required this.analytics,
+    required this.analytics, super.key,
     this.isLoading = false,
-  }) : super(key: key);
+  });
+  final Map<String, dynamic> analytics;
+  final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
@@ -77,16 +77,16 @@ class AnalyticsDashboard extends StatelessWidget {
     return Row(
       children: [
         Expanded(child: _kpiCard(context, 'Ventas', '\u20AC${revenue.toStringAsFixed(0)}',
-            _trendPct(revenue, prevRevenue), Icons.euro)),
+            _trendPct(revenue, prevRevenue), Icons.euro,),),
         const SizedBox(width: 8),
         Expanded(child: _kpiCard(context, 'Pedidos', '$orders',
-            _trendPct(orders.toDouble(), prevOrders.toDouble()), Icons.receipt_long)),
+            _trendPct(orders.toDouble(), prevOrders.toDouble()), Icons.receipt_long,),),
         const SizedBox(width: 8),
         Expanded(child: _kpiCard(context, 'Ticket medio', '\u20AC${avgOrder.toStringAsFixed(0)}',
-            null, Icons.analytics_outlined)),
+            null, Icons.analytics_outlined,),),
         const SizedBox(width: 8),
         Expanded(child: _kpiCard(context, 'Clientes', '$clients',
-            null, Icons.people_outline)),
+            null, Icons.people_outline,),),
       ],
     );
   }
@@ -113,24 +113,24 @@ class AnalyticsDashboard extends StatelessWidget {
               const SizedBox(width: 4),
               Expanded(
                 child: Text(label, style: TextStyle(color: Colors.white54,
-                    fontSize: Responsive.fontSize(context, small: 10, large: 11)),
-                    overflow: TextOverflow.ellipsis),
+                    fontSize: Responsive.fontSize(context, small: 10, large: 11),),
+                    overflow: TextOverflow.ellipsis,),
               ),
             ],
           ),
           const SizedBox(height: 6),
           Text(value, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold,
-              fontSize: Responsive.fontSize(context, small: 14, large: 16))),
+              fontSize: Responsive.fontSize(context, small: 14, large: 16),),),
           if (trend != null) ...[
             const SizedBox(height: 2),
             Row(
               children: [
                 Icon(trend >= 0 ? Icons.trending_up : Icons.trending_down,
-                    color: trend >= 0 ? AppTheme.neonGreen : AppTheme.error, size: 12),
+                    color: trend >= 0 ? AppTheme.neonGreen : AppTheme.error, size: 12,),
                 const SizedBox(width: 2),
                 Text('${trend >= 0 ? '+' : ''}${trend.toStringAsFixed(0)}%',
                     style: TextStyle(color: trend >= 0 ? AppTheme.neonGreen : AppTheme.error,
-                        fontSize: 10, fontWeight: FontWeight.w600)),
+                        fontSize: 10, fontWeight: FontWeight.w600,),),
               ],
             ),
           ],
@@ -157,7 +157,7 @@ class AnalyticsDashboard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Evolucion mensual', style: TextStyle(color: Colors.white70,
-              fontSize: Responsive.fontSize(context, small: 12, large: 14), fontWeight: FontWeight.w600)),
+              fontSize: Responsive.fontSize(context, small: 12, large: 14), fontWeight: FontWeight.w600,),),
           const SizedBox(height: 12),
           SizedBox(
             height: 140,
@@ -167,9 +167,9 @@ class AnalyticsDashboard extends StatelessWidget {
                 maxY: maxY * 1.2,
                 barTouchData: BarTouchData(enabled: false),
                 titlesData: FlTitlesData(
-                  leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                  leftTitles: const AxisTitles(),
+                  rightTitles: const AxisTitles(),
+                  topTitles: const AxisTitles(),
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
@@ -196,7 +196,7 @@ class AnalyticsDashboard extends StatelessWidget {
                       width: 16,
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
                     ),
-                  ]);
+                  ],);
                 }).toList(),
               ),
             ),
@@ -232,9 +232,9 @@ class AnalyticsDashboard extends StatelessWidget {
                 Icon(icon, color: color, size: 16),
                 const SizedBox(height: 4),
                 Text('$count', style: TextStyle(color: color, fontWeight: FontWeight.bold,
-                    fontSize: Responsive.fontSize(context, small: 14, large: 16))),
+                    fontSize: Responsive.fontSize(context, small: 14, large: 16),),),
                 Text(entry.key.substring(0, 4), style: TextStyle(color: color.withOpacity(0.7),
-                    fontSize: 9, fontWeight: FontWeight.w500)),
+                    fontSize: 9, fontWeight: FontWeight.w500,),),
               ],
             ),
           ),
@@ -255,7 +255,7 @@ class AnalyticsDashboard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('Top productos', style: TextStyle(color: Colors.white70,
-              fontSize: Responsive.fontSize(context, small: 12, large: 14), fontWeight: FontWeight.w600)),
+              fontSize: Responsive.fontSize(context, small: 12, large: 14), fontWeight: FontWeight.w600,),),
           const SizedBox(height: 8),
           ...topProducts.take(5).map((p) {
             final sales = (p['totalSales'] as num?)?.toDouble() ?? 0;
@@ -267,8 +267,8 @@ class AnalyticsDashboard extends StatelessWidget {
                   Expanded(
                     flex: 3,
                     child: Text((p['name'] ?? '').toString(), style: TextStyle(color: Colors.white70,
-                        fontSize: Responsive.fontSize(context, small: 11, large: 12)),
-                        overflow: TextOverflow.ellipsis),
+                        fontSize: Responsive.fontSize(context, small: 11, large: 12),),
+                        overflow: TextOverflow.ellipsis,),
                   ),
                   Expanded(
                     flex: 2,
@@ -284,7 +284,7 @@ class AnalyticsDashboard extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text('\u20AC${sales.toStringAsFixed(0)}', style: TextStyle(color: AppTheme.neonGreen,
-                      fontSize: Responsive.fontSize(context, small: 11, large: 12), fontWeight: FontWeight.w600)),
+                      fontSize: Responsive.fontSize(context, small: 11, large: 12), fontWeight: FontWeight.w600,),),
                 ],
               ),
             );

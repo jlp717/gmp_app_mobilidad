@@ -2,10 +2,6 @@ import 'package:equatable/equatable.dart';
 
 /// Top-level dashboard metrics container.
 class DashboardMetrics extends Equatable {
-  final VencimientosMetrics vencimientos;
-  final CobrosMetrics cobros;
-  final PedidosMetrics pedidos;
-  final SalesSummary salesSummary;
 
   const DashboardMetrics({
     this.vencimientos = const VencimientosMetrics(),
@@ -13,6 +9,10 @@ class DashboardMetrics extends Equatable {
     this.pedidos = const PedidosMetrics(),
     this.salesSummary = const SalesSummary(),
   });
+  final VencimientosMetrics vencimientos;
+  final CobrosMetrics cobros;
+  final PedidosMetrics pedidos;
+  final SalesSummary salesSummary;
 
   @override
   List<Object?> get props => [vencimientos, cobros, pedidos, salesSummary];
@@ -20,13 +20,13 @@ class DashboardMetrics extends Equatable {
 
 /// Vencimientos (due dates / expirations).
 class VencimientosMetrics extends Equatable {
-  final int pendingCount;
-  final double totalAmount;
 
   const VencimientosMetrics({
     this.pendingCount = 0,
     this.totalAmount = 0,
   });
+  final int pendingCount;
+  final double totalAmount;
 
   @override
   List<Object?> get props => [pendingCount, totalAmount];
@@ -34,13 +34,13 @@ class VencimientosMetrics extends Equatable {
 
 /// Cobros (collections / payments received).
 class CobrosMetrics extends Equatable {
-  final int realizedCount;
-  final double totalAmount;
 
   const CobrosMetrics({
     this.realizedCount = 0,
     this.totalAmount = 0,
   });
+  final int realizedCount;
+  final double totalAmount;
 
   @override
   List<Object?> get props => [realizedCount, totalAmount];
@@ -48,13 +48,13 @@ class CobrosMetrics extends Equatable {
 
 /// Pedidos (orders).
 class PedidosMetrics extends Equatable {
-  final int pendingCount;
-  final double totalAmount;
 
   const PedidosMetrics({
     this.pendingCount = 0,
     this.totalAmount = 0,
   });
+  final int pendingCount;
+  final double totalAmount;
 
   @override
   List<Object?> get props => [pendingCount, totalAmount];
@@ -62,10 +62,6 @@ class PedidosMetrics extends Equatable {
 
 /// Sales summary with daily breakdown.
 class SalesSummary extends Equatable {
-  final double totalSales;
-  final int totalUnits;
-  final double previousPeriodSales;
-  final List<DailySalesData> dailyData;
 
   const SalesSummary({
     this.totalSales = 0,
@@ -73,6 +69,10 @@ class SalesSummary extends Equatable {
     this.previousPeriodSales = 0,
     this.dailyData = const [],
   });
+  final double totalSales;
+  final int totalUnits;
+  final double previousPeriodSales;
+  final List<DailySalesData> dailyData;
 
   /// Growth percentage vs previous period.
   double get salesGrowth {
@@ -87,15 +87,15 @@ class SalesSummary extends Equatable {
 
 /// Single day sales data point.
 class DailySalesData extends Equatable {
-  final String dayLabel;
-  final double sales;
-  final int units;
 
   const DailySalesData({
     required this.dayLabel,
     this.sales = 0,
     this.units = 0,
   });
+  final String dayLabel;
+  final double sales;
+  final int units;
 
   @override
   List<Object?> get props => [dayLabel, sales, units];
@@ -103,10 +103,6 @@ class DailySalesData extends Equatable {
 
 /// Recent sale entry.
 class UltimaVenta extends Equatable {
-  final String fecha;
-  final String cliente;
-  final String numeroAlbaran;
-  final double importe;
 
   const UltimaVenta({
     required this.fecha,
@@ -114,6 +110,10 @@ class UltimaVenta extends Equatable {
     required this.numeroAlbaran,
     this.importe = 0,
   });
+  final String fecha;
+  final String cliente;
+  final String numeroAlbaran;
+  final double importe;
 
   @override
   List<Object?> get props => [fecha, cliente, numeroAlbaran, importe];
@@ -121,15 +121,15 @@ class UltimaVenta extends Equatable {
 
 /// Sales metrics (today / year).
 class VentasMetrics extends Equatable {
-  final double total;
-  final int cantidad;
-  final double margen;
 
   const VentasMetrics({
     this.total = 0,
     this.cantidad = 0,
     this.margen = 0,
   });
+  final double total;
+  final int cantidad;
+  final double margen;
 
   @override
   List<Object?> get props => [total, cantidad, margen];
@@ -137,10 +137,6 @@ class VentasMetrics extends Equatable {
 
 /// Monthly sales metrics with previous month comparison.
 class VentasMesMetrics extends Equatable {
-  final double total;
-  final int cantidad;
-  final double margen;
-  final double comparativaMesAnterior;
 
   const VentasMesMetrics({
     this.total = 0,
@@ -148,6 +144,10 @@ class VentasMesMetrics extends Equatable {
     this.margen = 0,
     this.comparativaMesAnterior = 0,
   });
+  final double total;
+  final int cantidad;
+  final double margen;
+  final double comparativaMesAnterior;
 
   @override
   List<Object?> get props => [total, cantidad, margen, comparativaMesAnterior];
@@ -155,13 +155,13 @@ class VentasMesMetrics extends Equatable {
 
 /// Clients attended count.
 class ClientesAtendidos extends Equatable {
-  final int hoy;
-  final int mes;
 
   const ClientesAtendidos({
     this.hoy = 0,
     this.mes = 0,
   });
+  final int hoy;
+  final int mes;
 
   @override
   List<Object?> get props => [hoy, mes];

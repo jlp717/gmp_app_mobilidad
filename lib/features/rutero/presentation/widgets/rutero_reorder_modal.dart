@@ -1,19 +1,16 @@
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class RuteroReorderModal extends StatefulWidget {
+
+  const RuteroReorderModal({
+    required this.clients, required this.employeeCode, required this.day, super.key,
+  });
   final List<Map<String, dynamic>> clients;
   final String employeeCode;
   final String day;
-
-  const RuteroReorderModal({
-    super.key,
-    required this.clients,
-    required this.employeeCode,
-    required this.day,
-  });
 
   @override
   State<RuteroReorderModal> createState() => _RuteroReorderModalState();
@@ -134,14 +131,14 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
         actions: [
           if (_isSaving)
             const Center(child: Padding(
-              padding: EdgeInsets.only(right: 16.0),
+              padding: EdgeInsets.only(right: 16),
               child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonPink)),
-            ))
+            ),)
           else
             TextButton.icon(
               onPressed: _saveOrder,
-              icon: Icon(Icons.save, color: AppTheme.neonPink),
-              label: Text('Guardar', style: TextStyle(color: AppTheme.neonPink, fontWeight: FontWeight.bold)),
+              icon: const Icon(Icons.save, color: AppTheme.neonPink),
+              label: const Text('Guardar', style: TextStyle(color: AppTheme.neonPink, fontWeight: FontWeight.bold)),
             ),
         ],
       ),
@@ -154,14 +151,14 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
               width: double.infinity,
               child: Text(
                 _error!,
-                style: TextStyle(color: AppTheme.error),
+                style: const TextStyle(color: AppTheme.error),
                 textAlign: TextAlign.center,
               ),
             ),
             
           // Search Bar
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(16),
             child: TextField(
               controller: _searchController,
               onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
@@ -187,16 +184,16 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
           ),
           
           if (isSearching)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
                   Icon(Icons.info_outline, color: AppTheme.neonBlue, size: 16),
-                  const SizedBox(width: 8),
+                  SizedBox(width: 8),
                   Expanded(child: Text(
                     'Limpia la búsqueda para arrastrar y soltar.',
                     style: TextStyle(color: AppTheme.neonBlue, fontSize: 12),
-                  )),
+                  ),),
                 ],
               ),
             ),
@@ -245,7 +242,7 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
           backgroundColor: AppTheme.neonPink.withOpacity(0.1),
           child: Text(
             '${index + 1}', 
-            style: TextStyle(color: AppTheme.neonPink, fontWeight: FontWeight.bold)
+            style: const TextStyle(color: AppTheme.neonPink, fontWeight: FontWeight.bold),
           ),
         ),
         title: Text(

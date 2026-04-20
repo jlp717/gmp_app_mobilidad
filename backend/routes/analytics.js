@@ -13,7 +13,8 @@ const {
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
     sanitizeForSQL,
-    sanitizeCodeList
+    sanitizeCodeList,
+    handleRouteError
 } = require('../utils/common');
 
 
@@ -79,7 +80,7 @@ router.get('/yoy-comparison', async (req, res) => {
 
     } catch (error) {
         logger.error(`YoY error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo comparación', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo comparación', 500);
     }
 });
 
@@ -141,7 +142,7 @@ router.get('/top-clients', async (req, res) => {
 
     } catch (error) {
         logger.error(`Top clients error: ${error.message}`);
-        res.status(500).json({ error: 'Error top clients', details: error.message });
+        handleRouteError(error, res, 'Error top clients', 500);
     }
 });
 
@@ -184,7 +185,7 @@ router.get('/trends', async (req, res) => {
 
     } catch (error) {
         logger.error(`Trends error: ${error.message}`);
-        res.status(500).json({ error: 'Error calculating trends', details: error.message });
+        handleRouteError(error, res, 'Error calculating trends', 500);
     }
 });
 
@@ -235,7 +236,7 @@ router.get('/top-products', async (req, res) => {
         });
     } catch (error) {
         logger.error(`Top Products error: ${error.message} `);
-        res.status(500).json({ error: 'Error obteniendo productos', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo productos', 500);
     }
 });
 
@@ -295,7 +296,7 @@ router.get('/margins', async (req, res) => {
 
     } catch (error) {
         logger.error(`Margins error: ${error.message} `);
-        res.status(500).json({ error: 'Error obteniendo márgenes', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo márgenes', 500);
     }
 });
 
@@ -412,8 +413,7 @@ router.get('/sales-history', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error(`Sales history error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo histórico de ventas', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo histórico de ventas', 500);
     }
 });
 
@@ -579,8 +579,7 @@ router.get('/sales-history/summary', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error(`Error in sales-history/summary: ${error.message}`);
-        res.status(500).json({ error: 'Error calculating summary', details: error.message });
+        handleRouteError(error, res, 'Error calculating summary', 500);
     }
 });
 

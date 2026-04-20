@@ -5,27 +5,26 @@
 /// - AutomaticKeepAliveClientMixin for tab persistence
 /// - RepaintBoundary for isolated repaints
 /// - Const optimizations
+library;
 
 import 'package:flutter/material.dart';
 
 /// Optimized ListView.builder with performance settings
 class OptimizedListView extends StatelessWidget {
+
+  const OptimizedListView({
+    required this.itemCount, required this.itemBuilder, super.key,
+    this.controller,
+    this.padding,
+    this.physics,
+    this.shrinkWrap = false,
+  });
   final int itemCount;
   final Widget Function(BuildContext, int) itemBuilder;
   final ScrollController? controller;
   final EdgeInsets? padding;
   final ScrollPhysics? physics;
   final bool shrinkWrap;
-
-  const OptimizedListView({
-    super.key,
-    required this.itemCount,
-    required this.itemBuilder,
-    this.controller,
-    this.padding,
-    this.physics,
-    this.shrinkWrap = false,
-  });
 
   @override
   Widget build(BuildContext context) {
@@ -37,9 +36,6 @@ class OptimizedListView extends StatelessWidget {
       itemCount: itemCount,
       // OPTIMIZATION: Cache 3 screens worth of items
       cacheExtent: MediaQuery.of(context).size.height * 3,
-      // OPTIMIZATION: Keep items alive when scrolled off-screen
-      addAutomaticKeepAlives: true,
-      addRepaintBoundaries: true,
       addSemanticIndexes: false, // Slight perf gain if not using accessibility
       itemBuilder: (context, index) {
         // Wrap each item in RepaintBoundary for isolated repaints
@@ -53,14 +49,12 @@ class OptimizedListView extends StatelessWidget {
 
 /// Optimized SliverList for use in CustomScrollView
 class OptimizedSliverList extends StatelessWidget {
-  final int itemCount;
-  final Widget Function(BuildContext, int) itemBuilder;
 
   const OptimizedSliverList({
-    super.key,
-    required this.itemCount,
-    required this.itemBuilder,
+    required this.itemCount, required this.itemBuilder, super.key,
   });
+  final int itemCount;
+  final Widget Function(BuildContext, int) itemBuilder;
 
   @override
   Widget build(BuildContext context) {
@@ -72,8 +66,6 @@ class OptimizedSliverList extends StatelessWidget {
           );
         },
         childCount: itemCount,
-        addAutomaticKeepAlives: true,
-        addRepaintBoundaries: true,
       ),
     );
   }
@@ -98,9 +90,9 @@ mixin TabKeepAliveMixin<T extends StatefulWidget> on AutomaticKeepAliveClientMix
 /// Optimized container with RepaintBoundary
 /// Use for heavy widgets that re-render independently
 class IsolatedWidget extends StatelessWidget {
-  final Widget child;
 
-  const IsolatedWidget({super.key, required this.child});
+  const IsolatedWidget({required this.child, super.key});
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
@@ -111,10 +103,10 @@ class IsolatedWidget extends StatelessWidget {
 /// Debounced callback wrapper
 /// Prevents callback from firing more than once per duration
 class DebouncedCallback {
-  final Duration duration;
-  DateTime? _lastCall;
 
   DebouncedCallback({this.duration = const Duration(milliseconds: 300)});
+  final Duration duration;
+  DateTime? _lastCall;
 
   bool call() {
     final now = DateTime.now();

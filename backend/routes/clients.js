@@ -9,7 +9,8 @@ const {
   MIN_YEAR,
   LACLAE_SALES_FILTER,
   sanitizeForSQL,
-  sanitizeCodeList
+  sanitizeCodeList,
+  handleRouteError
 } = require('../utils/common');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
@@ -217,8 +218,7 @@ const getClientsHandler = async (req, res) => {
     logger.info(`[CLIENTS] Total response time: ${totalDuration}ms for ${clients.length} clients`);
 
   } catch (error) {
-    logger.error(`Clients error: ${error.message} `);
-    res.status(500).json({ error: 'Error obteniendo clientes', details: error.message });
+    handleRouteError(error, res, 'Error obteniendo clientes', 500);
   }
 };
 
@@ -273,8 +273,7 @@ router.put('/notes', async (req, res) => {
 
     res.json({ success: true });
   } catch (error) {
-    logger.error(`Error saving notes: ${error.message}`);
-    res.status(500).json({ error: 'Error guardando notas', details: error.message });
+    handleRouteError(error, res, 'Error guardando notas', 500);
   }
 });
 
@@ -483,8 +482,7 @@ if (clientInfo.length === 0) {
     });
 
   } catch (error) {
-    logger.error(`Client detail error: ${error.message}`);
-    res.status(500).json({ error: 'Error obteniendo detalle de cliente', details: error.message });
+    handleRouteError(error, res, 'Error obteniendo detalle de cliente', 500);
   }
 });
 
@@ -573,7 +571,7 @@ router.put('/:code/notes', async (req, res) => {
     res.json({ success: true, message: 'Notas guardadas correctamente' });
   } catch (error) {
     logger.error(`Save notes error: ${error.message}`);
-    res.status(500).json({ error: 'Error guardando notas', details: error.message });
+    handleRouteError(error, res, 'Error guardando notas', 500);
   }
 });
 
@@ -623,7 +621,7 @@ router.get('/:code/sales-history', async (req, res) => {
 
   } catch (error) {
     logger.error(`Client history error: ${error.message} `);
-    res.status(500).json({ error: 'Error obteniendo historial', details: error.message });
+    handleRouteError(error, res, 'Error obteniendo historial', 500);
   }
 });
 
@@ -713,7 +711,7 @@ router.get('/compare', async (req, res) => {
 
   } catch (error) {
     logger.error(`Client compare error: ${error.message} `);
-    res.status(500).json({ error: 'Error comparando clientes', details: error.message });
+    handleRouteError(error, res, 'Error comparando clientes', 500);
   }
 });
 

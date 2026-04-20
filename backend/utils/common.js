@@ -432,3 +432,183 @@ module.exports = {
         return count;
     }
 };
+
+// =============================================================================
+// ERROR HANDLING - Sanitized error responses for production
+// =============================================================================
+
+/**
+ * Patterns that indicate sensitive information should NEVER be exposed
+ * These are checked and stripped from error messages
+ */
+const SENSITIVE_PATTERNS = [
+    /password/i,
+    /secret/i,
+    /token/i,
+    /key/i,
+    /credential/i,
+    /auth/i,
+    /jwt/i,
+    /bearer/i,
+    /api[_-]?key/i,
+    /private[_-]?key/i,
+    /session/i,
+    /cookie/i,
+    /db[_-]?pass/i,
+    /connection[_-]?string/i,
+    /odbc/i,
+    /dsn/i,
+    /host/i,
+    /port/i,
+    /charset/i,
+    /encoding/i,
+    /sql/i,
+    /syntax/i,
+    /table/i,
+    /column/i,
+    /index/i,
+    /constraint/i,
+    /trigger/i,
+    /procedure/i,
+    /function/i,
+    /schema/i,
+    /catalog/i,
+    /driver/i,
+    /pool/i,
+    /connection/i,
+    /timeout/i,
+    /memory/i,
+    /heap/i,
+    /stack/i,
+    /overflow/i,
+    /underflow/i,
+    /null/i,
+    /undefined/i,
+    /NaN/i,
+    /undefined/i,
+    /\[object/i,
+    /object\.object/i,
+    /^\s*at\s+/m, // stack trace lines
+    /line\s+\d+/i,
+    /column\s+\d+/i,
+    /file\s+"?[^"]+\.js"?/i,
+    /\.js:\d+:\d+/i,
+    /<anonymous>/i,
+    /internal\/modules/i,
+    /node_modules/i,
+    /async\s*lib/i,
+    /node:internal/i,
+];
+
+/**
+ * Check if a message contains sensitive patterns
+ * @param {string} msg - Error message to check
+ * @returns {boolean} True if sensitive patterns found
+ */
+function containsSensitiveInfo(msg) {
+    if (!msg || typeof msg !== 'string') return false;
+    return SENSITIVE_PATTERNS.some(pattern => pattern.test(msg));
+}
+
+/**
+ * Sanitize an error message for client response.
+ * Removes sensitive patterns, stack traces, and internal details.
+ * 
+ * @param {string|Error} error - Error object or message
+ * @param {string} fallbackMessage - Message to return if error is too generic
+ * @returns {string} Sanitized error message safe for client
+ */
+function sanitizeErrorMessage(error, fallbackMessage = 'Error interno del servidor') {
+    let originalMessage = '';
+    
+    if (error instanceof Error) {
+        originalMessage = error.message || '';
+    } else if (typeof error === 'string') {
+        originalMessage = error;
+    } else if (error && typeof error === 'object') {
+        originalMessage = error.message || error.error || JSON.stringify(error);
+    }
+    
+    if (!originalMessage || originalMessage.trim() === '') {
+        return fallbackMessage;
+    }
+    
+    // Check if message contains sensitive patterns
+    if (containsSensitiveInfo(originalMessage)) {
+        logger.warn(`[SECURITY] Blocking exposure of sensitive error info: ${originalMessage.substring(0, 50)}...`);
+        return fallbackMessage;
+    }
+    
+    // Additional cleanup: remove any remaining potential internal paths or stack traces
+    let sanitized = originalMessage
+        .replace(/\s+at\s+[^\n]+/g, '') // Remove stack trace lines
+        .replace(/in\s+"?[^"]+\.js"?/gi, '') // Remove file references
+        .replace(/:\d+:\d+/g, '') // Remove line:column numbers
+        .replace(/\s+/g, ' ') // Normalize whitespace
+        .trim();
+    
+    // If the sanitized message is too short or looks like garbage, use fallback
+    if (sanitized.length < 5 || /^[^\w\s]{3,}$/.test(sanitized)) {
+        return fallbackMessage;
+    }
+    
+    // Truncate to reasonable length (never expose huge error dumps)
+    if (sanitized.length > 200) {
+        sanitized = sanitized.substring(0, 200) + '...';
+    }
+    
+    return sanitized;
+}
+
+/**
+ * Create a standardized error response object.
+ * Use this in all catch blocks to ensure consistent, safe error responses.
+ * 
+ * @param {string|Error} error - The caught error
+ * @param {string} userMessage - User-friendly message to display
+ * @param {object} extras - Additional fields to include in response
+ * @returns {object} Safe error response object
+ */
+function createErrorResponse(error, userMessage = 'Error interno del servidor', extras = {}) {
+    const safeMessage = sanitizeErrorMessage(error, userMessage);
+    
+    const response = {
+        error: safeMessage,
+        code: extras.code || 'INTERNAL_ERROR',
+        ...extras
+    };
+    
+    // Only include 'details' if the error is safe (doesn't contain sensitive info)
+    if (error instanceof Error && !containsSensitiveInfo(error.message)) {
+        // Include a generic indicator, not the actual message
+        response.details = 'Ver logs internos para más información';
+    }
+    
+    return response;
+}
+
+/**
+ * Handle a caught error in an async route handler.
+ * Logs the full error and sends a safe response to the client.
+ * 
+ * @param {Error} error - The caught error
+ * @param {object} res - Express response object
+ * @param {string} userMessage - User-friendly message
+ * @param {number} statusCode - HTTP status code (default 500)
+ * @param {object} extras - Additional response fields
+ */
+function handleRouteError(error, res, userMessage = 'Error interno del servidor', statusCode = 500, extras = {}) {
+    // Log full error details internally (never sent to client)
+    logger.error(`[ROUTE ERROR] ${error.message}${error.stack ? '\n' + error.stack.substring(0, 500) : ''}`);
+    
+    // Send safe response to client
+    res.status(statusCode).json(createErrorResponse(error, userMessage, extras));
+}
+
+module.exports = {
+    ...module.exports,
+    sanitizeErrorMessage,
+    createErrorResponse,
+    handleRouteError,
+    containsSensitiveInfo,
+};

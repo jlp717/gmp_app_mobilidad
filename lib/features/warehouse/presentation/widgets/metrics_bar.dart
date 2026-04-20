@@ -1,19 +1,17 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../domain/models/load_planner_models.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
 
 /// Premium metrics bar with circular gauges, animated counters and glow accents.
 class MetricsBar extends StatelessWidget {
-  final PlannerMetrics? metrics;
-  final SaveState saveState;
 
   const MetricsBar({
-    super.key,
-    required this.metrics,
-    required this.saveState,
+    required this.metrics, required this.saveState, super.key,
   });
+  final PlannerMetrics? metrics;
+  final SaveState saveState;
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +32,6 @@ class MetricsBar extends StatelessWidget {
         border: Border(
           bottom: BorderSide(
             color: AppTheme.neonBlue.withOpacity(0.1),
-            width: 1,
           ),
         ),
       ),
@@ -44,7 +41,7 @@ class MetricsBar extends StatelessWidget {
           _CircularGaugeCard(
             label: 'Volumen',
             value: m.volumePct,
-            current: '${(m.usedVolumeCm3 / 1e6).toStringAsFixed(1)}',
+            current: (m.usedVolumeCm3 / 1e6).toStringAsFixed(1),
             unit: 'm\u00B3',
             max: '${(m.containerVolumeCm3 / 1e6).toStringAsFixed(1)} m\u00B3',
             color: _statusColor(m.volumePct),
@@ -55,7 +52,7 @@ class MetricsBar extends StatelessWidget {
           _CircularGaugeCard(
             label: 'Peso',
             value: m.weightPct,
-            current: '${m.totalWeightKg.toStringAsFixed(0)}',
+            current: m.totalWeightKg.toStringAsFixed(0),
             unit: 'kg',
             max: '${m.maxPayloadKg.toStringAsFixed(0)} kg',
             color: _statusColor(m.weightPct),
@@ -90,12 +87,6 @@ class MetricsBar extends StatelessWidget {
 // =============================================================================
 
 class _CircularGaugeCard extends StatelessWidget {
-  final String label;
-  final double value;
-  final String current;
-  final String unit;
-  final String max;
-  final Color color;
 
   const _CircularGaugeCard({
     required this.label,
@@ -105,6 +96,12 @@ class _CircularGaugeCard extends StatelessWidget {
     required this.max,
     required this.color,
   });
+  final String label;
+  final double value;
+  final String current;
+  final String unit;
+  final String max;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
@@ -169,7 +166,7 @@ class _CircularGaugeCard extends StatelessWidget {
                       current.contains('.')
                           ? v.toStringAsFixed(1)
                           : v.toInt().toString(),
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
@@ -180,7 +177,7 @@ class _CircularGaugeCard extends StatelessWidget {
                   const SizedBox(width: 2),
                   Text(
                     unit,
-                    style: TextStyle(
+                    style: const TextStyle(
                       color: AppTheme.textTertiary,
                       fontSize: 9,
                       fontWeight: FontWeight.w500,
@@ -205,19 +202,19 @@ class _CircularGaugeCard extends StatelessWidget {
 // =============================================================================
 
 class _ArcPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  final Color bgColor;
 
   _ArcPainter({
     required this.progress,
     required this.color,
     required this.bgColor,
   });
+  final double progress;
+  final Color color;
+  final Color bgColor;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final strokeWidth = 3.5;
+    const strokeWidth = 3.5;
     final rect = Rect.fromLTWH(
       strokeWidth / 2,
       strokeWidth / 2,
@@ -264,8 +261,8 @@ class _ArcPainter extends CustomPainter {
 // =============================================================================
 
 class _PremiumStatusBadge extends StatefulWidget {
-  final LoadStatus status;
   const _PremiumStatusBadge({required this.status});
+  final LoadStatus status;
 
   @override
   State<_PremiumStatusBadge> createState() => _PremiumStatusBadgeState();
@@ -329,7 +326,6 @@ class _PremiumStatusBadgeState extends State<_PremiumStatusBadge>
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: color.withOpacity(0.4),
-              width: 1,
             ),
             boxShadow: [
               BoxShadow(
@@ -365,9 +361,9 @@ class _PremiumStatusBadgeState extends State<_PremiumStatusBadge>
 // =============================================================================
 
 class _BoxCountCard extends StatelessWidget {
+  const _BoxCountCard({required this.placed, required this.overflow});
   final int placed;
   final int overflow;
-  const _BoxCountCard({required this.placed, required this.overflow});
 
   @override
   Widget build(BuildContext context) {
@@ -378,7 +374,6 @@ class _BoxCountCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: AppTheme.borderColor.withOpacity(0.15),
-          width: 1,
         ),
       ),
       child: Column(
@@ -417,8 +412,8 @@ class _BoxCountCard extends StatelessWidget {
 // =============================================================================
 
 class _PremiumSaveIndicator extends StatelessWidget {
-  final SaveState state;
   const _PremiumSaveIndicator({required this.state});
+  final SaveState state;
 
   @override
   Widget build(BuildContext context) {

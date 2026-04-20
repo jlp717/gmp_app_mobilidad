@@ -1,42 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/models/user_model.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/providers/dashboard_notifier.dart';
+import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/services/navigation_config_service.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/coming_soon_placeholder.dart';
+import 'package:gmp_app_mobilidad/core/widgets/lazy_indexed_stack.dart';
+import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
+import 'package:gmp_app_mobilidad/features/clients/presentation/pages/simple_client_list_page.dart';
+import 'package:gmp_app_mobilidad/features/cobros/presentation/pages/cobros_page.dart';
+import 'package:gmp_app_mobilidad/features/commissions/presentation/pages/commissions_page.dart';
+import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/dashboard_content.dart';
+import 'package:gmp_app_mobilidad/features/facturas/presentation/pages/facturas_page.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/pages/kpi_dashboard_page.dart';
+import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/objectives_page.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/pedidos_page.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_clientes_page.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_historico_page.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_panel_page.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_rutero_page.dart';
+import 'package:gmp_app_mobilidad/features/rutero/presentation/pages/rutero_page.dart';
+import 'package:gmp_app_mobilidad/features/settings/presentation/pages/network_settings_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/articles_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/load_history_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/personnel_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/vehicles_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/warehouse_dashboard_page.dart';
 import 'package:url_launcher/url_launcher.dart';
-
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/providers/auth_notifier.dart';
-import '../../../../core/providers/filter_provider.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/widgets/modern_loading.dart';
-import '../../../../core/providers/dashboard_notifier.dart';
-import '../../../../core/widgets/coming_soon_placeholder.dart';
-import '../../../clients/presentation/pages/simple_client_list_page.dart';
-import '../../../rutero/presentation/pages/rutero_page.dart';
-import '../../../objectives/presentation/pages/objectives_page.dart';
-import '../../../chatbot/presentation/pages/chatbot_page.dart';
-import '../../../commissions/presentation/pages/commissions_page.dart';
-import '../../../cobros/presentation/pages/cobros_page.dart';
-import '../../../settings/presentation/pages/network_settings_page.dart';
-import '../../../entregas/presentation/pages/entregas_page.dart';
-import '../../../entregas/providers/entregas_provider.dart';
-import '../../../repartidor/presentation/pages/repartidor_rutero_page.dart';
-import '../../../repartidor/presentation/pages/repartidor_comisiones_page.dart';
-import '../../../repartidor/presentation/pages/repartidor_historico_page.dart';
-import '../../../repartidor/presentation/pages/repartidor_panel_page.dart';
-import '../../../repartidor/presentation/pages/repartidor_clientes_page.dart';
-import '../../../facturas/presentation/pages/facturas_page.dart';
-import '../../../pedidos/presentation/pages/pedidos_page.dart';
-import '../../../pedidos/providers/pedidos_provider.dart';
-import '../../../warehouse/presentation/pages/warehouse_dashboard_page.dart';
-import '../../../warehouse/presentation/pages/vehicles_page.dart';
-import '../../../warehouse/presentation/pages/articles_page.dart';
-import '../../../warehouse/presentation/pages/load_history_page.dart';
-import '../../../warehouse/presentation/pages/personnel_page.dart';
-import '../../../../core/models/user_model.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../../../core/widgets/lazy_indexed_stack.dart';
-import 'dashboard_content.dart';
 
 /// Main app shell with navigation rail for tablet mode
 /// Panel de Control (Dashboard) is only visible for Jefe de Ventas
@@ -90,8 +85,8 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   bool get _isAlmacenEffective {
-     if (_forceAlmacenMode) return true;
-     return false; 
+    if (_forceAlmacenMode) return true;
+    return false;
   }
 
   void _onFilterChanged() {
@@ -107,11 +102,15 @@ class _MainShellState extends ConsumerState<MainShell> {
     if (selectedVendor != null && selectedVendor.isNotEmpty) {
       // Use Riverpod dashboardProvider to update vendor codes
       final container = ProviderScope.containerOf(context);
-      container.read(dashboardProvider.notifier).updateVendorCodes(selectedVendor.split(','));
+      container
+          .read(dashboardProvider.notifier)
+          .updateVendorCodes(selectedVendor.split(','));
     } else {
       // No filter = show all vendor codes
       final container = ProviderScope.containerOf(context);
-      container.read(dashboardProvider.notifier).updateVendorCodes(authState?.vendedorCodes ?? []);
+      container
+          .read(dashboardProvider.notifier)
+          .updateVendorCodes(authState?.vendedorCodes ?? []);
     }
   }
 
@@ -120,12 +119,11 @@ class _MainShellState extends ConsumerState<MainShell> {
     super.dispose();
   }
 
-
   void _checkForUpdates() {
     final authState = ref.read(authProvider).value;
     if (!(authState?.updateAvailable ?? false)) return;
 
-    final bool isMandatory = authState?.isMandatoryUpdate ?? false;
+    final isMandatory = authState?.isMandatoryUpdate ?? false;
 
     showDialog(
       context: context,
@@ -134,22 +132,30 @@ class _MainShellState extends ConsumerState<MainShell> {
         onWillPop: () async => !isMandatory,
         child: AlertDialog(
           title: Text(
-            isMandatory ? 'Actualización Obligatoria' : 'Actualización Disponible',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+            isMandatory
+                ? 'Actualización Obligatoria'
+                : 'Actualización Disponible',
+            style: const TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20,),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                (authState?.updateMessage.isNotEmpty ?? false) ? authState!.updateMessage : 'Hay una nueva versión de la app con mejoras críticas.',
+                (authState?.updateMessage.isNotEmpty ?? false)
+                    ? authState!.updateMessage
+                    : 'Hay una nueva versión de la app con mejoras críticas.',
                 style: const TextStyle(color: Colors.white70),
               ),
               if (isMandatory) ...[
                 const SizedBox(height: 16),
                 const Text(
                   'Esta actualización es necesaria para garantizar la integridad de los datos y el correcto funcionamiento.',
-                  style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: Colors.orange,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,),
                 ),
               ],
             ],
@@ -159,19 +165,23 @@ class _MainShellState extends ConsumerState<MainShell> {
             if (!isMandatory)
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('MÁS TARDE', style: TextStyle(color: Colors.white54)),
+                child: const Text('MÁS TARDE',
+                    style: TextStyle(color: Colors.white54),),
               )
             else
-              TextButton(
-                onPressed: () => SystemNavigator.pop(),
-                child: const Text('CERRAR APP', style: TextStyle(color: AppTheme.error)),
+              const TextButton(
+                onPressed: SystemNavigator.pop,
+                child: Text('CERRAR APP',
+                    style: TextStyle(color: AppTheme.error),),
               ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.neonBlue,
                 foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),),
               ),
               onPressed: () {
                 launchUrl(
@@ -179,7 +189,8 @@ class _MainShellState extends ConsumerState<MainShell> {
                   mode: LaunchMode.externalApplication,
                 );
               },
-              child: const Text('ACTUALIZAR AHORA', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text('ACTUALIZAR AHORA',
+                  style: TextStyle(fontWeight: FontWeight.bold),),
             ),
           ],
         ),
@@ -194,16 +205,18 @@ class _MainShellState extends ConsumerState<MainShell> {
       final now = DateTime.now();
 
       if (user.isJefeVentas) {
-        ref.read(dashboardProvider.notifier).fetchAll(year: now.year, month: now.month);
-          // Fetch repartidores
-          _fetchRepartidores();
-        } else {
-          // Non-Jefe starts at first available section (Clientes)
-          setState(() {
-            _currentIndex = 0; // Will map to Clientes for non-Jefe
-          });
-        }
+        ref
+            .read(dashboardProvider.notifier)
+            .fetchAll(year: now.year, month: now.month);
+        // Fetch repartidores
+        _fetchRepartidores();
+      } else {
+        // Non-Jefe starts at first available section (Clientes)
+        setState(() {
+          _currentIndex = 0; // Will map to Clientes for non-Jefe
+        });
       }
+    }
   }
 
   // Show futuristic logout confirmation modal
@@ -216,233 +229,93 @@ class _MainShellState extends ConsumerState<MainShell> {
       ),
     );
 
-    if (shouldLogout == true) {
+    if (shouldLogout ?? false) {
       ProviderScope.containerOf(context).read(authProvider.notifier).logout();
     }
   }
 
   Future<void> _fetchRepartidores() async {
-      setState(() => _isLoadingRepartidores = true);
-      try {
-        debugPrint('[MainShell] _fetchRepartidores: calling API...');
-        final res = await ApiClient.getList('/auth/repartidores');
-        debugPrint('[MainShell] _fetchRepartidores: got ${res.length} items, type=${res.runtimeType}');
-        if (res.isNotEmpty) {
-          debugPrint('[MainShell] First item: ${res.first} (type=${res.first.runtimeType})');
+    setState(() => _isLoadingRepartidores = true);
+    try {
+      debugPrint('[MainShell] _fetchRepartidores: calling API...');
+      final res = await ApiClient.getList('/auth/repartidores');
+      debugPrint(
+          '[MainShell] _fetchRepartidores: got ${res.length} items, type=${res.runtimeType}',);
+      if (res.isNotEmpty) {
+        debugPrint(
+            '[MainShell] First item: ${res.first} (type=${res.first.runtimeType})',);
+      }
+      if (!mounted) return;
+      setState(() {
+        // Helper to safely get value regardless of case
+        String? getValue(Map m, String key) {
+          if (m.containsKey(key)) return m[key]?.toString();
+          if (m.containsKey(key.toUpperCase())) {
+            return m[key.toUpperCase()]?.toString();
+          }
+          if (m.containsKey(key.toLowerCase())) {
+            return m[key.toLowerCase()]?.toString();
+          }
+          return null;
         }
-        if (!mounted) return;
-        setState(() {
-           // Helper to safely get value regardless of case
-           String? getValue(Map m, String key) {
-             if (m.containsKey(key)) return m[key]?.toString();
-             if (m.containsKey(key.toUpperCase())) return m[key.toUpperCase()]?.toString();
-             if (m.containsKey(key.toLowerCase())) return m[key.toLowerCase()]?.toString();
-             return null;
-           }
 
-           _repartidoresOptions = res.map((item) {
+        _repartidoresOptions = res
+            .map((item) {
               final m = Map<String, dynamic>.from(item as Map);
               return {
-                 'code': getValue(m, 'code') ?? getValue(m, 'CODIGOVENDEDOR') ?? '',
-                 'name': getValue(m, 'name') ?? getValue(m, 'NOMBREVENDEDOR') ?? 'Desconocido',
+                'code':
+                    getValue(m, 'code') ?? getValue(m, 'CODIGOVENDEDOR') ?? '',
+                'name': getValue(m, 'name') ??
+                    getValue(m, 'NOMBREVENDEDOR') ??
+                    'Desconocido',
               };
-           }).where((item) => item['code'] != null && item['code'].toString().isNotEmpty).toList();
-           
-           // Sort by code ascending
-           _repartidoresOptions.sort((a, b) => 
-             (a['code']?.toString() ?? '').compareTo(b['code']?.toString() ?? ''));
-           
-           debugPrint('[MainShell] _fetchRepartidores: mapped ${_repartidoresOptions.length} options');
-           _isLoadingRepartidores = false;
-        });
-      } catch (e, stack) {
-        debugPrint('[MainShell] ERROR fetching repartidores: $e');
-        debugPrint('[MainShell] Stack: $stack');
-        if (mounted) setState(() => _isLoadingRepartidores = false);
-      }
+            })
+            .where((item) =>
+                item['code'] != null && item['code'].toString().isNotEmpty,)
+            .toList();
+
+        // Sort by code ascending
+        _repartidoresOptions.sort((a, b) => (a['code']?.toString() ?? '')
+            .compareTo(b['code']?.toString() ?? ''),);
+
+        debugPrint(
+            '[MainShell] _fetchRepartidores: mapped ${_repartidoresOptions.length} options',);
+        _isLoadingRepartidores = false;
+      });
+    } catch (e, stack) {
+      debugPrint('[MainShell] ERROR fetching repartidores: $e');
+      debugPrint('[MainShell] Stack: $stack');
+      if (mounted) setState(() => _isLoadingRepartidores = false);
+    }
   }
 
-  // Get navigation destinations based on user role
   List<_NavItem> _getNavItems(bool isJefeVentas, List<String> vendorCodes) {
-    final items = <_NavItem>[];
     final authState = ref.read(authProvider).value;
-    final user = authState?.user;
+    final showCommissions = authState?.user?.showCommissions ?? false;
 
-    // ===============================================
-    // ALMACÉN MODE
-    // ===============================================
-    if (_isAlmacenEffective) {
-      items.add(_NavItem(
-        icon: Icons.warehouse_outlined,
-        selectedIcon: Icons.warehouse_rounded,
-        label: 'Expediciones',
-        color: AppTheme.neonBlue,
-      ));
-      items.add(_NavItem(
-        icon: Icons.local_shipping_outlined,
-        selectedIcon: Icons.local_shipping_rounded,
-        label: 'Vehiculos',
-        color: AppTheme.neonPurple,
-      ));
-      items.add(_NavItem(
-        icon: Icons.inventory_2_outlined,
-        selectedIcon: Icons.inventory_2_rounded,
-        label: 'Articulos',
-        color: AppTheme.neonGreen,
-      ));
-      items.add(_NavItem(
-        icon: Icons.history_outlined,
-        selectedIcon: Icons.history_rounded,
-        label: 'Historial',
-        color: Colors.amber,
-      ));
-      items.add(_NavItem(
-        icon: Icons.groups_outlined,
-        selectedIcon: Icons.groups_rounded,
-        label: 'Personal',
-        color: AppTheme.neonPurple,
-      ));
-      return items;
-    }
-    
-    // Check EFFECTIVE role
-    final isRepartidor = _isRepartidorEffective;
-    
-    // ===============================================
-    // REPARTIDOR MODE
-    // ===============================================
-    if (isRepartidor) {
-      final isJefe = user?.isJefeVentas == true;
-      // Panel only for Jefe in repartidor mode, NOT for real repartidores
-      if (isJefe) {
-        items.add(_NavItem(
-          icon: Icons.dashboard_outlined,
-          selectedIcon: Icons.dashboard,
-          label: 'Panel',
-          color: Colors.orange,
-        ));
-      }
-      items.add(_NavItem(
-        icon: Icons.people_outline,
-        selectedIcon: Icons.people,
-        label: 'Clientes',
-        color: AppTheme.neonGreen,
-      ));
-      items.add(_NavItem(
-        icon: Icons.route_outlined,
-        selectedIcon: Icons.route,
-        label: 'Rutero',
-        color: AppTheme.neonBlue,
-      ));
-      // Comisiones only for real repartidores with showCommissions enabled
-      if (!isJefe && (authState?.user?.showCommissions ?? false)) {
-        items.add(_NavItem(
-          icon: Icons.euro_outlined,
-          selectedIcon: Icons.euro,
-          label: 'Comisiones',
-          color: AppTheme.neonGreen,
-        ));
-      }
-      items.add(_NavItem(
-        icon: Icons.history_outlined,
-        selectedIcon: Icons.history,
-        label: 'Histórico',
-        color: AppTheme.neonPurple,
-      ));
-      items.add(_NavItem(
-        icon: Icons.smart_toy_outlined,
-        selectedIcon: Icons.smart_toy,
-        label: 'Chat IA',
-        color: AppTheme.neonPink,
-      ));
-      return items;
-    }
-    
-    // ===============================================
-    // SALES MODE (Jefe / Comercial)
-    // ===============================================
-    if (isJefeVentas) {
-      items.add(_NavItem(
-        icon: Icons.dashboard_outlined,
-        selectedIcon: Icons.dashboard,
-        label: 'Panel',
-        color: AppTheme.neonBlue,
-      ));
-    }
-    items.add(_NavItem(
-      icon: Icons.people_outline,
-      selectedIcon: Icons.people,
-      label: 'Clientes',
-      color: AppTheme.neonGreen,
-    ));
-    items.add(_NavItem(
-      icon: Icons.route_outlined,
-      selectedIcon: Icons.route,
-      label: 'Ruta',
-      color: AppTheme.neonPurple,
-    ));
-    items.add(_NavItem(
-      icon: Icons.track_changes_outlined,
-      selectedIcon: Icons.track_changes,
-      label: 'Objetivos',
-      color: Colors.orange,
-    ));
-    
-    // Comisiones: Jefe always sees it; comercial raso only if showCommissions
-    if (isJefeVentas || (authState?.user?.showCommissions ?? false)) {
-      items.add(_NavItem(
-        icon: Icons.euro_outlined,
-        selectedIcon: Icons.euro,
-        label: 'Comisiones',
-        color: AppTheme.neonGreen,
-      ));
-    }
-    
-    items.add(_NavItem(
-      icon: Icons.receipt_long_outlined,
-      selectedIcon: Icons.receipt_long,
-      label: 'Facturas',
-      color: Colors.teal,
-    ));
+    final navItems = NavigationConfigService.getNavItems(
+      isAlmacen: _isAlmacenEffective,
+      isRepartidor: _isRepartidorEffective,
+      isJefeVentas: isJefeVentas,
+      showCommissions: showCommissions,
+    );
 
-    items.add(_NavItem(
-      icon: Icons.shopping_cart_outlined,
-      selectedIcon: Icons.shopping_cart,
-      label: 'Pedidos',
-      color: Colors.deepOrange,
-    ));
-
-    items.add(_NavItem(
-      icon: Icons.ac_unit_outlined,
-      selectedIcon: Icons.ac_unit,
-      label: 'Glacius',
-      color: Colors.lightBlueAccent,
-    ));
-
-    items.add(_NavItem(
-      icon: Icons.payments_outlined,
-      selectedIcon: Icons.payments,
-      label: 'Cobros',
-      color: Colors.blueAccent,
-    ));
-
-    items.add(_NavItem(
-      icon: Icons.smart_toy_outlined,
-      selectedIcon: Icons.smart_toy,
-      label: 'Chat IA',
-      color: AppTheme.neonPink,
-    ));
-    
-    return items;
+    return navItems
+        .map((item) => _NavItem(
+              icon: item.icon,
+              selectedIcon: item.selectedIcon,
+              label: item.label,
+              color: item.color,
+            ),)
+        .toList();
   }
 
   List<Map<String, String>> _getRepartidores(List<String> codes) {
-     return [
-       {'code': 'ALL', 'name': 'Todos los Repartidores'},
-       ...codes.map((c) => {'code': c, 'name': 'Repartidor $c'}),
-     ];
+    return [
+      {'code': 'ALL', 'name': 'Todos los Repartidores'},
+      ...codes.map((c) => {'code': c, 'name': 'Repartidor $c'}),
+    ];
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -451,8 +324,8 @@ class _MainShellState extends ConsumerState<MainShell> {
       _onFilterChanged();
     });
 
-    final authState = ref.watch(authProvider).value;
-    final user = authState?.user;
+    // PERFORMANCE: Use select() to only rebuild when user changes
+    final user = ref.watch(authProvider.select((state) => state.value?.user));
 
     if (user == null) {
       return const Scaffold(
@@ -465,7 +338,10 @@ class _MainShellState extends ConsumerState<MainShell> {
       _selectedRepartidor = 'ALL';
     }
 
-    final navItems = _getNavItems(isJefeVentas, authState!.vendedorCodes);
+    // PERFORMANCE: Use select() to only rebuild when vendedorCodes changes
+    final vendedorCodes = ref.watch(
+        authProvider.select((state) => state.value?.vendedorCodes ?? []),);
+    final navItems = _getNavItems(isJefeVentas, vendedorCodes);
     final safeIndex = _currentIndex.clamp(0, navItems.length - 1);
     final useBottomNav = Responsive.useBottomNav(context);
 
@@ -484,9 +360,10 @@ class _MainShellState extends ConsumerState<MainShell> {
     UserModel user,
     bool isJefeVentas,
   ) {
-    final maxBottomItems = 5;
+    const maxBottomItems = 5;
     final hasOverflow = navItems.length > maxBottomItems;
-    final bottomItems = hasOverflow ? navItems.sublist(0, maxBottomItems - 1) : navItems;
+    final bottomItems =
+        hasOverflow ? navItems.sublist(0, maxBottomItems - 1) : navItems;
 
     return Scaffold(
       backgroundColor: Colors.transparent,
@@ -497,7 +374,8 @@ class _MainShellState extends ConsumerState<MainShell> {
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
-          border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+          border:
+              Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
         ),
         child: SafeArea(
           top: false,
@@ -529,7 +407,8 @@ class _MainShellState extends ConsumerState<MainShell> {
                         color: AppTheme.textSecondary,
                       ),
                       isSelected: safeIndex >= maxBottomItems - 1,
-                      onTap: () => _showOverflowMenu(navItems, maxBottomItems - 1),
+                      onTap: () =>
+                          _showOverflowMenu(navItems, maxBottomItems - 1),
                     ),
                   ),
               ],
@@ -590,16 +469,19 @@ class _MainShellState extends ConsumerState<MainShell> {
               Container(
                 width: 26,
                 height: 26,
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   shape: BoxShape.circle,
-                  gradient: const LinearGradient(
+                  gradient: LinearGradient(
                     colors: [AppTheme.neonBlue, AppTheme.neonPurple],
                   ),
                 ),
                 child: Center(
                   child: Text(
                     user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
-                    style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,),
                   ),
                 ),
               ),
@@ -626,7 +508,8 @@ class _MainShellState extends ConsumerState<MainShell> {
           children: [
             Container(
               margin: const EdgeInsets.only(top: 8, bottom: 12),
-              width: 32, height: 4,
+              width: 32,
+              height: 4,
               decoration: BoxDecoration(
                 color: Colors.white24,
                 borderRadius: BorderRadius.circular(2),
@@ -645,7 +528,8 @@ class _MainShellState extends ConsumerState<MainShell> {
                   item.label,
                   style: TextStyle(
                     color: isSelected ? item.color : Colors.white,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.normal,
                   ),
                 ),
                 onTap: () {
@@ -679,8 +563,10 @@ class _MainShellState extends ConsumerState<MainShell> {
             const Divider(color: Colors.white10),
             // Logout
             ListTile(
-              leading: const Icon(Icons.logout_rounded, color: AppTheme.error, size: 20),
-              title: const Text('Cerrar Sesión', style: TextStyle(color: AppTheme.error, fontSize: 13)),
+              leading: const Icon(Icons.logout_rounded,
+                  color: AppTheme.error, size: 20,),
+              title: const Text('Cerrar Sesión',
+                  style: TextStyle(color: AppTheme.error, fontSize: 13),),
               onTap: () {
                 Navigator.pop(context);
                 ref.read(authProvider.notifier).logout();
@@ -713,55 +599,60 @@ class _MainShellState extends ConsumerState<MainShell> {
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeInOut,
               width: _isNavExpanded ? sidebarW : 0,
-              child: _isNavExpanded ? Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceColor,
-                  border: Border(
-                    right: BorderSide(color: Colors.white.withOpacity(0.05), width: 1),
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 16),
-                    _buildUserAvatar(user, isJefeVentas),
-                    const SizedBox(height: 16),
-
-                    // Mode switcher for Jefe
-                    if (isJefeVentas) _buildModeSwitcher(),
-
-                    const SizedBox(height: 16),
-
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        itemCount: navItems.length,
-                        itemBuilder: (context, index) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: _buildNavItem(
-                              item: navItems[index],
-                              isSelected: safeIndex == index,
-                              onTap: () => setState(() => _currentIndex = index),
-                            ),
-                          );
-                        },
+              child: _isNavExpanded
+                  ? Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceColor,
+                        border: Border(
+                          right: BorderSide(
+                              color: Colors.white.withOpacity(0.05),),
+                        ),
                       ),
-                    ),
-
-                    const Divider(height: 1, color: Colors.white10),
-                    Padding(
-                      padding: const EdgeInsets.all(12),
                       child: Column(
                         children: [
-                          _buildCollapseButton(),
-                          const SizedBox(height: 8),
-                          _buildLogoutButton(),
+                          const SizedBox(height: 16),
+                          _buildUserAvatar(user, isJefeVentas),
+                          const SizedBox(height: 16),
+
+                          // Mode switcher for Jefe
+                          if (isJefeVentas) _buildModeSwitcher(),
+
+                          const SizedBox(height: 16),
+
+                          Expanded(
+                            child: ListView.builder(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                              itemCount: navItems.length,
+                              itemBuilder: (context, index) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: _buildNavItem(
+                                    item: navItems[index],
+                                    isSelected: safeIndex == index,
+                                    onTap: () =>
+                                        setState(() => _currentIndex = index),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+
+                          const Divider(height: 1, color: Colors.white10),
+                          Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              children: [
+                                _buildCollapseButton(),
+                                const SizedBox(height: 8),
+                                _buildLogoutButton(),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-              ) : null,
+                    )
+                  : null,
             ),
 
             // Expand button when sidebar is collapsed
@@ -772,16 +663,20 @@ class _MainShellState extends ConsumerState<MainShell> {
                   width: 24,
                   decoration: BoxDecoration(
                     color: AppTheme.surfaceColor,
-                    border: Border(right: BorderSide(color: Colors.white.withOpacity(0.05), width: 1)),
+                    border: Border(
+                        right: BorderSide(
+                            color: Colors.white.withOpacity(0.05),),),
                   ),
                   child: Center(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 4),
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 20, horizontal: 4,),
                       decoration: BoxDecoration(
                         color: AppTheme.neonBlue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(Icons.chevron_right_rounded, color: AppTheme.neonBlue, size: 16),
+                      child: const Icon(Icons.chevron_right_rounded,
+                          color: AppTheme.neonBlue, size: 16,),
                     ),
                   ),
                 ),
@@ -805,18 +700,17 @@ class _MainShellState extends ConsumerState<MainShell> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
           color: _forceAlmacenMode
-             ? AppTheme.neonPink.withOpacity(0.15)
-             : _forceRepartidorMode
+              ? AppTheme.neonPink.withOpacity(0.15)
+              : _forceRepartidorMode
                   ? Colors.orange.withOpacity(0.15)
                   : AppTheme.neonBlue.withOpacity(0.15),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: _forceAlmacenMode
-               ? AppTheme.neonPink.withOpacity(0.5)
-               : _forceRepartidorMode
+                ? AppTheme.neonPink.withOpacity(0.5)
+                : _forceRepartidorMode
                     ? Colors.orange.withOpacity(0.5)
                     : AppTheme.neonBlue.withOpacity(0.5),
-            width: 1,
           ),
         ),
         child: PopupMenuButton<String>(
@@ -831,27 +725,40 @@ class _MainShellState extends ConsumerState<MainShell> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(
-                _forceAlmacenMode ? Icons.warehouse_rounded
-                  : _forceRepartidorMode ? Icons.local_shipping : Icons.store,
-                color: _forceAlmacenMode ? AppTheme.neonPink
-                  : _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
+                _forceAlmacenMode
+                    ? Icons.warehouse_rounded
+                    : _forceRepartidorMode
+                        ? Icons.local_shipping
+                        : Icons.store,
+                color: _forceAlmacenMode
+                    ? AppTheme.neonPink
+                    : _forceRepartidorMode
+                        ? Colors.orange
+                        : AppTheme.neonBlue,
                 size: 20,
               ),
               const SizedBox(width: 8),
               Flexible(
                 child: Text(
-                  _forceAlmacenMode ? 'Almacén'
-                    : _forceRepartidorMode ? 'Reparto' : 'Ventas',
+                  _forceAlmacenMode
+                      ? 'Almacén'
+                      : _forceRepartidorMode
+                          ? 'Reparto'
+                          : 'Ventas',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.bold,
-                    color: _forceAlmacenMode ? AppTheme.neonPink
-                      : _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
+                    color: _forceAlmacenMode
+                        ? AppTheme.neonPink
+                        : _forceRepartidorMode
+                            ? Colors.orange
+                            : AppTheme.neonBlue,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Icon(Icons.arrow_drop_down, color: Colors.white54, size: 18),
+              const Icon(Icons.arrow_drop_down,
+                  color: Colors.white54, size: 18,),
             ],
           ),
           itemBuilder: (context) => [
@@ -895,7 +802,7 @@ class _MainShellState extends ConsumerState<MainShell> {
               });
               return;
             }
-            final bool newMode = value == 'REPARTO';
+            final newMode = value == 'REPARTO';
             setState(() {
               _forceAlmacenMode = false;
               _forceRepartidorMode = newMode;
@@ -918,13 +825,14 @@ class _MainShellState extends ConsumerState<MainShell> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: isJefeVentas 
-                ? [AppTheme.neonBlue, AppTheme.neonPurple]
-                : [AppTheme.neonGreen, AppTheme.neonBlue],
+              colors: isJefeVentas
+                  ? [AppTheme.neonBlue, AppTheme.neonPurple]
+                  : [AppTheme.neonGreen, AppTheme.neonBlue],
             ),
             boxShadow: [
               BoxShadow(
-                color: (isJefeVentas ? AppTheme.neonBlue : AppTheme.neonGreen).withOpacity(0.3),
+                color: (isJefeVentas ? AppTheme.neonBlue : AppTheme.neonGreen)
+                    .withOpacity(0.3),
                 blurRadius: 12,
                 spreadRadius: 2,
               ),
@@ -943,7 +851,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         ),
         const SizedBox(height: 6),
         Text(
-          user.name.length > 16 ? '${user.name.substring(0, 16)}' : user.name,
+          user.name.length > 16 ? user.name.substring(0, 16) : user.name,
           style: const TextStyle(fontSize: 9, color: AppTheme.textSecondary),
           maxLines: 1,
           textAlign: TextAlign.center,
@@ -1009,20 +917,19 @@ class _MainShellState extends ConsumerState<MainShell> {
     required VoidCallback onTap,
   }) {
     final isSmall = Responsive.isSmall(context);
-    
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: EdgeInsets.symmetric(vertical: isSmall ? 8 : 12, horizontal: 4),
+        padding:
+            EdgeInsets.symmetric(vertical: isSmall ? 8 : 12, horizontal: 4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          color: isSelected 
-            ? item.color.withOpacity(0.15) 
-            : Colors.transparent,
+          color: isSelected ? item.color.withOpacity(0.15) : Colors.transparent,
           border: isSelected
-            ? Border.all(color: item.color.withOpacity(0.3), width: 1)
-            : null,
+              ? Border.all(color: item.color.withOpacity(0.3))
+              : null,
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1108,7 +1015,6 @@ class _MainShellState extends ConsumerState<MainShell> {
     );
   }
 
-
   Widget _buildCollapseButton() {
     return InkWell(
       onTap: () => setState(() => _isNavExpanded = !_isNavExpanded),
@@ -1122,7 +1028,9 @@ class _MainShellState extends ConsumerState<MainShell> {
         child: Column(
           children: [
             Icon(
-              _isNavExpanded ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+              _isNavExpanded
+                  ? Icons.chevron_left_rounded
+                  : Icons.chevron_right_rounded,
               color: AppTheme.neonBlue,
               size: 20,
             ),
@@ -1147,53 +1055,68 @@ class _MainShellState extends ConsumerState<MainShell> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
-        border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
+        border:
+            Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
       ),
       child: Row(
         children: [
-           const Row(
-             children: [
-               Icon(Icons.visibility, color: AppTheme.neonBlue, size: 16),
-               SizedBox(width: 8),
-               Text('Ver Como', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
-             ],
-           ),
-           const SizedBox(width: 16),
-           Expanded(
-             child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
-                ),
-                child: _isLoadingRepartidores
-                  ? const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonPurple)))
+          const Row(
+            children: [
+              Icon(Icons.visibility, color: AppTheme.neonBlue, size: 16),
+              SizedBox(width: 8),
+              Text('Ver Como',
+                  style: TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,),),
+            ],
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
+              ),
+              child: _isLoadingRepartidores
+                  ? const Center(
+                      child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppTheme.neonPurple,),),)
                   : DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _selectedRepartidor,
-                    hint: const Text('Seleccionar Repartidor', style: TextStyle(color: Colors.white54)),
-                    isExpanded: true,
-                    dropdownColor: AppTheme.surfaceColor,
-                    icon: const Icon(Icons.keyboard_arrow_down, color: AppTheme.neonPurple),
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
-                    items: [
-                      const DropdownMenuItem(
-                          value: 'ALL', 
-                          child: Text('Todos los Repartidores', style: TextStyle(fontWeight: FontWeight.bold))
+                      child: DropdownButton<String>(
+                        value: _selectedRepartidor,
+                        hint: const Text('Seleccionar Repartidor',
+                            style: TextStyle(color: Colors.white54),),
+                        isExpanded: true,
+                        dropdownColor: AppTheme.surfaceColor,
+                        icon: const Icon(Icons.keyboard_arrow_down,
+                            color: AppTheme.neonPurple,),
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 13),
+                        items: [
+                          const DropdownMenuItem(
+                              value: 'ALL',
+                              child: Text('Todos los Repartidores',
+                                  style:
+                                      TextStyle(fontWeight: FontWeight.bold),),),
+                          ..._repartidoresOptions.map((r) {
+                            return DropdownMenuItem(
+                              value: r['code'].toString(),
+                              child: Text('${r['code']} - ${r['name']}'),
+                            );
+                          }),
+                        ],
+                        onChanged: (val) =>
+                            setState(() => _selectedRepartidor = val),
                       ),
-                      ..._repartidoresOptions.map((r) {
-                        return DropdownMenuItem(
-                          value: r['code'].toString(),
-                          child: Text('${r['code']} - ${r['name']}'),
-                        );
-                      }),
-                    ],
-                    onChanged: (val) => setState(() => _selectedRepartidor = val),
-                  ),
-                ),
-             ),
-           ),
+                    ),
+            ),
+          ),
         ],
       ),
     );
@@ -1220,36 +1143,38 @@ class _MainShellState extends ConsumerState<MainShell> {
       );
     }
 
-    final isRepartidor = _isRepartidorEffective; 
-    
+    final isRepartidor = _isRepartidorEffective;
+
     // ===============================================
     // REPARTIDOR MODE
     // ===============================================
     if (isRepartidor) {
-      String effectiveRepartidorId = user?.codigoConductor ?? vendedorCodes.join(','); 
-      final isJefe = user?.isJefeVentas == true;
-      
+      var effectiveRepartidorId =
+          user?.codigoConductor ?? vendedorCodes.join(',');
+      final isJefe = user?.isJefeVentas ?? false;
+
       if (isJefeVentas) {
-          if (_selectedRepartidor == null || _selectedRepartidor == 'ALL') {
-             if (_repartidoresOptions.isNotEmpty) {
-                effectiveRepartidorId = _repartidoresOptions.map((e) => e['code']).join(',');
-             } else {
-                effectiveRepartidorId = vendedorCodes.join(','); 
-             }
+        if (_selectedRepartidor == null || _selectedRepartidor == 'ALL') {
+          if (_repartidoresOptions.isNotEmpty) {
+            effectiveRepartidorId =
+                _repartidoresOptions.map((e) => e['code']).join(',');
           } else {
-             effectiveRepartidorId = _selectedRepartidor!;
+            effectiveRepartidorId = vendedorCodes.join(',');
           }
+        } else {
+          effectiveRepartidorId = _selectedRepartidor!;
+        }
       }
 
-      final Map<String, String> repNamesMap = {
-        for (var r in _repartidoresOptions)
+      final repNamesMap = <String, String>{
+        for (final r in _repartidoresOptions)
           (r['code']?.toString() ?? ''): (r['name']?.toString() ?? ''),
       };
 
       final navItems = _getNavItems(isJefeVentas, vendedorCodes);
 
-      int? _navIndexOf(String label) {
-        for (int i = 0; i < navItems.length; i++) {
+      int? navIndexOf(String label) {
+        for (var i = 0; i < navItems.length; i++) {
           if (navItems[i].label == label) return i;
         }
         return null;
@@ -1262,7 +1187,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
         }
         if (label == 'Clientes') {
-          final histIdx = _navIndexOf('Histórico');
+          final histIdx = navIndexOf('Histórico');
           return RepartidorClientesPage(
             repartidorId: effectiveRepartidorId,
             isJefeMode: isJefe,
@@ -1276,27 +1201,30 @@ class _MainShellState extends ConsumerState<MainShell> {
           );
         }
         if (label == 'Rutero') {
-          return RepartidorRuteroPage(repartidorId: effectiveRepartidorId, repartidorNames: repNamesMap);
+          return RepartidorRuteroPage(
+              repartidorId: effectiveRepartidorId,
+              repartidorNames: repNamesMap,);
         }
         if (label == 'Comisiones') {
           return const ComingSoonPlaceholder(
             title: 'Comisiones de Reparto',
-            subtitle: 'Aquí podrás consultar tus comisiones\nbasadas en los cobros realizados.',
+            subtitle:
+                'Aquí podrás consultar tus comisiones\nbasadas en los cobros realizados.',
             icon: Icons.euro,
             accentColor: AppTheme.neonGreen,
           );
         }
         if (label == 'Histórico') {
           return RepartidorHistoricoPage(
-            repartidorId: effectiveRepartidorId, 
-            initialClientId: _pendingClientId, 
-            initialClientName: _pendingClientName
-          );
+              repartidorId: effectiveRepartidorId,
+              initialClientId: _pendingClientId,
+              initialClientName: _pendingClientName,);
         }
         if (label == 'Chat IA') {
           return const ComingSoonPlaceholder(
             title: 'Asistente IA de Reparto',
-            subtitle: 'Tu asistente inteligente para\noptimizar rutas y consultar datos.',
+            subtitle:
+                'Tu asistente inteligente para\noptimizar rutas y consultar datos.',
             icon: Icons.smart_toy,
             accentColor: AppTheme.neonPink,
           );
@@ -1308,23 +1236,24 @@ class _MainShellState extends ConsumerState<MainShell> {
         index: _currentIndex,
         children: List.generate(navItems.length, (idx) {
           return KeyedSubtree(
-            key: ValueKey('rutero_view_${effectiveRepartidorId}_${idx}_${_pendingClientId ?? ""}'),
+            key: ValueKey(
+                'rutero_view_${effectiveRepartidorId}_${idx}_${_pendingClientId ?? ""}',),
             child: pageForIndex(idx),
           );
         }),
       );
 
       if (isJefeVentas) {
-         return Column(
-           children: [
-             _buildRepartidorHeader(),
-             Expanded(child: content),
-           ],
-         );
+        return Column(
+          children: [
+            _buildRepartidorHeader(),
+            Expanded(child: content),
+          ],
+        );
       }
       return content;
     }
-    
+
     // ===============================================
     // JEFE MODE
     // ===============================================
@@ -1345,7 +1274,8 @@ class _MainShellState extends ConsumerState<MainShell> {
           CobrosPage(employeeCode: employeeCode, isJefeVentas: true),
           const ComingSoonPlaceholder(
             title: 'Nexus AI — Asistente Comercial',
-            subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
+            subtitle:
+                'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
             icon: Icons.smart_toy,
             accentColor: AppTheme.neonPink,
           ),
@@ -1363,13 +1293,14 @@ class _MainShellState extends ConsumerState<MainShell> {
       final label = idx < comercialNav.length ? comercialNav[idx].label : '';
       switch (label) {
         case 'Clientes':
-          return SimpleClientListPage(employeeCode: empCode, isJefeVentas: false);
+          return SimpleClientListPage(
+              employeeCode: empCode,);
         case 'Ruta':
-          return RuteroPage(employeeCode: empCode, isJefeVentas: false);
+          return RuteroPage(employeeCode: empCode);
         case 'Objetivos':
-          return ObjectivesPage(employeeCode: empCode, isJefeVentas: false);
+          return ObjectivesPage(employeeCode: empCode);
         case 'Comisiones':
-          return CommissionsPage(employeeCode: empCode, isJefeVentas: false);
+          return CommissionsPage(employeeCode: empCode);
         case 'Facturas':
           return const FacturasPage();
         case 'Pedidos':
@@ -1377,11 +1308,12 @@ class _MainShellState extends ConsumerState<MainShell> {
         case 'Glacius':
           return KpiDashboardPage(employeeCode: empCode, isJefeVentas: false);
         case 'Cobros':
-          return CobrosPage(employeeCode: empCode, isJefeVentas: false);
+          return CobrosPage(employeeCode: empCode);
         case 'Chat IA':
           return const ComingSoonPlaceholder(
             title: 'Nexus AI — Asistente Comercial',
-            subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
+            subtitle:
+                'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
             icon: Icons.smart_toy,
             accentColor: AppTheme.neonPink,
           );
@@ -1392,17 +1324,14 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     return LazyIndexedStack(
       index: _currentIndex,
-      children: List.generate(comercialNav.length, (idx) => comercialPageForIndex(idx)),
+      children: List.generate(
+          comercialNav.length, comercialPageForIndex,),
     );
   }
 }
 
 // Helper class for nav items
 class _NavItem {
-  final IconData icon;
-  final IconData selectedIcon;
-  final String label;
-  final Color color;
 
   _NavItem({
     required this.icon,
@@ -1410,13 +1339,17 @@ class _NavItem {
     required this.label,
     required this.color,
   });
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final Color color;
 }
 
 // Futuristic Logout Confirmation Dialog
 class _LogoutConfirmationDialog extends StatelessWidget {
-  final String userName;
 
   const _LogoutConfirmationDialog({required this.userName});
+  final String userName;
 
   @override
   Widget build(BuildContext context) {
@@ -1482,9 +1415,9 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                 size: iconDim * 0.44,
               ),
             ),
-            
+
             const SizedBox(height: 24),
-            
+
             // Title (responsive)
             Text(
               '¿Cerrar Sesión?',
@@ -1494,9 +1427,9 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                 color: AppTheme.textPrimary,
               ),
             ),
-            
+
             const SizedBox(height: 12),
-            
+
             // Message
             Text(
               'Estás a punto de salir de tu cuenta, $userName. ¿Estás seguro?',
@@ -1507,9 +1440,9 @@ class _LogoutConfirmationDialog extends StatelessWidget {
               ),
               textAlign: TextAlign.center,
             ),
-            
+
             const SizedBox(height: 32),
-            
+
             // Buttons
             Row(
               children: [
@@ -1533,13 +1466,13 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(width: 12),
-                
+
                 // Confirm Button
                 Expanded(
                   child: Container(
-                    decoration: BoxDecoration (
+                    decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(14),
                       gradient: const LinearGradient(
                         colors: [AppTheme.error, Color(0xFFB71C1C)],
@@ -1562,7 +1495,8 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.logout_rounded, color: Colors.white, size: 18),
+                              Icon(Icons.logout_rounded,
+                                  color: Colors.white, size: 18,),
                               SizedBox(width: 8),
                               Text(
                                 'Salir',

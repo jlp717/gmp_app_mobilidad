@@ -2,25 +2,23 @@
 /// ======================
 /// Orange popup to select pricing tariff per order line.
 /// Shows PT (client tariff), PU (per-unit breakdown), and all other tariffs.
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 
 class TarifaSelectorModal extends StatefulWidget {
+
+  const TarifaSelectorModal({
+    required this.product, required this.tariffs, required this.codigoTarifaCliente, super.key,
+    this.initialPrice,
+  });
   final Product product;
   final List<TariffEntry> tariffs;
   final int codigoTarifaCliente;
   final double? initialPrice;
-
-  const TarifaSelectorModal({
-    Key? key,
-    required this.product,
-    required this.tariffs,
-    required this.codigoTarifaCliente,
-    this.initialPrice,
-  }) : super(key: key);
 
   /// Show the modal and return the selected price per unit, or null if cancelled.
   static Future<double?> show(
@@ -112,7 +110,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
     bool isClientTariff = false,
   }) {
     final selected = _selected == selKey;
-    final orange = AppTheme.warning;
+    const orange = AppTheme.warning;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
@@ -152,7 +150,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
   Widget build(BuildContext context) {
     final p = widget.product;
     final ct = _clientTariff;
-    final orange = AppTheme.warning;
+    const orange = AppTheme.warning;
     final unitAbbr = _unitAbbr(p.displayUnit);
     final hasTariffs = widget.tariffs.isNotEmpty;
 
@@ -169,7 +167,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
             // Header
             Row(
               children: [
-                Icon(Icons.euro_rounded, color: orange, size: 22),
+                const Icon(Icons.euro_rounded, color: orange, size: 22),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -233,7 +231,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                       size: 18,
                     ),
                     const SizedBox(width: 4),
-                    Text(
+                    const Text(
                       'PT',
                       style: TextStyle(
                         color: orange,
@@ -257,7 +255,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                           ),
                           Text(
                             '${_fmt(ct.price)} €/cj',
-                            style: TextStyle(color: orange, fontSize: 12),
+                            style: const TextStyle(color: orange, fontSize: 12),
                           ),
                         ],
                       ),
@@ -285,10 +283,10 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                 ),
                 content: Row(
                   children: [
-                    Expanded(
+                    const Expanded(
                       child: Text(
                         'por unidad',
-                        style: const TextStyle(color: Colors.white60, fontSize: 12),
+                        style: TextStyle(color: Colors.white60, fontSize: 12),
                       ),
                     ),
                     Text(

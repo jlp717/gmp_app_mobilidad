@@ -1,9 +1,10 @@
 /// WAREHOUSE DATA SERVICE
 /// API client for warehouse/expedition endpoints (3D Load Planner)
+library;
 
-import '../../../core/api/api_client.dart';
-import '../../../core/api/api_config.dart';
-import '../../../core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // MODELS
@@ -11,16 +12,6 @@ import '../../../core/cache/cache_service.dart';
 
 /// Resumen de un camión en el dashboard
 class TruckSummary {
-  final String vehicleCode;
-  final String description;
-  final String matricula;
-  final String driverCode;
-  final String driverName;
-  final int orderCount;
-  final int lineCount;
-  final double maxPayloadKg;
-  final double containerVolume;
-  final double tolerancePct;
 
   TruckSummary({
     required this.vehicleCode,
@@ -47,20 +38,20 @@ class TruckSummary {
     containerVolume: ((json['containerVolume'] ?? 0) as num).toDouble(),
     tolerancePct: ((json['tolerancePct'] ?? 5) as num).toDouble(),
   );
+  final String vehicleCode;
+  final String description;
+  final String matricula;
+  final String driverCode;
+  final String driverName;
+  final int orderCount;
+  final int lineCount;
+  final double maxPayloadKg;
+  final double containerVolume;
+  final double tolerancePct;
 }
 
 /// Vehículo completo con configuración
 class VehicleConfig {
-  final String code;
-  final String description;
-  final String matricula;
-  final double maxPayloadKg;
-  final double tara;
-  final double volumeM3;
-  final double containerVolumeM3;
-  final TruckInterior interior;
-  final double tolerancePct;
-  final String? imageUrl;
 
   VehicleConfig({
     required this.code,
@@ -77,7 +68,7 @@ class VehicleConfig {
 
   factory VehicleConfig.fromJson(Map<String, dynamic> json) {
     // Build full image URL from relative proxy path
-    String? imgUrl = json['imageUrl'] as String?;
+    var imgUrl = json['imageUrl'] as String?;
     if (imgUrl != null && imgUrl.startsWith('/api/')) {
       final base = ApiConfig.baseUrl; // e.g. http://192.168.1.230:3334/api
       final serverRoot = base.endsWith('/api')
@@ -94,17 +85,24 @@ class VehicleConfig {
       volumeM3: ((json['volumeM3'] ?? 0) as num).toDouble(),
       containerVolumeM3: ((json['containerVolumeM3'] ?? 0) as num).toDouble(),
       interior: TruckInterior.fromJson(
-          (json['interior'] as Map<String, dynamic>?) ?? {}),
+          (json['interior'] as Map<String, dynamic>?) ?? {},),
       tolerancePct: ((json['tolerancePct'] ?? 5) as num).toDouble(),
       imageUrl: imgUrl,
     );
   }
+  final String code;
+  final String description;
+  final String matricula;
+  final double maxPayloadKg;
+  final double tara;
+  final double volumeM3;
+  final double containerVolumeM3;
+  final TruckInterior interior;
+  final double tolerancePct;
+  final String? imageUrl;
 }
 
 class TruckInterior {
-  final double lengthCm;
-  final double widthCm;
-  final double heightCm;
 
   TruckInterior({
     required this.lengthCm,
@@ -112,30 +110,20 @@ class TruckInterior {
     required this.heightCm,
   });
 
-  double get volumeM3 => (lengthCm * widthCm * heightCm) / 1e6;
-
   factory TruckInterior.fromJson(Map<String, dynamic> json) => TruckInterior(
     lengthCm: ((json['lengthCm'] ?? 0) as num).toDouble(),
     widthCm: ((json['widthCm'] ?? 0) as num).toDouble(),
     heightCm: ((json['heightCm'] ?? 0) as num).toDouble(),
   );
+  final double lengthCm;
+  final double widthCm;
+  final double heightCm;
+
+  double get volumeM3 => (lengthCm * widthCm * heightCm) / 1e6;
 }
 
 /// Caja colocada en el camión (resultado del bin packing)
 class PlacedBox {
-  final int id;
-  final String label;
-  final int orderNumber;
-  final String clientCode;
-  final String articleCode;
-  final double weight;
-  // EUR values from invoice
-  final double importeEur;
-  final double margenEur;
-  // Posición (esquina inferior-izquierda-frontal)
-  final double x, y, z;
-  // Dimensiones tal como fue colocada
-  final double w, d, h;
 
   PlacedBox({
     required this.id,
@@ -144,17 +132,9 @@ class PlacedBox {
     required this.clientCode,
     required this.articleCode,
     required this.weight,
-    this.importeEur = 0,
+    required this.x, required this.y, required this.z, required this.w, required this.d, required this.h, this.importeEur = 0,
     this.margenEur = 0,
-    required this.x,
-    required this.y,
-    required this.z,
-    required this.w,
-    required this.d,
-    required this.h,
   });
-
-  double get volume => w * d * h;
 
   factory PlacedBox.fromJson(Map<String, dynamic> json) => PlacedBox(
     id: (json['id'] as int?) ?? 0,
@@ -172,28 +152,25 @@ class PlacedBox {
     d: ((json['d'] ?? 0) as num).toDouble(),
     h: ((json['h'] ?? 0) as num).toDouble(),
   );
+  final int id;
+  final String label;
+  final int orderNumber;
+  final String clientCode;
+  final String articleCode;
+  final double weight;
+  // EUR values from invoice
+  final double importeEur;
+  final double margenEur;
+  // Posición (esquina inferior-izquierda-frontal)
+  final double x, y, z;
+  // Dimensiones tal como fue colocada
+  final double w, d, h;
+
+  double get volume => w * d * h;
 }
 
 /// Métricas del resultado del load plan
 class LoadMetrics {
-  final int totalBoxes;
-  final int placedCount;
-  final int overflowCount;
-  final double containerVolumeCm3;
-  final double usedVolumeCm3;
-  final double volumeOccupancyPct;
-  final double totalWeightKg;
-  final double overflowWeightKg;
-  final double maxPayloadKg;
-  final double weightOccupancyPct;
-  final double totalDemandVolumeCm3;
-  final double totalDemandWeightKg;
-  final double demandVsCapacityPct;
-  final String status; // SEGURO, OPTIMO, EXCESO
-  // EUR economic data
-  final double totalImporteEur;
-  final double totalMargenEur;
-  final double overflowImporteEur;
 
   LoadMetrics({
     required this.totalBoxes,
@@ -234,22 +211,31 @@ class LoadMetrics {
     totalMargenEur: ((json['totalMargenEur'] ?? 0) as num).toDouble(),
     overflowImporteEur: ((json['overflowImporteEur'] ?? 0) as num).toDouble(),
   );
+  final int totalBoxes;
+  final int placedCount;
+  final int overflowCount;
+  final double containerVolumeCm3;
+  final double usedVolumeCm3;
+  final double volumeOccupancyPct;
+  final double totalWeightKg;
+  final double overflowWeightKg;
+  final double maxPayloadKg;
+  final double weightOccupancyPct;
+  final double totalDemandVolumeCm3;
+  final double totalDemandWeightKg;
+  final double demandVsCapacityPct;
+  final String status; // SEGURO, OPTIMO, EXCESO
+  // EUR economic data
+  final double totalImporteEur;
+  final double totalMargenEur;
+  final double overflowImporteEur;
 }
 
 /// Resultado completo del planificador de carga
 class LoadPlanResult {
-  final VehicleConfig? truck;
-  final List<PlacedBox> placed;
-  final List<PlacedBox> overflow;
-  final LoadMetrics metrics;
-  final double tolerancePct;
 
   LoadPlanResult({
-    this.truck,
-    required this.placed,
-    required this.overflow,
-    required this.metrics,
-    required this.tolerancePct,
+    required this.placed, required this.overflow, required this.metrics, required this.tolerancePct, this.truck,
   });
 
   factory LoadPlanResult.fromJson(Map<String, dynamic> json) {
@@ -263,19 +249,19 @@ class LoadPlanResult {
           .map((b) => PlacedBox.fromJson(b as Map<String, dynamic>))
           .toList(),
       metrics: LoadMetrics.fromJson(
-          (json['metrics'] as Map<String, dynamic>?) ?? {}),
+          (json['metrics'] as Map<String, dynamic>?) ?? {},),
       tolerancePct: ((json['tolerancePct'] ?? 5) as num).toDouble(),
     );
   }
+  final VehicleConfig? truck;
+  final List<PlacedBox> placed;
+  final List<PlacedBox> overflow;
+  final LoadMetrics metrics;
+  final double tolerancePct;
 }
 
 /// Resultado del cálculo de equilibrio de ejes
 class AxleBalanceResult {
-  final double cogX, cogY, cogZ;
-  final double frontPct, rearPct, leftPct, rightPct;
-  final double totalWeightKg;
-  final bool balanced;
-  final String warning;
 
   AxleBalanceResult({
     required this.cogX,
@@ -306,22 +292,20 @@ class AxleBalanceResult {
       warning: (json['warning'] as String?) ?? '',
     );
   }
+  final double cogX;
+  final double cogY;
+  final double cogZ;
+  final double frontPct;
+  final double rearPct;
+  final double leftPct;
+  final double rightPct;
+  final double totalWeightKg;
+  final bool balanced;
+  final String warning;
 }
 
 /// Orden de un camión
 class TruckOrder {
-  final String articleCode;
-  final String articleName;
-  final String clientCode;
-  final String clientName;
-  final int orderNumber;
-  final double units;
-  final double boxes;
-  final double weightPerUnit;
-  final bool hasDimensions;
-  final double largoCm;
-  final double anchoCm;
-  final double altoCm;
 
   TruckOrder({
     required this.articleCode,
@@ -337,9 +321,6 @@ class TruckOrder {
     required this.anchoCm,
     required this.altoCm,
   });
-
-  /// Display quantity: boxes if available, otherwise units
-  double get quantity => boxes > 0 ? boxes : units;
 
   factory TruckOrder.fromJson(Map<String, dynamic> json) {
     final dims = (json['dimensions'] as Map<String, dynamic>?) ?? {};
@@ -358,18 +339,25 @@ class TruckOrder {
       altoCm: ((dims['altoCm'] ?? 15) as num).toDouble(),
     );
   }
+  final String articleCode;
+  final String articleName;
+  final String clientCode;
+  final String clientName;
+  final int orderNumber;
+  final double units;
+  final double boxes;
+  final double weightPerUnit;
+  final bool hasDimensions;
+  final double largoCm;
+  final double anchoCm;
+  final double altoCm;
+
+  /// Display quantity: boxes if available, otherwise units
+  double get quantity => boxes > 0 ? boxes : units;
 }
 
 /// Personal de almacén
-class WarehousePerson {
-  final String id;
-  final String name;
-  final String vendorCode;
-  final String role;
-  final bool active;
-  final String phone;
-  final String email;
-  final String source; // 'custom' or 'vdd'
+class WarehousePerson { // 'custom' or 'vdd'
 
   WarehousePerson({
     required this.id,
@@ -393,20 +381,18 @@ class WarehousePerson {
         email: (json['email'] as String?) ?? '',
         source: (json['source'] as String?) ?? 'custom',
       );
+  final String id;
+  final String name;
+  final String vendorCode;
+  final String role;
+  final bool active;
+  final String phone;
+  final String email;
+  final String source;
 }
 
 /// Artículo con dimensiones (reales o estimadas)
 class ArticleDimension {
-  final String code;
-  final String name;
-  final double weight;
-  final int unitsPerBox;
-  final bool hasRealDimensions;
-  final double? largoCm, anchoCm, altoCm;
-  final double? estLargoCm, estAnchoCm, estAltoCm;
-  final double? pesoOverrideKg;
-  final String notas;
-  final bool inRecentOrders;
 
   ArticleDimension({
     required this.code,
@@ -442,46 +428,33 @@ class ArticleDimension {
         notas: (json['notas'] as String?) ?? '',
         inRecentOrders: (json['inRecentOrders'] as bool?) ?? false,
       );
+  final String code;
+  final String name;
+  final double weight;
+  final int unitsPerBox;
+  final bool hasRealDimensions;
+  final double? largoCm;
+  final double? anchoCm;
+  final double? altoCm;
+  final double? estLargoCm;
+  final double? estAnchoCm;
+  final double? estAltoCm;
+  final double? pesoOverrideKg;
+  final String notas;
+  final bool inRecentOrders;
 }
 
 /// Entrada del historial de cargas
 class LoadHistoryEntry {
-  final int id;
-  final String vehicleCode;
-  final String vehicleDesc;
-  final String matricula;
-  final String date;
-  final double weightKg;
-  final double volumeCm3;
-  final double volumePct;
-  final double weightPct;
-  final int orderCount;
-  final int boxCount;
-  final String status;
-  final double importeTotal;
-  final double margenTotal;
-  final Map<String, dynamic>? detalles;
-  final String createdBy;
-  final String createdAt;
 
   LoadHistoryEntry({
     required this.id,
     required this.vehicleCode,
-    this.vehicleDesc = '',
+    required this.date, required this.weightKg, required this.volumeCm3, required this.volumePct, required this.weightPct, required this.orderCount, required this.boxCount, required this.status, required this.createdBy, required this.createdAt, this.vehicleDesc = '',
     this.matricula = '',
-    required this.date,
-    required this.weightKg,
-    required this.volumeCm3,
-    required this.volumePct,
-    required this.weightPct,
-    required this.orderCount,
-    required this.boxCount,
-    required this.status,
     this.importeTotal = 0,
     this.margenTotal = 0,
     this.detalles,
-    required this.createdBy,
-    required this.createdAt,
   });
 
   factory LoadHistoryEntry.fromJson(Map<String, dynamic> json) =>
@@ -504,6 +477,23 @@ class LoadHistoryEntry {
         createdBy: (json['createdBy'] as String?) ?? '',
         createdAt: (json['createdAt'] as String?) ?? '',
       );
+  final int id;
+  final String vehicleCode;
+  final String vehicleDesc;
+  final String matricula;
+  final String date;
+  final double weightKg;
+  final double volumeCm3;
+  final double volumePct;
+  final double weightPct;
+  final int orderCount;
+  final int boxCount;
+  final String status;
+  final double importeTotal;
+  final double margenTotal;
+  final Map<String, dynamic>? detalles;
+  final String createdBy;
+  final String createdAt;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -656,7 +646,7 @@ class WarehouseDataService {
       if (telefono != null) 'telefono': telefono,
       if (email != null) 'email': email,
       if (activo != null) 'activo': activo,
-    });
+    },);
   }
 
   /// Eliminar operario (soft delete)
@@ -678,7 +668,7 @@ class WarehouseDataService {
   }) async {
     final qp = <String, String>{'limit': limit.toString()};
     if (search != null && search.isNotEmpty) qp['search'] = search;
-    if (onlyWithDimensions == true) qp['onlyWithDimensions'] = 'true';
+    if (onlyWithDimensions ?? false) qp['onlyWithDimensions'] = 'true';
 
     final response = await ApiClient.get(
       '/warehouse/articles',
@@ -705,7 +695,7 @@ class WarehouseDataService {
       'altoCm': altoCm,
       if (pesoCajaKg != null) 'pesoCajaKg': pesoCajaKg,
       if (notas != null) 'notas': notas,
-    });
+    },);
   }
 
   /// Eliminar dimensiones reales (volver a estimado)
@@ -863,7 +853,7 @@ class WarehouseDataService {
       'key': key,
       'value': value,
       if (description != null) 'description': description,
-    });
+    },);
   }
 
   /// Seed default config values
@@ -907,6 +897,6 @@ class WarehouseDataService {
       if (altoInteriorCm != null) 'altoInteriorCm': altoInteriorCm,
       if (toleranciaExceso != null) 'toleranciaExceso': toleranciaExceso,
       if (notas != null) 'notas': notas,
-    });
+    },);
   }
 }

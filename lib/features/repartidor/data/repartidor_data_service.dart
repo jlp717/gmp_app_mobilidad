@@ -1,23 +1,14 @@
 /// REPARTIDOR DATA SERVICE
 /// Cliente de API para obtener datos de cobros, comisiones e histórico desde backend
 /// OPTIMIZED: Full caching support with intelligent TTLs
+library;
 
 import 'package:flutter/foundation.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 
 /// Resultado del resumen de cobros
 class CollectionsSummary {
-  final String repartidorId;
-  final int year;
-  final int month;
-  final double totalCollectable;
-  final double totalCollected;
-  final double totalCommission;
-  final double overallPercentage;
-  final bool thresholdMet;
-  final int clientCount;
-  final List<ClientCollectionData> clients;
 
   CollectionsSummary({
     required this.repartidorId,
@@ -51,21 +42,20 @@ class CollectionsSummary {
       clients: clientsList,
     );
   }
+  final String repartidorId;
+  final int year;
+  final int month;
+  final double totalCollectable;
+  final double totalCollected;
+  final double totalCommission;
+  final double overallPercentage;
+  final bool thresholdMet;
+  final int clientCount;
+  final List<ClientCollectionData> clients;
 }
 
 /// Datos de cobranza por cliente
 class ClientCollectionData {
-  final String clientId;
-  final String clientName;
-  final double collectable;
-  final double collected;
-  final double percentage;
-  final bool thresholdMet;
-  final double thresholdProgress;
-  final double commission;
-  final int tier;
-  final String paymentType;
-  final int numDocuments;
 
   ClientCollectionData({
     required this.clientId,
@@ -96,14 +86,21 @@ class ClientCollectionData {
       numDocuments: (json['numDocuments'] as int?) ?? 0,
     );
   }
+  final String clientId;
+  final String clientName;
+  final double collectable;
+  final double collected;
+  final double percentage;
+  final bool thresholdMet;
+  final double thresholdProgress;
+  final double commission;
+  final int tier;
+  final String paymentType;
+  final int numDocuments;
 }
 
 /// Acumulado diario
 class DailyCollection {
-  final int day;
-  final String date;
-  final double collectable;
-  final double collected;
 
   DailyCollection({
     required this.day,
@@ -120,18 +117,14 @@ class DailyCollection {
       collected: ((json['collected'] ?? 0) as num).toDouble(),
     );
   }
+  final int day;
+  final String date;
+  final double collectable;
+  final double collected;
 }
 
 /// Cliente del historial
 class HistoryClient {
-  final String id;
-  final String name;
-  final String address;
-  final int totalDocuments;
-  final double totalAmount;
-  final String? lastVisit;
-  final String? repCode;
-  final String? repName;
 
   HistoryClient({
     required this.id,
@@ -156,51 +149,30 @@ class HistoryClient {
       repName: json['repName'] as String?,
     );
   }
+  final String id;
+  final String name;
+  final String address;
+  final int totalDocuments;
+  final double totalAmount;
+  final String? lastVisit;
+  final String? repCode;
+  final String? repName;
 }
 
 /// Documento del historial
 class HistoryDocument {
-  final String id;
-  final String type; // 'albaran' o 'factura'
-  final int number;
-  final int? albaranNumber;
-  final int? facturaNumber;
-  final String? serieFactura;
-  final int? ejercicioFactura;
-  final String serie;
-  final int ejercicio;
-  final int terminal;
-  final String date;
-  final double amount;
-  final double pending;
-  final String status; // 'delivered', 'partial', 'notDelivered'
-  final bool hasSignature;
-  final String? signaturePath;
-  final String? deliveryDate;
-  final String? deliveryRepartidor;
-  final String? deliveryObs;
-  final String? time;
-  // Legacy signature fields (from CACFIRMAS)
-  final String? legacySignatureName;
-  final bool hasLegacySignature;
-  final String? legacyDate;
 
   HistoryDocument({
     required this.id,
     required this.type,
     required this.number,
-    this.albaranNumber,
+    required this.date, required this.amount, required this.pending, required this.status, required this.hasSignature, this.albaranNumber,
     this.facturaNumber,
     this.serieFactura,
     this.ejercicioFactura,
     this.serie = 'A',
     this.ejercicio = 0,
     this.terminal = 0,
-    required this.date,
-    required this.amount,
-    required this.pending,
-    required this.status,
-    required this.hasSignature,
     this.signaturePath,
     this.deliveryDate,
     this.deliveryRepartidor,
@@ -238,17 +210,34 @@ class HistoryDocument {
       legacyDate: json['legacyDate'] as String?,
     );
   }
+  final String id;
+  final String type; // 'albaran' o 'factura'
+  final int number;
+  final int? albaranNumber;
+  final int? facturaNumber;
+  final String? serieFactura;
+  final int? ejercicioFactura;
+  final String serie;
+  final int ejercicio;
+  final int terminal;
+  final String date;
+  final double amount;
+  final double pending;
+  final String status; // 'delivered', 'partial', 'notDelivered'
+  final bool hasSignature;
+  final String? signaturePath;
+  final String? deliveryDate;
+  final String? deliveryRepartidor;
+  final String? deliveryObs;
+  final String? time;
+  // Legacy signature fields (from CACFIRMAS)
+  final String? legacySignatureName;
+  final bool hasLegacySignature;
+  final String? legacyDate;
 }
 
 /// Objetivo mensual
 class MonthlyObjective {
-  final String month;
-  final int year;
-  final int monthNum;
-  final double collectable;
-  final double collected;
-  final double percentage;
-  final bool thresholdMet;
 
   MonthlyObjective({
     required this.month,
@@ -271,18 +260,17 @@ class MonthlyObjective {
       thresholdMet: (json['thresholdMet'] as bool?) ?? false,
     );
   }
+  final String month;
+  final int year;
+  final int monthNum;
+  final double collectable;
+  final double collected;
+  final double percentage;
+  final bool thresholdMet;
 }
 
 /// Resultado del cálculo de comisión
 class CommissionResult {
-  final double collectable;
-  final double collected;
-  final double percentageCollected;
-  final bool thresholdMet;
-  final double thresholdProgress;
-  final int currentTier;
-  final double commissionEarned;
-  final String tierLabel;
 
   const CommissionResult({
     required this.collectable,
@@ -296,15 +284,23 @@ class CommissionResult {
   });
 
   factory CommissionResult.empty() => const CommissionResult(
-    collectable: 0.0,
-    collected: 0.0,
-    percentageCollected: 0.0,
+    collectable: 0,
+    collected: 0,
+    percentageCollected: 0,
     thresholdMet: false,
-    thresholdProgress: 0.0,
+    thresholdProgress: 0,
     currentTier: 0,
-    commissionEarned: 0.0,
+    commissionEarned: 0,
     tierLabel: 'Sin cobros',
   );
+  final double collectable;
+  final double collected;
+  final double percentageCollected;
+  final bool thresholdMet;
+  final double thresholdProgress;
+  final int currentTier;
+  final double commissionEarned;
+  final String tierLabel;
 }
 
 /// Servicio de datos para repartidor
@@ -422,8 +418,6 @@ class RepartidorDataService {
         queryParameters: queryParams,
         cacheKey: cacheKey,
         cacheTTL: const Duration(minutes: 15),
-        // Only force refresh on first load, use cache on subsequent calls
-        forceRefresh: false,
       );
       
       final docs = (response['documents'] as List? ?? [])

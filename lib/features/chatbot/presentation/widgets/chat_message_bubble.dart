@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widgets/modern_loading.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 
 /// [ChatMessageBubble] - Professional styled message bubble
 /// 
@@ -11,9 +11,7 @@ import '../../../../core/widgets/modern_loading.dart';
 /// - Clean typing indicator animation
 class ChatMessageBubble extends StatelessWidget {
   const ChatMessageBubble({
-    super.key,
-    required this.message,
-    required this.isUser,
+    required this.message, required this.isUser, super.key,
     this.timestamp,
     this.isLoading = false,
   });
@@ -42,7 +40,7 @@ class ChatMessageBubble extends StatelessWidget {
               height: 34,
               margin: const EdgeInsets.only(right: 10),
               decoration: BoxDecoration(
-                gradient: LinearGradient(
+                gradient: const LinearGradient(
                   colors: [AppTheme.neonBlue, AppTheme.neonPurple],
                 ),
                 borderRadius: BorderRadius.circular(10),
@@ -198,8 +196,8 @@ class ChatMessageBubble extends StatelessWidget {
       );
     }
     
-    List<InlineSpan> spans = [];
-    int lastEnd = 0;
+    final spans = <InlineSpan>[];
+    var lastEnd = 0;
     
     for (final match in matches) {
       if (match.start > lastEnd) {
@@ -208,7 +206,7 @@ class ChatMessageBubble extends StatelessWidget {
       spans.add(TextSpan(
         text: match.group(1),
         style: const TextStyle(fontWeight: FontWeight.bold),
-      ));
+      ),);
       lastEnd = match.end;
     }
     
@@ -232,9 +230,9 @@ class ChatMessageBubble extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
       alignment: Alignment.centerLeft,
-      child: Row(
+      child: const Row(
         mainAxisSize: MainAxisSize.min,
-        children: const [
+        children: [
           SizedBox(
             width: 40,
             height: 40,

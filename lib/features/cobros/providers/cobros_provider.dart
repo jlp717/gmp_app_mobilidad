@@ -3,14 +3,19 @@
 /// State management for cobros/entregas module.
 /// Uses family pattern to parameterize by employeeCode + isRepartidor.
 /// No overrideWithValue, no UnimplementedError, no null checks.
+library;
 
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../data/models/cobros_models.dart';
-import '../../../core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart';
 
 class CobrosProvider extends ChangeNotifier {
+
+  CobrosProvider({
+    required this.employeeCode,
+    this.isRepartidor = false,
+  });
   final String employeeCode;
   final bool isRepartidor;
 
@@ -27,11 +32,6 @@ class CobrosProvider extends ChangeNotifier {
   String _filtroEstado = 'todos';
   String _filtroCliente = '';
   DateTime? _filtroFecha;
-
-  CobrosProvider({
-    required this.employeeCode,
-    this.isRepartidor = false,
-  });
 
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -53,7 +53,7 @@ class CobrosProvider extends ChangeNotifier {
       .length;
   double get totalImportePendiente => _albaranesPendientes
       .where((a) => a.estado != EstadoEntrega.entregado)
-      .fold(0.0, (sum, a) => sum + a.importeTotal);
+      .fold(0, (sum, a) => sum + a.importeTotal);
   int get totalCTRPendientes => _albaranesPendientes
       .where((a) => a.esCTR && a.estado != EstadoEntrega.entregado)
       .length;
@@ -70,7 +70,7 @@ class CobrosProvider extends ChangeNotifier {
               a.nombreCliente
                   .toLowerCase()
                   .contains(_filtroCliente.toLowerCase()) ||
-              a.codigoCliente.contains(_filtroCliente))
+              a.codigoCliente.contains(_filtroCliente),)
           .toList();
     }
     return resultado;
@@ -197,17 +197,17 @@ class CobrosProvider extends ChangeNotifier {
   }
 
   Future<bool> completarEntrega(String albaranId,
-      {String? observaciones}) async {
+      {String? observaciones,}) async {
     final albaran = _albaranesPendientes.firstWhere((a) => a.id == albaranId,
-        orElse: () => throw Exception('Albarán no encontrado'));
-    bool allSucceeded = true;
+        orElse: () => throw Exception('Albarán no encontrado'),);
+    var allSucceeded = true;
     for (final item in albaran.items) {
       if (item.estado != EstadoEntrega.entregado) {
         final ok = await actualizarEstadoEntrega(
             itemId: item.itemId,
             estado: EstadoEntrega.entregado,
             cantidadEntregada: item.cantidadPedida,
-            observaciones: observaciones);
+            observaciones: observaciones,);
         if (!ok) allSucceeded = false;
       }
     }
@@ -221,7 +221,7 @@ class CobrosProvider extends ChangeNotifier {
   }
 
   Future<void> cargarPendingSummary(String? vendedorCode,
-      {List<String>? vendedorCodes}) async {
+      {List<String>? vendedorCodes,}) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -273,7 +273,7 @@ class CobrosProvider extends ChangeNotifier {
             [];
         if (payload['resumen'] != null) {
           _resumenCobros = ResumenCobros.fromJson(
-              payload['resumen'] as Map<String, dynamic>);
+              payload['resumen'] as Map<String, dynamic>,);
         }
       }
     } catch (e) {
@@ -289,7 +289,7 @@ class CobrosProvider extends ChangeNotifier {
       final response = await ApiClient.get('/cobros/$codigoCliente/estado');
       if (response['success'] == true && response['estadoCliente'] != null) {
         _estadoClienteActual = EstadoCliente.fromJson(
-            response['estadoCliente'] as Map<String, dynamic>);
+            response['estadoCliente'] as Map<String, dynamic>,);
         notifyListeners();
       }
     } catch (e) {
@@ -348,13 +348,13 @@ class CobrosProvider extends ChangeNotifier {
                 itemId: '1001-1',
                 codigoArticulo: 'COCA2L',
                 descripcion: 'Coca-Cola 2L Pack 6',
-                cantidadPedida: 5),
+                cantidadPedida: 5,),
             EntregaItem(
                 itemId: '1001-2',
                 codigoArticulo: 'AGUA1L',
                 descripcion: 'Agua Mineral 1.5L Pack 6',
-                cantidadPedida: 10),
-          ]),
+                cantidadPedida: 10,),
+          ],),
       Albaran(
           id: '2026-A-1002',
           numeroAlbaran: 1002,
@@ -363,14 +363,13 @@ class CobrosProvider extends ChangeNotifier {
           direccion: 'Plaza España, 3 - Madrid',
           fecha: now,
           importeTotal: 532.40,
-          esCTR: false,
           items: [
             EntregaItem(
                 itemId: '1002-1',
                 codigoArticulo: 'CERV33',
                 descripcion: 'Cerveza 33cl Caja 24',
-                cantidadPedida: 8),
-          ]),
+                cantidadPedida: 8,),
+          ],),
     ];
   }
 
@@ -398,9 +397,9 @@ final cobrosProvider =
 );
 
 class CobrosParams {
+  const CobrosParams({required this.employeeCode, this.isRepartidor = false});
   final String employeeCode;
   final bool isRepartidor;
-  const CobrosParams({required this.employeeCode, this.isRepartidor = false});
 
   @override
   bool operator ==(Object other) {

@@ -1,23 +1,20 @@
-import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
-import '../utils/responsive.dart';
 import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+
 class MultiSelectDialog<T> extends StatefulWidget {
+
+  const MultiSelectDialog({
+    required this.items, required this.selectedItems, required this.title, required this.labelBuilder, super.key,
+    this.onRemoteSearch,
+  });
   final List<T> items;
   final Set<T> selectedItems;
   final String title;
   final String Function(T) labelBuilder;
   final Future<List<T>> Function(String)? onRemoteSearch;
-
-  const MultiSelectDialog({
-    super.key,
-    required this.items,
-    required this.selectedItems,
-    required this.title,
-    required this.labelBuilder,
-    this.onRemoteSearch,
-  });
 
   @override
   State<MultiSelectDialog<T>> createState() => _MultiSelectDialogState<T>();
@@ -128,7 +125,7 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                         // Ah, _tempSelected is Set<T>. If T is Map, we have a problem with remote search returning new maps.
                         
                         // HACK for Map<String, dynamic>:
-                        bool isSelected = _tempSelected.contains(item);
+                        var isSelected = _tempSelected.contains(item);
                         if (!isSelected && item is Map && item.containsKey('code')) {
                            // Try finding by code in _tempSelected if T is Map
                            // This breaks generic purity but solves the immediate issue for our Map-heavy app.
@@ -143,7 +140,7 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                           checkColor: Colors.white,
                           onChanged: (val) {
                             setState(() {
-                              if (val == true) {
+                              if (val ?? false) {
                                 // If using Map identification hack, we should remove the OLD entry with same code first to avoid duplicates?
                                 // No, Set handles uniqueness by object.
                                 // If we want to replace the object with same code:

@@ -1,22 +1,21 @@
 /// ENTREGA DETAIL SHEET
 /// Bottom sheet con detalle del albarán y acciones
+library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../data/models/cobros_models.dart';
-
 class EntregaDetailSheet extends StatelessWidget {
-  final Albaran albaran;
-  final VoidCallback? onComplete;
 
   const EntregaDetailSheet({
-    super.key,
-    required this.albaran,
+    required this.albaran, super.key,
     this.onComplete,
   });
+  final Albaran albaran;
+  final VoidCallback? onComplete;
 
   @override
   Widget build(BuildContext context) {
@@ -50,7 +49,7 @@ class EntregaDetailSheet extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
+                    gradient: const LinearGradient(
                       colors: [AppTheme.neonBlue, AppTheme.neonPurple],
                     ),
                     borderRadius: BorderRadius.circular(14),

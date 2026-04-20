@@ -1,9 +1,10 @@
 // ignore_for_file: argument_type_not_assignable, invalid_assignment
 import 'dart:async';
+
+import 'package:gmp_app_mobilidad/core/memory/agent_database.dart';
+import 'package:gmp_app_mobilidad/core/memory/unified_memory_layer.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'agent_database.dart';
-import 'unified_memory_layer.dart';
 
 /// **Data Migration Service**
 ///
@@ -18,10 +19,10 @@ import 'unified_memory_layer.dart';
 /// - Validación de datos migrados
 /// - Logging detallado
 class DataMigrationService {
-  final UnifiedMemoryLayer _memoryLayer;
-  final MigrationLogger _logger = MigrationLogger();
 
   DataMigrationService(this._memoryLayer);
+  final UnifiedMemoryLayer _memoryLayer;
+  final MigrationLogger _logger = MigrationLogger();
 
   /// Ejecuta migración completa
   Future<MigrationResult> migrateAll() async {
@@ -341,7 +342,7 @@ class DataMigrationService {
       final productsToIndex = <Map<String, dynamic>>[];
 
       // Buscar en caché legacy
-      for (int i = 0; i < 1000; i++) {
+      for (var i = 0; i < 1000; i++) {
         final productData = _memoryLayer.cacheGet('product:$i');
         if (productData != null) {
           productsToIndex.add(productData);
@@ -393,7 +394,7 @@ class DataMigrationService {
   MigrationStatus getMigrationStatus() {
     // Verificar si existen datos legacy
     final hasLegacyHive = Hive.isBoxOpen('pedidos_drafts');
-    final hasLegacyPrefs = true; // SharedPreferences siempre existe
+    const hasLegacyPrefs = true; // SharedPreferences siempre existe
 
     return MigrationStatus(
       hasLegacyData: hasLegacyHive || hasLegacyPrefs,
@@ -434,7 +435,7 @@ class DataMigrationService {
       final legacyKeys = prefs.getKeys().where((k) =>
           k.startsWith('repartidor_') ||
           k == 'global_filter_vendor' ||
-          k == 'isDarkMode');
+          k == 'isDarkMode',);
 
       for (final key in legacyKeys) {
         await prefs.remove(key);
@@ -449,10 +450,6 @@ class DataMigrationService {
 // ==================== MODELOS ====================
 
 class MigrationResult {
-  final bool success;
-  final List<MigrationStepResult> steps;
-  final int totalItems;
-  final List<String> errors;
 
   MigrationResult({
     required this.success,
@@ -460,6 +457,10 @@ class MigrationResult {
     required this.totalItems,
     required this.errors,
   });
+  final bool success;
+  final List<MigrationStepResult> steps;
+  final int totalItems;
+  final List<String> errors;
 
   String get summary {
     if (success) {
@@ -471,11 +472,6 @@ class MigrationResult {
 }
 
 class MigrationStepResult {
-  final String step;
-  bool success;
-  int itemsMigrated;
-  int failedItems;
-  final List<String> errors;
 
   MigrationStepResult({
     required this.step,
@@ -484,18 +480,23 @@ class MigrationStepResult {
     this.failedItems = 0,
     this.errors = const [],
   });
+  final String step;
+  bool success;
+  int itemsMigrated;
+  int failedItems;
+  final List<String> errors;
 }
 
 class MigrationStatus {
-  final bool hasLegacyData;
-  final bool hasNewData;
-  final MemoryStats stats;
 
   MigrationStatus({
     required this.hasLegacyData,
     required this.hasNewData,
     required this.stats,
   });
+  final bool hasLegacyData;
+  final bool hasNewData;
+  final MemoryStats stats;
 }
 
 /// Logger para migración
@@ -541,10 +542,6 @@ class MigrationLogger {
 }
 
 class LogEntry {
-  final DateTime timestamp;
-  final String level;
-  final String message;
-  final StackTrace? stackTrace;
 
   LogEntry({
     required this.timestamp,
@@ -552,4 +549,8 @@ class LogEntry {
     required this.message,
     this.stackTrace,
   });
+  final DateTime timestamp;
+  final String level;
+  final String message;
+  final StackTrace? stackTrace;
 }

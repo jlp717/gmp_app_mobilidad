@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import '../cache/cache_service_optimized.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service_optimized.dart';
 
 /// Stream-Chain Utility V3
 /// 
@@ -34,11 +34,11 @@ import '../cache/cache_service_optimized.dart';
 /// );
 /// ```
 class StreamChain<T> {
+  
+  StreamChain._(this._stream, this._cacheKey, this._cacheTTL);
   final Stream<T> _stream;
   final String? _cacheKey;
   final Duration? _cacheTTL;
-  
-  StreamChain._(this._stream, this._cacheKey, this._cacheTTL);
 
   /// Create a StreamChain from a stream
   static StreamChain<T> from<T>(Stream<T> stream) {
@@ -57,7 +57,7 @@ class StreamChain<T> {
 
     final cachedStream = _stream.map((value) {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final key = '${keyPrefix}${timestamp}';
+      final key = '$keyPrefix$timestamp';
       
       CacheServiceOptimized.set(
         key,
@@ -211,11 +211,11 @@ class StreamChain<T> {
 
 /// ReplayCache - Cache last N emissions for late subscribers
 class ReplayCache<T> {
+
+  ReplayCache({int maxSize = 1}) : _maxSize = maxSize;
   final int _maxSize;
   final List<T> _buffer = [];
   final _controller = StreamController<T>.broadcast();
-
-  ReplayCache({int maxSize = 1}) : _maxSize = maxSize;
 
   /// Add value to replay cache
   void add(T value) {
@@ -274,9 +274,9 @@ class ReplayCache<T> {
 }
 
 class _ReplayTransformer<T> extends StreamTransformerBase<T, T> {
-  final List<T> _replayValues;
 
   _ReplayTransformer(this._replayValues);
+  final List<T> _replayValues;
 
   @override
   Stream<T> bind(Stream<T> stream) {
@@ -306,7 +306,7 @@ class StreamCache {
   }) {
     return stream.map((value) {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final key = '${keyPrefix}${timestamp}';
+      final key = '$keyPrefix$timestamp';
       
       CacheServiceOptimized.set(
         key,

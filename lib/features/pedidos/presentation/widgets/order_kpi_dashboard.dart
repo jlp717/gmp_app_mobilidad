@@ -1,18 +1,18 @@
 /// Order KPI Dashboard
 /// ===================
 /// Shows 4 KPI cards, status counters, 7-day trend chart, and top clients.
+library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../providers/pedidos_provider.dart';
-import '../utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
 class OrderKpiDashboard extends ConsumerWidget {
+  const OrderKpiDashboard({required this.vendedorCodes, super.key});
   final String vendedorCodes;
-  const OrderKpiDashboard({Key? key, required this.vendedorCodes})
-      : super(key: key);
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -172,11 +172,11 @@ class OrderKpiDashboard extends ConsumerWidget {
   Widget? _trendIcon(double? pct) {
     if (pct == null) return null;
     if (pct > 0) {
-      return Icon(Icons.arrow_upward, color: AppTheme.neonGreen, size: 12);
+      return const Icon(Icons.arrow_upward, color: AppTheme.neonGreen, size: 12);
     } else if (pct < 0) {
-      return Icon(Icons.arrow_downward, color: AppTheme.error, size: 12);
+      return const Icon(Icons.arrow_downward, color: AppTheme.error, size: 12);
     }
-    return Icon(Icons.remove, color: Colors.white54, size: 12);
+    return const Icon(Icons.remove, color: Colors.white54, size: 12);
   }
 
   Widget? _trendText(double? pct) {

@@ -2,15 +2,16 @@
 /// ====================
 /// Shows outstanding balance and risk level for selected client
 /// with info icon that opens an explanation modal.
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 
 class ClientBalanceBadge extends StatelessWidget {
-  final Map<String, dynamic> balance;
 
-  const ClientBalanceBadge({Key? key, required this.balance}) : super(key: key);
+  const ClientBalanceBadge({required this.balance, super.key});
+  final Map<String, dynamic> balance;
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +85,7 @@ class ClientBalanceBadge extends StatelessWidget {
                       const SizedBox(width: 5),
                       Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 1),
+                            horizontal: 5, vertical: 1,),
                         decoration: BoxDecoration(
                           color: color.withOpacity(0.16),
                           borderRadius: BorderRadius.circular(10),
@@ -141,12 +142,12 @@ class ClientBalanceBadge extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(color: AppTheme.borderColor.withOpacity(0.3)),
         ),
-        title: Row(
+        title: const Row(
           children: [
-            const Icon(Icons.account_balance_wallet,
-                color: AppTheme.neonBlue, size: 22),
-            const SizedBox(width: 8),
-            const Expanded(
+            Icon(Icons.account_balance_wallet,
+                color: AppTheme.neonBlue, size: 22,),
+            SizedBox(width: 8),
+            Expanded(
               child: Text(
                 'Datos financieros del cliente',
                 style: TextStyle(
@@ -201,7 +202,7 @@ class ClientBalanceBadge extends StatelessWidget {
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
+                              horizontal: 6, vertical: 2,),
                           decoration: BoxDecoration(
                             color: color.withOpacity(0.15),
                             borderRadius: BorderRadius.circular(6),
@@ -223,17 +224,17 @@ class ClientBalanceBadge extends StatelessWidget {
                       style: TextStyle(
                           color: Colors.white70,
                           fontSize: 11,
-                          fontWeight: FontWeight.w600),
+                          fontWeight: FontWeight.w600,),
                     ),
                     const SizedBox(height: 4),
                     _riskLevel(AppTheme.neonGreen, 'Sin riesgo',
-                        'Sin deuda pendiente'),
+                        'Sin deuda pendiente',),
                     _riskLevel(AppTheme.neonGreen, 'Riesgo bajo',
-                        'Pendiente < 5.000\u20AC'),
+                        'Pendiente < 5.000\u20AC',),
                     _riskLevel(Colors.orange, 'Riesgo medio',
-                        'Pendiente entre 5.000\u20AC y 10.000\u20AC'),
+                        'Pendiente entre 5.000\u20AC y 10.000\u20AC',),
                     _riskLevel(AppTheme.error, 'Riesgo alto',
-                        'Pendiente > 10.000\u20AC'),
+                        'Pendiente > 10.000\u20AC',),
                   ],
                 ),
               ),
@@ -244,7 +245,7 @@ class ClientBalanceBadge extends StatelessWidget {
           TextButton(
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Entendido',
-                style: TextStyle(color: AppTheme.neonBlue)),
+                style: TextStyle(color: AppTheme.neonBlue),),
           ),
         ],
       ),
@@ -270,16 +271,16 @@ class ClientBalanceBadge extends StatelessWidget {
                     style: TextStyle(
                         color: color,
                         fontSize: 11,
-                        fontWeight: FontWeight.w600)),
+                        fontWeight: FontWeight.w600,),),
               ),
               Text(value,
                   style: TextStyle(
-                      color: color, fontSize: 13, fontWeight: FontWeight.bold)),
+                      color: color, fontSize: 13, fontWeight: FontWeight.bold,),),
             ],
           ),
           const SizedBox(height: 4),
           Text(desc,
-              style: const TextStyle(color: Colors.white38, fontSize: 10)),
+              style: const TextStyle(color: Colors.white38, fontSize: 10),),
         ],
       ),
     );
@@ -299,7 +300,7 @@ class ClientBalanceBadge extends StatelessWidget {
           Text(
             '$label: ',
             style: TextStyle(
-                color: color, fontSize: 10, fontWeight: FontWeight.w600),
+                color: color, fontSize: 10, fontWeight: FontWeight.w600,),
           ),
           Flexible(
             child: Text(

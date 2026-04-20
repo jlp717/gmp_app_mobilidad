@@ -1,28 +1,32 @@
 /// Load Planner Panel — Order management, summary, overflow tabs
 /// Extracted from the monolithic load_planner_3d_page.dart
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../data/warehouse_data_service.dart';
-import '../painters/projection_3d.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/painters/projection_3d.dart';
 
 // ─── Helper models ──────────────────────────────────────────────────────────
 
 class ClientSummary {
-  final String code, name;
+  ClientSummary({required this.code, required this.name});
+  final String code;
+  final String name;
   final List<TruckOrder> orders = [];
   double totalWeight = 0;
   int totalBoxes = 0;
   double totalImporteEur = 0;
-  ClientSummary({required this.code, required this.name});
 }
 
 class OverflowGroup {
-  final String code, name, clientCode;
+  OverflowGroup(
+      {required this.code, required this.name, required this.clientCode,});
+  final String code;
+  final String name;
+  final String clientCode;
   int count = 0;
   double totalWeight = 0;
-  OverflowGroup(
-      {required this.code, required this.name, required this.clientCode});
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -30,6 +34,13 @@ class OverflowGroup {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class LoadPlannerPanel extends StatefulWidget {
+
+  const LoadPlannerPanel({
+    required this.result, required this.allOrders, required this.excludedIndices, required this.isManualMode, required this.recomputing, required this.onAddAll, required this.onRemoveAll, required this.onReset, required this.onRemoveOrder, required this.onRestoreOrder, super.key,
+    this.onDragStarted,
+    this.onSmartOptimize,
+    this.optimizing = false,
+  });
   final LoadPlanResult result;
   final List<TruckOrder> allOrders;
   final Set<int> excludedIndices;
@@ -43,23 +54,6 @@ class LoadPlannerPanel extends StatefulWidget {
   final ValueChanged<TruckOrder>? onDragStarted;
   final VoidCallback? onSmartOptimize;
   final bool optimizing;
-
-  const LoadPlannerPanel({
-    super.key,
-    required this.result,
-    required this.allOrders,
-    required this.excludedIndices,
-    required this.isManualMode,
-    required this.recomputing,
-    required this.onAddAll,
-    required this.onRemoveAll,
-    required this.onReset,
-    required this.onRemoveOrder,
-    required this.onRestoreOrder,
-    this.onDragStarted,
-    this.onSmartOptimize,
-    this.optimizing = false,
-  });
 
   @override
   State<LoadPlannerPanel> createState() => _LoadPlannerPanelState();
@@ -97,7 +91,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                   ? _buildProductos()
                   : _buildOverflow(),
         ),
-      ]),
+      ],),
     );
   }
 
@@ -116,43 +110,43 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
         gradient: LinearGradient(colors: [
           AppTheme.neonBlue.withValues(alpha: 0.08),
           Colors.transparent,
-        ]),
+        ],),
       ),
       child: Column(children: [
         Row(children: [
           const Icon(Icons.inventory_2_rounded,
-              color: AppTheme.neonBlue, size: 16),
+              color: AppTheme.neonBlue, size: 16,),
           const SizedBox(width: 6),
-          Text('PEDIDOS DEL DIA',
+          const Text('PEDIDOS DEL DIA',
               style: TextStyle(
                   color: AppTheme.neonBlue,
                   fontSize: 11,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: 1)),
+                  letterSpacing: 1,),),
           const Spacer(),
           Text(
             '${widget.allOrders.length - widget.excludedIndices.length}/${widget.allOrders.length}',
             style: const TextStyle(
                 color: AppTheme.neonGreen,
                 fontSize: 11,
-                fontWeight: FontWeight.w700),
+                fontWeight: FontWeight.w700,),
           ),
-        ]),
+        ],),
         const SizedBox(height: 8),
         // Action buttons
         Row(children: [
           Expanded(
               child: _actionBtn(
                   'Añadir Todo', Icons.add_circle_outline, AppTheme.neonGreen,
-                  widget.onAddAll)),
+                  widget.onAddAll,),),
           const SizedBox(width: 4),
           Expanded(
               child: _actionBtn('Quitar Todo', Icons.remove_circle_outline,
-                  Colors.redAccent, widget.onRemoveAll)),
+                  Colors.redAccent, widget.onRemoveAll,),),
           const SizedBox(width: 4),
           _actionBtn(
-              'Reset', Icons.restart_alt_rounded, Colors.amber, widget.onReset),
-        ]),
+              'Reset', Icons.restart_alt_rounded, Colors.amber, widget.onReset,),
+        ],),
         if (widget.onSmartOptimize != null) ...[
           const SizedBox(height: 6),
           GestureDetector(
@@ -163,7 +157,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                 gradient: LinearGradient(colors: [
                   AppTheme.neonGreen.withValues(alpha: 0.15),
                   AppTheme.neonBlue.withValues(alpha: 0.15),
-                ]),
+                ],),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
                   color: AppTheme.neonGreen.withValues(alpha: 0.3),
@@ -182,7 +176,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                     )
                   else
                     const Icon(Icons.auto_awesome_rounded,
-                        color: AppTheme.neonGreen, size: 16),
+                        color: AppTheme.neonGreen, size: 16,),
                   const SizedBox(width: 6),
                   Text(
                     widget.optimizing
@@ -204,8 +198,8 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
         _progressBar('Peso', m.totalWeightKg, m.maxPayloadKg, 'kg', sc),
         const SizedBox(height: 4),
         _progressBar(
-            'Vol.', m.usedVolumeCm3 / 1e6, m.containerVolumeCm3 / 1e6, 'm³', sc),
-      ]),
+            'Vol.', m.usedVolumeCm3 / 1e6, m.containerVolumeCm3 / 1e6, 'm³', sc,),
+      ],),
     );
   }
 
@@ -249,7 +243,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
         Expanded(
           child: Text(msg,
               style: TextStyle(
-                  color: sc, fontSize: 11, fontWeight: FontWeight.w600)),
+                  color: sc, fontSize: 11, fontWeight: FontWeight.w600,),),
         ),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -260,7 +254,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
           child: Text(
             '${m.totalWeightKg.toStringAsFixed(0)} / ${m.maxPayloadKg.toStringAsFixed(0)} kg',
             style: TextStyle(
-                color: sc, fontSize: 11, fontWeight: FontWeight.w800),
+                color: sc, fontSize: 11, fontWeight: FontWeight.w800,),
           ),
         ),
         if (m.totalImporteEur > 0) ...[
@@ -281,7 +275,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
             ),
           ),
         ],
-      ]),
+      ],),
     );
   }
 
@@ -296,8 +290,8 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
         _tab('PRODUCTOS', 1, Icons.inventory_2_rounded),
         if (hasOverflow)
           _tab('NO CABEN (${m.overflowCount})', 2,
-              Icons.warning_amber_rounded),
-      ]),
+              Icons.warning_amber_rounded,),
+      ],),
     );
   }
 
@@ -327,13 +321,13 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
             children: [
               Icon(icon,
                   size: 13,
-                  color: sel ? activeColor : Colors.white30),
+                  color: sel ? activeColor : Colors.white30,),
               const SizedBox(width: 4),
               Text(label,
                   style: TextStyle(
                       color: sel ? activeColor : Colors.white30,
                       fontSize: 10,
-                      fontWeight: FontWeight.w700)),
+                      fontWeight: FontWeight.w700,),),
             ],
           ),
         ),
@@ -358,7 +352,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
           key,
           () => ClientSummary(
               code: key,
-              name: o.clientName.isNotEmpty ? o.clientName : key));
+              name: o.clientName.isNotEmpty ? o.clientName : key,),);
       final cs = clientMap[key]!;
       cs.orders.add(o);
       cs.totalWeight += o.units * o.weightPerUnit;
@@ -384,29 +378,29 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
             _summaryItem(
                 'Pedidos',
                 '${activeOrders.map((o) => o.orderNumber).toSet().length}',
-                AppTheme.neonBlue),
+                AppTheme.neonBlue,),
             _summaryItem(
-                'Clientes', '${clients.length}', AppTheme.neonPurple),
+                'Clientes', '${clients.length}', AppTheme.neonPurple,),
             _summaryItem('Bultos', '${m.placedCount}', AppTheme.neonGreen),
             _summaryItem(
-                'Peso', '${m.totalWeightKg.toStringAsFixed(0)} kg', Colors.amber),
+                'Peso', '${m.totalWeightKg.toStringAsFixed(0)} kg', Colors.amber,),
             _summaryItem('Valor', '${m.totalImporteEur.toStringAsFixed(0)}€', const Color(0xFF4CAF50)),
           ],
         ),
       ),
-      ...clients.map((c) => _clientRow(c)),
-    ]);
+      ...clients.map(_clientRow),
+    ],);
   }
 
   Widget _summaryItem(String label, String value, Color color) {
     return Column(mainAxisSize: MainAxisSize.min, children: [
       Text(value,
           style: TextStyle(
-              color: color, fontSize: 16, fontWeight: FontWeight.w800)),
+              color: color, fontSize: 16, fontWeight: FontWeight.w800,),),
       Text(label,
           style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.35), fontSize: 9)),
-    ]);
+              color: Colors.white.withValues(alpha: 0.35), fontSize: 9,),),
+    ],);
   }
 
   Widget _clientRow(ClientSummary c) {
@@ -427,17 +421,17 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
           backgroundColor: cc.withValues(alpha: 0.15),
           child: Text(c.name.isNotEmpty ? c.name[0] : '?',
               style: TextStyle(
-                  color: cc, fontSize: 12, fontWeight: FontWeight.w700)),
+                  color: cc, fontSize: 12, fontWeight: FontWeight.w700,),),
         ),
         title: Text(c.name,
             style: const TextStyle(
-                color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600,),
             maxLines: 1,
-            overflow: TextOverflow.ellipsis),
+            overflow: TextOverflow.ellipsis,),
         subtitle: Text(
             '${c.orders.length} lin · ${c.totalBoxes} bul · ${c.totalWeight.toStringAsFixed(0)} kg${c.totalImporteEur > 0 ? ' · ${c.totalImporteEur.toStringAsFixed(0)}€' : ''}',
             style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.35), fontSize: 10)),
+                color: Colors.white.withValues(alpha: 0.35), fontSize: 10,),),
         iconColor: Colors.white30,
         collapsedIconColor: Colors.white.withValues(alpha: 0.2),
         children: c.orders
@@ -458,7 +452,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                           style: TextStyle(
                               color: CargoColors.sizeColor(o.weightPerUnit),
                               fontSize: 8,
-                              fontWeight: FontWeight.w800),
+                              fontWeight: FontWeight.w800,),
                         ),
                       ),
                     ),
@@ -469,9 +463,9 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                               ? o.articleName
                               : o.articleCode,
                           style: const TextStyle(
-                              color: Colors.white70, fontSize: 11),
+                              color: Colors.white70, fontSize: 11,),
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis),
+                          overflow: TextOverflow.ellipsis,),
                     ),
                     Text(
                         o.boxes > 0
@@ -480,15 +474,15 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                         style: TextStyle(
                             color: AppTheme.neonGreen.withValues(alpha: 0.7),
                             fontSize: 10,
-                            fontWeight: FontWeight.w600)),
+                            fontWeight: FontWeight.w600,),),
                     const SizedBox(width: 8),
                     Text(
                         '${(o.units * o.weightPerUnit).toStringAsFixed(1)} kg',
                         style: TextStyle(
                             color: Colors.white.withValues(alpha: 0.3),
-                            fontSize: 10)),
-                  ]),
-                ))
+                            fontSize: 10,),),
+                  ],),
+                ),)
             .toList(),
       ),
     );
@@ -522,7 +516,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
               border: Border.all(
                   color: excluded
                       ? Colors.white10
-                      : cc.withValues(alpha: 0.15)),
+                      : cc.withValues(alpha: 0.15),),
             ),
             child: Row(children: [
               Container(
@@ -562,7 +556,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                       style: TextStyle(
                           color:
                               excluded ? Colors.white10 : Colors.white24,
-                          fontSize: 8),
+                          fontSize: 8,),
                     ),
                   ],
                 ),
@@ -579,14 +573,14 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                         color:
                             excluded ? Colors.white12 : AppTheme.neonGreen,
                         fontSize: 9,
-                        fontWeight: FontWeight.w600),
+                        fontWeight: FontWeight.w600,),
                   ),
                   if (weight > 0)
                     Text('${weight.toStringAsFixed(1)}kg',
                         style: TextStyle(
                             color: Colors.white.withValues(
-                                alpha: excluded ? 0.08 : 0.2),
-                            fontSize: 8)),
+                                alpha: excluded ? 0.08 : 0.2,),
+                            fontSize: 8,),),
                 ],
               ),
               const SizedBox(width: 4),
@@ -598,14 +592,14 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                   onChanged: (v) => v
                       ? widget.onRestoreOrder(i)
                       : widget.onRemoveOrder(i),
-                  activeColor: AppTheme.neonGreen,
+                  activeThumbColor: AppTheme.neonGreen,
                   activeTrackColor: AppTheme.neonGreen.withValues(alpha: 0.3),
                   inactiveThumbColor: Colors.white24,
                   inactiveTrackColor: Colors.white10,
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ),
-            ]),
+            ],),
           ),
         );
 
@@ -628,7 +622,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
               child: Text(
                 o.articleName.isNotEmpty ? o.articleName : o.articleCode,
                 style: const TextStyle(
-                    color: Colors.white, fontSize: 11),
+                    color: Colors.white, fontSize: 11,),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -649,7 +643,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
     if (overflow.isEmpty) {
       return const Center(
           child: Text('Todo cabe en el camion',
-              style: TextStyle(color: Colors.white30, fontSize: 13)));
+              style: TextStyle(color: Colors.white30, fontSize: 13),),);
     }
 
     final grouped = <String, OverflowGroup>{};
@@ -659,7 +653,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
           () => OverflowGroup(
               code: b.articleCode,
               name: b.label,
-              clientCode: b.clientCode));
+              clientCode: b.clientCode,),);
       grouped[b.articleCode]!.count++;
       grouped[b.articleCode]!.totalWeight += b.weight;
     }
@@ -689,7 +683,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
           children: [
             Row(children: [
               const Icon(Icons.warning_rounded,
-                  color: Colors.redAccent, size: 20),
+                  color: Colors.redAccent, size: 20,),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -697,10 +691,10 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                   style: const TextStyle(
                       color: Colors.redAccent,
                       fontSize: 13,
-                      fontWeight: FontWeight.w800),
+                      fontWeight: FontWeight.w800,),
                 ),
               ),
-            ]),
+            ],),
             const SizedBox(height: 4),
             Text(
               '${widget.result.metrics.overflowWeightKg.toStringAsFixed(0)} kg de exceso de peso',
@@ -714,7 +708,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
         ),
       ),
       ...groups.map((g) {
-        String client = g.clientCode;
+        var client = g.clientCode;
         for (final o in widget.allOrders) {
           if (o.clientCode == g.clientCode && o.clientName.isNotEmpty) {
             client = o.clientName;
@@ -741,7 +735,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                     style: const TextStyle(
                         color: Colors.redAccent,
                         fontSize: 12,
-                        fontWeight: FontWeight.w800)),
+                        fontWeight: FontWeight.w800,),),
               ),
             ),
             const SizedBox(width: 8),
@@ -753,11 +747,11 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                       style:
                           const TextStyle(color: Colors.white70, fontSize: 11),
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
+                      overflow: TextOverflow.ellipsis,),
                   Text(client,
                       style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.25),
-                          fontSize: 9)),
+                          fontSize: 9,),),
                 ],
               ),
             ),
@@ -765,17 +759,17 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                 style: const TextStyle(
                     color: Colors.redAccent,
                     fontSize: 11,
-                    fontWeight: FontWeight.w600)),
-          ]),
+                    fontWeight: FontWeight.w600,),),
+          ],),
         );
       }),
-    ]);
+    ],);
   }
 
   // ─── WIDGETS HELPERS ──────────────────────────────────────────────────
 
   Widget _progressBar(
-      String label, double used, double max, String unit, Color sc) {
+      String label, double used, double max, String unit, Color sc,) {
     final pct = max > 0 ? (used / max).clamp(0.0, 1.0) : 0.0;
     final c = pct > 0.9
         ? Colors.redAccent
@@ -787,7 +781,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
           width: 28,
           child: Text(label,
               style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.4), fontSize: 9))),
+                  color: Colors.white.withValues(alpha: 0.4), fontSize: 9,),),),
       Expanded(
         child: ClipRRect(
           borderRadius: BorderRadius.circular(3),
@@ -798,7 +792,7 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
               duration: const Duration(milliseconds: 600),
               curve: Curves.easeOutCubic,
               builder: (_, v, __) => LinearProgressIndicator(
-                  value: v, backgroundColor: Colors.white10, color: c),
+                  value: v, backgroundColor: Colors.white10, color: c,),
             ),
           ),
         ),
@@ -807,13 +801,13 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
       Text(
         '${used.toStringAsFixed(1)}/${max.toStringAsFixed(1)} $unit',
         style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.4), fontSize: 8),
+            color: Colors.white.withValues(alpha: 0.4), fontSize: 8,),
       ),
-    ]);
+    ],);
   }
 
   Widget _actionBtn(
-      String label, IconData icon, Color color, VoidCallback onTap) {
+      String label, IconData icon, Color color, VoidCallback onTap,) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -834,9 +828,9 @@ class _LoadPlannerPanelState extends State<LoadPlannerPanel> {
                   style: TextStyle(
                       color: color,
                       fontSize: 8,
-                      fontWeight: FontWeight.w700),
+                      fontWeight: FontWeight.w700,),
                   maxLines: 1,
-                  overflow: TextOverflow.ellipsis),
+                  overflow: TextOverflow.ellipsis,),
             ),
           ],
         ),

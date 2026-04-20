@@ -2,64 +2,16 @@
 /// ====================
 /// API client for order operations (COMERCIAL + JEFE_VENTAS roles)
 /// Includes product catalog, stock, pricing, and order CRUD
+library;
 
 import 'package:flutter/foundation.dart';
-import '../../../core/api/api_client.dart';
-import '../../../core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 
 // ─── MODELS ──────────────────────────────────────────────────
 
 /// Product in catalog list
 class Product {
-  final String code;
-  final String name;
-  final String brand;
-  final String family;
-  final String ean;
-  final double unitsPerBox;
-  final double unitsFraction;
-  final double unitsRetractil;
-  final String unitMeasure;
-  final double weight;
-  final double stockEnvases;
-  final double stockUnidades;
-  final double precioTarifa1;
-  final double precioMinimo;
-  final double precioCliente;
-  final int codigoTarifaCliente;
-  final double precioTarifaCliente;
-  // Extended fields from ART table
-  final String nameExt;
-  final String familyName;
-  final String prefamilia;
-  final String subFamily;
-  final String grupoGeneral;
-  final String tipoProducto;
-  final String claseArticulo;
-  final String categoria;
-  final String gama;
-  final String codigoIva;
-  final double pesoNeto;
-  final double volumen;
-  final String grados;
-  final String calibre;
-  final String observacion1;
-  final String observacion2;
-  final String presentacion;
-  final String formato;
-  final bool productoPesado;
-  final bool trazable;
-  final double unidadPale;
-  final double unidadFilaPale;
-  final String? fechaAlta;
-  final int anoBaja;
-  final int mesBaja;
-  // NEW: Purchase history & sales analytics
-  final String? unitType; // 'unidad' | 'caja' | 'ambos'
-  final bool hasPurchased;
-  final double salesThisYear;
-  final double salesPrevYear;
-  final double yoyChange;
 
   Product({
     required this.code,
@@ -170,6 +122,55 @@ class Product {
       yoyChange: _toDouble(json['yoyChange']),
     );
   }
+  final String code;
+  final String name;
+  final String brand;
+  final String family;
+  final String ean;
+  final double unitsPerBox;
+  final double unitsFraction;
+  final double unitsRetractil;
+  final String unitMeasure;
+  final double weight;
+  final double stockEnvases;
+  final double stockUnidades;
+  final double precioTarifa1;
+  final double precioMinimo;
+  final double precioCliente;
+  final int codigoTarifaCliente;
+  final double precioTarifaCliente;
+  // Extended fields from ART table
+  final String nameExt;
+  final String familyName;
+  final String prefamilia;
+  final String subFamily;
+  final String grupoGeneral;
+  final String tipoProducto;
+  final String claseArticulo;
+  final String categoria;
+  final String gama;
+  final String codigoIva;
+  final double pesoNeto;
+  final double volumen;
+  final String grados;
+  final String calibre;
+  final String observacion1;
+  final String observacion2;
+  final String presentacion;
+  final String formato;
+  final bool productoPesado;
+  final bool trazable;
+  final double unidadPale;
+  final double unidadFilaPale;
+  final String? fechaAlta;
+  final int anoBaja;
+  final int mesBaja;
+  // NEW: Purchase history & sales analytics
+  final String? unitType; // 'unidad' | 'caja' | 'ambos'
+  final bool hasPurchased;
+  final double salesThisYear;
+  final double salesPrevYear;
+  final double yoyChange;
 
   /// Best available price (client > tariff), never below minimum price.
   double get bestPrice {
@@ -403,10 +404,10 @@ class Product {
     // Legacy display: If U/R > 0 and U/C = 1, show Neto U/R logic
     if (netoURPrice > 0) {
       final dUnit = displayUnit;
-      String shortLabel = 'ud';
-      if (dUnit == 'BANDEJAS')
+      var shortLabel = 'ud';
+      if (dUnit == 'BANDEJAS') {
         shortLabel = 'bandeja';
-      else if (dUnit == 'ESTUCHES')
+      } else if (dUnit == 'ESTUCHES')
         shortLabel = 'estuche';
       else if (dUnit == 'PIEZAS') shortLabel = 'pieza';
       return 'Neto U/R: ${netoURPrice.toStringAsFixed(decimals)} €/$shortLabel';
@@ -505,10 +506,6 @@ class Product {
 
 /// Tariff entry for product detail
 class TariffEntry {
-  final int code;
-  final String description;
-  final double price;
-  final double precioUnitario;
 
   TariffEntry({
     required this.code,
@@ -525,20 +522,20 @@ class TariffEntry {
       precioUnitario: _toDouble(json['precioUnitario']),
     );
   }
+  final int code;
+  final String description;
+  final double price;
+  final double precioUnitario;
 }
 
 /// Stock entry per warehouse
 class StockEntry {
-  final int almacenCode;
-  final String almacenName;
-  final double envases;
-  final double unidades;
 
   StockEntry(
       {required this.almacenCode,
       required this.almacenName,
       required this.envases,
-      required this.unidades});
+      required this.unidades,});
 
   factory StockEntry.fromJson(Map<String, dynamic> json) {
     final code = json['almacenCode'] ?? json['almacen'];
@@ -550,24 +547,14 @@ class StockEntry {
       unidades: _toDouble(json['unidades']),
     );
   }
+  final int almacenCode;
+  final String almacenName;
+  final double envases;
+  final double unidades;
 }
 
 /// Promotion item from backend
 class PromotionItem {
-  final String code;
-  final String name;
-  final String promoDesc;
-  final String promoType;
-  final String promoCode;
-  final double promoPrice;
-  final double regularPrice;
-  final String dateFrom;
-  final String dateTo;
-  final double stockEnvases;
-  final double stockUnidades;
-  final double minQty;
-  final double giftQty;
-  final bool cumulative;
 
   PromotionItem({
     required this.code,
@@ -586,18 +573,9 @@ class PromotionItem {
     this.cumulative = false,
   });
 
-  bool get hasSaving => regularPrice > 0 && promoPrice < regularPrice;
-  double get savingPct =>
-      regularPrice > 0 ? ((regularPrice - promoPrice) / regularPrice * 100) : 0;
-  bool get hasStock => stockEnvases > 0 || stockUnidades > 0;
-  bool get isGift => promoType == 'GIFT';
-  String get giftLabel => minQty > 0 && giftQty > 0
-      ? '${minQty.toInt()}+${giftQty.toInt()} gratis'
-      : promoDesc;
-
   factory PromotionItem.fromJson(Map<String, dynamic> json) {
-    String dateFrom = (json['dateFrom'] ?? '').toString().trim();
-    String dateTo = (json['dateTo'] ?? '').toString().trim();
+    var dateFrom = (json['dateFrom'] ?? '').toString().trim();
+    var dateTo = (json['dateTo'] ?? '').toString().trim();
 
     if (dateFrom.isEmpty && json['dayFrom'] != null) {
       final d = (json['dayFrom'] ?? '').toString().trim().padLeft(2, '0');
@@ -634,15 +612,33 @@ class PromotionItem {
       cumulative: json['cumulative'] == true,
     );
   }
+  final String code;
+  final String name;
+  final String promoDesc;
+  final String promoType;
+  final String promoCode;
+  final double promoPrice;
+  final double regularPrice;
+  final String dateFrom;
+  final String dateTo;
+  final double stockEnvases;
+  final double stockUnidades;
+  final double minQty;
+  final double giftQty;
+  final bool cumulative;
+
+  bool get hasSaving => regularPrice > 0 && promoPrice < regularPrice;
+  double get savingPct =>
+      regularPrice > 0 ? ((regularPrice - promoPrice) / regularPrice * 100) : 0;
+  bool get hasStock => stockEnvases > 0 || stockUnidades > 0;
+  bool get isGift => promoType == 'GIFT';
+  String get giftLabel => minQty > 0 && giftQty > 0
+      ? '${minQty.toInt()}+${giftQty.toInt()} gratis'
+      : promoDesc;
 }
 
 /// Full product detail
 class ProductDetail {
-  final Product product;
-  final List<TariffEntry> tariffs;
-  final List<StockEntry> stockByWarehouse;
-  final double clientPrice;
-  final int codigoTarifaCliente;
 
   ProductDetail({
     required this.product,
@@ -677,34 +673,18 @@ class ProductDetail {
       clientPrice: _toDouble(cPrice),
     );
   }
+  final Product product;
+  final List<TariffEntry> tariffs;
+  final List<StockEntry> stockByWarehouse;
+  final double clientPrice;
+  final int codigoTarifaCliente;
 }
 
 /// Order line (for cart and saved orders)
-class OrderLine {
-  int? id;
-  final String codigoArticulo;
-  final String descripcion;
-  double cantidadEnvases;
-  double cantidadUnidades;
-  String unidadMedida;
-  double unidadesCaja;
-  double precioVenta;
-  double precioCosto;
-  double precioTarifa;
-  double precioTarifaCliente;
-  double precioMinimo;
-  double importeVenta;
-  double importeCosto;
-  double importeMargen;
-  double porcentajeMargen;
-  double ivaRate; // e.g. 0.21, 0.10, 0.04, 0.0
-  double unidadesFraccion; // Support for dual-field unit logic
-  String claseLinea; // 'VT' = Venta, 'SC' = Sin Cargo
+class OrderLine { // 'VT' = Venta, 'SC' = Sin Cargo
 
   OrderLine({
-    this.id,
-    required this.codigoArticulo,
-    required this.descripcion,
+    required this.codigoArticulo, required this.descripcion, this.id,
     this.cantidadEnvases = 0,
     this.cantidadUnidades = 0,
     this.unidadMedida = 'CAJAS',
@@ -751,13 +731,32 @@ class OrderLine {
       porcentajeMargen:
           _toDouble(json['porcentajeMargen'] ?? json['PORCENTAJEMARGEN']),
       ivaRate: _toDouble(json['ivaRate'] ?? json['IVARATE'] ?? json['TIPOIVA'],
-          fallback: 0.21),
+          fallback: 0.21,),
       unidadesFraccion:
           _toDouble(json['unidadesFraccion'] ?? json['UNIDADESFRACCION']),
       claseLinea:
           (json['claseLinea'] ?? json['CLASELINEA'] ?? 'VT').toString().trim(),
     );
   }
+  int? id;
+  final String codigoArticulo;
+  final String descripcion;
+  double cantidadEnvases;
+  double cantidadUnidades;
+  String unidadMedida;
+  double unidadesCaja;
+  double precioVenta;
+  double precioCosto;
+  double precioTarifa;
+  double precioTarifaCliente;
+  double precioMinimo;
+  double importeVenta;
+  double importeCosto;
+  double importeMargen;
+  double porcentajeMargen;
+  double ivaRate; // e.g. 0.21, 0.10, 0.04, 0.0
+  double unidadesFraccion; // Support for dual-field unit logic
+  String claseLinea;
 
   Map<String, dynamic> toJson() => {
         'codigoArticulo': codigoArticulo,
@@ -828,36 +827,13 @@ class OrderLine {
         double.parse((importeVenta - importeCosto).toStringAsFixed(2));
     porcentajeMargen = importeVenta > 0
         ? double.parse(
-            ((importeMargen / importeVenta) * 100).toStringAsFixed(2))
+            ((importeMargen / importeVenta) * 100).toStringAsFixed(2),)
         : 0;
   }
 }
 
 /// Order summary (list item)
 class OrderSummary {
-  final int id;
-  final int numeroPedido;
-  final String clienteCode;
-  final String clienteName;
-  final String vendedorCode;
-  final String fecha;
-  final String estado;
-  final String tipoVenta;
-  final double total;
-  final double margen;
-  final int lineCount;
-  // New fields
-  final String serie;
-  final int ejercicio;
-  final String numeroPedidoFormatted;
-  final String fechaFormatted;
-  final double base;
-  final double iva;
-  final double costo;
-  final String observaciones;
-  final int tarifa;
-  final String formaPago;
-  final String origen;
 
   OrderSummary({
     required this.id,
@@ -910,21 +886,33 @@ class OrderSummary {
       origen: (json['origen'] ?? 'A').toString().trim(),
     );
   }
+  final int id;
+  final int numeroPedido;
+  final String clienteCode;
+  final String clienteName;
+  final String vendedorCode;
+  final String fecha;
+  final String estado;
+  final String tipoVenta;
+  final double total;
+  final double margen;
+  final int lineCount;
+  // New fields
+  final String serie;
+  final int ejercicio;
+  final String numeroPedidoFormatted;
+  final String fechaFormatted;
+  final double base;
+  final double iva;
+  final double costo;
+  final String observaciones;
+  final int tarifa;
+  final String formaPago;
+  final String origen;
 }
 
 /// Order statistics
 class OrderStats {
-  final int totalOrders;
-  final double totalAmount;
-  final double totalBase;
-  final double totalIva;
-  final double avgMargin;
-  final double avgTicket;
-  final Map<String, int> byStatus;
-  final List<Map<String, dynamic>> dailyTrend;
-  final List<Map<String, dynamic>> topClients;
-  final double trendOrdersPct;
-  final double trendAmountPct;
 
   OrderStats({
     required this.totalOrders,
@@ -952,7 +940,7 @@ class OrderStats {
       avgTicket: _toDouble(json['avgTicket']),
       byStatus: (json['byStatus'] as Map? ?? {}).map(
         (k, v) => MapEntry(
-            k.toString(), v is int ? v : int.tryParse(v.toString()) ?? 0),
+            k.toString(), v is int ? v : int.tryParse(v.toString()) ?? 0,),
       ),
       dailyTrend: (json['dailyTrend'] as List? ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map<dynamic, dynamic>))
@@ -964,12 +952,21 @@ class OrderStats {
       trendAmountPct: trendAmountPct,
     );
   }
+  final int totalOrders;
+  final double totalAmount;
+  final double totalBase;
+  final double totalIva;
+  final double avgMargin;
+  final double avgTicket;
+  final Map<String, int> byStatus;
+  final List<Map<String, dynamic>> dailyTrend;
+  final List<Map<String, dynamic>> topClients;
+  final double trendOrdersPct;
+  final double trendAmountPct;
 }
 
 /// Order detail (header + lines)
 class OrderDetail {
-  final OrderSummary header;
-  final List<OrderLine> lines;
 
   OrderDetail({required this.header, required this.lines});
 
@@ -982,15 +979,12 @@ class OrderDetail {
           .toList(),
     );
   }
+  final OrderSummary header;
+  final List<OrderLine> lines;
 }
 
 /// Recommendation item
 class Recommendation {
-  final String code;
-  final String name;
-  final int frequency;
-  final double totalUnits;
-  final int clientCount;
 
   Recommendation({
     required this.code,
@@ -1013,6 +1007,11 @@ class Recommendation {
           : int.tryParse(json['clientCount']?.toString() ?? '0') ?? 0,
     );
   }
+  final String code;
+  final String name;
+  final int frequency;
+  final double totalUnits;
+  final int clientCount;
 }
 
 // ─── SERVICE ──────────────────────────────────────────────────
@@ -1021,7 +1020,7 @@ class PedidosService {
   static const _base = '/pedidos';
 
   static Map<String, dynamic> _normalizeOrderResponse(
-      Map<String, dynamic> response) {
+      Map<String, dynamic> response,) {
     final normalized = Map<String, dynamic>.from(response);
     final orderRaw = response['order'];
     final order = orderRaw is Map ? Map<String, dynamic>.from(orderRaw) : null;
@@ -1054,8 +1053,9 @@ class PedidosService {
       'offset': offset.toString(),
     };
     if (search != null && search.isNotEmpty) params['search'] = search;
-    if (clientCode != null && clientCode.isNotEmpty)
+    if (clientCode != null && clientCode.isNotEmpty) {
       params['clientCode'] = clientCode;
+    }
     if (family != null && family.isNotEmpty) params['family'] = family;
     if (marca != null && marca.isNotEmpty) params['marca'] = marca;
 
@@ -1080,7 +1080,7 @@ class PedidosService {
   }
 
   static Future<ProductDetail> getProductDetail(String code,
-      {String? clientCode}) async {
+      {String? clientCode,}) async {
     final trimmedCode = code.trim();
     if (trimmedCode.isEmpty) {
       throw Exception('Product code is required');
@@ -1160,11 +1160,10 @@ class PedidosService {
     required String clientCode,
     required String clientName,
     required String vendedorCode,
-    String tipoVenta = 'CC',
+    required List<OrderLine> lines, String tipoVenta = 'CC',
     int almacen = 1,
     int tarifa = 1,
     String observaciones = '',
-    required List<OrderLine> lines,
   }) async {
     try {
       final response = await ApiClient.post('$_base/create', {
@@ -1301,7 +1300,7 @@ class PedidosService {
   }
 
   static Future<void> updateLine(
-      int orderId, int lineId, Map<String, dynamic> data) async {
+      int orderId, int lineId, Map<String, dynamic> data,) async {
     try {
       await ApiClient.put('$_base/$orderId/lines/$lineId', data: data);
       CacheService.invalidate('pedidos:order:$orderId');
@@ -1324,10 +1323,10 @@ class PedidosService {
   }
 
   static Future<Map<String, dynamic>> confirmOrder(
-      int orderId, String saleType) async {
+      int orderId, String saleType,) async {
     try {
       final response = await ApiClient.put('$_base/$orderId/confirm',
-          data: {'saleType': saleType});
+          data: {'saleType': saleType},);
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
       return _normalizeOrderResponse(response);
@@ -1361,10 +1360,10 @@ class PedidosService {
   }
 
   static Future<Map<String, dynamic>> updateOrderStatus(
-      int orderId, String status) async {
+      int orderId, String status,) async {
     try {
       final response = await ApiClient.put('$_base/$orderId/status',
-          data: {'status': status});
+          data: {'status': status},);
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
       return response;
@@ -1405,7 +1404,7 @@ class PedidosService {
 
   // ── Client Balance ──
   static Future<Map<String, dynamic>> getClientBalance(
-      String clientCode) async {
+      String clientCode,) async {
     try {
       final response = await ApiClient.get(
         '$_base/client-balance/$clientCode',
@@ -1437,7 +1436,7 @@ class PedidosService {
   // ── Complementary Products ──
   static Future<List<Map<String, dynamic>>> getComplementaryProducts(
       List<String> productCodes,
-      {String? clientCode}) async {
+      {String? clientCode,}) async {
     try {
       final response = await ApiClient.post('$_base/complementary', {
         'productCodes': productCodes,

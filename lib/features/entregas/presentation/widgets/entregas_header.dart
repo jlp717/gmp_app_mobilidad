@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../entregas/providers/entregas_provider.dart';
-import '../../../../core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 
 /// Header con resumen de entregas del día
 class EntregasHeader extends ConsumerWidget {
@@ -33,7 +33,7 @@ class EntregasHeader extends ConsumerWidget {
           Row(
             children: [
               Icon(Icons.local_shipping,
-                         color: Colors.white, size: Responsive.iconSize(context, phone: 24, desktop: 28)),
+                         color: Colors.white, size: Responsive.iconSize(context, phone: 24, desktop: 28),),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -171,7 +171,7 @@ class EntregasHeader extends ConsumerWidget {
       child: Container(
         padding: EdgeInsets.symmetric(
             vertical: 12 * Responsive.landscapeScale(context),
-            horizontal: 8 * Responsive.landscapeScale(context)
+            horizontal: 8 * Responsive.landscapeScale(context),
         ),
         decoration: BoxDecoration(
           color: Colors.white.withOpacity(0.15),

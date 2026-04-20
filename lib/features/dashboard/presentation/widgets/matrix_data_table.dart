@@ -1,17 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 
 /// Node for Hierarchical Data
 class MatrixNode {
-  final String id;
-  final String name;
-  final String type; // 'vendor', 'client', 'product', 'family'
-  final double sales;
-  final double margin;
-  final double growth;
-  final List<MatrixNode> children;
-  bool isExpanded;
 
   MatrixNode({
     required this.id,
@@ -23,19 +15,27 @@ class MatrixNode {
     this.children = const [],
     this.isExpanded = false,
   });
+  final String id;
+  final String name;
+  final String type; // 'vendor', 'client', 'product', 'family'
+  final double sales;
+  final double margin;
+  final double growth;
+  final List<MatrixNode> children;
+  bool isExpanded;
   
   // Calculate accumulated margin (self + all children recursively)
   double get accumulatedMargin {
-    double acc = margin;
-    for (var child in children) {
+    var acc = margin;
+    for (final child in children) {
       acc += child.accumulatedMargin;
     }
     return acc;
   }
   
   double get accumulatedSales {
-    double acc = sales;
-    for (var child in children) {
+    var acc = sales;
+    for (final child in children) {
       acc += child.accumulatedSales;
     }
     return acc;
@@ -45,20 +45,17 @@ class MatrixNode {
 /// Tree-style expandable data table
 /// Children expand WITHIN the same table, indented
 class MatrixDataTable extends StatefulWidget {
+
+  const MatrixDataTable({
+    required this.data, required this.periods, required this.onRowTap, super.key,
+    this.onNodeTap,
+    this.selectedId,
+  });
   final List<MatrixNode> data;
   final List<String> periods;
   final Function(String, String) onRowTap;
   final Function(MatrixNode)? onNodeTap;
   final String? selectedId;
-
-  const MatrixDataTable({
-    super.key,
-    required this.data,
-    required this.periods,
-    required this.onRowTap,
-    this.onNodeTap,
-    this.selectedId,
-  });
 
   @override
   State<MatrixDataTable> createState() => _MatrixDataTableState();
@@ -69,9 +66,9 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
   Widget build(BuildContext context) {
     if (widget.data.isEmpty) {
       return const Center(child: Padding(
-        padding: EdgeInsets.all(32.0),
+        padding: EdgeInsets.all(32),
         child: Text('No hay datos para esta selección', style: TextStyle(color: Colors.white30)),
-      ));
+      ),);
     }
 
     return Card(
@@ -104,8 +101,8 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
                 border: Border(bottom: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2))),
                 color: Colors.white.withOpacity(0.02),
               ),
-              child: Row(
-                children: const [
+              child: const Row(
+                children: [
                   Expanded(flex: 5, child: Text('ITEM', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
                   Expanded(flex: 3, child: Text('VENTA', textAlign: TextAlign.right, style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
                   Expanded(flex: 2, child: Text('MARG %', textAlign: TextAlign.right, style: TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1))),
@@ -135,7 +132,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
   Widget _buildTotalRow() {
     double totalSales = 0;
     double totalMargin = 0;
-    for (var node in widget.data) {
+    for (final node in widget.data) {
       totalSales += node.sales;
       totalMargin += node.margin;
     }
@@ -150,10 +147,10 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
       ),
       child: Row(
         children: [
-          Expanded(
+          const Expanded(
             flex: 5,
             child: Row(
-              children: const [
+              children: [
                 Icon(Icons.summarize, color: Colors.orange, size: 16),
                 SizedBox(width: 6),
                 Text('TOTAL', style: TextStyle(color: Colors.orange, fontSize: 13, fontWeight: FontWeight.bold)),
@@ -200,7 +197,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
     
     // If expanded, add children recursively
     if (node.isExpanded && node.children.isNotEmpty) {
-      for (var child in node.children) {
+      for (final child in node.children) {
         widgets.add(_buildNodeWithChildren(child, level + 1));
       }
     }
@@ -212,8 +209,8 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
   }
 
   Widget _buildNodeRow(MatrixNode node, int level) {
-    final double marginPercent = node.sales > 0 ? (node.margin / node.sales) * 100 : 0.0;
-    final Color marginColor = marginPercent > 20 ? AppTheme.neonGreen : (marginPercent > 10 ? Colors.amber : AppTheme.error);
+    final marginPercent = node.sales > 0 ? (node.margin / node.sales) * 100 : 0.0;
+    final marginColor = marginPercent > 20 ? AppTheme.neonGreen : (marginPercent > 10 ? Colors.amber : AppTheme.error);
     
     // Level colors for visual hierarchy
     final levelColors = [AppTheme.neonBlue, AppTheme.neonPurple, AppTheme.neonGreen, Colors.teal, Colors.pink];
@@ -224,8 +221,8 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
     final accSales = node.accumulatedSales;
     final accMarginPct = accSales > 0 ? (accMargin / accSales) * 100 : 0.0;
     
-    final bool hasChildren = node.children.isNotEmpty;
-    final bool isSelected = widget.selectedId == node.id;
+    final hasChildren = node.children.isNotEmpty;
+    final isSelected = widget.selectedId == node.id;
 
     return InkWell(
       onTap: () {
@@ -335,10 +332,10 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               flex: 2,
               child: Builder(
                 builder: (context) {
-                  final Color accMarginColor = accMarginPct > 20 ? AppTheme.neonGreen : (accMarginPct > 10 ? Colors.amber : AppTheme.error);
+                  final accMarginColor = accMarginPct > 20 ? AppTheme.neonGreen : (accMarginPct > 10 ? Colors.amber : AppTheme.error);
                   // Show margin% for ALL nodes, with bold for parents
                   final displayPct = hasChildren ? accMarginPct : marginPercent;
-                  final Color displayColor = hasChildren ? accMarginColor : marginColor;
+                  final displayColor = hasChildren ? accMarginColor : marginColor;
                   return Text(
                     '${displayPct.toStringAsFixed(1)}%',
                     textAlign: TextAlign.right,

@@ -4,6 +4,17 @@ import 'package:flutter/material.dart';
 /// Si la imagen no está disponible (ej. 404), muestra un gradiente con el código del producto
 /// o sus iniciales, eliminando el fallo visual y manteniendo la UX.
 class SmartProductImage extends StatelessWidget {
+
+  const SmartProductImage({
+    required this.imageUrl, required this.productCode, super.key,
+    this.productName,
+    this.width = double.infinity,
+    this.height = double.infinity,
+    this.fit = BoxFit.cover,
+    this.borderRadius,
+    this.showCodeOnFallback = true,
+    this.headers,
+  });
   final String imageUrl;
   final String productCode;
   final String? productName;
@@ -13,19 +24,6 @@ class SmartProductImage extends StatelessWidget {
   final BorderRadiusGeometry? borderRadius;
   final bool showCodeOnFallback;
   final Map<String, String>? headers;
-
-  const SmartProductImage({
-    super.key,
-    required this.imageUrl,
-    required this.productCode,
-    this.productName,
-    this.width = double.infinity,
-    this.height = double.infinity,
-    this.fit = BoxFit.cover,
-    this.borderRadius,
-    this.showCodeOnFallback = true,
-    this.headers,
-  });
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +79,7 @@ class SmartProductImage extends StatelessWidget {
       height: height,
       child: ClipRRect(
         borderRadius: borderRadius ?? BorderRadius.circular(8),
-        child: Container(
+        child: ColoredBox(
           color: Colors.white.withOpacity(0.05),
           child: Center(
             child: Column(

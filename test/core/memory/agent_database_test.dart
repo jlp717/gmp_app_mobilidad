@@ -45,7 +45,7 @@ void main() {
     test('should find similar vectors', () {
       // Arrange
       final queryVector = [0.95, 0.05, 0.0, 0.0];
-      
+
       vectorStore.insert(
         id: 'similar1',
         vector: [1.0, 0.0, 0.0, 0.0],
@@ -81,7 +81,7 @@ void main() {
         vector: [1.0, 0.0, 0.0],
         metadata: {'temp': true},
       );
-      
+
       expect(vectorStore.size, 1);
 
       // Act
@@ -97,7 +97,7 @@ void main() {
       // Arrange
       vectorStore.insert(id: 'item1', vector: [1.0, 0.0]);
       vectorStore.insert(id: 'item2', vector: [0.0, 1.0]);
-      
+
       expect(vectorStore.size, 2);
 
       // Act
@@ -158,7 +158,10 @@ void main() {
         operationType: 'create',
         entityType: 'pedido',
         entityId: 'order_456',
-        data: {'items': ['item1', 'item2'], 'total': 100.0},
+        data: {
+          'items': ['item1', 'item2'],
+          'total': 100.0
+        },
         createdAt: DateTime(2024),
         retryCount: 2,
       );
@@ -192,7 +195,7 @@ void main() {
 
   group('MemoryType Tests', () {
     test('should have correct number of types', () {
-      expect(MemoryType.values.length, 7);
+      expect(MemoryType.values.length, 8);
       expect(MemoryType.values[0], MemoryType.general);
       expect(MemoryType.values[1], MemoryType.state);
       expect(MemoryType.values[2], MemoryType.semantic);
@@ -200,6 +203,7 @@ void main() {
       expect(MemoryType.values[4], MemoryType.cache);
       expect(MemoryType.values[5], MemoryType.config);
       expect(MemoryType.values[6], MemoryType.user);
+      expect(MemoryType.values[7], MemoryType.entity);
     });
   });
 
@@ -220,7 +224,7 @@ void main() {
       expect(stats.syncQueueCount, 5);
       expect(stats.vectorCount, 200);
       expect(stats.workingMemoryCount, 25);
-      
+
       expect(
         stats.toString(),
         contains('persistent: 100'),

@@ -1,7 +1,8 @@
-import 'package:flutter/material.dart';
 import 'dart:math' as math;
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
+
+import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// Holographic KPI Dashboard with futuristic design
 /// Features:
@@ -10,6 +11,14 @@ import '../../../../core/utils/responsive.dart';
 /// - Gamification badges and streaks
 /// - AI suggestion banner (optional)
 class HolographicKpiDashboard extends StatefulWidget {
+  
+
+
+  const HolographicKpiDashboard({
+    required this.totalEntregas, required this.entregasCompletadas, required this.montoACobrar, required this.montoOpcional, required this.totalMonto, super.key,
+    this.montoCobrado = 0,
+    this.isLoading = false,
+  });
   final int totalEntregas;
   final int entregasCompletadas;
   final double montoACobrar;
@@ -17,19 +26,6 @@ class HolographicKpiDashboard extends StatefulWidget {
   final double totalMonto;
   final double montoCobrado;
   final bool isLoading;
-  
-
-
-  const HolographicKpiDashboard({
-    super.key,
-    required this.totalEntregas,
-    required this.entregasCompletadas,
-    required this.montoACobrar,
-    required this.montoOpcional,
-    required this.totalMonto,
-    this.montoCobrado = 0,
-    this.isLoading = false,
-  });
 
   @override
   State<HolographicKpiDashboard> createState() => _HolographicKpiDashboardState();
@@ -66,7 +62,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
       vsync: this,
     )..repeat(reverse: true);
     
-    _pulseAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+    _pulseAnimation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
     
@@ -112,7 +108,6 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: AppTheme.neonBlue.withOpacity(0.2),
-          width: 1,
         ),
       ),
       child: widget.isLoading ? _buildLoadingState() : _buildContent(),
@@ -392,12 +387,6 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
 }
 
 class _HoloRingPainter extends CustomPainter {
-  final double progress;
-  final double scannerAngle;
-  final Color backgroundColor;
-  final Color progressColor;
-  final Color glowColor;
-  final double strokeWidth;
 
   _HoloRingPainter({
     required this.progress,
@@ -407,6 +396,12 @@ class _HoloRingPainter extends CustomPainter {
     required this.glowColor,
     this.strokeWidth = 6.0,
   });
+  final double progress;
+  final double scannerAngle;
+  final Color backgroundColor;
+  final Color progressColor;
+  final Color glowColor;
+  final double strokeWidth;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -427,7 +422,7 @@ class _HoloRingPainter extends CustomPainter {
       ..shader = SweepGradient(
         startAngle: -math.pi / 2,
         endAngle: 3 * math.pi / 2,
-        colors: [this.progressColor, this.glowColor, this.progressColor],
+        colors: [progressColor, glowColor, progressColor],
         stops: const [0.0, 0.5, 1.0],
       ).createShader(Rect.fromCircle(center: center, radius: radius))
       ..style = PaintingStyle.stroke
@@ -437,7 +432,7 @@ class _HoloRingPainter extends CustomPainter {
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
       -math.pi / 2,
-      2 * math.pi * this.progress.clamp(0.0, 1.0),
+      2 * math.pi * progress.clamp(0.0, 1.0),
       false,
       progressPaint,
     );
@@ -445,11 +440,11 @@ class _HoloRingPainter extends CustomPainter {
     // Scanner effect (rotating highlight)
     final scannerPaint = Paint()
       ..shader = SweepGradient(
-        startAngle: this.scannerAngle - 0.3,
-        endAngle: this.scannerAngle + 0.3,
+        startAngle: scannerAngle - 0.3,
+        endAngle: scannerAngle + 0.3,
         colors: [
           Colors.transparent,
-          this.glowColor.withOpacity(0.6),
+          glowColor.withOpacity(0.6),
           Colors.transparent,
         ],
         stops: const [0.0, 0.5, 1.0],
@@ -462,7 +457,7 @@ class _HoloRingPainter extends CustomPainter {
     
     // Outer glow
     final glowPaint = Paint()
-      ..color = this.progressColor.withOpacity(0.2)
+      ..color = progressColor.withOpacity(0.2)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 4);
@@ -472,7 +467,7 @@ class _HoloRingPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _HoloRingPainter oldDelegate) {
-    return this.progress != oldDelegate.progress ||
-        this.scannerAngle != oldDelegate.scannerAngle;
+    return progress != oldDelegate.progress ||
+        scannerAngle != oldDelegate.scannerAngle;
   }
 }

@@ -1,19 +1,19 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/auth/presentation/pages/login_page.dart';
+import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/main_shell.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
-
-import 'core/api/api_client.dart';
-import 'core/cache/cache_service.dart';
-import 'core/providers/auth_notifier.dart';
-import 'core/services/secure_storage.dart';
-import 'core/theme/app_theme.dart';
-import 'features/auth/presentation/pages/login_page.dart';
-import 'features/dashboard/presentation/pages/main_shell.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,18 +34,18 @@ void main() async {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.warning_amber_rounded,
-                    size: 48, color: Colors.orange.shade300),
+                    size: 48, color: Colors.orange.shade300,),
                 const SizedBox(height: 16),
                 const Text('Se ha producido un error',
-                    style: TextStyle(color: Colors.white, fontSize: 16)),
+                    style: TextStyle(color: Colors.white, fontSize: 16),),
                 const SizedBox(height: 8),
                 Text('Error: ${details.exceptionAsString()}',
                     style:
-                        const TextStyle(color: Colors.white70, fontSize: 12)),
+                        const TextStyle(color: Colors.white70, fontSize: 12),),
                 const SizedBox(height: 8),
                 const Text('Vuelve atrás o reinicia la app',
                     style:
-                        TextStyle(color: Colors.white70, fontSize: 13)),
+                        TextStyle(color: Colors.white70, fontSize: 13),),
               ],
             ),
           ),
@@ -59,13 +59,13 @@ void main() async {
     debugPrint('[MAIN] ✅ Cache initialized');
     await ApiClient.initialize();
     debugPrint(
-        '[MAIN] ✅ API initialized: ${ApiClient.dio.options.baseUrl}');
+        '[MAIN] ✅ API initialized: ${ApiClient.dio.options.baseUrl}',);
   } catch (e, stack) {
     debugPrint('[MAIN] ❌ Initialization error: $e');
     debugPrint('[MAIN] Stack: $stack');
   }
 
-  await initializeDateFormatting('es', null);
+  await initializeDateFormatting('es');
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.landscapeLeft,
@@ -129,7 +129,7 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
       final authState = ref.read(authProvider);
       
       // If user was authenticated, verify token still exists in storage
-      if (authState.value?.isAuthenticated == true) {
+      if (authState.value?.isAuthenticated ?? false) {
         final token = await SecureStorage.readSecureData('user_token');
         
         if (token == null || token.isEmpty) {

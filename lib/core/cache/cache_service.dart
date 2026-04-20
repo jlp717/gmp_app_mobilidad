@@ -1,7 +1,8 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 
 /// Cache service using Hive for persistent local storage
 /// Implements TTL-based caching for API responses
@@ -57,15 +58,15 @@ class CacheService {
     final encryptionCipher = HiveAesCipher(key);
 
     _cacheBox = await Hive.openBox<dynamic>(_cacheBoxName,
-        encryptionCipher: encryptionCipher);
+        encryptionCipher: encryptionCipher,);
     _metadataBox = await Hive.openBox<dynamic>(_metadataBoxName,
-        encryptionCipher: encryptionCipher);
+        encryptionCipher: encryptionCipher,);
     debugPrint(
-        '[CacheService] Initialized with ${_cacheBox?.length ?? 0} cached items (encrypted)');
+        '[CacheService] Initialized with ${_cacheBox?.length ?? 0} cached items (encrypted)',);
   }
 
   static List<int> _generateEncryptionKey() {
-    final seed = 'gmp_app_cache_encryption_key_v1';
+    const seed = 'gmp_app_cache_encryption_key_v1';
     return sha256.convert(utf8.encode(seed)).bytes;
   }
 
@@ -114,7 +115,7 @@ class CacheService {
       await _cacheBox?.put(safeKey, value);
       await _metadataBox?.put('${safeKey}_expiry', expiryTimestamp);
       debugPrint(
-          '[CacheService] Cache SET for key: $key (TTL: ${effectiveTTL.inMinutes}min)');
+          '[CacheService] Cache SET for key: $key (TTL: ${effectiveTTL.inMinutes}min)',);
     } catch (e) {
       debugPrint('[CacheService] Error setting cache: $e');
     }
@@ -140,7 +141,7 @@ class CacheService {
     final keysToDelete = _cacheBox!.keys
         .where((k) =>
             k.toString().startsWith(prefix) ||
-            k.toString().startsWith('hashed_$prefix'))
+            k.toString().startsWith('hashed_$prefix'),)
         .toList();
 
     for (final key in keysToDelete) {
@@ -149,7 +150,7 @@ class CacheService {
     }
 
     debugPrint(
-        '[CacheService] Invalidated ${keysToDelete.length} entries with prefix: $prefix');
+        '[CacheService] Invalidated ${keysToDelete.length} entries with prefix: $prefix',);
   }
 
   /// Clear all cached data

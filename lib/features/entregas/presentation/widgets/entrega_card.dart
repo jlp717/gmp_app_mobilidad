@@ -1,17 +1,16 @@
 import 'package:flutter/material.dart';
-import '../../providers/entregas_provider.dart';
-import '../../../../core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 
 /// Tarjeta de albarán en la lista de entregas
 class EntregaCard extends StatelessWidget {
-  final AlbaranEntrega albaran;
-  final VoidCallback? onTap;
 
   const EntregaCard({
-    super.key,
-    required this.albaran,
+    required this.albaran, super.key,
     this.onTap,
   });
+  final AlbaranEntrega albaran;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -85,7 +84,7 @@ class EntregaCard extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(albaran.estado.icon, 
-                             size: 14, color: albaran.estado.color),
+                             size: 14, color: albaran.estado.color,),
                         const SizedBox(width: 4),
                         Text(
                           albaran.estado.label,
@@ -228,7 +227,7 @@ class EntregaCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   Icon(Icons.chevron_right, 
-                       size: 16, color: Colors.grey.shade500),
+                       size: 16, color: Colors.grey.shade500,),
                 ],
               ),
             ],

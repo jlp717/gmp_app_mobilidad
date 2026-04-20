@@ -1,21 +1,22 @@
 /// REPARTIDOR PANEL PAGE v1.0
 /// Dashboard adaptado para reparto con métricas de entregas, cobros y resumen diario
 /// Equivalente al Panel de Ventas pero enfocado a operativa de reparto
+library;
+
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'dart:math' as math;
-import 'package:intl/intl.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../../../core/utils/currency_formatter.dart';
-import '../../../../core/widgets/error_state_widget.dart';
-import '../../../../core/widgets/shimmer_skeleton.dart';
-import '../../data/repartidor_data_service.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
 
 class RepartidorPanelPage extends StatefulWidget {
-  final String repartidorId;
 
-  const RepartidorPanelPage({super.key, required this.repartidorId});
+  const RepartidorPanelPage({required this.repartidorId, super.key});
+  final String repartidorId;
 
   @override
   State<RepartidorPanelPage> createState() => _RepartidorPanelPageState();
@@ -391,7 +392,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
       );
     }
 
-    final maxTotal = _dailyData.fold<double>(0.0, (double m, d) {
+    final maxTotal = _dailyData.fold<double>(0, (double m, d) {
       final t = ((d['total'] ?? 0) as num).toDouble();
       return t > m ? t : m;
     });

@@ -1,21 +1,20 @@
 /// Complementary Products Widget
 /// ==============================
 /// Shows products frequently bought together with items in cart
+library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 class ComplementaryProducts extends StatelessWidget {
-  final List<Map<String, dynamic>> products;
-  final void Function(String code, String name) onAdd;
 
   const ComplementaryProducts({
-    Key? key,
-    required this.products,
-    required this.onAdd,
-  }) : super(key: key);
+    required this.products, required this.onAdd, super.key,
+  });
+  final List<Map<String, dynamic>> products;
+  final void Function(String code, String name) onAdd;
 
   @override
   Widget build(BuildContext context) {
@@ -73,17 +72,17 @@ class ComplementaryProducts extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Text(name, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
-                            maxLines: 1, overflow: TextOverflow.ellipsis),
+                            maxLines: 1, overflow: TextOverflow.ellipsis,),
                         const SizedBox(height: 2),
                         Text(code, style: TextStyle(color: AppTheme.neonPurple.withOpacity(0.7), fontSize: 9)),
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            Icon(Icons.link, color: Colors.white38, size: 10),
+                            const Icon(Icons.link, color: Colors.white38, size: 10),
                             const SizedBox(width: 3),
                             Text('$cooc pedidos juntos', style: const TextStyle(color: Colors.white38, fontSize: 9)),
                             const Spacer(),
-                            Icon(Icons.add_circle, color: AppTheme.neonPurple, size: 16),
+                            const Icon(Icons.add_circle, color: AppTheme.neonPurple, size: 16),
                           ],
                         ),
                       ],

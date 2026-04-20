@@ -1,13 +1,14 @@
 /// Pedidos Offline Service
 /// =======================
 /// Hive-based local storage for draft orders and offline sync queue
+library;
 
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
-import 'package:hive_flutter/hive_flutter.dart';
-import 'dart:io';
+
 import 'package:crypto/crypto.dart';
-import 'pedidos_service.dart';
+import 'package:flutter/foundation.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 class PedidosOfflineService {
   static const _draftsBoxName = 'pedidos_drafts';
@@ -26,7 +27,7 @@ class PedidosOfflineService {
   }
 
   static List<int> _generateEncryptionKey() {
-    final seed = 'gmp_app_pedidos_offline_key_v1';
+    const seed = 'gmp_app_pedidos_offline_key_v1';
     return sha256.convert(utf8.encode(seed)).bytes;
   }
 
@@ -95,7 +96,7 @@ class PedidosOfflineService {
     }
     // Sort by savedAt descending
     drafts.sort((a, b) => (b['savedAt']?.toString() ?? '')
-        .compareTo(a['savedAt']?.toString() ?? ''));
+        .compareTo(a['savedAt']?.toString() ?? ''),);
     return drafts;
   }
 
@@ -161,7 +162,7 @@ class PedidosOfflineService {
     final pending = getPendingSyncs();
     if (pending.isEmpty) return 0;
 
-    int synced = 0;
+    var synced = 0;
     for (final item in pending) {
       try {
         final lines = (item['lines'] as List)

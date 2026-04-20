@@ -7,7 +7,8 @@ const { TTL } = require('../services/redis-cache');
 const {
     getCurrentDate,
     formatCurrency,
-    sanitizeForSQL
+    sanitizeForSQL,
+    handleRouteError
 } = require('../utils/common');
 
 // =============================================================================
@@ -53,8 +54,7 @@ router.get('/products', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error(`Products error: ${error.message} `);
-        res.status(500).json({ error: 'Error obteniendo productos', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo productos', 500);
     }
 });
 
@@ -98,8 +98,7 @@ router.get('/vendedores', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error(`Vendedores error: ${error.message} `);
-        res.status(500).json({ error: 'Error obteniendo vendedores', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo vendedores', 500);
     }
 });
 
@@ -128,8 +127,7 @@ router.get('/families', async (req, res) => {
             name: f.NAME
         })));
     } catch (error) {
-        logger.error(`Families error: ${error.message}`);
-        res.status(500).json({ error: 'Error loading families', details: error.message });
+        handleRouteError(error, res, 'Error loading families', 500);
     }
 });
 

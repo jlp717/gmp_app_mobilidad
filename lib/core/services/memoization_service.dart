@@ -148,7 +148,7 @@ class MemoizationService {
   /// Invalidate entries matching a pattern
   static void invalidatePattern(String pattern) {
     final regex = RegExp(pattern.replaceAll('*', '.*'));
-    final keysToRemove = _cache.keys.where((k) => regex.hasMatch(k)).toList();
+    final keysToRemove = _cache.keys.where(regex.hasMatch).toList();
     
     for (final key in keysToRemove) {
       _cache.remove(key);
@@ -187,8 +187,8 @@ class MemoizationService {
     final totalRequests = _hits + _misses;
     final hitRate = totalRequests > 0 ? (_hits / totalRequests * 100) : 0.0;
     
-    int expiredCount = 0;
-    int validCount = 0;
+    var expiredCount = 0;
+    var validCount = 0;
     
     for (final entry in _cache.values) {
       if (entry.isExpired) {
@@ -248,15 +248,15 @@ class MemoizationService {
 
 /// Internal cache entry with metadata
 class _MemoEntry {
-  final dynamic value;
-  final DateTime expiresAt;
-  final DateTime createdAt;
   
   const _MemoEntry({
     required this.value,
     required this.expiresAt,
     required this.createdAt,
   });
+  final dynamic value;
+  final DateTime expiresAt;
+  final DateTime createdAt;
   
   bool get isExpired => DateTime.now().isAfter(expiresAt);
   
@@ -278,15 +278,15 @@ extension MemoizeFuture<T> on Future<T> Function() {
 
 /// Create a memoized version of a function
 class MemoizedFunction<T, R> {
-  final String _keyPrefix;
-  final R Function(T arg) _fn;
-  final Duration _ttl;
   
   MemoizedFunction(
     this._keyPrefix,
     this._fn, {
     Duration ttl = const Duration(minutes: 30),
   }) : _ttl = ttl;
+  final String _keyPrefix;
+  final R Function(T arg) _fn;
+  final Duration _ttl;
   
   R call(T arg) {
     final key = '${_keyPrefix}_${arg.hashCode}';

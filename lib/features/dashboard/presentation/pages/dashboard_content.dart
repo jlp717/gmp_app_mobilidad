@@ -1,30 +1,27 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
-// ignore: unused_import
-import 'dart:ui';
+
 import 'package:flutter/foundation.dart'; // For compute
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:fl_chart/fl_chart.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/providers/dashboard_notifier.dart';
-import '../../../../core/providers/auth_notifier.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/utils/currency_formatter.dart';
-import '../../../../core/widgets/modern_loading.dart';
-import '../../../../core/widgets/multi_select_dialog.dart';
-import '../../../../core/widgets/fi_filters_widget.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../../../core/widgets/error_state_widget.dart';
-import '../../../../core/utils/date_formatter.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/providers/dashboard_notifier.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/date_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/widgets/fi_filters_widget.dart';
+import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
+import 'package:gmp_app_mobilidad/core/widgets/multi_select_dialog.dart';
 // SmartSyncHeader already imported in line 10 theoretically, but let's just keep one. 
 // Step 1420 lines 10 & 11 were both SmartSyncHeader.
-import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
-import '../widgets/matrix_data_table.dart';
-import '../widgets/hierarchy_selector.dart';
-import '../widgets/hierarchy_section.dart'; // New import
-import '../widgets/advanced_sales_chart.dart'; // Kept for HierarchySection internal use
-import '../widgets/dashboard_chart_factory.dart'; // Add factory import
+import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Import Sync Header
+import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/dashboard_chart_factory.dart'; // Add factory import
+import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/hierarchy_section.dart'; // New import
+import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/hierarchy_selector.dart';
+import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/matrix_data_table.dart';
 
 /// Professional Dashboard - Power BI Style for Sales Manager
 /// Multi-select filters: Years, Months, Vendors, Clients
@@ -94,7 +91,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
   /// REMOVED: _loadFamilies - FI options are loaded by FiFiltersWidget
 
   /// FI Filters Dialog (replaces Family Filter)
-  void _openFiFiltersDialog() async {
+  Future<void> _openFiFiltersDialog() async {
     final result = await showDialog<FiFilterState>(
       context: context,
       builder: (context) => Dialog(
@@ -151,7 +148,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
       if (mounted) {
         setState(() {
           // Safe conversion - convert each item explicitly to Map<String, dynamic>
-          final Map<String, dynamic> data = Map<String, dynamic>.from(response as Map);
+          final data = Map<String, dynamic>.from(response as Map);
           final rawList = data['vendedores'] ?? [];
           debugPrint('📋 Raw vendedores list length: ${rawList is List ? rawList.length : 'not a list'}');
           _vendedoresDisponibles = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
@@ -176,12 +173,12 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
       final response = await ApiClient.get('/clients/list', 
         queryParameters: params, 
         cacheKey: 'clients_dropdown_${_selectedVendedor ?? 'top50'}', 
-        cacheTTL: const Duration(minutes: 30)
+        cacheTTL: const Duration(minutes: 30),
       );
       
       if (mounted) {
         setState(() {
-          final Map<String, dynamic> data = Map<String, dynamic>.from(response as Map);
+          final data = Map<String, dynamic>.from(response as Map);
           final rawList = data['clients'] ?? [];
           _clientsDisponibles = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
         });
@@ -192,7 +189,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
   }
 
   /// Open MultiSelect for Clients with Remote Search Support
-  void _openClientFilter() async {
+  Future<void> _openClientFilter() async {
     // Load initial batch if empty (e.g. first open)
     if (_clientsDisponibles.isEmpty) await _loadClients(initial: true);
 
@@ -292,12 +289,12 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
       final results = await Future.wait([
         ApiClient.get('/dashboard/matrix-data', 
           queryParameters: params,
-          cacheKey: 'dash_matrix_${params.toString()}_v2', // Changed key (v2)
+          cacheKey: 'dash_matrix_${params}_v2', // Changed key (v2)
           cacheTTL: const Duration(minutes: 15),
         ),
         ApiClient.get('/dashboard/metrics', 
           queryParameters: params,
-          cacheKey: 'dashboard_metrics_${params.toString()}',
+          cacheKey: 'dashboard_metrics_$params',
           cacheTTL: const Duration(minutes: 5),
         ),
       ]);
@@ -309,7 +306,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
       // Safe type conversion for API response
       final matrixData = Map<String, dynamic>.from(results[0] as Map);
       final rawList = matrixData['rows'] ?? [];
-      var rawRows = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+      final rawRows = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
       
       // Filter by selected year and months
       final filteredRows = rawRows.where((row) {
@@ -319,12 +316,14 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
         int? year;
         int? month;
         
-        if (yearVal is int) year = yearVal;
-        else if (yearVal is num) year = yearVal.toInt();
+        if (yearVal is int) {
+          year = yearVal;
+        } else if (yearVal is num) year = yearVal.toInt();
         else if (yearVal is String) year = int.tryParse(yearVal);
         
-        if (monthVal is int) month = monthVal;
-        else if (monthVal is num) month = monthVal.toInt();
+        if (monthVal is int) {
+          month = monthVal;
+        } else if (monthVal is num) month = monthVal.toInt();
         else if (monthVal is String) month = int.tryParse(monthVal);
         
         if (year == null || !_selectedYears.contains(year)) return false;
@@ -359,14 +358,14 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
 
   /// Safe value extraction
   double _safeDouble(dynamic value) {
-    if (value == null) return 0.0;
+    if (value == null) return 0;
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value) ?? 0.0;
     if (value is Map) {
       final v = value['value'];
       if (v != null) return _safeDouble(v);
     }
-    return 0.0;
+    return 0;
   }
 
   int _safeInt(dynamic value) {
@@ -383,7 +382,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
   void _onNodeTap(MatrixNode node, int level) {
     setState(() {
        // Check if this node is already in the selection path at this level
-       final bool isAlreadySelected = level < _selectionPath.length && 
+       final isAlreadySelected = level < _selectionPath.length && 
                                        _selectionPath[level].id == node.id;
        
        if (isAlreadySelected) {
@@ -468,7 +467,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
                     const SizedBox(height: 16),
                       if (_isLoading && _matrixData.isEmpty) 
                         const Padding(
-                          padding: EdgeInsets.all(60.0),
+                          padding: EdgeInsets.all(60),
                           child: ModernLoading(message: 'Analizando tendencias...'),
                         )
                       else if (_error != null && _matrixData.isEmpty)
@@ -494,7 +493,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
                             ),
                             if (_isLoading)
                               Positioned.fill(
-                                child: Container(
+                                child: ColoredBox(
                                   color: Colors.black.withOpacity(0.3),
                                   child: const Center(
                                     child: SizedBox(
@@ -549,12 +548,12 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
           SizedBox(
             width: filterWidth,
             child: DropdownButtonFormField<String>(
-              value: _vendedoresDisponibles.any((v) => v['code'].toString() == _selectedVendedor) ? _selectedVendedor : '',
+              initialValue: _vendedoresDisponibles.any((v) => v['code'].toString() == _selectedVendedor) ? _selectedVendedor : '',
               isExpanded: true,
               decoration: InputDecoration(
                 filled: true,
                 fillColor: AppTheme.surfaceColor,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                 enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: _selectedVendedor != null ? AppTheme.neonBlue : Colors.transparent)),
                 focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.neonBlue)),
@@ -574,7 +573,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
               ],
               onChanged: (val) async {
                 setState(() {
-                  _selectedVendedor = val?.isEmpty == true ? null : val;
+                  _selectedVendedor = val?.isEmpty ?? false ? null : val;
                   _selectedClientCodes.clear();
                   _clientsDisponibles.clear();
                 });
@@ -712,11 +711,10 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                decoration: BoxDecoration(color: Colors.amber.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
                child: const Text('Cambios pendientes', style: TextStyle(color: Colors.amber, fontSize: 10)),
-             )
-          ]
+             ),
+          ],
         ],
       ),
-      initiallyExpanded: false,
       collapsedBackgroundColor: AppTheme.surfaceColor.withOpacity(0.5),
       backgroundColor: AppTheme.surfaceColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -740,15 +738,16 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
                    selected: _pendingYears.contains(year),
                    onSelected: (selected) {
                      setState(() {
-                       if (selected) _pendingYears.add(year);
-                       else if (_pendingYears.length > 1) _pendingYears.remove(year); // Prevent empty
+                       if (selected) {
+                         _pendingYears.add(year);
+                       } else if (_pendingYears.length > 1) _pendingYears.remove(year); // Prevent empty
                        _hasPendingChanges = true;
                      });
                    },
                    selectedColor: AppTheme.neonPurple.withOpacity(0.3),
                    checkmarkColor: AppTheme.neonPurple,
                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                 )).toList(),
+                 ),).toList(),
                ),
              ),
            ],
@@ -796,8 +795,11 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
             selected: _pendingMonths.contains(i + 1),
             onSelected: (selected) {
               setState(() {
-                if (selected) _pendingMonths.add(i + 1);
-                else _pendingMonths.remove(i + 1);
+                if (selected) {
+                  _pendingMonths.add(i + 1);
+                } else {
+                  _pendingMonths.remove(i + 1);
+                }
                 _hasPendingChanges = true;
               });
             },
@@ -806,7 +808,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
             visualDensity: VisualDensity.compact,
             padding: EdgeInsets.zero,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-          )),
+          ),),
         ),
         const SizedBox(height: 16),
         // Apply Button
@@ -949,7 +951,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
           ),
           if (subtitle != null) ...[
             const SizedBox(height: 4),
-            Text(subtitle, style: TextStyle(color: Colors.white38, fontSize: 9), overflow: TextOverflow.ellipsis),
+            Text(subtitle, style: const TextStyle(color: Colors.white38, fontSize: 9), overflow: TextOverflow.ellipsis),
           ],
         ],
       ),
@@ -965,11 +967,11 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
 
   // Calculate total margin for a list of nodes
   double _calculateTotalMargin(List<MatrixNode> nodes) {
-    return nodes.fold(0.0, (sum, node) => sum + node.margin);
+    return nodes.fold(0, (sum, node) => sum + node.margin);
   }
   
   double _calculateTotalSales(List<MatrixNode> nodes) {
-    return nodes.fold(0.0, (sum, node) => sum + node.sales);
+    return nodes.fold(0, (sum, node) => sum + node.sales);
   }
 
   Widget _buildMarginTotalBanner(String level, double margin, double sales, int depth) {
@@ -1037,9 +1039,6 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
       data: _matrixData,
       hierarchy: _hierarchy,
       periods: _matrixPeriods,
-      selectedNode: null, // Tree handles its own selection internally
-      color: AppTheme.neonBlue,
-      chartType: ChartType.bar,
       onNodeTap: (node) {
         // Optional: track selection if needed for other purposes
       },
@@ -1070,8 +1069,8 @@ class _DashboardContentState extends ConsumerState<DashboardContent> with Automa
 
 // Mutable Helper Class
 class _ProductSearchDialog extends StatefulWidget {
+  const _ProductSearchDialog({required this.initialSelection, super.key});
   final Set<String> initialSelection;
-  const _ProductSearchDialog({Key? key, required this.initialSelection}) : super(key: key);
 
   @override
   State<_ProductSearchDialog> createState() => _ProductSearchDialogState();
@@ -1221,14 +1220,14 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
 }
 
 class _MutableNode {
+
+  _MutableNode({required this.id, required this.name, required this.type});
   final String id;
   final String name;
   final String type;
   double sales = 0;
   double margin = 0;
   List<_MutableNode> children = [];
-
-  _MutableNode({required this.id, required this.name, required this.type});
 
   MatrixNode toMatrixNode() {
     return MatrixNode(
@@ -1244,9 +1243,9 @@ class _MutableNode {
 }
 
 class TreeBuildParams {
+  TreeBuildParams({required this.rows, required this.hierarchy});
   final List<Map<String, dynamic>> rows;
   final List<String> hierarchy;
-  TreeBuildParams({required this.rows, required this.hierarchy});
 }
 
 // Top level function for compute
@@ -1256,21 +1255,21 @@ List<MatrixNode> buildTreeIsolate(TreeBuildParams params) {
   
   if (rows.isEmpty || hierarchy.isEmpty) return [];
 
-  final Map<String, _MutableNode> encMap = {}; // Key: Path
+  final encMap = <String, _MutableNode>{}; // Key: Path
 
   for (final row in rows) {
-     String path = '';
+     var path = '';
      double getDouble(dynamic v) {
-       if (v == null) return 0.0;
+       if (v == null) return 0;
        if (v is num) return v.toDouble();
        return double.tryParse(v.toString()) ?? 0.0;
      }
      
-     double sales = getDouble(row['SALES'] ?? row['sales']);
-     double margin = getDouble(row['MARGIN'] ?? row['margin']);
+     final sales = getDouble(row['SALES'] ?? row['sales']);
+     final margin = getDouble(row['MARGIN'] ?? row['margin']);
      
      // Traverse hierarchy levels for this row
-     for (int i = 0; i < hierarchy.length; i++) {
+     for (var i = 0; i < hierarchy.length; i++) {
         final levelIndex = i + 1;
         dynamic getVal(String k) => row[k] ?? row[k.toLowerCase()] ?? row[k.toUpperCase()];
         
@@ -1314,13 +1313,13 @@ List<MatrixNode> buildTreeIsolate(TreeBuildParams params) {
 
 /// Dialog content for FI filters
 class _FiFilterDialogContent extends StatefulWidget {
-  final FiFilterState initialFilters;
-  final Function(FiFilterState) onApply;
 
   const _FiFilterDialogContent({
     required this.initialFilters,
     required this.onApply,
   });
+  final FiFilterState initialFilters;
+  final Function(FiFilterState) onApply;
 
   @override
   State<_FiFilterDialogContent> createState() => _FiFilterDialogContentState();

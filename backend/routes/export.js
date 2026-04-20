@@ -6,7 +6,8 @@ const {
     buildVendedorFilter,
     formatCurrency,
     MIN_YEAR,
-    sanitizeForSQL
+    sanitizeForSQL,
+    handleRouteError
 } = require('../utils/common');
 
 // =============================================================================
@@ -90,8 +91,7 @@ router.get('/client-report', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error(`Export error: ${error.message} `);
-        res.status(500).json({ error: 'Error exportando datos', details: error.message });
+        handleRouteError(error, res, 'Error exportando datos', 500);
     }
 });
 

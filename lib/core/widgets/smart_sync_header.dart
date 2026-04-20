@@ -1,38 +1,34 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import '../theme/app_theme.dart';
-import '../utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
-class SmartSyncHeader extends StatelessWidget {
+class SmartSyncHeader extends StatelessWidget { // NEW: compact mode for smaller header
+
+  const SmartSyncHeader({
+    required this.title, required this.subtitle, required this.onSync, super.key,
+    this.lastSync,
+    this.isLoading = false,
+    this.onMonthTap,
+    this.compact = false, // Default false for backwards compatibility
+  });
   final String title;
   final String subtitle;
   final DateTime? lastSync;
   final bool isLoading;
   final VoidCallback onSync;
   final VoidCallback? onMonthTap;
-  final bool compact; // NEW: compact mode for smaller header
-
-  const SmartSyncHeader({
-    super.key,
-    required this.title,
-    required this.subtitle,
-    this.lastSync,
-    this.isLoading = false,
-    required this.onSync,
-    this.onMonthTap,
-    this.compact = false, // Default false for backwards compatibility
-  });
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    final bool isCompact = compact || Responsive.isLandscapeCompact(context);
+    final isCompact = compact || Responsive.isLandscapeCompact(context);
     final factor = Responsive.landscapeScale(context);
     // Extreme padding reduction in auto-compact mode
-    final double vertPad = (isCompact ? 2 : 16) * factor;
-    final double iconSize = (isCompact ? 18 : 24) * factor;
-    final double iconPad = (isCompact ? 6 : 10) * factor;
-    final double titleSize = (isCompact ? 14 : 20) * factor;
-    final double subtitleSize = (isCompact ? 11 : 12) * factor;
+    final vertPad = (isCompact ? 2 : 16) * factor;
+    final iconSize = (isCompact ? 18 : 24) * factor;
+    final iconPad = (isCompact ? 6 : 10) * factor;
+    final titleSize = (isCompact ? 14 : 20) * factor;
+    final subtitleSize = (isCompact ? 11 : 12) * factor;
 
     return Container(
       padding: EdgeInsets.fromLTRB(isCompact ? 12 : Responsive.padding(context, small: 16, large: 24), vertPad, isCompact ? 12 : Responsive.padding(context, small: 16, large: 24), vertPad),
@@ -46,7 +42,7 @@ class SmartSyncHeader extends StatelessWidget {
           ],
         ),
         border: Border(
-          bottom: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2), width: 1),
+          bottom: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2)),
         ),
       ),
       child: Row(

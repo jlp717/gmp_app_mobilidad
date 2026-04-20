@@ -1,22 +1,16 @@
 /// 3D Projection Engine v2 — Optimized with precalculated trig, face culling,
 /// and efficient hit testing. Performance-critical path.
+library;
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../../data/warehouse_data_service.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // 3D PROJECTION — Precalculated sin/cos for performance
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class Projection3D {
-  final double rotX;
-  final double rotY;
-  final double zoom;
-  final Offset panOffset;
-
-  // Precalculated trig values — avoid recalculating per vertex
-  late final double _cosX, _sinX, _cosY, _sinY;
 
   Projection3D({
     required this.rotX,
@@ -29,6 +23,13 @@ class Projection3D {
     _cosX = math.cos(rotY);
     _sinX = math.sin(rotY);
   }
+  final double rotX;
+  final double rotY;
+  final double zoom;
+  final Offset panOffset;
+
+  // Precalculated trig values — avoid recalculating per vertex
+  late final double _cosX, _sinX, _cosY, _sinY;
 
   /// Project a 3D point (x, y, z) to 2D screen coordinates
   Offset project(double x, double y, double z, Size size) {
@@ -45,7 +46,7 @@ class Projection3D {
 
   /// Batch project 8 corners of a box — returns [fbl, fbr, bbl, bbr, ftl, ftr, btl, btr]
   List<Offset> projectBox(
-      double bx, double by, double bz, double w, double d, double h, Size size) {
+      double bx, double by, double bz, double w, double d, double h, Size size,) {
     return [
       project(bx, by, bz, size),         // 0: front-bottom-left
       project(bx + w, by, bz, size),     // 1: front-bottom-right
@@ -91,17 +92,19 @@ class Projection3D {
 
 class Lighting3D {
   // Light direction (normalized): front-right-up
-  static const double lx = 0.35, ly = -0.45, lz = 0.82;
+  static const double lx = 0.35;
+  static const double ly = -0.45;
+  static const double lz = 0.82;
   static const double ambient = 0.35;
 
   /// Calculate light intensity for a face with given normal (nx, ny, nz)
   static double intensity(double nx, double ny, double nz) {
     final dot = nx * lx + ny * ly + nz * lz;
-    return (ambient + (1 - ambient) * dot.clamp(0, 1));
+    return ambient + (1 - ambient) * dot.clamp(0, 1);
   }
 
   /// Face-specific intensity presets for quick lookup
-  static const double topLight = 1.0;     // Brightest — facing light
+  static const double topLight = 1;     // Brightest — facing light
   static const double frontLight = 0.75;  // Medium
   static const double rightLight = 0.55;  // Darker side
   static const double leftLight = 0.45;   // Darkest side
@@ -111,9 +114,9 @@ class Lighting3D {
   /// Apply lighting to a base color with alpha
   static Color applyLight(Color base, double light, double alpha) {
     final l = light.clamp(0.3, 1.5);
-    final int r = (base.red * l).round().clamp(0, 255);
-    final int g = (base.green * l).round().clamp(0, 255);
-    final int b = (base.blue * l).round().clamp(0, 255);
+    final r = (base.red * l).round().clamp(0, 255);
+    final g = (base.green * l).round().clamp(0, 255);
+    final b = (base.blue * l).round().clamp(0, 255);
     return Color.fromARGB((alpha * 255).round(), r, g, b);
   }
 
@@ -135,7 +138,7 @@ class PolyHelper {
   static Path pathOf(List<Offset> pts) {
     if (pts.isEmpty) return Path();
     final p = Path()..moveTo(pts[0].dx, pts[0].dy);
-    for (int i = 1; i < pts.length; i++) {
+    for (var i = 1; i < pts.length; i++) {
       p.lineTo(pts[i].dx, pts[i].dy);
     }
     p.close();
@@ -181,7 +184,7 @@ class PolyHelper {
   ) {
     if (pts.length < 3) return;
     // Calculate bounding box for gradient
-    double minY = double.infinity, maxY = double.negativeInfinity;
+    var minY = double.infinity, maxY = double.negativeInfinity;
     for (final p in pts) {
       if (p.dy < minY) minY = p.dy;
       if (p.dy > maxY) maxY = p.dy;
@@ -215,9 +218,9 @@ class PolyHelper {
   /// Point-in-polygon test (ray casting algorithm)
   static bool pointInPolygon(Offset point, List<Offset> polygon) {
     if (polygon.length < 3) return false;
-    bool inside = false;
-    int j = polygon.length - 1;
-    for (int i = 0; i < polygon.length; i++) {
+    var inside = false;
+    var j = polygon.length - 1;
+    for (var i = 0; i < polygon.length; i++) {
       if ((polygon[i].dy > point.dy) != (polygon[j].dy > point.dy) &&
           point.dx <
               (polygon[j].dx - polygon[i].dx) *
@@ -248,10 +251,12 @@ class HitTester {
     required double oz,
   }) {
     PlacedBox? hit;
-    double hitDepth = double.negativeInfinity;
+    var hitDepth = double.negativeInfinity;
 
     for (final b in boxes) {
-      final bx = ox + b.x, by = oy + b.y, bz = oz + b.z;
+      final bx = ox + b.x;
+      final by = oy + b.y;
+      final bz = oz + b.z;
       final depth = proj.depth(bx + b.w / 2, by + b.d / 2, bz + b.h / 2);
 
       final corners = proj.projectBox(bx, by, bz, b.w, b.d, b.h, canvasSize);
@@ -356,7 +361,10 @@ class AxleBalanceHelper {
   /// Calculate center of gravity from placed boxes
   static Map<String, double> centerOfGravity(List<PlacedBox> boxes) {
     if (boxes.isEmpty) return {'x': 0, 'y': 0, 'z': 0};
-    double totalW = 0, wx = 0, wy = 0, wz = 0;
+    double totalW = 0;
+    double wx = 0;
+    double wy = 0;
+    double wz = 0;
     for (final b in boxes) {
       totalW += b.weight;
       wx += (b.x + b.w / 2) * b.weight;
@@ -374,7 +382,7 @@ class AxleBalanceHelper {
   /// Calculate front/rear weight distribution (percentage)
   /// containerLength is the total length of the container in cm
   static Map<String, double> axleDistribution(
-      List<PlacedBox> boxes, double containerLength) {
+      List<PlacedBox> boxes, double containerLength,) {
     if (boxes.isEmpty || containerLength <= 0) {
       return {'frontPct': 50, 'rearPct': 50};
     }
@@ -392,7 +400,7 @@ class AxleBalanceHelper {
 
   /// Calculate left/right weight distribution (percentage)
   static Map<String, double> lateralDistribution(
-      List<PlacedBox> boxes, double containerWidth) {
+      List<PlacedBox> boxes, double containerWidth,) {
     if (boxes.isEmpty || containerWidth <= 0) {
       return {'leftPct': 50, 'rightPct': 50};
     }

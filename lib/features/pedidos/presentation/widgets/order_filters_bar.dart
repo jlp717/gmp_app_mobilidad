@@ -1,12 +1,17 @@
 /// Order Filters Bar
 /// =================
 /// Complete filter bar: search, status chips, date range, presets, advanced filters.
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 class OrderFiltersBar extends StatefulWidget {
+
+  const OrderFiltersBar({
+    required this.searchQuery, required this.statusFilter, required this.dateFrom, required this.dateTo, required this.minAmount, required this.maxAmount, required this.sortBy, required this.sortOrder, required this.onSearchChanged, required this.onStatusChanged, required this.onDateFromChanged, required this.onDateToChanged, required this.onMinAmountChanged, required this.onMaxAmountChanged, required this.onSortByChanged, required this.onSortOrderChanged, required this.onApplyAdvanced, required this.onClearAll, super.key,
+  });
   final String searchQuery;
   final String? statusFilter;
   final DateTime? dateFrom;
@@ -26,28 +31,6 @@ class OrderFiltersBar extends StatefulWidget {
   final ValueChanged<String> onSortOrderChanged;
   final VoidCallback onApplyAdvanced;
   final VoidCallback onClearAll;
-
-  const OrderFiltersBar({
-    Key? key,
-    required this.searchQuery,
-    required this.statusFilter,
-    required this.dateFrom,
-    required this.dateTo,
-    required this.minAmount,
-    required this.maxAmount,
-    required this.sortBy,
-    required this.sortOrder,
-    required this.onSearchChanged,
-    required this.onStatusChanged,
-    required this.onDateFromChanged,
-    required this.onDateToChanged,
-    required this.onMinAmountChanged,
-    required this.onMaxAmountChanged,
-    required this.onSortByChanged,
-    required this.onSortOrderChanged,
-    required this.onApplyAdvanced,
-    required this.onClearAll,
-  }) : super(key: key);
 
   @override
   State<OrderFiltersBar> createState() => _OrderFiltersBarState();
@@ -89,7 +72,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
               suffixIcon: widget.searchQuery.isNotEmpty
                   ? IconButton(
                       icon: const Icon(Icons.clear,
-                          color: Colors.white54, size: 16),
+                          color: Colors.white54, size: 16,),
                       onPressed: () {
                         _searchCtrl.clear();
                         widget.onSearchChanged('');
@@ -118,7 +101,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                 _statusChip('Borrador', 'BORRADOR', const Color(0xFFF97316)),
                 const SizedBox(width: 6),
                 _statusChip(
-                    'Confirmado', 'CONFIRMADO', const Color(0xFF3B82F6)),
+                    'Confirmado', 'CONFIRMADO', const Color(0xFF3B82F6),),
                 const SizedBox(width: 6),
                 _statusChip('Enviado', 'ENVIADO', const Color(0xFF22C55E)),
                 const SizedBox(width: 6),
@@ -183,7 +166,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                   size: 16,
                 ),
                 const SizedBox(width: 4),
-                Text(
+                const Text(
                   'Más filtros',
                   style: TextStyle(
                     color: AppTheme.neonBlue,
@@ -241,11 +224,11 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                     children: [
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          value: widget.sortBy,
+                          initialValue: widget.sortBy,
                           decoration: InputDecoration(
                             labelText: 'Ordenar por',
                             labelStyle: const TextStyle(
-                                color: Colors.white54, fontSize: 11),
+                                color: Colors.white54, fontSize: 11,),
                             filled: true,
                             fillColor: AppTheme.darkSurface,
                             border: OutlineInputBorder(
@@ -253,20 +236,20 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                               borderSide: BorderSide.none,
                             ),
                             contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8),
+                                horizontal: 10, vertical: 8,),
                           ),
                           dropdownColor: AppTheme.darkSurface,
                           style: const TextStyle(
-                              color: Colors.white, fontSize: 12),
+                              color: Colors.white, fontSize: 12,),
                           items: const [
                             DropdownMenuItem(
-                                value: 'fecha', child: Text('Fecha')),
+                                value: 'fecha', child: Text('Fecha'),),
                             DropdownMenuItem(
-                                value: 'importe', child: Text('Importe')),
+                                value: 'importe', child: Text('Importe'),),
                             DropdownMenuItem(
-                                value: 'cliente', child: Text('Cliente')),
+                                value: 'cliente', child: Text('Cliente'),),
                             DropdownMenuItem(
-                                value: 'numero', child: Text('Nº Pedido')),
+                                value: 'numero', child: Text('Nº Pedido'),),
                           ],
                           onChanged: (v) {
                             if (v != null) widget.onSortByChanged(v);
@@ -276,11 +259,11 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: DropdownButtonFormField<String>(
-                          value: widget.sortOrder,
+                          initialValue: widget.sortOrder,
                           decoration: InputDecoration(
                             labelText: 'Orden',
                             labelStyle: const TextStyle(
-                                color: Colors.white54, fontSize: 11),
+                                color: Colors.white54, fontSize: 11,),
                             filled: true,
                             fillColor: AppTheme.darkSurface,
                             border: OutlineInputBorder(
@@ -288,16 +271,16 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                               borderSide: BorderSide.none,
                             ),
                             contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8),
+                                horizontal: 10, vertical: 8,),
                           ),
                           dropdownColor: AppTheme.darkSurface,
                           style: const TextStyle(
-                              color: Colors.white, fontSize: 12),
+                              color: Colors.white, fontSize: 12,),
                           items: const [
                             DropdownMenuItem(
-                                value: 'DESC', child: Text('Descendente')),
+                                value: 'DESC', child: Text('Descendente'),),
                             DropdownMenuItem(
-                                value: 'ASC', child: Text('Ascendente')),
+                                value: 'ASC', child: Text('Ascendente'),),
                           ],
                           onChanged: (v) {
                             if (v != null) widget.onSortOrderChanged(v);
@@ -322,7 +305,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                       child: const Text(
                         'Aplicar filtros',
                         style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13),
+                            fontWeight: FontWeight.bold, fontSize: 13,),
                       ),
                     ),
                   ),
@@ -377,7 +360,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
         child: Row(
           children: [
             Icon(Icons.calendar_today,
-                color: AppTheme.neonBlue.withOpacity(0.7), size: 14),
+                color: AppTheme.neonBlue.withOpacity(0.7), size: 14,),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
@@ -419,7 +402,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
   }
 
   Widget _amountField(
-      String label, double? value, ValueChanged<double?> onChanged) {
+      String label, double? value, ValueChanged<double?> onChanged,) {
     final ctrl = TextEditingController(
       text: value != null ? value.toStringAsFixed(2) : '',
     );
@@ -467,7 +450,6 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
               primary: AppTheme.neonBlue,
               onPrimary: Colors.white,
               surface: AppTheme.darkSurface,
-              onSurface: Colors.white,
             ),
           ),
           child: child!,
@@ -492,29 +474,22 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
       case 'Hoy':
         from = DateTime(now.year, now.month, now.day);
         to = from;
-        break;
       case 'Semana':
         from = now.subtract(Duration(days: now.weekday - 1));
         from = DateTime(from.year, from.month, from.day);
-        break;
       case 'Mes':
-        from = DateTime(now.year, now.month, 1);
-        break;
+        from = DateTime(now.year, now.month);
       case 'MesAnt':
-        from = DateTime(now.year, now.month - 1, 1);
+        from = DateTime(now.year, now.month - 1);
         to = DateTime(now.year, now.month, 0);
-        break;
       case '7d':
         from = now.subtract(const Duration(days: 6));
         from = DateTime(from.year, from.month, from.day);
-        break;
       case '30d':
         from = now.subtract(const Duration(days: 29));
         from = DateTime(from.year, from.month, from.day);
-        break;
       case 'Año':
-        from = DateTime(now.year, 1, 1);
-        break;
+        from = DateTime(now.year);
     }
 
     widget.onDateFromChanged(from);

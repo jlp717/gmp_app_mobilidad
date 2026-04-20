@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
-import '../utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 /// ⏳ ASYNC OPERATION MODAL
@@ -27,15 +27,6 @@ import '../utils/responsive.dart';
 enum _ModalState { loading, success, error }
 
 class AsyncOperationModalController {
-  final BuildContext _context;
-  final _stateNotifier = ValueNotifier<_ModalState>(_ModalState.loading);
-  final _textNotifier = ValueNotifier<String>('');
-  final _errorTextNotifier = ValueNotifier<String>('');
-  final _showCancelNotifier = ValueNotifier<bool>(false);
-  VoidCallback? _onRetry;
-  bool _closed = false;
-  Timer? _timeoutTimer;
-  Timer? _cancelButtonTimer;
 
   AsyncOperationModalController(this._context, String initialText, {
     Duration timeout = const Duration(seconds: 45),
@@ -57,6 +48,15 @@ class AsyncOperationModalController {
       }
     });
   }
+  final BuildContext _context;
+  final _stateNotifier = ValueNotifier<_ModalState>(_ModalState.loading);
+  final _textNotifier = ValueNotifier<String>('');
+  final _errorTextNotifier = ValueNotifier<String>('');
+  final _showCancelNotifier = ValueNotifier<bool>(false);
+  VoidCallback? _onRetry;
+  bool _closed = false;
+  Timer? _timeoutTimer;
+  Timer? _cancelButtonTimer;
 
   /// Transition to success state → auto-closes after 1.5s
   void success([String? text]) {
@@ -65,7 +65,7 @@ class AsyncOperationModalController {
     _cancelButtonTimer?.cancel();
     _textNotifier.value = text ?? '¡Completado!';
     _stateNotifier.value = _ModalState.success;
-    Future.delayed(const Duration(milliseconds: 1500), () => close());
+    Future.delayed(const Duration(milliseconds: 1500), close);
   }
 
   /// Transition to error state with retry option
@@ -105,9 +105,9 @@ class AsyncOperationModalController {
 }
 
 class AsyncOperationModal extends StatelessWidget {
-  final AsyncOperationModalController controller;
 
-  const AsyncOperationModal({super.key, required this.controller});
+  const AsyncOperationModal({required this.controller, super.key});
+  final AsyncOperationModalController controller;
 
   /// Show the modal and return a controller
   static AsyncOperationModalController show(
@@ -183,7 +183,7 @@ class AsyncOperationModal extends StatelessWidget {
                 return Padding(
                   padding: const EdgeInsets.only(top: 16),
                   child: TextButton(
-                    onPressed: () => controller.close(),
+                    onPressed: controller.close,
                     style: TextButton.styleFrom(
                       foregroundColor: AppTheme.textSecondary,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -314,7 +314,7 @@ class AsyncOperationModal extends StatelessWidget {
           const SizedBox(width: 12),
         ],
         TextButton(
-          onPressed: () => controller.close(),
+          onPressed: controller.close,
           style: TextButton.styleFrom(
             foregroundColor: AppTheme.textSecondary,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

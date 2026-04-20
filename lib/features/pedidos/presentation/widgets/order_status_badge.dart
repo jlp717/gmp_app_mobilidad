@@ -1,15 +1,12 @@
 /// Order Status Badge
 /// ==================
 /// Reusable badge showing order status with color, icon and animation.
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class OrderTheme {
-  final Color primary;
-  final List<Color> gradient;
-  final IconData icon;
-  final String label;
 
   const OrderTheme({
     required this.primary,
@@ -17,6 +14,10 @@ class OrderTheme {
     required this.icon,
     required this.label,
   });
+  final Color primary;
+  final List<Color> gradient;
+  final IconData icon;
+  final String label;
 }
 
 class OrderStatusConfig {
@@ -69,16 +70,15 @@ class OrderStatusConfig {
 }
 
 class OrderStatusBadge extends StatelessWidget {
+
+  const OrderStatusBadge({
+    required this.estado, super.key,
+    this.fontSize = 11,
+    this.showIcon = true,
+  });
   final String estado;
   final double fontSize;
   final bool showIcon;
-
-  const OrderStatusBadge({
-    Key? key,
-    required this.estado,
-    this.fontSize = 11,
-    this.showIcon = true,
-  }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -89,7 +89,7 @@ class OrderStatusBadge extends StatelessWidget {
         gradient: LinearGradient(
           colors: [
             theme.primary.withOpacity(0.2),
-            theme.primary.withOpacity(0.1)
+            theme.primary.withOpacity(0.1),
           ],
         ),
         borderRadius: BorderRadius.circular(20),
@@ -107,7 +107,7 @@ class OrderStatusBadge extends StatelessWidget {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                      color: theme.primary.withOpacity(0.6), blurRadius: 4),
+                      color: theme.primary.withOpacity(0.6), blurRadius: 4,),
                 ],
               ),
             ),

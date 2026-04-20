@@ -1,12 +1,13 @@
 import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'isolate_transformer.dart';
-import 'api_config.dart';
-import '../cache/cache_service.dart';
-import '../services/device_fingerprint.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/api/isolate_transformer.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/services/device_fingerprint.dart';
 
 /// Secure API Client for all backend communications
 ///
@@ -18,8 +19,8 @@ import '../services/device_fingerprint.dart';
 /// - OWASP Mobile Top 10 protection
 class ApiClient {
   static Dio? _dio;
-  static int _maxRetries = 3;
-  static Duration _retryDelay = const Duration(seconds: 1);
+  static const int _maxRetries = 3;
+  static const Duration _retryDelay = Duration(seconds: 1);
   static bool _isInitialized = false;
 
   // Secure storage for tokens
@@ -49,7 +50,7 @@ class ApiClient {
       await ApiConfig.initialize();
       _isInitialized = true;
       debugPrint(
-          '[ApiClient] ✅ Inicializado con servidor: ${ApiConfig.baseUrl}');
+          '[ApiClient] ✅ Inicializado con servidor: ${ApiConfig.baseUrl}',);
     } catch (e) {
       debugPrint('[ApiClient] ⚠️ Error en inicialización: $e');
       _isInitialized = true;
@@ -77,10 +78,9 @@ class ApiClient {
         // AUDIT: Device fingerprint on every request
         ...DeviceFingerprint.headers,
       },
-      responseType: ResponseType.json,
       validateStatus: (status) =>
           status != null && status >= 200 && status < 300,
-    ));
+    ),);
 
     // Configure certificate pinning for production
     (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
@@ -93,7 +93,7 @@ class ApiClient {
           '10.0.2.2',
           '192.168.1.52',
           '172.31.192.1',
-          'localhost'
+          'localhost',
         ];
         if (devHosts.contains(host)) return true;
 
@@ -126,7 +126,7 @@ class ApiClient {
 
   /// Verify certificate fingerprint against pinned value
   static bool _verifyCertificateFingerprint(
-      X509Certificate cert, String pinnedFingerprint) {
+      X509Certificate cert, String pinnedFingerprint,) {
     final certBytes = cert.der;
     final hexFingerprint = certBytes
         .map((b) => b.toRadixString(16).padLeft(2, '0'))
@@ -156,7 +156,7 @@ class ApiClient {
 
   /// Get current auth token from secure storage
   static Future<String?> get authToken async {
-    return await _secureStorage.read(key: 'auth_token');
+    return _secureStorage.read(key: 'auth_token');
   }
 
   /// Get auth headers map for Image.network, url_launcher, etc.
@@ -189,7 +189,7 @@ class ApiClient {
 
   /// Get refresh token from secure storage
   static Future<String?> get refreshToken async {
-    return await _secureStorage.read(key: 'refresh_token');
+    return _secureStorage.read(key: 'refresh_token');
   }
 
   /// Clear refresh token
@@ -199,7 +199,7 @@ class ApiClient {
 
   /// Store both access and refresh tokens
   static Future<void> storeTokens(
-      {required String accessToken, required String refreshToken}) async {
+      {required String accessToken, required String refreshToken,}) async {
     await setAuthToken(accessToken);
     await setRefreshToken(refreshToken);
   }
@@ -221,7 +221,7 @@ class ApiClient {
 
       final response = await dio.post('/auth/refresh', data: {
         'refreshToken': refreshTok,
-      });
+      },);
 
       if (response.data is Map && response.data['accessToken'] != null) {
         await storeTokens(
@@ -266,10 +266,11 @@ class ApiClient {
       );
       final rawData = response.data;
       if (rawData is! Map) {
-        if (rawData is List)
+        if (rawData is List) {
           throw ApiException('Response is a List, use getList() instead');
+        }
         throw ApiException(
-            'Expected Map response but got ${rawData.runtimeType}');
+            'Expected Map response but got ${rawData.runtimeType}',);
       }
       final data = Map<String, dynamic>.from(rawData);
 
@@ -291,7 +292,7 @@ class ApiClient {
                 queryParameters: queryParameters,
                 cacheKey: cacheKey,
                 cacheTTL: cacheTTL,
-                forceRefresh: true);
+                forceRefresh: true,);
           }
           onUnauthorized?.call();
         }
@@ -458,10 +459,10 @@ class ApiClient {
   static ApiException _handleError(DioException e) {
     if (e.type == DioExceptionType.connectionTimeout) {
       return ApiException('Timeout de conexión - Verifica tu red',
-          statusCode: 0);
+          statusCode: 0,);
     } else if (e.type == DioExceptionType.connectionError) {
       return ApiException('Error de conexión - Verifica tu red WiFi',
-          statusCode: 0);
+          statusCode: 0,);
     } else if (e.type == DioExceptionType.receiveTimeout) {
       return ApiException('El servidor está tardando demasiado', statusCode: 0);
     } else if (e.response != null) {
@@ -479,17 +480,17 @@ class ApiClient {
 
       if (statusCode == 401) {
         return ApiException(serverMessage ?? 'Credenciales inválidas',
-            statusCode: 401);
+            statusCode: 401,);
       } else if (statusCode == 403) {
         return ApiException(serverMessage ?? 'Acceso denegado',
-            statusCode: 403);
+            statusCode: 403,);
       } else if (statusCode == 429) {
         return ApiException(
             serverMessage ?? 'Demasiados intentos - Espera un momento',
-            statusCode: 429);
+            statusCode: 429,);
       }
       return ApiException(serverMessage ?? 'Error: $statusCode',
-          statusCode: statusCode);
+          statusCode: statusCode,);
     } else if (e.type == DioExceptionType.unknown) {
       if (e.error.toString().contains('SocketException')) {
         return ApiException('No se pudo conectar al servidor', statusCode: 0);
@@ -535,20 +536,20 @@ class ApiClient {
 
 /// Retry interceptor for handling transient failures
 class _RetryInterceptor extends Interceptor {
+
+  _RetryInterceptor(this._dio, this._maxRetries, this._retryDelay);
   final Dio _dio;
   final int _maxRetries;
   final Duration _retryDelay;
 
-  _RetryInterceptor(this._dio, this._maxRetries, this._retryDelay);
-
   @override
-  void onError(DioException err, ErrorInterceptorHandler handler) async {
+  Future<void> onError(DioException err, ErrorInterceptorHandler handler) async {
     final shouldRetry = _shouldRetry(err);
     final retryCount = err.requestOptions.extra['retryCount'] as int? ?? 0;
 
     if (shouldRetry && retryCount < _maxRetries) {
       debugPrint(
-          '[ApiClient] Retrying request (${retryCount + 1}/$_maxRetries)...');
+          '[ApiClient] Retrying request (${retryCount + 1}/$_maxRetries)...',);
 
       final delay = _retryDelay * (retryCount + 1);
       await Future<void>.delayed(delay);
@@ -613,10 +614,10 @@ class _SecurityInterceptor extends Interceptor {
 }
 
 class ApiException implements Exception {
-  final String message;
-  final int? statusCode;
 
   ApiException(this.message, {this.statusCode});
+  final String message;
+  final int? statusCode;
 
   @override
   String toString() => message;

@@ -1,25 +1,15 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/api/api_client.dart';
-import '../../../core/api/api_config.dart';
-import '../../../core/models/estado_entrega.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
 
 export '../../../core/models/estado_entrega.dart';
 
 // ── Models (kept from original) ──────────────────────────────────────────────
 
 class EntregaItem {
-  final String itemId;
-  final String codigoArticulo;
-  final String descripcion;
-  final double cantidadPedida;
-  final int bultos;
-  final String? unit;
-  final double precioUnitario;
-  double cantidadEntregada;
-  EstadoEntrega estado;
-  String? observacion;
-
   EntregaItem({
     required this.itemId,
     required this.codigoArticulo,
@@ -44,22 +34,28 @@ class EntregaItem {
       unit: json['UNIT']?.toString() ?? json['unit']?.toString(),
       precioUnitario:
           ((json['precioUnitario'] ?? json['PRICE'] ?? 0) as num).toDouble(),
-      cantidadEntregada:
-          ((json['cantidadEntregada'] ?? 0) as num).toDouble(),
+      cantidadEntregada: ((json['cantidadEntregada'] ?? 0) as num).toDouble(),
       estado: EstadoEntrega.fromString(
-          (json['estado'] ?? 'PENDIENTE') as String),
+        (json['estado'] ?? 'PENDIENTE') as String,
+      ),
       observacion: json['observacion'] as String?,
     );
   }
+  final String itemId;
+  final String codigoArticulo;
+  final String descripcion;
+  final double cantidadPedida;
+  final int bultos;
+  final String? unit;
+  final double precioUnitario;
+  double cantidadEntregada;
+  EstadoEntrega estado;
+  String? observacion;
 
   bool get entregadoCompleto => cantidadEntregada >= cantidadPedida;
 }
 
 class IvaBreakdownItem {
-  final double base;
-  final double pct;
-  final double iva;
-
   IvaBreakdownItem({required this.base, required this.pct, required this.iva});
 
   factory IvaBreakdownItem.fromJson(Map<String, dynamic> json) {
@@ -69,9 +65,116 @@ class IvaBreakdownItem {
       iva: ((json['iva'] ?? 0) as num).toDouble(),
     );
   }
+  final double base;
+  final double pct;
+  final double iva;
 }
 
 class AlbaranEntrega {
+  AlbaranEntrega({
+    required this.id,
+    required this.numeroAlbaran,
+    required this.ejercicio,
+    required this.codigoCliente,
+    required this.nombreCliente,
+    required this.fecha,
+    required this.importeTotal,
+    this.serie = '',
+    this.terminal = 0,
+    this.numeroFactura = 0,
+    this.serieFactura = '',
+    this.direccion = '',
+    this.poblacion = '',
+    this.telefono = '',
+    this.telefono2 = '',
+    this.emailCliente = '',
+    this.importeBruto = 0,
+    this.importeNeto = 0,
+    this.importeIva = 0,
+    this.ivaBreakdown = const [],
+    this.checksum,
+    this.formaPago = '',
+    this.formaPagoDesc = '',
+    this.tipoPago = '',
+    this.diasPago = 0,
+    this.esCTR = false,
+    this.puedeCobrarse = false,
+    this.colorEstado = 'green',
+    this.ruta = '',
+    this.codigoVendedor = '',
+    this.nombreVendedor = '',
+    this.codigoRepartidor = '',
+    this.nombreRepartidor = '',
+    this.ordenPreparacion,
+    this.discrepancy = false,
+    this.lineSum = 0,
+    this.estado = EstadoEntrega.pendiente,
+    this.items = const [],
+    this.observaciones,
+    this.fotos = const [],
+    this.firma,
+    this.horaEntrega,
+    this.horaPrevista,
+  });
+
+  factory AlbaranEntrega.fromJson(Map<String, dynamic> json) {
+    return AlbaranEntrega(
+      id: json['id']?.toString() ?? '',
+      numeroAlbaran: (json['numeroAlbaran'] ?? json['numero'] ?? 0) as int,
+      ejercicio: (json['ejercicio'] ?? DateTime.now().year) as int,
+      serie: json['serie']?.toString() ?? '',
+      terminal: (json['terminal'] ?? 0) as int,
+      numeroFactura: (json['numeroFactura'] ?? 0) as int,
+      serieFactura: json['serieFactura']?.toString() ?? '',
+      codigoCliente: json['codigoCliente']?.toString() ?? '',
+      nombreCliente: json['nombreCliente']?.toString() ?? 'Cliente',
+      direccion: json['direccion']?.toString() ?? '',
+      poblacion: json['poblacion']?.toString() ?? '',
+      telefono: json['telefono']?.toString() ?? '',
+      telefono2: json['telefono2']?.toString() ?? '',
+      emailCliente:
+          json['emailCliente']?.toString() ?? json['email']?.toString() ?? '',
+      fecha: json['fecha']?.toString() ?? '',
+      importeTotal:
+          ((json['importe'] ?? json['importeTotal'] ?? 0) as num).toDouble(),
+      importeBruto: ((json['importeBruto'] ?? 0) as num).toDouble(),
+      importeNeto: ((json['netoSum'] ?? 0) as num).toDouble(),
+      importeIva: ((json['ivaSum'] ?? 0) as num).toDouble(),
+      ivaBreakdown: (json['ivaBreakdown'] as List<dynamic>?)
+              ?.map(
+                (e) => IvaBreakdownItem.fromJson(e as Map<String, dynamic>),
+              )
+              .toList() ??
+          [],
+      checksum: json['checksum']?.toString(),
+      formaPago: json['formaPago']?.toString() ?? '',
+      formaPagoDesc: json['formaPagoDesc']?.toString() ?? '',
+      tipoPago: json['tipoPago']?.toString() ?? '',
+      diasPago: (json['diasPago'] ?? 0) as int,
+      esCTR: json['esCTR'] == true,
+      puedeCobrarse: json['puedeCobrarse'] == true,
+      colorEstado: json['colorEstado']?.toString() ?? 'green',
+      ruta: json['ruta']?.toString() ?? '',
+      codigoVendedor: json['codigoVendedor']?.toString() ?? '',
+      nombreVendedor: json['nombreVendedor']?.toString() ?? '',
+      codigoRepartidor: json['codigoRepartidor']?.toString() ?? '',
+      nombreRepartidor: json['nombreRepartidor']?.toString() ?? '',
+      ordenPreparacion: json['ordenPreparacion'] as int?,
+      discrepancy: json['discrepancy'] == true,
+      lineSum: ((json['lineSum'] ?? 0) as num).toDouble(),
+      estado: EstadoEntrega.fromString(
+        (json['estado'] ?? 'PENDIENTE') as String,
+      ),
+      items: (json['items'] as List<dynamic>?)
+              ?.map((e) => EntregaItem.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [],
+      observaciones: json['observaciones'] as String?,
+      fotos: (json['fotos'] as List<dynamic>?)?.cast<String>() ?? [],
+      firma: json['firma'] as String?,
+      horaPrevista: _parseHoraPrevista(json['HORALLEGADA']),
+    );
+  }
   final String id;
   final int numeroAlbaran;
   final int ejercicio;
@@ -116,110 +219,6 @@ class AlbaranEntrega {
   DateTime? horaEntrega;
   final String? horaPrevista;
 
-  AlbaranEntrega({
-    required this.id,
-    required this.numeroAlbaran,
-    required this.ejercicio,
-    this.serie = '',
-    this.terminal = 0,
-    this.numeroFactura = 0,
-    this.serieFactura = '',
-    required this.codigoCliente,
-    required this.nombreCliente,
-    this.direccion = '',
-    this.poblacion = '',
-    this.telefono = '',
-    this.telefono2 = '',
-    this.emailCliente = '',
-    required this.fecha,
-    required this.importeTotal,
-    this.importeBruto = 0,
-    this.importeNeto = 0,
-    this.importeIva = 0,
-    this.ivaBreakdown = const [],
-    this.checksum,
-    this.formaPago = '',
-    this.formaPagoDesc = '',
-    this.tipoPago = '',
-    this.diasPago = 0,
-    this.esCTR = false,
-    this.puedeCobrarse = false,
-    this.colorEstado = 'green',
-    this.ruta = '',
-    this.codigoVendedor = '',
-    this.nombreVendedor = '',
-    this.codigoRepartidor = '',
-    this.nombreRepartidor = '',
-    this.ordenPreparacion,
-    this.discrepancy = false,
-    this.lineSum = 0,
-    this.estado = EstadoEntrega.pendiente,
-    this.items = const [],
-    this.observaciones,
-    this.fotos = const [],
-    this.firma,
-    this.horaEntrega,
-    this.horaPrevista,
-  });
-
-  factory AlbaranEntrega.fromJson(Map<String, dynamic> json) {
-    return AlbaranEntrega(
-      id: json['id']?.toString() ?? '',
-      numeroAlbaran:
-          (json['numeroAlbaran'] ?? json['numero'] ?? 0) as int,
-      ejercicio: (json['ejercicio'] ?? DateTime.now().year) as int,
-      serie: json['serie']?.toString() ?? '',
-      terminal: (json['terminal'] ?? 0) as int,
-      numeroFactura: (json['numeroFactura'] ?? 0) as int,
-      serieFactura: json['serieFactura']?.toString() ?? '',
-      codigoCliente: json['codigoCliente']?.toString() ?? '',
-      nombreCliente: json['nombreCliente']?.toString() ?? 'Cliente',
-      direccion: json['direccion']?.toString() ?? '',
-      poblacion: json['poblacion']?.toString() ?? '',
-      telefono: json['telefono']?.toString() ?? '',
-      telefono2: json['telefono2']?.toString() ?? '',
-      emailCliente:
-          json['emailCliente']?.toString() ?? json['email']?.toString() ?? '',
-      fecha: json['fecha']?.toString() ?? '',
-      importeTotal:
-          ((json['importe'] ?? json['importeTotal'] ?? 0) as num).toDouble(),
-      importeBruto: ((json['importeBruto'] ?? 0) as num).toDouble(),
-      importeNeto: ((json['netoSum'] ?? 0) as num).toDouble(),
-      importeIva: ((json['ivaSum'] ?? 0) as num).toDouble(),
-      ivaBreakdown: (json['ivaBreakdown'] as List<dynamic>?)
-              ?.map((e) =>
-                  IvaBreakdownItem.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
-      checksum: json['checksum']?.toString(),
-      formaPago: json['formaPago']?.toString() ?? '',
-      formaPagoDesc: json['formaPagoDesc']?.toString() ?? '',
-      tipoPago: json['tipoPago']?.toString() ?? '',
-      diasPago: (json['diasPago'] ?? 0) as int,
-      esCTR: json['esCTR'] == true,
-      puedeCobrarse: json['puedeCobrarse'] == true,
-      colorEstado: json['colorEstado']?.toString() ?? 'green',
-      ruta: json['ruta']?.toString() ?? '',
-      codigoVendedor: json['codigoVendedor']?.toString() ?? '',
-      nombreVendedor: json['nombreVendedor']?.toString() ?? '',
-      codigoRepartidor: json['codigoRepartidor']?.toString() ?? '',
-      nombreRepartidor: json['nombreRepartidor']?.toString() ?? '',
-      ordenPreparacion: json['ordenPreparacion'] as int?,
-      discrepancy: json['discrepancy'] == true,
-      lineSum: ((json['lineSum'] ?? 0) as num).toDouble(),
-      estado: EstadoEntrega.fromString(
-          (json['estado'] ?? 'PENDIENTE') as String),
-      items: (json['items'] as List<dynamic>?)
-              ?.map((e) => EntregaItem.fromJson(e as Map<String, dynamic>))
-              .toList() ??
-          [],
-      observaciones: json['observaciones'] as String?,
-      fotos: (json['fotos'] as List<dynamic>?)?.cast<String>() ?? [],
-      firma: json['firma'] as String?,
-      horaPrevista: _parseHoraPrevista(json['HORALLEGADA']),
-    );
-  }
-
   static String? _parseHoraPrevista(dynamic val) {
     if (val == null) return null;
     final s = val.toString().padLeft(6, '0');
@@ -232,32 +231,13 @@ class AlbaranEntrega {
   int get totalItems => items.length;
   int get itemsEntregados =>
       items.where((i) => i.estado == EstadoEntrega.entregado).length;
-  double get progreso =>
-      totalItems > 0 ? itemsEntregados / totalItems : 0;
+  double get progreso => totalItems > 0 ? itemsEntregados / totalItems : 0;
   bool get requiereCobro => esCTR && estado != EstadoEntrega.entregado;
 }
 
 // ── Riverpod State ────────────────────────────────────────────────────────────
 
 class EntregasState {
-  final List<AlbaranEntrega> albaranes;
-  final AlbaranEntrega? albaranSeleccionado;
-  final bool isLoading;
-  final String? error;
-  final String repartidorId;
-  final DateTime fechaSeleccionada;
-  final String searchQuery;
-  final String searchClient;
-  final String searchAlbaran;
-  final String sortBy;
-  final String filterTipoPago;
-  final String filterDebeCobrar;
-  final String filterDocTipo;
-  final double resumenTotalBruto;
-  final double resumenTotalACobrar;
-  final double resumenTotalOpcional;
-  final int resumenCompletedCount;
-
   EntregasState({
     this.albaranes = const [],
     this.albaranSeleccionado,
@@ -277,6 +257,23 @@ class EntregasState {
     this.resumenTotalOpcional = 0,
     this.resumenCompletedCount = 0,
   }) : fechaSeleccionada = fechaSeleccionada ?? DateTime.now();
+  final List<AlbaranEntrega> albaranes;
+  final AlbaranEntrega? albaranSeleccionado;
+  final bool isLoading;
+  final String? error;
+  final String repartidorId;
+  final DateTime fechaSeleccionada;
+  final String searchQuery;
+  final String searchClient;
+  final String searchAlbaran;
+  final String sortBy;
+  final String filterTipoPago;
+  final String filterDebeCobrar;
+  final String filterDocTipo;
+  final double resumenTotalBruto;
+  final double resumenTotalACobrar;
+  final double resumenTotalOpcional;
+  final int resumenCompletedCount;
 
   EntregasState copyWith({
     List<AlbaranEntrega>? albaranes,
@@ -315,8 +312,7 @@ class EntregasState {
       filterDocTipo: filterDocTipo ?? this.filterDocTipo,
       resumenTotalBruto: resumenTotalBruto ?? this.resumenTotalBruto,
       resumenTotalACobrar: resumenTotalACobrar ?? this.resumenTotalACobrar,
-      resumenTotalOpcional:
-          resumenTotalOpcional ?? this.resumenTotalOpcional,
+      resumenTotalOpcional: resumenTotalOpcional ?? this.resumenTotalOpcional,
       resumenCompletedCount:
           resumenCompletedCount ?? this.resumenCompletedCount,
     );
@@ -331,8 +327,11 @@ class EntregasState {
       albaranes.where((a) => a.estado == EstadoEntrega.enRuta).toList();
 
   List<AlbaranEntrega> get albaranesEntregados => albaranes
-      .where((a) => a.estado == EstadoEntrega.entregado ||
-          a.estado == EstadoEntrega.parcial)
+      .where(
+        (a) =>
+            a.estado == EstadoEntrega.entregado ||
+            a.estado == EstadoEntrega.parcial,
+      )
       .toList();
 
   int get totalPendientes => albaranesPendientes.length;
@@ -348,11 +347,27 @@ class EntregasState {
 // ── Notifier ─────────────────────────────────────────────────────────────────
 
 class EntregasNotifier extends Notifier<EntregasState> {
+  Timer? _debounceTimer;
+
   @override
   EntregasState build() => EntregasState();
 
-  void setRepartidor(String repartidorId,
-      {bool autoReload = true, bool forceReload = false}) {
+  void _debouncedLoad() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      cargarAlbaranesPendientes();
+    });
+  }
+
+  void _cancelDebouncedLoad() {
+    _debounceTimer?.cancel();
+  }
+
+  void setRepartidor(
+    String repartidorId, {
+    bool autoReload = true,
+    bool forceReload = false,
+  }) {
     final wasChanged = state.repartidorId != repartidorId;
     if (autoReload && (wasChanged || forceReload)) {
       state = state.copyWith(repartidorId: repartidorId);
@@ -364,42 +379,42 @@ class EntregasNotifier extends Notifier<EntregasState> {
 
   void seleccionarFecha(DateTime fecha) {
     state = state.copyWith(fechaSeleccionada: fecha);
-    cargarAlbaranesPendientes();
+    _debouncedLoad();
   }
 
   void setSearchQuery(String query) {
     state = state.copyWith(searchQuery: query);
-    cargarAlbaranesPendientes();
+    _debouncedLoad();
   }
 
   void setSearchClient(String query) {
     state = state.copyWith(searchClient: query);
-    cargarAlbaranesPendientes();
+    _debouncedLoad();
   }
 
   void setSearchAlbaran(String query) {
     state = state.copyWith(searchAlbaran: query);
-    cargarAlbaranesPendientes();
+    _debouncedLoad();
   }
 
   void setSortBy(String sort) {
     state = state.copyWith(sortBy: sort);
-    cargarAlbaranesPendientes();
+    _debouncedLoad();
   }
 
   void setFilterTipoPago(String tipo) {
     state = state.copyWith(filterTipoPago: tipo);
-    cargarAlbaranesPendientes();
+    _debouncedLoad();
   }
 
   void setFilterDebeCobrar(String debeCobrar) {
     state = state.copyWith(filterDebeCobrar: debeCobrar);
-    cargarAlbaranesPendientes();
+    _debouncedLoad();
   }
 
   void setFilterDocTipo(String docTipo) {
     state = state.copyWith(filterDocTipo: docTipo);
-    cargarAlbaranesPendientes();
+    _debouncedLoad();
   }
 
   Future<void> cargarAlbaranesPendientes() async {
@@ -411,7 +426,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
       final formattedDate =
           '${state.fechaSeleccionada.year}-${state.fechaSeleccionada.month.toString().padLeft(2, '0')}-${state.fechaSeleccionada.day.toString().padLeft(2, '0')}';
 
-      String url =
+      var url =
           '/entregas/pendientes/${state.repartidorId}?date=$formattedDate';
 
       if (state.searchQuery.isNotEmpty) {
@@ -448,8 +463,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
         state = state.copyWith(
           albaranes: albaranes,
           isLoading: false,
-          resumenTotalBruto:
-              ((resumen['totalBruto'] ?? 0) as num).toDouble(),
+          resumenTotalBruto: ((resumen['totalBruto'] ?? 0) as num).toDouble(),
           resumenTotalACobrar:
               ((resumen['totalACobrar'] ?? 0) as num).toDouble(),
           resumenTotalOpcional:
@@ -471,15 +485,19 @@ class EntregasNotifier extends Notifier<EntregasState> {
   }
 
   Future<AlbaranEntrega?> obtenerDetalleAlbaran(
-      int numero, int ejercicio, String serie, int terminal) async {
+    int numero,
+    int ejercicio,
+    String serie,
+    int terminal,
+  ) async {
     try {
       final response = await ApiClient.get(
         '/entregas/albaran/$numero/$ejercicio?serie=$serie&terminal=$terminal',
       );
 
       if (response['success'] == true && response['albaran'] != null) {
-        final albaran =
-            AlbaranEntrega.fromJson(response['albaran'] as Map<String, dynamic>);
+        final albaran = AlbaranEntrega.fromJson(
+            response['albaran'] as Map<String, dynamic>);
         state = state.copyWith(albaranSeleccionado: albaran);
         return albaran;
       }
@@ -519,7 +537,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
       }
     }
 
-    return await _actualizarEstado(
+    return _actualizarEstado(
       itemId: albaranId,
       estado: EstadoEntrega.entregado,
       observaciones: observaciones,
@@ -537,17 +555,18 @@ class EntregasNotifier extends Notifier<EntregasState> {
       final response = await ApiClient.post('/entregas/receipt/${albaran.id}', {
         'signaturePath': albaran.firma,
         'items': albaran.items
-            .map((i) => {
-                  'cantidad': i.cantidadPedida,
-                  'descripcion': i.descripcion,
-                  'precio': i.precioUnitario,
-                })
+            .map(
+              (i) => {
+                'cantidad': i.cantidadPedida,
+                'descripcion': i.descripcion,
+                'precio': i.precioUnitario,
+              },
+            )
             .toList(),
         'clientCode': albaran.codigoCliente,
         'clientName': albaran.nombreCliente,
         'albaranNum': albaran.numeroAlbaran,
-        'facturaNum':
-            albaran.numeroFactura > 0 ? albaran.numeroFactura : null,
+        'facturaNum': albaran.numeroFactura > 0 ? albaran.numeroFactura : null,
         'fecha': albaran.fecha,
         'subtotal': albaran.importeNeto > 0
             ? albaran.importeNeto
@@ -576,17 +595,18 @@ class EntregasNotifier extends Notifier<EntregasState> {
         'email': email,
         'signaturePath': albaran.firma,
         'items': albaran.items
-            .map((i) => {
-                  'cantidad': i.cantidadPedida,
-                  'descripcion': i.descripcion,
-                  'precio': i.precioUnitario,
-                })
+            .map(
+              (i) => {
+                'cantidad': i.cantidadPedida,
+                'descripcion': i.descripcion,
+                'precio': i.precioUnitario,
+              },
+            )
             .toList(),
         'clientCode': albaran.codigoCliente,
         'clientName': albaran.nombreCliente,
         'albaranNum': albaran.numeroAlbaran,
-        'facturaNum':
-            albaran.numeroFactura > 0 ? albaran.numeroFactura : null,
+        'facturaNum': albaran.numeroFactura > 0 ? albaran.numeroFactura : null,
         'fecha': albaran.fecha,
         'subtotal': albaran.importeNeto > 0
             ? albaran.importeNeto
@@ -610,7 +630,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
     String? firma,
     List<String>? fotos,
   }) async {
-    return await _actualizarEstado(
+    return _actualizarEstado(
       itemId: albaranId,
       estado: EstadoEntrega.parcial,
       observaciones: observaciones,
@@ -624,7 +644,7 @@ class EntregasNotifier extends Notifier<EntregasState> {
     required String observaciones,
     List<String>? fotos,
   }) async {
-    return await _actualizarEstado(
+    return _actualizarEstado(
       itemId: albaranId,
       estado: EstadoEntrega.noEntregado,
       observaciones: observaciones,
@@ -673,11 +693,13 @@ class EntregasNotifier extends Notifier<EntregasState> {
         return true;
       } else if (response['alreadyDelivered'] == true) {
         state = state.copyWith(
-            error: 'Esta entrega ya fue confirmada anteriormente');
+          error: 'Esta entrega ya fue confirmada anteriormente',
+        );
         return false;
       } else {
         state = state.copyWith(
-            error: (response['error'] ?? 'Error desconocido') as String);
+          error: (response['error'] ?? 'Error desconocido') as String,
+        );
         return false;
       }
     } catch (e) {

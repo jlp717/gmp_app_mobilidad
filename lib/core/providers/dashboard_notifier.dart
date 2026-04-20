@@ -11,28 +11,21 @@
 ///
 /// @agent Flutter Riverpod - AsyncNotifier, family for vendor codes
 /// @agent Performance - Server cache means client just displays
+library;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/api/api_client.dart';
-import '../../core/api/api_config.dart';
-import '../../core/models/dashboard_models.dart';
-import 'auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/models/dashboard_models.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 
 // ============================================================
 // STATE
 // ============================================================
 
 class DashboardState {
-  final DashboardMetrics? metrics;
-  final List<RecentSale> recentSales;
-  final List<SalesEvolutionPoint> salesEvolution;
-  final YoYComparison? yoyComparison;
-  final List<TopProduct> topProducts;
-  final List<TopClient> topClients;
-  final int selectedYear;
-  final int selectedMonth;
 
   const DashboardState({
     this.metrics,
@@ -44,6 +37,14 @@ class DashboardState {
     this.selectedYear = 0,
     this.selectedMonth = 0,
   });
+  final DashboardMetrics? metrics;
+  final List<RecentSale> recentSales;
+  final List<SalesEvolutionPoint> salesEvolution;
+  final YoYComparison? yoyComparison;
+  final List<TopProduct> topProducts;
+  final List<TopClient> topClients;
+  final int selectedYear;
+  final int selectedMonth;
 
   bool get hasData => metrics != null;
 
@@ -211,7 +212,7 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
       final p = Map<String, String>.from(params)..['months'] = '12';
       final response = await ApiClient.get(ApiConfig.salesEvolution, queryParameters: p);
       if (response == null) return [];
-      final dataList = (response['evolution'] as List? ?? response['data'] as List? ?? []);
+      final dataList = response['evolution'] as List? ?? response['data'] as List? ?? [];
       return dataList.map((j) => SalesEvolutionPoint.fromJson(j as Map<String, dynamic>)).toList();
     } catch (e) {
       debugPrint('[DashboardNotifier] salesEvolution error: $e');

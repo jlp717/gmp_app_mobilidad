@@ -15,8 +15,7 @@ import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_m
 /// UBICACIÓN: Entre gráficas y Accesos Rápidos
 class SummaryStatsWidget extends StatelessWidget {
   const SummaryStatsWidget({
-    super.key,
-    required this.metrics,
+    required this.metrics, super.key,
   });
 
   final DashboardMetrics metrics;
@@ -34,7 +33,7 @@ class SummaryStatsWidget extends StatelessWidget {
     // Calcular promedio de ventas diarias
     final dailyData = metrics.salesSummary.dailyData;
     final avgDailySales = dailyData.isNotEmpty
-        ? dailyData.fold<double>(0.0, (sum, day) => sum + day.sales) / dailyData.length
+        ? dailyData.fold<double>(0, (sum, day) => sum + day.sales) / dailyData.length
         : 0.0;
     
     // Determinar tendencia (simplificado)
@@ -285,7 +284,6 @@ class SummaryStatsWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: color.withOpacity(0.2),
-          width: 1,
         ),
       ),
       child: Column(

@@ -1,14 +1,13 @@
-import 'dart:convert';
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/application/load_planner_provider.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-
-import '../../../../core/theme/app_theme.dart';
-import '../../application/load_planner_provider.dart';
-import '../../domain/models/load_planner_models.dart';
 
 /// LoadCanvas V3 Performance Optimized
 /// 
@@ -142,7 +141,6 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
         case 'sceneReady':
           setState(() => _sceneReady = true);
           _pushFullState();
-          break;
 
         case 'boxSelected':
           final index = data['index'] as int?;
@@ -150,11 +148,9 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
             HapticFeedback.selectionClick();
             context.read<LoadPlannerProvider>().selectBox(index);
           }
-          break;
 
         case 'canvasTapped':
           context.read<LoadPlannerProvider>().clearSelection();
-          break;
 
         case 'boxDragStart':
           final index = data['index'] as int?;
@@ -162,7 +158,6 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
             HapticFeedback.mediumImpact();
             context.read<LoadPlannerProvider>().startDrag(index);
           }
-          break;
 
         case 'boxDragMove':
           final x = (data['x'] as num?)?.toDouble();
@@ -172,7 +167,6 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
             // Throttled collision state update
             _scheduleCollisionSync();
           }
-          break;
 
         case 'boxDragEnd':
           final hasCollision = 
@@ -186,7 +180,6 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
           _lastCollisionState = false;
           // Sync positions after drag
           _scheduleBoxSync();
-          break;
 
         case 'boxesSettled':
           final settledBoxes = data['boxes'] as List?;
@@ -196,7 +189,6 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
             );
             _lastBoxCount = context.read<LoadPlannerProvider>().placedBoxes.length;
           }
-          break;
 
         case 'boxesRepacked':
           final placedList = data['placed'] as List?;
@@ -208,7 +200,6 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
             );
             _lastBoxCount = context.read<LoadPlannerProvider>().placedBoxes.length;
           }
-          break;
       }
     } catch (e) {
       debugPrint('JS message parse error: $e');
@@ -287,9 +278,9 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
 
   String _escapeJs(String s) {
     return s
-        .replaceAll('\\', '\\\\')
-        .replaceAll("'", "\\'")
-        .replaceAll('\n', '\\n')
+        .replaceAll(r'\', r'\\')
+        .replaceAll("'", r"\'")
+        .replaceAll('\n', r'\n')
         .replaceAll('\r', '');
   }
 
@@ -398,9 +389,9 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
 
             // Loading overlay while Three.js initializes
             if (!_sceneReady || planner.truck == null)
-              Container(
+              const ColoredBox(
                 color: AppTheme.darkBase,
-                child: const Center(
+                child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [

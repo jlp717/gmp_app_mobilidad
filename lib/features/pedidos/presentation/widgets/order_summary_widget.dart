@@ -1,28 +1,27 @@
 /// Order Summary Widget
 /// ====================
 /// Cart/current order panel showing client header, line items, totals, and confirm button
+library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../data/pedidos_service.dart';
-import '../../providers/pedidos_provider.dart';
-import 'order_line_tile.dart';
-import 'order_preview_sheet.dart';
-import 'stock_alternatives_sheet.dart';
-import '../dialogs/delete_line_dialog.dart';
-import '../utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/dialogs/delete_line_dialog.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_line_tile.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_preview_sheet.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
 class OrderSummaryWidget extends ConsumerStatefulWidget {
-  final String vendedorCode;
-  final ScrollController? scrollController;
 
   const OrderSummaryWidget({
-    Key? key,
-    required this.vendedorCode,
+    required this.vendedorCode, super.key,
     this.scrollController,
-  }) : super(key: key);
+  });
+  final String vendedorCode;
+  final ScrollController? scrollController;
 
   @override
   ConsumerState<OrderSummaryWidget> createState() => _OrderSummaryWidgetState();
@@ -45,7 +44,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
   Widget build(BuildContext context) {
     final provider = ref.watch(pedidosProvider);
 
-    return Container(
+    return ColoredBox(
       color: AppTheme.darkBase,
       child: Column(
         children: [
@@ -92,7 +91,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                           color: Colors.white,
                           fontWeight: FontWeight.w600,
                           fontSize: Responsive.fontSize(context,
-                              small: 13, large: 15),
+                              small: 13, large: 15,),
                         ),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -101,7 +100,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                         style: TextStyle(
                           color: AppTheme.neonBlue,
                           fontSize: Responsive.fontSize(context,
-                              small: 11, large: 12),
+                              small: 11, large: 12,),
                         ),
                       ),
                     ],
@@ -136,7 +135,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           if (provider.hasLines)
             IconButton(
               icon: const Icon(Icons.delete_sweep_outlined,
-                  color: AppTheme.error, size: 20),
+                  color: AppTheme.error, size: 20,),
               tooltip: 'Vaciar carrito',
               onPressed: () {
                 showDialog<void>(
@@ -144,15 +143,15 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                   builder: (ctx) => AlertDialog(
                     backgroundColor: AppTheme.darkSurface,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
+                        borderRadius: BorderRadius.circular(16),),
                     title: const Row(
                       children: [
                         Icon(Icons.warning_amber_rounded,
-                            color: AppTheme.error, size: 22),
+                            color: AppTheme.error, size: 22,),
                         SizedBox(width: 8),
                         Text('Vaciar carrito',
                             style:
-                                TextStyle(color: Colors.white, fontSize: 16)),
+                                TextStyle(color: Colors.white, fontSize: 16),),
                       ],
                     ),
                     content: const Text(
@@ -163,7 +162,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                       TextButton(
                         onPressed: () => Navigator.pop(ctx),
                         child: const Text('Cancelar',
-                            style: TextStyle(color: Colors.white54)),
+                            style: TextStyle(color: Colors.white54),),
                       ),
                       TextButton(
                         onPressed: () async {
@@ -174,7 +173,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                         child: const Text('Vaciar',
                             style: TextStyle(
                                 color: AppTheme.error,
-                                fontWeight: FontWeight.bold)),
+                                fontWeight: FontWeight.bold,),),
                       ),
                     ],
                   ),
@@ -191,7 +190,6 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
       scrollController: widget.scrollController,
       padding: const EdgeInsets.symmetric(vertical: 4),
       itemCount: provider.lines.length,
-      buildDefaultDragHandles: true,
       onReorder: (oldIndex, newIndex) =>
           provider.reorderLines(oldIndex, newIndex),
       itemBuilder: (ctx, i) {
@@ -205,7 +203,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
               context,
               productName: line.descripcion,
             );
-            if (confirm == true) {
+            if (confirm ?? false) {
               provider.removeLine(i);
             }
           },
@@ -218,13 +216,13 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                 isBoxes ? line.cantidadEnvases + 1 : line.cantidadUnidades + 1;
             final error = provider.updateLine(i,
                 cantidadEnvases: isBoxes ? qty : null,
-                cantidadUnidades: isBoxes ? null : qty);
+                cantidadUnidades: isBoxes ? null : qty,);
             if (error != null) {
               ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                   content: Text(error,
                       style: const TextStyle(
-                          color: Colors.white, fontWeight: FontWeight.bold)),
-                  backgroundColor: AppTheme.error));
+                          color: Colors.white, fontWeight: FontWeight.bold,),),
+                  backgroundColor: AppTheme.error,),);
             }
           },
           onDecrement: () {
@@ -235,7 +233,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
             final qty = currentQty - 1;
             provider.updateLine(i,
                 cantidadEnvases: isBoxes ? qty : null,
-                cantidadUnidades: isBoxes ? null : qty);
+                cantidadUnidades: isBoxes ? null : qty,);
           },
           onClaseLineaToggle: (clase) =>
               provider.updateLineClaseLinea(i, clase),
@@ -249,7 +247,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.shopping_cart_outlined, color: Colors.white24, size: 56),
+          const Icon(Icons.shopping_cart_outlined, color: Colors.white24, size: 56),
           const SizedBox(height: 12),
           Text(
             'Pedido vacio',
@@ -323,13 +321,13 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
               hintText: 'Añadir observaciones al pedido...',
               hintStyle: const TextStyle(color: Colors.white38),
               prefixIcon: const Icon(Icons.comment_outlined,
-                  color: Colors.white54, size: 18),
+                  color: Colors.white54, size: 18,),
               filled: true,
               fillColor: AppTheme.darkCard,
               contentPadding: const EdgeInsets.symmetric(vertical: 10),
               border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none),
+                  borderSide: BorderSide.none,),
             ),
           ),
           const SizedBox(height: 12),
@@ -339,7 +337,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
             child: Row(
               children: [
                 const Icon(Icons.discount_outlined,
-                    color: Colors.white54, size: 16),
+                    color: Colors.white54, size: 16,),
                 const SizedBox(width: 6),
                 Text(
                   'Descuento:',
@@ -371,7 +369,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                       filled: true,
                       fillColor: AppTheme.darkCard,
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 6),
+                          horizontal: 8, vertical: 6,),
                       isDense: true,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -459,8 +457,8 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                   ...provider.ivaBreakdown.entries.map((e) => Text(
                         'IVA ${(e.key * 100).toStringAsFixed(0)}%: ${PedidosFormatters.money(e.value)}',
                         style: const TextStyle(
-                            color: Colors.white38, fontSize: 10),
-                      )),
+                            color: Colors.white38, fontSize: 10,),
+                      ),),
                 ],
               ),
             ),
@@ -546,7 +544,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
   }
 
   Widget _buildStatItem(
-      BuildContext context, String value, IconData icon, Color color) {
+      BuildContext context, String value, IconData icon, Color color,) {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -571,7 +569,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
   }
 
   void _showEditLineDialog(BuildContext context, PedidosProvider provider,
-      OrderLine line, int index) {
+      OrderLine line, int index,) {
     final isDual = line.unidadesCaja > 1 &&
         line.unidadesFraccion > 0 &&
         line.unidadesFraccion < line.unidadesCaja;
@@ -584,7 +582,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     final qtyController = TextEditingController(
       text: formatQty(line.cantidadEnvases > 0
           ? line.cantidadEnvases
-          : line.cantidadUnidades),
+          : line.cantidadUnidades,),
     );
     final cajasController = TextEditingController(
       text: line.cantidadEnvases > 0 ? formatQty(line.cantidadEnvases) : '',
@@ -625,7 +623,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                 Row(
                   children: [
                     const Icon(Icons.edit_outlined,
-                        color: AppTheme.neonBlue, size: 20),
+                        color: AppTheme.neonBlue, size: 20,),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -634,14 +632,14 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
                           fontSize: Responsive.fontSize(context,
-                              small: 15, large: 17),
+                              small: 15, large: 17,),
                         ),
                       ),
                     ),
                     IconButton(
                       onPressed: () => Navigator.pop(ctx),
                       icon: const Icon(Icons.close,
-                          color: Colors.white54, size: 20),
+                          color: Colors.white54, size: 20,),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
@@ -697,11 +695,11 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                         child: TextField(
                           controller: cajasController,
                           keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
+                              decimal: true,),
                           style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
-                              fontWeight: FontWeight.bold),
+                              fontWeight: FontWeight.bold,),
                           textAlign: TextAlign.center,
                           decoration: InputDecoration(
                             labelText: 'Cajas',
@@ -711,15 +709,15 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                             border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: const BorderSide(
-                                    color: AppTheme.borderColor)),
+                                    color: AppTheme.borderColor,),),
                             enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: const BorderSide(
-                                    color: AppTheme.borderColor)),
+                                    color: AppTheme.borderColor,),),
                             focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: const BorderSide(
-                                    color: AppTheme.neonGreen)),
+                                    color: AppTheme.neonGreen,),),
                           ),
                           onChanged: (val) {
                             final cur =
@@ -734,11 +732,11 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                         child: TextField(
                           controller: unidadesController,
                           keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
+                              decimal: true,),
                           style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
-                              fontWeight: FontWeight.bold),
+                              fontWeight: FontWeight.bold,),
                           textAlign: TextAlign.center,
                           decoration: InputDecoration(
                             labelText:
@@ -749,15 +747,15 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                             border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: const BorderSide(
-                                    color: AppTheme.borderColor)),
+                                    color: AppTheme.borderColor,),),
                             enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: const BorderSide(
-                                    color: AppTheme.borderColor)),
+                                    color: AppTheme.borderColor,),),
                             focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide:
-                                    const BorderSide(color: AppTheme.neonBlue)),
+                                    const BorderSide(color: AppTheme.neonBlue),),
                           ),
                           onChanged: (val) {
                             final cur =
@@ -784,15 +782,15 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide:
-                              const BorderSide(color: AppTheme.borderColor)),
+                              const BorderSide(color: AppTheme.borderColor),),
                       enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide:
-                              const BorderSide(color: AppTheme.borderColor)),
+                              const BorderSide(color: AppTheme.borderColor),),
                       focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide:
-                              const BorderSide(color: AppTheme.neonBlue)),
+                              const BorderSide(color: AppTheme.neonBlue),),
                     ),
                   ),
                 ] else ...[
@@ -802,11 +800,11 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                         child: TextField(
                           controller: qtyController,
                           keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
+                              decimal: true,),
                           style: const TextStyle(
                               color: Colors.white,
                               fontSize: 18,
-                              fontWeight: FontWeight.bold),
+                              fontWeight: FontWeight.bold,),
                           textAlign: TextAlign.center,
                           decoration: InputDecoration(
                             labelText: 'Cantidad ($unitLabel)',
@@ -816,15 +814,15 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                             border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: const BorderSide(
-                                    color: AppTheme.borderColor)),
+                                    color: AppTheme.borderColor,),),
                             enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: const BorderSide(
-                                    color: AppTheme.borderColor)),
+                                    color: AppTheme.borderColor,),),
                             focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide:
-                                    const BorderSide(color: AppTheme.neonBlue)),
+                                    const BorderSide(color: AppTheme.neonBlue),),
                           ),
                         ),
                       ),
@@ -833,7 +831,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                         child: TextField(
                           controller: priceController,
                           keyboardType: const TextInputType.numberWithOptions(
-                              decimal: true),
+                              decimal: true,),
                           style: const TextStyle(color: Colors.white),
                           decoration: InputDecoration(
                             labelText: 'Precio',
@@ -844,15 +842,15 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                             border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: const BorderSide(
-                                    color: AppTheme.borderColor)),
+                                    color: AppTheme.borderColor,),),
                             enabledBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: const BorderSide(
-                                    color: AppTheme.borderColor)),
+                                    color: AppTheme.borderColor,),),
                             focusedBorder: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide:
-                                    const BorderSide(color: AppTheme.neonBlue)),
+                                    const BorderSide(color: AppTheme.neonBlue),),
                           ),
                         ),
                       ),
@@ -886,7 +884,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                           },
                           icon: const Icon(Icons.delete_outline, size: 16),
                           label: const Text('ELIMINAR',
-                              style: TextStyle(fontSize: 13)),
+                              style: TextStyle(fontSize: 13),),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppTheme.error,
                             side: const BorderSide(color: AppTheme.error),
@@ -906,15 +904,15 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                         child: ElevatedButton.icon(
                           onPressed: () {
                             final price = double.tryParse(priceController.text
-                                    .replaceAll(',', '.')) ??
+                                    .replaceAll(',', '.'),) ??
                                 0;
 
                             if (isDual) {
                               final c = double.tryParse(cajasController.text
-                                      .replaceAll(',', '.')) ??
+                                      .replaceAll(',', '.'),) ??
                                   0;
                               final u = double.tryParse(unidadesController.text
-                                      .replaceAll(',', '.')) ??
+                                      .replaceAll(',', '.'),) ??
                                   0;
                               if (c <= 0 && u <= 0) return;
                               provider.updateLine(
@@ -925,7 +923,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                               );
                             } else {
                               final qty = double.tryParse(qtyController.text
-                                      .replaceAll(',', '.')) ??
+                                      .replaceAll(',', '.'),) ??
                                   0;
                               if (qty <= 0) return;
                               final isBoxes = line.cantidadEnvases > 0;
@@ -941,7 +939,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                           icon: const Icon(Icons.check, size: 18),
                           label: const Text('GUARDAR',
                               style: TextStyle(
-                                  fontSize: 14, fontWeight: FontWeight.bold)),
+                                  fontSize: 14, fontWeight: FontWeight.bold,),),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppTheme.neonBlue,
                             foregroundColor: AppTheme.darkBase,
@@ -963,7 +961,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
   }
 
   Future<void> _onConfirm(
-      BuildContext context, PedidosProvider provider) async {
+      BuildContext context, PedidosProvider provider,) async {
     if (!provider.hasClient) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -975,7 +973,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     }
 
     final result = await provider.confirmOrder(widget.vendedorCode,
-        observaciones: _obsCtrl.text.trim());
+        observaciones: _obsCtrl.text.trim(),);
     
     if (result != null && context.mounted) {
       // Check if order was blocked due to stock issues
@@ -1001,7 +999,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-              'Pedido #${result['numeroPedido'] ?? ''} confirmado correctamente'),
+              'Pedido #${result['numeroPedido'] ?? ''} confirmado correctamente',),
           backgroundColor: AppTheme.neonGreen,
         ),
       );
@@ -1078,7 +1076,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text('Selecciona un cliente primero'),
-            backgroundColor: AppTheme.error),
+            backgroundColor: AppTheme.error,),
       );
       return;
     }
@@ -1108,7 +1106,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                  'Pedido #${result['numeroPedido'] ?? ''} confirmado correctamente'),
+                  'Pedido #${result['numeroPedido'] ?? ''} confirmado correctamente',),
               backgroundColor: AppTheme.neonGreen,
             ),
           );
@@ -1124,16 +1122,13 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
 // ============================================================================
 
 class _AlternativesDialog extends StatefulWidget {
+
+  const _AlternativesDialog({
+    required this.stockWarnings, required this.alternatives, required this.onAddToCart, super.key,
+  });
   final List<dynamic> stockWarnings;
   final List<dynamic> alternatives;
   final Function(String productCode, String productName, double quantity, String unit) onAddToCart;
-
-  const _AlternativesDialog({
-    Key? key,
-    required this.stockWarnings,
-    required this.alternatives,
-    required this.onAddToCart,
-  }) : super(key: key);
 
   @override
   State<_AlternativesDialog> createState() => _AlternativesDialogState();
@@ -1248,7 +1243,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                             ),
                           ],
                         ),
-                      )),
+                      ),),
                       const SizedBox(height: 16),
                     ],
                     // Alternatives

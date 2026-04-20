@@ -1,15 +1,16 @@
 /// WAREHOUSE SHELL PAGE
 /// Contenedor principal del perfil Almacén con 5 tabs:
 /// EXPEDICIONES | VEHICULOS | ARTICULOS | HISTORIAL | PERSONAL
+library;
 
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_theme.dart';
-import 'pages/warehouse_dashboard_page.dart';
-import 'pages/vehicles_page.dart';
-import 'pages/articles_page.dart';
-import 'pages/load_history_page.dart';
-import 'pages/personnel_page.dart';
-import 'pages/warehouse_config_page.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/articles_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/load_history_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/personnel_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/vehicles_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/warehouse_config_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/warehouse_dashboard_page.dart';
 
 class WarehouseShellPage extends StatefulWidget {
   const WarehouseShellPage({super.key});
@@ -43,7 +44,7 @@ class _WarehouseShellPageState extends State<WarehouseShellPage> {
           color: AppTheme.darkCard,
           border: Border(
             top: BorderSide(
-                color: AppTheme.neonBlue.withValues(alpha: 0.15)),
+                color: AppTheme.neonBlue.withValues(alpha: 0.15),),
           ),
         ),
         child: BottomNavigationBar(
@@ -54,7 +55,7 @@ class _WarehouseShellPageState extends State<WarehouseShellPage> {
           selectedItemColor: AppTheme.neonBlue,
           unselectedItemColor: Colors.white38,
           selectedLabelStyle: const TextStyle(
-              fontWeight: FontWeight.w700, fontSize: 10, letterSpacing: 0.3),
+              fontWeight: FontWeight.w700, fontSize: 10, letterSpacing: 0.3,),
           unselectedLabelStyle:
               const TextStyle(fontSize: 9, letterSpacing: 0.2),
           type: BottomNavigationBarType.fixed,

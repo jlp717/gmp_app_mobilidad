@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:intl/intl.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../../entregas/providers/entregas_provider.dart';
 
 /// Smart Delivery Card with futuristic design
 /// Features:
@@ -13,19 +13,17 @@ import '../../../entregas/providers/entregas_provider.dart';
 /// - Quick action buttons
 /// - Swipe gestures for rapid completion
 class SmartDeliveryCard extends StatefulWidget {
+  const SmartDeliveryCard({
+    required this.albaran, required this.onTap, super.key,
+    this.onSwipeComplete,
+    this.onSwipeNote,
+    this.repartidorNames,
+  });
   final AlbaranEntrega albaran;
   final VoidCallback onTap;
   final VoidCallback? onSwipeComplete;
   final VoidCallback? onSwipeNote;
   final Map<String, String>? repartidorNames;
-  const SmartDeliveryCard({
-    super.key,
-    required this.albaran,
-    required this.onTap,
-    this.onSwipeComplete,
-    this.onSwipeNote,
-    this.repartidorNames,
-  });
 
   @override
   State<SmartDeliveryCard> createState() => _SmartDeliveryCardState();
@@ -45,7 +43,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
       duration: AppTheme.animFast,
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.98).animate(
+    _scaleAnimation = Tween<double>(begin: 1, end: 0.98).animate(
       CurvedAnimation(parent: _animController, curve: Curves.easeInOut),
     );
   }
@@ -84,7 +82,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
       borderRadius: BorderRadius.circular(12),
       border: Border.all(color: baseColor.withOpacity(0.6), width: 1.5),
       boxShadow: [
-        BoxShadow(color: baseColor.withOpacity(0.1), blurRadius: 8, spreadRadius: 0),
+        BoxShadow(color: baseColor.withOpacity(0.1), blurRadius: 8),
       ],
     );
   }
@@ -273,7 +271,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               child: Text(
                 widget.albaran.codigoCliente.length > 6
                     ? widget.albaran.codigoCliente.substring(
-                        widget.albaran.codigoCliente.length - 4)
+                        widget.albaran.codigoCliente.length - 4,)
                     : widget.albaran.codigoCliente,
                 style: const TextStyle(
                   color: AppTheme.neonBlue,
@@ -323,7 +321,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
         // Address
         Row(
           children: [
-            Icon(
+            const Icon(
               Icons.location_on_outlined,
               size: 14,
               color: AppTheme.textTertiary,
@@ -378,8 +376,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
   Widget _buildActionButton({
     required IconData icon,
     required String label,
-    Color? color,
-    required VoidCallback onTap,
+    required VoidCallback onTap, Color? color,
   }) {
     final buttonColor = color ?? AppTheme.neonBlue;
     

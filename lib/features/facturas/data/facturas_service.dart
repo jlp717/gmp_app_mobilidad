@@ -2,26 +2,18 @@
 /// =====================
 /// API client for invoice operations in commercial profile
 /// OPTIMIZED: Full caching support with memory + disk layers
+library;
 
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:path_provider/path_provider.dart';
-import '../../../core/api/api_client.dart';
-import '../../../core/cache/cache_service.dart';
 import 'package:printing/printing.dart';
 
 /// Model for invoice list item
 class Factura {
-  final String id;
-  final String serie;
-  final int numero;
-  final int ejercicio;
-  final String fecha;
-  final String clienteId;
-  final String clienteNombre;
-  final double total;
-  final double base;
-  final double iva;
 
   Factura({
     required this.id,
@@ -37,12 +29,12 @@ class Factura {
   });
 
   factory Factura.fromJson(Map<String, dynamic> json) {
-    final double serverTotal = (json['total'] is num ? (json['total'] as num).toDouble() : double.tryParse(json['total']?.toString() ?? '0') ?? 0.0);
-    final double base = (json['base'] is num ? (json['base'] as num).toDouble() : double.tryParse(json['base']?.toString() ?? '0') ?? 0.0);
-    final double iva = (json['iva'] is num ? (json['iva'] as num).toDouble() : double.tryParse(json['iva']?.toString() ?? '0') ?? 0.0);
+    final serverTotal = (json['total'] is num ? (json['total'] as num).toDouble() : double.tryParse(json['total']?.toString() ?? '0') ?? 0.0);
+    final base = (json['base'] is num ? (json['base'] as num).toDouble() : double.tryParse(json['base']?.toString() ?? '0') ?? 0.0);
+    final iva = (json['iva'] is num ? (json['iva'] as num).toDouble() : double.tryParse(json['iva']?.toString() ?? '0') ?? 0.0);
     // We trust the total from the server since multi-base invoices
     // might not expose all bases in the list view.
-    double finalTotal = serverTotal;
+    final finalTotal = serverTotal;
 
     return Factura(
       id: json['id']?.toString() ?? '',
@@ -57,14 +49,22 @@ class Factura {
       iva: iva,
     );
   }
+  final String id;
+  final String serie;
+  final int numero;
+  final int ejercicio;
+  final String fecha;
+  final String clienteId;
+  final String clienteNombre;
+  final double total;
+  final double base;
+  final double iva;
 
   String get numeroFormateado => '$serie-${numero.toString().padLeft(5, '0')}';
 }
 
 /// Model for invoice detail
 class FacturaDetail {
-  final FacturaHeader header;
-  final List<FacturaLine> lines;
 
   FacturaDetail({required this.header, required this.lines});
 
@@ -77,20 +77,11 @@ class FacturaDetail {
       lines: linesJson.map((l) => FacturaLine.fromJson(l as Map<String, dynamic>)).toList(),
     );
   }
+  final FacturaHeader header;
+  final List<FacturaLine> lines;
 }
 
 class FacturaHeader {
-  final String serie;
-  final int numero;
-  final int ejercicio;
-  final String fecha;
-  final String clienteId;
-  final String clienteNombre;
-  final String clienteDireccion;
-  final String clientePoblacion;
-  final String clienteNif;
-  final double total;
-  final List<FacturaBase> bases;
 
   FacturaHeader({
     required this.serie,
@@ -122,33 +113,38 @@ class FacturaHeader {
       bases: basesJson.map((b) => FacturaBase.fromJson(b as Map<String, dynamic>)).toList(),
     );
   }
+  final String serie;
+  final int numero;
+  final int ejercicio;
+  final String fecha;
+  final String clienteId;
+  final String clienteNombre;
+  final String clienteDireccion;
+  final String clientePoblacion;
+  final String clienteNif;
+  final double total;
+  final List<FacturaBase> bases;
 
   String get numeroFormateado => '$serie-${numero.toString().padLeft(5, '0')}';
 }
 
 class FacturaBase {
-  final double base;
-  final double pct;
-  final double iva;
 
   FacturaBase({required this.base, required this.pct, required this.iva});
 
   factory FacturaBase.fromJson(Map<String, dynamic> json) {
     return FacturaBase(
-      base: (json['base'] is num ? (json['base'] as num).toDouble() : double.tryParse(json['base']?.toString() ?? '0') ?? 0).toDouble(),
-      pct: (json['pct'] is num ? (json['pct'] as num).toDouble() : double.tryParse(json['pct']?.toString() ?? '0') ?? 0).toDouble(),
-      iva: (json['iva'] is num ? (json['iva'] as num).toDouble() : double.tryParse(json['iva']?.toString() ?? '0') ?? 0).toDouble(),
+      base: (json['base'] is num ? (json['base'] as num).toDouble() : double.tryParse(json['base']?.toString() ?? '0') ?? 0),
+      pct: (json['pct'] is num ? (json['pct'] as num).toDouble() : double.tryParse(json['pct']?.toString() ?? '0') ?? 0),
+      iva: (json['iva'] is num ? (json['iva'] as num).toDouble() : double.tryParse(json['iva']?.toString() ?? '0') ?? 0),
     );
   }
+  final double base;
+  final double pct;
+  final double iva;
 }
 
 class FacturaLine {
-  final String codigo;
-  final String descripcion;
-  final double cantidad;
-  final double precio;
-  final double importe;
-  final double descuento;
 
   FacturaLine({
     required this.codigo,
@@ -163,20 +159,22 @@ class FacturaLine {
     return FacturaLine(
       codigo: json['codigo']?.toString() ?? '',
       descripcion: json['descripcion']?.toString() ?? '',
-      cantidad: (json['cantidad'] is num ? (json['cantidad'] as num).toDouble() : double.tryParse(json['cantidad']?.toString() ?? '0') ?? 0).toDouble(),
-      precio: (json['precio'] is num ? (json['precio'] as num).toDouble() : double.tryParse(json['precio']?.toString() ?? '0') ?? 0).toDouble(),
-      importe: (json['importe'] is num ? (json['importe'] as num).toDouble() : double.tryParse(json['importe']?.toString() ?? '0') ?? 0).toDouble(),
-      descuento: (json['descuento'] is num ? (json['descuento'] as num).toDouble() : double.tryParse(json['descuento']?.toString() ?? '0') ?? 0).toDouble(),
+      cantidad: (json['cantidad'] is num ? (json['cantidad'] as num).toDouble() : double.tryParse(json['cantidad']?.toString() ?? '0') ?? 0),
+      precio: (json['precio'] is num ? (json['precio'] as num).toDouble() : double.tryParse(json['precio']?.toString() ?? '0') ?? 0),
+      importe: (json['importe'] is num ? (json['importe'] as num).toDouble() : double.tryParse(json['importe']?.toString() ?? '0') ?? 0),
+      descuento: (json['descuento'] is num ? (json['descuento'] as num).toDouble() : double.tryParse(json['descuento']?.toString() ?? '0') ?? 0),
     );
   }
+  final String codigo;
+  final String descripcion;
+  final double cantidad;
+  final double precio;
+  final double importe;
+  final double descuento;
 }
 
 /// Summary model
 class FacturaSummary {
-  final int totalFacturas;
-  final double totalImporte;
-  final double totalBase;
-  final double totalIva;
 
   FacturaSummary({
     required this.totalFacturas,
@@ -188,11 +186,15 @@ class FacturaSummary {
   factory FacturaSummary.fromJson(Map<String, dynamic> json) {
     return FacturaSummary(
       totalFacturas: json['totalFacturas'] is int ? (json['totalFacturas'] as int) : int.tryParse(json['totalFacturas']?.toString() ?? '0') ?? 0,
-      totalImporte: (json['totalImporte'] is num ? (json['totalImporte'] as num).toDouble() : double.tryParse(json['totalImporte']?.toString() ?? '0') ?? 0).toDouble(),
-      totalBase: (json['totalBase'] is num ? (json['totalBase'] as num).toDouble() : double.tryParse(json['totalBase']?.toString() ?? '0') ?? 0).toDouble(),
-      totalIva: (json['totalIva'] is num ? (json['totalIva'] as num).toDouble() : double.tryParse(json['totalIva']?.toString() ?? '0') ?? 0).toDouble(),
+      totalImporte: (json['totalImporte'] is num ? (json['totalImporte'] as num).toDouble() : double.tryParse(json['totalImporte']?.toString() ?? '0') ?? 0),
+      totalBase: (json['totalBase'] is num ? (json['totalBase'] as num).toDouble() : double.tryParse(json['totalBase']?.toString() ?? '0') ?? 0),
+      totalIva: (json['totalIva'] is num ? (json['totalIva'] as num).toDouble() : double.tryParse(json['totalIva']?.toString() ?? '0') ?? 0),
     );
   }
+  final int totalFacturas;
+  final double totalImporte;
+  final double totalBase;
+  final double totalIva;
 }
 
 /// Service class for facturas API calls
@@ -213,7 +215,7 @@ class FacturasService {
     String? dateTo,
   }) async {
     try {
-      String url = '/facturas?vendedorCodes=$vendedorCodes';
+      var url = '/facturas?vendedorCodes=$vendedorCodes';
       // Prioritize Date Range in URL if present
       if (dateFrom != null && dateTo != null) {
         url += '&dateFrom=$dateFrom&dateTo=$dateTo';
@@ -236,7 +238,7 @@ class FacturasService {
       );
       
       if (response['success'] == true && response['facturas'] != null) {
-        final List<dynamic> list = response['facturas'] as List<dynamic>;
+        final list = response['facturas'] as List<dynamic>;
         var facturas = list.map((e) => Factura.fromJson(e as Map<String, dynamic>)).toList();
 
         // ---------------------------------------------------------
@@ -350,7 +352,7 @@ class FacturasService {
       );
       
       if (response['success'] == true && response['years'] != null) {
-        final List<dynamic> list = response['years'] as List<dynamic>;
+        final list = response['years'] as List<dynamic>;
         return list.map((e) => e is int ? e : int.tryParse(e.toString()) ?? 0).toList();
       }
       return [DateTime.now().year];
@@ -373,7 +375,7 @@ class FacturasService {
     String? dateTo,
   }) async {
     try {
-      String url = '/facturas/summary?vendedorCodes=$vendedorCodes';
+      var url = '/facturas/summary?vendedorCodes=$vendedorCodes';
       if (dateFrom != null && dateTo != null) {
         url += '&dateFrom=$dateFrom&dateTo=$dateTo';
       } else {
@@ -501,7 +503,7 @@ class FacturasService {
       final bytes = await ApiClient.getBytes('/facturas/$serie/$numero/$ejercicio/pdf?_t=$ts');
 
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/Factura_${serie}_${numero}_${ejercicio}.pdf');
+      final file = File('${dir.path}/Factura_${serie}_${numero}_$ejercicio.pdf');
       await file.writeAsBytes(bytes);
       return file;
     } catch (e) {

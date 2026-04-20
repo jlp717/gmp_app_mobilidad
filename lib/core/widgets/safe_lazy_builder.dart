@@ -23,6 +23,22 @@ import 'package:flutter/scheduler.dart';
 /// )
 /// ```
 class SafeLazyBuilder<T> extends StatefulWidget {
+
+  const SafeLazyBuilder({
+    required this.future, required this.builder, super.key,
+    this.placeholder,
+    this.errorBuilder,
+    this.useIsolate = false,
+    this.isolateCompute,
+    this.isolateMessage,
+    this.enableJankDetection = true,
+    this.jankThresholdFps = 45,
+    this.cacheKey,
+    this.onLoadComplete,
+  }) : assert(
+         !useIsolate || isolateCompute != null,
+         'isolateCompute is required when useIsolate is true',
+       );
   /// Function that returns the Future to execute
   final Future<T> Function() future;
   
@@ -56,24 +72,6 @@ class SafeLazyBuilder<T> extends StatefulWidget {
   
   /// Callback when load completes (for metrics)
   final void Function(Duration loadTime)? onLoadComplete;
-
-  const SafeLazyBuilder({
-    super.key,
-    required this.future,
-    required this.builder,
-    this.placeholder,
-    this.errorBuilder,
-    this.useIsolate = false,
-    this.isolateCompute,
-    this.isolateMessage,
-    this.enableJankDetection = true,
-    this.jankThresholdFps = 45,
-    this.cacheKey,
-    this.onLoadComplete,
-  }) : assert(
-         !useIsolate || isolateCompute != null,
-         'isolateCompute is required when useIsolate is true',
-       );
 
   @override
   State<SafeLazyBuilder<T>> createState() => _SafeLazyBuilderState<T>();
@@ -121,7 +119,7 @@ class _SafeLazyBuilderState<T> extends State<SafeLazyBuilder<T>>
       if (!_isLoading) return;
       
       final frameDuration = SchedulerBinding.instance.currentFrameTimeStamp;
-      final targetDuration = const Duration(milliseconds: 16); // 60fps
+      const targetDuration = Duration(milliseconds: 16); // 60fps
       
       if (frameDuration != null) {
         // Simple jank detection: if frame takes too long
@@ -193,7 +191,7 @@ class _SafeLazyBuilderState<T> extends State<SafeLazyBuilder<T>>
     } catch (e) {
       debugPrint('[SafeLazyBuilder] Isolate error, falling back: $e');
       // Fallback to main thread
-      return await widget.future();
+      return widget.future();
     }
   }
 

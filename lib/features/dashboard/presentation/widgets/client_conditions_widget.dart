@@ -68,9 +68,9 @@ class ClientConditionsWidget extends StatelessWidget {
                 topRight: Radius.circular(12),
               ),
             ),
-            child: Text(
+            child: const Text(
               'Diversos',
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,

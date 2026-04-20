@@ -1,19 +1,19 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/providers/auth_notifier.dart';
-import '../../../../core/providers/filter_provider.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../../../core/widgets/smart_sync_header.dart';
-import '../../../entregas/providers/entregas_provider.dart';
-import '../../../../core/api/api_client.dart';
-import '../widgets/futuristic_week_navigator.dart';
-import '../widgets/holographic_kpi_dashboard.dart';
-import '../widgets/smart_delivery_card.dart';
-import '../widgets/rutero_detail_modal.dart';
-import 'repartidor_historico_page.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
+import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/futuristic_week_navigator.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/holographic_kpi_dashboard.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/rutero_detail_modal.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/widgets/smart_delivery_card.dart';
 
 /// Repartidor Rutero Page - Futuristic Redesign
 /// Features:
@@ -23,13 +23,17 @@ import 'repartidor_historico_page.dart';
 /// - Improved filtering and search
 /// - Director "View As" with auto-reload
 class RepartidorRuteroPage extends ConsumerStatefulWidget {
+  const RepartidorRuteroPage({
+    super.key,
+    this.repartidorId,
+    this.repartidorNames,
+  });
   final String? repartidorId;
   final Map<String, String>? repartidorNames;
 
-  const RepartidorRuteroPage({super.key, this.repartidorId, this.repartidorNames});
-
   @override
-  ConsumerState<RepartidorRuteroPage> createState() => _RepartidorRuteroPageState();
+  ConsumerState<RepartidorRuteroPage> createState() =>
+      _RepartidorRuteroPageState();
 }
 
 class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
@@ -39,7 +43,8 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   bool _isLoadingWeek = false;
   String? _lastLoadedId;
   final TextEditingController _searchClientController = TextEditingController();
-  final TextEditingController _searchAlbaranController = TextEditingController();
+  final TextEditingController _searchAlbaranController =
+      TextEditingController();
   Timer? _loadDebounceTimer;
 
   late AnimationController _listAnimController;
@@ -57,7 +62,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     _repartidoresFuture = ApiClient.getList('/auth/repartidores').then(
       (val) => val.map((e) => e as Map<String, dynamic>).toList(),
     );
-    
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadData();
       _listAnimController.forward();
@@ -67,7 +72,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Logic removed to prevent infinite loop. 
+    // Logic removed to prevent infinite loop.
     // Data loading is handled by initState and Dropdown changes.
   }
 
@@ -83,20 +88,20 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   Future<void> _loadData() async {
     // Cancel any pending load requests (debounce)
     _loadDebounceTimer?.cancel();
-    
+
     // Debounce for 300ms to prevent rapid successive calls
     _loadDebounceTimer = Timer(const Duration(milliseconds: 300), () {
       if (!mounted) return;
-      
+
       final auth = ref.read(authProvider).value;
       final selectedVendor = ref.read(selectedVendorProvider);
       final entregas = ref.read(entregasProvider.notifier);
 
-      String targetId = widget.repartidorId ?? auth?.user?.code ?? '';
+      var targetId = widget.repartidorId ?? auth?.user?.code ?? '';
 
       // View As logic for directors
-      if (auth?.user?.isJefeVentas == true && selectedVendor != null) {
-        targetId = selectedVendor;
+      if (auth?.user?.isJefeVentas ?? false && selectedVendor != null) {
+        targetId = selectedVendor!;
       }
 
       // NOTE: Multi-ID (comma-separated) IS supported by /pendientes endpoint
@@ -126,7 +131,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       );
       if (response['success'] == true && mounted) {
         setState(() {
-          _weekDays = List<Map<String, dynamic>>.from((response['days'] as List));
+          _weekDays = List<Map<String, dynamic>>.from(response['days'] as List);
         });
       }
     } catch (e) {
@@ -136,15 +141,13 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     }
   }
 
-
-
   void _onDaySelected(DateTime date) {
     HapticFeedback.selectionClick();
     setState(() => _selectedDate = date);
-    
+
     final entregas = ref.read(entregasProvider.notifier);
     entregas.seleccionarFecha(date);
-    
+
     // Animate list
     _listAnimController.reset();
     _listAnimController.forward();
@@ -159,16 +162,31 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
 
   @override
   Widget build(BuildContext context) {
-    final auth = ref.watch(authProvider).value;
+    final authState = ref.watch(authProvider.select((s) => s.value));
     final selectedVendor = ref.watch(selectedVendorProvider);
-    final entregas = ref.watch(entregasProvider);
 
+    final isLoading = ref.watch(entregasProvider.select((s) => s.isLoading));
+    final error = ref.watch(entregasProvider.select((s) => s.error));
+    final albaranes = ref.watch(entregasProvider.select((s) => s.albaranes));
+    final resumenCompletedCount =
+        ref.watch(entregasProvider.select((s) => s.resumenCompletedCount));
+    final resumenTotalACobrar =
+        ref.watch(entregasProvider.select((s) => s.resumenTotalACobrar));
+    final resumenTotalOpcional =
+        ref.watch(entregasProvider.select((s) => s.resumenTotalOpcional));
+    final resumenTotalBruto =
+        ref.watch(entregasProvider.select((s) => s.resumenTotalBruto));
+
+    final filterDebeCobrar =
+        ref.watch(entregasProvider.select((s) => s.filterDebeCobrar));
+    final filterTipoPago =
+        ref.watch(entregasProvider.select((s) => s.filterTipoPago));
+    final sortBy = ref.watch(entregasProvider.select((s) => s.sortBy));
 
     // Header Name Logic
-    String currentName = auth?.user?.name ?? 'Repartidor';
-    if (auth?.user?.isJefeVentas == true && selectedVendor != null) {
-      // Just show the vendor code for now
-      currentName = 'Repartidor ${selectedVendor}';
+    var currentName = authState?.user?.name ?? 'Repartidor';
+    if (authState?.user?.isJefeVentas ?? false && selectedVendor != null) {
+      currentName = 'Repartidor $selectedVendor';
     }
 
     return Scaffold(
@@ -179,8 +197,8 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
           SmartSyncHeader(
             title: 'Rutero',
             subtitle: currentName,
-            onSync: () => _loadData(),
-            isLoading: entregas.isLoading || _isLoadingWeek,
+            onSync: _loadData,
+            isLoading: isLoading || _isLoadingWeek,
             compact: true,
           ),
 
@@ -191,11 +209,11 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             onDaySelected: _onDaySelected,
             onWeekChange: _onWeekChange,
             isLoading: _isLoadingWeek,
-            totalClients: entregas.albaranes.length,
+            totalClients: albaranes.length,
           ),
 
           // ERROR BANNER
-          if (entregas.error != null)
+          if (error != null)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               margin: const EdgeInsets.symmetric(horizontal: 12),
@@ -206,16 +224,25 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.error_outline, color: AppTheme.error, size: 18),
+                  const Icon(
+                    Icons.error_outline,
+                    color: AppTheme.error,
+                    size: 18,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '${entregas.error}',
-                      style: const TextStyle(color: AppTheme.error, fontSize: 12),
+                      error,
+                      style:
+                          const TextStyle(color: AppTheme.error, fontSize: 12),
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.refresh, color: AppTheme.error, size: 18),
+                    icon: const Icon(
+                      Icons.refresh,
+                      color: AppTheme.error,
+                      size: 18,
+                    ),
                     onPressed: _loadData,
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
@@ -225,37 +252,38 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             ),
 
           // DIRECTOR FILTER (if applicable)
-          if (auth?.user?.isJefeVentas == true) _buildDirectorFilter(auth!, ref.watch(filterProvider), entregas),
+          if (authState?.user?.isJefeVentas ?? false)
+            _buildDirectorFilter(authState!),
 
           // SEARCH & FILTER ROW
-          _buildSearchAndFilters(entregas),
+          _buildSearchAndFilters(
+            filterDebeCobrar: filterDebeCobrar,
+            filterTipoPago: filterTipoPago,
+            sortBy: sortBy,
+          ),
 
           // HOLOGRAPHIC KPI DASHBOARD
           HolographicKpiDashboard(
-            totalEntregas: entregas.albaranes.length,
-            entregasCompletadas: entregas.resumenCompletedCount,
-            montoACobrar: entregas.resumenTotalACobrar,
-            montoOpcional: entregas.resumenTotalOpcional,
-            totalMonto: entregas.resumenTotalBruto,
-            isLoading: entregas.isLoading,
+            totalEntregas: albaranes.length,
+            entregasCompletadas: resumenCompletedCount,
+            montoACobrar: resumenTotalACobrar,
+            montoOpcional: resumenTotalOpcional,
+            totalMonto: resumenTotalBruto,
+            isLoading: isLoading,
           ),
 
           // CLIENT LIST
           Expanded(
-            child: entregas.isLoading
-                ? _buildLoadingState()
-                : _buildClientList(entregas),
+            child:
+                isLoading ? _buildLoadingState() : _buildClientList(albaranes),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDirectorFilter(
-    AuthState auth,
-    dynamic filterState,
-    EntregasState entregas,
-  ) {
+  Widget _buildDirectorFilter(AuthState auth) {
+    final filterState = ref.watch(filterProvider);
     final filterNotifier = ref.read(filterProvider.notifier);
     final selectedVendor = filterState.selectedVendor as String?;
     return Padding(
@@ -271,7 +299,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             height: 42,
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
-              gradient: LinearGradient(
+              gradient: const LinearGradient(
                 colors: [
                   AppTheme.darkCard,
                   AppTheme.darkSurface,
@@ -284,7 +312,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             ),
             child: Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.person_search,
                   color: AppTheme.neonBlue,
                   size: 20,
@@ -294,7 +322,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<String>(
                       value: selectedVendor,
-                      hint: Text(
+                      hint: const Text(
                         'Ver como repartidor...',
                         style: TextStyle(
                           color: AppTheme.textSecondary,
@@ -315,7 +343,8 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                         final code = r['code'].toString().trim();
                         final name = r['name'].toString().trim();
                         // Format requested: R. 44: NOMBRE
-                        final displayName = 'R. $code: ${name.startsWith('$code ') ? name.replaceFirst('$code ', '') : name}';
+                        final displayName =
+                            'R. $code: ${name.startsWith('$code ') ? name.replaceFirst('$code ', '') : name}';
 
                         return DropdownMenuItem(
                           value: code,
@@ -330,16 +359,20 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                         if (val != null) {
                           HapticFeedback.selectionClick();
                           filterNotifier.setVendor(val);
-                          
+
                           // Manually trigger reload and pivot _lastLoadedId to prevent
                           // duplicate/conflicting loads from didChangeDependencies
                           if (mounted) {
                             setState(() => _lastLoadedId = val);
                           }
-                          
+
                           // Force immediate reload
-                          ref.read(entregasProvider.notifier).setRepartidor(val, forceReload: true);
-                          ref.read(entregasProvider.notifier).seleccionarFecha(_selectedDate);
+                          ref
+                              .read(entregasProvider.notifier)
+                              .setRepartidor(val, forceReload: true);
+                          ref
+                              .read(entregasProvider.notifier)
+                              .seleccionarFecha(_selectedDate);
                           _loadWeekData(val);
                         }
                       },
@@ -348,7 +381,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                 ),
                 const SizedBox(width: 8),
                 IconButton(
-                  icon: Icon(
+                  icon: const Icon(
                     Icons.refresh,
                     color: AppTheme.neonBlue,
                     size: 20,
@@ -357,8 +390,12 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                   onPressed: () {
                     HapticFeedback.lightImpact();
                     if (selectedVendor != null) {
-                      ref.read(entregasProvider.notifier).setRepartidor(selectedVendor);
-                      ref.read(entregasProvider.notifier).cargarAlbaranesPendientes();
+                      ref
+                          .read(entregasProvider.notifier)
+                          .setRepartidor(selectedVendor);
+                      ref
+                          .read(entregasProvider.notifier)
+                          .cargarAlbaranesPendientes();
                     }
                   },
                   padding: EdgeInsets.zero,
@@ -372,7 +409,11 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     );
   }
 
-  Widget _buildSearchAndFilters(EntregasState entregas) {
+  Widget _buildSearchAndFilters({
+    required String filterDebeCobrar,
+    required String filterTipoPago,
+    required String sortBy,
+  }) {
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -394,20 +435,32 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               child: Row(
                 children: [
                   const SizedBox(width: 8),
-                  const Icon(Icons.person_outline, size: 14, color: AppTheme.textSecondary),
+                  const Icon(
+                    Icons.person_outline,
+                    size: 14,
+                    color: AppTheme.textSecondary,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: TextField(
                       controller: _searchClientController,
-                      style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textPrimary,
+                      ),
                       decoration: const InputDecoration(
                         hintText: 'Cliente...',
-                        hintStyle: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        hintStyle: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                        ),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
                       ),
-                      onChanged: (v) => ref.read(entregasProvider.notifier).setSearchClient(v),
+                      onChanged: (v) => ref
+                          .read(entregasProvider.notifier)
+                          .setSearchClient(v),
                     ),
                   ),
                   if (_searchClientController.text.isNotEmpty)
@@ -443,20 +496,32 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               child: Row(
                 children: [
                   const SizedBox(width: 8),
-                  const Icon(Icons.description_outlined, size: 14, color: AppTheme.textSecondary),
+                  const Icon(
+                    Icons.description_outlined,
+                    size: 14,
+                    color: AppTheme.textSecondary,
+                  ),
                   const SizedBox(width: 6),
                   Expanded(
                     child: TextField(
                       controller: _searchAlbaranController,
-                      style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textPrimary,
+                      ),
                       decoration: const InputDecoration(
                         hintText: 'Nº Alb/Fac...',
-                        hintStyle: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        hintStyle: TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.textSecondary,
+                        ),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
                       ),
-                      onChanged: (v) => ref.read(entregasProvider.notifier).setSearchAlbaran(v),
+                      onChanged: (v) => ref
+                          .read(entregasProvider.notifier)
+                          .setSearchAlbaran(v),
                     ),
                   ),
                   if (_searchAlbaranController.text.isNotEmpty)
@@ -464,7 +529,9 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                       icon: const Icon(Icons.clear, size: 14),
                       onPressed: () {
                         _searchAlbaranController.clear();
-                        ref.read(entregasProvider.notifier).setSearchAlbaran('');
+                        ref
+                            .read(entregasProvider.notifier)
+                            .setSearchAlbaran('');
                       },
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -473,20 +540,20 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               ),
             ),
           ),
-          
+
           const SizedBox(width: 8),
 
           // Quick filter chips
           _buildQuickFilterChip(
             label: 'Cobrar',
-            isSelected: entregas.filterDebeCobrar == 'S',
+            isSelected: filterDebeCobrar == 'S',
             color: AppTheme.obligatorio,
             icon: Icons.euro,
             onTap: () {
               HapticFeedback.selectionClick();
               ref.read(entregasProvider.notifier).setFilterDebeCobrar(
-                entregas.filterDebeCobrar == 'S' ? '' : 'S',
-              );
+                    filterDebeCobrar == 'S' ? '' : 'S',
+                  );
             },
           ),
 
@@ -494,17 +561,17 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
 
           _buildQuickFilterChip(
             label: 'Crédito',
-            isSelected: entregas.filterTipoPago == 'CREDITO',
+            isSelected: filterTipoPago == 'CREDITO',
             color: AppTheme.credito,
             icon: Icons.credit_card,
             onTap: () {
               HapticFeedback.selectionClick();
               ref.read(entregasProvider.notifier).setFilterTipoPago(
-                entregas.filterTipoPago == 'CREDITO' ? '' : 'CREDITO',
-              );
+                    filterTipoPago == 'CREDITO' ? '' : 'CREDITO',
+                  );
             },
           ),
-          
+
           const SizedBox(width: 6),
 
           // Sort dropdown
@@ -518,7 +585,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             ),
             child: DropdownButtonHideUnderline(
               child: DropdownButton<String>(
-                value: entregas.sortBy,
+                value: sortBy,
                 icon: const Icon(
                   Icons.sort,
                   color: AppTheme.neonBlue,
@@ -530,21 +597,24 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                     value: 'default',
                     child: Text(
                       '↕ Orden',
-                      style: TextStyle(color: AppTheme.textPrimary, fontSize: 11),
+                      style:
+                          TextStyle(color: AppTheme.textPrimary, fontSize: 11),
                     ),
                   ),
                   DropdownMenuItem(
                     value: 'importe_desc',
                     child: Text(
                       '↓ Mayor €',
-                      style: TextStyle(color: AppTheme.textPrimary, fontSize: 11),
+                      style:
+                          TextStyle(color: AppTheme.textPrimary, fontSize: 11),
                     ),
                   ),
                   DropdownMenuItem(
                     value: 'importe_asc',
                     child: Text(
                       '↑ Menor €',
-                      style: TextStyle(color: AppTheme.textPrimary, fontSize: 11),
+                      style:
+                          TextStyle(color: AppTheme.textPrimary, fontSize: 11),
                     ),
                   ),
                 ],
@@ -557,8 +627,6 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               ),
             ),
           ),
-          
-
         ],
       ),
     );
@@ -587,7 +655,11 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 14, color: isSelected ? color : AppTheme.textSecondary),
+            Icon(
+              icon,
+              size: 14,
+              color: isSelected ? color : AppTheme.textSecondary,
+            ),
             const SizedBox(width: 4),
             Text(
               label,
@@ -604,7 +676,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   }
 
   Widget _buildLoadingState() {
-    return Center(
+    return const Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -616,7 +688,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               strokeWidth: 3,
             ),
           ),
-          const SizedBox(height: 16),
+          SizedBox(height: 16),
           Text(
             'Cargando entregas...',
             style: TextStyle(
@@ -629,8 +701,8 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     );
   }
 
-  Widget _buildClientList(EntregasState provider) {
-    if (provider.albaranes.isEmpty) {
+  Widget _buildClientList(List<AlbaranEntrega> albaranes) {
+    if (albaranes.isEmpty) {
       return _buildEmptyState();
     }
 
@@ -643,10 +715,12 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             position: Tween<Offset>(
               begin: const Offset(0, 0.1),
               end: Offset.zero,
-            ).animate(CurvedAnimation(
-              parent: _listAnimController,
-              curve: Curves.easeOutCubic,
-            )),
+            ).animate(
+              CurvedAnimation(
+                parent: _listAnimController,
+                curve: Curves.easeOutCubic,
+              ),
+            ),
             child: RefreshIndicator(
               onRefresh: _loadData,
               color: AppTheme.neonBlue,
@@ -658,10 +732,10 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                   top: 4,
                   bottom: Responsive.useBottomNav(context) ? 16 : 100,
                 ),
-                itemCount: provider.albaranes.length,
+                itemCount: albaranes.length,
                 itemBuilder: (context, index) {
-                  final albaran = provider.albaranes[index];
-                  
+                  final albaran = albaranes[index];
+
                   return Column(
                     children: [
                       SmartDeliveryCard(
@@ -671,7 +745,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                         onSwipeNote: () => _showQuickNoteDialog(albaran),
                         repartidorNames: widget.repartidorNames,
                       ),
-                      if (index < provider.albaranes.length - 1)
+                      if (index < albaranes.length - 1)
                         Divider(
                           height: 1,
                           thickness: 1,
@@ -726,7 +800,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             ),
           ),
           const SizedBox(height: 8),
-          Text(
+          const Text(
             'Selecciona otro día en el calendario\no usa el buscador',
             textAlign: TextAlign.center,
             style: TextStyle(
@@ -761,14 +835,20 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: AppTheme.darkCard,
-        title: Row(
-          children: const [
+        title: const Row(
+          children: [
             Icon(Icons.auto_awesome, color: AppTheme.neonPurple),
             SizedBox(width: 10),
-            Text('Análisis Inteligente', style: TextStyle(color: AppTheme.neonPurple)),
+            Text(
+              'Análisis Inteligente',
+              style: TextStyle(color: AppTheme.neonPurple),
+            ),
           ],
         ),
-        content: Text(suggestion, style: const TextStyle(color: AppTheme.textPrimary)),
+        content: Text(
+          suggestion,
+          style: const TextStyle(color: AppTheme.textPrimary),
+        ),
         actions: [
           TextButton(
             child: const Text('Entendido'),
@@ -800,11 +880,15 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       HapticFeedback.heavyImpact();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Row(
-            children: const [
+          content: const Row(
+            children: [
               Icon(Icons.warning_amber_rounded, color: Colors.white),
               SizedBox(width: 12),
-              Expanded(child: Text('Cobro obligatorio. Abra el detalle para registrar pago.')),
+              Expanded(
+                child: Text(
+                  'Cobro obligatorio. Abra el detalle para registrar pago.',
+                ),
+              ),
             ],
           ),
           backgroundColor: AppTheme.obligatorio,
@@ -817,24 +901,30 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
         ),
       );
       // Re-open detail slightly delayed
-      Future.delayed(const Duration(milliseconds: 300), () => _showDetailDialog(albaran));
+      Future.delayed(
+        const Duration(milliseconds: 300),
+        () => _showDetailDialog(albaran),
+      );
       return;
     }
 
     // 2. Perform Quick Complete
     final provider = ref.read(entregasProvider.notifier);
-    
-    // Optimistic UI update or wait? 
+
+    // Optimistic UI update or wait?
     // Let's show loading snackbar then success
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            SizedBox(
-              width: 20, 
-              height: 20, 
-              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonBlue)
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppTheme.neonBlue,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(child: Text('Completando ${albaran.nombreCliente}...')),
@@ -845,11 +935,13 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       ),
     );
 
-    provider.marcarEntregado(
+    provider
+        .marcarEntregado(
       albaranId: albaran.id,
       observaciones: 'Completado rápido (Swipe)',
       // No signature/photos for quick swipe
-    ).then((success) {
+    )
+        .then((success) {
       if (success) {
         HapticFeedback.lightImpact();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -870,7 +962,9 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
         HapticFeedback.heavyImpact();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error al completar: ${ref.read(entregasProvider).error ?? "Desconocido"}'),
+            content: Text(
+              'Error al completar: ${ref.read(entregasProvider).error ?? "Desconocido"}',
+            ),
             backgroundColor: AppTheme.error,
           ),
         );
@@ -894,13 +988,18 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                 color: AppTheme.neonBlue.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.note_add, color: AppTheme.neonBlue, size: 20),
+              child: const Icon(
+                Icons.note_add,
+                color: AppTheme.neonBlue,
+                size: 20,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 'Nota para ${albaran.nombreCliente}',
-                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 16),
+                style:
+                    const TextStyle(color: AppTheme.textPrimary, fontSize: 16),
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -913,7 +1012,8 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
           style: const TextStyle(color: AppTheme.textPrimary),
           decoration: InputDecoration(
             hintText: 'Añadir nota...',
-            hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
+            hintStyle:
+                TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
             filled: true,
             fillColor: AppTheme.darkBase,
             border: OutlineInputBorder(
@@ -1006,7 +1106,9 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               onTap: () {
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Función próximamente disponible')),
+                  const SnackBar(
+                    content: Text('Función próximamente disponible'),
+                  ),
                 );
               },
             ),
@@ -1040,11 +1142,11 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     required IconData icon,
     required String title,
     required String subtitle,
-    Color? color,
     required VoidCallback onTap,
+    Color? color,
   }) {
     final tileColor = color ?? AppTheme.neonBlue;
-    
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -1067,7 +1169,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                   children: [
                     Text(
                       title,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: AppTheme.textPrimary,
                         fontWeight: FontWeight.w600,
                       ),
@@ -1075,7 +1177,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                     const SizedBox(height: 2),
                     Text(
                       subtitle,
-                      style: TextStyle(
+                      style: const TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 12,
                       ),
@@ -1094,4 +1196,3 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     );
   }
 }
-

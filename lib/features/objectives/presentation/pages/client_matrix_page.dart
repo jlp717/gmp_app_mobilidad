@@ -1,19 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:intl/intl.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/api/api_config.dart';
 
 class ClientMatrixPage extends StatefulWidget {
-  final String clientCode;
-  final String clientName;
 
   const ClientMatrixPage({
-    super.key,
-    required this.clientCode,
-    required this.clientName,
+    required this.clientCode, required this.clientName, super.key,
   });
+  final String clientCode;
+  final String clientName;
 
   @override
   State<ClientMatrixPage> createState() => _ClientMatrixPageState();
@@ -24,11 +21,11 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
   String? _error;
   int _selectedYear = DateTime.now().year;
   List<Map<String, dynamic>> _matrixRows = [];
-  Map<String, Map<int, Map<String, double>>> _pivotedData = {};
+  final Map<String, Map<int, Map<String, double>>> _pivotedData = {};
   
   // Pivot keys
   List<String> _uniqueProducts = [];
-  Map<String, Map<String, dynamic>> _productDetails = {};
+  final Map<String, Map<String, dynamic>> _productDetails = {};
 
   final _currencyFormat = NumberFormat.currency(symbol: '€', decimalDigits: 2);
   final _searchController = TextEditingController();
@@ -73,9 +70,9 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
   void _processData(List<Map<String, dynamic>> rows) {
     _pivotedData.clear();
     _productDetails.clear();
-    final Set<String> keys = {};
+    final keys = <String>{};
 
-    for (var row in rows) {
+    for (final row in rows) {
       final code = row['code'] ?? '';
       final lote = row['lote'] ?? '';
       final ref = row['ref'] ?? '';
@@ -141,7 +138,7 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(widget.clientName, style: const TextStyle(fontSize: 16)),
-            Text('Matriz ${_selectedYear}', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+            Text('Matriz $_selectedYear', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
           ],
         ),
         actions: [
@@ -156,7 +153,7 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                   children: ApiConfig.availableYears.map((y) => SimpleDialogOption(
                     onPressed: () => Navigator.pop(ctx, y),
                     child: Text(y.toString()),
-                  )).toList(),
+                  ),).toList(),
                 ),
               );
               if (year != null && year != _selectedYear) {
@@ -171,7 +168,7 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
         children: [
           // Filter
           Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(8),
             child: TextField(
               controller: _searchController,
               decoration: InputDecoration(
@@ -196,14 +193,13 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                     : filteredKeys.isEmpty 
                       ? const Center(child: Text('No hay datos'))
                       : SingleChildScrollView(
-                          scrollDirection: Axis.vertical,
                           child: SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
                             child: Theme(
                               data: Theme.of(context).copyWith(dividerColor: Colors.grey[800]),
                               child: DataTable(
-                                headingRowColor: MaterialStateProperty.all(AppTheme.surfaceColor),
-                                dataRowColor: MaterialStateProperty.all(AppTheme.darkBase),
+                                headingRowColor: WidgetStateProperty.all(AppTheme.surfaceColor),
+                                dataRowColor: WidgetStateProperty.all(AppTheme.darkBase),
                                 columnSpacing: 20,
                                 columns: [
                                   const DataColumn(label: Text('Producto', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -211,9 +207,9 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                                   const DataColumn(label: Text('Precio', style: TextStyle(fontWeight: FontWeight.bold))),
                                   const DataColumn(label: Text('Total', style: TextStyle(fontWeight: FontWeight.bold))),
                                   for (var m = 1; m <= 12; m++) ...[
-                                     DataColumn(label: Text('${_monthShort(m)}\n€', textAlign: TextAlign.center, style: TextStyle(fontSize: 11))),
-                                     DataColumn(label: Text('${_monthShort(m)}\nUds', textAlign: TextAlign.center, style: TextStyle(fontSize: 11))),
-                                  ]
+                                     DataColumn(label: Text('${_monthShort(m)}\n€', textAlign: TextAlign.center, style: const TextStyle(fontSize: 11))),
+                                     DataColumn(label: Text('${_monthShort(m)}\nUds', textAlign: TextAlign.center, style: const TextStyle(fontSize: 11))),
+                                  ],
                                 ],
                                 rows: filteredKeys.map((key) {
                                   final details = _productDetails[key]!;
@@ -226,9 +222,9 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                                         mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
                                           Text(details['name'].toString(), style: const TextStyle(fontWeight: FontWeight.w500)),
-                                          Text(details['code'].toString(), style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                                          Text(details['code'].toString(), style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
                                         ],
-                                      )),
+                                      ),),
                                       DataCell(Column(
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         mainAxisAlignment: MainAxisAlignment.center,
@@ -236,9 +232,9 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                                           if (details['lote'].toString().isNotEmpty)
                                             Text(details['lote'].toString(), style: const TextStyle(fontSize: 11)),
                                           if (details['ref'].toString().isNotEmpty)
-                                            Text(details['ref'].toString(), style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+                                            Text(details['ref'].toString(), style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
                                         ],
-                                      )),
+                                      ),),
                                       DataCell(Text(_currencyFormat.format(details['price']))),
                                       DataCell(Text(_currencyFormat.format(totalSales), style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonBlue))),
                                       for (var m = 1; m <= 12; m++) ...[
@@ -247,14 +243,14 @@ class _ClientMatrixPageState extends State<ClientMatrixPage> {
                                             ? _currencyFormat.format(_pivotedData[key]![m]!['sales'])
                                             : '-',
                                           style: const TextStyle(fontSize: 11),
-                                        )),
+                                        ),),
                                          DataCell(Text(
                                           _pivotedData[key]?[m]?['units'] != null 
                                             ? _pivotedData[key]![m]!['units']!.toStringAsFixed(0)
                                             : '-',
-                                          style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-                                        )),
-                                      ]
+                                          style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                                        ),),
+                                      ],
                                     ],
                                   );
                                 }).toList(),

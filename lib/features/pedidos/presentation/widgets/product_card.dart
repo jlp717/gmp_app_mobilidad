@@ -2,17 +2,28 @@
 /// =========================
 /// Catalog product card with purchase history badges, unit type indicators,
 /// YoY change, IVA toggle, and dual price display
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/api/api_config.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../data/pedidos_service.dart';
-import '../utils/pedidos_formatters.dart';
-import '../../../../core/widgets/smart_product_image.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 
 class ProductCard extends StatefulWidget {
+
+  const ProductCard({
+    required this.product, required this.onTap, super.key,
+    this.isFavorite = false,
+    this.promo,
+    this.onToggleFavorite,
+    this.cartQty = 0,
+    this.cartQtySuffix = 'c',
+    this.onQuickAdd,
+  });
   final Product product;
   final VoidCallback onTap;
   final bool isFavorite;
@@ -21,18 +32,6 @@ class ProductCard extends StatefulWidget {
   final double cartQty;
   final String cartQtySuffix;
   final VoidCallback? onQuickAdd;
-
-  const ProductCard({
-    Key? key,
-    required this.product,
-    required this.onTap,
-    this.isFavorite = false,
-    this.promo,
-    this.onToggleFavorite,
-    this.cartQty = 0,
-    this.cartQtySuffix = 'c',
-    this.onQuickAdd,
-  }) : super(key: key);
 
   @override
   State<ProductCard> createState() => _ProductCardState();
@@ -126,7 +125,7 @@ class _ProductCardState extends State<ProductCard> {
                       right: 0,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 1),
+                            horizontal: 4, vertical: 1,),
                         decoration: BoxDecoration(
                           color: AppTheme.neonGreen,
                           borderRadius: BorderRadius.circular(6),
@@ -180,7 +179,7 @@ class _ProductCardState extends State<ProductCard> {
                                 ? AppTheme.success
                                 : AppTheme.error,
                             fontSize: Responsive.fontSize(context,
-                                small: 9, large: 10),
+                                small: 9, large: 10,),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -188,12 +187,12 @@ class _ProductCardState extends State<ProductCard> {
                         // Unit type badge
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 1),
+                              horizontal: 5, vertical: 1,),
                           decoration: BoxDecoration(
                             color: AppTheme.neonBlue.withOpacity(0.12),
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
-                                color: AppTheme.neonBlue.withOpacity(0.3)),
+                                color: AppTheme.neonBlue.withOpacity(0.3),),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -209,7 +208,7 @@ class _ProductCardState extends State<ProductCard> {
                                 style: TextStyle(
                                   color: AppTheme.neonBlue,
                                   fontSize: Responsive.fontSize(context,
-                                      small: 9, large: 10),
+                                      small: 9, large: 10,),
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -221,19 +220,19 @@ class _ProductCardState extends State<ProductCard> {
                           const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 1),
+                                horizontal: 4, vertical: 1,),
                             decoration: BoxDecoration(
                               color: AppTheme.neonPurple.withOpacity(0.2),
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(
-                                  color: AppTheme.neonPurple.withOpacity(0.4)),
+                                  color: AppTheme.neonPurple.withOpacity(0.4),),
                             ),
                             child: Text(
                               widget.promo!.promoDesc,
                               style: const TextStyle(
                                   color: AppTheme.neonPurple,
                                   fontSize: 9,
-                                  fontWeight: FontWeight.bold),
+                                  fontWeight: FontWeight.bold,),
                             ),
                           ),
                         ],
@@ -261,7 +260,7 @@ class _ProductCardState extends State<ProductCard> {
                           style: TextStyle(
                             color: Colors.white38,
                             fontSize: Responsive.fontSize(context,
-                                small: 11, large: 12),
+                                small: 11, large: 12,),
                           ),
                         ),
                         if (widget.product.hasPurchased &&
@@ -279,7 +278,7 @@ class _ProductCardState extends State<ProductCard> {
                             color: widget.product.hasStock
                                 ? AppTheme.neonGreen
                                 : AppTheme.error,
-                            size: 13),
+                            size: 13,),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
@@ -289,7 +288,7 @@ class _ProductCardState extends State<ProductCard> {
                                   ? AppTheme.neonGreen
                                   : AppTheme.error,
                               fontSize: Responsive.fontSize(context,
-                                  small: 11, large: 12),
+                                  small: 11, large: 12,),
                               fontWeight: FontWeight.w500,
                             ),
                             maxLines: 1,
@@ -316,7 +315,7 @@ class _ProductCardState extends State<ProductCard> {
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 1),
+                            horizontal: 5, vertical: 1,),
                         decoration: BoxDecoration(
                           color: _showClientePrice
                               ? AppTheme.neonGreen.withOpacity(0.15)
@@ -335,7 +334,7 @@ class _ProductCardState extends State<ProductCard> {
                                 ? AppTheme.neonGreen
                                 : Colors.white54,
                             fontSize: Responsive.fontSize(context,
-                                small: 8, large: 9),
+                                small: 8, large: 9,),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -354,7 +353,7 @@ class _ProductCardState extends State<ProductCard> {
                               : AppTheme.neonGreen,
                           fontWeight: FontWeight.bold,
                           fontSize: Responsive.fontSize(context,
-                              small: 14, large: 16),
+                              small: 14, large: 16,),
                         ),
                       ),
                       // IVA toggle button
@@ -385,7 +384,7 @@ class _ProductCardState extends State<ProductCard> {
                                   ? AppTheme.neonPurple
                                   : Colors.white54,
                               fontSize: Responsive.fontSize(context,
-                                  small: 7, large: 8),
+                                  small: 7, large: 8,),
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -458,7 +457,7 @@ class _ProductCardState extends State<ProductCard> {
                           Border.all(color: AppTheme.neonBlue.withOpacity(0.4)),
                     ),
                     child: const Icon(Icons.add,
-                        color: AppTheme.neonBlue, size: 18),
+                        color: AppTheme.neonBlue, size: 18,),
                   ),
                 ),
               ],
@@ -476,7 +475,7 @@ class _ProductCardState extends State<ProductCard> {
                 ),
               ],
               const SizedBox(width: 2),
-              Icon(Icons.chevron_right, color: Colors.white24, size: 18),
+              const Icon(Icons.chevron_right, color: Colors.white24, size: 18),
             ],
           ),
         ),
@@ -555,10 +554,8 @@ class _ProductCardState extends State<ProductCard> {
       productName: widget.product.name,
       width: 48,
       height: 48,
-      fit: BoxFit.cover,
       headers: ApiClient.authHeaders,
       borderRadius: BorderRadius.circular(8),
-      showCodeOnFallback: true,
     );
   }
 
@@ -589,14 +586,13 @@ class _ProductCardState extends State<ProductCard> {
             body: Center(
               child: InteractiveViewer(
                 minScale: 0.5,
-                maxScale: 5.0,
+                maxScale: 5,
                 child: SmartProductImage(
                   imageUrl: imageUrl,
                   productCode: code,
                   productName: widget.product.name,
                   fit: BoxFit.contain,
                   headers: ApiClient.authHeaders,
-                  showCodeOnFallback: true,
                 ),
               ),
             ),

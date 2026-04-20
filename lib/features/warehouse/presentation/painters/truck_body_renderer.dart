@@ -11,19 +11,14 @@
 /// - Dynamic shadows, gradient lighting
 /// - Van vs Truck parametric morphing
 /// - Wheel arch intrusion for vans
+library;
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../../data/warehouse_data_service.dart';
-import 'projection_3d.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/painters/projection_3d.dart';
 
-class TruckBodyRenderer {
-  final Projection3D proj;
-  final Size size;
-  final double cW, cD, cH; // Container dims in cm
-  final double ox, oy, oz; // Origin offsets
-  final bool isVan;
-  final String? matricula; // License plate text
+class TruckBodyRenderer { // License plate text
 
   TruckBodyRenderer({
     required this.proj,
@@ -37,6 +32,14 @@ class TruckBodyRenderer {
     required this.isVan,
     this.matricula,
   });
+  final Projection3D proj;
+  final Size size;
+  final double cW;
+  final double cD;
+  final double cH; // Container dims in cm
+  final double ox, oy, oz; // Origin offsets
+  final bool isVan;
+  final String? matricula;
 
   // ═══════════════════════════════════════════════════════════════════════
   // COLORS — Premium metallic palette
@@ -123,7 +126,7 @@ class TruckBodyRenderer {
       proj.project(ox, oy + cD, oz, size),
     ];
 
-    PolyHelper.fillFaceSolid(canvas, pts, _containerFloor, 0.9, 1.0);
+    PolyHelper.fillFaceSolid(canvas, pts, _containerFloor, 0.9, 1);
     PolyHelper.strokeFace(canvas, pts, _containerFrame.withValues(alpha: 0.4), 1.5);
   }
 
@@ -524,7 +527,7 @@ class TruckBodyRenderer {
   }
 
   void _drawEdge(Canvas canvas, double x1, double y1, double z1,
-                  double x2, double y2, double z2, Paint paint) {
+                  double x2, double y2, double z2, Paint paint,) {
     canvas.drawLine(
       proj.project(x1, y1, z1, size),
       proj.project(x2, y2, z2, size),
@@ -794,8 +797,8 @@ class TruckBodyRenderer {
     final grillBot = gz + gh * 0.45;
     final grillLeft = gx + gw * 0.2;
     final grillRight = gx + gw * 0.8;
-    final numLines = 5;
-    for (int i = 0; i <= numLines; i++) {
+    const numLines = 5;
+    for (var i = 0; i <= numLines; i++) {
       final z = grillTop + (grillBot - grillTop) * i / numLines;
       canvas.drawLine(
         proj.project(grillLeft, gy, z, size),
@@ -912,10 +915,10 @@ class TruckBodyRenderer {
     if (!isVan) return;
     // Vans have wheel arches that intrude into cargo space
     // Typically ~15cm from each side, 50cm tall, near the rear
-    final archW = 15.0;
-    final archH = 50.0;
+    const archW = 15.0;
+    const archH = 50.0;
     final archY = cD * 0.75; // Near rear wheels
-    final archD = 60.0;
+    const archD = 60.0;
 
     final archPaint = Paint()..color = const Color(0xFF1A1A2E).withValues(alpha: 0.4);
 
@@ -1003,7 +1006,7 @@ class TruckBodyRenderer {
     final spokePaint = Paint()
       ..color = _chrome.withValues(alpha: 0.25)
       ..strokeWidth = 1;
-    for (int i = 0; i < 5; i++) {
+    for (var i = 0; i < 5; i++) {
       final angle = i * math.pi * 2 / 5;
       canvas.drawLine(
         Offset(center.dx + math.cos(angle) * sr * 0.2, center.dy + math.sin(angle) * sr * 0.2),

@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../providers/filter_provider.dart';
-import '../api/api_client.dart';
-import '../theme/app_theme.dart';
-import '../utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 class GlobalVendorSelector extends ConsumerStatefulWidget {
-  final bool isJefeVentas;
-  final VoidCallback? onChanged;
 
   const GlobalVendorSelector({
-    super.key,
-    required this.isJefeVentas,
+    required this.isJefeVentas, super.key,
     this.onChanged,
   });
+  final bool isJefeVentas;
+  final VoidCallback? onChanged;
 
   @override
   ConsumerState<GlobalVendorSelector> createState() =>
@@ -80,18 +79,18 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
         _vendedores.any((v) => v['code'].toString() == selectedVendor);
 
     final currentValue = isValidSelection ? selectedVendor : null;
-    final bool isCompact = Responsive.isLandscapeCompact(context);
+    final isCompact = Responsive.isLandscapeCompact(context);
 
     return Container(
       padding: EdgeInsets.symmetric(
-          horizontal: 12, vertical: isCompact ? 2 : 8),
+          horizontal: 12, vertical: isCompact ? 2 : 8,),
       color: AppTheme.surfaceColor,
       child: Row(
         children: [
           const Icon(Icons.visibility, color: AppTheme.neonBlue, size: 18),
           const SizedBox(width: 8),
           const Text('Ver como:',
-              style: TextStyle(fontSize: 12, color: Colors.white70)),
+              style: TextStyle(fontSize: 12, color: Colors.white70),),
           const SizedBox(width: 8),
           Expanded(
             child: Container(
@@ -101,7 +100,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                 color: AppTheme.darkSurface,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                    color: AppTheme.neonBlue.withOpacity(0.3)),
+                    color: AppTheme.neonBlue.withOpacity(0.3),),
               ),
               child: _isLoading
                   ? const Center(
@@ -109,7 +108,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                           width: 16,
                           height: 16,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: AppTheme.neonBlue)))
+                              strokeWidth: 2, color: AppTheme.neonBlue,),),)
                   : DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: currentValue,
@@ -117,21 +116,20 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                         isDense: true,
                         dropdownColor: AppTheme.darkCard,
                         icon: const Icon(Icons.arrow_drop_down,
-                            color: AppTheme.neonBlue, size: 20),
+                            color: AppTheme.neonBlue, size: 20,),
                         style: const TextStyle(
-                            color: Colors.white, fontSize: 13),
+                            color: Colors.white, fontSize: 13,),
                         hint: const Text('Todos los comerciales',
                             style: TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.bold,
-                                fontSize: 13)),
+                                fontSize: 13,),),
                         items: [
                           const DropdownMenuItem<String>(
-                            value: null,
                             child: Text('Todos los comerciales',
                                 style: TextStyle(
                                     color: Colors.white,
-                                    fontWeight: FontWeight.bold)),
+                                    fontWeight: FontWeight.bold,),),
                           ),
                           ..._vendedores.map((v) {
                             final code = v['code']?.toString() ?? '';
@@ -143,7 +141,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                               value: code,
                               child: Text(displayName,
                                   style: const TextStyle(
-                                      color: Colors.white, fontSize: 12)),
+                                      color: Colors.white, fontSize: 12,),),
                             );
                           }),
                         ],

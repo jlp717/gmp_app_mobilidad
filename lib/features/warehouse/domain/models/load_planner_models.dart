@@ -1,5 +1,6 @@
 /// Domain models for Load Planner V2.
 /// Immutable data classes with copyWith support.
+library;
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // ENUMS
@@ -18,16 +19,6 @@ enum SaveState { saved, saving, unsaved, error }
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class LoadBox {
-  final int id;
-  final String label;
-  final int orderNumber;
-  final String clientCode;
-  final String articleCode;
-  final double weight;
-  // Position (lower-left-front corner)
-  final double x, y, z;
-  // Dimensions as placed
-  final double w, d, h;
 
   const LoadBox({
     required this.id,
@@ -43,6 +34,31 @@ class LoadBox {
     required this.d,
     required this.h,
   });
+
+  factory LoadBox.fromJson(Map<String, dynamic> json) => LoadBox(
+        id: (json['id'] as int?) ?? 0,
+        label: (json['label'] as String?) ?? '',
+        orderNumber: (json['orderNumber'] as int?) ?? 0,
+        clientCode: (json['clientCode'] as String?) ?? '',
+        articleCode: (json['articleCode'] as String?) ?? '',
+        weight: ((json['weight'] ?? 0) as num).toDouble(),
+        x: ((json['x'] ?? 0) as num).toDouble(),
+        y: ((json['y'] ?? 0) as num).toDouble(),
+        z: ((json['z'] ?? 0) as num).toDouble(),
+        w: ((json['w'] ?? 0) as num).toDouble(),
+        d: ((json['d'] ?? 0) as num).toDouble(),
+        h: ((json['h'] ?? 0) as num).toDouble(),
+      );
+  final int id;
+  final String label;
+  final int orderNumber;
+  final String clientCode;
+  final String articleCode;
+  final double weight;
+  // Position (lower-left-front corner)
+  final double x, y, z;
+  // Dimensions as placed
+  final double w, d, h;
 
   double get volume => w * d * h;
 
@@ -75,21 +91,6 @@ class LoadBox {
         h: h ?? this.h,
       );
 
-  factory LoadBox.fromJson(Map<String, dynamic> json) => LoadBox(
-        id: (json['id'] as int?) ?? 0,
-        label: (json['label'] as String?) ?? '',
-        orderNumber: (json['orderNumber'] as int?) ?? 0,
-        clientCode: (json['clientCode'] as String?) ?? '',
-        articleCode: (json['articleCode'] as String?) ?? '',
-        weight: ((json['weight'] ?? 0) as num).toDouble(),
-        x: ((json['x'] ?? 0) as num).toDouble(),
-        y: ((json['y'] ?? 0) as num).toDouble(),
-        z: ((json['z'] ?? 0) as num).toDouble(),
-        w: ((json['w'] ?? 0) as num).toDouble(),
-        d: ((json['d'] ?? 0) as num).toDouble(),
-        h: ((json['h'] ?? 0) as num).toDouble(),
-      );
-
   Map<String, dynamic> toJson() => {
         'id': id,
         'label': label,
@@ -111,13 +112,6 @@ class LoadBox {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class TruckDimensions {
-  final String code;
-  final String description;
-  final double lengthCm;
-  final double widthCm;
-  final double heightCm;
-  final double maxPayloadKg;
-  final double tolerancePct;
 
   const TruckDimensions({
     required this.code,
@@ -128,9 +122,6 @@ class TruckDimensions {
     required this.maxPayloadKg,
     this.tolerancePct = 5.0,
   });
-
-  double get volumeCm3 => lengthCm * widthCm * heightCm;
-  double get volumeM3 => volumeCm3 / 1e6;
 
   factory TruckDimensions.fromVehicleConfig(Map<String, dynamic> json) {
     final interior = (json['interior'] as Map<String, dynamic>?) ?? {};
@@ -144,6 +135,16 @@ class TruckDimensions {
       tolerancePct: ((json['tolerancePct'] ?? 5) as num).toDouble(),
     );
   }
+  final String code;
+  final String description;
+  final double lengthCm;
+  final double widthCm;
+  final double heightCm;
+  final double maxPayloadKg;
+  final double tolerancePct;
+
+  double get volumeCm3 => lengthCm * widthCm * heightCm;
+  double get volumeM3 => volumeCm3 / 1e6;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -151,17 +152,6 @@ class TruckDimensions {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class PlannerMetrics {
-  final int totalBoxes;
-  final int placedCount;
-  final int overflowCount;
-  final double containerVolumeCm3;
-  final double usedVolumeCm3;
-  final double volumePct;
-  final double totalWeightKg;
-  final double overflowWeightKg;
-  final double maxPayloadKg;
-  final double weightPct;
-  final LoadStatus status;
 
   const PlannerMetrics({
     required this.totalBoxes,
@@ -230,10 +220,8 @@ class PlannerMetrics {
     switch (statusStr) {
       case 'EXCESO':
         status = LoadStatus.exceso;
-        break;
       case 'OPTIMO':
         status = LoadStatus.optimo;
-        break;
       default:
         status = LoadStatus.seguro;
     }
@@ -255,6 +243,17 @@ class PlannerMetrics {
       status: status,
     );
   }
+  final int totalBoxes;
+  final int placedCount;
+  final int overflowCount;
+  final double containerVolumeCm3;
+  final double usedVolumeCm3;
+  final double volumePct;
+  final double totalWeightKg;
+  final double overflowWeightKg;
+  final double maxPayloadKg;
+  final double weightPct;
+  final LoadStatus status;
 
   Map<String, dynamic> toJson() => {
         'totalBoxes': totalBoxes,
@@ -276,9 +275,6 @@ class PlannerMetrics {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class DragState {
-  final int boxIndex;
-  final double startX, startY, startZ; // original 3D position
-  final bool hasCollision;
 
   const DragState({
     required this.boxIndex,
@@ -287,6 +283,11 @@ class DragState {
     required this.startZ,
     this.hasCollision = false,
   });
+  final int boxIndex;
+  final double startX;
+  final double startY;
+  final double startZ; // original 3D position
+  final bool hasCollision;
 
   DragState copyWith({bool? hasCollision}) => DragState(
         boxIndex: boxIndex,
@@ -302,18 +303,9 @@ class DragState {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class ManualLayout {
-  final int? id;
-  final String vehicleCode;
-  final String date;
-  final List<LoadBox> boxes;
-  final List<int> excludedOrders;
-  final Map<String, dynamic> metrics;
 
   const ManualLayout({
-    this.id,
-    required this.vehicleCode,
-    required this.date,
-    required this.boxes,
+    required this.vehicleCode, required this.date, required this.boxes, this.id,
     this.excludedOrders = const [],
     this.metrics = const {},
   });
@@ -336,6 +328,12 @@ class ManualLayout {
       metrics: (json['metrics'] as Map<String, dynamic>?) ?? {},
     );
   }
+  final int? id;
+  final String vehicleCode;
+  final String date;
+  final List<LoadBox> boxes;
+  final List<int> excludedOrders;
+  final Map<String, dynamic> metrics;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -343,10 +341,6 @@ class ManualLayout {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class ClientSummary {
-  final String clientCode;
-  final int boxCount;
-  final double totalWeight;
-  final double totalVolume;
 
   const ClientSummary({
     required this.clientCode,
@@ -354,4 +348,8 @@ class ClientSummary {
     required this.totalWeight,
     required this.totalVolume,
   });
+  final String clientCode;
+  final int boxCount;
+  final double totalWeight;
+  final double totalVolume;
 }

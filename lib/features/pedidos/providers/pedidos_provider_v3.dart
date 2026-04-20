@@ -16,13 +16,12 @@
 /// - 40% faster cart operations
 /// - 30% reduction in memory allocations
 /// - 70% faster product search with caching
+library;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../core/api/api_client.dart';
-import '../data/pedidos_service.dart';
-import '../data/pedidos_offline_service.dart';
-import '../../../core/cache/cache_service_optimized.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service_optimized.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 
 class PedidosProviderV3 with ChangeNotifier {
   // ── Cart State (current order being built) ──
@@ -53,8 +52,8 @@ class PedidosProviderV3 with ChangeNotifier {
   bool _isLoadingStats = false;
 
   // ── Recommendations ──
-  List<Recommendation> _clientHistory = [];
-  List<Recommendation> _similarClients = [];
+  final List<Recommendation> _clientHistory = [];
+  final List<Recommendation> _similarClients = [];
 
   // ── General ──
   bool _isSaving = false;
@@ -79,7 +78,7 @@ class PedidosProviderV3 with ChangeNotifier {
   final Map<String, double> _lastPriceByProduct = {};
 
   // ── Global Discount (C5) ──
-  double _globalDiscountPct = 0.0;
+  double _globalDiscountPct = 0;
 
   // ── Complementary Products & Promotions ──
   List<Map<String, dynamic>> _complementaryProducts = [];
@@ -87,8 +86,8 @@ class PedidosProviderV3 with ChangeNotifier {
   final Map<String, PromotionItem> _activePromotions = {};
 
   // ── Analytics ──
-  Map<String, dynamic> _analytics = {};
-  bool _isLoadingAnalytics = false;
+  final Map<String, dynamic> _analytics = {};
+  final bool _isLoadingAnalytics = false;
 
   // ── Cached Calculations (avoid recalculation) ──
   double? _cachedTotalImporte;
@@ -174,7 +173,7 @@ class PedidosProviderV3 with ChangeNotifier {
   double get totalConDescuento => totalImporte - totalDescuento;
   
   double get totalBase {
-    double sum = 0.0;
+    var sum = 0;
     for (final l in _lines) {
       final saleAfterDiscount = l.importeVenta * _discountFactor;
       sum += saleAfterDiscount / (1 + l.ivaRate);
@@ -215,7 +214,7 @@ class PedidosProviderV3 with ChangeNotifier {
     if (_cacheValid && _cachedTotalImporte != null) {
       return _cachedTotalImporte!;
     }
-    final value = _lines.fold(0.0, (sum, l) => sum + l.importeVenta);
+    final value = _lines.fold(0, (sum, l) => sum + l.importeVenta);
     _cachedTotalImporte = value;
     _cacheValid = true;
     return value;
@@ -295,7 +294,7 @@ class PedidosProviderV3 with ChangeNotifier {
   // ── Client Operations (optimized) ──
 
   void setClient(String code, String name, {bool clearCart = false}) {
-    bool needsNotify = false;
+    var needsNotify = false;
     
     if (clearCart && _lines.isNotEmpty) {
       _lines.clear();
@@ -432,7 +431,6 @@ class PedidosProviderV3 with ChangeNotifier {
         clientCode: _clientCode,
         family: _selectedFamily,
         marca: _selectedBrand,
-        limit: 50,
         offset: _productOffset,
         forceRefresh: forceRefresh,
       );
@@ -538,7 +536,7 @@ class PedidosProviderV3 with ChangeNotifier {
   // ── Cart Operations (optimized with minimal allocations) ──
 
   String? addLine(Product product, double cantidadEnvases,
-      double cantidadUnidades, String unidadMedida, double precioVenta) {
+      double cantidadUnidades, String unidadMedida, double precioVenta,) {
     if (!hasClient) {
       const msg = 'Debes seleccionar un cliente antes de anadir productos.';
       _error = msg;
@@ -550,7 +548,7 @@ class PedidosProviderV3 with ChangeNotifier {
         ? 'CAJAS'
         : unidadMedida.trim().toUpperCase();
 
-    double requestQty = unit == 'CAJAS' ? cantidadEnvases : cantidadUnidades;
+    var requestQty = unit == 'CAJAS' ? cantidadEnvases : cantidadUnidades;
 
     final existingIdx = _lines.indexWhere((l) => l.codigoArticulo == product.code);
     final currentQtyInCart = existingIdx >= 0
@@ -573,7 +571,7 @@ class PedidosProviderV3 with ChangeNotifier {
       return msg;
     }
 
-    bool isPartial = false;
+    var isPartial = false;
     double missingQty = 0;
 
     if (requestQty > remainingAvailable) {
@@ -696,7 +694,7 @@ class PedidosProviderV3 with ChangeNotifier {
   // ── Order Persistence ──
 
   Future<Map<String, dynamic>?> confirmOrder(String vendedorCode,
-      {String observaciones = ''}) async {
+      {String observaciones = '',}) async {
     if (!hasClient || !hasLines) {
       _error = 'Seleccione un cliente y añada al menos un producto';
       _notify(immediate: true);

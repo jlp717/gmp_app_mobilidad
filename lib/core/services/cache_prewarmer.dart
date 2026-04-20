@@ -2,10 +2,11 @@
 /// ==========================
 /// Pre-loads critical data in background on app start
 /// Ensures instant display on first navigation to any screen
+library;
 
 import 'package:flutter/foundation.dart';
-import '../cache/cache_service.dart';
-import '../api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 
 /// Service to pre-warm cache with critical data
 class CachePreWarmer {
@@ -31,7 +32,7 @@ class CachePreWarmer {
         if (isJefeVentas) _preWarmVendedores(),
         _preWarmCommissions(codes, currentYear),
         _preWarmRuteroWeek(codes, currentYear, currentMonth),
-      ], eagerError: false);
+      ],);
 
       _hasPreWarmed = true;
       debugPrint('[CachePreWarmer] ✅ Pre-warming completed');
@@ -132,7 +133,7 @@ class CachePreWarmer {
         _preWarmFacturas(codes, currentYear, currentMonth),
         _preWarmCommissions(codes, currentYear),
         _preWarmRuteroWeek(codes, currentYear, currentMonth),
-      ], eagerError: false);
+      ],);
 
       _hasPreWarmed = true;
       debugPrint('[CachePreWarmer] ✅ Pre-warming completed (codes)');

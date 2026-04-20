@@ -1,29 +1,27 @@
-/**
- * Accessibility Utilities
- * =====================
- * Accessibility helpers for screen readers and accessibility tools
- */
+/// Accessibility Utilities
+/// =====================
+/// Accessibility helpers for screen readers and accessibility tools
+library;
 
 import 'package:flutter/material.dart';
 
 /// Semantic wrapper for better accessibility
 class AccessibleWidget extends StatelessWidget {
-  final Widget child;
-  final String? label;
-  final String? hint;
-  final String? role;
-  final bool? checked;
-  final bool? enabled;
 
   const AccessibleWidget({
-    super.key,
-    required this.child,
+    required this.child, super.key,
     this.label,
     this.hint,
     this.role,
     this.checked,
     this.enabled,
   });
+  final Widget child;
+  final String? label;
+  final String? hint;
+  final String? role;
+  final bool? checked;
+  final bool? enabled;
 
   @override
   Widget build(BuildContext context) {
@@ -41,16 +39,14 @@ class AccessibleWidget extends StatelessWidget {
 
 /// Accessible button with label
 class AccessibleButton extends StatelessWidget {
+
+  const AccessibleButton({
+    required this.onPressed, required this.child, super.key,
+    this.semanticLabel,
+  });
   final VoidCallback? onPressed;
   final Widget child;
   final String? semanticLabel;
-
-  const AccessibleButton({
-    super.key,
-    required this.onPressed,
-    required this.child,
-    this.semanticLabel,
-  });
 
   @override
   Widget build(BuildContext context) {
@@ -68,13 +64,6 @@ class AccessibleButton extends StatelessWidget {
 
 /// Accessible text field
 class AccessibleTextField extends StatelessWidget {
-  final TextEditingController? controller;
-  final String? label;
-  final String? hint;
-  final String? errorText;
-  final bool? obscureText;
-  final TextInputType? keyboardType;
-  final ValueChanged<String>? onChanged;
 
   const AccessibleTextField({
     super.key,
@@ -86,6 +75,13 @@ class AccessibleTextField extends StatelessWidget {
     this.keyboardType,
     this.onChanged,
   });
+  final TextEditingController? controller;
+  final String? label;
+  final String? hint;
+  final String? errorText;
+  final bool? obscureText;
+  final TextInputType? keyboardType;
+  final ValueChanged<String>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -110,12 +106,6 @@ class AccessibleTextField extends StatelessWidget {
 
 /// High contrast text for accessibility
 class AccessibleText extends StatelessWidget {
-  final String text;
-  final TextStyle? style;
-  final double? fontSize;
-  final FontWeight? fontWeight;
-  final Color? color;
-  final TextAlign? textAlign;
 
   const AccessibleText(
     this.text, {
@@ -126,6 +116,12 @@ class AccessibleText extends StatelessWidget {
     this.color,
     this.textAlign,
   });
+  final String text;
+  final TextStyle? style;
+  final double? fontSize;
+  final FontWeight? fontWeight;
+  final Color? color;
+  final TextAlign? textAlign;
 
   @override
   Widget build(BuildContext context) {
@@ -152,7 +148,7 @@ class AccessibleText extends StatelessWidget {
 /// Helper to check if text scaling is reasonable
 class TextScalingHelper {
   static double getScaledFontSize(BuildContext context, double baseSize) {
-    final scale = MediaQuery.textScalerOf(context).scale(1.0);
+    final scale = MediaQuery.textScalerOf(context).scale(1);
     // Cap scaling at 1.3x to prevent UI breaks
     final clampedScale = scale.clamp(0.8, 1.3);
     return baseSize * clampedScale;

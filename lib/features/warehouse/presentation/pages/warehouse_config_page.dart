@@ -1,9 +1,10 @@
 /// WAREHOUSE CONFIG PAGE — Global config key-value editor
 /// Reads/writes from ALMACEN_CONFIG_GLOBAL via /warehouse/config
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../data/warehouse_data_service.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
 
 class WarehouseConfigPage extends StatefulWidget {
   const WarehouseConfigPage({super.key});

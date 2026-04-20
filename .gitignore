@@ -48,6 +48,7 @@ app.*.map.json
 backend/node_modules/
 backend/*.log
 backend/.env
+backend/.env.produccion
 backend/db_exploration_results.json
 backend/db_probe_results.json
 

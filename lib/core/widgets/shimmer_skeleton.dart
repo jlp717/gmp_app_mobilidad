@@ -2,20 +2,20 @@
 /// ================================
 /// Premium loading placeholder for perceived instant performance
 /// Uses shimmer animation to indicate loading state
+library;
 
 import 'package:flutter/material.dart';
-import '../utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// Shimmer effect widget for loading states
 class ShimmerLoading extends StatefulWidget {
-  final Widget child;
-  final bool isLoading;
 
   const ShimmerLoading({
-    super.key,
-    required this.child,
+    required this.child, super.key,
     this.isLoading = true,
   });
+  final Widget child;
+  final bool isLoading;
 
   @override
   State<ShimmerLoading> createState() => _ShimmerLoadingState();
@@ -80,9 +80,6 @@ class _ShimmerLoadingState extends State<ShimmerLoading>
 
 /// Skeleton placeholder for list items (cards)
 class SkeletonCard extends StatelessWidget {
-  final double height;
-  final double? width;
-  final EdgeInsets margin;
 
   const SkeletonCard({
     super.key,
@@ -90,6 +87,9 @@ class SkeletonCard extends StatelessWidget {
     this.width,
     this.margin = const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
   });
+  final double height;
+  final double? width;
+  final EdgeInsets margin;
 
   @override
   Widget build(BuildContext context) {
@@ -188,14 +188,14 @@ class SkeletonCard extends StatelessWidget {
 
 /// Skeleton list - shows multiple skeleton cards
 class SkeletonList extends StatelessWidget {
-  final int itemCount;
-  final double itemHeight;
 
   const SkeletonList({
     super.key,
     this.itemCount = 5,
     this.itemHeight = 120,
   });
+  final int itemCount;
+  final double itemHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -221,12 +221,12 @@ class SkeletonSummary extends StatelessWidget {
         margin: EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
         padding: EdgeInsets.all(Responsive.padding(context, small: 16, large: 24)),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
+          gradient: const LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              const Color(0xFF1E2746),
-              const Color(0xFF252B48),
+              Color(0xFF1E2746),
+              Color(0xFF252B48),
             ],
           ),
           borderRadius: BorderRadius.circular(20),

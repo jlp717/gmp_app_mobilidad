@@ -1,12 +1,13 @@
 /// Client Search Dialog for Pedidos
 /// =================================
 /// Bottom sheet with debounced search to select a client for the order
+library;
 
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../../clients/data/clients_service.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
 
 class ClientSearchDialog {
   /// Show the client search bottom sheet.
@@ -37,13 +38,13 @@ class ClientSearchDialog {
 }
 
 class _ClientSearchBody extends StatefulWidget {
-  final String vendedorCodes;
-  final ScrollController scrollController;
 
   const _ClientSearchBody({
     required this.vendedorCodes,
     required this.scrollController,
   });
+  final String vendedorCodes;
+  final ScrollController scrollController;
 
   @override
   State<_ClientSearchBody> createState() => _ClientSearchBodyState();

@@ -1,8 +1,8 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
-import 'dart:convert';
-import 'dart:isolate';
-import 'package:crypto/crypto.dart';
 
 /// CacheService V3 Performance Optimized
 ///
@@ -29,7 +29,7 @@ class CacheServiceOptimized {
   // In-Memory Cache Layer (LRU with max size)
   // ============================================================
   static final Map<String, _MemoryCacheEntry> _memoryCache = {};
-  static int _memoryCacheMaxSize = 100; // Increased for better hit rate
+  static const int _memoryCacheMaxSize = 100; // Increased for better hit rate
   static const Duration _memoryCacheTTL = Duration(minutes: 10); // Extended TTL
 
   // Access order tracking for LRU eviction
@@ -87,7 +87,7 @@ class CacheServiceOptimized {
   }
 
   static List<int> _generateEncryptionKey() {
-    final seed = 'gmp_app_cache_encryption_key_v2_optimized';
+    const seed = 'gmp_app_cache_encryption_key_v2_optimized';
     return sha256.convert(utf8.encode(seed)).bytes;
   }
 
@@ -154,7 +154,7 @@ class CacheServiceOptimized {
       _hits++;
       if (trackAccess) _updateAccessOrder(safeKey);
       // Promote to memory cache
-      _setMemoryCache(safeKey, value, promote: true);
+      _setMemoryCache(safeKey, value);
       debugPrint('[CacheService] Hive cache HIT: $key');
       return value as T?;
     }
@@ -187,7 +187,7 @@ class CacheServiceOptimized {
     }
 
     // Compress large payloads
-    bool isCompressed = false;
+    var isCompressed = false;
     if (compress ||
         (processedValue is String &&
             processedValue.length > _compressionThreshold)) {
@@ -213,7 +213,7 @@ class CacheServiceOptimized {
       await Future.wait(futures);
 
       // Update memory cache
-      _setMemoryCache(safeKey, value, promote: true);
+      _setMemoryCache(safeKey, value);
 
       debugPrint(
         '[CacheService] SET: $key (TTL: ${effectiveTTL.inMinutes}min, '
@@ -244,7 +244,7 @@ class CacheServiceOptimized {
       final metaFuture =
           _metadataBox?.put('${safeKey}_expiry', expiryTimestamp);
       if (metaFuture != null) batchOperations.add(metaFuture);
-      _setMemoryCache(safeKey, entry.value, promote: true);
+      _setMemoryCache(safeKey, entry.value);
     }
 
     try {
@@ -348,7 +348,7 @@ class CacheServiceOptimized {
 
   /// Set value in memory cache with LRU eviction
   static void _setMemoryCache(String key, dynamic value,
-      {bool promote = true}) {
+      {bool promote = true,}) {
     if (promote) {
       _updateAccessOrder(key);
     }
@@ -382,7 +382,7 @@ class CacheServiceOptimized {
     final keysToDelete = _cacheBox!.keys
         .where((k) =>
             k.toString().startsWith(prefix) ||
-            k.toString().startsWith('hashed_$prefix'))
+            k.toString().startsWith('hashed_$prefix'),)
         .toList();
 
     if (keysToDelete.isEmpty) return;
@@ -401,7 +401,7 @@ class CacheServiceOptimized {
 
     await Future.wait(batchOperations);
     debugPrint(
-        '[CacheService] INVALIDATED ${keysToDelete.length} entries: $prefix');
+        '[CacheService] INVALIDATED ${keysToDelete.length} entries: $prefix',);
   }
 
   /// Clear all cached data
@@ -490,7 +490,7 @@ class CacheServiceOptimized {
 
     await Future.wait(batchOperations);
     debugPrint(
-        '[CacheService] GC collected ${expiredKeys.length} expired entries');
+        '[CacheService] GC collected ${expiredKeys.length} expired entries',);
   }
 }
 

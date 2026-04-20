@@ -737,51 +737,63 @@ async function createOrder({ clientCode, clientName, vendedorCode, tipoventa = '
     const pedidoId = idRows[0]?.ID;
     if (!pedidoId) throw new Error('Failed to retrieve created order ID');
 
-    // Insert lines
-    for (let i = 0; i < lines.length; i++) {
-        const ln = lines[i];
-        
-        let cantidadEnvases = parseFloat(ln.cantidadEnvases) || 0;
-        let cantidadUnidades = parseFloat(ln.cantidadUnidades) || parseFloat(ln.cantidad) || 0;
-        let unidadesCaja = parseFloat(ln.unidadesCaja) || 1;
-        let unidadMedida = ln.unidadMedida || 'CAJAS';
-        let precio = parseFloat(ln.precio) || parseFloat(ln.precioVenta) || 0;
-        
-        const importeVenta = calculateLineImporte({
-            unidadMedida,
-            cantidadEnvases,
-            cantidadUnidades,
-            unidadesCaja,
-            precioVenta: precio
-        });
-        const billingQty = unidadMedida === 'CAJAS' ? cantidadEnvases : cantidadUnidades;
-        const importeCosto = parseFloat(ln.importeCosto) || Math.round((billingQty * (parseFloat(ln.precioCosto) || 0)) * 100) / 100;
-        const importeMargen = importeVenta - importeCosto;
-        const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
+    // Insert lines with compensation pattern: if any line fails, delete the header
+    try {
+        for (let i = 0; i < lines.length; i++) {
+            const ln = lines[i];
+            
+            let cantidadEnvases = parseFloat(ln.cantidadEnvases) || 0;
+            let cantidadUnidades = parseFloat(ln.cantidadUnidades) || parseFloat(ln.cantidad) || 0;
+            let unidadesCaja = parseFloat(ln.unidadesCaja) || 1;
+            let unidadMedida = ln.unidadMedida || 'CAJAS';
+            let precio = parseFloat(ln.precio) || parseFloat(ln.precioVenta) || 0;
+            
+            const importeVenta = calculateLineImporte({
+                unidadMedida,
+                cantidadEnvases,
+                cantidadUnidades,
+                unidadesCaja,
+                precioVenta: precio
+            });
+            const billingQty = unidadMedida === 'CAJAS' ? cantidadEnvases : cantidadUnidades;
+            const importeCosto = parseFloat(ln.importeCosto) || Math.round((billingQty * (parseFloat(ln.precioCosto) || 0)) * 100) / 100;
+            const importeMargen = importeVenta - importeCosto;
+            const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
 
-        const linSql = `
-            INSERT INTO JAVIER.PEDIDOS_LIN (
-                PEDIDO_ID, SECUENCIA, CODIGOARTICULO, DESCRIPCION,
-                CANTIDADENVASES, CANTIDADUNIDADES, UNIDADMEDIDA, UNIDADESCAJA,
-                PRECIOVENTA, PRECIOCOSTO, PRECIOTARIFA, PRECIOTARIFACLIENTE, PRECIOMINIMO,
-                IMPORTEVENTA, IMPORTECOSTO, IMPORTEMARGEN, PORCENTAJEMARGEN,
-                TIPOLINEA, TIPOVENTA, CLASELINEA, ORDEN
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            const linSql = `
+                INSERT INTO JAVIER.PEDIDOS_LIN (
+                    PEDIDO_ID, SECUENCIA, CODIGOARTICULO, DESCRIPCION,
+                    CANTIDADENVASES, CANTIDADUNIDADES, UNIDADMEDIDA, UNIDADESCAJA,
+                    PRECIOVENTA, PRECIOCOSTO, PRECIOTARIFA, PRECIOTARIFACLIENTE, PRECIOMINIMO,
+                    IMPORTEVENTA, IMPORTECOSTO, IMPORTEMARGEN, PORCENTAJEMARGEN,
+                    TIPOLINEA, TIPOVENTA, CLASELINEA, ORDEN
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
-        const linParams = [
-            pedidoId, i + 1,
-            (ln.codigoArticulo || '').trim(), (ln.descripcion || '').substring(0, 40),
-            cantidadEnvases, cantidadUnidades,
-            unidadMedida, unidadesCaja,
-            precio, parseFloat(ln.precioCosto) || 0,
-            parseFloat(ln.precioTarifa) || 0, parseFloat(ln.precioTarifaCliente) || 0,
-            parseFloat(ln.precioMinimo) || 0,
-            importeVenta, importeCosto, importeMargen,
-            Math.round(pctMargen * 100) / 100,
-            ln.tipoLinea || 'R', ln.tipoventa || tipoventa, ln.claseLinea || 'VT', i + 1
-        ];
+            const linParams = [
+                pedidoId, i + 1,
+                (ln.codigoArticulo || '').trim(), (ln.descripcion || '').substring(0, 40),
+                cantidadEnvases, cantidadUnidades,
+                unidadMedida, unidadesCaja,
+                precio, parseFloat(ln.precioCosto) || 0,
+                parseFloat(ln.precioTarifa) || 0, parseFloat(ln.precioTarifaCliente) || 0,
+                parseFloat(ln.precioMinimo) || 0,
+                importeVenta, importeCosto, importeMargen,
+                Math.round(pctMargen * 100) / 100,
+                ln.tipoLinea || 'R', ln.tipoventa || tipoventa, ln.claseLinea || 'VT', i + 1
+            ];
 
-        await queryWithParams(linSql, linParams, false);
+            await queryWithParams(linSql, linParams, false);
+        }
+    } catch (linErr) {
+        // COMPENSATION: If lines fail, delete the header to avoid orphaned orders
+        logger.error(`[PEDIDOS] Failed to insert lines for order ${pedidoId}, rolling back header: ${linErr.message}`);
+        try {
+            await queryWithParams(`DELETE FROM JAVIER.PEDIDOS_CAB WHERE ID = ?`, [pedidoId], false);
+            logger.info(`[PEDIDOS] Successfully rolled back orphaned header ID=${pedidoId}`);
+        } catch (delErr) {
+            logger.error(`[PEDIDOS] CRITICAL: Failed to rollback orphaned header ID=${pedidoId}: ${delErr.message}`);
+        }
+        throw linErr;
     }
 
     // Recalculate totals
@@ -913,6 +925,9 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
 
     try {
         const rows = await queryWithParams(sql, params);
+        if (!rows || rows.length === 0) {
+            return [];
+        }
         const orders = rows.map(r => {
             const dia = String(r.DIADOCUMENTO).padStart(2, '0');
             const mes = String(r.MESDOCUMENTO).padStart(2, '0');

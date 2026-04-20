@@ -1,30 +1,29 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
+import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
+import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Import Sync Header
+import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
+import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/enhanced_client_matrix_page.dart';
+import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_dialogs.dart'; // NEW: Import dialogs
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/api/api_config.dart';
-import '../../../objectives/presentation/pages/enhanced_client_matrix_page.dart';
-import '../widgets/rutero_reorder_modal.dart';
-import '../widgets/rutero_dialogs.dart'; // NEW: Import dialogs
-import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
-import '../../../../core/widgets/modern_loading.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/providers/filter_provider.dart';
-import '../../../../core/widgets/global_vendor_selector.dart';
-import '../../../../core/providers/auth_notifier.dart';
-import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
-import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
 
 /// Rutero Page - Premium Design with Visit/Delivery Toggle
 /// Shows clients to visit/deliver each day with YoY comparison
 class RuteroPage extends ConsumerStatefulWidget {
-  final String employeeCode;
-  final bool isJefeVentas;
 
   const RuteroPage(
-      {super.key, required this.employeeCode, this.isJefeVentas = false});
+      {required this.employeeCode, super.key, this.isJefeVentas = false,});
+  final String employeeCode;
+  final bool isJefeVentas;
 
   @override
   ConsumerState<RuteroPage> createState() => _RuteroPageState();
@@ -76,7 +75,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   int _weeksInMonth = 4;
 
   // Jefe de ventas - Ver rutero como
-  List<Map<String, dynamic>> _vendedoresDisponibles = [];
+  final List<Map<String, dynamic>> _vendedoresDisponibles = [];
   String? _selectedVendedor; // null = ver su propio rutero
 
   final List<String> _monthNames = const [
@@ -91,7 +90,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     'Septiembre',
     'Octubre',
     'Noviembre',
-    'Diciembre'
+    'Diciembre',
   ];
 
   static const List<String> _weekdays = [
@@ -101,7 +100,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     'jueves',
     'viernes',
     'sabado',
-    'domingo'
+    'domingo',
   ];
 
   static const Map<String, String> _weekdayLabels = {
@@ -111,7 +110,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     'jueves': 'JUE',
     'viernes': 'VIE',
     'sabado': 'SÁB',
-    'domingo': 'DOM'
+    'domingo': 'DOM',
   };
 
   static const Map<String, String> _weekdayFullLabels = {
@@ -121,7 +120,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     'jueves': 'Jueves',
     'viernes': 'Viernes',
     'sabado': 'Sábado',
-    'domingo': 'Domingo'
+    'domingo': 'Domingo',
   };
 
   @override
@@ -165,7 +164,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   }
 
   int _getWeeksInMonth(int year, int month) {
-    final firstDay = DateTime(year, month, 1);
+    final firstDay = DateTime(year, month);
     final lastDay = DateTime(year, month + 1, 0);
     // Calculate weeks: ceiling of (days + first day offset) / 7
     final firstWeekday = firstDay.weekday; // 1=Mon
@@ -174,23 +173,23 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   }
 
   int _getCurrentWeekInMonth(DateTime date) {
-    final firstDay = DateTime(date.year, date.month, 1);
+    final firstDay = DateTime(date.year, date.month);
     final firstWeekday = firstDay.weekday;
     return ((date.day + firstWeekday - 2) ~/ 7) + 1;
   }
 
   /// Obtiene las fechas de inicio y fin de la semana seleccionada dentro del mes
   (int startDay, int endDay) _getWeekDates(int year, int month, int weekNum) {
-    final firstOfMonth = DateTime(year, month, 1);
+    final firstOfMonth = DateTime(year, month);
     final lastOfMonth = DateTime(year, month + 1, 0);
     final firstWeekday = firstOfMonth.weekday; // 1=Lunes
 
     // Calcular día de inicio de la semana (Lunes de esa semana)
-    int startDay = 1 + (weekNum - 1) * 7 - (firstWeekday - 1);
+    var startDay = 1 + (weekNum - 1) * 7 - (firstWeekday - 1);
     if (startDay < 1) startDay = 1;
 
     // Día fin (Domingo o último día del mes)
-    int endDay = startDay + 6;
+    var endDay = startDay + 6;
     if (endDay > lastOfMonth.day) endDay = lastOfMonth.day;
 
     return (startDay, endDay);
@@ -279,7 +278,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
       setState(() {
         _weekData = Map<String, int>.from((response['week'] as Map)
-            .map((k, v) => MapEntry(k.toString(), (v as num).toInt())));
+            .map((k, v) => MapEntry(k.toString(), (v as num).toInt())),);
         // Usar totalUniqueClients del backend para el conteo real de clientes
         _totalUniqueClients =
             (response['totalUniqueClients'] as num?)?.toInt() ??
@@ -425,7 +424,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
       // Update existing clients with sales data
       setState(() {
-        for (int i = 0; i < _dayClients.length; i++) {
+        for (var i = 0; i < _dayClients.length; i++) {
           final code = _dayClients[i]['code'] as String?;
           if (code != null && salesMap.containsKey(code)) {
             _dayClients[i]['status'] = salesMap[code];
@@ -490,7 +489,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                 color: AppTheme.neonBlue.withOpacity(0.15),
                 child: Row(
                   children: [
-                    SizedBox(
+                    const SizedBox(
                       width: 12, height: 12,
                       child: CircularProgressIndicator(
                         strokeWidth: 1.5,
@@ -531,14 +530,14 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
   // Main layout wrapper to organize header elements effectively
   Widget _buildUnifiedHeader(bool isSmallScreen) {
-    return Container(
+    return ColoredBox(
       color: AppTheme.darkBase,
       child: Column(
         mainAxisSize: MainAxisSize.min, // Shrink to fit children
         children: [
           // 1. Top Bar: Back, Title, Role Toggle, Sort
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: Row(
               children: [
                 // Title + Role Switcher in one row
@@ -550,12 +549,12 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                       // Toggle role on title tap
                       _onRoleChanged(_selectedRole == 'comercial'
                           ? 'repartidor'
-                          : 'comercial');
+                          : 'comercial',);
                     },
                     child: Row(
                       children: [
                         ShaderMask(
-                          shaderCallback: (bounds) => LinearGradient(
+                          shaderCallback: (bounds) => const LinearGradient(
                             colors: [AppTheme.neonPink, AppTheme.neonPurple],
                           ).createShader(bounds),
                           child: Text(
@@ -572,7 +571,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                         // Current Role Badge (Compact)
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 2),
+                              horizontal: 8, vertical: 2,),
                           decoration: BoxDecoration(
                             color: (_selectedRole == 'comercial'
                                     ? AppTheme.neonPink
@@ -583,8 +582,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                                 color: (_selectedRole == 'comercial'
                                         ? AppTheme.neonPink
                                         : AppTheme.neonBlue)
-                                    .withOpacity(0.5),
-                                width: 1),
+                                    .withOpacity(0.5),),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -608,7 +606,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                                     fontWeight: FontWeight.bold,
                                     color: _selectedRole == 'comercial'
                                         ? AppTheme.neonPink
-                                        : AppTheme.neonBlue),
+                                        : AppTheme.neonBlue,),
                               ),
                             ],
                           ),
@@ -682,7 +680,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               IconButton(
                 onPressed: () => _changeWeek(-1),
                 icon: const Icon(Icons.chevron_left,
-                    size: 20, color: Colors.white),
+                    size: 20, color: Colors.white,),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
@@ -691,12 +689,12 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                   style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: Responsive.isSmall(context) ? 12 : 13)),
+                      fontSize: Responsive.isSmall(context) ? 12 : 13,),),
               const SizedBox(width: 8),
               IconButton(
                 onPressed: () => _changeWeek(1),
                 icon: const Icon(Icons.chevron_right,
-                    size: 20, color: Colors.white),
+                    size: 20, color: Colors.white,),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
               ),
@@ -713,7 +711,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                 style: TextStyle(
                     color: AppTheme.neonPink,
                     fontSize: Responsive.isSmall(context) ? 10 : 11,
-                    fontWeight: FontWeight.bold)),
+                    fontWeight: FontWeight.bold,),),
           ),
         ],
       ),
@@ -739,13 +737,13 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                     fontSize: 10,
                     color: isSelected ? Colors.white : AppTheme.textSecondary,
                     fontWeight:
-                        isSelected ? FontWeight.bold : FontWeight.normal)),
+                        isSelected ? FontWeight.bold : FontWeight.normal,),),
             const SizedBox(height: 2),
             Text('$count',
                 style: TextStyle(
                     fontSize: 12,
                     color: isSelected ? Colors.white : AppTheme.textPrimary,
-                    fontWeight: FontWeight.bold)),
+                    fontWeight: FontWeight.bold,),),
           ],
         ),
       ),
@@ -771,11 +769,11 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         decoration: InputDecoration(
           hintText: 'Buscar...',
           hintStyle: TextStyle(
-              color: AppTheme.textSecondary.withOpacity(0.7), fontSize: 13),
+              color: AppTheme.textSecondary.withOpacity(0.7), fontSize: 13,),
           prefixIcon:
               const Icon(Icons.search, size: 16, color: AppTheme.textSecondary),
           contentPadding:
-              const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
+              const EdgeInsets.symmetric(horizontal: 8),
           isDense: true,
           filled: true,
           fillColor: AppTheme.surfaceColor,
@@ -793,10 +791,10 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
         children: [
-          Icon(Icons.sort, size: 16, color: AppTheme.textSecondary),
+          const Icon(Icons.sort, size: 16, color: AppTheme.textSecondary),
           const SizedBox(width: 8),
-          Text('Ordenar:',
-              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+          const Text('Ordenar:',
+              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),),
           const SizedBox(width: 8),
           Expanded(
             child: Container(
@@ -811,17 +809,17 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                 child: DropdownButton<String>(
                   value: _sortMode,
                   isExpanded: true,
-                  icon: Icon(Icons.arrow_drop_down,
-                      size: 16, color: AppTheme.textSecondary),
+                  icon: const Icon(Icons.arrow_drop_down,
+                      size: 16, color: AppTheme.textSecondary,),
                   dropdownColor: AppTheme.surfaceColor,
                   style: const TextStyle(
-                      fontSize: 12, color: AppTheme.textPrimary),
+                      fontSize: 12, color: AppTheme.textPrimary,),
                   items: _sortModeLabels.entries
                       .map((e) => DropdownMenuItem(
                             value: e.key,
                             child: Text(e.value,
-                                style: const TextStyle(fontSize: 12)),
-                          ))
+                                style: const TextStyle(fontSize: 12),),
+                          ),)
                       .toList(),
                   onChanged: (value) {
                     if (value != null) {
@@ -848,18 +846,18 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   Widget _buildClientList() {
     if (_isLoadingWeek || _isLoadingClients) {
       return const Padding(
-        padding: EdgeInsets.all(40.0),
+        padding: EdgeInsets.all(40),
         child: ModernLoading(message: 'Cargando rutas...'),
       );
     }
 
     if (_error != null) {
-      return Center(
+      return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.error_outline, size: 48, color: AppTheme.error),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Text('Error al cargar', style: TextStyle(color: AppTheme.error)),
           ],
         ),
@@ -932,7 +930,6 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                   0;
           return salesB.compareTo(salesA); // Descending
         });
-        break;
       case 'sales_asc':
         filteredClients.sort((a, b) {
           final salesA =
@@ -945,7 +942,6 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                   0;
           return salesA.compareTo(salesB); // Ascending
         });
-        break;
       case 'route':
         // Already sorted by API order
         break;
@@ -959,7 +955,6 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           final nameB = (b['name'] as String?) ?? '';
           return nameA.compareTo(nameB);
         });
-        break;
     }
 
     // --- Empty States for Filtered Results ---
@@ -972,14 +967,14 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.notifications_off_outlined,
-                size: 60, color: AppTheme.neonPink.withOpacity(0.3)),
+                size: 60, color: AppTheme.neonPink.withOpacity(0.3),),
             const SizedBox(height: 16),
             Text(
               'Sin clientes con alertas',
               style: TextStyle(
                   fontSize: 18,
                   color: Colors.white.withOpacity(0.9),
-                  fontWeight: FontWeight.bold),
+                  fontWeight: FontWeight.bold,),
             ),
             const SizedBox(height: 8),
             Text(
@@ -1011,7 +1006,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.search_off,
-                size: 48, color: AppTheme.neonPink.withValues(alpha: 0.4)),
+                size: 48, color: AppTheme.neonPink.withValues(alpha: 0.4),),
             const SizedBox(height: 16),
             Text(
               'No se encontró ningún cliente para "$_searchQuery"',
@@ -1023,8 +1018,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                 _searchController.clear();
                 _searchQuery = '';
               }),
-              child: Text('Limpiar búsqueda',
-                  style: TextStyle(color: AppTheme.neonPink)),
+              child: const Text('Limpiar búsqueda',
+                  style: TextStyle(color: AppTheme.neonPink),),
             ),
           ],
         ),
@@ -1151,16 +1146,16 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Llamar',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),),
             const SizedBox(height: 8),
             const Text('Selecciona el número:',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),),
             const SizedBox(height: 12),
             if (phones.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text('No hay teléfonos guardados',
-                    style: TextStyle(color: AppTheme.textSecondary)),
+                    style: TextStyle(color: AppTheme.textSecondary),),
               ),
             ...phones.map((p) => ListTile(
                   leading: const Icon(Icons.phone, color: AppTheme.neonBlue),
@@ -1170,7 +1165,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                     Navigator.pop(ctx);
                     _launchPhoneCall((p['number'] as String?) ?? '');
                   },
-                )),
+                ),),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.dialpad, color: AppTheme.neonPink),
@@ -1188,8 +1183,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     );
   }
 
-  void _launchPhoneCall(String phone) async {
-    final cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+  Future<void> _launchPhoneCall(String phone) async {
+    final cleanPhone = phone.replaceAll(RegExp('[^0-9+]'), '');
     try {
       await launchUrl(Uri.parse('tel:$cleanPhone'));
     } catch (e) {
@@ -1242,7 +1237,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   }
 
   Future<void> _openNotesDialog(Map<String, dynamic> client) async {
-    final Map<String, dynamic> currentNotes =
+    final currentNotes =
         Map<String, dynamic>.from((client['observaciones'] as Map?) ?? {});
     final text = currentNotes['text'] as String? ?? '';
     final ctrl = TextEditingController(text: text);
@@ -1283,7 +1278,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     // Optimistic update locally
     final updatedClient = Map<String, dynamic>.from(client);
     final obs = Map<String, dynamic>.from(
-        (updatedClient['observaciones'] as Map?) ?? {});
+        (updatedClient['observaciones'] as Map?) ?? {},);
     obs['text'] = notes;
     updatedClient['observaciones'] = obs;
 
@@ -1312,7 +1307,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text('Error guardando notas: $e'),
-              backgroundColor: AppTheme.error),
+              backgroundColor: AppTheme.error,),
         );
       }
     }
@@ -1338,16 +1333,16 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Enviar WhatsApp',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),),
             const SizedBox(height: 8),
             const Text('Selecciona el número:',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),),
             const SizedBox(height: 12),
             if (phones.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text('No hay teléfonos guardados',
-                    style: TextStyle(color: AppTheme.textSecondary)),
+                    style: TextStyle(color: AppTheme.textSecondary),),
               ),
             ...phones.map((p) => ListTile(
                   leading:
@@ -1358,7 +1353,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                     Navigator.pop(ctx);
                     _launchWhatsApp((p['number'] as String?) ?? '');
                   },
-                )),
+                ),),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.dialpad, color: AppTheme.neonPink),
@@ -1376,9 +1371,9 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     );
   }
 
-  void _launchWhatsApp(String phone) async {
+  Future<void> _launchWhatsApp(String phone) async {
     // Clean phone number - remove non-digits except +
-    String cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    var cleanPhone = phone.replaceAll(RegExp('[^0-9+]'), '');
     // Add Spain prefix if not present
     if (!cleanPhone.startsWith('+') && !cleanPhone.startsWith('34')) {
       cleanPhone = '34$cleanPhone';
@@ -1407,7 +1402,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     }
   }
 
-  void _openReorderModal() async {
+  Future<void> _openReorderModal() async {
     final vendedor = _singleVendedorCode;
     if (vendedor == null) {
       if (mounted) {
@@ -1457,7 +1452,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       if (countsResponse['counts'] != null && mounted) {
         setState(() {
           _weekData = Map<String, int>.from((countsResponse['counts'] as Map)
-              .map((k, v) => MapEntry(k.toString(), (v as num).toInt())));
+              .map((k, v) => MapEntry(k.toString(), (v as num).toInt())),);
           _totalUniqueClients =
               (countsResponse['totalUniqueClients'] as num?)?.toInt() ??
                   _weekData.values.fold(0, (a, b) => a + b);
@@ -1491,13 +1486,13 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                 'posicion': e.key,
                 'posicionOriginal':
                     (e.value['posicionOriginal'] as int?) ?? e.key,
-              })
+              },)
           .toList();
 
       await ApiClient.post('/rutero/config', {
         'vendedor': vendedor,
         'dia': _selectedDay.toLowerCase(),
-        'orden': orderPayload
+        'orden': orderPayload,
       });
 
       // Refrescar contadores y datos
@@ -1565,7 +1560,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                           size: 14,
                           color: _selectedAlertType != 'ALL'
                               ? AppTheme.neonPink
-                              : AppTheme.textSecondary),
+                              : AppTheme.textSecondary,),
                       style: TextStyle(
                         fontSize: 11,
                         color: _selectedAlertType != 'ALL'
@@ -1579,7 +1574,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                           .map((e) => DropdownMenuItem(
                                 value: e.key,
                                 child: Text(e.value),
-                              ))
+                              ),)
                           .toList(),
                       onChanged: (value) {
                         if (value != null) {
@@ -1632,11 +1627,6 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
 // Role toggle button widget
 class _RoleButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool isSelected;
-  final Color color;
-  final VoidCallback onTap;
 
   const _RoleButton({
     required this.label,
@@ -1645,6 +1635,11 @@ class _RoleButton extends StatelessWidget {
     required this.color,
     required this.onTap,
   });
+  final String label;
+  final IconData icon;
+  final bool isSelected;
+  final Color color;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1681,7 +1676,21 @@ class _RoleButton extends StatelessWidget {
 }
 
 // Premium client card with YoY display
-class _ClientCard extends StatelessWidget {
+class _ClientCard extends StatelessWidget { // NEW: Index to show position
+
+  const _ClientCard({
+    required this.client,
+    required this.formatCurrency,
+    required this.formatVariation,
+    required this.onTap,
+    required this.onMapTap,
+    required this.onCallTap,
+    required this.selectedYear, required this.index, this.onWhatsAppTap,
+    this.onNotesTap,
+    this.showMargin = false,
+    this.completedWeeks = 0,
+    this.periodLabel = '',
+  });
   final Map<String, dynamic> client;
   final String Function(double) formatCurrency;
   final String Function(double) formatVariation;
@@ -1694,23 +1703,7 @@ class _ClientCard extends StatelessWidget {
   final int selectedYear;
   final int completedWeeks;
   final String periodLabel; // NEW: "1 Ene - 12 Ene"
-  final int index; // NEW: Index to show position
-
-  const _ClientCard({
-    required this.client,
-    required this.formatCurrency,
-    required this.formatVariation,
-    required this.onTap,
-    required this.onMapTap,
-    required this.onCallTap,
-    this.onWhatsAppTap,
-    this.onNotesTap,
-    this.showMargin = false,
-    required this.selectedYear,
-    this.completedWeeks = 0,
-    this.periodLabel = '',
-    required this.index,
-  });
+  final int index;
 
   @override
   Widget build(BuildContext context) {
@@ -1745,13 +1738,13 @@ class _ClientCard extends StatelessWidget {
     // 1) Gris "SIN VENTAS": Sin ventas en las semanas comparadas de ambos años (ytdSales ≈ 0 Y ytdPrevYear ≈ 0)
     // 2) Azul "NUEVO": Tiene ventas este período, pero NO tuvo ventas en TODO el año anterior (prevYearTotal ≈ 0)
     // 3) Verde/Rojo: En cualquier otro caso, compara las semanas equivalentes
-    final bool noSalesThisPeriod = ytdSales < 0.01;
-    final bool noSalesLastPeriod = ytdPrevYear < 0.01;
-    final bool noSalesEntireLastYear = prevYearTotal < 0.01;
+    final noSalesThisPeriod = ytdSales < 0.01;
+    final noSalesLastPeriod = ytdPrevYear < 0.01;
+    final noSalesEntireLastYear = prevYearTotal < 0.01;
 
-    final bool isInactive = noSalesThisPeriod &&
+    final isInactive = noSalesThisPeriod &&
         noSalesLastPeriod; // Gris - sin ventas ambos períodos
-    final bool isNewClient = !noSalesThisPeriod &&
+    final isNewClient = !noSalesThisPeriod &&
         noSalesEntireLastYear; // Azul - ventas ahora, pero 0 en TODO el año anterior
 
     Color accentColor;
@@ -1815,7 +1808,7 @@ class _ClientCard extends StatelessWidget {
                   child: Row(
                     children: [
                       const Icon(Icons.warning_amber_rounded,
-                          color: Colors.black87, size: 16),
+                          color: Colors.black87, size: 16,),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -1823,13 +1816,13 @@ class _ClientCard extends StatelessWidget {
                           style: const TextStyle(
                               color: Colors.black87,
                               fontSize: 11,
-                              fontWeight: FontWeight.bold),
+                              fontWeight: FontWeight.bold,),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const Icon(Icons.edit,
-                          size: 14, color: Colors.black54), // Edit hint
+                          size: 14, color: Colors.black54,), // Edit hint
                     ],
                   ),
                 ),
@@ -1862,7 +1855,7 @@ class _ClientCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         // Show different states: INACTIVE, NUEVO, or YoY percentage
                         if (isInactive) ...[
-                          Text(
+                          const Text(
                             'SIN VENTAS',
                             textAlign: TextAlign.center,
                             style: TextStyle(
@@ -1918,7 +1911,7 @@ class _ClientCard extends StatelessWidget {
                           Container(
                             margin: const EdgeInsets.only(top: 4),
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
+                                horizontal: 6, vertical: 2,),
                             decoration: BoxDecoration(
                               color: margin >= 15
                                   ? AppTheme.success.withOpacity(0.2)
@@ -1980,7 +1973,7 @@ class _ClientCard extends StatelessWidget {
                                 style: TextStyle(
                                     fontSize:
                                         Responsive.isSmall(context) ? 15 : 17,
-                                    fontWeight: FontWeight.bold),
+                                    fontWeight: FontWeight.bold,),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -1992,17 +1985,17 @@ class _ClientCard extends StatelessWidget {
                         if (code.isNotEmpty)
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 2),
+                                horizontal: 8, vertical: 2,),
                             decoration: BoxDecoration(
                               color: AppTheme.neonBlue.withOpacity(0.15),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
                               code,
-                              style: TextStyle(
+                              style: const TextStyle(
                                   fontSize: 11,
                                   color: AppTheme.neonBlue,
-                                  fontWeight: FontWeight.w500),
+                                  fontWeight: FontWeight.w500,),
                             ),
                           ),
                         // KPI Alert Badges (compact)
@@ -2015,7 +2008,7 @@ class _ClientCard extends StatelessWidget {
                           Row(
                             children: [
                               Icon(Icons.place,
-                                  size: 14, color: Colors.grey.shade500),
+                                  size: 14, color: Colors.grey.shade500,),
                               const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
@@ -2024,7 +2017,7 @@ class _ClientCard extends StatelessWidget {
                                       .join(', '),
                                   style: TextStyle(
                                       fontSize: 13,
-                                      color: Colors.grey.shade400),
+                                      color: Colors.grey.shade400,),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -2042,14 +2035,14 @@ class _ClientCard extends StatelessWidget {
                                         ? 'Acumulado Sem. 1${periodLabel.isNotEmpty ? ' (hasta ${periodLabel.split(' - ').last})' : ''}:'
                                         : 'Sin semanas completadas:',
                                 style: TextStyle(
-                                    fontSize: 11, color: Colors.grey.shade500)),
+                                    fontSize: 11, color: Colors.grey.shade500,),),
                             const SizedBox(height: 4),
                             Row(
                               children: [
                                 // Current Year
                                 Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 6, vertical: 2),
+                                      horizontal: 6, vertical: 2,),
                                   decoration: BoxDecoration(
                                     color: AppTheme.neonBlue.withOpacity(0.15),
                                     borderRadius: BorderRadius.circular(4),
@@ -2060,7 +2053,7 @@ class _ClientCard extends StatelessWidget {
                                               ? 9
                                               : 10,
                                           color: AppTheme.neonBlue,
-                                          fontWeight: FontWeight.bold)),
+                                          fontWeight: FontWeight.bold,),),
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
@@ -2068,14 +2061,14 @@ class _ClientCard extends StatelessWidget {
                                   style: TextStyle(
                                       fontSize:
                                           Responsive.isSmall(context) ? 13 : 14,
-                                      fontWeight: FontWeight.bold),
+                                      fontWeight: FontWeight.bold,),
                                 ),
                                 const SizedBox(width: 12),
                                 // Previous Year
                                 if (ytdPrevYear > 0) ...[
                                   Container(
                                     padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
+                                        horizontal: 6, vertical: 2,),
                                     decoration: BoxDecoration(
                                       color: Colors.grey.shade700,
                                       borderRadius: BorderRadius.circular(4),
@@ -2087,7 +2080,7 @@ class _ClientCard extends StatelessWidget {
                                                     ? 9
                                                     : 10,
                                             color: Colors.grey.shade300,
-                                            fontWeight: FontWeight.bold)),
+                                            fontWeight: FontWeight.bold,),),
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
@@ -2096,7 +2089,7 @@ class _ClientCard extends StatelessWidget {
                                         fontSize: Responsive.isSmall(context)
                                             ? 11
                                             : 12,
-                                        color: Colors.grey.shade400),
+                                        color: Colors.grey.shade400,),
                                   ),
                                 ] else if (selectedYear ==
                                         DateTime.now().year &&
@@ -2107,19 +2100,19 @@ class _ClientCard extends StatelessWidget {
                                     triggerMode: TooltipTriggerMode.tap,
                                     showDuration: const Duration(seconds: 4),
                                     margin: const EdgeInsets.symmetric(
-                                        horizontal: 20),
+                                        horizontal: 20,),
                                     padding: const EdgeInsets.all(12),
                                     decoration: BoxDecoration(
                                         color: AppTheme.darkBase,
                                         borderRadius: BorderRadius.circular(8),
                                         border: Border.all(
-                                            color: Colors.grey.shade700)),
+                                            color: Colors.grey.shade700,),),
                                     textStyle: const TextStyle(
-                                        color: Colors.white, fontSize: 13),
+                                        color: Colors.white, fontSize: 13,),
                                     message:
                                         'El acumulado del año anterior aparecerá a partir de la 2ª semana.',
                                     child: Icon(Icons.info_outline,
-                                        size: 14, color: Colors.grey.shade600),
+                                        size: 14, color: Colors.grey.shade600,),
                                   ),
                                 ],
                               ],
@@ -2135,8 +2128,8 @@ class _ClientCard extends StatelessWidget {
                     children: [
                       IconButton(
                         onPressed: onMapTap,
-                        icon: Icon(Icons.directions,
-                            color: AppTheme.neonPink, size: 26),
+                        icon: const Icon(Icons.directions,
+                            color: AppTheme.neonPink, size: 26,),
                         tooltip: 'Cómo llegar',
                         splashRadius: 24,
                         padding: const EdgeInsets.all(4),
@@ -2153,7 +2146,7 @@ class _ClientCard extends StatelessWidget {
                               color: hasObservaciones
                                   ? AppTheme.warning
                                   : Colors.grey.shade400,
-                              size: 26),
+                              size: 26,),
                           tooltip: 'Observaciones',
                           splashRadius: 24,
                           padding: const EdgeInsets.all(4),
@@ -2168,22 +2161,22 @@ class _ClientCard extends StatelessWidget {
                             IconButton(
                               onPressed: onWhatsAppTap,
                               icon: const Icon(Icons.chat,
-                                  color: Color(0xFF25D366), size: 26),
+                                  color: Color(0xFF25D366), size: 26,),
                               tooltip: 'WhatsApp',
                               splashRadius: 24,
                               padding: const EdgeInsets.all(4),
                               constraints: const BoxConstraints(
-                                  minWidth: 44, minHeight: 44),
+                                  minWidth: 44, minHeight: 44,),
                             ),
                           IconButton(
                             onPressed: onCallTap,
-                            icon: Icon(Icons.phone,
-                                color: AppTheme.neonBlue, size: 26),
+                            icon: const Icon(Icons.phone,
+                                color: AppTheme.neonBlue, size: 26,),
                             tooltip: 'Llamar',
                             splashRadius: 24,
                             padding: const EdgeInsets.all(4),
                             constraints: const BoxConstraints(
-                                minWidth: 44, minHeight: 44),
+                                minWidth: 44, minHeight: 44,),
                           ),
                         ],
                       ),
@@ -2200,16 +2193,13 @@ class _ClientCard extends StatelessWidget {
 }
 
 class ReorderDialog extends StatefulWidget {
+
+  const ReorderDialog({
+    required this.clients, required this.activeVendedor, required this.currentDay, super.key,
+  });
   final List<Map<String, dynamic>> clients;
   final String activeVendedor;
   final String currentDay;
-
-  const ReorderDialog({
-    Key? key,
-    required this.clients,
-    required this.activeVendedor,
-    required this.currentDay,
-  }) : super(key: key);
 
   @override
   _ReorderDialogState createState() => _ReorderDialogState();
@@ -2220,7 +2210,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
   final ScrollController _scrollController = ScrollController();
   bool _hasChanges = false; // Track if order has changed
   List<String> _originalOrder = []; // Store original order to detect changes
-  Map<String, int> _originalPositions =
+  final Map<String, int> _originalPositions =
       {}; // Store original position of each client
 
   @override
@@ -2230,7 +2220,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
     // Store original order for comparison
     _originalOrder = _items.map((c) => c['code'] as String).toList();
     // Store original position (index) of each client
-    for (int i = 0; i < _items.length; i++) {
+    for (var i = 0; i < _items.length; i++) {
       _originalPositions[_items[i]['code'] as String] = i;
     }
   }
@@ -2251,7 +2241,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
 
   bool _listEquals(List<String> a, List<String> b) {
     if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
+    for (var i = 0; i < a.length; i++) {
       if (a[i] != b[i]) return false;
     }
     return true;
@@ -2268,7 +2258,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
     final newPos = int.tryParse(val);
     if (newPos != null) {
       // Convert form 1-based user input to 0-based index
-      int targetIndex = newPos - 1;
+      var targetIndex = newPos - 1;
       if (targetIndex < 0) targetIndex = 0;
       if (targetIndex >= _items.length) targetIndex = _items.length - 1;
 
@@ -2391,7 +2381,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                '${(client['name'] as String?) ?? ''} movido al ${toDay.toUpperCase()}'),
+                '${(client['name'] as String?) ?? ''} movido al ${toDay.toUpperCase()}',),
             backgroundColor: AppTheme.success,
           ),
         );
@@ -2427,7 +2417,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
       ),
     );
 
-    if (confirmed == true) {
+    if (confirmed ?? false) {
       // Añadir posición original a cada item antes de retornar
       final itemsWithOriginalPos = _items.map((item) {
         final code = item['code'] as String;
@@ -2437,7 +2427,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
         };
       }).toList();
       Navigator.pop(context,
-          itemsWithOriginalPos); // Retornar items con posición original
+          itemsWithOriginalPos,); // Retornar items con posición original
     }
   }
 
@@ -2449,11 +2439,11 @@ class _ReorderDialogState extends State<ReorderDialog> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surfaceColor,
-        title: Row(
+        title: const Row(
           children: [
             Icon(Icons.warning_amber_rounded, color: AppTheme.warning),
-            const SizedBox(width: 8),
-            const Text('¿Descartar cambios?'),
+            SizedBox(width: 8),
+            Text('¿Descartar cambios?'),
           ],
         ),
         content: const Text(
@@ -2473,7 +2463,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
       ),
     );
 
-    return discard == true;
+    return discard ?? false;
   }
 
   @override
@@ -2493,17 +2483,17 @@ class _ReorderDialogState extends State<ReorderDialog> {
                 children: [
                   const Text('Organizar Rutero',
                       style:
-                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+                          TextStyle(fontSize: 20, fontWeight: FontWeight.bold),),
                   if (_hasChanges)
                     Container(
                       margin: const EdgeInsets.only(left: 8),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
+                          horizontal: 8, vertical: 2,),
                       decoration: BoxDecoration(
                         color: AppTheme.warning.withOpacity(0.2),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Text(
+                      child: const Text(
                         'Cambios sin guardar',
                         style: TextStyle(fontSize: 10, color: AppTheme.warning),
                       ),
@@ -2527,7 +2517,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
               width: double.infinity,
               color: AppTheme.surfaceColor,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(
+              child: const Text(
                 'Arrastra para ordenar o usa las flechas. Usa el icono 📅 para mover a otro día.\n'
                 '⚠️ Los cambios solo se aplican al pulsar GUARDAR CAMBIOS.',
                 style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
@@ -2542,7 +2532,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.inbox,
-                              size: 48, color: Colors.grey.shade600),
+                              size: 48, color: Colors.grey.shade600,),
                           const SizedBox(height: 8),
                           const Text('No hay clientes en este día'),
                         ],
@@ -2560,10 +2550,10 @@ class _ReorderDialogState extends State<ReorderDialog> {
                           key: ValueKey(item['code']),
                           decoration: const BoxDecoration(
                               border: Border(
-                                  bottom: BorderSide(color: Colors.black12))),
+                                  bottom: BorderSide(color: Colors.black12),),),
                           child: ListTile(
                             contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 0),
+                                horizontal: 4,),
                             leading: ReorderableDragStartListener(
                               index: index,
                               child: const Padding(
@@ -2574,10 +2564,10 @@ class _ReorderDialogState extends State<ReorderDialog> {
                             ),
                             title: Text((item['name'] as String?) ?? '',
                                 style: const TextStyle(
-                                    fontSize: 14, fontWeight: FontWeight.w600)),
+                                    fontSize: 14, fontWeight: FontWeight.w600,),),
                             subtitle: Text((item['code'] as String?) ?? '',
                                 style: const TextStyle(
-                                    fontSize: 12, color: Colors.grey)),
+                                    fontSize: 12, color: Colors.grey,),),
                             trailing: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
@@ -2588,11 +2578,11 @@ class _ReorderDialogState extends State<ReorderDialog> {
                                     InkWell(
                                         onTap: () => _moveItem(index, -1),
                                         child: const Icon(Icons.arrow_drop_up,
-                                            size: 20)),
+                                            size: 20,),),
                                     InkWell(
                                         onTap: () => _moveItem(index, 1),
                                         child: const Icon(Icons.arrow_drop_down,
-                                            size: 20)),
+                                            size: 20,),),
                                   ],
                                 ),
                                 const SizedBox(width: 8),
@@ -2606,11 +2596,11 @@ class _ReorderDialogState extends State<ReorderDialog> {
                                     decoration: const InputDecoration(
                                         contentPadding: EdgeInsets.zero,
                                         border: OutlineInputBorder(),
-                                        isDense: true),
+                                        isDense: true,),
                                     controller:
                                         TextEditingController(text: '$pos')
                                           ..selection = TextSelection.collapsed(
-                                              offset: '$pos'.length),
+                                              offset: '$pos'.length,),
                                     onSubmitted: (val) =>
                                         _updatePositionManual(index, val),
                                   ),
@@ -2619,7 +2609,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
                                 // Change Day Button
                                 IconButton(
                                   icon: const Icon(Icons.calendar_month,
-                                      color: AppTheme.neonBlue),
+                                      color: AppTheme.neonBlue,),
                                   tooltip: 'Mover a otro día',
                                   onPressed: () => _moveClientToDay(index),
                                 ),

@@ -1,13 +1,12 @@
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widgets/modern_loading.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/utils/currency_formatter.dart';
-import '../../../../core/utils/date_formatter.dart';
-import '../../../../core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/date_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 
 /// Professional Advanced Analytics Page
 /// Features: Multi-year comparison, Spanish formatting, Advanced filters
@@ -20,7 +19,7 @@ class AnalyticsPage extends StatefulWidget {
 
 class _AnalyticsPageState extends State<AnalyticsPage> {
   // Filter state
-  Set<int> _selectedYears = {DateTime.now().year}; // Multi-select years
+  final Set<int> _selectedYears = {DateTime.now().year}; // Multi-select years
   int? _selectedMonth; // null = "Todo"
  String _granularity = 'month'; // 'month' or 'week'
   bool _upToToday = false; // YTD toggle
@@ -58,24 +57,24 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           'granularity': _granularity,
           'upToToday': upToTodayParam,
           'months': '36',
-        }),
+        },),
         ApiClient.get('/dashboard/yoy-comparison', queryParameters: {
           'year': _selectedYears.first.toString(),
-        }),
+        },),
         ApiClient.get('/analytics/top-clients', queryParameters: {
           'year': _selectedYears.first.toString(),
           if (monthParam.isNotEmpty) 'month': monthParam,
           'limit': '10',
-        }),
+        },),
         ApiClient.get('/analytics/top-products', queryParameters: {
           'year': _selectedYears.first.toString(),
           if (monthParam.isNotEmpty) 'month': monthParam,
           'limit': '10',
-        }),
+        },),
         ApiClient.get('/analytics/trends'),
         ApiClient.get('/analytics/margins', queryParameters: {
           'year': _selectedYears.first.toString(),
-        }),
+        },),
         ApiClient.get('/dashboard/metrics'),
       ]);
 
@@ -221,7 +220,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     const Text('Mes:', style: TextStyle(color: Colors.white70, fontSize: 14)),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<int?>(
-                      value: _selectedMonth,
+                      initialValue: _selectedMonth,
                       decoration: InputDecoration(
                         filled: true,
                         fillColor: AppTheme.darkBase,
@@ -234,11 +233,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       dropdownColor: AppTheme.darkBase,
                       style: const TextStyle(color: Colors.white),
                       items: [
-                        const DropdownMenuItem(value: null, child: Text('Todo el año')),
+                        const DropdownMenuItem(child: Text('Todo el año')),
                         ...List.generate(12, (i) => i + 1).map((month) => DropdownMenuItem(
                           value: month,
                           child: Text(DateFormatter.getMonthName(month)),
-                        )),
+                        ),),
                       ],
                       onChanged: (value) {
                         setState(() => _selectedMonth = value);
@@ -268,14 +267,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                         _fetchAllData();
                       },
                       style: ButtonStyle(
-                        backgroundColor: MaterialStateProperty.resolveWith((states) {
-                          if (states.contains(MaterialState.selected)) {
+                        backgroundColor: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.selected)) {
                             return AppTheme.neonBlue.withOpacity(0.3);
                           }
                           return AppTheme.darkBase;
                         }),
-                        foregroundColor: MaterialStateProperty.resolveWith((states) {
-                          if (states.contains(MaterialState.selected)) {
+                        foregroundColor: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.selected)) {
                             return AppTheme.neonBlue;
                           }
                           return Colors.white70;
@@ -302,7 +301,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               setState(() => _upToToday = value);
               _fetchAllData();
             },
-            activeColor: AppTheme.neonGreen,
+            activeThumbColor: AppTheme.neonGreen,
             contentPadding: EdgeInsets.zero,
           ),
           
@@ -360,15 +359,15 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       }
     }
     
-    double totalSales = 0.0;
-    int totalClients = 0;
+    var totalSales = 0;
+    var totalClients = 0;
     
     for (final item in monthlyData.values) {
       totalSales += (item['totalSales'] as num?)?.toDouble() ?? 0.0;
       totalClients += (item['uniqueClients'] as num?)?.toInt() ?? 0;
     }
     
-    final totalMargin = 0.0; // Not available in CVC
+    const totalMargin = 0.0; // Not available in CVC
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -521,7 +520,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         barWidth: 3,
         isStrokeCapRound: true,
         dotData: FlDotData(
-          show: true,
           getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
             radius: 4,
             color: yearColors[entry.key] ?? Colors.white,
@@ -534,7 +532,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           gradient: LinearGradient(
             colors: [
               (yearColors[entry.key] ?? Colors.white).withOpacity(0.1),
-              (yearColors[entry.key] ?? Colors.white).withOpacity(0.0),
+              (yearColors[entry.key] ?? Colors.white).withOpacity(0),
             ],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -591,13 +589,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             },
           ),
         ),
-        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(),
+        topTitles: const AxisTitles(),
       ),
       gridData: FlGridData(
-        show: true,
         drawVerticalLine: false,
-        getDrawingHorizontalLine: (value) => FlLine(
+        getDrawingHorizontalLine: (value) => const FlLine(
           color: Colors.white10,
           strokeWidth: 1,
         ),
@@ -811,13 +808,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             },
           ),
         ),
-        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(),
+        topTitles: const AxisTitles(),
       ),
       gridData: FlGridData(
-        show: true,
         drawVerticalLine: false,
-        getDrawingHorizontalLine: (value) => FlLine(color: Colors.white10, strokeWidth: 1),
+        getDrawingHorizontalLine: (value) => const FlLine(color: Colors.white10, strokeWidth: 1),
       ),
       borderData: FlBorderData(show: false),
       barTouchData: BarTouchData(
@@ -887,9 +883,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
+          const Text(
             'Predicción basada en histórico de 6 meses',
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
+            style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
           const SizedBox(height: 8),
           Container(
@@ -899,14 +895,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: Colors.white10),
             ),
-            child: Row(
+            child: const Row(
               children: [
                 Icon(Icons.info_outline, size: 14, color: Colors.white54),
-                const SizedBox(width: 6),
+                SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     'Usamos regresión lineal sobre tus ventas de los últimos 6 meses para estimar los próximos 3 meses.',
-                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                    style: TextStyle(color: Colors.white54, fontSize: 11),
                   ),
                 ),
               ],
@@ -1048,7 +1044,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 
   Widget _buildRankedListItem(int rank, String name, String value) {
-    Color rankColor = Colors.white54;
+    var rankColor = Colors.white54;
     if (rank == 1) rankColor = Colors.amber;
     if (rank == 2) rankColor = Colors.grey[400]!;
     if (rank == 3) rankColor = Colors.brown[300]!;

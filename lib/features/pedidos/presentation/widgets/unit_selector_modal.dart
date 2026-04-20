@@ -2,28 +2,29 @@
 /// ======================================
 /// Centered dialog for selecting unit of measure and quantity.
 /// Shows equivalences, stock per unit, and price per unit.
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 
 class UnitSelectorModal extends StatefulWidget {
+
+  const UnitSelectorModal({
+    super.key,
+    this.initialUnit,
+    this.initialQuantity,
+    this.availableUnits = const ['CAJAS'],
+    this.product,
+    this.initialPrice,
+  });
   final String? initialUnit;
   final double? initialQuantity;
   final List<String> availableUnits;
   final Product? product;
   // Override price per displayUnit (from TarifaSelectorModal). null = use product.bestPrice
   final double? initialPrice;
-
-  const UnitSelectorModal({
-    Key? key,
-    this.initialUnit,
-    this.initialQuantity,
-    this.availableUnits = const ['CAJAS'],
-    this.product,
-    this.initialPrice,
-  }) : super(key: key);
 
   /// Show the modal as a centered dialog and return { 'unit': String, 'quantity': double } or null
   static Future<Map<String, dynamic>?> show(
@@ -130,11 +131,11 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     final parts = <String>[];
     if (p.unitsPerBox > 1) {
       parts.add(
-          '1 cj = ${p.unitsPerBox.toStringAsFixed(p.unitsPerBox == p.unitsPerBox.roundToDouble() ? 0 : 1)} uds');
+          '1 cj = ${p.unitsPerBox.toStringAsFixed(p.unitsPerBox == p.unitsPerBox.roundToDouble() ? 0 : 1)} uds',);
     }
     if (p.unitsRetractil > 0) {
       parts.add(
-          'U/R: ${p.unitsRetractil.toStringAsFixed(p.unitsRetractil == p.unitsRetractil.roundToDouble() ? 0 : 1)}');
+          'U/R: ${p.unitsRetractil.toStringAsFixed(p.unitsRetractil == p.unitsRetractil.roundToDouble() ? 0 : 1)}',);
     }
     return parts.isEmpty ? null : parts.join('  ·  ');
   }
@@ -233,7 +234,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
             Row(
               children: [
                 const Icon(Icons.straighten,
-                    color: AppTheme.neonBlue, size: 22),
+                    color: AppTheme.neonBlue, size: 22,),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -286,14 +287,14 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                             style: const TextStyle(
                                 color: AppTheme.neonBlue,
                                 fontSize: 12,
-                                fontWeight: FontWeight.w500)),
+                                fontWeight: FontWeight.w500,),),
                       ),
                     if (netoUr != null)
                       Text(netoUr,
                           style: const TextStyle(
                               color: AppTheme.neonGreen,
                               fontSize: 12,
-                              fontWeight: FontWeight.w600)),
+                              fontWeight: FontWeight.w600,),),
                   ],
                 ),
               ),
@@ -320,7 +321,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                     borderRadius: BorderRadius.circular(10),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
+                          horizontal: 14, vertical: 10,),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
@@ -371,7 +372,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                           if (stockStr.isNotEmpty)
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
+                                  horizontal: 6, vertical: 2,),
                               decoration: BoxDecoration(
                                 color:
                                     AppTheme.neonGreen.withValues(alpha: 0.1),
@@ -382,7 +383,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                                 style: const TextStyle(
                                     color: AppTheme.neonGreen,
                                     fontSize: 11,
-                                    fontWeight: FontWeight.w600),
+                                    fontWeight: FontWeight.w600,),
                               ),
                             ),
                           if (priceStr.isNotEmpty) ...[
@@ -390,7 +391,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                             Text(
                               priceStr,
                               style: const TextStyle(
-                                  color: Colors.white54, fontSize: 11),
+                                  color: Colors.white54, fontSize: 11,),
                             ),
                           ],
                         ],
@@ -411,7 +412,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
               style: const TextStyle(
                   color: Colors.white,
                   fontSize: 20,
-                  fontWeight: FontWeight.bold),
+                  fontWeight: FontWeight.bold,),
               textAlign: TextAlign.center,
               autofocus: true,
               decoration: InputDecoration(
@@ -476,7 +477,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                     child: ElevatedButton.icon(
                       onPressed: () {
                         final qty = double.tryParse(
-                                _qtyController.text.replaceAll(',', '.')) ??
+                                _qtyController.text.replaceAll(',', '.'),) ??
                             0;
                         Navigator.pop(context, {
                           'unit': _selectedUnit,
@@ -486,7 +487,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                       icon: const Icon(Icons.check, size: 18),
                       label: const Text('ACEPTAR',
                           style: TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.bold)),
+                              fontSize: 14, fontWeight: FontWeight.bold,),),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.neonBlue,
                         foregroundColor: AppTheme.darkBase,

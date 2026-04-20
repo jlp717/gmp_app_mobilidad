@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:intl/intl.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/theme/app_colors.dart';
-import '../../../../core/utils/responsive.dart';
 
 class SalesSummaryHeader extends StatelessWidget {
-  final Map<String, dynamic> summary;
-  final bool showMargin;
-  final bool isJefeVentas;
 
   const SalesSummaryHeader({
-    super.key, 
-    required this.summary, 
+    required this.summary, super.key, 
     this.showMargin = true,
     this.isJefeVentas = true, // Por defecto muestra vista de jefe
   });
+  final Map<String, dynamic> summary;
+  final bool showMargin;
+  final bool isJefeVentas;
 
   @override
   Widget build(BuildContext context) {
@@ -83,7 +82,7 @@ class SalesSummaryHeader extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.symmetric(
           horizontal: 16, 
-          vertical: 8 * Responsive.landscapeScale(context)
+          vertical: 8 * Responsive.landscapeScale(context),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -101,7 +100,7 @@ class SalesSummaryHeader extends StatelessWidget {
               const SizedBox(width: 8),
                Text(
                 title, 
-                style: const TextStyle(color: Colors.white60, fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.5)
+                style: const TextStyle(color: Colors.white60, fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.5),
               ),
             ],
           ),
@@ -152,7 +151,7 @@ class SalesSummaryHeader extends StatelessWidget {
                 // Red (#FF0000) if curr <= prev (desmejora)
                 
                 Color cardColor;
-                String statusLabel = '';
+                var statusLabel = '';
                 
                 if (useMonthly && prevValue != null) {
                    if (prevValue == 0) {
@@ -172,10 +171,11 @@ class SalesSummaryHeader extends StatelessWidget {
                 }
                 
                 // Border Color based on same logic to make it pop
-                Color borderColor = Colors.white10;
+                var borderColor = Colors.white10;
                  if (useMonthly && prevValue != null) {
-                   if (prevValue == 0) borderColor = const Color(0xFF0000FF);
-                   else if (mainValue > prevValue) borderColor = const Color(0xFF00FF00);
+                   if (prevValue == 0) {
+                     borderColor = const Color(0xFF0000FF);
+                   } else if (mainValue > prevValue) borderColor = const Color(0xFF00FF00);
                    else borderColor = const Color(0xFFFF0000);
                 }
 
@@ -205,8 +205,8 @@ class SalesSummaryHeader extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                               decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(4)),
                               child: Text(statusLabel, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white)),
-                            )
-                          ]
+                            ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 4),
@@ -214,13 +214,13 @@ class SalesSummaryHeader extends StatelessWidget {
                       if (useMonthly && prevValue != null)
                          Text(
                            'vs ${fmt.format(prevValue)}', 
-                           style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 10)
+                           style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 10),
                          ),
                       // Only show aux data if annual
                       if (!useMonthly) ...[
                         const SizedBox(height: 2),
                         Text('${_formatCompact(u)} Uds', style: const TextStyle(color: Colors.white38, fontSize: 10)),
-                      ]
+                      ],
                     ],
                   ),
                 );
@@ -242,10 +242,10 @@ class SalesSummaryHeader extends StatelessWidget {
     return Container(
       margin: EdgeInsets.symmetric(
           horizontal: 12, 
-          vertical: 8 * Responsive.landscapeScale(context)
+          vertical: 8 * Responsive.landscapeScale(context),
       ),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           colors: [
             AppTheme.surfaceColor,
             AppTheme.darkCard,
@@ -270,7 +270,7 @@ class SalesSummaryHeader extends StatelessWidget {
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
               height: 1,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 gradient: LinearGradient(
                   colors: [Colors.transparent, Colors.white24, Colors.transparent],
                 ),
@@ -281,7 +281,7 @@ class SalesSummaryHeader extends StatelessWidget {
             Padding(
               padding: EdgeInsets.symmetric(
                   horizontal: 12, 
-                  vertical: 10 * Responsive.landscapeScale(context)
+                  vertical: 10 * Responsive.landscapeScale(context),
               ),
               child: Row(
                 children: [
@@ -337,10 +337,9 @@ class SalesSummaryHeader extends StatelessWidget {
     return Padding(
       padding: EdgeInsets.symmetric(
           horizontal: 16, 
-          vertical: 12 * Responsive.landscapeScale(context)
+          vertical: 12 * Responsive.landscapeScale(context),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Icon + Label
           Container(
@@ -349,7 +348,7 @@ class SalesSummaryHeader extends StatelessWidget {
               color: AppTheme.neonGreen.withOpacity(0.15),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(Icons.euro, color: AppTheme.neonGreen, size: 16),
+            child: const Icon(Icons.euro, color: AppTheme.neonGreen, size: 16),
           ),
           const SizedBox(width: 8),
           // Main value
@@ -405,13 +404,13 @@ class SalesSummaryHeader extends StatelessWidget {
                 fontSize: 14,
               ),
             ),
-            Text(
+            const Text(
               ' vs ',
               style: TextStyle(color: Colors.white38, fontSize: 12),
             ),
             Text(
               _formatCurrencyDecimals(prevSales),
-              style: TextStyle(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.w500),
+              style: const TextStyle(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.w500),
             ),
           ],
         ),
@@ -421,14 +420,14 @@ class SalesSummaryHeader extends StatelessWidget {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          Text(
+          const Text(
             'Año anterior',
             style: TextStyle(color: Colors.white38, fontSize: 10),
           ),
           const SizedBox(height: 2),
           Text(
             _formatCurrencyDecimals(prevSales),
-            style: TextStyle(color: Colors.white60, fontSize: 16, fontWeight: FontWeight.w600),
+            style: const TextStyle(color: Colors.white60, fontSize: 16, fontWeight: FontWeight.w600),
           ),
         ],
       );
@@ -470,7 +469,7 @@ class SalesSummaryHeader extends StatelessWidget {
                     color: iconColor.withOpacity(0.9), 
                     fontWeight: FontWeight.w600, 
                     fontSize: 9, 
-                    letterSpacing: 0.5
+                    letterSpacing: 0.5,
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -524,7 +523,6 @@ class SalesSummaryHeader extends StatelessWidget {
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Value principal
           Text(value, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
@@ -566,7 +564,6 @@ class SalesSummaryHeader extends StatelessWidget {
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Value
           Text('${margin.toStringAsFixed(1)}%', style: TextStyle(color: marginColor, fontSize: 16, fontWeight: FontWeight.bold)),
@@ -576,7 +573,7 @@ class SalesSummaryHeader extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.show_chart, color: AppTheme.neonPurple, size: 10),
+              const Icon(Icons.show_chart, color: AppTheme.neonPurple, size: 10),
               const SizedBox(width: 3),
               Text('MARGEN', style: TextStyle(color: AppTheme.neonPurple.withOpacity(0.8), fontWeight: FontWeight.w500, fontSize: 8)),
             ],
@@ -605,7 +602,7 @@ class SalesSummaryHeader extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       );
     } else {
-      return Text('Ant: $prevText', style: TextStyle(color: Colors.white38, fontSize: 9));
+      return Text('Ant: $prevText', style: const TextStyle(color: Colors.white38, fontSize: 9));
     }
   }
 
@@ -626,7 +623,7 @@ class SalesSummaryHeader extends StatelessWidget {
           // Header
           Row(
             children: [
-              Icon(Icons.show_chart, color: AppTheme.neonPurple, size: 14),
+              const Icon(Icons.show_chart, color: AppTheme.neonPurple, size: 14),
               const SizedBox(width: 6),
               Text(
                 'MARGEN', 
@@ -634,7 +631,7 @@ class SalesSummaryHeader extends StatelessWidget {
                   color: AppTheme.neonPurple.withOpacity(0.9), 
                   fontWeight: FontWeight.w600, 
                   fontSize: 9, 
-                  letterSpacing: 0.5
+                  letterSpacing: 0.5,
                 ),
               ),
             ],
@@ -675,7 +672,7 @@ class SalesSummaryHeader extends StatelessWidget {
               style: TextStyle(
                 color: isPositive ? AppColors.success : AppColors.error, 
                 fontWeight: FontWeight.bold, 
-                fontSize: 10
+                fontSize: 10,
               ),
             ),
           ),
@@ -683,7 +680,7 @@ class SalesSummaryHeader extends StatelessWidget {
           Expanded(
             child: Text(
               'vs $prevText',
-              style: TextStyle(color: Colors.white38, fontSize: 9),
+              style: const TextStyle(color: Colors.white38, fontSize: 9),
               overflow: TextOverflow.ellipsis,
             ),
           ),
@@ -693,7 +690,7 @@ class SalesSummaryHeader extends StatelessWidget {
       // Comercial: solo muestra valor anterior
       return Text(
         'Ant: $prevText',
-        style: TextStyle(color: Colors.white38, fontSize: 10),
+        style: const TextStyle(color: Colors.white38, fontSize: 10),
       );
     }
   }
@@ -739,7 +736,7 @@ class SalesSummaryHeader extends StatelessWidget {
           Icon(
             isPositive ? Icons.trending_up : Icons.trending_down, 
             color: color, 
-            size: 14
+            size: 14,
           ),
           const SizedBox(width: 4),
           Text(
@@ -765,9 +762,9 @@ class SalesSummaryHeader extends StatelessWidget {
     final intPart = parts[0];
     final decPart = parts.length > 1 ? parts[1] : '00';
     // Add thousand separators
-    String formatted = '';
-    int count = 0;
-    for (int i = intPart.length - 1; i >= 0; i--) {
+    var formatted = '';
+    var count = 0;
+    for (var i = intPart.length - 1; i >= 0; i--) {
       if (count > 0 && count % 3 == 0 && intPart[i] != '-') formatted = '.$formatted';
       formatted = intPart[i] + formatted;
       count++;

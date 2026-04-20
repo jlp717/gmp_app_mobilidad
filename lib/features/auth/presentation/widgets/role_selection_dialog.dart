@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/providers/auth_notifier.dart';
-import '../../../../core/utils/responsive.dart';
 
 class RoleSelectionDialog extends StatefulWidget {
   const RoleSelectionDialog({super.key});
@@ -14,7 +14,7 @@ class RoleSelectionDialog extends StatefulWidget {
 
 class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
   String _selectedRole = 'COMERCIAL';
-  String _viewAs = 'ALL_DRIVERS';
+  final String _viewAs = 'ALL_DRIVERS';
 
   @override
   Widget build(BuildContext context) {
@@ -60,21 +60,21 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
                 'COMERCIAL',
                 Icons.shopping_bag_outlined,
                 'Gestión de Ventas',
-                AppTheme.neonBlue
+                AppTheme.neonBlue,
               ),
               const SizedBox(height: 12),
               _buildRoleOption(
                 'REPARTIDOR',
                 Icons.local_shipping_outlined,
                 'Gestión de Reparto',
-                AppTheme.neonPurple
+                AppTheme.neonPurple,
               ),
               const SizedBox(height: 12),
               _buildRoleOption(
                 'ALMACEN',
                 Icons.inventory_2_outlined,
                 'Gestión de Almacén',
-                AppTheme.neonPink
+                AppTheme.neonPink,
               ),
 
               // VIEW AS SELECTOR MOVED TO DASHBOARD
@@ -164,7 +164,7 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
         if (mounted) {
           final error = ref.read(authProvider).value?.error;
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error: ${error ?? "Failed to switch role"}'))
+            SnackBar(content: Text('Error: ${error ?? "Failed to switch role"}')),
           );
         }
       }

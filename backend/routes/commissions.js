@@ -5,7 +5,7 @@ const { cachedQuery } = require('../services/query-optimizer');
 const logger = require('../middleware/logger');
 const { auditDataAccess } = require('../middleware/audit');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
-const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, getVendorColumn, buildVendedorFilterLACLAE, buildColumnaVendedorFilter, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL } = require('../utils/common');
+const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, getVendorColumn, buildVendedorFilterLACLAE, buildColumnaVendedorFilter, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL, handleRouteError } = require('../utils/common');
 const { redisCache, TTL, invalidateCachePattern } = require('../services/redis-cache');
 
 const router = express.Router();
@@ -1008,8 +1008,7 @@ router.get('/summary', async (req, res) => {
         return res.json(responsePayload);
 
     } catch (error) {
-        logger.error(`Commissions error: ${error.message}`);
-        res.status(500).json({ success: false, error: 'Error calculando comisiones', details: error.message });
+        handleRouteError(error, res, 'Error calculando comisiones', 500, { success: false });
     }
 });
 

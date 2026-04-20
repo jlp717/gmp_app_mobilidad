@@ -1,25 +1,24 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../../../core/widgets/global_vendor_selector.dart';
-import '../../../../core/providers/filter_provider.dart';
-import '../../../../core/providers/auth_notifier.dart';
-import '../../providers/cobros_provider.dart';
-import '../../../clients/data/clients_service.dart';
-import 'cobro_detail_screen.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
+import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
+import 'package:gmp_app_mobilidad/features/cobros/presentation/pages/cobro_detail_screen.dart';
+import 'package:gmp_app_mobilidad/features/cobros/providers/cobros_provider.dart';
 
 class CobrosPage extends ConsumerStatefulWidget {
-  final String employeeCode;
-  final bool isJefeVentas;
 
   const CobrosPage({
-    super.key,
-    required this.employeeCode,
+    required this.employeeCode, super.key,
     this.isJefeVentas = false,
   });
+  final String employeeCode;
+  final bool isJefeVentas;
 
   @override
   ConsumerState<CobrosPage> createState() => _CobrosPageState();
@@ -44,7 +43,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     });
   }
 
-  void _loadClients([String query = '']) async {
+  Future<void> _loadClients([String query = '']) async {
     if (!mounted) return;
     setState(() => _isSearchingClients = true);
     try {
@@ -93,9 +92,15 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Watch provider for reactive state updates
-    final cobros = ref
-        .watch(cobrosProvider(CobrosParams(employeeCode: widget.employeeCode)));
+    // Watch pendingSummary to trigger rebuilds only when pending data changes
+    ref.watch(
+      cobrosProvider(CobrosParams(employeeCode: widget.employeeCode))
+          .select((p) => p.pendingSummary),
+    );
+    // Read full provider for grandTotal (not watched, just accessed when needed)
+    final cobros = ref.read(
+      cobrosProvider(CobrosParams(employeeCode: widget.employeeCode)),
+    );
     final visibleClients = _visibleClients(cobros);
 
     return Scaffold(
@@ -175,13 +180,13 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         color: AppTheme.surfaceColor,
         border: Border(
           bottom:
-              BorderSide(color: AppTheme.neonBlue.withOpacity(0.2), width: 1),
+              BorderSide(color: AppTheme.neonBlue.withOpacity(0.2)),
         ),
       ),
       child: Row(
         children: [
           const Icon(Icons.account_balance_wallet,
-              color: AppTheme.neonBlue, size: 28),
+              color: AppTheme.neonBlue, size: 28,),
           const SizedBox(width: 12),
           Text(
             'Gestión de Cobros',
@@ -223,7 +228,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: AppTheme.neonBlue, width: 2),
+                borderSide: const BorderSide(color: AppTheme.neonBlue, width: 2),
               ),
               filled: true,
               fillColor: AppTheme.surfaceColor,
@@ -252,10 +257,10 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.person_search,
-              size: 64, color: AppTheme.textSecondary.withOpacity(0.2)),
+              size: 64, color: AppTheme.textSecondary.withOpacity(0.2),),
           const SizedBox(height: 16),
           const Text('No se han encontrado clientes',
-              style: TextStyle(color: AppTheme.textSecondary)),
+              style: TextStyle(color: AppTheme.textSecondary),),
           if (grandTotal > 0)
             Padding(
               padding: const EdgeInsets.only(top: 4),
@@ -274,12 +279,12 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   }
 
   Widget _buildClientCobroCard(Map<String, dynamic> client) {
-    final String name = (client['name'] ??
+    final name = (client['name'] ??
             client['nombre'] ??
             client['nombreCliente'] ??
             'Cliente')
         .toString();
-    final String code =
+    final code =
         (client['code'] ?? client['codigoCliente'] ?? client['codigo'] ?? '')
             .toString();
     final pending = _provider.pendingForClient(code);
@@ -380,7 +385,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Icon(Icons.check_circle,
-                      color: AppTheme.success, size: 20),
+                      color: AppTheme.success, size: 20,),
                 ),
             ],
           ),

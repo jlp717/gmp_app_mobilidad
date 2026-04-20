@@ -3,10 +3,12 @@
 /// Collects device info (model, OS, app version, device ID) ONCE at startup.
 /// Used to send X-App-Version, X-Device-Model, X-Device-OS, X-Device-ID
 /// headers on every API call for enterprise audit traceability.
+library;
 import 'dart:io';
+
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/foundation.dart';
 import 'package:package_info_plus/package_info_plus.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 
 class DeviceFingerprint {
   static String appVersion = 'unknown';

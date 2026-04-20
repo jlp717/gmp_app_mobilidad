@@ -1,20 +1,19 @@
 /// Sale Type Selector
 /// ==================
 /// Dropdown for selecting sale type: Venta (CC), Venta Sin Nombre (VC), No Venta (NV)
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 class SaleTypeSelector extends StatelessWidget {
-  final String value;
-  final ValueChanged<String> onChanged;
 
   const SaleTypeSelector({
-    Key? key,
-    required this.value,
-    required this.onChanged,
-  }) : super(key: key);
+    required this.value, required this.onChanged, super.key,
+  });
+  final String value;
+  final ValueChanged<String> onChanged;
 
   static const _options = [
     {'code': 'CC', 'label': 'Venta'},
@@ -25,7 +24,7 @@ class SaleTypeSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
         color: AppTheme.darkCard,
         borderRadius: BorderRadius.circular(12),

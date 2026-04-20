@@ -7,20 +7,14 @@
 /// - Viewport culling: skip boxes off-screen
 /// - Soft shadows between boxes
 /// - Weight badge on each box
+library;
 
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../../data/warehouse_data_service.dart';
-import 'projection_3d.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/painters/projection_3d.dart';
 
 class CargoBoxRenderer {
-  final Projection3D proj;
-  final Size size;
-  final double ox, oy, oz;
-  final ColorMode colorMode;
-  final double maxWeight;
-  final int? selectedId;
-  final double glow;
 
   CargoBoxRenderer({
     required this.proj,
@@ -33,6 +27,15 @@ class CargoBoxRenderer {
     this.selectedId,
     this.glow = 0,
   });
+  final Projection3D proj;
+  final Size size;
+  final double ox;
+  final double oy;
+  final double oz;
+  final ColorMode colorMode;
+  final double maxWeight;
+  final int? selectedId;
+  final double glow;
 
   // ═══════════════════════════════════════════════════════════════════════
   // MAIN RENDER — Z-sorted, LOD-aware, culled
@@ -40,7 +43,7 @@ class CargoBoxRenderer {
 
   /// Render all placed boxes with Z-sorting, shadows, and labels.
   void renderAll(Canvas canvas, List<PlacedBox> placed,
-      {List<PlacedBox>? cachedSort}) {
+      {List<PlacedBox>? cachedSort,}) {
     if (placed.isEmpty) return;
 
     final sorted = cachedSort ?? _zSort(placed);
@@ -56,7 +59,7 @@ class CargoBoxRenderer {
 
   /// Render overflow boxes outside the truck boundary
   void renderOverflow(
-      Canvas canvas, List<PlacedBox> overflow, double containerDepth) {
+      Canvas canvas, List<PlacedBox> overflow, double containerDepth,) {
     if (overflow.isEmpty) return;
 
     // Overflow banner with weight info
@@ -79,9 +82,10 @@ class CargoBoxRenderer {
 
     // Render overflow boxes stacked neatly in front of truck
     final maxShow = overflow.length > 12 ? 12 : overflow.length;
-    double stackX = 0, stackZ = 0;
+    double stackX = 0;
+    double stackZ = 0;
     double rowMaxH = 0;
-    for (int i = 0; i < maxShow; i++) {
+    for (var i = 0; i < maxShow; i++) {
       final b = overflow[i];
       final bx = ox + stackX;
       final by = oy - 50;
@@ -100,8 +104,8 @@ class CargoBoxRenderer {
       final morePos = proj.project(ox, oy - 55, oz, size);
       _drawText(canvas, morePos, '+${overflow.length - maxShow} mas',
           const TextStyle(color: Color(0xFFFF8C8C), fontSize: 9,
-              fontWeight: FontWeight.w600),
-          bgColor: const Color(0xAA1A1A2E));
+              fontWeight: FontWeight.w600,),
+          bgColor: const Color(0xAA1A1A2E),);
     }
   }
 
@@ -147,7 +151,9 @@ class CargoBoxRenderer {
   // ═══════════════════════════════════════════════════════════════════════
 
   void _renderBox(Canvas canvas, PlacedBox b) {
-    final bx = ox + b.x, by = oy + b.y, bz = oz + b.z;
+    final bx = ox + b.x;
+    final by = oy + b.y;
+    final bz = oz + b.z;
     final color = CargoColors.forBox(b, colorMode, maxWeight);
     final isSelected = b.id == selectedId;
     final alpha = isSelected ? 1.0 : 0.92;
@@ -277,7 +283,7 @@ class CargoBoxRenderer {
   // ═══════════════════════════════════════════════════════════════════════
 
   void _drawBoxLabel(Canvas canvas, List<Offset> topPts, PlacedBox b,
-      Color boxColor, bool isSmall) {
+      Color boxColor, bool isSmall,) {
     // Center of top face
     final cx =
         (topPts[0].dx + topPts[1].dx + topPts[2].dx + topPts[3].dx) / 4;
@@ -389,7 +395,8 @@ class CargoBoxRenderer {
       textDirection: TextDirection.ltr,
     )..layout();
 
-    final padH = 6.0, padV = 3.0;
+    const padH = 6.0;
+    const padV = 3.0;
     final rect = RRect.fromRectAndRadius(
       Rect.fromCenter(
         center: center,
@@ -431,7 +438,7 @@ class CargoBoxRenderer {
   // ═══════════════════════════════════════════════════════════════════════
 
   void _drawSizeClassBadge(
-      Canvas canvas, List<Offset> frontPts, double weight) {
+      Canvas canvas, List<Offset> frontPts, double weight,) {
     final faceW = (frontPts[1] - frontPts[0]).distance;
     final faceH = (frontPts[3] - frontPts[0]).distance;
     if (faceW < 30 || faceH < 20) return;
@@ -477,8 +484,8 @@ class CargoBoxRenderer {
   // ═══════════════════════════════════════════════════════════════════════
 
   void _renderOverflowBox(
-      Canvas canvas, PlacedBox b, double bx, double by, double bz) {
-    final color = const Color(0xFFFF6B6B);
+      Canvas canvas, PlacedBox b, double bx, double by, double bz,) {
+    const color = Color(0xFFFF6B6B);
     final corners = proj.projectBox(bx, by, bz, b.w, b.d, b.h, size);
 
     // Top
@@ -495,7 +502,7 @@ class CargoBoxRenderer {
 
     // Red outline
     PolyHelper.strokeFace(canvas, topPts, const Color(0xFFFF4444), 1.5);
-    PolyHelper.strokeFace(canvas, frontPts, const Color(0xFFFF4444), 1.0);
+    PolyHelper.strokeFace(canvas, frontPts, const Color(0xFFFF4444), 1);
     
     // Label
     _drawBoxLabel(canvas, topPts, b, color, true);
@@ -506,7 +513,7 @@ class CargoBoxRenderer {
   // ═══════════════════════════════════════════════════════════════════════
 
   void drawInfoLabel(
-      Canvas canvas, TruckInterior interior, LoadMetrics metrics) {
+      Canvas canvas, TruckInterior interior, LoadMetrics metrics,) {
     // Position at top-right area
     final pos = Offset(size.width - 10, 10);
 
@@ -516,7 +523,7 @@ class CargoBoxRenderer {
       '⚖️ Peso: ${metrics.totalWeightKg.toStringAsFixed(0)}/${metrics.maxPayloadKg.toStringAsFixed(0)} kg',
     ];
 
-    double yOffset = pos.dy;
+    var yOffset = pos.dy;
     for (final line in lines) {
       final tp = TextPainter(
         text: TextSpan(
@@ -558,7 +565,7 @@ class CargoBoxRenderer {
 
   /// Draw text at a position
   void _drawText(Canvas canvas, Offset pos, String text, TextStyle style,
-      {Color? bgColor}) {
+      {Color? bgColor,}) {
     final tp = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: TextDirection.ltr,

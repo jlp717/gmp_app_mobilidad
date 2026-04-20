@@ -10,7 +10,8 @@ const {
     buildVendedorFilter,
     formatCurrency,
     LACLAE_SALES_FILTER,
-    sanitizeForSQL
+    sanitizeForSQL,
+    handleRouteError
 } = require('../utils/common');
 
 // Imports from laclae service
@@ -101,8 +102,7 @@ L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
         });
 
     } catch (error) {
-        logger.error(`Router error: ${error.message} `);
-        res.status(500).json({ error: 'Error obteniendo rutero', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo rutero', 500);
     }
 });
 
@@ -250,8 +250,7 @@ router.get('/rutero/week', async (req, res) => {
             });
         }
     } catch (error) {
-        logger.error(`Rutero week error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo rutero semana', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo rutero semana', 500);
     }
 });
 
@@ -326,6 +325,20 @@ router.post('/rutero/move_clients', async (req, res) => {
 
         if (vendedor.includes(',')) {
             return res.status(400).json({ error: 'Vendedor debe ser un código único, no una lista.' });
+        }
+
+        // SECURITY: Verify user authorization
+        // User must be either a JEFE_VENTAS (can modify any rutero) or the owner of this rutero
+        const userCode = req.user?.codigovendedor || req.user?.code;
+        const isJefeVentas = req.user?.isJefeVentas || req.user?.role === 'JEFE_VENTAS';
+        
+        if (!userCode) {
+            return res.status(401).json({ error: 'Autenticación requerida', code: 'MISSING_TOKEN' });
+        }
+        
+        if (!isJefeVentas && userCode !== vendedor) {
+            logger.warn(`[AUTH] User ${userCode} attempted to move clients in rutero for vendor ${vendedor} without permission`);
+            return res.status(403).json({ error: 'No tienes permisos para modificar el rutero de otro vendedor', code: 'INSUFFICIENT_ROLE' });
         }
 
         const DIAS_PROHIBIDOS = ['domingo'];
@@ -500,8 +513,7 @@ router.post('/rutero/move_clients', async (req, res) => {
 
     } catch (error) {
         if (conn) { try { await conn.rollback(); } catch (e) { logger.warn(`Rollback failed: ${e.message}`); } }
-        logger.error(`Rutero move error: ${error.message}`);
-        res.status(500).json({ error: 'Error moviendo clientes', details: error.message });
+        handleRouteError(error, res, 'Error moviendo clientes', 500);
     } finally {
         if (conn) { try { await conn.close(); } catch (e) { logger.warn(`Connection close failed: ${e.message}`); } }
     }
@@ -521,6 +533,20 @@ router.post('/rutero/config', async (req, res) => {
         // Guard: vendedor must be a single code, not a comma-separated list
         if (vendedor.includes(',')) {
             return res.status(400).json({ error: 'Vendedor debe ser un código único, no una lista.' });
+        }
+
+        // SECURITY: Verify user authorization
+        // User must be either a JEFE_VENTAS (can modify any rutero) or the owner of this rutero
+        const userCode = req.user?.codigovendedor || req.user?.code;
+        const isJefeVentas = req.user?.isJefeVentas || req.user?.role === 'JEFE_VENTAS';
+        
+        if (!userCode) {
+            return res.status(401).json({ error: 'Autenticación requerida', code: 'MISSING_TOKEN' });
+        }
+        
+        if (!isJefeVentas && userCode !== vendedor) {
+            logger.warn(`[AUTH] User ${userCode} attempted to modify rutero for vendor ${vendedor} without permission`);
+            return res.status(403).json({ error: 'No tienes permisos para modificar el rutero de otro vendedor', code: 'INSUFFICIENT_ROLE' });
         }
 
         const pool = getPool();
@@ -665,8 +691,11 @@ router.post('/rutero/config', async (req, res) => {
         try {
             let clientNamesMap = {};
             if (orden.length > 0) {
-                const clientCodes = orden.map(o => `'${o.cliente}'`).join(',');
-                const names = await query(`SELECT CODIGOCLIENTE as C, COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), TRIM(NOMBRECLIENTE)) as N FROM DSEDAC.CLI WHERE CODIGOCLIENTE IN (${clientCodes}) FETCH FIRST 1000 ROWS ONLY`);
+                // SECURITY: Use parameterized query to prevent SQL injection
+                const clientCodesList = orden.map(o => o.cliente);
+                const placeholders = clientCodesList.map(() => '?').join(',');
+                const sql = `SELECT CODIGOCLIENTE as C, COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), TRIM(NOMBRECLIENTE)) as N FROM DSEDAC.CLI WHERE CODIGOCLIENTE IN (${placeholders}) FETCH FIRST 1000 ROWS ONLY`;
+                const names = await queryWithParams(sql, clientCodesList);
                 names.forEach(n => clientNamesMap[n.C.trim()] = n.N.trim());
             }
 
@@ -709,7 +738,7 @@ router.post('/rutero/config', async (req, res) => {
     } catch (error) {
         const odbcDetail = (error.odbcErrors || []).map(e => `[${e.code}/${e.state}] ${e.message}`).join('; ');
         logger.error(`Rutero config save error: ${odbcDetail || error.message}`);
-        res.status(500).json({ error: 'Error guardando orden', details: odbcDetail || error.message });
+        handleRouteError(error, res, 'Error guardando orden', 500);
     }
 });
 
@@ -796,6 +825,13 @@ router.get('/rutero/positions/:day', async (req, res) => {
 // RUTERO FULL CACHE RELOAD (CDVI + LACLAE + RUTERO_CONFIG)
 // =============================================================================
 router.post('/rutero/reload-cache', async (req, res) => {
+    // SECURITY: Only JEFE_VENTAS can reload cache
+    const isJefeVentas = req.user?.isJefeVentas || req.user?.role === 'JEFE_VENTAS';
+    if (!isJefeVentas) {
+        logger.warn(`[AUTH] Non-jefe user ${req.user?.codigovendedor} attempted to reload cache`);
+        return res.status(403).json({ error: 'Acceso restringido a Jefes de Ventas', code: 'INSUFFICIENT_ROLE' });
+    }
+    
     try {
         logger.info(`[CACHE RELOAD] Full cache reload requested by ${req.user ? req.user.codigovendedor : 'unknown'}`);
         const start = Date.now();
@@ -812,8 +848,7 @@ router.post('/rutero/reload-cache', async (req, res) => {
         logger.info(`[CACHE RELOAD] Complete in ${duration}ms`);
         res.json({ success: true, duration, message: 'Cache CDVI + LACLAE + RUTERO_CONFIG + Redis recargada' });
     } catch (error) {
-        logger.error(`[CACHE RELOAD] Failed: ${error.message}`);
-        res.status(500).json({ error: 'Error recargando caché', details: error.message });
+        handleRouteError(error, res, 'Error recargando caché', 500);
     }
 });
 
@@ -825,7 +860,18 @@ router.get('/rutero/day-direct/:day', async (req, res) => {
         const { day } = req.params;
         const { vendedorCodes, year, role, month, week, ignoreOverrides } = req.query;
         
-        logger.info(`[RUTERO DAY DIRECT] Query without cache for ${vendedorCodes} on ${day}`);
+        // SECURITY: Validate day parameter
+        const normalizedDay = day ? day.toLowerCase() : '';
+        if (!DAY_NAMES.includes(normalizedDay)) {
+            return res.status(400).json({ error: 'Día inválido', day });
+        }
+        
+        // SECURITY: Validate vendedorCodes is not injection attempt
+        if (vendedorCodes && !/^[a-zA-Z0-9,_\s]+$/.test(vendedorCodes)) {
+            return res.status(400).json({ error: 'Código de vendedor inválido' });
+        }
+        
+        logger.info(`[RUTERO DAY DIRECT] Query without cache for ${vendedorCodes} on ${normalizedDay}`);
         
         // First, reload the cache to ensure we have latest data
         await loadLaclaeCache();
@@ -859,12 +905,13 @@ router.get('/rutero/day-direct/:day', async (req, res) => {
         const clientDetails = await query(clientDetailsSql, false, false);
 
         // Get RUTERO_CONFIG order for sorting
+        // SECURITY: Use parameterized query to prevent SQL injection
         const configSql = `
             SELECT TRIM(CLIENTE) as CLIENTE, ORDEN
             FROM JAVIER.RUTERO_CONFIG
-            WHERE VENDEDOR = '${vendedorCodes}' AND DIA = '${day.toLowerCase()}' AND ORDEN >= 0
+            WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= 0
         `;
-        const configRows = await query(configSql, false, false);
+        const configRows = await queryWithParams(configSql, [vendedorCodes, normalizedDay], false, false);
         
         const configOrder = {};
         configRows.forEach(r => { configOrder[r.CLIENTE?.trim()] = r.ORDEN; });
@@ -895,8 +942,7 @@ router.get('/rutero/day-direct/:day', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error(`Rutero day direct error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo rutero', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo rutero', 500);
     }
 });
 
@@ -904,6 +950,13 @@ router.get('/rutero/day-direct/:day', async (req, res) => {
 // RUTERO FULL CACHE RELOAD (CDVI + LACLAE + RUTERO_CONFIG)
 // =============================================================================
 router.post('/rutero/reload-cache-old', async (req, res) => {
+    // SECURITY: Only JEFE_VENTAS can reload cache
+    const isJefeVentas = req.user?.isJefeVentas || req.user?.role === 'JEFE_VENTAS';
+    if (!isJefeVentas) {
+        logger.warn(`[AUTH] Non-jefe user ${req.user?.codigovendedor} attempted to reload cache (old endpoint)`);
+        return res.status(403).json({ error: 'Acceso restringido a Jefes de Ventas', code: 'INSUFFICIENT_ROLE' });
+    }
+    
     try {
         logger.info(`[CACHE RELOAD] Full cache reload requested by ${req.user ? req.user.codigovendedor : 'unknown'}`);
         const start = Date.now();
@@ -920,8 +973,7 @@ router.post('/rutero/reload-cache-old', async (req, res) => {
         logger.info(`[CACHE RELOAD] Complete in ${duration}ms`);
         res.json({ success: true, duration, message: 'Cache CDVI + LACLAE + RUTERO_CONFIG + Redis recargada' });
     } catch (error) {
-        logger.error(`[CACHE RELOAD] Failed: ${error.message}`);
-        res.status(500).json({ error: 'Error recargando caché', details: error.message });
+        handleRouteError(error, res, 'Error recargando caché', 500);
     }
 });
 
@@ -932,6 +984,13 @@ router.get('/rutero/day/:day', async (req, res) => {
     try {
         const { day } = req.params;
         const { vendedorCodes, year, role, month, week, ignoreOverrides } = req.query; // Added ignoreOverrides
+        
+        // SECURITY: Validate day parameter
+        const normalizedDay = day ? day.toLowerCase() : '';
+        if (!DAY_NAMES.includes(normalizedDay)) {
+            return res.status(400).json({ error: 'Día inválido', day });
+        }
+        
         const shouldIgnoreOverrides = ignoreOverrides === 'true' || ignoreOverrides === '1' || ignoreOverrides === true;
 
         if (shouldIgnoreOverrides) {
@@ -1225,12 +1284,12 @@ router.get('/rutero/day/:day', async (req, res) => {
 
         // Only load custom order if NOT ignoring overrides
         if (primaryVendor && !shouldIgnoreOverrides) {
-            // Direct query (No Cache) to ensure instant updates
-            const configRows = await query(`
+            // SECURITY: Use parameterized query to prevent SQL injection
+            const configRows = await queryWithParams(`
                 SELECT CLIENTE, ORDEN 
                 FROM JAVIER.RUTERO_CONFIG 
-                WHERE VENDEDOR = '${primaryVendor}' AND DIA = '${day.toLowerCase()}'
-             `, false); // false = no debug log clutter
+                WHERE VENDEDOR = ? AND DIA = ?
+            `, [primaryVendor, normalizedDay], false, false); // false = no debug log clutter
 
             configRows.forEach(r => {
                 // Only include POSITIVE overrides (order >= 0), skip blocking entries (-1)
@@ -1238,7 +1297,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                     orderMap.set(r.CLIENTE.trim(), r.ORDEN);
                 }
             });
-            logger.info(`[RUTERO SORT] Loaded ${configRows.length} overrides for ${primaryVendor}/${day}`);
+            logger.info(`[RUTERO SORT] Loaded ${configRows.length} overrides for ${primaryVendor}/${normalizedDay}`);
         }
 
         const clients = currentYearRows.map(r => {
@@ -1335,8 +1394,7 @@ router.get('/rutero/day/:day', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error(`Rutero Day Error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo rutero diario', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo rutero diario', 500);
     }
 });
 
@@ -1487,8 +1545,7 @@ router.get('/diagnose/client/:code', async (req, res) => {
         res.json(results);
 
     } catch (error) {
-        logger.error(`Diagnose Error: ${error.message}`);
-        res.status(500).json({ error: 'Error en diagnóstico', details: error.message });
+        handleRouteError(error, res, 'Error en diagnóstico', 500);
     }
 });
 
@@ -1658,8 +1715,7 @@ router.get('/rutero/client/:code/detail', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error(`Rutero Client Detail Error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo detalle de cliente', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo detalle de cliente', 500);
     }
 });
 

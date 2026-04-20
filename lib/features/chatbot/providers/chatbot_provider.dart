@@ -1,26 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../data/chatbot_service.dart';
+import 'package:gmp_app_mobilidad/features/chatbot/data/chatbot_service.dart';
 
 // ── State ────────────────────────────────────────────────────────────────────
 
 class ChatMessage {
-  final String content;
-  final bool isUser;
-  final DateTime timestamp;
 
   ChatMessage({
     required this.content,
     required this.isUser,
     DateTime? timestamp,
   }) : timestamp = timestamp ?? DateTime.now();
+  final String content;
+  final bool isUser;
+  final DateTime timestamp;
 }
 
 class ChatbotState {
-  final List<ChatMessage> messages;
-  final bool isLoading;
-  final String? error;
-  final String? currentClientCode;
-  final List<String> vendedorCodes;
 
   const ChatbotState({
     this.messages = const [],
@@ -29,6 +24,11 @@ class ChatbotState {
     this.currentClientCode,
     this.vendedorCodes = const [],
   });
+  final List<ChatMessage> messages;
+  final bool isLoading;
+  final String? error;
+  final String? currentClientCode;
+  final List<String> vendedorCodes;
 
   ChatbotState copyWith({
     List<ChatMessage>? messages,
@@ -54,10 +54,10 @@ class ChatbotState {
 // ── Notifier ─────────────────────────────────────────────────────────────────
 
 class ChatbotNotifier extends Notifier<ChatbotState> {
-  final ChatbotService _service = ChatbotService();
 
   ChatbotNotifier({List<String> vendedorCodes = const []})
       : _initialVendedorCodes = vendedorCodes;
+  final ChatbotService _service = ChatbotService();
 
   final List<String> _initialVendedorCodes;
 

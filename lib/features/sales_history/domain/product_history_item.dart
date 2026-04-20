@@ -1,24 +1,4 @@
 class ProductHistoryItem {
-  final String date;
-  final int year;
-  final int month;
-  final String clientCode;
-  final String productCode;
-  final String productName;
-  final String price;
-  final double quantity;
-  final String total;
-  final String lote;
-  final String ref;
-  final String invoice;
-  // FIX: Added subfamily and FI codes to support proper classification display
-  final String family;
-  final String subfamily;
-  final String fi1;
-  final String fi2;
-  final String fi3;
-  final String fi4;
-  final String fi5;
 
   ProductHistoryItem({
     required this.date,
@@ -41,14 +21,6 @@ class ProductHistoryItem {
     this.fi4 = '',
     this.fi5 = '',
   });
-
-  /// URL for product image (served by backend)
-  String imageUrl(String baseUrl) =>
-      '$baseUrl/products/${Uri.encodeComponent(productCode.trim())}/image';
-
-  /// URL for technical datasheet PDF (served by backend)
-  String fichaUrl(String baseUrl) =>
-      '$baseUrl/products/${Uri.encodeComponent(productCode.trim())}/ficha';
 
   factory ProductHistoryItem.fromJson(Map<String, dynamic> json) {
     return ProductHistoryItem(
@@ -73,5 +45,33 @@ class ProductHistoryItem {
       fi5: (json['fi5'] as String?) ?? '',
     );
   }
+  final String date;
+  final int year;
+  final int month;
+  final String clientCode;
+  final String productCode;
+  final String productName;
+  final String price;
+  final double quantity;
+  final String total;
+  final String lote;
+  final String ref;
+  final String invoice;
+  // FIX: Added subfamily and FI codes to support proper classification display
+  final String family;
+  final String subfamily;
+  final String fi1;
+  final String fi2;
+  final String fi3;
+  final String fi4;
+  final String fi5;
+
+  /// URL for product image (served by backend)
+  String imageUrl(String baseUrl) =>
+      '$baseUrl/products/${Uri.encodeComponent(productCode.trim())}/image';
+
+  /// URL for technical datasheet PDF (served by backend)
+  String fichaUrl(String baseUrl) =>
+      '$baseUrl/products/${Uri.encodeComponent(productCode.trim())}/ficha';
 }
 

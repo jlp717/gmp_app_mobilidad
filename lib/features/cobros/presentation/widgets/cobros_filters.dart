@@ -1,22 +1,21 @@
 /// COBROS FILTERS WIDGET
 /// Panel de filtros para entregas/cobros
+library;
 
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 class CobrosFilters extends StatefulWidget {
+
+  const CobrosFilters({
+    required this.onEstadoChanged, required this.onClienteChanged, super.key,
+    this.estadoActual = 'todos',
+  });
   final Function(String) onEstadoChanged;
   final Function(String) onClienteChanged;
   final String estadoActual;
-
-  const CobrosFilters({
-    super.key,
-    required this.onEstadoChanged,
-    required this.onClienteChanged,
-    this.estadoActual = 'todos',
-  });
 
   @override
   State<CobrosFilters> createState() => _CobrosFiltersState();
@@ -52,15 +51,15 @@ class _CobrosFiltersState extends State<CobrosFilters> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Título
-          Row(
+          const Row(
             children: [
               Icon(
                 Icons.filter_list,
                 color: AppTheme.neonPurple,
                 size: 18,
               ),
-              const SizedBox(width: 8),
-              const Text(
+              SizedBox(width: 8),
+              Text(
                 'Filtros',
                 style: TextStyle(
                   color: AppTheme.textPrimary,
@@ -117,7 +116,7 @@ class _CobrosFiltersState extends State<CobrosFilters> {
             children: _estados.map((estado) {
               final isSelected = widget.estadoActual == estado['value'];
               return GestureDetector(
-                onTap: () => widget.onEstadoChanged(estado['value'] as String),
+                onTap: () => widget.onEstadoChanged(estado['value']! as String),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -136,7 +135,7 @@ class _CobrosFiltersState extends State<CobrosFilters> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        estado['icon'] as IconData,
+                        estado['icon']! as IconData,
                         size: 12,
                         color: isSelected
                             ? AppTheme.neonPurple
@@ -144,7 +143,7 @@ class _CobrosFiltersState extends State<CobrosFilters> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        estado['label'] as String,
+                        estado['label']! as String,
                         style: TextStyle(
                           color: isSelected
                               ? AppTheme.neonPurple

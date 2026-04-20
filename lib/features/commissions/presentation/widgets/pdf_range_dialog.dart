@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../data/commissions_pdf_service.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/commissions/data/commissions_pdf_service.dart';
 
 class PdfRangeDialog extends StatefulWidget {
+  const PdfRangeDialog({required this.vendorCode, super.key});
   final String vendorCode;
-  const PdfRangeDialog({super.key, required this.vendorCode});
 
   @override
   State<PdfRangeDialog> createState() => _PdfRangeDialogState();
@@ -72,7 +72,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
               groupValue: _selectedRange,
               activeColor: AppTheme.success,
               onChanged: (val) => setState(() => _selectedRange = val!),
-            )).toList(),
+            ),),
             const SizedBox(height: 8),
             Container(
               padding: const EdgeInsets.all(8),

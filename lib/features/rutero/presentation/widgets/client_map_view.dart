@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart';
-import '../../../../core/theme/app_theme.dart';
 
 /// OpenStreetMap Widget - 100% Free, no API key needed
 class ClientMapView extends StatefulWidget {
-  final List<ClientLocation> clients;
-  final LatLng? initialCenter;
-  final double initialZoom;
-  final Function(ClientLocation)? onClientTap;
 
   const ClientMapView({
-    super.key,
-    required this.clients,
+    required this.clients, super.key,
     this.initialCenter,
     this.initialZoom = 10.0,
     this.onClientTap,
   });
+  final List<ClientLocation> clients;
+  final LatLng? initialCenter;
+  final double initialZoom;
+  final Function(ClientLocation)? onClientTap;
 
   @override
   State<ClientMapView> createState() => _ClientMapViewState();
@@ -46,7 +45,7 @@ class _ClientMapViewState extends State<ClientMapView> {
     
     // Calculate center from clients
     double avgLat = 0, avgLng = 0;
-    int count = 0;
+    var count = 0;
     for (final client in widget.clients) {
       if (client.latitude != null && client.longitude != null) {
         avgLat += client.latitude!;
@@ -86,7 +85,7 @@ class _ClientMapViewState extends State<ClientMapView> {
             MarkerLayer(
               markers: widget.clients
                   .where((c) => c.latitude != null && c.longitude != null)
-                  .map((client) => _buildMarker(client))
+                  .map(_buildMarker)
                   .toList(),
             ),
           ],
@@ -152,10 +151,10 @@ class _ClientMapViewState extends State<ClientMapView> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.location_pin, color: AppTheme.success, size: 20),
+                const Icon(Icons.location_pin, color: AppTheme.success, size: 20),
                 const SizedBox(width: 4),
                 Text('${widget.clients.where((c) => c.latitude != null).length} clientes', 
-                     style: const TextStyle(fontSize: 12)),
+                     style: const TextStyle(fontSize: 12),),
               ],
             ),
           ),
@@ -200,10 +199,10 @@ class _ClientMapViewState extends State<ClientMapView> {
 }
 
 class _MapButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback onPressed;
 
   const _MapButton({required this.icon, required this.onPressed});
+  final IconData icon;
+  final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
@@ -224,15 +223,15 @@ class _MapButton extends StatelessWidget {
 }
 
 class _ClientInfoCard extends StatelessWidget {
-  final ClientLocation client;
-  final VoidCallback onClose;
-  final VoidCallback onTap;
 
   const _ClientInfoCard({
     required this.client,
     required this.onClose,
     required this.onTap,
   });
+  final ClientLocation client;
+  final VoidCallback onClose;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -269,7 +268,7 @@ class _ClientInfoCard extends StatelessWidget {
                     if (client.city != null)
                       Text(
                         client.city!,
-                        style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
                       ),
                     if (client.lastSale != null)
                       Text(
@@ -295,13 +294,6 @@ class _ClientInfoCard extends StatelessWidget {
 
 /// Model for client location data
 class ClientLocation {
-  final String code;
-  final String name;
-  final String? city;
-  final double? latitude;
-  final double? longitude;
-  final double? lastSale;
-  final String? route;
 
   ClientLocation({
     required this.code,
@@ -324,4 +316,11 @@ class ClientLocation {
       route: json['route']?.toString(),
     );
   }
+  final String code;
+  final String name;
+  final String? city;
+  final double? latitude;
+  final double? longitude;
+  final double? lastSale;
+  final String? route;
 }

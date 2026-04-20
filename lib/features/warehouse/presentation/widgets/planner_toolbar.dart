@@ -2,16 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../application/load_planner_provider.dart';
-import '../../domain/models/load_planner_models.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/application/load_planner_provider.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
 
 /// Premium floating-pill toolbar with animated highlight indicators.
 class PlannerToolbar extends StatelessWidget {
-  final VoidCallback? onToggleWalls;
-  final VoidCallback? onRepack;
 
   const PlannerToolbar({super.key, this.onToggleWalls, this.onRepack});
+  final VoidCallback? onToggleWalls;
+  final VoidCallback? onRepack;
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +32,6 @@ class PlannerToolbar extends StatelessWidget {
             border: Border(
               bottom: BorderSide(
                 color: AppTheme.neonBlue.withOpacity(0.1),
-                width: 1,
               ),
             ),
           ),
@@ -155,15 +154,14 @@ class PlannerToolbar extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
             color: AppTheme.warning.withOpacity(0.3),
-            width: 1,
           ),
         ),
-        title: Row(
+        title: const Row(
           children: [
             Icon(Icons.warning_amber_rounded,
-                color: AppTheme.warning, size: 22),
-            const SizedBox(width: 8),
-            const Text('Recalcular carga'),
+                color: AppTheme.warning, size: 22,),
+            SizedBox(width: 8),
+            Text('Recalcular carga'),
           ],
         ),
         content: const Text(
@@ -195,15 +193,15 @@ class PlannerToolbar extends StatelessWidget {
 // =============================================================================
 
 class _PillSegmented<T> extends StatelessWidget {
-  final T selected;
-  final List<(T, IconData, String)> options;
-  final ValueChanged<T> onChanged;
 
   const _PillSegmented({
     required this.selected,
     required this.options,
     required this.onChanged,
   });
+  final T selected;
+  final List<(T, IconData, String)> options;
+  final ValueChanged<T> onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -214,7 +212,6 @@ class _PillSegmented<T> extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
           color: AppTheme.borderColor.withOpacity(0.2),
-          width: 1,
         ),
       ),
       child: Row(
@@ -235,7 +232,6 @@ class _PillSegmented<T> extends StatelessWidget {
                 border: isActive
                     ? Border.all(
                         color: AppTheme.neonBlue.withOpacity(0.3),
-                        width: 1,
                       )
                     : null,
                 boxShadow: isActive
@@ -286,19 +282,18 @@ class _PillSegmented<T> extends StatelessWidget {
 // =============================================================================
 
 class _GlowToolButton extends StatefulWidget {
+
+  const _GlowToolButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onPressed, this.enabled = true,
+    this.color,
+  });
   final IconData icon;
   final String tooltip;
   final bool enabled;
   final VoidCallback onPressed;
   final Color? color;
-
-  const _GlowToolButton({
-    required this.icon,
-    required this.tooltip,
-    this.enabled = true,
-    required this.onPressed,
-    this.color,
-  });
 
   @override
   State<_GlowToolButton> createState() => _GlowToolButtonState();

@@ -1,13 +1,13 @@
 import 'dart:io';
-import 'dart:typed_data';
+
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:share_plus/share_plus.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
-import '../theme/app_theme.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 /// 📄 PDF PREVIEW SCREEN
@@ -28,20 +28,17 @@ import '../theme/app_theme.dart';
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class PdfPreviewScreen extends StatefulWidget {
+
+  const PdfPreviewScreen({
+    required this.pdfBytes, required this.title, required this.fileName, super.key,
+    this.onEmailTap,
+    this.onWhatsAppTap,
+  });
   final Uint8List pdfBytes;
   final String title;
   final String fileName;
   final VoidCallback? onEmailTap;
   final VoidCallback? onWhatsAppTap;
-
-  const PdfPreviewScreen({
-    super.key,
-    required this.pdfBytes,
-    required this.title,
-    required this.fileName,
-    this.onEmailTap,
-    this.onWhatsAppTap,
-  });
 
   @override
   State<PdfPreviewScreen> createState() => _PdfPreviewScreenState();
@@ -173,7 +170,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
               content: Text('Error al compartir: $e'),
-              backgroundColor: AppTheme.error),
+              backgroundColor: AppTheme.error,),
         );
       }
     }
@@ -278,13 +275,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
     }
 
     return PDFView(
-      filePath: _tempPath!,
-      enableSwipe: true,
-      swipeHorizontal: false,
-      autoSpacing: true,
-      pageFling: true,
-      pageSnap: true,
-      fitPolicy: FitPolicy.WIDTH,
+      filePath: _tempPath,
       nightMode: true,
       onRender: (pages) {
         if (mounted) {
@@ -310,7 +301,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
       onPageError: (page, error) {
         if (mounted) {
           setState(
-              () => _errorMessage = 'Error en página ${page ?? 0}: $error');
+              () => _errorMessage = 'Error en página ${page ?? 0}: $error',);
         }
       },
     );

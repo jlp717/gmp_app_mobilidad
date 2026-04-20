@@ -1,28 +1,27 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/currency_formatter.dart';
-import '../../data/clients_service.dart';
-import '../../../objectives/presentation/pages/enhanced_client_matrix_page.dart';
 
-import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
-import '../../../../core/widgets/modern_loading.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/providers/filter_provider.dart';
-import '../../../../core/widgets/global_vendor_selector.dart';
-import '../../../../core/providers/auth_notifier.dart';
-import '../../../../core/utils/responsive.dart';
-import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
+import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
+import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Import Sync Header
+import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
+import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/enhanced_client_matrix_page.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Simple Clients List Page with debounced search
 class SimpleClientListPage extends ConsumerStatefulWidget {
+
+  const SimpleClientListPage({required this.employeeCode, super.key, this.isJefeVentas = false});
   final String employeeCode;
   final bool isJefeVentas;
-
-  const SimpleClientListPage({super.key, required this.employeeCode, this.isJefeVentas = false});
 
   @override
   ConsumerState<SimpleClientListPage> createState() => _SimpleClientListPageState();
@@ -42,8 +41,8 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
   bool _onlyWithAlerts = false;
   List<String>? _clientsWithAlertsCodes;
 
-  List<Map<String, dynamic>> _availableVendors = [];
-  String? _selectedVendorCode = ''; // Default to empty string (All) for Manager view, so it matches dropdown item
+  final List<Map<String, dynamic>> _availableVendors = [];
+  final String _selectedVendorCode = ''; // Default to empty string (All) for Manager view, so it matches dropdown item
 
   @override
   void initState() {
@@ -95,7 +94,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
       );
 
       // Apply KPI Alerts filtering
-      List<Map<String, dynamic>> filteredResults = results;
+      var filteredResults = results;
       if (_onlyWithAlerts || _selectedAlertType != 'ALL') {
         final alertCodes = await KpiAlertsService.instance.getClientsWithAlerts(
           vendedorCodes: codesToPass,
@@ -169,7 +168,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
                 Navigator.pop(ctx);
                 _launchWhatsApp((p['number'] as String?) ?? '');
               },
-            )),
+            ),),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.dialpad, color: AppTheme.neonPink),
@@ -226,9 +225,9 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
     }
   }
 
-  void _launchWhatsApp(String phone) async {
+  Future<void> _launchWhatsApp(String phone) async {
     // Clean phone number - remove non-digits except +
-    String cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    var cleanPhone = phone.replaceAll(RegExp('[^0-9+]'), '');
     // Add Spain prefix if not present
     if (!cleanPhone.startsWith('+') && !cleanPhone.startsWith('34')) {
       cleanPhone = '34$cleanPhone';
@@ -317,10 +316,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
                  const SizedBox(height: 12),
                  GlobalVendorSelector(
                    isJefeVentas: true,
-                   onChanged: () {
-                     // The provider updates automatically, we just need to reload clients
-                     _loadClients();
-                   },
+                   onChanged: _loadClients,
                  ),
               ],
             ],
@@ -363,7 +359,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
     if (_isLoading) {
       return Padding(
         padding: EdgeInsets.all(Responsive.padding(context, small: 24, large: 40)),
-        child: ModernLoading(message: 'Cargando cartera de clientes...'),
+        child: const ModernLoading(message: 'Cargando cartera de clientes...'),
       );
     }
 
@@ -372,12 +368,12 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64, color: AppTheme.error),
+            const Icon(Icons.error_outline, size: 64, color: AppTheme.error),
             const SizedBox(height: 16),
             Text('Error: $_error'),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () => _loadClients(),
+              onPressed: _loadClients,
               child: const Text('Reintentar'),
             ),
           ],
@@ -390,7 +386,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.people_outline, size: 64, color: AppTheme.textSecondary),
+            const Icon(Icons.people_outline, size: 64, color: AppTheme.textSecondary),
             const SizedBox(height: 16),
             const Text('No se encontraron clientes'),
             const SizedBox(height: 8),
@@ -465,7 +461,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
                       items: alertTypes.entries.map((e) => DropdownMenuItem(
                         value: e.key,
                         child: Text(e.value),
-                      )).toList(),
+                      ),).toList(),
                       onChanged: (value) {
                         if (value != null) {
                           setState(() => _selectedAlertType = value);
@@ -528,12 +524,12 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
 }
 
 class _ClientCard extends StatelessWidget {
+
+  const _ClientCard({required this.client, this.isJefeVentas = false, this.onTap, this.onWhatsAppTap});
   final Map<String, dynamic> client;
   final bool isJefeVentas;
   final VoidCallback? onTap;
   final VoidCallback? onWhatsAppTap;
-
-  const _ClientCard({required this.client, this.isJefeVentas = false, this.onTap, this.onWhatsAppTap});
 
   @override
   Widget build(BuildContext context) {
@@ -595,7 +591,7 @@ class _ClientCard extends StatelessWidget {
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            Icon(Icons.location_on, size: 14, color: AppTheme.textSecondary),
+                            const Icon(Icons.location_on, size: 14, color: AppTheme.textSecondary),
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
@@ -613,7 +609,7 @@ class _ClientCard extends StatelessWidget {
                           const SizedBox(height: 2),
                           Row(
                           children: [
-                              Icon(Icons.phone, size: 14, color: AppTheme.textSecondary),
+                              const Icon(Icons.phone, size: 14, color: AppTheme.textSecondary),
                               const SizedBox(width: 4),
                               Text(
                                 phone,
@@ -706,9 +702,9 @@ class _ClientCard extends StatelessWidget {
 }
 
 Widget _buildRouteDaysRow() {
-final String route = client['route'] as String? ?? '';
-final String visitDays = client['visitDaysShort'] as String? ?? '';
-final String deliveryDays = client['deliveryDaysShort'] as String? ?? '';
+final route = client['route'] as String? ?? '';
+final visitDays = client['visitDaysShort'] as String? ?? '';
+final deliveryDays = client['deliveryDaysShort'] as String? ?? '';
 
 if (route.isEmpty && visitDays.isEmpty && deliveryDays.isEmpty) {
   return const SizedBox.shrink();
@@ -731,11 +727,11 @@ return Padding(
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.route, size: 12, color: AppTheme.neonPurple),
+              const Icon(Icons.route, size: 12, color: AppTheme.neonPurple),
               const SizedBox(width: 4),
               Text(
                 'Ruta $route', 
-                style: TextStyle(fontSize: 11, color: AppTheme.neonPurple, fontWeight: FontWeight.w500),
+                style: const TextStyle(fontSize: 11, color: AppTheme.neonPurple, fontWeight: FontWeight.w500),
               ),
             ],
           ),
@@ -752,11 +748,11 @@ return Padding(
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.calendar_today, size: 12, color: AppTheme.neonBlue),
+              const Icon(Icons.calendar_today, size: 12, color: AppTheme.neonBlue),
               const SizedBox(width: 4),
               Text(
                 'Visita: $visitDays',
-                style: TextStyle(fontSize: 11, color: AppTheme.neonBlue, fontWeight: FontWeight.w500),
+                style: const TextStyle(fontSize: 11, color: AppTheme.neonBlue, fontWeight: FontWeight.w500),
               ),
             ],
           ),
@@ -773,11 +769,11 @@ return Padding(
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.local_shipping, size: 12, color: AppTheme.neonGreen),
+              const Icon(Icons.local_shipping, size: 12, color: AppTheme.neonGreen),
               const SizedBox(width: 4),
               Text(
                 'Reparto: $deliveryDays',
-                style: TextStyle(fontSize: 11, color: AppTheme.neonGreen, fontWeight: FontWeight.w500),
+                style: const TextStyle(fontSize: 11, color: AppTheme.neonGreen, fontWeight: FontWeight.w500),
               ),
             ],
           ),

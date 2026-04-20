@@ -1,23 +1,24 @@
 /// REPARTIDOR CLIENTES PAGE v1.0
 /// Lista de clientes adaptada para reparto con historial de entregas
 /// Equivalente a SimpleClientListPage de ventas pero enfocado a repartidor
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../../../core/utils/currency_formatter.dart';
-import '../../data/repartidor_data_service.dart';
-import '../../../../core/widgets/shimmer_skeleton.dart';
-import '../../../../core/widgets/error_state_widget.dart';
-import '../../../../core/widgets/optimized_list.dart';
-import 'repartidor_historico_page.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/widgets/optimized_list.dart';
+import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_historico_page.dart';
 
 class RepartidorClientesPage extends StatefulWidget {
+
+  const RepartidorClientesPage({required this.repartidorId, super.key, this.isJefeMode = false, this.onNavigateToHistory});
   final String repartidorId;
   final bool isJefeMode;
   final void Function(String clientId, String clientName)? onNavigateToHistory;
-
-  const RepartidorClientesPage({super.key, required this.repartidorId, this.isJefeMode = false, this.onNavigateToHistory});
 
   @override
   State<RepartidorClientesPage> createState() => _RepartidorClientesPageState();
@@ -82,7 +83,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
       list = list.where((c) =>
           c.name.toUpperCase().contains(q) ||
           c.id.toUpperCase().contains(q) ||
-          c.address.toUpperCase().contains(q)
+          c.address.toUpperCase().contains(q),
       ).toList();
     }
 
@@ -92,16 +93,12 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
       switch (_sortBy) {
         case _SortBy.name:
           cmp = a.name.compareTo(b.name);
-          break;
         case _SortBy.totalDocs:
           cmp = a.totalDocuments.compareTo(b.totalDocuments);
-          break;
         case _SortBy.totalAmount:
           cmp = a.totalAmount.compareTo(b.totalAmount);
-          break;
         case _SortBy.lastVisit:
           cmp = (a.lastVisit ?? '').compareTo(b.lastVisit ?? '');
-          break;
       }
       return _sortAsc ? cmp : -cmp;
     });
@@ -127,7 +124,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                         onRetry: _loadClients,
                       )
                     : RefreshIndicator(
-                        onRefresh: () => _loadClients(),
+                        onRefresh: _loadClients,
                         child: _filteredClients.isEmpty
                             ? ListView(
                                 children: const [

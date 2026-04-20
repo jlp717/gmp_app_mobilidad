@@ -60,12 +60,10 @@ class CommissionsService {
   static Future<Map<String, dynamic>> payCommission({
     required String vendedorCode,
     required int year,
-    int? month,
+    required double amount, required String adminCode, int? month,
     int? quarter,
-    required double amount,
     double? generatedAmount,
     String? concept,
-    required String adminCode,
     String? observaciones,
     double? objetivoMes,
     double? ventasSobreObjetivo,

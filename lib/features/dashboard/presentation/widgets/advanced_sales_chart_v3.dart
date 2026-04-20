@@ -1,9 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/currency_formatter.dart';
-import '../../../../core/utils/responsive.dart';
-import '../widgets/matrix_data_table.dart';
+import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/matrix_data_table.dart';
 
 /// AdvancedSalesChart V3 Performance Optimized
 /// 
@@ -22,18 +22,15 @@ import '../widgets/matrix_data_table.dart';
 /// - 30% lower memory footprint
 /// - Smoother animations at 60fps
 class AdvancedSalesChartV3 extends StatefulWidget {
+
+  const AdvancedSalesChartV3({
+    required this.matrixData, required this.hierarchy, required this.onBarTap, super.key,
+    this.color = AppTheme.neonBlue,
+  });
   final List<MatrixNode> matrixData;
   final List<String> hierarchy;
   final Color color;
   final Function(String, String) onBarTap;
-
-  const AdvancedSalesChartV3({
-    super.key,
-    required this.matrixData,
-    required this.hierarchy,
-    this.color = AppTheme.neonBlue,
-    required this.onBarTap,
-  });
 
   @override
   State<AdvancedSalesChartV3> createState() => _AdvancedSalesChartV3State();
@@ -52,7 +49,7 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
   late final BackgroundBarChartRodData _backgroundRod;
   
   // Animation optimization
-  bool _isAnimating = false;
+  final bool _isAnimating = false;
 
   @override
   void initState() {
@@ -161,7 +158,7 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
               ),
             ],
           ),
-        )
+        ),
       ],
     );
   }
@@ -189,7 +186,6 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
         barTouchData: _createBarTouchData(topItems),
         titlesData: _createTitlesData(topItems, maxY),
         gridData: FlGridData(
-          show: true,
           drawVerticalLine: false,
           getDrawingHorizontalLine: (value) => FlLine(
             color: Colors.white.withOpacity(0.05),
@@ -257,7 +253,6 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
 
   FlTitlesData _createTitlesData(List<MatrixNode> topItems, double maxY) {
     return FlTitlesData(
-      show: true,
       bottomTitles: AxisTitles(
         sideTitles: SideTitles(
           showTitles: true,
@@ -269,7 +264,7 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
             final isTouched = index == _touchedIndex;
 
             // Smart label truncation
-            String label = node.name;
+            var label = node.name;
             if (label.length > 12) label = '${label.substring(0, 10)}..';
 
             return Padding(
@@ -304,10 +299,10 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
         ),
       ),
       topTitles: const AxisTitles(
-        sideTitles: SideTitles(showTitles: false),
+        
       ),
       rightTitles: const AxisTitles(
-        sideTitles: SideTitles(showTitles: false),
+        
       ),
     );
   }
@@ -346,6 +341,8 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
 
 /// Performance-optimized container with cached decoration
 class _PerformanceOptimizedContainer extends StatelessWidget {
+
+  const _PerformanceOptimizedContainer({required this.child});
   final Widget child;
   static final _cachedDecoration = BoxDecoration(
     color: AppTheme.surfaceColor,
@@ -360,8 +357,6 @@ class _PerformanceOptimizedContainer extends StatelessWidget {
     ],
   );
 
-  const _PerformanceOptimizedContainer({required this.child});
-
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -374,18 +369,14 @@ class _PerformanceOptimizedContainer extends StatelessWidget {
 
 /// Memory-efficient pie chart implementation
 class PieChartV3 extends StatefulWidget {
+
+  const PieChartV3({
+    required this.data, required this.title, required this.color, required this.onTap, super.key,
+  });
   final List<MatrixNode> data;
   final String title;
   final Color color;
   final Function(String, String) onTap;
-
-  const PieChartV3({
-    super.key,
-    required this.data,
-    required this.title,
-    required this.color,
-    required this.onTap,
-  });
 
   @override
   State<PieChartV3> createState() => _PieChartV3State();
@@ -395,7 +386,7 @@ class _PieChartV3State extends State<PieChartV3> {
   List<MatrixNode>? _cachedTopItems;
   double? _cachedTotal;
   List<PieChartSectionData>? _cachedSections;
-  int _touchedIndex = -1;
+  final int _touchedIndex = -1;
 
   @override
   Widget build(BuildContext context) {

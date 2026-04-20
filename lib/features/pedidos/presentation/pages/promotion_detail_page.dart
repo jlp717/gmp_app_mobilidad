@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../data/pedidos_service.dart';
-import '../utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 
 class PromotionDetailPage extends StatefulWidget {
+
+  const PromotionDetailPage({
+    required this.promoType, required this.promoCode, required this.promoDesc, required this.dateFrom, required this.dateTo, required this.minQty, required this.giftQty, required this.cumulative, required this.items, required this.onProductTap, super.key,
+    this.onAddGift,
+    this.hasStockResolver,
+    this.qtyInOrderResolver,
+  });
   final String promoType;
   final String promoCode;
   final String promoDesc;
@@ -18,23 +25,6 @@ class PromotionDetailPage extends StatefulWidget {
       onAddGift;
   final bool? Function(String code)? hasStockResolver;
   final double Function(String code)? qtyInOrderResolver;
-
-  const PromotionDetailPage({
-    Key? key,
-    required this.promoType,
-    required this.promoCode,
-    required this.promoDesc,
-    required this.dateFrom,
-    required this.dateTo,
-    required this.minQty,
-    required this.giftQty,
-    required this.cumulative,
-    required this.items,
-    required this.onProductTap,
-    this.onAddGift,
-    this.hasStockResolver,
-    this.qtyInOrderResolver,
-  }) : super(key: key);
 
   @override
   State<PromotionDetailPage> createState() => _PromotionDetailPageState();
@@ -68,16 +58,16 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
   }
 
   double get _selectedGiftQty =>
-      _giftSelection.values.fold(0.0, (sum, qty) => sum + qty);
+      _giftSelection.values.fold(0, (sum, qty) => sum + qty);
 
   void _changeGiftQty(String code, double delta) {
     if (widget.promoType == 'GIFT' && _eligibleGiftQty <= 0) {
       return;
     }
     final current = _giftSelection[code] ?? 0;
-    double next = (current + delta).clamp(0, 9999).toDouble();
+    var next = (current + delta).clamp(0, 9999).toDouble();
     if (widget.promoType == 'GIFT' && _eligibleGiftQty > 0) {
-      final maxForThis = (_eligibleGiftQty - _selectedGiftQty + current);
+      final maxForThis = _eligibleGiftQty - _selectedGiftQty + current;
       if (next > maxForThis) next = maxForThis;
     }
     if (next <= 0) {
@@ -207,7 +197,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                       color: AppTheme.neonPurple.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                          color: AppTheme.neonPurple.withValues(alpha: 0.2)),
+                          color: AppTheme.neonPurple.withValues(alpha: 0.2),),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -257,7 +247,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                 hintText: 'Buscar articulo en promocion...',
                 hintStyle: const TextStyle(color: Colors.white38),
                 prefixIcon: const Icon(Icons.search,
-                    color: AppTheme.neonBlue, size: 18),
+                    color: AppTheme.neonBlue, size: 18,),
                 suffixIcon: IconButton(
                   onPressed: () =>
                       setState(() => _onlyWithStock = !_onlyWithStock),
@@ -306,11 +296,11 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide(
-                              color: AppTheme.borderColor.withOpacity(0.5)),
+                              color: AppTheme.borderColor.withOpacity(0.5),),
                         ),
                         child: ListTile(
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6),
+                              horizontal: 12, vertical: 6,),
                           title: Text(
                             item.name,
                             style: const TextStyle(
@@ -350,7 +340,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                                       'Oferta: ${PedidosFormatters.money(item.promoPrice, decimals: 3)}',
                                       style: const TextStyle(
                                           color: AppTheme.neonGreen,
-                                          fontSize: 11),
+                                          fontSize: 11,),
                                     ),
                                   if (item.promoType == 'GIFT' &&
                                       widget.minQty > 0 &&
@@ -360,7 +350,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                                       style: const TextStyle(
                                           color: AppTheme.neonPurple,
                                           fontSize: 11,
-                                          fontWeight: FontWeight.w700),
+                                          fontWeight: FontWeight.w700,),
                                     ),
                                 ],
                               ),
@@ -381,7 +371,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                             child: const Text(
                               'Seleccionar',
                               style: TextStyle(
-                                  fontSize: 11, fontWeight: FontWeight.w700),
+                                  fontSize: 11, fontWeight: FontWeight.w700,),
                             ),
                           ),
                           isThreeLine: widget.promoType == 'GIFT',
@@ -403,7 +393,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                                     const SizedBox(height: 6),
                                     Text(
                                       PedidosFormatters.number(
-                                          _giftSelection[item.code] ?? 0),
+                                          _giftSelection[item.code] ?? 0,),
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
@@ -459,7 +449,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                         ? 'Aplicando regalos...'
                         : 'Añadir regalos seleccionados',
                     style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 14),
+                        fontWeight: FontWeight.bold, fontSize: 14,),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.warning,
@@ -528,7 +518,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
         if (_eligibleGiftQty > 0) ...[
           Row(
             children: [
-              Icon(Icons.check_circle, color: AppTheme.neonGreen, size: 14),
+              const Icon(Icons.check_circle, color: AppTheme.neonGreen, size: 14),
               const SizedBox(width: 4),
               Text(
                 'Tienes ${maxGifts.toStringAsFixed(0)} regalo(s) disponible(s)',
@@ -553,7 +543,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
             ),
           const SizedBox(height: 4),
           Text(
-            'Seleccionados: ${PedidosFormatters.number(_selectedGiftQty, decimals: 0)} / ${PedidosFormatters.number(_eligibleGiftQty, decimals: 0)}',
+            'Seleccionados: ${PedidosFormatters.number(_selectedGiftQty)} / ${PedidosFormatters.number(_eligibleGiftQty)}',
             style: TextStyle(
               color: _selectedGiftQty > _eligibleGiftQty
                   ? AppTheme.error
@@ -565,7 +555,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
         ] else ...[
           Row(
             children: [
-              Icon(Icons.info_outline, color: AppTheme.warning, size: 14),
+              const Icon(Icons.info_outline, color: AppTheme.warning, size: 14),
               const SizedBox(width: 4),
               Text(
                 'Faltan ${remaining.toStringAsFixed(0)} uds para desbloquear el regalo',

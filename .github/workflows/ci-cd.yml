@@ -154,7 +154,7 @@ jobs:
             FOUND=1
           fi
           # Check for .env files in repo
-          if git ls-files | grep -E "\.env$|\.env\.(local|production|staging)$" 2>/dev/null; then
+          if git ls-files | grep -E "\.env$|\.env\.(local|production|staging|produccion)$" 2>/dev/null; then
             echo "❌ Found .env files committed!"
             FOUND=1
           fi

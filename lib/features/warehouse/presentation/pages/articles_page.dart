@@ -1,11 +1,12 @@
 /// ARTICLES PAGE — Catalogo de articulos con dimensiones
 /// Buscar articulos y establecer dimensiones reales para el planificador 3D
+library;
 
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../data/warehouse_data_service.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
 
 class ArticlesPage extends StatefulWidget {
   const ArticlesPage({super.key});
@@ -48,7 +49,6 @@ class _ArticlesPageState extends State<ArticlesPage> {
       final arts = await WarehouseDataService.getArticles(
         search: q.isEmpty ? null : q,
         onlyWithDimensions: _onlyWithDims ? true : null,
-        limit: 200,
       );
       if (mounted) {
         final filtered = _onlyRecent
@@ -81,14 +81,14 @@ class _ArticlesPageState extends State<ArticlesPage> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('$estimated articulos estimados automaticamente'),
           backgroundColor: AppTheme.neonGreen,
-        ));
+        ),);
         _search(_searchC.text);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Error: $e'), backgroundColor: Colors.redAccent,
-        ));
+        ),);
       }
     } finally {
       if (mounted) setState(() => _bulkEstimating = false);
@@ -102,7 +102,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
         backgroundColor: AppTheme.darkCard,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('RESETEAR TODAS las dimensiones',
-            style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+            style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
           Text(
             'Esto eliminara TODAS las dimensiones reales guardadas ($_withDimsCount articulos). '
@@ -114,7 +114,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
             'Esta accion NO se puede deshacer.',
             style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w700),
           ),
-        ]),
+        ],),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dCtx, false),
@@ -140,14 +140,14 @@ class _ArticlesPageState extends State<ArticlesPage> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('$deleted dimensiones reales eliminadas'),
           backgroundColor: Colors.amber,
-        ));
+        ),);
         _search(_searchC.text);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('Error: $e'), backgroundColor: Colors.redAccent,
-        ));
+        ),);
       }
     } finally {
       if (mounted) setState(() => _bulkResetting = false);
@@ -168,7 +168,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                 : _articles.isEmpty
                     ? Center(child: Text(
                         _searchC.text.isEmpty ? 'Cargando articulos...' : 'Sin resultados',
-                        style: const TextStyle(color: Colors.white30, fontSize: 13)))
+                        style: const TextStyle(color: Colors.white30, fontSize: 13),),)
                     : RefreshIndicator(
                         onRefresh: () => _search(_searchC.text),
                         color: AppTheme.neonBlue,
@@ -177,8 +177,8 @@ class _ArticlesPageState extends State<ArticlesPage> {
                           itemCount: _articles.length,
                           itemBuilder: (_, i) => _articleCard(_articles[i]),
                         ),
-                      )),
-      ]),
+                      ),),
+      ],),
     );
   }
 
@@ -186,43 +186,41 @@ class _ArticlesPageState extends State<ArticlesPage> {
     return Container(
       padding: EdgeInsets.fromLTRB(
           Responsive.padding(context, small: 12, large: 16), 12,
-          Responsive.padding(context, small: 12, large: 16), 4),
+          Responsive.padding(context, small: 12, large: 16), 4,),
       child: Row(children: [
         Container(
           padding: EdgeInsets.all(Responsive.padding(context, small: 6, large: 8)),
           decoration: BoxDecoration(
             color: AppTheme.neonGreen.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10)),
+            borderRadius: BorderRadius.circular(10),),
           child: Icon(Icons.inventory_2_rounded, color: AppTheme.neonGreen,
-              size: Responsive.iconSize(context, phone: 18, desktop: 22)),
+              size: Responsive.iconSize(context, phone: 18, desktop: 22),),
         ),
         const SizedBox(width: 12),
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text('CATALOGO DE ARTICULOS', style: TextStyle(
               color: Colors.white,
               fontSize: Responsive.fontSize(context, small: 13, large: 16),
-              fontWeight: FontWeight.w800, letterSpacing: 1)),
+              fontWeight: FontWeight.w800, letterSpacing: 1,),),
           Text('Dimensiones para el planificador 3D',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 10)),
-        ])),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 10),),
+        ],),),
         if (_withDimsCount > 0)
           _bulkResetting
             ? const SizedBox(width: 20, height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.redAccent))
+                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.redAccent),)
             : IconButton(
                 icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 20),
                 tooltip: 'Resetear TODAS las dimensiones reales',
                 onPressed: _bulkReset,
               ),
-        _bulkEstimating
-          ? const SizedBox(width: 20, height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonGreen))
-          : IconButton(
+        if (_bulkEstimating) const SizedBox(width: 20, height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonGreen),) else IconButton(
               icon: const Icon(Icons.auto_fix_high_rounded, color: AppTheme.neonGreen, size: 20),
               tooltip: 'Auto-estimar dimensiones',
               onPressed: _bulkEstimate,
             ),
-      ]),
+      ],),
     );
   }
 
@@ -233,11 +231,11 @@ class _ArticlesPageState extends State<ArticlesPage> {
         _statBadge('$_totalCount total', Colors.white24),
         const SizedBox(width: 6),
         _statBadge('$_withDimsCount con medidas',
-            AppTheme.neonGreen.withValues(alpha: 0.3)),
+            AppTheme.neonGreen.withValues(alpha: 0.3),),
         const SizedBox(width: 6),
         _statBadge('$_recentCount en pedidos',
-            AppTheme.neonBlue.withValues(alpha: 0.3)),
-      ]),
+            AppTheme.neonBlue.withValues(alpha: 0.3),),
+      ],),
     );
   }
 
@@ -245,10 +243,10 @@ class _ArticlesPageState extends State<ArticlesPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-          color: color, borderRadius: BorderRadius.circular(6)),
+          color: color, borderRadius: BorderRadius.circular(6),),
       child: Text(text,
           style: const TextStyle(
-              color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w600)),
+              color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w600,),),
     );
   }
 
@@ -267,12 +265,12 @@ class _ArticlesPageState extends State<ArticlesPage> {
             suffixIcon: _searchC.text.isNotEmpty
                 ? IconButton(
                     icon: const Icon(Icons.clear_rounded, size: 18, color: Colors.white30),
-                    onPressed: () { _searchC.clear(); _search(''); })
+                    onPressed: () { _searchC.clear(); _search(''); },)
                 : null,
             filled: true, fillColor: AppTheme.darkCard,
             border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none),
+                borderSide: BorderSide.none,),
             contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           ),
         ),
@@ -289,11 +287,11 @@ class _ArticlesPageState extends State<ArticlesPage> {
             backgroundColor: AppTheme.darkCard,
             checkmarkColor: AppTheme.neonGreen,
             labelStyle: TextStyle(
-                color: _onlyWithDims ? AppTheme.neonGreen : Colors.white38),
+                color: _onlyWithDims ? AppTheme.neonGreen : Colors.white38,),
             side: BorderSide(
                 color: _onlyWithDims
                     ? AppTheme.neonGreen.withValues(alpha: 0.3)
-                    : Colors.transparent),
+                    : Colors.transparent,),
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             visualDensity: VisualDensity.compact,
           ),
@@ -309,16 +307,16 @@ class _ArticlesPageState extends State<ArticlesPage> {
             backgroundColor: AppTheme.darkCard,
             checkmarkColor: AppTheme.neonBlue,
             labelStyle: TextStyle(
-                color: _onlyRecent ? AppTheme.neonBlue : Colors.white38),
+                color: _onlyRecent ? AppTheme.neonBlue : Colors.white38,),
             side: BorderSide(
                 color: _onlyRecent
                     ? AppTheme.neonBlue.withValues(alpha: 0.3)
-                    : Colors.transparent),
+                    : Colors.transparent,),
             materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
             visualDensity: VisualDensity.compact,
           ),
-        ]),
-      ]),
+        ],),
+      ],),
     );
   }
 
@@ -343,7 +341,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
       decoration: BoxDecoration(
         color: AppTheme.darkCard,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: dimColor.withValues(alpha: 0.08))),
+        border: Border.all(color: dimColor.withValues(alpha: 0.08)),),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
         onTap: () => _showEditSheet(a),
@@ -354,7 +352,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
               width: 6, height: 44,
               decoration: BoxDecoration(
                 color: dimColor.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(3)),
+                borderRadius: BorderRadius.circular(3),),
             ),
             const SizedBox(width: 10),
             Container(
@@ -363,12 +361,12 @@ class _ArticlesPageState extends State<ArticlesPage> {
                 color: AppTheme.neonBlue.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.15))),
+                    color: AppTheme.neonBlue.withValues(alpha: 0.15),),),
               child: Text(a.code,
                   style: const TextStyle(
                     color: AppTheme.neonBlue, fontSize: 11,
                     fontWeight: FontWeight.w800, fontFamily: 'monospace',
-                    letterSpacing: 0.5)),
+                    letterSpacing: 0.5,),),
             ),
             const SizedBox(width: 10),
             Expanded(child: Column(
@@ -376,46 +374,46 @@ class _ArticlesPageState extends State<ArticlesPage> {
               Text(a.name.isNotEmpty ? a.name : a.code,
                   style: const TextStyle(
                       color: Colors.white, fontSize: 12,
-                      fontWeight: FontWeight.w600),
-                  maxLines: 1, overflow: TextOverflow.ellipsis),
+                      fontWeight: FontWeight.w600,),
+                  maxLines: 1, overflow: TextOverflow.ellipsis,),
               const SizedBox(height: 2),
               Row(children: [
                 _infoChip('${a.weight.toStringAsFixed(1)} kg/ud',
-                    Icons.scale_rounded),
+                    Icons.scale_rounded,),
                 const SizedBox(width: 6),
                 _infoChip('${a.unitsPerBox} ud/caja',
-                    Icons.all_inbox_rounded),
+                    Icons.all_inbox_rounded,),
                 if (a.inRecentOrders) ...[
                   const SizedBox(width: 6),
                   Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 1),
+                        horizontal: 4, vertical: 1,),
                     decoration: BoxDecoration(
                       color: AppTheme.neonBlue.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(3)),
+                      borderRadius: BorderRadius.circular(3),),
                     child: const Text('RECIENTE',
                         style: TextStyle(
                             color: AppTheme.neonBlue, fontSize: 7,
-                            fontWeight: FontWeight.w800)),
+                            fontWeight: FontWeight.w800,),),
                   ),
                 ],
-              ]),
-            ])),
+              ],),
+            ],),),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
                 color: dimColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6)),
+                borderRadius: BorderRadius.circular(6),),
               child: Column(mainAxisSize: MainAxisSize.min, children: [
                 Text(dimText, style: TextStyle(
-                    color: dimColor, fontSize: 9, fontWeight: FontWeight.w700)),
+                    color: dimColor, fontSize: 9, fontWeight: FontWeight.w700,),),
                 Text(hasReal ? 'REAL' : (hasDims ? 'ESTIMADO' : ''),
                     style: TextStyle(
                         color: dimColor.withValues(alpha: 0.6),
-                        fontSize: 7, fontWeight: FontWeight.w800)),
-              ]),
+                        fontSize: 7, fontWeight: FontWeight.w800,),),
+              ],),
             ),
-          ]),
+          ],),
         ),
       ),
     );
@@ -426,40 +424,40 @@ class _ArticlesPageState extends State<ArticlesPage> {
       Icon(icon, size: 10, color: Colors.white24),
       const SizedBox(width: 2),
       Text(text, style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.4), fontSize: 10)),
-    ]);
+          color: Colors.white.withValues(alpha: 0.4), fontSize: 10,),),
+    ],);
   }
 
   void _showEditSheet(ArticleDimension a) {
     final largoC = TextEditingController(
         text: a.hasRealDimensions
             ? a.largoCm?.toStringAsFixed(0) ?? ''
-            : '');
+            : '',);
     final anchoC = TextEditingController(
         text: a.hasRealDimensions
             ? a.anchoCm?.toStringAsFixed(0) ?? ''
-            : '');
+            : '',);
     final altoC = TextEditingController(
         text: a.hasRealDimensions
             ? a.altoCm?.toStringAsFixed(0) ?? ''
-            : '');
+            : '',);
     final pesoC = TextEditingController(
-        text: a.pesoOverrideKg?.toStringAsFixed(1) ?? '');
+        text: a.pesoOverrideKg?.toStringAsFixed(1) ?? '',);
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.darkCard,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),),
       builder: (ctx) => Padding(
         padding: EdgeInsets.fromLTRB(
             Responsive.padding(ctx, small: 14, large: 20), 16,
             Responsive.padding(ctx, small: 14, large: 20),
-            MediaQuery.of(ctx).viewInsets.bottom + 20),
+            MediaQuery.of(ctx).viewInsets.bottom + 20,),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Container(width: 40, height: 4, decoration: BoxDecoration(
-              color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+              color: Colors.white24, borderRadius: BorderRadius.circular(2),),),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -467,32 +465,32 @@ class _ArticlesPageState extends State<ArticlesPage> {
               color: AppTheme.neonBlue.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.2))),
+                  color: AppTheme.neonBlue.withValues(alpha: 0.2),),),
             child: Text(a.code,
                 style: const TextStyle(
                     color: AppTheme.neonBlue, fontSize: 14,
                     fontWeight: FontWeight.w800, fontFamily: 'monospace',
-                    letterSpacing: 1)),
+                    letterSpacing: 1,),),
           ),
           const SizedBox(height: 8),
           Text(a.name.isNotEmpty ? a.name : a.code,
               style: const TextStyle(
                   color: Colors.white, fontSize: 15,
-                  fontWeight: FontWeight.w700),
+                  fontWeight: FontWeight.w700,),
               maxLines: 2, overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center),
+              textAlign: TextAlign.center,),
           const SizedBox(height: 4),
           Row(mainAxisAlignment: MainAxisAlignment.center, children: [
             Text('${a.weight.toStringAsFixed(2)} kg/ud',
                 style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.4),
-                    fontSize: 11)),
+                    fontSize: 11,),),
             const SizedBox(width: 12),
             Text('${a.unitsPerBox} ud/caja',
                 style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.4),
-                    fontSize: 11)),
-          ]),
+                    fontSize: 11,),),
+          ],),
           // Status badge: REAL vs ESTIMADO
           Padding(
             padding: const EdgeInsets.only(top: 8),
@@ -532,7 +530,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                     fontWeight: FontWeight.w700,
                   ),
                 ),
-              ]),
+              ],),
             ),
           ),
           if (!a.hasRealDimensions && a.estLargoCm != null)
@@ -542,8 +540,8 @@ class _ArticlesPageState extends State<ArticlesPage> {
                   'Introduce medidas reales verificadas con cinta metrica',
                   style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.3),
-                      fontSize: 10),
-                  textAlign: TextAlign.center),
+                      fontSize: 10,),
+                  textAlign: TextAlign.center,),
             ),
           const SizedBox(height: 16),
           Row(children: [
@@ -552,7 +550,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
             Expanded(child: _field(anchoC, 'Ancho (cm)')),
             const SizedBox(width: 10),
             Expanded(child: _field(altoC, 'Alto (cm)')),
-          ]),
+          ],),
           const SizedBox(height: 12),
           _field(pesoC, 'Peso por caja (kg) - opcional'),
           const SizedBox(height: 16),
@@ -565,7 +563,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
               if (largo == null || ancho == null || alto == null) {
                 ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
                     content: Text('Introduce las 3 dimensiones'),
-                    backgroundColor: Colors.amber));
+                    backgroundColor: Colors.amber,),);
                 return;
               }
               // Confirmation dialog
@@ -575,7 +573,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                   backgroundColor: AppTheme.darkCard,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   title: const Text('Confirmar dimensiones REALES',
-                      style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                      style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),),
                   content: Column(mainAxisSize: MainAxisSize.min, children: [
                     Text(
                       'Estas guardando ${largo.toStringAsFixed(0)} x ${ancho.toStringAsFixed(0)} x ${alto.toStringAsFixed(0)} cm como dimensiones REALES verificadas.',
@@ -586,7 +584,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                       'Estas medidas se usaran en el planificador 3D. Asegurate de haberlas medido fisicamente.',
                       style: TextStyle(color: Colors.amber.withValues(alpha: 0.8), fontSize: 11),
                     ),
-                  ]),
+                  ],),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.pop(dCtx, false),
@@ -615,20 +613,20 @@ class _ArticlesPageState extends State<ArticlesPage> {
                 if (ctx.mounted) {
                   ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
                       content: Text('Error: $e'),
-                      backgroundColor: Colors.redAccent));
+                      backgroundColor: Colors.redAccent,),);
                 }
               }
             },
             icon: const Icon(Icons.save_rounded, size: 18),
             label: const Text('GUARDAR COMO REAL',
                 style: TextStyle(
-                    fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+                    fontWeight: FontWeight.w700, letterSpacing: 0.5,),),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.2),
               foregroundColor: AppTheme.neonGreen,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10))),
-          )),
+                  borderRadius: BorderRadius.circular(10),),),
+          ),),
           // Undo button: delete real dimensions
           if (a.hasRealDimensions) ...[
             const SizedBox(height: 8),
@@ -641,7 +639,7 @@ class _ArticlesPageState extends State<ArticlesPage> {
                     backgroundColor: AppTheme.darkCard,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     title: const Text('Eliminar dimensiones reales',
-                        style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700)),
+                        style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),),
                     content: Text(
                       'Se eliminaran las dimensiones reales guardadas y el articulo volvera a usar dimensiones estimadas automaticamente.',
                       style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13),
@@ -671,27 +669,27 @@ class _ArticlesPageState extends State<ArticlesPage> {
                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                       content: Text('Dimensiones reales eliminadas, vuelve a estimado'),
                       backgroundColor: Colors.amber,
-                    ));
+                    ),);
                   }
                 } catch (e) {
                   if (ctx.mounted) {
                     ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
                         content: Text('Error: $e'),
-                        backgroundColor: Colors.redAccent));
+                        backgroundColor: Colors.redAccent,),);
                   }
                 }
               },
               icon: const Icon(Icons.undo_rounded, size: 16),
               label: const Text('VOLVER A ESTIMADO',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),),
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.redAccent,
                 side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.3)),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10))),
-            )),
+                    borderRadius: BorderRadius.circular(10),),),
+            ),),
           ],
-        ]),
+        ],),
       ),
     );
   }
@@ -704,13 +702,13 @@ class _ArticlesPageState extends State<ArticlesPage> {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(
-            color: Colors.white.withValues(alpha: 0.4), fontSize: 11),
+            color: Colors.white.withValues(alpha: 0.4), fontSize: 11,),
         filled: true, fillColor: AppTheme.darkBase,
         border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide.none),
+            borderSide: BorderSide.none,),
         contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12, vertical: 10),
+            horizontal: 12, vertical: 10,),
       ),
     );
   }

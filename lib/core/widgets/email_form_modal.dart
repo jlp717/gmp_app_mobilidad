@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
-import '../utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 /// 📧 EMAIL FORM MODAL
@@ -21,26 +21,26 @@ import '../utils/responsive.dart';
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class EmailFormResult {
-  final String email;
-  final String subject;
-  final String body;
 
   const EmailFormResult({
     required this.email,
     required this.subject,
     required this.body,
   });
+  final String email;
+  final String subject;
+  final String body;
 }
 
 class EmailFormModal extends StatefulWidget {
-  final String defaultSubject;
-  final String defaultBody;
 
   const EmailFormModal({
     super.key,
     this.defaultSubject = '',
     this.defaultBody = '',
   });
+  final String defaultSubject;
+  final String defaultBody;
 
   /// Show the modal and return the form result, or null if cancelled
   static Future<EmailFormResult?> show(
@@ -50,7 +50,6 @@ class EmailFormModal extends StatefulWidget {
   }) {
     return showDialog<EmailFormResult>(
       context: context,
-      barrierDismissible: true,
       builder: (ctx) => EmailFormModal(
         defaultSubject: defaultSubject,
         defaultBody: defaultBody,

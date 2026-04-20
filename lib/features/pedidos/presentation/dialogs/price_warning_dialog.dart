@@ -1,20 +1,19 @@
 /// Price Warning Dialog
 /// ====================
 /// Alert when price is below minimum
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 
 class PriceWarningDialog extends StatelessWidget {
-  final double price;
-  final double minPrice;
 
   const PriceWarningDialog({
-    Key? key,
-    required this.price,
-    required this.minPrice,
-  }) : super(key: key);
+    required this.price, required this.minPrice, super.key,
+  });
+  final double price;
+  final double minPrice;
 
   /// Show the dialog and return true if user accepts
   static Future<bool?> show(
@@ -33,12 +32,12 @@ class PriceWarningDialog extends StatelessWidget {
     return AlertDialog(
       backgroundColor: AppTheme.darkSurface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Row(
+      title: const Row(
         children: [
           Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 24),
-          const SizedBox(width: 8),
-          const Text('Precio bajo',
-              style: TextStyle(color: Colors.white, fontSize: 18)),
+          SizedBox(width: 8),
+          Text('Precio bajo',
+              style: TextStyle(color: Colors.white, fontSize: 18),),
         ],
       ),
       content: Text(

@@ -1,25 +1,24 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 /// Shared empty state widget used across multiple pages.
 /// Displays an icon, title, optional subtitle, and optional action button.
 class EmptyStateWidget extends StatelessWidget {
+
+  const EmptyStateWidget({
+    required this.title, super.key,
+    this.icon = Icons.inbox_outlined,
+    this.subtitle,
+    this.onAction,
+    this.actionLabel,
+    this.iconColor,
+  });
   final IconData icon;
   final String title;
   final String? subtitle;
   final VoidCallback? onAction;
   final String? actionLabel;
   final Color? iconColor;
-
-  const EmptyStateWidget({
-    super.key,
-    this.icon = Icons.inbox_outlined,
-    required this.title,
-    this.subtitle,
-    this.onAction,
-    this.actionLabel,
-    this.iconColor,
-  });
 
   @override
   Widget build(BuildContext context) {

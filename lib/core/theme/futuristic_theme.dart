@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:ui';
 
 /// 🚀 FUTURISTIC THEME - Tema ultra-moderno con glassmorphism
 ///
@@ -147,7 +146,6 @@ class FuturisticTheme {
     BoxShadow(
       color: cyanNeon.withOpacity(0.1),
       blurRadius: 30,
-      spreadRadius: 0,
       offset: const Offset(0, 10),
     ),
   ];
@@ -174,37 +172,32 @@ class FuturisticTheme {
       // Colores base
       scaffoldBackgroundColor: lightBackground,
       primaryColor: cyanNeon,
-      colorScheme: ColorScheme.light(
+      colorScheme: const ColorScheme.light(
         primary: cyanNeon,
         secondary: magentaNeon,
         tertiary: purpleNeon,
         error: redNeon,
-        surface: lightSurface,
-        onPrimary: Colors.white,
         onSecondary: Colors.white,
         onSurface: lightTextPrimary,
-        onError: Colors.white,
-        background: lightBackground,
-        onBackground: lightTextPrimary,
-        surfaceVariant: Color(0xFFF1F5F9),
+        surfaceContainerHighest: Color(0xFFF1F5F9),
         onSurfaceVariant: lightTextSecondary,
         outline: Color(0xFFCBD5E1),
         outlineVariant: Color(0xFFE2E8F0),
       ),
 
       // AppBar
-      appBarTheme: AppBarTheme(
+      appBarTheme: const AppBarTheme(
         centerTitle: false,
         elevation: 0,
         scrolledUnderElevation: 0,
         backgroundColor: Colors.transparent,
         foregroundColor: lightTextPrimary,
-        titleTextStyle: const TextStyle(
+        titleTextStyle: TextStyle(
           color: lightTextPrimary,
           fontSize: 20,
           fontWeight: FontWeight.w700,
         ),
-        iconTheme: const IconThemeData(
+        iconTheme: IconThemeData(
           color: lightTextPrimary,
           size: 24,
         ),
@@ -216,9 +209,8 @@ class FuturisticTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: BorderSide(
+          side: const BorderSide(
             color: Color(0xFFE2E8F0),
-            width: 1,
           ),
         ),
       ),
@@ -234,9 +226,9 @@ class FuturisticTheme {
             borderRadius: BorderRadius.circular(16),
           ),
         ).copyWith(
-          backgroundColor: MaterialStateProperty.resolveWith((states) {
-            if (states.contains(MaterialState.disabled)) {
-              return Color(0xFFE2E8F0);
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
+              return const Color(0xFFE2E8F0);
             }
             return cyanNeon;
           }),
@@ -269,11 +261,11 @@ class FuturisticTheme {
         fillColor: lightSurface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Color(0xFFE2E8F0)),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Color(0xFFE2E8F0)),
+          borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
@@ -309,31 +301,31 @@ class FuturisticTheme {
         elevation: 8,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: Color(0xFFE2E8F0), width: 1),
+          side: const BorderSide(color: Color(0xFFE2E8F0)),
         ),
       ),
 
       // Bottom Sheet
-      bottomSheetTheme: BottomSheetThemeData(
+      bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: lightSurface,
-        shape: const RoundedRectangleBorder(
+        shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
         ),
       ),
 
       // Chip
       chipTheme: ChipThemeData(
-        backgroundColor: Color(0xFFF1F5F9),
+        backgroundColor: const Color(0xFFF1F5F9),
         selectedColor: cyanNeon.withOpacity(0.2),
         labelStyle: const TextStyle(color: lightTextPrimary),
-        side: BorderSide(color: Color(0xFFE2E8F0)),
+        side: const BorderSide(color: Color(0xFFE2E8F0)),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
       ),
 
       // Divider
-      dividerTheme: DividerThemeData(
+      dividerTheme: const DividerThemeData(
         color: Color(0xFFE2E8F0),
         thickness: 1,
         space: 1,
@@ -432,36 +424,36 @@ class FuturisticTheme {
 
       // Switch
       switchTheme: SwitchThemeData(
-        thumbColor: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return cyanNeon;
           }
           return lightTextTertiary;
         }),
-        trackColor: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return cyanNeon.withOpacity(0.5);
           }
-          return Color(0xFFE2E8F0);
+          return const Color(0xFFE2E8F0);
         }),
       ),
 
       // Checkbox
       checkboxTheme: CheckboxThemeData(
-        fillColor: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return cyanNeon;
           }
           return Colors.transparent;
         }),
-        checkColor: MaterialStateProperty.all(Colors.white),
-        side: BorderSide(color: Color(0xFFCBD5E1), width: 2),
+        checkColor: WidgetStateProperty.all(Colors.white),
+        side: const BorderSide(color: Color(0xFFCBD5E1), width: 2),
       ),
 
       // Radio
       radioTheme: RadioThemeData(
-        fillColor: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return cyanNeon;
           }
           return lightTextTertiary;
@@ -471,7 +463,7 @@ class FuturisticTheme {
       // Slider
       sliderTheme: SliderThemeData(
         activeTrackColor: cyanNeon,
-        inactiveTrackColor: Color(0xFFE2E8F0),
+        inactiveTrackColor: const Color(0xFFE2E8F0),
         thumbColor: cyanNeon,
         overlayColor: cyanNeon.withOpacity(0.2),
       ),
@@ -486,7 +478,7 @@ class FuturisticTheme {
       // Colores base
       scaffoldBackgroundColor: backgroundDark,
       primaryColor: cyanNeon,
-      colorScheme: ColorScheme.dark(
+      colorScheme: const ColorScheme.dark(
         primary: cyanNeon,
         secondary: magentaNeon,
         tertiary: purpleNeon,
@@ -494,7 +486,6 @@ class FuturisticTheme {
         surface: surfaceDark,
         onPrimary: backgroundDark,
         onSecondary: backgroundDark,
-        onSurface: textPrimary,
         onError: textPrimary,
       ),
 
@@ -519,7 +510,6 @@ class FuturisticTheme {
           borderRadius: BorderRadius.circular(20),
           side: BorderSide(
             color: cyanNeon.withOpacity(0.2),
-            width: 1,
           ),
         ),
       ),
@@ -535,8 +525,8 @@ class FuturisticTheme {
             borderRadius: BorderRadius.circular(16),
           ),
         ).copyWith(
-          backgroundColor: MaterialStateProperty.resolveWith((states) {
-            if (states.contains(MaterialState.disabled)) {
+          backgroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) {
               return surfaceLighter.withOpacity(0.3);
             }
             return null; // Usará gradiente
@@ -610,7 +600,7 @@ class FuturisticTheme {
         elevation: 0,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: cyanNeon.withOpacity(0.3), width: 1),
+          side: BorderSide(color: cyanNeon.withOpacity(0.3)),
         ),
       ),
 
@@ -733,14 +723,14 @@ class FuturisticTheme {
 
       // Switch
       switchTheme: SwitchThemeData(
-        thumbColor: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        thumbColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return cyanNeon;
           }
           return textTertiary;
         }),
-        trackColor: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        trackColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return cyanNeon.withOpacity(0.5);
           }
           return surfaceLighter;
@@ -749,20 +739,20 @@ class FuturisticTheme {
 
       // Checkbox
       checkboxTheme: CheckboxThemeData(
-        fillColor: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return cyanNeon;
           }
           return Colors.transparent;
         }),
-        checkColor: MaterialStateProperty.all(backgroundDark),
+        checkColor: WidgetStateProperty.all(backgroundDark),
         side: BorderSide(color: cyanNeon.withOpacity(0.5), width: 2),
       ),
 
       // Radio
       radioTheme: RadioThemeData(
-        fillColor: MaterialStateProperty.resolveWith((states) {
-          if (states.contains(MaterialState.selected)) {
+        fillColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) {
             return cyanNeon;
           }
           return textTertiary;

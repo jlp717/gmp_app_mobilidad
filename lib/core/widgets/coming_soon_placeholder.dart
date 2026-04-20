@@ -1,22 +1,21 @@
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
-import '../utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// Beautiful "Coming Soon" placeholder for features under development.
 /// Preserves existing code while showing a professional placeholder.
 class ComingSoonPlaceholder extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final IconData icon;
-  final Color accentColor;
 
   const ComingSoonPlaceholder({
-    super.key,
-    required this.title,
+    required this.title, super.key,
     this.subtitle = 'Estamos trabajando en esta funcionalidad.\nDisponible próximamente.',
     this.icon = Icons.rocket_launch,
     this.accentColor = AppTheme.neonPurple,
   });
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -60,7 +59,7 @@ class ComingSoonPlaceholder extends StatelessWidget {
                     ),
                   ),
                 );
-              }),
+              },),
               const SizedBox(height: 32),
               // Responsive title
               Text(

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/providers/auth_notifier.dart';
-import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
-import '../../providers/chatbot_provider.dart';
-import '../widgets/chat_message_bubble.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Import Sync Header
+import 'package:gmp_app_mobilidad/features/chatbot/presentation/widgets/chat_message_bubble.dart';
+import 'package:gmp_app_mobilidad/features/chatbot/providers/chatbot_provider.dart';
 
 /// [ChatbotPage] - Professional AI Sales Assistant
 /// 
@@ -14,8 +14,7 @@ import '../widgets/chat_message_bubble.dart';
 /// - Gradient accents and glowing effects
 class ChatbotPage extends ConsumerStatefulWidget {
   const ChatbotPage({
-    super.key,
-    required this.vendedorCodes,
+    required this.vendedorCodes, super.key,
   });
 
   final List<String> vendedorCodes;
@@ -37,7 +36,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
       duration: const Duration(milliseconds: 2000),
       vsync: this,
     )..repeat(reverse: true);
-    _pulseAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+    _pulseAnimation = Tween<double>(begin: 0.8, end: 1).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
   }
@@ -71,7 +70,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
   @override
   Widget build(BuildContext context) {
     // Check role for custom message
-    bool isJefe = false;
+    var isJefe = false;
     try {
       final authState = ProviderScope.containerOf(context)
           .read(authProvider)
@@ -100,23 +99,23 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
                     _buildInputArea(),
                   ],
                 ),
-             )
+             ),
         ],
-      )
+      ),
     );
   }
 
   // OLD CHATBOT UI - PRESERVED FOR FUTURE USE
   Widget _buildChatbotInterface(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            const Color(0xFF0A0E21),
-            const Color(0xFF0D1320),
-            const Color(0xFF0A0E21),
+            Color(0xFF0A0E21),
+            Color(0xFF0D1320),
+            Color(0xFF0A0E21),
           ],
         ),
       ),
@@ -139,7 +138,6 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
         border: Border(
           bottom: BorderSide(
             color: AppTheme.neonBlue.withOpacity(0.2),
-            width: 1,
           ),
         ),
       ),
@@ -152,7 +150,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
+                gradient: const LinearGradient(
                   colors: [
                     AppTheme.neonBlue,
                     AppTheme.neonPurple,
@@ -170,7 +168,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  Icon(Icons.psychology, color: Colors.white, size: 28),
+                  const Icon(Icons.psychology, color: Colors.white, size: 28),
                   Positioned(
                     right: 6,
                     bottom: 6,
@@ -196,7 +194,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ShaderMask(
-                  shaderCallback: (bounds) => LinearGradient(
+                  shaderCallback: (bounds) => const LinearGradient(
                     colors: [AppTheme.neonBlue, AppTheme.neonPurple],
                   ).createShader(bounds),
                   child: const Text(
@@ -215,7 +213,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
                     Container(
                       width: 6,
                       height: 6,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: AppTheme.neonGreen,
                         shape: BoxShape.circle,
                       ),
@@ -285,7 +283,6 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: AppTheme.neonBlue.withOpacity(0.3),
-                  width: 1,
                 ),
               ),
               child: Row(
@@ -359,13 +356,13 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
               borderRadius: BorderRadius.circular(24),
               border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
             ),
-            child: Icon(Icons.psychology, size: 50, color: AppTheme.neonBlue),
+            child: const Icon(Icons.psychology, size: 50, color: AppTheme.neonBlue),
           ),
           const SizedBox(height: 28),
           
           // Title
           ShaderMask(
-            shaderCallback: (bounds) => LinearGradient(
+            shaderCallback: (bounds) => const LinearGradient(
               colors: [AppTheme.neonBlue, AppTheme.neonPurple],
             ).createShader(bounds),
             child: const Text(
@@ -500,7 +497,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
               ),
               child: Row(
                 children: [
-                  Icon(Icons.arrow_forward_ios, size: 12, color: AppTheme.neonBlue),
+                  const Icon(Icons.arrow_forward_ios, size: 12, color: AppTheme.neonBlue),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -515,7 +512,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
               ),
             ),
           ),
-        )),
+        ),),
       ],
     );
   }

@@ -7,20 +7,18 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
-import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
-import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class KpiDashboardPage extends ConsumerStatefulWidget {
-  final String employeeCode;
-  final bool isJefeVentas;
 
   const KpiDashboardPage({
-    super.key,
-    required this.employeeCode,
-    required this.isJefeVentas,
+    required this.employeeCode, required this.isJefeVentas, super.key,
   });
+  final String employeeCode;
+  final bool isJefeVentas;
 
   @override
   ConsumerState<KpiDashboardPage> createState() => _KpiDashboardPageState();
@@ -64,7 +62,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
     try {
       final vendorCode = _resolveVendorCode();
 
-      String url = ApiConfig.kpiDashboard;
+      var url = ApiConfig.kpiDashboard;
       if (vendorCode != null && vendorCode.isNotEmpty) {
         url += '?vendorCode=$vendorCode';
       }
@@ -117,7 +115,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
           // Content
           Expanded(
             child: _loading
-                ? const SkeletonList(itemCount: 4, itemHeight: 120)
+                ? const SkeletonList(itemCount: 4)
                 : _error != null
                     ? ErrorStateWidget(
                         message: _error!,
@@ -188,10 +186,10 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
           // Clients with alerts
           if (clients.isNotEmpty) ...[
             _buildSectionTitle(
-                'Clientes con alertas (${clients.length})'),
+                'Clientes con alertas (${clients.length})',),
             const SizedBox(height: 8),
             ...clients.map(
-                (c) => _buildClientTile(c as Map<String, dynamic>)),
+                (c) => _buildClientTile(c as Map<String, dynamic>),),
           ],
 
           // Empty state
@@ -411,7 +409,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
 
     // Short code: remove 4300 prefix for display
     final shortCode = code.startsWith('4300')
-        ? code.substring(4).replaceFirst(RegExp(r'^0+'), '')
+        ? code.substring(4).replaceFirst(RegExp('^0+'), '')
         : code;
 
     final headerColor = crit > 0
@@ -494,7 +492,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
               Row(
                 children: [
                   Icon(Icons.location_on_outlined,
-                      size: 14, color: Colors.grey[600]),
+                      size: 14, color: Colors.grey[600],),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
@@ -513,7 +511,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
 
             // Alerts list
             ...alerts.map(
-                (a) => _buildAlertItem(a as Map<String, dynamic>)),
+                (a) => _buildAlertItem(a as Map<String, dynamic>),),
           ],
         ),
       ),
@@ -568,7 +566,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
               ),
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 6, vertical: 1),
+                    horizontal: 6, vertical: 1,),
                 decoration: BoxDecoration(
                   color: sevColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
@@ -613,12 +611,12 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
                   .take(2)
                   .map((a) => Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
+                            horizontal: 8, vertical: 3,),
                         decoration: BoxDecoration(
                           color: color.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
-                              color: color.withValues(alpha: 0.3)),
+                              color: color.withValues(alpha: 0.3),),
                         ),
                         child: Text(
                           a.toString(),
@@ -628,7 +626,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                      ))
+                      ),)
                   .toList(),
             ),
           ],

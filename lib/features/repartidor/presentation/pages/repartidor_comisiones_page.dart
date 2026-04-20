@@ -1,25 +1,25 @@
 /// REPARTIDOR COMISIONES PAGE
 /// Pestaña de comisiones con umbral 30% y 4 tramos
 /// Dashboard, desglose por cliente, barras de progreso
+library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Import Sync Header
+import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
 import 'package:intl/intl.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
-import '../../../../core/utils/currency_formatter.dart';
-import '../../../../core/widgets/error_state_widget.dart';
-import '../../data/repartidor_data_service.dart';
 
 /// Página de comisiones para repartidores
 /// Muestra el progreso hacia el umbral del 30% y las comisiones por tramos
 class RepartidorComisionesPage extends StatefulWidget {
-  final String repartidorId;
 
   const RepartidorComisionesPage({
-    super.key,
-    required this.repartidorId,
+    required this.repartidorId, super.key,
   });
+  final String repartidorId;
 
   @override
   State<RepartidorComisionesPage> createState() => _RepartidorComisionesPageState();
@@ -106,7 +106,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
         date: DateTime.parse(d.date),
         collectable: d.collectable,
         collected: d.collected,
-      )).toList();
+      ),).toList();
 
       _lastFetchTime = DateTime.now();
       
@@ -239,12 +239,12 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
                 ),
               ),
               if (overallPct >= 30)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
+                const Padding(
+                  padding: EdgeInsets.only(top: 4),
                   child: Row(
                     children: [
                       Icon(Icons.check_circle, color: AppTheme.success, size: 14),
-                      const SizedBox(width: 4),
+                      SizedBox(width: 4),
                       Text(
                         '¡Umbral alcanzado! Las comisiones aplican.',
                         style: TextStyle(color: AppTheme.success, fontSize: 11),
@@ -358,11 +358,11 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
               Icon(Icons.info_outline, color: AppTheme.neonBlue, size: 18),
-              const SizedBox(width: 8),
-              const Text(
+              SizedBox(width: 8),
+              Text(
                 'Cómo funcionan las comisiones',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
@@ -404,18 +404,18 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
             fontSize: 12,
             fontWeight: FontWeight.w600,
             color: isActive ? AppTheme.neonGreen : AppTheme.textSecondary,
-          )),
+          ),),
           const SizedBox(width: 12),
           Text(range, style: TextStyle(
             fontSize: 11,
             color: isActive ? AppTheme.textPrimary : AppTheme.textSecondary,
-          )),
+          ),),
           const Spacer(),
           Text(rate, style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.bold,
             color: isActive ? AppTheme.neonGreen : AppTheme.textSecondary,
-          )),
+          ),),
         ],
       ),
     );
@@ -430,7 +430,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
         ),
         const SizedBox(height: 12),
-        ..._clientData.map((client) => _buildClientCard(client)),
+        ..._clientData.map(_buildClientCard),
       ],
     );
   }
@@ -508,7 +508,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
                   children: [
                     Text(
                       'Progreso: ${pct.toStringAsFixed(1)}%',
-                      style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                      style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
                     ),
                     const SizedBox(height: 4),
                     ClipRRect(
@@ -529,7 +529,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Text(
+                  const Text(
                     'Comisión',
                     style: TextStyle(fontSize: 9, color: AppTheme.textSecondary),
                   ),
@@ -552,11 +552,11 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
             children: [
               Text(
                 'Cobrable: ${CurrencyFormatter.format(client.collectable)}',
-                style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
               ),
               Text(
                 'Cobrado: ${CurrencyFormatter.format(client.collected)}',
-                style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
               ),
             ],
           ),
@@ -566,7 +566,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
               padding: const EdgeInsets.only(top: 6),
               child: Text(
                 result.tierLabel,
-                style: TextStyle(fontSize: 10, color: AppTheme.neonGreen, fontStyle: FontStyle.italic),
+                style: const TextStyle(fontSize: 10, color: AppTheme.neonGreen, fontStyle: FontStyle.italic),
               ),
             ),
         ],
@@ -612,8 +612,8 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
                       fontWeight: FontWeight.bold,
                       fontSize: 12,
                     ),
-                  )),
-                ]);
+                  ),),
+                ],);
               }).toList(),
             ),
           ),
@@ -689,7 +689,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
                             ? LinearGradient(colors: [
                                 AppTheme.neonGreen.withOpacity(0.2),
                                 AppTheme.success.withOpacity(0.1),
-                              ])
+                              ],)
                             : null,
                         color: isSelected ? null : AppTheme.darkBase,
                         borderRadius: BorderRadius.circular(12),
@@ -743,7 +743,7 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
                             ? LinearGradient(colors: [
                                 AppTheme.neonGreen.withOpacity(0.3),
                                 AppTheme.success.withOpacity(0.15),
-                              ])
+                              ],)
                             : null,
                         color: isSelected ? null : AppTheme.darkBase,
                         borderRadius: BorderRadius.circular(10),
@@ -783,12 +783,6 @@ class _RepartidorComisionesPageState extends State<RepartidorComisionesPage> {
 
 /// Modelo de datos de comisión por cliente
 class ClientCommissionData {
-  final String clientId;
-  final String clientName;
-  final double collectable;
-  final double collected;
-  final String paymentType;
-  CommissionResult? commissionResult;
 
   ClientCommissionData({
     required this.clientId,
@@ -798,17 +792,23 @@ class ClientCommissionData {
     required this.paymentType,
     this.commissionResult,
   });
+  final String clientId;
+  final String clientName;
+  final double collectable;
+  final double collected;
+  final String paymentType;
+  CommissionResult? commissionResult;
 }
 
 /// Modelo de acumulado diario
 class DailyAccumulated {
-  final DateTime date;
-  final double collectable;
-  final double collected;
 
   DailyAccumulated({
     required this.date,
     required this.collectable,
     required this.collected,
   });
+  final DateTime date;
+  final double collectable;
+  final double collected;
 }

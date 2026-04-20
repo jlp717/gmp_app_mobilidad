@@ -1,21 +1,21 @@
 /// Product Search Widget
 /// =====================
 /// Search field with debounce + family filter chips for product catalog
+library;
 
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
 class ProductSearchWidget extends ConsumerStatefulWidget {
-  final String vendedorCodes;
 
   const ProductSearchWidget({
-    Key? key,
-    required this.vendedorCodes,
-  }) : super(key: key);
+    required this.vendedorCodes, super.key,
+  });
+  final String vendedorCodes;
 
   @override
   ConsumerState<ProductSearchWidget> createState() => _ProductSearchWidgetState();
@@ -47,7 +47,7 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
 
   void _onFamilySelected(PedidosProvider provider, String? family) {
     provider.setFamilyFilter(
-        provider.selectedFamily == family ? null : family);
+        provider.selectedFamily == family ? null : family,);
     provider.loadProducts(
       vendedorCodes: widget.vendedorCodes,
       search: _searchController.text.isEmpty ? null : _searchController.text,
@@ -60,7 +60,7 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
     final provider = ref.watch(pedidosProvider);
     final pad = Responsive.contentPadding(context);
 
-    return Container(
+    return ColoredBox(
       color: AppTheme.darkBase,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -86,7 +86,7 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear,
-                            color: Colors.white38, size: 18),
+                            color: Colors.white38, size: 18,),
                         onPressed: () {
                           _searchController.clear();
                           _onSearchChanged('');

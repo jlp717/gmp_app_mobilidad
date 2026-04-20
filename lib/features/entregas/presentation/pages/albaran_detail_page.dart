@@ -1,19 +1,19 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/features/entregas/presentation/widgets/signature_pad.dart';
+import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import '../../../entregas/providers/entregas_provider.dart';
-import '../widgets/signature_pad.dart';
 
 /// Página de detalle de albarán con acciones de entrega
 class AlbaranDetailPage extends ConsumerStatefulWidget {
-  final AlbaranEntrega albaran;
 
-  const AlbaranDetailPage({super.key, required this.albaran});
+  const AlbaranDetailPage({required this.albaran, super.key});
+  final AlbaranEntrega albaran;
 
   @override
   ConsumerState<AlbaranDetailPage> createState() => _AlbaranDetailPageState();
@@ -58,7 +58,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                         fontSize: 12,
-                      )),
+                      ),),
                 ],
               ),
             )
@@ -79,7 +79,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.black87,
-                      )),
+                      ),),
                 ],
               ),
             ),
@@ -232,7 +232,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                 ),
               )
             else
-              ...widget.albaran.items.map((item) => _buildItemRow(item)),
+              ...widget.albaran.items.map(_buildItemRow),
           ],
         ),
       ),
@@ -408,7 +408,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(Icons.close,
-                                  size: 14, color: Colors.white),
+                                  size: 14, color: Colors.white,),
                             ),
                           ),
                         ),
@@ -471,7 +471,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.gesture,
-                              size: 32, color: Colors.grey.shade400),
+                              size: 32, color: Colors.grey.shade400,),
                           const SizedBox(height: 8),
                           Text(
                             'Toca para firmar',
@@ -539,7 +539,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(Icons.check_circle,
-                    color: Colors.green.shade700, size: 32),
+                    color: Colors.green.shade700, size: 32,),
                 const SizedBox(width: 12),
                 Text(
                   '¡Entrega completada!',
@@ -597,7 +597,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
+                        strokeWidth: 2, color: Colors.white,),
                   )
                 : const Icon(Icons.check_circle, size: 28),
             label: Text(
@@ -725,7 +725,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
   /// Diálogo post-entrega con opciones de ticket
   /// [popOnClose] controla si al cerrar el diálogo se vuelve a la lista
   Future<void> _showPostDeliveryDialog(
-      {bool popOnClose = true, bool isResend = false}) async {
+      {bool popOnClose = true, bool isResend = false,}) async {
     await showDialog(
       context: context,
       barrierDismissible: isResend,
@@ -821,9 +821,9 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
 
 /// Diálogo post-entrega con opciones de descarga/envío del ticket
 class _PostDeliveryDialog extends ConsumerStatefulWidget {
+  const _PostDeliveryDialog({required this.albaran, this.isResend = false});
   final AlbaranEntrega albaran;
   final bool isResend;
-  const _PostDeliveryDialog({required this.albaran, this.isResend = false});
 
   @override
   ConsumerState<_PostDeliveryDialog> createState() => _PostDeliveryDialogState();
@@ -924,7 +924,7 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white),
+                    strokeWidth: 2, color: Colors.white,),
               )
             : Icon(icon, size: 20),
         label: Text(label),
@@ -953,13 +953,13 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
                 content: Text('Error al generar el recibo'),
-                backgroundColor: Colors.red),
+                backgroundColor: Colors.red,),
           );
         }
         return;
       }
 
-      final Uint8List bytes = base64Decode(result['pdfBase64'] as String);
+      final bytes = base64Decode(result['pdfBase64'] as String);
       final dir = await getTemporaryDirectory();
       final fileName = (result['fileName'] as String?) ??
           'Nota_Entrega_${widget.albaran.numeroAlbaran}.pdf';
@@ -986,7 +986,7 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
               content: Text('PDF generado correctamente'),
-              backgroundColor: Colors.green),
+              backgroundColor: Colors.green,),
         );
       }
     } catch (e) {
@@ -996,11 +996,12 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
         );
       }
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isProcessing = false;
           _processingAction = null;
         });
+      }
     }
   }
 
@@ -1018,13 +1019,13 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
                 content: Text('Error al generar el recibo'),
-                backgroundColor: Colors.red),
+                backgroundColor: Colors.red,),
           );
         }
         return;
       }
 
-      final Uint8List bytes = base64Decode(result['pdfBase64'] as String);
+      final bytes = base64Decode(result['pdfBase64'] as String);
       final dir = await getTemporaryDirectory();
       final fileName = (result['fileName'] as String?) ??
           'Nota_Entrega_${widget.albaran.numeroAlbaran}.pdf';
@@ -1056,11 +1057,12 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
         );
       }
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isProcessing = false;
           _processingAction = null;
         });
+      }
     }
   }
 
@@ -1097,7 +1099,7 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
                 ScaffoldMessenger.of(ctx).showSnackBar(
                   const SnackBar(
                       content: Text('Email no válido'),
-                      backgroundColor: Colors.orange),
+                      backgroundColor: Colors.orange,),
                 );
               }
             },
@@ -1124,7 +1126,7 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                success ? 'Email enviado a $email' : 'Error al enviar email'),
+                success ? 'Email enviado a $email' : 'Error al enviar email',),
             backgroundColor: success ? Colors.green : Colors.red,
           ),
         );
@@ -1136,11 +1138,12 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
         );
       }
     } finally {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isProcessing = false;
           _processingAction = null;
         });
+      }
     }
   }
 }

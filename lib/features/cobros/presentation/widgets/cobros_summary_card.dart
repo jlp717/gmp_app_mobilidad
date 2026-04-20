@@ -1,25 +1,21 @@
 /// COBROS SUMMARY CARD
 /// Tarjeta de resumen diario de entregas
+library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:intl/intl.dart';
 
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-
 class CobrosSummaryCard extends StatelessWidget {
+
+  const CobrosSummaryCard({
+    required this.totalPendientes, required this.totalCompletadas, required this.totalCTR, required this.importeTotal, super.key,
+  });
   final int totalPendientes;
   final int totalCompletadas;
   final int totalCTR;
   final double importeTotal;
-
-  const CobrosSummaryCard({
-    super.key,
-    required this.totalPendientes,
-    required this.totalCompletadas,
-    required this.totalCTR,
-    required this.importeTotal,
-  });
 
   @override
   Widget build(BuildContext context) {

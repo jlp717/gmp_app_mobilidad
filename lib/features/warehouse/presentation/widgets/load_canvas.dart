@@ -3,11 +3,10 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/application/load_planner_provider.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_models.dart';
 import 'package:webview_flutter/webview_flutter.dart';
-
-import '../../../../core/theme/app_theme.dart';
-import '../../application/load_planner_provider.dart';
-import '../../domain/models/load_planner_models.dart';
 
 /// Interactive 3D canvas powered by Three.js in a WebView.
 ///
@@ -86,7 +85,6 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
         case 'sceneReady':
           setState(() => _sceneReady = true);
           _pushFullState(provider);
-          break;
 
         case 'boxSelected':
           final index = data['index'] as int?;
@@ -94,11 +92,9 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
             HapticFeedback.selectionClick();
             provider.selectBox(index);
           }
-          break;
 
         case 'canvasTapped':
           provider.clearSelection();
-          break;
 
         case 'boxDragStart':
           final index = data['index'] as int?;
@@ -106,7 +102,6 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
             HapticFeedback.mediumImpact();
             provider.startDrag(index);
           }
-          break;
 
         case 'boxDragMove':
           final x = (data['x'] as num?)?.toDouble();
@@ -123,7 +118,6 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
               );
             }
           }
-          break;
 
         case 'boxDragEnd':
           final hasCollision = provider.dragState?.hasCollision ?? false;
@@ -136,7 +130,6 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
           _lastCollisionState = false;
           // After drag ends, sync positions back (provider may have reverted)
           _pushBoxes(provider);
-          break;
 
         case 'boxesSettled':
           // JS engine settled gravity — update provider positions
@@ -147,7 +140,6 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
             );
             _lastBoxCount = provider.placedBoxes.length;
           }
-          break;
 
         case 'boxesRepacked':
           // JS engine repacked — update provider
@@ -160,7 +152,6 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
             );
             _lastBoxCount = provider.placedBoxes.length;
           }
-          break;
       }
     } catch (e) {
       debugPrint('JS message parse error: $e');
@@ -240,9 +231,9 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
   /// Escape single quotes and newlines for JS string literals
   String _escapeJs(String s) {
     return s
-        .replaceAll('\\', '\\\\')
-        .replaceAll("'", "\\'")
-        .replaceAll('\n', '\\n')
+        .replaceAll(r'\', r'\\')
+        .replaceAll("'", r"\'")
+        .replaceAll('\n', r'\n')
         .replaceAll('\r', '');
   }
 
@@ -308,9 +299,9 @@ class LoadCanvasState extends ConsumerState<LoadCanvas> {
 
             // Loading overlay while Three.js initializes
             if (!_sceneReady || planner.truck == null)
-              Container(
+              const ColoredBox(
                 color: AppTheme.darkBase,
-                child: const Center(
+                child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [

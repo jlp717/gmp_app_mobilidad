@@ -1,25 +1,22 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/responsive.dart';
-import '../../../../core/widgets/modern_loading.dart';
-import '../../../../core/widgets/shimmer_skeleton.dart';
-import '../../../../core/widgets/smart_sync_header.dart';
-import '../../../../core/utils/currency_formatter.dart';
-import '../../data/commissions_service.dart';
-import '../../data/commissions_pdf_service.dart';
-import '../widgets/pdf_range_dialog.dart';
-import '../../../../core/providers/filter_provider.dart';
-import '../../../../core/widgets/global_vendor_selector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
+import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
+import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
+import 'package:gmp_app_mobilidad/features/commissions/data/commissions_service.dart';
+import 'package:gmp_app_mobilidad/features/commissions/presentation/widgets/pdf_range_dialog.dart';
 
 
 class CommissionsPage extends ConsumerStatefulWidget {
+
+  const CommissionsPage({required this.employeeCode, super.key, this.isJefeVentas = false});
   final String employeeCode;
   final bool isJefeVentas;
-
-  const CommissionsPage({super.key, required this.employeeCode, this.isJefeVentas = false});
 
   @override
   ConsumerState<CommissionsPage> createState() => _CommissionsPageState();
@@ -106,10 +103,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               ),
               const SizedBox(height: 16),
               _buildStep('📊 Objetivo Anual', 
-                  'Tu objetivo se calcula en base a las ventas del año anterior más un pequeño porcentaje de incremento.'),
+                  'Tu objetivo se calcula en base a las ventas del año anterior más un pequeño porcentaje de incremento.',),
               const SizedBox(height: 12),
               _buildStep('✅ Estado Mensual', 
-                  '• VERDE ✓ = Superas el objetivo del mes\n• ROJO ✗ = Por debajo del objetivo\n• Solo comisionas si superas el 100%'),
+                  '• VERDE ✓ = Superas el objetivo del mes\n• ROJO ✗ = Por debajo del objetivo\n• Solo comisionas si superas el 100%',),
               const SizedBox(height: 12),
               _buildStep('💰 Franjas de Comisión', 
                   'El % se aplica SOLO al exceso sobre el objetivo:\n\n'
@@ -119,12 +116,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   '• Franja 4 (>110%):    2.0%'),
               const SizedBox(height: 12),
               _buildStep('📅 Ritmo Diario', 
-                  'Compara tus ventas actuales vs. lo esperado al día de hoy:\\n'
-                  '• ✓ Verde (Adelantado/En ritmo) = Vas por buen camino\\n'
+                  r'Compara tus ventas actuales vs. lo esperado al día de hoy:\n'
+                  r'• ✓ Verde (Adelantado/En ritmo) = Vas por buen camino\n'
                   '• ⚠ Naranja (Rezagado) = Necesitas acelerar'),
               const SizedBox(height: 12),
               _buildStep('🔒 Meses Pendientes', 
-                  'Los meses futuros aparecen sombreados.\nSe "desbloquean" cuando llegue su fecha.'),
+                  'Los meses futuros aparecen sombreados.\nSe "desbloquean" cuando llegue su fecha.',),
             ],
           ),
         ),
@@ -213,8 +210,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     
     // Find first unpaid, non-future month as default selection
     final now = DateTime.now();
-    int selectedMonth = now.month;
-    for (int m = 1; m <= 12; m++) {
+    var selectedMonth = now.month;
+    for (var m = 1; m <= 12; m++) {
       if (!paidMonths.contains(m) && m <= now.month) {
         selectedMonth = m;
         break;
@@ -227,7 +224,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
     // Get commission for the initially selected month
     final initialMonthData = _getMonthDataForVendor(vendorCode, selectedMonth);
-    double monthCommission = initialMonthData['commissionMes'] ?? 0;
+    var monthCommission = initialMonthData['commissionMes'] ?? 0;
 
     final amountController = TextEditingController(text: monthCommission.toStringAsFixed(2));
     final conceptController = TextEditingController(text: 'Pago Comisiones');
@@ -260,13 +257,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                 children: [
                   // Month selector with paid/future indicators
                   DropdownButtonFormField<int>(
-                    value: selectedMonth,
+                    initialValue: selectedMonth,
                     dropdownColor: AppTheme.surfaceColor,
                     items: List.generate(12, (index) {
                       final m = index + 1;
                       final isPaid = paidMonths.contains(m);
                       final isFuture = m > now.month;
-                      String label = _getMonthName(m);
+                      var label = _getMonthName(m);
                       if (isPaid) label += '  ✓ PAGADO';
                       if (isFuture) label += '  (Futuro)';
                       return DropdownMenuItem(
@@ -416,7 +413,6 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       const SnackBar(
                         content: Text('Debes indicar una observacion explicando por que se paga menos'),
                         backgroundColor: Colors.orange,
-                        duration: Duration(seconds: 4),
                       ),
                     );
                     return;
@@ -511,14 +507,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               _confirmRow('Comercial', vendorName),
               _confirmRow('Mes', '${_getMonthName(month)} / 2026'),
               const Divider(color: Colors.white12, height: 16),
-              _confirmRow('Venta del mes', '${CurrencyFormatter.format(ventaActual)}'),
-              _confirmRow('Objetivo del mes', '${CurrencyFormatter.format(objetivoMes)}'),
-              _confirmRow('Ventas sobre objetivo', '${CurrencyFormatter.format(ventasSobreObjetivo)}',
-                  valueColor: ventasSobreObjetivo >= 0 ? AppTheme.neonGreen : AppTheme.error),
+              _confirmRow('Venta del mes', CurrencyFormatter.format(ventaActual)),
+              _confirmRow('Objetivo del mes', CurrencyFormatter.format(objetivoMes)),
+              _confirmRow('Ventas sobre objetivo', CurrencyFormatter.format(ventasSobreObjetivo),
+                  valueColor: ventasSobreObjetivo >= 0 ? AppTheme.neonGreen : AppTheme.error,),
               const Divider(color: Colors.white12, height: 16),
-              _confirmRow('Comision generada', '${CurrencyFormatter.format(generatedAmount)}'),
-              _confirmRow('Importe a pagar', '${CurrencyFormatter.format(amount)}',
-                  valueColor: isPartialPay ? Colors.orange : AppTheme.neonGreen),
+              _confirmRow('Comision generada', CurrencyFormatter.format(generatedAmount)),
+              _confirmRow('Importe a pagar', CurrencyFormatter.format(amount),
+                  valueColor: isPartialPay ? Colors.orange : AppTheme.neonGreen,),
               _confirmRow('Observaciones', observaciones.isEmpty ? 'Ninguna' : observaciones),
               const SizedBox(height: 12),
 
@@ -673,7 +669,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       children: [
         Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
         const SizedBox(height: 4),
-        Text(desc, style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+        Text(desc, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
       ],
     );
   }
@@ -708,7 +704,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     double totalProRatedTarget = 0; // Expected sales by today
     Map<String, dynamic>? currentMonthData;
     
-    for (var m in months) {
+    for (final m in months) {
       final monthNum = (m['month'] as num?)?.toInt() ?? 0;
       final isFuture = (m['isFuture'] as bool?) ?? false;
       final actual = (m['actual'] as num?)?.toDouble() ?? 0;
@@ -750,14 +746,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     final curUserCode = authState?.user?.code?.trim() ?? '';
     final curUserName = authState?.user?.name?.toUpperCase() ?? '';
     // Allow payment for ADMIN users or specifically DIEGO (code 98)
-    final normalizedCode = curUserCode.replaceFirst(RegExp(r'^0+'), '');
+    final normalizedCode = curUserCode.replaceFirst(RegExp('^0+'), '');
     final canPay = authState?.user?.tipoVendedor == 'ADMIN'
         || normalizedCode == '98';
     // PDF generation is ONLY for DIEGO
-    final _isDiego = curUserName == 'DIEGO' || normalizedCode == '98';
+    final isDiego = curUserName == 'DIEGO' || normalizedCode == '98';
 
     // PDF dialog
-    void _showPdfDialog() {
+    void showPdfDialog() {
       final currentVendor = (_data?['vendor'] as String?) ?? widget.employeeCode.split(',').first;
       showDialog(
         context: context,
@@ -781,7 +777,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       final actual = (m['actual'] as num?)?.toDouble() ?? 0;
       final isFuture = (m['isFuture'] as bool?) ?? false;
       
-      final Map<dynamic, dynamic> ctx = (m['complianceCtx'] as Map?) ?? {};
+      final ctx = (m['complianceCtx'] as Map?) ?? {};
       final pct = (ctx['pct'] as num?)?.toDouble() ?? 0;
       final tier = (ctx['tier'] as num?)?.toInt() ?? 0;
       final commission = (ctx['commission'] as num?)?.toDouble() ?? 0;
@@ -789,7 +785,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       final workingDays = (m['workingDays'] as num?)?.toInt() ?? 0;
       final dailyTarget = (m['dailyTarget'] as num?)?.toDouble() ?? 0;
       final dailyActual = (m['dailyActual'] as num?)?.toDouble() ?? 0;
-      final Map<dynamic, dynamic> dailyCtx = (m['dailyComplianceCtx'] as Map?) ?? {};
+      final dailyCtx = (m['dailyComplianceCtx'] as Map?) ?? {};
       final dailyGreen = (dailyCtx['isGreen'] as bool?) ?? false;
 
       // Color logic: future months get special styling
@@ -831,10 +827,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                   decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(4)),
                   child: const Text('PENDIENTE', style: TextStyle(fontSize: 8, color: Colors.grey)),
-                )
-              ]
+                ),
+              ],
             ],
-          )),
+          ),),
           // OBJ. MES
           DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(target), style: TextStyle(color: Colors.white.withOpacity(textOpacity)))),
           // VENTA REAL (acumulada del mes)
@@ -851,17 +847,17 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                      decoration: BoxDecoration(color: AppTheme.neonBlue.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
                      child: Text('F$tier', style: const TextStyle(fontSize: 9, color: AppTheme.neonBlue)),
-                   )
-                 ]
+                   ),
+                 ],
                ],
-          )),
+          ),),
           // % SOBRE (mes)
           DataCell(Text(pctText, style: TextStyle(color: isFuture ? Colors.grey : color, fontSize: 11))),
           // COMISIÓN MES
           DataCell(Text(
             isFuture ? '-' : (isInformative ? '-' : CurrencyFormatter.format(commission)), 
-            style: TextStyle(color: isFuture ? Colors.grey : (isInformative ? Colors.grey : AppTheme.neonGreen), fontWeight: FontWeight.bold)
-          )),
+            style: TextStyle(color: isFuture ? Colors.grey : (isInformative ? Colors.grey : AppTheme.neonGreen), fontWeight: FontWeight.bold),
+          ),),
           
           // === SECCIÓN RITMO DIARIO ===
           // DÍAS (transcurridos / totales)
@@ -879,13 +875,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                    Icon(dailyGreen ? Icons.check_circle : Icons.warning_amber, color: dailyColor, size: 14),
                    const SizedBox(width: 4),
                    Text(dailyPctText, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: dailyColor)),
-                 ]),
+                 ],),
                  if (dailyTier > 0) 
                    Text('Franja $dailyTier (${dailyRate.toStringAsFixed(1)}%)', style: TextStyle(fontSize: 9, color: dailyColor))
                  else if (!dailyGreen && actual > 0)
-                   Text('Por debajo', style: TextStyle(fontSize: 9, color: dailyColor))
+                   Text('Por debajo', style: TextStyle(fontSize: 9, color: dailyColor)),
                 ],
-          )),
+          ),),
           // DIFERENCIA (Venta Real - Obj. Acumulado)
           DataCell(isFuture 
             ? const Text('-', style: TextStyle(color: Colors.grey))
@@ -896,9 +892,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                 style: TextStyle(
                   color: (actual - proRatedTarget) >= 0 ? AppTheme.success : AppTheme.error,
                   fontWeight: FontWeight.bold,
-                  fontSize: 11
-                )
-              )
+                  fontSize: 11,
+                ),
+              ),
           ),
           // COMISIÓN PROVISIONAL
           DataCell(isFuture || isInformative
@@ -908,9 +904,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                 style: TextStyle(
                   color: provisionalCommission > 0 ? AppTheme.neonPurple : Colors.grey,
                   fontWeight: FontWeight.bold,
-                  fontSize: 11
-                )
-              )
+                  fontSize: 11,
+                ),
+              ),
           ),
           // === PAGOS (NEW) ===
           // IMPORTE PAGADO
@@ -921,10 +917,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             return importePagado > 0
                 ? Text(
                     CurrencyFormatter.format(importePagado),
-                    style: const TextStyle(color: AppTheme.neonGreen, fontSize: 10, fontWeight: FontWeight.bold)
+                    style: const TextStyle(color: AppTheme.neonGreen, fontSize: 10, fontWeight: FontWeight.bold),
                   )
                 : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 10));
-          })),
+          },),),
           // VENTA REAL (momento pago)
           DataCell(Builder(builder: (context) {
             final detailsMap = paymentsData['details'] as Map?;
@@ -933,10 +929,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             return ventaComision > 0
                 ? Text(
                     CurrencyFormatter.format(ventaComision),
-                    style: const TextStyle(color: AppTheme.neonBlue, fontSize: 10, fontWeight: FontWeight.bold)
+                    style: const TextStyle(color: AppTheme.neonBlue, fontSize: 10, fontWeight: FontWeight.bold),
                   )
                 : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 10));
-          })),
+          },),),
           // OBJ. REAL (snapshot al momento del pago)
           DataCell(Builder(builder: (context) {
             final detailsMap = paymentsData['details'] as Map?;
@@ -945,10 +941,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             return objetivoReal > 0
                 ? Text(
                     CurrencyFormatter.format(objetivoReal),
-                    style: const TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold)
+                    style: const TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold),
                   )
                 : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 10));
-          })),
+          },),),
           // OBSERVACIONES
           DataCell(Builder(builder: (context) {
             final detailsMap = paymentsData['details'] as Map?;
@@ -968,9 +964,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     ),
                   )
                 : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 10));
-          })),
+          },),),
         ],
-      ));
+      ),);
     }
 
 
@@ -1022,8 +1018,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                 children: [
                   Text('Generado: ${CurrencyFormatter.format(total)}', style: TextStyle(fontSize: 11, color: isPast ? Colors.grey : Colors.white70)),
                   Text('Pagado: ${CurrencyFormatter.format(quarterPaid)}', style: TextStyle(fontSize: 12, color: isPast ? Colors.white60 : AppTheme.neonGreen, fontWeight: FontWeight.bold)),
-                ]
-            )),
+                ],
+            ),),
             const DataCell(SizedBox()), // DÍAS
             const DataCell(SizedBox()), // OBJ. ACUM.
             const DataCell(SizedBox()), // RITMO
@@ -1033,23 +1029,29 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             const DataCell(SizedBox()), // VENTA REAL (NEW)
             const DataCell(SizedBox()), // OBJ. REAL (NEW)
             const DataCell(SizedBox()), // OBSERVACIONES (NEW)
-         ]
-       ));
+         ],
+       ),);
     }
 
 
     // Build Sequence
     // Build Sequence
     final q1Months = months.where((m) => (m['month'] as int) <= 4).toList();
-    for (var m in q1Months) addMonthRow(m as Map<String, dynamic>);
+    for (final m in q1Months) {
+      addMonthRow(m as Map<String, dynamic>);
+    }
     if (q1Months.isNotEmpty && quarters.isNotEmpty) addQuarterRow(quarters[0] as Map<String, dynamic>, 0);
 
     final q2Months = months.where((m) => (m['month'] as int) > 4 && (m['month'] as int) <= 8).toList();
-    for (var m in q2Months) addMonthRow(m as Map<String, dynamic>);
+    for (final m in q2Months) {
+      addMonthRow(m as Map<String, dynamic>);
+    }
     if (q2Months.isNotEmpty && quarters.length > 1) addQuarterRow(quarters[1] as Map<String, dynamic>, 1);
 
     final q3Months = months.where((m) => (m['month'] as int) > 8).toList();
-    for (var m in q3Months) addMonthRow(m as Map<String, dynamic>);
+    for (final m in q3Months) {
+      addMonthRow(m as Map<String, dynamic>);
+    }
     if (q3Months.isNotEmpty && quarters.length > 2) addQuarterRow(quarters[2] as Map<String, dynamic>, 2);
     
     return Scaffold(
@@ -1092,10 +1094,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                            crossAxisAlignment: CrossAxisAlignment.end,
                            children: [
                              Text('Generado: ${CurrencyFormatter.format(grandTotal)}',
-                               style: const TextStyle(color: AppTheme.neonGreen, fontSize: 13, fontWeight: FontWeight.bold)),
+                               style: const TextStyle(color: AppTheme.neonGreen, fontSize: 13, fontWeight: FontWeight.bold),),
                              const SizedBox(height: 2),
                              Text('Pagado: ${CurrencyFormatter.format(totalPaid)}',
-                               style: const TextStyle(color: AppTheme.neonBlue, fontSize: 11, fontWeight: FontWeight.bold)),
+                               style: const TextStyle(color: AppTheme.neonBlue, fontSize: 11, fontWeight: FontWeight.bold),),
                            ],
                          ),
                      ],
@@ -1108,10 +1110,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                      onPressed: () => _showPayDialog((_data?['vendor'] as String?) ?? widget.employeeCode.split(',').first, 'Vendedor', grandTotal),
                      tooltip: 'Registrar Pago',
                    ),
-                 if (_isDiego) // PDF button - DIEGO only
+                 if (isDiego) // PDF button - DIEGO only
                    IconButton(
                      icon: const Icon(Icons.picture_as_pdf_rounded, color: AppTheme.success, size: 28),
-                     onPressed: _showPdfDialog,
+                     onPressed: showPdfDialog,
                      tooltip: 'Generar Informe PDF',
                    ),
                  IconButton(
@@ -1173,15 +1175,15 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                const Icon(Icons.calendar_today, color: AppTheme.neonBlue, size: 16),
                                const SizedBox(width: 6),
                                 Text(_getMonthName(DateTime.now().month).toUpperCase(), 
-                                    style: TextStyle(fontSize: Responsive.isSmall(context) ? 9 : 11, fontWeight: FontWeight.bold, color: AppTheme.neonBlue)),
+                                    style: TextStyle(fontSize: Responsive.isSmall(context) ? 9 : 11, fontWeight: FontWeight.bold, color: AppTheme.neonBlue),),
                              ],
                            ),
                            const SizedBox(height: 6),
                            if (currentMonthData != null) ...[
                               Text(CurrencyFormatter.format((currentMonthData!['actual'] as num?)?.toDouble() ?? 0),
-                                  style: TextStyle(fontSize: Responsive.isSmall(context) ? 14 : 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                                  style: TextStyle(fontSize: Responsive.isSmall(context) ? 14 : 16, fontWeight: FontWeight.bold, color: Colors.white),),
                               Text('de ${CurrencyFormatter.format((currentMonthData!['target'] as num?)?.toDouble() ?? 0)}',
-                                  style: TextStyle(fontSize: Responsive.isSmall(context) ? 8 : 9, color: Colors.white.withOpacity(0.6))),
+                                  style: TextStyle(fontSize: Responsive.isSmall(context) ? 8 : 9, color: Colors.white.withOpacity(0.6)),),
                              const SizedBox(height: 6),
                              // Mini progress bar
                              ClipRRect(
@@ -1193,7 +1195,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                  valueColor: AlwaysStoppedAnimation<Color>(
                                    ((currentMonthData!['actual'] as num?)?.toDouble() ?? 0) >= 
                                    ((currentMonthData!['target'] as num?)?.toDouble() ?? 0)
-                                   ? AppTheme.success : AppTheme.neonBlue
+                                   ? AppTheme.success : AppTheme.neonBlue,
                                  ),
                                  minHeight: 6,
                                ),
@@ -1228,10 +1230,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             ),
                             const SizedBox(height: 8),
                             Text(CurrencyFormatter.format(totalProvisionalCommission),
-                                style: TextStyle(fontSize: Responsive.isSmall(context) ? 14 : 18, fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
+                                style: TextStyle(fontSize: Responsive.isSmall(context) ? 14 : 18, fontWeight: FontWeight.bold, color: AppTheme.neonGreen),),
                             const SizedBox(height: 2),
                             Text('Confirmado: ${CurrencyFormatter.format(grandTotal)}',
-                                style: TextStyle(fontSize: Responsive.isSmall(context) ? 8 : 10, color: Colors.white.withOpacity(0.7))),
+                                style: TextStyle(fontSize: Responsive.isSmall(context) ? 8 : 10, color: Colors.white.withOpacity(0.7)),),
                          ],
                        ),
                      ),
@@ -1248,7 +1250,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                          borderRadius: BorderRadius.circular(12),
                          border: Border.all(color: isOnRhythm 
                            ? AppTheme.success.withOpacity(0.3) 
-                           : Colors.orange.withOpacity(0.3)),
+                           : Colors.orange.withOpacity(0.3),),
                        ),
                        child: Column(
                          crossAxisAlignment: CrossAxisAlignment.start,
@@ -1256,14 +1258,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                            Row(
                              children: [
                                 Icon(isOnRhythm ? Icons.trending_up : Icons.speed, 
-                                    color: isOnRhythm ? AppTheme.success : Colors.orange, size: 14),
+                                    color: isOnRhythm ? AppTheme.success : Colors.orange, size: 14,),
                                 const SizedBox(width: 6),
                                 Text('RITMO ACTUAL', style: TextStyle(fontSize: Responsive.isSmall(context) ? 8 : 10, fontWeight: FontWeight.bold, 
-                                    color: isOnRhythm ? AppTheme.success : Colors.orange)),
+                                    color: isOnRhythm ? AppTheme.success : Colors.orange,),),
                              ],
                            ),
                            Text('(a día ${DateTime.now().day})',
-                               style: TextStyle(fontSize: 9, color: Colors.white.withOpacity(0.5))),
+                               style: TextStyle(fontSize: 9, color: Colors.white.withOpacity(0.5)),),
                            const SizedBox(height: 6),
                            
                            // Metrics Row
@@ -1276,7 +1278,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                  children: [
                                     Text('Vs Ritmo:', style: TextStyle(fontSize: Responsive.isSmall(context) ? 8 : 10, color: Colors.white70)),
                                     Text('${rhythmCompliance.toStringAsFixed(1)}%', 
-                                      style: TextStyle(fontSize: Responsive.isSmall(context) ? 10 : 12, fontWeight: FontWeight.bold, color: isOnRhythm ? AppTheme.success : Colors.orange)),
+                                      style: TextStyle(fontSize: Responsive.isSmall(context) ? 10 : 12, fontWeight: FontWeight.bold, color: isOnRhythm ? AppTheme.success : Colors.orange),),
                                  ],
                                ),
                                const SizedBox(height: 2),
@@ -1294,7 +1296,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             const SizedBox(height: 4),
                             Text(rhythmStatus,
                                 style: TextStyle(fontSize: Responsive.isSmall(context) ? 9 : 11, fontWeight: FontWeight.bold, 
-                                    color: isOnRhythm ? AppTheme.success : Colors.orange)),
+                                    color: isOnRhythm ? AppTheme.success : Colors.orange,),),
                          ],
                        ),
                      ),
@@ -1311,28 +1313,28 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
              // OPTIMIZATION: Use SkeletonList for perceived performance
              child: _isLoading 
                ? const Padding(
-                   padding: EdgeInsets.all(16.0),
+                   padding: EdgeInsets.all(16),
                    child: SkeletonList(itemCount: 6, itemHeight: 60),
                  )
              : _error != null ? Center(child: Text('Error: $_error', style: const TextStyle(color: AppTheme.error)))
              : isAllMode
                ? _buildAllVendorsTable(breakdown)  // Show ALL vendors table
              : totalTarget <= 0 && !isInformative && !((_data?['isExcluded'] as bool?) ?? false) // ZERO TARGET WARNING (but NOT if excluded)
-               ? Center(
+               ? const Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(32),
+                    padding: EdgeInsets.all(32),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.search_off_rounded, size: 56, color: Colors.white24),
-                        const SizedBox(height: 16),
-                        const Text(
+                        Icon(Icons.search_off_rounded, size: 56, color: Colors.white24),
+                        SizedBox(height: 16),
+                        Text(
                           'No se han encontrado comisiones para los filtros seleccionados',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.white54, fontSize: 16, fontWeight: FontWeight.w500),
                         ),
-                        const SizedBox(height: 8),
-                        const Text(
+                        SizedBox(height: 8),
+                        Text(
                           'Prueba a seleccionar otro comercial o verifica que existan datos de ventas disponibles.',
                           textAlign: TextAlign.center,
                           style: TextStyle(color: Colors.white38, fontSize: 13),
@@ -1342,7 +1344,6 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   ),
                )
              : SingleChildScrollView(
-                 scrollDirection: Axis.vertical,
                  child: SingleChildScrollView(
                    scrollDirection: Axis.horizontal,
                    child: DataTable(
@@ -1419,7 +1420,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
     try {
       // Sort by grand total descending, handle nulls defensively
-      final List<Map<String, dynamic>> sorted = List<Map<String, dynamic>>.from(breakdown);
+      final sorted = List<Map<String, dynamic>>.from(breakdown);
       sorted.sort((a, b) {
         final valA = (a['grandTotalCommission'] as num?)?.toDouble() ?? 0.0;
         final valB = (b['grandTotalCommission'] as num?)?.toDouble() ?? 0.0;
@@ -1428,11 +1429,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
       // Get payment authorization status
       final authState = ref.watch(authProvider).value;
-      final curCode = (authState?.user?.code?.trim() ?? '').replaceFirst(RegExp(r'^0+'), '');
+      final curCode = (authState?.user?.code?.trim() ?? '').replaceFirst(RegExp('^0+'), '');
       final canPay = authState?.user?.tipoVendedor == 'ADMIN'
           || curCode == '98';
 
-      return Container(
+      return ColoredBox(
         color: AppTheme.darkBase,
         child: ListView.builder(
           itemCount: sorted.length,
@@ -1466,18 +1467,16 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
 /// Expandable card for each vendor in ALL mode
 class _VendorExpandableCard extends StatefulWidget {
+
+  const _VendorExpandableCard({
+    required this.data, required this.getMonthName, super.key,
+    this.canPay = false,
+    this.onPay,
+  });
   final Map<String, dynamic> data;
   final bool canPay;
   final String Function(int) getMonthName;
   final Function(String, String)? onPay;
-
-  const _VendorExpandableCard({
-    super.key,
-    required this.data,
-    this.canPay = false,
-    required this.getMonthName,
-    this.onPay,
-  });
 
   @override
   State<_VendorExpandableCard> createState() => _VendorExpandableCardState();
@@ -1501,7 +1500,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
 
     // Calculate vendor totals (only non-future months for meaningful %)
     double totalTarget = 0, totalActual = 0;
-    for (var m in months) {
+    for (final m in months) {
       final isFuture = (m['isFuture'] as bool?) ?? false;
       if (!isFuture) {
         totalTarget += (m['target'] as num?)?.toDouble() ?? 0;
@@ -1583,14 +1582,14 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                           children: [
                               Text('Generado: ${CurrencyFormatter.format(grandTotal)}', style: TextStyle(color: AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: Responsive.isSmall(context) ? 10 : 12)),
                              Text('Pagado: ${CurrencyFormatter.format(totalPaid)}',
-                               style: TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold, fontSize: Responsive.isSmall(context) ? 8 : 9)),
+                               style: TextStyle(color: AppTheme.neonBlue, fontWeight: FontWeight.bold, fontSize: Responsive.isSmall(context) ? 8 : 9),),
                           ],
                         ),
                       ],
                     ),
                     if (widget.canPay)
                        Padding(
-                         padding: const EdgeInsets.only(left: 8.0),
+                         padding: const EdgeInsets.only(left: 8),
                          child: IconButton(
                            icon: const Icon(Icons.payment_rounded, color: AppTheme.neonBlue, size: 22),
                            onPressed: () => widget.onPay?.call(vendorCode, vendorName),
@@ -1600,7 +1599,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                          ),
                        ),
                   ] else
-                    Text('0,00 €', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    const Text('0,00 €', style: TextStyle(color: Colors.grey, fontSize: 12)),
                 ],
               ),
             ),
@@ -1631,13 +1630,13 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
       {'name': 'CUATRIMESTRE 3', 'label': 'Sep - Dic', 'start': 9, 'end': 12},
     ];
 
-    int quarterIndex = 0;
+    var quarterIndex = 0;
 
     for (final m in sortedMonths) {
       final monthNum = (m['month'] as num?)?.toInt() ?? 0;
 
       // Check if we need to insert a quarter header BEFORE this month
-      while (quarterIndex < quarterRanges.length && monthNum > (quarterRanges[quarterIndex]['end'] as int)) {
+      while (quarterIndex < quarterRanges.length && monthNum > (quarterRanges[quarterIndex]['end']! as int)) {
         // Add quarter summary row
         final qr = quarterRanges[quarterIndex];
         final qData = quarters.length > quarterIndex ? quarters[quarterIndex] : null;
@@ -1725,15 +1724,15 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
               padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
               decoration: BoxDecoration(color: Colors.grey.withOpacity(0.3), borderRadius: BorderRadius.circular(3)),
               child: const Text('PEND', style: TextStyle(fontSize: 7, color: Colors.grey)),
-            )
-          ]
-        ])),
+            ),
+          ],
+        ],),),
         DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(target), style: TextStyle(color: Colors.white.withOpacity(textOpacity), fontSize: 10))),
         DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(actual), style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 10))),
         DataCell(isFuture ? const Text('-', style: TextStyle(color: Colors.grey, fontSize: 10)) : Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(isPositive ? Icons.check_circle : Icons.cancel, color: color, size: 12),
           if (isPositive && tier > 0) Text(' F$tier', style: const TextStyle(fontSize: 8, color: AppTheme.neonBlue)),
-        ])),
+        ],),),
         DataCell(Text(pctText, style: TextStyle(color: color, fontSize: 9))),
         DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(commission), style: TextStyle(color: isFuture ? Colors.grey : AppTheme.neonGreen, fontWeight: FontWeight.bold, fontSize: 10))),
         DataCell(Text(isFuture ? '-' : '$daysPassed/$workingDays', style: TextStyle(color: Colors.white.withOpacity(textOpacity * 0.7), fontSize: 9))),
@@ -1741,15 +1740,15 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         DataCell(isFuture ? const Text('-', style: TextStyle(color: Colors.grey, fontSize: 9)) : Row(mainAxisSize: MainAxisSize.min, children: [
           Icon(dailyGreen ? Icons.check_circle : Icons.warning_amber, color: dailyColor, size: 10),
           Text(' $dailyPctText', style: TextStyle(fontSize: 8, color: dailyColor)),
-        ])),
+        ],),),
         DataCell(isFuture ? const Text('-', style: TextStyle(color: Colors.grey, fontSize: 9)) : Text(
           (actual - proRatedTarget) >= 0 ? '+${CurrencyFormatter.format(actual - proRatedTarget)}' : CurrencyFormatter.format(actual - proRatedTarget),
           style: TextStyle(color: (actual - proRatedTarget) >= 0 ? AppTheme.success : AppTheme.error, fontWeight: FontWeight.bold, fontSize: 9),
-        )),
+        ),),
         DataCell(isFuture ? const Text('-', style: TextStyle(color: Colors.grey, fontSize: 9)) : Text(
           CurrencyFormatter.format(provisionalCommission),
           style: TextStyle(color: provisionalCommission > 0 ? AppTheme.neonPurple : Colors.grey, fontWeight: FontWeight.bold, fontSize: 9),
-        )),
+        ),),
         // === PAGOS (NEW) ===
         // IMPORTE PAGADO
         DataCell(Builder(builder: (context) {
@@ -1760,10 +1759,10 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
           return importePagado > 0
               ? Text(
                   CurrencyFormatter.format(importePagado),
-                  style: const TextStyle(color: AppTheme.neonGreen, fontSize: 9, fontWeight: FontWeight.bold)
+                  style: const TextStyle(color: AppTheme.neonGreen, fontSize: 9, fontWeight: FontWeight.bold),
                 )
               : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 9));
-        })),
+        },),),
         // VENTA REAL (momento pago)
         DataCell(Builder(builder: (context) {
           final payments = widget.data['payments'] as Map?;
@@ -1773,10 +1772,10 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
           return ventaComision > 0
               ? Text(
                   CurrencyFormatter.format(ventaComision),
-                  style: const TextStyle(color: AppTheme.neonBlue, fontSize: 9, fontWeight: FontWeight.bold)
+                  style: const TextStyle(color: AppTheme.neonBlue, fontSize: 9, fontWeight: FontWeight.bold),
                 )
               : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 9));
-        })),
+        },),),
         // OBJ. REAL (snapshot al momento del pago)
         DataCell(Builder(builder: (context) {
           final payments = widget.data['payments'] as Map?;
@@ -1786,10 +1785,10 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
           return objetivoReal > 0
               ? Text(
                   CurrencyFormatter.format(objetivoReal),
-                  style: const TextStyle(color: Colors.amber, fontSize: 9, fontWeight: FontWeight.bold)
+                  style: const TextStyle(color: Colors.amber, fontSize: 9, fontWeight: FontWeight.bold),
                 )
               : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 9));
-        })),
+        },),),
         // OBSERVACIONES
         DataCell(Builder(builder: (context) {
           final payments = widget.data['payments'] as Map?;
@@ -1810,7 +1809,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                   ),
                 )
               : const Text('-', style: TextStyle(color: Colors.grey, fontSize: 9));
-        })),
+        },),),
       ],
     );
   }
@@ -1828,7 +1827,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
     final payments = widget.data['payments'] as Map?;
     final monthlyPaidMap = (payments?['monthly'] as Map?) ?? {};
     double quarterPaid = 0;
-    for (int m = startMonth; m <= endMonth; m++) {
+    for (var m = startMonth; m <= endMonth; m++) {
       quarterPaid += (monthlyPaidMap[m] as num?)?.toDouble()
           ?? (monthlyPaidMap['$m'] as num?)?.toDouble()
           ?? (monthlyPaidMap[m.toString()] as num?)?.toDouble()
@@ -1844,7 +1843,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
           Text(name, style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonPurple, fontSize: 10)),
           const SizedBox(width: 4),
           Text('($label)', style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 9)),
-        ])),
+        ],),),
         const DataCell(SizedBox()),
         const DataCell(SizedBox()),
         const DataCell(SizedBox()),
@@ -1856,7 +1855,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
             Text('Gen: ${CurrencyFormatter.format(total)}', style: TextStyle(fontSize: 9, color: isExcluded ? Colors.grey : Colors.white70)),
             Text('Pag: ${CurrencyFormatter.format(quarterPaid)}', style: TextStyle(fontSize: 10, color: isExcluded ? Colors.grey : AppTheme.neonGreen, fontWeight: FontWeight.bold)),
           ],
-        )),
+        ),),
         const DataCell(SizedBox()),
         const DataCell(SizedBox()),
         const DataCell(SizedBox()),

@@ -1,10 +1,10 @@
 // ignore_for_file: argument_type_not_assignable, invalid_assignment, return_of_invalid_type
 import 'dart:async';
 import 'dart:convert';
-import 'package:hive_flutter/hive_flutter.dart';
+
 import 'package:crypto/crypto.dart';
-import 'package:path_provider/path_provider.dart';
-import 'vector_store_hnsw.dart';
+import 'package:gmp_app_mobilidad/core/memory/vector_store_hnsw.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 /// **AgentDB - Backend Unificado de Memoria**
 ///
@@ -17,6 +17,8 @@ import 'vector_store_hnsw.dart';
 ///
 /// Arquitectura inspirada en Claude-Flow v3 AgentDB
 class AgentDatabase {
+
+  AgentDatabase._();
   static AgentDatabase? _instance;
 
   // Cajas Hive unificadas
@@ -42,8 +44,6 @@ class AgentDatabase {
 
   // Callbacks de sincronización
   Function(SyncOperation)? _onSyncOperation;
-
-  AgentDatabase._();
 
   /// Singleton instance
   static AgentDatabase get instance {
@@ -82,7 +82,7 @@ class AgentDatabase {
   }
 
   static List<int> _generateEncryptionKey() {
-    final seed = 'agentdb_unified_memory_encryption_v1';
+    const seed = 'agentdb_unified_memory_encryption_v1';
     return sha256.convert(utf8.encode(seed)).bytes;
   }
 
@@ -227,7 +227,7 @@ class AgentDatabase {
   Future<void> incrementSyncRetry(String operationId) async {
     final operation = _pendingSyncQueue.firstWhere(
       (op) => op.id == operationId,
-      orElse: () => SyncOperation.empty(),
+      orElse: SyncOperation.empty,
     );
 
     if (operation.id.isEmpty) return;
@@ -343,7 +343,7 @@ class AgentDatabase {
 
   /// Ejecuta múltiples operaciones en lote
   Future<void> batchSet(Map<String, dynamic> entries,
-      {MemoryType type = MemoryType.general}) async {
+      {MemoryType type = MemoryType.general,}) async {
     for (final entry in entries.entries) {
       await setPersistent(key: entry.key, value: entry.value, type: type);
     }
@@ -361,7 +361,7 @@ class AgentDatabase {
   // ==================== UTILITIES ====================
 
   String _sanitizeKey(String key) {
-    return key.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '_');
+    return key.replaceAll(RegExp('[^a-zA-Z0-9_]'), '_');
   }
 
   Future<void> _loadSyncQueue() async {
@@ -427,12 +427,6 @@ enum MemoryType {
 
 /// Entrada de memoria
 class MemoryEntry {
-  final String key;
-  final dynamic value;
-  final MemoryType type;
-  final DateTime createdAt;
-  final DateTime updatedAt;
-  final int? expiresAt;
 
   MemoryEntry({
     required this.key,
@@ -443,15 +437,6 @@ class MemoryEntry {
     this.expiresAt,
   });
 
-  Map<String, dynamic> toJson() => {
-        'key': key,
-        'value': value,
-        'type': type.index,
-        'createdAt': createdAt.toIso8601String(),
-        'updatedAt': updatedAt.toIso8601String(),
-        'expiresAt': expiresAt,
-      };
-
   factory MemoryEntry.fromJson(Map<String, dynamic> json) => MemoryEntry(
         key: json['key'] ?? '',
         value: json['value'],
@@ -460,17 +445,25 @@ class MemoryEntry {
         updatedAt: DateTime.tryParse(json['updatedAt'] ?? '') ?? DateTime.now(),
         expiresAt: json['expiresAt'],
       );
+  final String key;
+  final dynamic value;
+  final MemoryType type;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int? expiresAt;
+
+  Map<String, dynamic> toJson() => {
+        'key': key,
+        'value': value,
+        'type': type.index,
+        'createdAt': createdAt.toIso8601String(),
+        'updatedAt': updatedAt.toIso8601String(),
+        'expiresAt': expiresAt,
+      };
 }
 
 /// Operación de sincronización
 class SyncOperation {
-  final String id;
-  final String operationType; // create, update, delete
-  final String entityType; // pedido, producto, cliente
-  final String entityId;
-  final Map<String, dynamic> data;
-  final DateTime createdAt;
-  int retryCount;
 
   SyncOperation({
     required this.id,
@@ -491,16 +484,6 @@ class SyncOperation {
         createdAt = DateTime.now(),
         retryCount = 0;
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'operationType': operationType,
-        'entityType': entityType,
-        'entityId': entityId,
-        'data': data,
-        'createdAt': createdAt.toIso8601String(),
-        'retryCount': retryCount,
-      };
-
   factory SyncOperation.fromJson(Map<String, dynamic> json) => SyncOperation(
         id: json['id'] ?? '',
         operationType: json['operationType'] ?? '',
@@ -510,15 +493,27 @@ class SyncOperation {
         createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
         retryCount: json['retryCount'] ?? 0,
       );
+  final String id;
+  final String operationType; // create, update, delete
+  final String entityType; // pedido, producto, cliente
+  final String entityId;
+  final Map<String, dynamic> data;
+  final DateTime createdAt;
+  int retryCount;
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'operationType': operationType,
+        'entityType': entityType,
+        'entityId': entityId,
+        'data': data,
+        'createdAt': createdAt.toIso8601String(),
+        'retryCount': retryCount,
+      };
 }
 
 /// Estadísticas de memoria
 class MemoryStats {
-  final int persistentCount;
-  final int stateCount;
-  final int syncQueueCount;
-  final int vectorCount;
-  final int workingMemoryCount;
 
   MemoryStats({
     required this.persistentCount,
@@ -527,6 +522,11 @@ class MemoryStats {
     required this.vectorCount,
     required this.workingMemoryCount,
   });
+  final int persistentCount;
+  final int stateCount;
+  final int syncQueueCount;
+  final int vectorCount;
+  final int workingMemoryCount;
 
   @override
   String toString() =>
