@@ -24,8 +24,25 @@ class Db2AuthRepository extends AuthRepository {
       WHERE TRIM(P.CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
       FETCH FIRST 1 ROWS ONLY
     `;
-    const result = await this._db.executeParams(sql, [code.trim()]);
-    console.log(`[DDD-AUTH-DEBUG] findByCode('${code}') → count:${result ? result.length : 'null'} hash:'${result && result[0] ? String(result[0].PASSWORD_HASH).trim() : 'N/A'}'`);
+    let result = await this._db.executeParams(sql, [code.trim()]);
+
+    // Fallback: search by name (like legacy auth) — user may enter name instead of code
+    if (!result || result.length === 0) {
+      const nameSql = `
+        SELECT TRIM(P.CODIGOVENDEDOR) AS USUARIO, TRIM(D.NOMBREVENDEDOR) AS NOMBRE,
+          CASE WHEN X.JEFEVENTASSN = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
+          '' AS EMAIL, P.CODIGOPIN AS PASSWORD_HASH, 1 AS ACTIVO
+        FROM DSEDAC.VDD D
+        JOIN DSEDAC.VDPL1 P ON D.CODIGOVENDEDOR = P.CODIGOVENDEDOR
+        JOIN DSEDAC.VDC V ON D.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
+        LEFT JOIN DSEDAC.VDDX X ON D.CODIGOVENDEDOR = X.CODIGOVENDEDOR
+        WHERE REPLACE(UPPER(TRIM(D.NOMBREVENDEDOR)), ' ', '') LIKE '%' CONCAT CAST(? AS VARCHAR(100)) CONCAT '%'
+        FETCH FIRST 1 ROWS ONLY
+      `;
+      const searchParam = code.replace(/ /g, '').toUpperCase();
+      result = await this._db.executeParams(nameSql, [searchParam]);
+    }
+
     if (!result || result.length === 0) return null;
     return User.fromDbRow(result[0]);
   }
