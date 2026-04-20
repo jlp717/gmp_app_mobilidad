@@ -148,6 +148,22 @@ function createAuthRoutes() {
 
       await repo.logLoginAttempt(user.id, true, req.ip);
 
+      // Expand vendedorCodes for JEFE_VENTAS (same as legacy: all GMP vendors)
+      let vendedorCodes = [user.code];
+      if (user.isJefeVentas) {
+        try {
+          const allVendedores = await getDbPool().execute(
+            `SELECT DISTINCT TRIM(CODIGOVENDEDOR) as CODE FROM DSEDAC.VDC WHERE SUBEMPRESA = 'GMP'`
+          );
+          const orphans = ['82', '20', 'UNK'];
+          const existingCodes = new Set(allVendedores.map(v => v.CODE));
+          orphans.forEach(o => existingCodes.add(o));
+          vendedorCodes = Array.from(existingCodes);
+        } catch (e) {
+          logger.warn(`[DDD-AUTH] Could not expand vendedorCodes for JEFE_VENTAS: ${e.message}`);
+        }
+      }
+
       // Response format must match legacy auth routes (Flutter expects 'token', not 'accessToken')
       res.json({
         success: true,
@@ -162,7 +178,7 @@ function createAuthRoutes() {
           showCommissions: true
         },
         role: user.role,
-        vendedorCodes: user.vendedorCodes || [user.code],
+        vendedorCodes,
         token: accessToken,
         refreshToken,
         tokenExpiresIn: 3600,
