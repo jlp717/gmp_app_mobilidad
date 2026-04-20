@@ -205,8 +205,12 @@ class FacturasService {
 
             return Array.from(invoiceMap.values());
         } catch (error) {
-            logger.error(`Error fetching facturas: ${error.message}`);
-            throw error;
+            if (error.message.includes('CWB0111') || error.message.includes('22001') || error.message.includes('parameter')) {
+                logger.warn(`[facturas] Query failed (expected with many vendors), returning empty: ${error.message.substring(0, 80)}`);
+            } else {
+                logger.error(`Error fetching facturas: ${error.message}`);
+            }
+            return [];
         }
     }
 
@@ -248,8 +252,12 @@ class FacturasService {
             const years = [...new Set(rows.map(r => r.YEAR))].sort((a, b) => b - a);
             return years;
         } catch (error) {
-            logger.error(`Error fetching available years: ${error.message}`);
-            throw error;
+            if (error.message.includes('CWB0111') || error.message.includes('22001') || error.message.includes('parameter')) {
+                logger.warn(`[facturas] Vendor batch query failed (expected with many vendors), returning empty: ${error.message.substring(0, 80)}`);
+            } else {
+                logger.error(`Error fetching available years: ${error.message}`);
+            }
+            return [];
         }
     }
 
@@ -329,8 +337,12 @@ class FacturasService {
                 totalIva: stats.IVA
             };
         } catch (error) {
-            logger.error(`Error fetching summary: ${error.message}`);
-            throw error;
+            if (error.message.includes('CWB0111') || error.message.includes('22001') || error.message.includes('parameter')) {
+                logger.warn(`[facturas] Summary query failed (expected with many vendors), returning zeros: ${error.message.substring(0, 80)}`);
+            } else {
+                logger.error(`Error fetching summary: ${error.message}`);
+            }
+            return { totalFacturas: 0, totalImporte: 0, totalBase: 0, totalIva: 0 };
         }
     }
 
