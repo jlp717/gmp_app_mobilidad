@@ -726,24 +726,22 @@ const gracefulShutdown = async (signal) => {
   
   logger.info(`📴 Received ${signal}. Starting graceful shutdown...`);
   
-  // 1. Stop HTTP server (will be defined after app.listen)
+  // 1. Close HTTP server if available
   try {
-    const httpServer = require('http').globalAgent?.socket?._server || 
-                       global.__httpServer;
-    if (httpServer && httpServer.close) {
-      httpServer.close(() => {
+    if (global.__httpServer && typeof global.__httpServer.close === 'function') {
+      global.__httpServer.close(() => {
         logger.info('📴 HTTP server closed');
       });
     }
   } catch (e) {
-    logger.warn(`📴 HTTP server close error: ${e.message}`);
+    logger.warn(`📴 HTTP server close error (non-fatal): ${e.message}`);
   }
   
   // 2. Close DB pool
   try {
     const { getPool } = require('./config/db');
     const pool = getPool();
-    if (pool) {
+    if (pool && typeof pool.close === 'function') {
       await pool.close();
       logger.info('📴 Database pool closed');
     }
@@ -754,8 +752,10 @@ const gracefulShutdown = async (signal) => {
   // 3. Close Redis cache
   try {
     const { redisCache } = require('./services/redis-cache');
-    await redisCache.close();
-    logger.info('📴 Redis cache closed');
+    if (redisCache && typeof redisCache.close === 'function') {
+      await redisCache.close();
+      logger.info('📴 Redis cache closed');
+    }
   } catch (e) {
     logger.warn(`📴 Redis close error: ${e.message}`);
   }
@@ -763,8 +763,10 @@ const gracefulShutdown = async (signal) => {
   // 4. Clear LACLAE memory cache
   try {
     const { clearLaclaeCache } = require('./services/laclae');
-    clearLaclaeCache();
-    logger.info('📴 LACLAE memory cache cleared');
+    if (typeof clearLaclaeCache === 'function') {
+      clearLaclaeCache();
+      logger.info('📴 LACLAE memory cache cleared');
+    }
   } catch (e) {
     logger.warn(`📴 LACLAE cache clear error: ${e.message}`);
   }
@@ -772,7 +774,7 @@ const gracefulShutdown = async (signal) => {
   // 5. Stop auth session cleanup interval
   try {
     const auth = require('./middleware/auth');
-    if (auth.stopSessionCleanup) {
+    if (auth && typeof auth.stopSessionCleanup === 'function') {
       auth.stopSessionCleanup();
       logger.info('📴 Auth session cleanup stopped');
     }
@@ -782,7 +784,7 @@ const gracefulShutdown = async (signal) => {
   
   // 6. Stop rate limiter cleanup interval
   try {
-    if (globalLimiter && globalLimiter.stopCleanup) {
+    if (globalLimiter && typeof globalLimiter.stopCleanup === 'function') {
       globalLimiter.stopCleanup();
       logger.info('📴 Rate limiter cleanup stopped');
     }
