@@ -63,8 +63,15 @@ class FacturasService {
         }
 
         const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
-        
-        let sql = `
+        const vendors = isAll ? [] : vendedorCodes.split(',').map(v => v.trim()).filter(v => v);
+
+        const currentYear = year || new Date().getFullYear();
+        const dateFilterApplied = dateFrom && dateTo;
+        const dateFromInt = dateFilterApplied ? parseInt(dateFrom.replace(/-/g, '')) : null;
+        const dateToInt = dateFilterApplied ? parseInt(dateTo.replace(/-/g, '')) : null;
+
+        function buildSqlForVendors(vendorBatch) {
+            let sql = `
       SELECT
         TRIM(CAC.SERIEFACTURA) as SERIE,
         CAC.NUMEROFACTURA as NUMERO,
@@ -81,96 +88,92 @@ class FacturasService {
       LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CAC.CODIGOCLIENTEFACTURA
       WHERE CAC.NUMEROFACTURA > 0 AND CAC.NUMEROFACTURA < 900000
     `;
+            const queryParams = [];
 
-        const queryParams = [];
+            if (vendorBatch.length > 0) {
+                const placeholders = vendorBatch.map(() => '?').join(',');
+                sql += ` AND TRIM(CAC.CODIGOVENDEDOR) IN (${placeholders})`;
+                queryParams.push(...vendorBatch);
+            }
 
-        if (!isAll) {
-            const vendors = vendedorCodes.split(',').map(v => v.trim());
-            const placeholders = vendors.map(() => '?').join(',');
-            sql += ` AND TRIM(CAC.CODIGOVENDEDOR) IN (${placeholders})`;
-            queryParams.push(...vendors);
-        }
-
-        // Date Filtering Logic
-        let dateFilterApplied = false;
-
-        if (dateFrom && dateTo) {
-            const fromInt = parseInt(dateFrom.replace(/-/g, ''));
-            const toInt = parseInt(dateTo.replace(/-/g, ''));
-            if (!isNaN(fromInt) && !isNaN(toInt)) {
+            if (dateFilterApplied && dateFromInt && dateToInt) {
                 sql += ` AND (CAC.ANOFACTURA * 10000 + CAC.MESFACTURA * 100 + CAC.DIAFACTURA) BETWEEN ? AND ?`;
-                queryParams.push(fromInt, toInt);
-                dateFilterApplied = true;
-            }
-        }
-
-        if (!dateFilterApplied) {
-            const currentYear = year || new Date().getFullYear();
-            sql += ` AND CAC.EJERCICIOFACTURA = ?`;
-            queryParams.push(currentYear);
-
-            if (month) {
-                sql += ` AND CAC.MESFACTURA = ?`;
-                queryParams.push(month);
-            }
-        }
-
-        if (clientId) {
-            sql += ` AND TRIM(CAC.CODIGOCLIENTEFACTURA) = ?`;
-            queryParams.push(clientId.trim());
-        }
-
-        // Specific Client Search
-        if (clientSearch) {
-            const safeClientSearch = `%${clientSearch.toUpperCase()}%`;
-            sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ?)`;
-            queryParams.push(safeClientSearch, safeClientSearch);
-        }
-
-        // Specific Doc Search (Factura/Client Code)
-        if (docSearch) {
-            const safeDocSearch = `%${docSearch.toUpperCase()}%`;
-            const searchNum = parseFloat(docSearch);
-            const isNum = !isNaN(searchNum);
-            
-            if (isNum) {
-                sql += ` AND (TRIM(CAC.SERIEFACTURA) LIKE ? OR TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE ? OR CAC.NUMEROFACTURA = ?)`;
-                queryParams.push(safeDocSearch, safeDocSearch, searchNum);
+                queryParams.push(dateFromInt, dateToInt);
             } else {
-                sql += ` AND (TRIM(CAC.SERIEFACTURA) LIKE ? OR TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE ?)`;
-                queryParams.push(safeDocSearch, safeDocSearch);
+                sql += ` AND CAC.EJERCICIOFACTURA = ?`;
+                queryParams.push(currentYear);
+                if (month) {
+                    sql += ` AND CAC.MESFACTURA = ?`;
+                    queryParams.push(month);
+                }
             }
-        }
 
-        // Legacy Global Search (if provided)
-        if (search) {
-            const safeSearch = `%${search.toUpperCase()}%`;
-            const searchNum = parseFloat(search);
-            const isNum = !isNaN(searchNum);
-            
-            if (isNum) {
-                sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR CAC.NUMEROFACTURA = ? OR TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE ?)`;
-                queryParams.push(safeSearch, safeSearch, searchNum, safeSearch);
-            } else {
-                sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE ?)`;
-                queryParams.push(safeSearch, safeSearch, safeSearch);
+            if (clientId) {
+                sql += ` AND TRIM(CAC.CODIGOCLIENTEFACTURA) = ?`;
+                queryParams.push(clientId.trim());
             }
-        }
 
-        sql += ` ORDER BY CAC.ANOFACTURA DESC, CAC.MESFACTURA DESC, CAC.DIAFACTURA DESC, CAC.NUMEROFACTURA DESC`;
+            if (clientSearch) {
+                const safeClientSearch = `%${clientSearch.toUpperCase()}%`;
+                sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ?)`;
+                queryParams.push(safeClientSearch, safeClientSearch);
+            }
+
+            if (docSearch) {
+                const safeDocSearch = `%${docSearch.toUpperCase()}%`;
+                const searchNum = parseFloat(docSearch);
+                const isNum = !isNaN(searchNum);
+                if (isNum) {
+                    sql += ` AND (TRIM(CAC.SERIEFACTURA) LIKE ? OR TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE ? OR CAC.NUMEROFACTURA = ?)`;
+                    queryParams.push(safeDocSearch, safeDocSearch, searchNum);
+                } else {
+                    sql += ` AND (TRIM(CAC.SERIEFACTURA) LIKE ? OR TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE ?)`;
+                    queryParams.push(safeDocSearch, safeDocSearch);
+                }
+            }
+
+            if (search) {
+                const safeSearch = `%${search.toUpperCase()}%`;
+                const searchNum = parseFloat(search);
+                const isNum = !isNaN(searchNum);
+                if (isNum) {
+                    sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR CAC.NUMEROFACTURA = ? OR TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE ?)`;
+                    queryParams.push(safeSearch, safeSearch, searchNum, safeSearch);
+                } else {
+                    sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE ?)`;
+                    queryParams.push(safeSearch, safeSearch, safeSearch);
+                }
+            }
+
+            sql += ` ORDER BY CAC.ANOFACTURA DESC, CAC.MESFACTURA DESC, CAC.DIAFACTURA DESC, CAC.NUMEROFACTURA DESC`;
+            return { sql, queryParams };
+        }
 
         try {
-            const rows = await queryWithParams(sql, queryParams);
+            let rows;
+            if (isAll || vendors.length === 0) {
+                const { sql, queryParams } = buildSqlForVendors([]);
+                rows = await queryWithParams(sql, queryParams);
+            } else if (vendors.length <= BATCH_SIZE) {
+                const { sql, queryParams } = buildSqlForVendors(vendors);
+                rows = await queryWithParams(sql, queryParams);
+            } else {
+                const batches = [];
+                for (let i = 0; i < vendors.length; i += BATCH_SIZE) {
+                    batches.push(vendors.slice(i, i + BATCH_SIZE));
+                }
+                const batchResults = await Promise.all(
+                    batches.map(batch => {
+                        const { sql, queryParams } = buildSqlForVendors(batch);
+                        return queryWithParams(sql, queryParams);
+                    })
+                );
+                rows = batchResults.flat();
+            }
 
-            // FIX: Aggregate CAC records by invoice key (SERIE-NUMERO-EJERCICIO).
-            // A single invoice can span multiple albaranes (delivery notes),
-            // each stored as a separate CAC row. We must SUM their totals.
-            // Example: Invoice F-750 for client 4300040696 has 5 albaranes
-            // totaling 581.34€, but previously only showed 218.65€ (first albarán).
             const invoiceMap = new Map();
             for (const row of rows) {
                 const key = `${row.SERIE}-${row.NUMERO}-${row.EJERCICIO}`;
-                // AUDIT FIX: Sanitize sentinel values and normalize -0
                 const sanitize = (v) => {
                     const n = parseFloat(v) || 0;
                     if (Object.is(n, -0)) return 0;
