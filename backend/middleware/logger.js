@@ -3,9 +3,9 @@ const winston = require('winston');
 // =============================================================================
 // WINSTON LOGGER CONFIGURATION
 // =============================================================================
-// Nivel de logging base según environment
+const NODE_ENV = process.env.NODE_ENV || 'development';
+
 const getLogLevel = () => {
-    const NODE_ENV = process.env.NODE_ENV || 'development';
     if (NODE_ENV === 'production') {
         return 'warn';
     }
