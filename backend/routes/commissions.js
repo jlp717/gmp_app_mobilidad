@@ -486,8 +486,12 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
         missingMonths.length > 0 ? getVendorCurrentClients(vendedorCode, selectedYear) : Promise.resolve([]),
         (async () => {
             try {
+                // Fixed targets are per single vendor. If vendedorCode is a comma list
+                // (e.g. "95,02,03") skip the lookup — aggregation is handled at caller level.
+                if (!vendedorCode || vendedorCode.indexOf(',') !== -1) return [];
                 const currentMonth = new Date().getMonth() + 1;
-                const safeVendor = vendedorCode.replace(/[^a-zA-Z0-9]/g, '');
+                const safeVendor = vendedorCode.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
+                if (!safeVendor) return [];
                 const fixedTargetCacheKey = `commissions:fixedTarget:${safeVendor}:${safeYear}`;
                 let rows = await redisCache.get('route', fixedTargetCacheKey);
                 if (!rows) {
