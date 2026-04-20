@@ -12,18 +12,19 @@ class Db2AuthRepository extends AuthRepository {
   }
 
   async findByCode(code) {
-    // CAST(? AS VARCHAR(50)) avoids ODBC 22001/CWB0111 when binding to IBM i CHAR columns
+    // Same query structure as legacy routes/auth.js - start from VDPL1 (PIN table) and JOIN VDD + VDC
     const sql = `
-      SELECT TRIM(V.CODIGOVENDEDOR) AS USUARIO, TRIM(V.NOMBREVENDEDOR) AS NOMBRE,
-        CASE WHEN VX.JEFEVENTASSN = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
-        '' AS EMAIL, TRIM(PL.CODIGOPIN) AS PASSWORD_HASH, 1 AS ACTIVO
-      FROM DSEDAC.VDD V
-      LEFT JOIN DSEDAC.VDDX VX ON V.CODIGOVENDEDOR = VX.CODIGOVENDEDOR
-      LEFT JOIN DSEDAC.VDPL1 PL ON V.CODIGOVENDEDOR = PL.CODIGOVENDEDOR
-      WHERE TRIM(V.CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
+      SELECT TRIM(P.CODIGOVENDEDOR) AS USUARIO, TRIM(D.NOMBREVENDEDOR) AS NOMBRE,
+        CASE WHEN X.JEFEVENTASSN = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
+        '' AS EMAIL, P.CODIGOPIN AS PASSWORD_HASH, 1 AS ACTIVO
+      FROM DSEDAC.VDPL1 P
+      JOIN DSEDAC.VDD D ON P.CODIGOVENDEDOR = D.CODIGOVENDEDOR
+      JOIN DSEDAC.VDC V ON P.CODIGOVENDEDOR = V.CODIGOVENDEDOR AND V.SUBEMPRESA = 'GMP'
+      LEFT JOIN DSEDAC.VDDX X ON P.CODIGOVENDEDOR = X.CODIGOVENDEDOR
+      WHERE TRIM(P.CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
+      FETCH FIRST 1 ROWS ONLY
     `;
     const result = await this._db.executeParams(sql, [code.trim()]);
-    console.log(`[DDD-AUTH-DEBUG] findByCode('${code}') → rows:`, JSON.stringify(result));
     if (!result || result.length === 0) return null;
     return User.fromDbRow(result[0]);
   }
