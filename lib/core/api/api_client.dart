@@ -28,6 +28,16 @@ class ApiClient {
   /// Flag to prevent duplicate logout calls
   static bool _isLoggingOut = false;
 
+  /// Flag to suppress 401→logout while a login is in progress.
+  /// Prevents stale 401 responses from clearing the new token mid-login.
+  static bool _isLoggingIn = false;
+
+  /// Call before sending login credentials to block concurrent 401→logout.
+  static void startLogin() => _isLoggingIn = true;
+
+  /// Call when login completes (success or failure) to re-enable 401→logout.
+  static void endLogin() => _isLoggingIn = false;
+
   /// Initialize the API client with automatic server detection
   static Future<void> initialize() async {
     if (_isInitialized) return;
@@ -503,7 +513,7 @@ class ApiClient {
 
       if (statusCode == 401) {
         final isLoginRequest = e.requestOptions.path.contains('/auth/login');
-        if (!isLoginRequest && !_isLoggingOut) {
+        if (!isLoginRequest && !_isLoggingOut && !_isLoggingIn) {
           _isLoggingOut = true;
           debugPrint('[ApiClient] 401 detected - triggering logout');
           onUnauthorized?.call();

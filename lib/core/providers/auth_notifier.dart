@@ -126,26 +126,29 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     return _tryAutoLogin();
   }
 
-  /// Returns true if the JWT token is expired (checks 'exp' claim locally)
+  /// Returns true if the stored token is expired.
+  /// The server uses a custom 2-part HMAC format: base64(JSON).hmacHex
+  /// The payload contains a 'timestamp' (ms epoch) and the TTL is 1 hour.
   bool _isTokenExpired(String token) {
     try {
-      final parts = token.split('.');
-      if (parts.length != 3) return true;
-      // Decode base64url payload (pad to multiple of 4)
-      var payload = parts[1].replaceAll('-', '+').replaceAll('_', '/');
-      switch (payload.length % 4) {
-        case 2: payload += '=='; break;
-        case 3: payload += '='; break;
+      // Custom format: base64Payload.hmacHex  (NOT standard 3-part JWT)
+      final dotIndex = token.indexOf('.');
+      if (dotIndex < 1) return true;
+      var dataB64 = token.substring(0, dotIndex);
+      // Add standard base64 padding if needed
+      switch (dataB64.length % 4) {
+        case 2: dataB64 += '=='; break;
+        case 3: dataB64 += '='; break;
         default: break;
       }
-      final decoded = utf8.decode(base64.decode(payload));
+      final decoded = utf8.decode(base64.decode(dataB64));
       final data = jsonDecode(decoded) as Map<String, dynamic>;
-      final exp = data['exp'];
-      if (exp == null) return false;
-      final expSeconds = exp is int ? exp : int.tryParse(exp.toString()) ?? 0;
-      return DateTime.now().isAfter(
-        DateTime.fromMillisecondsSinceEpoch(expSeconds * 1000),
-      );
+      // Token payload uses 'timestamp' (ms since epoch), TTL = 1 hour server-side
+      final timestamp = data['timestamp'];
+      if (timestamp == null) return true;
+      final ts = timestamp is int ? timestamp : int.tryParse(timestamp.toString()) ?? 0;
+      const ttlMs = 3600000; // 1 hour — matches server JWT_ACCESS_EXPIRES default
+      return DateTime.now().millisecondsSinceEpoch - ts > ttlMs;
     } catch (_) {
       return true; // can't decode → treat as expired
     }
@@ -195,6 +198,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
   /// Login with credentials
   Future<bool> login(String username, String password) async {
+    ApiClient.startLogin(); // Block concurrent 401s from triggering logout
     state = const AsyncValue.loading();
 
     try {
@@ -262,6 +266,10 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         final prefs = await SharedPreferences.getInstance();
         await prefs.setStringList('vendedor_codes', vendedorCodes);
 
+        // Re-apply token immediately before state update to guard against
+        // stale 401 responses clearing it during the storage writes above
+        ApiClient.setAuthToken(token);
+
         // Update state
         state = AsyncValue.data(
           AuthState(
@@ -295,11 +303,14 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       );
       debugPrintStack(stackTrace: st);
       return false;
+    } finally {
+      ApiClient.endLogin();
     }
   }
 
   /// Login for multi-role users
   Future<bool> loginWithRole(String username, String password, String role) async {
+    ApiClient.startLogin(); // Block concurrent 401s from triggering logout
     state = const AsyncValue.loading();
 
     try {
@@ -335,6 +346,10 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList('vendedor_codes', vendedorCodes);
 
+      // Re-apply token immediately before state update to guard against
+      // stale 401 responses clearing it during the storage writes above
+      ApiClient.setAuthToken(token);
+
       state = AsyncValue.data(
         AuthState(user: user, vendedorCodes: vendedorCodes, isInitialized: true),
       );
@@ -346,6 +361,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         AuthState(isInitialized: true, error: e.toString()),
       );
       return false;
+    } finally {
+      ApiClient.endLogin();
     }
   }
 
