@@ -574,7 +574,10 @@ async function startServer() {
   }
 
   // ─── PHASE 4: Start server (schema ready + caches warm) ───────────────
-  app.listen(PORT, '0.0.0.0', () => {
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    // Store server reference globally for graceful shutdown
+    global.__httpServer = server;
+    
     const dddStatus = process.env.USE_DDD_ROUTES === 'true' ? 'DDD Routes ✅' : 'Legacy Routes';
     logger.info('═'.repeat(60));
     logger.info(`  GMP Sales Analytics Server - Port ${PORT}`);
@@ -723,11 +726,17 @@ const gracefulShutdown = async (signal) => {
   
   logger.info(`📴 Received ${signal}. Starting graceful shutdown...`);
   
-  // 1. Stop accepting new connections
-  if (server.close) {
-    server.close(() => {
-      logger.info('📴 HTTP server closed');
-    });
+  // 1. Stop HTTP server (will be defined after app.listen)
+  try {
+    const httpServer = require('http').globalAgent?.socket?._server || 
+                       global.__httpServer;
+    if (httpServer && httpServer.close) {
+      httpServer.close(() => {
+        logger.info('📴 HTTP server closed');
+      });
+    }
+  } catch (e) {
+    logger.warn(`📴 HTTP server close error: ${e.message}`);
   }
   
   // 2. Close DB pool
