@@ -12,14 +12,14 @@ class Db2AuthRepository extends AuthRepository {
   }
 
   async findByCode(code) {
-    // TRIM() on both sides avoids ODBC 22001/CWB0111 when binding VARCHAR to CHAR
+    // CAST(? AS VARCHAR(50)) avoids ODBC 22001/CWB0111 when binding to IBM i CHAR columns
     const sql = `
       SELECT TRIM(V.CODIGOVENDEDOR) AS USUARIO, TRIM(V.NOMBREVENDEDOR) AS NOMBRE,
         CASE WHEN VX.JEFEVENTASSN = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
         '' AS EMAIL, '' AS PASSWORD_HASH, 1 AS ACTIVO
       FROM DSEDAC.VDD V
-      LEFT JOIN DSEDAC.VDDX VX ON TRIM(VX.CODIGOVENDEDOR) = TRIM(V.CODIGOVENDEDOR)
-      WHERE TRIM(V.CODIGOVENDEDOR) = TRIM(?)
+      LEFT JOIN DSEDAC.VDDX VX ON V.CODIGOVENDEDOR = VX.CODIGOVENDEDOR
+      WHERE TRIM(V.CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
     `;
     const result = await this._db.executeParams(sql, [code.trim()]);
     if (!result || result.length === 0) return null;
@@ -27,15 +27,15 @@ class Db2AuthRepository extends AuthRepository {
   }
 
   async findByCredentials(username, password) {
-    // TRIM() on both sides avoids ODBC 22001/CWB0111 when binding VARCHAR to CHAR
+    // CAST(? AS VARCHAR(50)) avoids ODBC 22001/CWB0111 when binding to IBM i CHAR columns
     const sql = `
       SELECT TRIM(V.CODIGOVENDEDOR) AS USUARIO, TRIM(V.NOMBREVENDEDOR) AS NOMBRE,
         CASE WHEN VX.JEFEVENTASSN = 'S' THEN 'JEFE_VENTAS' ELSE 'COMERCIAL' END AS ROL,
         '' AS EMAIL, PL.CODIGOPIN AS PASSWORD_HASH, 1 AS ACTIVO
       FROM DSEDAC.VDD V
-      LEFT JOIN DSEDAC.VDDX VX ON TRIM(VX.CODIGOVENDEDOR) = TRIM(V.CODIGOVENDEDOR)
-      LEFT JOIN DSEDAC.VDPL1 PL ON TRIM(PL.CODIGOVENDEDOR) = TRIM(V.CODIGOVENDEDOR)
-      WHERE TRIM(V.CODIGOVENDEDOR) = TRIM(?)
+      LEFT JOIN DSEDAC.VDDX VX ON V.CODIGOVENDEDOR = VX.CODIGOVENDEDOR
+      LEFT JOIN DSEDAC.VDPL1 PL ON V.CODIGOVENDEDOR = PL.CODIGOVENDEDOR
+      WHERE TRIM(V.CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
     `;
     const result = await this._db.executeParams(sql, [username.trim()]);
     if (!result || result.length === 0) return null;
