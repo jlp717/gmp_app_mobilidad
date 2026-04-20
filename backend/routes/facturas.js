@@ -11,11 +11,12 @@ const facturasService = require('../services/facturas.service');
 const pdfService = require('../services/pdf.service');
 const logger = require('../middleware/logger');
 const { sendEmailWithPdf, generateInvoiceEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
+const { verifyToken } = require('../middleware/auth');
 
 /**
  * GET /api/facturas
  */
-router.get('/', async (req, res, next) => {
+router.get('/', verifyToken, async (req, res, next) => {
     try {
         const params = {
             vendedorCodes: req.query.vendedorCodes,
@@ -54,7 +55,7 @@ router.get('/', async (req, res, next) => {
 /**
  * GET /api/facturas/years
  */
-router.get('/years', async (req, res, next) => {
+router.get('/years', verifyToken, async (req, res, next) => {
     try {
         const vendedorCodes = req.query.vendedorCodes;
 
@@ -78,7 +79,7 @@ router.get('/years', async (req, res, next) => {
 /**
  * GET /api/facturas/summary
  */
-router.get('/summary', async (req, res, next) => {
+router.get('/summary', verifyToken, async (req, res, next) => {
     try {
         const params = {
             vendedorCodes: req.query.vendedorCodes,
@@ -109,7 +110,7 @@ router.get('/summary', async (req, res, next) => {
 /**
  * GET /api/facturas/:serie/:numero/:ejercicio
  */
-router.get('/:serie/:numero/:ejercicio', async (req, res, next) => {
+router.get('/:serie/:numero/:ejercicio', verifyToken, async (req, res, next) => {
     try {
         const { serie, numero, ejercicio } = req.params;
 
@@ -132,7 +133,7 @@ router.get('/:serie/:numero/:ejercicio', async (req, res, next) => {
 /**
  * GET /api/facturas/:serie/:numero/:ejercicio/pdf
  */
-router.get('/:serie/:numero/:ejercicio/pdf', async (req, res, next) => {
+router.get('/:serie/:numero/:ejercicio/pdf', verifyToken, async (req, res, next) => {
     try {
         const { serie, numero, ejercicio } = req.params;
         const preview = req.query.preview === 'true';
@@ -185,7 +186,7 @@ router.get('/:serie/:numero/:ejercicio/pdf', async (req, res, next) => {
  * POST /api/facturas/share/whatsapp
  * WhatsApp share with PDF base64 for Flutter to share as document
  */
-router.post('/share/whatsapp', async (req, res, next) => {
+router.post('/share/whatsapp', verifyToken, async (req, res, next) => {
     try {
         const { serie, numero, ejercicio, telefono, clienteNombre } = req.body;
 
@@ -243,7 +244,7 @@ router.post('/share/whatsapp', async (req, res, next) => {
  * POST /api/facturas/send-email
  * Server-side email sending with PDF attachment via Nodemailer
  */
-router.post('/send-email', async (req, res, next) => {
+router.post('/send-email', verifyToken, async (req, res, next) => {
     try {
         const { serie, numero, ejercicio, destinatario, asunto, cuerpo, clienteNombre } = req.body;
 
@@ -311,7 +312,7 @@ router.post('/send-email', async (req, res, next) => {
  * POST /api/facturas/share/email (LEGACY - kept for backward compatibility)
  * Now redirects to send-email
  */
-router.post('/share/email', async (req, res, next) => {
+router.post('/share/email', verifyToken, async (req, res, next) => {
     try {
         const { serie, numero, ejercicio, destinatario, clienteNombre } = req.body;
 

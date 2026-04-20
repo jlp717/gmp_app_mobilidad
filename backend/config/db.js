@@ -6,12 +6,10 @@ dotenv.config();
 
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Build connection string from environment variables
 const DB_UID = process.env.ODBC_UID;
 const DB_PWD = process.env.ODBC_PWD;
 const DB_DSN = process.env.ODBC_DSN || 'GMP';
 
-// SECURITY: Warn but allow production with existing credentials
 if (NODE_ENV === 'production' && (!DB_UID || !DB_PWD)) {
     logger.warn('[DB] ⚠️ Using default DB credentials in production');
 }
@@ -19,7 +17,6 @@ if (NODE_ENV === 'production' && (!DB_UID || !DB_PWD)) {
 const DB_UID_FINAL = DB_UID || 'JAVIER';
 const DB_PWD_FINAL = DB_PWD || (NODE_ENV === 'development' ? 'JAVIER' : '');
 
-// OPTIMIZED: Connection pool settings for better performance
 const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID_FINAL};PWD=${DB_PWD_FINAL};NAM=1;CCSID=1208;CMPTDM=1;
     CPOOLMAX=${parseInt(process.env.ODBC_POOL_MAX) || 20};
     CPOOLMIN=${parseInt(process.env.ODBC_POOL_MIN) || 3};
@@ -27,67 +24,178 @@ const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID_FINAL};PWD=${DB_PWD_FINAL};NAM=1;C
     COMMTIMEOUT=${parseInt(process.env.ODBC_COMM_TIMEOUT) || 90};
     DBQ=${DB_DSN};`;
 
+const POOL_CONFIG = {
+    min: 2,
+    max: 10,
+    idleTimeoutMs: 30000,
+    acquireTimeoutMs: 10000
+};
+
+const pool = {
+    connections: [],
+    active: 0,
+    min: POOL_CONFIG.min,
+    max: POOL_CONFIG.max,
+    idleTimeoutMs: POOL_CONFIG.idleTimeoutMs,
+    acquireTimeoutMs: POOL_CONFIG.acquireTimeoutMs,
+    _odbcPool: null,
+    _initPromise: null,
+    _closed: false,
+
+    async _ensureMinConnections() {
+        while (this.connections.length < this.min) {
+            try {
+                const conn = await this._odbcPool.connect();
+                this.connections.push({
+                    conn,
+                    createdAt: Date.now(),
+                    lastUsed: Date.now()
+                });
+                logger.debug(`[POOL] Min connection created (${this.connections.length}/${this.min})`);
+            } catch (error) {
+                logger.error(`[POOL] Failed to create min connection: ${error.message}`);
+                break;
+            }
+        }
+    },
+
+    async _closeIdleConnections() {
+        const now = Date.now();
+        const toClose = [];
+        for (let i = this.connections.length - 1; i >= 0; i--) {
+            const c = this.connections[i];
+            if (c.conn && now - c.lastUsed > this.idleTimeoutMs && this.connections.length > this.min) {
+                toClose.push(i);
+            }
+        }
+        for (const i of toClose) {
+            try {
+                await this.connections[i].conn.close();
+                this.connections.splice(i, 1);
+                logger.debug(`[POOL] Idle connection closed (${this.connections.length} total)`);
+            } catch (e) {
+                this.connections.splice(i, 1);
+            }
+        }
+    },
+
+    async acquire() {
+        if (this._closed) throw new Error('Pool is closed');
+        const start = Date.now();
+
+        while (this.active >= this.max) {
+            if (Date.now() - start > this.acquireTimeoutMs) {
+                throw new Error('Pool: acquire timeout - max connections reached');
+            }
+            await new Promise(res => setTimeout(res, 50));
+        }
+
+        let c = this.connections.find(c => !c.inUse);
+        if (!c) {
+            if (this.connections.length < this.max) {
+                try {
+                    const conn = await this._odbcPool.connect();
+                    c = { conn, createdAt: Date.now(), lastUsed: Date.now(), inUse: true };
+                    this.connections.push(c);
+                } catch (error) {
+                    throw new Error(`Pool: failed to create connection - ${error.message}`);
+                }
+            } else {
+                while (!c) {
+                    if (Date.now() - start > this.acquireTimeoutMs) {
+                        throw new Error('Pool: acquire timeout - no available connections');
+                    }
+                    await new Promise(res => setTimeout(res, 50));
+                    c = this.connections.find(c => !c.inUse);
+                }
+            }
+        } else {
+            c.inUse = true;
+            c.lastUsed = Date.now();
+        }
+
+        this.active++;
+        return c.conn;
+    },
+
+    async release(conn) {
+        const entry = this.connections.find(c => c.conn === conn);
+        if (entry) {
+            entry.inUse = false;
+            entry.lastUsed = Date.now();
+        }
+        if (this.active > 0) this.active--;
+        this._ensureMinConnections().catch(() => {});
+        this._closeIdleConnections().catch(() => {});
+    },
+
+    async close() {
+        this._closed = true;
+        this._odbcPool = null;
+        for (const entry of this.connections) {
+            try { await entry.conn.close(); } catch (_) {}
+        }
+        this.connections = [];
+        this.active = 0;
+        logger.info('[POOL] All connections closed');
+    },
+
+    getMetrics() {
+        return {
+            active: this.active,
+            idle: this.connections.filter(c => !c.inUse).length,
+            total: this.connections.length,
+            min: this.min,
+            max: this.max,
+            closed: this._closed
+        };
+    }
+};
+
 let dbPool = null;
 const MAX_RETRIES = 3;
-const RETRY_DELAY_BASE_MS = 500;   // Exponential: 500ms, 1000ms, 2000ms
-let poolRecreateInProgress = false; // Prevent concurrent pool recreation
-let keepaliveInterval = null;       // Keepalive timer
+const RETRY_DELAY_BASE_MS = 500;
+let poolRecreateInProgress = false;
+let keepaliveInterval = null;
 
-// Track connections that already have CCSID set to UTF-8
 const _utf8Connections = new WeakSet();
 
-/**
- * Ensure an ODBC connection uses CCSID 1208 (UTF-8) for character translation.
- * Without this, the IBM i ODBC driver returns CP1252 bytes which node-odbc
- * misinterprets as UTF-8, corrupting Ñ, tildes, and other non-ASCII chars.
- */
 async function ensureUtf8(conn) {
     if (_utf8Connections.has(conn)) return;
     try {
         await conn.query("CALL QSYS.QCMDEXC('CHGJOB CCSID(1208)', 0000000018.00000)");
         logger.debug('[DB] Connection CCSID set to 1208 (UTF-8)');
     } catch (e) {
-        // Non-fatal: CCSID=1208 in connection string might already handle it,
-        // or the user might lack CHGJOB authority
         logger.debug(`[DB] CHGJOB CCSID(1208) skipped: ${e.message}`);
     }
     _utf8Connections.add(conn);
 }
 
-/**
- * Wrap a pool so that every connection obtained via pool.connect()
- * automatically gets CCSID 1208 (UTF-8) initialization.
- */
-function wrapPoolWithUtf8(pool) {
-    const originalConnect = pool.connect.bind(pool);
-    pool.connect = async function () {
-        const conn = await originalConnect();
-        await ensureUtf8(conn);
-        return conn;
-    };
-    return pool;
-}
-
 async function initDb() {
-    try {
-        dbPool = await odbc.pool(DB_CONFIG);
-        wrapPoolWithUtf8(dbPool);
-        logger.info('✅ Database connection pool initialized (UTF-8 CCSID=1208)');
-        startKeepalive();
-        return dbPool;
-    } catch (error) {
-        logger.error(`❌ Database connection failed during init: ${error.message}`);
+    if (pool._initPromise) {
+        await pool._initPromise;
+        return pool._odbcPool;
     }
+    pool._initPromise = (async () => {
+        try {
+            pool._odbcPool = await odbc.pool(DB_CONFIG);
+            dbPool = pool._odbcPool;
+            await pool._ensureMinConnections();
+            logger.info(`✅ Connection pool initialized: min=${pool.min}, max=${pool.max}, idleTimeoutMs=${pool.idleTimeoutMs}, acquireTimeoutMs=${pool.acquireTimeoutMs}`);
+            startKeepalive();
+        } catch (error) {
+            logger.error(`❌ Database connection failed during init: ${error.message}`);
+            throw error;
+        } finally {
+            pool._initPromise = null;
+        }
+    })();
+    await pool._initPromise;
+    return pool._odbcPool;
 }
 
-/**
- * Recreate the connection pool when stale connections are detected.
- * Error 10054 (TCP reset) / 08S01 (communication link failure) indicate
- * the AS400 dropped idle connections - the entire pool is poisoned.
- */
 async function recreatePool() {
     if (poolRecreateInProgress) {
-        // Wait for ongoing recreation to finish
         await new Promise(res => setTimeout(res, 2000));
         return;
     }
@@ -98,17 +206,18 @@ async function recreatePool() {
         dbPool = null;
         stopKeepalive();
 
-        // Try to close old pool gracefully (don't block on failure)
         if (oldPool) {
             try { await oldPool.close(); } catch (e) { /* ignore */ }
         }
+        pool.connections = [];
+        pool.active = 0;
 
-        // Small delay to let AS400 clean up
         await new Promise(res => setTimeout(res, 500));
 
-        dbPool = await odbc.pool(DB_CONFIG);
-        wrapPoolWithUtf8(dbPool);
-        logger.info('✅ Database pool recreated successfully (UTF-8 CCSID=1208)');
+        pool._odbcPool = await odbc.pool(DB_CONFIG);
+        dbPool = pool._odbcPool;
+        await pool._ensureMinConnections();
+        logger.info('✅ Database pool recreated successfully');
         startKeepalive();
     } catch (error) {
         logger.error(`❌ Pool recreation failed: ${error.message}`);
@@ -118,10 +227,6 @@ async function recreatePool() {
     }
 }
 
-/**
- * Detect if an error is a connection/network error (stale connection).
- * These errors mean the TCP connection to the AS400 was dropped.
- */
 function isConnectionError(error) {
     const msg = (error.message || '').toLowerCase();
     const odbcCodes = (error.odbcErrors || []).map(e => e.code);
@@ -130,33 +235,25 @@ function isConnectionError(error) {
     return msg.includes('communication link failure') ||
         msg.includes('so close') ||
         msg.includes('connection') ||
-        odbcCodes.includes(10054) ||   // TCP reset by remote
-        odbcCodes.includes(10053) ||   // Software caused connection abort
-        odbcStates.includes('08S01') || // Communication link failure
-        odbcStates.includes('08003') || // Connection not open
-        odbcStates.includes('HY000');   // General ODBC error (often stale conn)
+        odbcCodes.includes(10054) ||
+        odbcCodes.includes(10053) ||
+        odbcStates.includes('08S01') ||
+        odbcStates.includes('08003') ||
+        odbcStates.includes('HY000');
 }
 
-/**
- * Detect SQL syntax/schema errors that will never succeed on retry.
- * These are permanent errors — retrying wastes time and connections.
- */
 function isSqlSyntaxError(error) {
     const odbcStates = (error.odbcErrors || []).map(e => e.state);
     const odbcCodes = (error.odbcErrors || []).map(e => e.code);
 
-    return odbcStates.includes('42S22') || // Column not found
-        odbcStates.includes('42S02') || // Table not found
-        odbcStates.includes('42000') || // Syntax error or access violation
-        odbcCodes.includes(-205) ||     // DB2: column not found
-        odbcCodes.includes(-204) ||     // DB2: object not found
-        odbcCodes.includes(-104);       // DB2: illegal symbol/token
+    return odbcStates.includes('42S22') ||
+        odbcStates.includes('42S02') ||
+        odbcStates.includes('42000') ||
+        odbcCodes.includes(-205) ||
+        odbcCodes.includes(-204) ||
+        odbcCodes.includes(-104);
 }
 
-/**
- * Keepalive: ping the DB every 2 minutes to prevent AS400 from
- * dropping idle connections. Lightweight query on SYSIBM.SYSDUMMY1.
- */
 function startKeepalive() {
     stopKeepalive();
     keepaliveInterval = setInterval(async () => {
@@ -170,7 +267,7 @@ function startKeepalive() {
         } finally {
             if (conn) try { await conn.close(); } catch (_) { }
         }
-    }, 2 * 60 * 1000); // 2 minutes
+    }, 2 * 60 * 1000);
 }
 
 function stopKeepalive() {
@@ -180,9 +277,6 @@ function stopKeepalive() {
     }
 }
 
-/**
- * Execute a query with retry logic, exponential backoff, and pool recreation.
- */
 async function query(sql, logQuery = true, logError = true) {
     if (!dbPool) {
         await initDb();
@@ -195,7 +289,9 @@ async function query(sql, logQuery = true, logError = true) {
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         let conn = null;
         try {
-            conn = await dbPool.connect();
+            conn = await pool.acquire();
+
+            await ensureUtf8(conn);
 
             const start = Date.now();
             const result = await conn.query(sql);
@@ -224,7 +320,6 @@ async function query(sql, logQuery = true, logError = true) {
             }
 
             if (isSqlSyntaxError(error)) {
-                // SQL syntax/schema error — will never succeed, don't waste retries
                 if (logError) {
                     logger.error(`🚫 SQL syntax/schema error (no retry): state=${(error.odbcErrors || []).map(e => e.state).join(',')} code=${(error.odbcErrors || []).map(e => e.code).join(',')}\n  SQL: ${sql ? sql.replace(/\s+/g, ' ') : 'N/A'}`);
                 }
@@ -232,22 +327,20 @@ async function query(sql, logQuery = true, logError = true) {
             }
 
             if (!connError && !error.message.includes('odbc')) {
-                // Non-ODBC logic error — don't retry
                 break;
             }
 
-            // If 2+ connection errors in a row, recreate the pool before next retry
             if (connectionErrorCount >= 2 && attempt < MAX_RETRIES) {
                 await recreatePool();
             }
 
-            // Exponential backoff: 500ms, 1000ms, 2000ms
             const delay = RETRY_DELAY_BASE_MS * Math.pow(2, attempt - 1);
             await new Promise(res => setTimeout(res, delay));
 
         } finally {
             if (conn) {
                 try {
+                    await pool.release(conn);
                     await conn.close();
                 } catch (closeError) {
                     // Ignore close errors on stale connections
@@ -256,18 +349,13 @@ async function query(sql, logQuery = true, logError = true) {
         }
     }
 
-    // If ALL retries failed with connection errors, schedule pool recreation
-    // for the next request (don't block this one further)
     if (connectionErrorCount >= MAX_RETRIES) {
-        recreatePool().catch(() => { }); // fire-and-forget
+        recreatePool().catch(() => { });
     }
 
     throw lastError;
 }
 
-/**
- * Execute a parameterized query with retry logic and pool recovery.
- */
 async function queryWithParams(sql, params = [], logQuery = true, logError = true) {
     if (!dbPool) {
         await initDb();
@@ -280,7 +368,9 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         let conn = null;
         try {
-            conn = await dbPool.connect();
+            conn = await pool.acquire();
+
+            await ensureUtf8(conn);
 
             const start = Date.now();
             const result = await conn.query(sql, params);
@@ -327,6 +417,7 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
         } finally {
             if (conn) {
                 try {
+                    await pool.release(conn);
                     await conn.close();
                 } catch (e) { /* ignore */ }
             }
@@ -344,9 +435,21 @@ function getPool() {
     return dbPool;
 }
 
+function getPoolMetrics() {
+    return pool.getMetrics();
+}
+
+async function closePool() {
+    stopKeepalive();
+    await pool.close();
+    dbPool = null;
+}
+
 module.exports = {
     initDb,
     query,
     queryWithParams,
-    getPool
+    getPool,
+    getPoolMetrics,
+    closePool
 };

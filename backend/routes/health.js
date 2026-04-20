@@ -6,7 +6,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { query } = require('../config/db');
+const { query, getPoolMetrics } = require('../config/db');
 const logger = require('../middleware/logger');
 
 /**
@@ -28,9 +28,17 @@ router.get('/', async (req, res) => {
     try {
         const start = Date.now();
         await query('SELECT 1 FROM SYSIBM.SYSDUMMY1 FETCH FIRST 1 ROW ONLY');
+        const metrics = getPoolMetrics();
         health.database.db2 = {
             status: 'connected',
-            latencyMs: Date.now() - start
+            latencyMs: Date.now() - start,
+            pool: {
+                active: metrics.active,
+                idle: metrics.idle,
+                total: metrics.total,
+                min: metrics.min,
+                max: metrics.max
+            }
         };
     } catch (error) {
         health.database.db2 = {

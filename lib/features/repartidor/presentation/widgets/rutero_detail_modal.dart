@@ -12,10 +12,9 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/email_form_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
-import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
+import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
-import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
@@ -23,7 +22,15 @@ import 'package:share_plus/share_plus.dart';
 import 'package:signature/signature.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-/// Validate Spanish DNI/NIE format with check letter
+import 'rutero_detail_header.dart';
+import 'rutero_detail_products.dart';
+import 'rutero_detail_signature.dart';
+import 'rutero_detail_payment.dart';
+import 'rutero_detail_finalize.dart';
+import 'rutero_detail_completed.dart';
+import 'rutero_printer_config.dart';
+import 'rutero_detail_tab_bar.dart';
+
 bool _isValidDniNie(String value) {
   final cleaned = value.trim().toUpperCase();
   final regex = RegExp(r'^([XYZ]\d{7}|\d{8})[A-Z]$');
@@ -39,16 +46,9 @@ bool _isValidDniNie(String value) {
   return cleaned[cleaned.length - 1] == letters[num % 23];
 }
 
-/// Rutero Detail Modal - Futuristic Redesign v2
-/// Features:
-/// - Visual product carousel with quantity adjustment
-/// - Smart payment module with multiple methods
-/// - Geo-tagged photo capture
-/// - Improved signature capture
-/// - Clear obligatory vs optional payment indicators
 class RuteroDetailModal extends StatefulWidget {
-
-  const RuteroDetailModal({required this.albaran, required this.ref, super.key});
+  const RuteroDetailModal(
+      {required this.albaran, required this.ref, super.key});
   final AlbaranEntrega albaran;
   final WidgetRef ref;
 
@@ -65,23 +65,18 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       TextEditingController();
   final TextEditingController _dniController = TextEditingController();
   final TextEditingController _nombreController = TextEditingController();
-  final FocusNode _dniFocus = FocusNode();
-  final FocusNode _nombreFocus = FocusNode();
 
   final SignatureController _signatureController = SignatureController(
     exportBackgroundColor: Colors.white,
   );
 
-  // Product verification state
   final Map<String, bool> _productChecked = {};
   final Map<String, int> _productQuantities = {};
 
-  // Data state
   List<EntregaItem> _items = [];
   bool _isLoadingItems = true;
   String? _itemsError;
 
-  // Helpers
   List<String> _suggestedNames = [];
   List<String> _suggestedDnis = [];
 
@@ -89,21 +84,18 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   bool _isPaid = false;
   bool _isSubmitting = false;
 
-  // Zebra printer config
   bool _tieneImpresora = false;
   String? _printerName;
   String? _printerAddress;
   bool _isTestingConnection = false;
-  bool? _lastConnectionResult; // null=not tested, true=ok, false=fail
+  bool? _lastConnectionResult;
 
-  // Inline validation errors (instead of snackbar)
   String? _nombreError;
   String? _dniError;
   String? _firmaError;
   String? _pagoError;
   String? _observacionesError;
 
-  // PDF cache to avoid regenerating on re-open
   String? _cachedPdfBase64;
 
   @override
@@ -170,195 +162,32 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
   }
 
-  /// Reusable printer config widget (toggle, status, verify, change).
   Widget _buildPrinterConfigSection() {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: AppTheme.darkCard,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: _tieneImpresora
-              ? AppTheme.neonCyan.withValues(alpha: 0.4)
-              : Colors.transparent,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(
-                Icons.print,
-                color:
-                    _tieneImpresora ? AppTheme.neonCyan : AppTheme.textTertiary,
-                size: 20,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Imprimir ticket (Zebra)',
-                  style: TextStyle(
-                    color: _tieneImpresora
-                        ? AppTheme.textPrimary
-                        : AppTheme.textSecondary,
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              Switch(
-                value: _tieneImpresora,
-                activeThumbColor: AppTheme.neonCyan,
-                onChanged: (val) async {
-                  if (val && _printerAddress == null) {
-                    await _selectAndSavePrinter();
-                    if (_printerAddress == null) return;
-                  }
-                  await ZebraPrintService.setTieneImpresora(val);
-                  setState(() {
-                    _tieneImpresora = val;
-                    _lastConnectionResult = null;
-                  });
-                },
-              ),
-            ],
-          ),
-          if (_tieneImpresora) ...[
-            const SizedBox(height: 8),
-            if (_printerAddress != null) ...[
-              Row(
-                children: [
-                  Icon(
-                    Icons.bluetooth_connected,
-                    size: 14,
-                    color: _lastConnectionResult ?? false
-                        ? AppTheme.success
-                        : _lastConnectionResult == false
-                            ? AppTheme.error
-                            : AppTheme.textTertiary,
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      '${_printerName ?? "Zebra"} · '
-                      '${ZebraPrintService.maskAddress(_printerAddress!)}',
-                      style: const TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              if (_lastConnectionResult != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4, left: 20),
-                  child: Text(
-                    _lastConnectionResult!
-                        ? 'Conectada · Cifrado BT activo'
-                        : 'No detectada · Verifica que esté encendida',
-                    style: TextStyle(
-                      color: _lastConnectionResult!
-                          ? AppTheme.success
-                          : AppTheme.error,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: SizedBox(
-                      height: 30,
-                      child: OutlinedButton.icon(
-                        onPressed: _isTestingConnection
-                            ? null
-                            : _testPrinterConnection,
-                        icon: _isTestingConnection
-                            ? const SizedBox(
-                                width: 12,
-                                height: 12,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 1.5,
-                                  color: AppTheme.neonCyan,
-                                ),
-                              )
-                            : const Icon(Icons.wifi_find, size: 14),
-                        label: Text(
-                          _isTestingConnection ? 'Verificando...' : 'Verificar',
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.neonCyan,
-                          side: BorderSide(
-                            color: AppTheme.neonCyan.withValues(alpha: 0.4),
-                          ),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: SizedBox(
-                      height: 30,
-                      child: OutlinedButton.icon(
-                        onPressed: _selectAndSavePrinter,
-                        icon: const Icon(Icons.swap_horiz, size: 14),
-                        label: const Text(
-                          'Cambiar',
-                          style: TextStyle(fontSize: 11),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppTheme.textSecondary,
-                          side: const BorderSide(color: AppTheme.borderColor),
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ] else ...[
-              SizedBox(
-                height: 32,
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _selectAndSavePrinter,
-                  icon: const Icon(Icons.bluetooth_searching, size: 16),
-                  label: const Text(
-                    'Seleccionar impresora',
-                    style: TextStyle(fontSize: 12),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppTheme.neonCyan,
-                    side: BorderSide(
-                      color: AppTheme.neonCyan.withValues(alpha: 0.4),
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ],
-      ),
+    return RuteroPrinterConfig(
+      tieneImpresora: _tieneImpresora,
+      printerName: _printerName,
+      printerAddress: _printerAddress,
+      isTestingConnection: _isTestingConnection,
+      lastConnectionResult: _lastConnectionResult,
+      onToggle: (val) async {
+        if (val == true && _printerAddress == null) {
+          await _selectAndSavePrinter();
+          if (_printerAddress == null) return;
+        }
+        await ZebraPrintService.setTieneImpresora(val);
+        setState(() {
+          _tieneImpresora = val;
+          _lastConnectionResult = null;
+        });
+      },
+      onSelectPrinter: _selectAndSavePrinter,
+      onTestConnection: _testPrinterConnection,
     );
   }
 
   Future<void> _loadItems() async {
     try {
       List<EntregaItem> items;
-      // If albaran already has items, use them; otherwise fetch from API
       if (widget.albaran.items.isNotEmpty) {
         items = widget.albaran.items;
       } else {
@@ -381,13 +210,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         items = albaranDetalle.items;
       }
 
-      // Filter out ghost lines: no product code, or description starts with "Pedido:"
       final filtered = items.where((item) {
         final code = item.codigoArticulo.trim();
         final desc = item.descripcion.trim();
         if (code.isEmpty) return false;
         if (desc.toLowerCase().startsWith('pedido:')) return false;
-        // Filter lines with code like "000" or purely zeros
         if (RegExp(r'^0+$').hasMatch(code)) return false;
         return true;
       }).toList();
@@ -430,7 +257,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           _suggestedNames =
               signers.map((s) => s['NOMBRE'].toString().trim()).toList();
 
-          // Pre-fill with most recent signer (User request)
           if (signers.isNotEmpty) {
             final last = signers.first;
             _dniController.text = last['DNI'].toString().trim();
@@ -450,16 +276,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     _observacionesController.dispose();
     _dniController.dispose();
     _nombreController.dispose();
-    _dniFocus.dispose();
-    _nombreFocus.dispose();
     _signatureController.dispose();
     super.dispose();
   }
 
   bool get _isFactura => widget.albaran.numeroFactura > 0;
   bool get _isUrgent => widget.albaran.esCTR;
-
   bool get _isCompleted => widget.albaran.estado == EstadoEntrega.entregado;
+
+  bool get _hasDiscrepancy {
+    final anyQtyModified = _items.any((item) =>
+        (_productQuantities[item.codigoArticulo] ??
+            item.cantidadPedida.toInt()) !=
+        item.cantidadPedida.toInt());
+    final anyUnchecked =
+        _items.any((item) => !(_productChecked[item.codigoArticulo] ?? true));
+    return anyQtyModified || anyUnchecked;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -470,9 +303,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       ).animate(CurvedAnimation(
         parent: _slideController,
         curve: Curves.easeOutCubic,
-      ),),
+      )),
       child: Container(
-        // Responsive: use more height in landscape where screen is shorter
         height: Responsive.modalHeight(
           context,
           portraitFraction: _isCompleted ? 0.70 : 0.92,
@@ -489,7 +321,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ),
         child: Column(
           children: [
-            // Drag handle
             Container(
               margin: const EdgeInsets.only(top: 12, bottom: 8),
               width: 40,
@@ -499,18 +330,17 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
-
-            // Header
-            _buildHeader(),
-
+            RuteroDetailHeader(
+              albaran: widget.albaran,
+              isCompleted: _isCompleted,
+            ),
             if (_isCompleted)
-              // Read-only completed view
               Expanded(child: _buildCompletedView())
             else ...[
-              // Tab bar
-              _buildTabBar(),
-
-              // Tab content
+              RuteroDetailTabBar(
+                tabController: _tabController,
+                isUrgent: _isUrgent,
+              ),
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
@@ -529,1137 +359,433 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
   }
 
-  /// Vista solo-lectura para entregas ya completadas
   Widget _buildCompletedView() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        children: [
-          // Success banner
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  AppTheme.success.withOpacity(0.15),
-                  AppTheme.success.withOpacity(0.05),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.success.withOpacity(0.3)),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppTheme.success.withOpacity(0.2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.check_circle,
-                      color: AppTheme.success, size: 32,),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'ENTREGA COMPLETADA',
-                        style: TextStyle(
-                          color: AppTheme.success,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _isFactura
-                            ? 'Factura ${widget.albaran.numeroFactura}'
-                            : 'Albarán ${widget.albaran.numeroAlbaran}',
-                        style: const TextStyle(
-                            color: AppTheme.textSecondary, fontSize: 13,),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Summary info
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.darkCard,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.borderColor),
-            ),
-            child: Column(
-              children: [
-                _buildInfoRow(
-                    Icons.store, 'Cliente', widget.albaran.nombreCliente,),
-                const Divider(color: AppTheme.borderColor, height: 20),
-                _buildInfoRow(Icons.location_on, 'Dirección',
-                    '${widget.albaran.direccion}, ${widget.albaran.poblacion}',),
-                const Divider(color: AppTheme.borderColor, height: 20),
-                // IVA breakdown: show neto + each IVA line + total
-                if (widget.albaran.importeNeto > 0) ...[
-                  _buildInfoRow(Icons.euro, 'Importe Neto',
-                      '${widget.albaran.importeNeto.toStringAsFixed(2)} €',),
-                  for (final iva in widget.albaran.ivaBreakdown)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 4),
-                      child: _buildInfoRow(
-                        Icons.percent,
-                        'IVA ${iva.pct.toStringAsFixed(0)}%',
-                        '${iva.iva.toStringAsFixed(2)} €',
-                      ),
-                    ),
-                  const Divider(color: AppTheme.borderColor, height: 20),
-                  _buildInfoRow(Icons.euro, 'Total',
-                      '${widget.albaran.importeTotal.toStringAsFixed(2)} €',),
-                ] else ...[
-                  _buildInfoRow(Icons.euro, 'Importe',
-                      '${widget.albaran.importeTotal.toStringAsFixed(2)} €',),
-                ],
-                const Divider(color: AppTheme.borderColor, height: 20),
-                _buildInfoRow(
-                    Icons.payment, 'Forma pago', widget.albaran.formaPagoDesc,),
-                if (widget.albaran.observaciones != null &&
-                    widget.albaran.observaciones!.isNotEmpty) ...[
-                  const Divider(color: AppTheme.borderColor, height: 20),
-                  _buildInfoRow(Icons.notes, 'Observaciones',
-                      widget.albaran.observaciones!,),
-                ],
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Share buttons
-          const Text(
-            'REENVIAR NOTA DE ENTREGA',
-            style: TextStyle(
-              color: AppTheme.textSecondary,
-              fontWeight: FontWeight.bold,
-              fontSize: 12,
-              letterSpacing: 1,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // View PDF
-          _buildShareButton(
-            icon: Icons.visibility,
-            label: 'Ver PDF',
-            color: AppTheme.neonPurple,
-            onTap: _previewReceiptPdf,
-          ),
-          const SizedBox(height: 10),
-
-          // Download PDF
-          _buildShareButton(
-            icon: Icons.download,
-            label: 'Descargar PDF',
-            color: AppTheme.neonBlue,
-            onTap: _downloadReceiptPdf,
-          ),
-          const SizedBox(height: 10),
-
-          // WhatsApp
-          _buildShareButton(
-            icon: Icons.chat,
-            label: 'Enviar por WhatsApp',
-            color: const Color(0xFF25D366),
-            onTap: () async {
-              await _shareViaWhatsApp();
-            },
-          ),
-          const SizedBox(height: 10),
-
-          // Email
-          _buildShareButton(
-            icon: Icons.email,
-            label: 'Enviar por Email',
-            color: AppTheme.neonCyan,
-            onTap: () async {
-              await _shareViaEmail();
-            },
-          ),
-
-          // Zebra printer section (same as finalize tab)
-          const SizedBox(height: 16),
-          _buildPrinterConfigSection(),
-          if (_tieneImpresora && _items.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            _buildShareButton(
-              icon: Icons.print,
-              label: 'Imprimir Ticket (Zebra)',
-              color: const Color(0xFF00BCD4),
-              onTap: _showZebraPrintPreview,
-            ),
-          ],
-
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(IconData icon, String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(icon, size: 18, color: AppTheme.textTertiary),
-        const SizedBox(width: 10),
-        // Responsive label width
-        SizedBox(
-          width: Responsive.value(context, phone: 60, desktop: 80),
-          child: Text(label,
-              style:
-                  const TextStyle(color: AppTheme.textTertiary, fontSize: 12),),
-        ),
-        Expanded(
-          child: Text(value,
-              style:
-                  const TextStyle(color: AppTheme.textPrimary, fontSize: 13),),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _previewReceiptPdf() async {
-    final modal =
-        AsyncOperationModal.show(context, text: 'Generando vista previa...');
-    try {
-      // Use cached PDF if available, otherwise generate
-      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
-      if (pdfData == null) throw Exception('No se pudo generar el PDF');
-      _cachedPdfBase64 = pdfData; // Cache for re-opens
-
-      modal.close();
-      if (!mounted) return;
-
-      final pdfBytes = base64Decode(pdfData);
-      final docLabel = widget.albaran.numeroFactura > 0
-          ? 'Factura ${widget.albaran.numeroFactura}'
-          : 'Albarán ${widget.albaran.numeroAlbaran}';
-      final fileName =
-          'Nota_Entrega_${widget.albaran.numeroFactura > 0 ? "F${widget.albaran.numeroFactura}" : "A${widget.albaran.numeroAlbaran}"}.pdf';
-
-      if (!mounted) return;
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PdfPreviewScreen(
-            pdfBytes: pdfBytes,
-            title: docLabel,
-            fileName: fileName,
-            onEmailTap: () {
-              Navigator.pop(context); // Close preview
-              _shareViaEmail();
-            },
-            onWhatsAppTap: () {
-              Navigator.pop(context); // Close preview
-              _shareViaWhatsApp();
-            },
-          ),
-        ),
-      );
-    } catch (e) {
-      modal.error('Error al visualizar: $e',
-          onRetry: _previewReceiptPdf,);
-    }
-  }
-
-  /// Descargar el PDF y abrirlo con share sheet
-  Future<void> _downloadReceiptPdf() async {
-    final modal = AsyncOperationModal.show(context, text: 'Preparando PDF...');
-    try {
-      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
-      if (pdfData == null) {
-        throw Exception('Error al generar el PDF');
-      }
-      _cachedPdfBase64 = pdfData;
-
-      final tempDir = await getTemporaryDirectory();
-      final docLabel = widget.albaran.numeroFactura > 0
-          ? 'Factura_${widget.albaran.numeroFactura}'
-          : 'Albaran_${widget.albaran.numeroAlbaran}';
-      final dlTs = DateTime.now().millisecondsSinceEpoch;
-      final file = File('${tempDir.path}/Nota_Entrega_${docLabel}_$dlTs.pdf');
-      await file.writeAsBytes(base64Decode(pdfData));
-
-      modal.close();
-      if (!mounted) return;
-
-      // Use Share sheet - user can save or open in any app
-      final renderBox = context.findRenderObject() as RenderBox?;
-      final origin = renderBox != null
-          ? Rect.fromCenter(
-              center:
-                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
-              width: 1,
-              height: 1,
-            )
-          : null;
-
-      await Share.shareXFiles(
-        [XFile(file.path, mimeType: 'application/pdf')],
-        text: 'Guardar $docLabel',
-        subject: docLabel,
-        sharePositionOrigin: origin,
-      );
-    } catch (e) {
-      modal.close();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error al descargar PDF: $e'),
-            backgroundColor: AppTheme.error,
-          ),
-        );
-      }
-    }
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.darkSurface,
-            AppTheme.darkBase,
-          ],
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              // Document badge
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: _isFactura
-                        ? [
-                            AppTheme.neonPurple.withOpacity(0.3),
-                            AppTheme.neonPurple.withOpacity(0.1),
-                          ]
-                        : [
-                            AppTheme.neonBlue.withOpacity(0.2),
-                            AppTheme.neonBlue.withOpacity(0.05),
-                          ],
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: _isFactura ? AppTheme.neonPurple : AppTheme.neonBlue,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _isFactura ? Icons.receipt_long : Icons.description,
-                      size: 16,
-                      color:
-                          _isFactura ? AppTheme.neonPurple : AppTheme.neonBlue,
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      _isFactura
-                          ? 'FACTURA ${widget.albaran.serieFactura.isNotEmpty ? "${widget.albaran.serieFactura}-" : ""}${widget.albaran.numeroFactura}'
-                          : 'ALBARÁN ${widget.albaran.serie.isNotEmpty ? widget.albaran.serie : "A"}${widget.albaran.terminal > 0 ? "-${widget.albaran.terminal}" : ""}-${widget.albaran.numeroAlbaran}',
-                      style: TextStyle(
-                        color: _isFactura
-                            ? AppTheme.neonPurple
-                            : AppTheme.neonBlue,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const Spacer(),
-
-              // Amount badge
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    NumberFormat.currency(symbol: '€', locale: 'es_ES')
-                        .format(widget.albaran.importeTotal),
-                    style: TextStyle(
-                      color: _isUrgent
-                          ? AppTheme.obligatorio
-                          : AppTheme.textPrimary,
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color:
-                          (_isUrgent ? AppTheme.obligatorio : AppTheme.success)
-                              .withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      _isCompleted
-                          ? '✓ ENTREGADO'
-                          : _isUrgent
-                              ? '⚠ COBRO OBLIGATORIO'
-                              : '✓ COBRO OPCIONAL',
-                      style: TextStyle(
-                        color: _isCompleted
-                            ? AppTheme.success
-                            : _isUrgent
-                                ? AppTheme.obligatorio
-                                : AppTheme.success,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(width: 12),
-
-              // Close button
-              IconButton(
-                icon: Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: const BoxDecoration(
-                    color: AppTheme.borderColor,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.close,
-                      color: AppTheme.textSecondary, size: 18,),
-                ),
-                onPressed: () => Navigator.pop(context),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 12),
-
-          // Client info
-          Text(
-            widget.albaran.nombreCliente,
-            style: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              const Icon(Icons.location_on_outlined,
-                  size: 14, color: AppTheme.textSecondary,),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  '${widget.albaran.direccion}, ${widget.albaran.poblacion}',
-                  style: const TextStyle(
-                      color: AppTheme.textSecondary, fontSize: 13,),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-          // KPI Glacius compact badges
-          ClientAlertsWidget(
-            clientId: widget.albaran.codigoCliente,
-            compact: true,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTabBar() {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppTheme.darkSurface,
-        border: Border(
-          bottom: BorderSide(color: AppTheme.borderColor),
-        ),
-      ),
-      child: TabBar(
-        controller: _tabController,
-        indicatorColor: AppTheme.neonBlue,
-        indicatorWeight: 3,
-        labelColor: AppTheme.neonBlue,
-        unselectedLabelColor: AppTheme.textSecondary,
-        labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-        tabs: [
-          const Tab(
-            icon: Icon(Icons.inventory_2_outlined, size: 20),
-            text: 'PRODUCTOS',
-          ),
-          Tab(
-            icon: Icon(
-              Icons.payment,
-              size: 20,
-              color: _isUrgent ? AppTheme.obligatorio : null,
-            ),
-            child: Text(
-              'COBRO',
-              style: TextStyle(
-                color: _isUrgent ? AppTheme.obligatorio : null,
-              ),
-            ),
-          ),
-          const Tab(
-            icon: Icon(Icons.check_circle_outline, size: 20),
-            text: 'FINALIZAR',
-          ),
-        ],
-      ),
+    return RuteroDetailCompleted(
+      albaran: widget.albaran,
+      onPreviewReceiptPdf: _previewReceiptPdf,
+      onDownloadReceiptPdf: _downloadReceiptPdf,
+      onShareViaWhatsApp: _shareViaWhatsApp,
+      onShareViaEmail: _shareViaEmail,
+      buildPrinterConfigSection: _buildPrinterConfigSection,
+      tieneImpresora: _tieneImpresora,
+      items: _items,
+      onShowZebraPrintPreview: _showZebraPrintPreview,
     );
   }
 
   Widget _buildProductsTab() {
-    if (_isLoadingItems) {
-      return _buildProductsLoading();
-    }
+    return RuteroDetailProducts(
+      items: _items,
+      isLoadingItems: _isLoadingItems,
+      itemsError: _itemsError,
+      productChecked: _productChecked,
+      productQuantities: _productQuantities,
+      ordenPreparacion: widget.albaran.ordenPreparacion?.toString(),
+      onProductCheckedChanged: (code, value) {
+        setState(() {
+          _productChecked[code] = value;
+        });
+      },
+      onQuantityChanged: (code, value) {
+        setState(() {
+          _productQuantities[code] = value;
+          _cachedPdfBase64 = null;
+        });
+      },
+      onShowQuantityEditDialog: _showQuantityEditDialog,
+      onConfirmAll: () {
+        HapticFeedback.lightImpact();
+        final allChecked = _productChecked.values.every((v) => v);
+        setState(() {
+          for (final linea in _items) {
+            _productChecked[linea.codigoArticulo] = !allChecked;
+          }
+        });
+      },
+      onContinueToPayment: () {
+        HapticFeedback.mediumImpact();
+        _tabController.animateTo(1);
+      },
+      onOpenFicha: _openFichaTecnica,
+      onShowFullscreenImage: _showFullscreenImage,
+    );
+  }
 
-    if (_itemsError != null) {
-      return _buildProductsError(_itemsError);
-    }
+  Widget _buildPaymentTab() {
+    return RuteroDetailPayment(
+      albaran: widget.albaran,
+      selectedPaymentMethod: _selectedPaymentMethod,
+      isPaid: _isPaid,
+      pagoError: _pagoError,
+      onPaymentMethodChanged: (method) {
+        setState(() => _selectedPaymentMethod = method);
+      },
+      onPaidChanged: () {
+        setState(() => _isPaid = !_isPaid);
+      },
+      onContinueToFinalize: () {
+        HapticFeedback.mediumImpact();
+        _tabController.animateTo(2);
+      },
+      getPaymentTypeLabel: _getPaymentTypeLabel,
+    );
+  }
 
-    if (_items.isEmpty) {
-      return _buildProductsEmpty();
-    }
+  Widget _buildFinalizeTab() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildReceiverData(),
+          const SizedBox(height: 16),
+          if (_hasDiscrepancy) ...[
+            _buildDiscrepancyWarning(),
+            const SizedBox(height: 12),
+          ],
+          TextField(
+            controller: _observacionesController,
+            maxLines: 3,
+            onChanged: (_) {
+              if (_observacionesError != null) {
+                setState(() => _observacionesError = null);
+              }
+            },
+            style: const TextStyle(color: AppTheme.textPrimary),
+            decoration: InputDecoration(
+              labelText: 'Observaciones',
+              hintText: 'Añadir nota sobre la entrega...',
+              alignLabelWithHint: true,
+              errorText: _observacionesError,
+              filled: true,
+              fillColor: AppTheme.darkCard,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildPrinterConfigSection(),
+          const SizedBox(height: 20),
+          _buildSignatureSection(),
+          const SizedBox(height: 24),
+          _buildSubmitButton(),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
 
-    return Column(
-      children: [
-        // Summary bar
-        _buildProductsSummary(_items),
-
-        // Product list
-        Expanded(
-          child: ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: _items.length,
-            itemBuilder: (context, index) {
-              final linea = _items[index];
-              return _buildProductCard(linea);
+  Widget _buildReceiverData() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.darkCard,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.person, color: AppTheme.neonBlue, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'DATOS DEL RECEPTOR',
+                style: TextStyle(
+                  color: AppTheme.neonBlue,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          RawAutocomplete<String>(
+            textEditingController: _nombreController,
+            focusNode: FocusNode(),
+            optionsBuilder: (TextEditingValue textEditingValue) {
+              if (textEditingValue.text.isEmpty) {
+                return const Iterable<String>.empty();
+              }
+              return _suggestedNames.where((String option) {
+                return option
+                    .toUpperCase()
+                    .contains(textEditingValue.text.toUpperCase());
+              });
+            },
+            fieldViewBuilder:
+                (context, controller, focusNode, onEditingComplete) {
+              return TextField(
+                controller: controller,
+                focusNode: focusNode,
+                onEditingComplete: onEditingComplete,
+                onChanged: (_) {
+                  if (_nombreError != null) {
+                    setState(() => _nombreError = null);
+                  }
+                },
+                style: const TextStyle(color: AppTheme.textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'Nombre y Apellidos *',
+                  prefixIcon: const Icon(Icons.person_outline, size: 20),
+                  filled: true,
+                  fillColor: AppTheme.darkBase,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  errorText: _nombreError,
+                  errorStyle: const TextStyle(color: AppTheme.error),
+                ),
+              );
+            },
+            optionsViewBuilder: (context, onSelected, options) {
+              return Align(
+                alignment: Alignment.topLeft,
+                child: Material(
+                  elevation: 4,
+                  color: AppTheme.darkCard,
+                  child: SizedBox(
+                    height: 200,
+                    width: MediaQuery.of(context).size.width -
+                        Responsive.value(context, phone: 40, desktop: 80),
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(8),
+                      itemCount: options.length,
+                      itemBuilder: (BuildContext context, int index) {
+                        final option = options.elementAt(index);
+                        return ListTile(
+                          tileColor: AppTheme.darkBase,
+                          title: Text(option,
+                              style:
+                                  const TextStyle(color: AppTheme.textPrimary)),
+                          onTap: () {
+                            onSelected(option);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              );
             },
           ),
-        ),
+          const SizedBox(height: 12),
+          RawAutocomplete<String>(
+            textEditingController: _dniController,
+            focusNode: FocusNode(),
+            optionsBuilder: (TextEditingValue textEditingValue) {
+              if (textEditingValue.text.isEmpty) {
+                return const Iterable<String>.empty();
+              }
+              return _suggestedDnis.where((String option) {
+                return option
+                    .toUpperCase()
+                    .contains(textEditingValue.text.toUpperCase());
+              });
+            },
+            fieldViewBuilder:
+                (context, controller, focusNode, onEditingComplete) {
+              return TextField(
+                controller: controller,
+                focusNode: focusNode,
+                onEditingComplete: onEditingComplete,
+                onChanged: (_) {
+                  if (_dniError != null) {
+                    setState(() => _dniError = null);
+                  }
+                },
+                style: const TextStyle(color: AppTheme.textPrimary),
+                decoration: InputDecoration(
+                  labelText: 'DNI / NIF *',
+                  prefixIcon: const Icon(Icons.badge_outlined, size: 20),
+                  filled: true,
+                  fillColor: AppTheme.darkBase,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  errorText: _dniError,
+                  errorStyle: const TextStyle(color: AppTheme.error),
+                ),
+              );
+            },
+            optionsViewBuilder: (context, onSelected, options) {
+              return Align(
+                alignment: Alignment.topLeft,
+                child: Material(
+                  elevation: 4,
+                  color: AppTheme.darkCard,
+                  child: SizedBox(
+                    height: 200,
+                    width: MediaQuery.of(context).size.width -
+                        Responsive.value(context, phone: 40, desktop: 80),
+                    child: ListView.builder(
+                      padding: const EdgeInsets.all(8),
+                      itemCount: options.length,
+                      itemBuilder: (BuildContext context, int index) {
+                        final option = options.elementAt(index);
+                        return ListTile(
+                          tileColor: AppTheme.darkBase,
+                          title: Text(option,
+                              style:
+                                  const TextStyle(color: AppTheme.textPrimary)),
+                          onTap: () {
+                            onSelected(option);
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
 
-        // Confirm all button
-        _buildConfirmAllButton(_items),
+  Widget _buildDiscrepancyWarning() {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: Colors.orange.withOpacity(0.15),
+        border: Border.all(color: Colors.orange),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Text(
+        'ATENCIÓN: Si marca en verde sin modificar cantidades, '
+        'la entrega está OK. Si modifica o quita cantidades, la '
+        'entrega NO coincide — debe añadir observaciones en la '
+        "pestaña 'Observaciones' antes de confirmar.",
+        style: TextStyle(
+          color: Colors.orange,
+          fontSize: 13,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSignatureSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.draw, color: AppTheme.neonBlue, size: 20),
+                SizedBox(width: 8),
+                Text(
+                  'FIRMA DEL CLIENTE *',
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+            TextButton.icon(
+              onPressed: _signatureController.clear,
+              icon: const Icon(Icons.refresh, size: 16),
+              label: const Text('Borrar'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.error,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Container(
+          height: Responsive.isLandscape(context)
+              ? 120.0
+              : Responsive.value(context, phone: 120, desktop: 160),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color:
+                  _firmaError != null ? AppTheme.error : AppTheme.borderColor,
+              width: _firmaError != null ? 2 : 1,
+            ),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Signature(
+              controller: _signatureController,
+              backgroundColor: Colors.white,
+            ),
+          ),
+        ),
+        if (_firmaError != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            _firmaError!,
+            style: const TextStyle(color: AppTheme.error, fontSize: 12),
+          ),
+        ],
       ],
     );
   }
 
-  Widget _buildProductsLoading() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          SizedBox(
-            width: 60,
-            height: 60,
-            child: CircularProgressIndicator(
-              color: AppTheme.neonBlue,
-              strokeWidth: 3,
-            ),
-          ),
-          SizedBox(height: 16),
-          Text(
-            'Cargando productos...',
-            style: TextStyle(color: AppTheme.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProductsError(Object? error) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppTheme.error.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.error_outline,
-                  color: AppTheme.error, size: 48,),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Error al cargar productos',
-              style: TextStyle(color: AppTheme.error, fontSize: 16),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '$error',
-              style:
-                  const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: () => setState(() {}),
-              icon: const Icon(Icons.refresh),
-              label: const Text('Reintentar'),
-            ),
-          ],
+  Widget _buildSubmitButton() {
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [AppTheme.neonBlue, AppTheme.neonCyan],
         ),
-      ),
-    );
-  }
-
-  Widget _buildProductsEmpty() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.inventory_2_outlined,
-            color: AppTheme.textSecondary.withOpacity(0.5),
-            size: 64,
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'No hay líneas de producto',
-            style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Albarán: ${widget.albaran.numeroAlbaran}',
-            style: const TextStyle(color: AppTheme.textTertiary, fontSize: 12),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProductsSummary(List<EntregaItem> lineas) {
-    final checked = _productChecked.values.where((v) => v).length;
-    final total = lineas.length;
-
-    final ordenPrep = widget.albaran.ordenPreparacion;
-
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        gradient: AppTheme.holoGradient,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.2)),
-      ),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.checklist, color: AppTheme.neonBlue, size: 20),
-              const SizedBox(width: 12),
-              Text(
-                '$checked de $total productos verificados',
-                style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: checked == total
-                      ? AppTheme.success.withOpacity(0.2)
-                      : AppTheme.warning.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  checked == total ? '✓ COMPLETO' : 'PENDIENTE',
-                  style: TextStyle(
-                    color:
-                        checked == total ? AppTheme.success : AppTheme.warning,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (ordenPrep != null) ...[
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                const Icon(Icons.assignment, color: AppTheme.neonCyan, size: 18),
-                const SizedBox(width: 8),
-                Text(
-                  'Orden de Preparación: $ordenPrep',
-                  style: const TextStyle(
-                    color: AppTheme.neonCyan,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProductCard(EntregaItem linea) {
-    final isChecked = _productChecked[linea.codigoArticulo] ?? true;
-    final quantity = _productQuantities[linea.codigoArticulo] ??
-        linea.cantidadPedida.toInt();
-    final isModified = quantity != linea.cantidadPedida.toInt();
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        gradient: AppTheme.cardGradient,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: isChecked
-              ? AppTheme.success.withOpacity(0.3)
-              : AppTheme.warning.withOpacity(0.3),
-        ),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.neonBlue.withOpacity(0.3),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            HapticFeedback.selectionClick();
-            setState(() {
-              _productChecked[linea.codigoArticulo] = !isChecked;
-            });
-          },
-          borderRadius: BorderRadius.circular(14),
-          child: Padding(
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              children: [
-                // Checkbox
-                AnimatedContainer(
-                  duration: AppTheme.animFast,
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: isChecked
-                        ? AppTheme.success.withOpacity(0.2)
-                        : AppTheme.darkBase,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color:
-                          isChecked ? AppTheme.success : AppTheme.borderColor,
-                      width: 2,
+      child: ElevatedButton(
+        onPressed: _isSubmitting ? null : _submitDelivery,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          foregroundColor: AppTheme.darkBase,
+          padding: const EdgeInsets.symmetric(vertical: 18),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        child: _isSubmitting
+            ? const SizedBox(
+                height: 24,
+                width: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: AppTheme.darkBase,
+                ),
+              )
+            : const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.check_circle, size: 24),
+                  SizedBox(width: 12),
+                  Text(
+                    'CONFIRMAR ENTREGA',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
                     ),
                   ),
-                  child: isChecked
-                      ? const Icon(Icons.check,
-                          color: AppTheme.success, size: 18,)
-                      : null,
-                ),
-
-                const SizedBox(width: 10),
-
-                // Product image thumbnail
-                _buildProductThumbnail(linea),
-
-                const SizedBox(width: 10),
-
-                // Product info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        linea.descripcion,
-                        style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          decoration:
-                              isChecked ? null : TextDecoration.lineThrough,
-                        ),
-                        maxLines: 4,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Text(
-                            'Ref: ${linea.codigoArticulo}',
-                            style: const TextStyle(
-                              color: AppTheme.textTertiary,
-                              fontSize: 11,
-                            ),
-                          ),
-                          if (isModified) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 2,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppTheme.warning.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Text(
-                                'MODIFICADO',
-                                style: TextStyle(
-                                  color: AppTheme.warning,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ],
-                          const Spacer(),
-                          // Ficha técnica button
-                          _buildFichaButton(linea),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Quantity controls
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppTheme.darkBase,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppTheme.borderColor),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _buildQuantityButton(
-                        icon: Icons.remove,
-                        onTap: quantity > 0
-                            ? () {
-                                HapticFeedback.selectionClick();
-                                setState(() {
-                                  _productQuantities[linea.codigoArticulo] =
-                                      quantity - 1;
-                                  _cachedPdfBase64 = null;
-                                });
-                              }
-                            : null,
-                      ),
-                      GestureDetector(
-                        onTap: () => _showQuantityEditDialog(linea, quantity),
-                        child: Container(
-                          width: 40,
-                          alignment: Alignment.center,
-                          child: Text(
-                            '$quantity',
-                            style: TextStyle(
-                              color: isModified
-                                  ? AppTheme.warning
-                                  : AppTheme.textPrimary,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                              decoration: TextDecoration.underline,
-                              decorationStyle: TextDecorationStyle.dotted,
-                            ),
-                          ),
-                        ),
-                      ),
-                      _buildQuantityButton(
-                        icon: Icons.add,
-                        onTap: () {
-                          HapticFeedback.selectionClick();
-                          setState(() {
-                            _productQuantities[linea.codigoArticulo] =
-                                quantity + 1;
-                            _cachedPdfBase64 = null;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                // Pencil icon for direct quantity editing
-                const SizedBox(width: 6),
-                GestureDetector(
-                  onTap: () => _showQuantityEditDialog(linea, quantity),
-                  child: const Icon(
-                    Icons.edit_outlined,
-                    color: AppTheme.textTertiary,
-                    size: 18,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+                ],
+              ),
       ),
     );
   }
 
-  Widget _buildQuantityButton({
-    required IconData icon,
-    VoidCallback? onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: Icon(
-            icon,
-            color: onTap != null ? AppTheme.neonBlue : AppTheme.textTertiary,
-            size: 18,
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ==========================================================================
-  // PRODUCT IMAGE & FICHA TÉCNICA
-  // ==========================================================================
-
-  String _productImageUrl(String code) =>
-      '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(code.trim())}/image';
-
-  String _productFichaUrl(String code) =>
-      '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(code.trim())}/ficha';
-
-  Widget _buildProductThumbnail(EntregaItem linea) {
-    final url = _productImageUrl(linea.codigoArticulo);
-    return GestureDetector(
-      onTap: () => _showFullscreenImage(
-        url,
-        linea.descripcion,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          width: 48,
-          height: 48,
-          color: AppTheme.darkBase,
-          child: SmartProductImage(
-            imageUrl: url,
-            productCode: linea.codigoArticulo,
-            productName: linea.descripcion,
-            width: 48,
-            height: 48,
-            headers: {
-              'Accept': 'image/*',
-              if (ApiClient.dio.options.headers['Authorization'] != null)
-                'Authorization':
-                    ApiClient.dio.options.headers['Authorization'] as String,
-            },
-            showCodeOnFallback: false,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildFichaButton(EntregaItem linea) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: () => _openFichaTecnica(linea),
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: 6,
-            vertical: 3,
-          ),
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: AppTheme.neonBlue.withOpacity(0.5),
-            ),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: const Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.description_outlined,
-                color: AppTheme.neonBlue,
-                size: 14,
-              ),
-              SizedBox(width: 3),
-              Text(
-                'Ficha',
-                style: TextStyle(
-                  color: AppTheme.neonBlue,
-                  fontSize: 10,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showFullscreenImage(String imageUrl, String name) {
-    Navigator.of(context).push<void>(
-      PageRouteBuilder<void>(
-        opaque: false,
-        barrierColor: Colors.black87,
-        barrierDismissible: true,
-        pageBuilder: (ctx, anim, secondAnim) {
-          return Scaffold(
-            backgroundColor: Colors.black,
-            appBar: AppBar(
-              backgroundColor: Colors.black,
-              elevation: 0,
-              title: Text(
-                name,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-              leading: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.of(ctx).pop(),
-              ),
-            ),
-            body: Center(
-              child: InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 5,
-                child: SmartProductImage(
-                  imageUrl: imageUrl,
-                  productCode: '',
-                  productName: name,
-                  fit: BoxFit.contain,
-                  headers: {
-                    'Accept': 'image/*',
-                    if (ApiClient.dio.options.headers['Authorization'] != null)
-                      'Authorization': ApiClient
-                          .dio.options.headers['Authorization'] as String,
-                  },
-                ),
-              ),
-            ),
-          );
-        },
-        transitionsBuilder: (ctx, anim, secondAnim, child) {
-          return FadeTransition(opacity: anim, child: child);
-        },
-      ),
-    );
-  }
-
-  Future<void> _openFichaTecnica(EntregaItem linea) async {
-    final navigator = Navigator.of(context);
-    final url = _productFichaUrl(linea.codigoArticulo);
-    final filePath =
-        '${(await getTemporaryDirectory()).path}/${linea.codigoArticulo.trim()}_ficha.pdf';
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        backgroundColor: AppTheme.darkCard,
-        content: Row(
-          children: [
-            const SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: AppTheme.neonBlue,
-              ),
-            ),
-            const SizedBox(width: 16),
-            Text(
-              'Descargando ficha técnica...',
-              style: TextStyle(color: Colors.grey[300]),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    try {
-      await ApiClient.dio.download(url, filePath);
-
-      if (!navigator.canPop()) {
-        Navigator.of(context).pop();
-      }
-
-      if (!File(filePath).existsSync()) {
-        if (navigator.canPop()) navigator.pop();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se encontró la ficha técnica'),
-          ),
-        );
-        return;
-      }
-
-      await navigator.push<void>(
-        MaterialPageRoute<void>(
-          builder: (_) => Scaffold(
-            backgroundColor: Colors.white,
-            appBar: AppBar(
-              title: Text(
-                'Ficha - ${linea.codigoArticulo.trim()}',
-                style: const TextStyle(fontSize: 14),
-              ),
-              backgroundColor: AppTheme.darkSurface,
-              elevation: 0,
-            ),
-            body: PDFView(
-              filePath: filePath,
-              onError: (error) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error al abrir PDF: $error')),
-                );
-              },
-            ),
-          ),
-        ),
-      );
-    } catch (e) {
-      if (navigator.canPop()) navigator.pop();
-      final msg = e.toString().contains('404')
-          ? 'No hay ficha técnica para este producto'
-          : 'Error al descargar: $e';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg)),
-      );
-    }
-  }
-
-  /// Show a dialog to edit quantity directly by typing a number.
   Future<void> _showQuantityEditDialog(EntregaItem linea, int current) async {
     final controller = TextEditingController(text: '$current');
     final result = await showDialog<int>(
@@ -1750,754 +876,144 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       HapticFeedback.selectionClick();
       setState(() {
         _productQuantities[linea.codigoArticulo] = result;
-        _cachedPdfBase64 = null; // Invalidate PDF cache
+        _cachedPdfBase64 = null;
       });
     }
   }
 
-  Widget _buildConfirmAllButton(List<EntregaItem> lineas) {
-    final allChecked = _productChecked.values.every((v) => v);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(
-        color: AppTheme.darkSurface,
-        border: Border(top: BorderSide(color: AppTheme.borderColor)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: OutlinedButton.icon(
-              onPressed: () {
-                HapticFeedback.lightImpact();
-                setState(() {
-                  for (final linea in lineas) {
-                    _productChecked[linea.codigoArticulo] = !allChecked;
-                  }
-                });
-              },
-              icon: Icon(
-                  allChecked ? Icons.check_box : Icons.check_box_outline_blank,),
-              label: Text(allChecked ? 'DESMARCAR TODO' : 'MARCAR TODO'),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: AppTheme.neonBlue,
-                side: BorderSide(color: AppTheme.neonBlue.withOpacity(0.5)),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: ElevatedButton.icon(
-              onPressed: () {
-                HapticFeedback.mediumImpact();
-                _tabController.animateTo(1);
-              },
-              icon: const Icon(Icons.arrow_forward),
-              label: const Text('CONTINUAR'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.neonBlue,
-                foregroundColor: AppTheme.darkBase,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPaymentTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Amount card
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppTheme.darkCard,
-                  if (_isUrgent) AppTheme.obligatorio.withOpacity(0.1) else AppTheme.darkSurface,
-                ],
-              ),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: _isUrgent
-                    ? AppTheme.obligatorio.withOpacity(0.4)
-                    : AppTheme.neonBlue.withOpacity(0.2),
-                width: 2,
-              ),
-              boxShadow: [
-                if (_isUrgent)
-                  BoxShadow(
-                    color: AppTheme.obligatorio.withOpacity(0.15),
-                    blurRadius: 20,
-                  ),
-              ],
-            ),
-            child: Column(
-              children: [
-                const Text(
-                  'TOTAL A COBRAR',
-                  style: TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 12,
-                    letterSpacing: 1,
-                  ),
+  void _showFullscreenImage(String imageUrl, String name) {
+    Navigator.of(context).push<void>(
+      PageRouteBuilder<void>(
+        opaque: false,
+        barrierColor: Colors.black87,
+        barrierDismissible: true,
+        pageBuilder: (ctx, anim, secondAnim) {
+          return Scaffold(
+            backgroundColor: Colors.black,
+            appBar: AppBar(
+              backgroundColor: Colors.black,
+              elevation: 0,
+              title: Text(
+                name,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  NumberFormat.currency(symbol: '€', locale: 'es_ES')
-                      .format(widget.albaran.importeTotal),
-                  style: TextStyle(
-                    color:
-                        _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
-                    // Responsive: scale down large amount on small screens
-                    fontSize:
-                        Responsive.fontSize(context, small: 28, large: 42),
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: (_isUrgent ? AppTheme.obligatorio : AppTheme.success)
-                        .withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _isUrgent ? Icons.priority_high : Icons.info_outline,
-                        size: 16,
-                        color:
-                            _isUrgent ? AppTheme.obligatorio : AppTheme.success,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _isUrgent
-                            ? 'COBRO OBLIGATORIO - ${_getPaymentTypeLabel()}'
-                            : 'COBRO OPCIONAL - ${_getPaymentTypeLabel()}',
-                        style: TextStyle(
-                          color: _isUrgent
-                              ? AppTheme.obligatorio
-                              : AppTheme.success,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+                overflow: TextOverflow.ellipsis,
+              ),
+              leading: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () => Navigator.of(ctx).pop(),
+              ),
             ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Payment method selector
-          const Text(
-            'MÉTODO DE PAGO',
-            style: TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1,
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          Row(
-            children: [
-              Expanded(child: _buildPaymentOption('EFECTIVO', Icons.money)),
-              const SizedBox(width: 12),
-              Expanded(
-                  child: _buildPaymentOption('TARJETA', Icons.credit_card),),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                  child: _buildPaymentOption('BIZUM', Icons.phone_android),),
-              const SizedBox(width: 12),
-              Expanded(
-                  child:
-                      _buildPaymentOption('TRANSFER', Icons.account_balance),),
-            ],
-          ),
-
-          const SizedBox(height: 24),
-
-          // Mark as paid checkbox
-          InkWell(
-            onTap: () {
-              HapticFeedback.selectionClick();
-              setState(() => _isPaid = !_isPaid);
-            },
-            borderRadius: BorderRadius.circular(12),
-            child: AnimatedContainer(
-              duration: AppTheme.animFast,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                gradient: _isPaid
-                    ? LinearGradient(
-                        colors: [
-                          AppTheme.success.withOpacity(0.2),
-                          AppTheme.success.withOpacity(0.1),
-                        ],
-                      )
-                    : null,
-                color: _isPaid ? null : AppTheme.darkCard,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: _isPaid ? AppTheme.success : AppTheme.borderColor,
-                  width: _isPaid ? 2 : 1,
+            body: Center(
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 5,
+                child: SmartProductImage(
+                  imageUrl: imageUrl,
+                  productCode: '',
+                  productName: name,
+                  fit: BoxFit.contain,
+                  headers: {
+                    'Accept': 'image/*',
+                    if (ApiClient.dio.options.headers['Authorization'] != null)
+                      'Authorization': ApiClient
+                          .dio.options.headers['Authorization'] as String,
+                  },
                 ),
               ),
-              child: Row(
-                children: [
-                  AnimatedContainer(
-                    duration: AppTheme.animFast,
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: _isPaid ? AppTheme.success : AppTheme.darkBase,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color:
-                            _isPaid ? AppTheme.success : AppTheme.borderColor,
-                        width: 2,
-                      ),
-                    ),
-                    child: _isPaid
-                        ? const Icon(Icons.check, color: Colors.white, size: 18)
-                        : null,
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'MARCAR COMO COBRADO',
-                          style: TextStyle(
-                            color: _isPaid
-                                ? AppTheme.success
-                                : AppTheme.textPrimary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 14,
-                          ),
-                        ),
-                        Text(
-                          _isPaid
-                              ? 'Cobro registrado con $_selectedPaymentMethod'
-                              : 'Confirmar recepción del pago',
-                          style: const TextStyle(
-                            color: AppTheme.textSecondary,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (_isPaid)
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppTheme.success.withOpacity(0.2),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.check_circle,
-                        color: AppTheme.success,
-                        size: 24,
-                      ),
-                    ),
-                ],
-              ),
             ),
-          ),
-
-          if (_pagoError != null) ...[
-            const SizedBox(height: 8),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppTheme.error.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.error.withOpacity(0.5)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded,
-                      color: AppTheme.error, size: 20,),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      _pagoError!,
-                      style: const TextStyle(
-                          color: AppTheme.error,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-
-          const SizedBox(height: 24),
-
-          // Continue button
-          ElevatedButton.icon(
-            onPressed: () {
-              HapticFeedback.mediumImpact();
-              _tabController.animateTo(2);
-            },
-            icon: const Icon(Icons.arrow_forward),
-            label: const Text('CONTINUAR A FINALIZAR'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonBlue,
-              foregroundColor: AppTheme.darkBase,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-        ],
+          );
+        },
+        transitionsBuilder: (ctx, anim, secondAnim, child) {
+          return FadeTransition(opacity: anim, child: child);
+        },
       ),
     );
   }
 
-  Widget _buildPaymentOption(String method, IconData icon) {
-    final isSelected = _selectedPaymentMethod == method;
+  Future<void> _openFichaTecnica(EntregaItem linea) async {
+    final navigator = Navigator.of(context);
+    final url =
+        '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(linea.codigoArticulo.trim())}/ficha';
+    final filePath =
+        '${(await getTemporaryDirectory()).path}/${linea.codigoArticulo.trim()}_ficha.pdf';
 
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        setState(() => _selectedPaymentMethod = method);
-      },
-      child: AnimatedContainer(
-        duration: AppTheme.animFast,
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          gradient: isSelected
-              ? LinearGradient(
-                  colors: [
-                    AppTheme.neonBlue.withOpacity(0.2),
-                    AppTheme.neonCyan.withOpacity(0.1),
-                  ],
-                )
-              : null,
-          color: isSelected ? null : AppTheme.darkCard,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? AppTheme.neonBlue : AppTheme.borderColor,
-            width: isSelected ? 2 : 1,
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppTheme.neonBlue.withOpacity(0.2),
-                    blurRadius: 10,
-                  ),
-                ]
-              : null,
-        ),
-        child: Column(
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.darkCard,
+        content: Row(
           children: [
-            Icon(
-              icon,
-              color: isSelected ? AppTheme.neonBlue : AppTheme.textSecondary,
-              size: 28,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              method,
-              style: TextStyle(
-                color: isSelected ? AppTheme.neonBlue : AppTheme.textSecondary,
-                fontWeight: FontWeight.bold,
-                fontSize: 11,
+            const SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppTheme.neonBlue,
               ),
+            ),
+            const SizedBox(width: 16),
+            Text(
+              'Descargando ficha técnica...',
+              style: TextStyle(color: Colors.grey[300]),
             ),
           ],
         ),
       ),
     );
-  }
 
-  Widget _buildFinalizeTab() {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Receiver data
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.darkCard,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: AppTheme.borderColor),
+    try {
+      await ApiClient.dio.download(url, filePath);
+
+      if (!navigator.canPop()) {
+        Navigator.of(context).pop();
+      }
+
+      if (!File(filePath).existsSync()) {
+        if (navigator.canPop()) navigator.pop();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se encontró la ficha técnica'),
+          ),
+        );
+        return;
+      }
+
+      await navigator.push<void>(
+        MaterialPageRoute<void>(
+          builder: (_) => Scaffold(
+            backgroundColor: Colors.white,
+            appBar: AppBar(
+              title: Text(
+                'Ficha - ${linea.codigoArticulo.trim()}',
+                style: const TextStyle(fontSize: 14),
+              ),
+              backgroundColor: AppTheme.darkSurface,
+              elevation: 0,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Row(
-                  children: [
-                    Icon(Icons.person, color: AppTheme.neonBlue, size: 20),
-                    SizedBox(width: 8),
-                    Text(
-                      'DATOS DEL RECEPTOR',
-                      style: TextStyle(
-                        color: AppTheme.neonBlue,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const SizedBox(height: 16),
-
-                // Name Autocomplete
-                RawAutocomplete<String>(
-                  textEditingController: _nombreController,
-                  focusNode: _nombreFocus,
-                  optionsBuilder: (TextEditingValue textEditingValue) {
-                    if (textEditingValue.text.isEmpty) {
-                      return const Iterable<String>.empty();
-                    }
-                    return _suggestedNames.where((String option) {
-                      return option
-                          .toUpperCase()
-                          .contains(textEditingValue.text.toUpperCase());
-                    });
-                  },
-                  fieldViewBuilder:
-                      (context, controller, focusNode, onEditingComplete) {
-                    return TextField(
-                      controller: controller,
-                      focusNode: focusNode,
-                      onEditingComplete: onEditingComplete,
-                      onChanged: (_) {
-                        // Clear error when user starts typing
-                        if (_nombreError != null) {
-                          setState(() => _nombreError = null);
-                        }
-                      },
-                      style: const TextStyle(color: AppTheme.textPrimary),
-                      decoration: InputDecoration(
-                        labelText: 'Nombre y Apellidos *',
-                        prefixIcon: const Icon(Icons.person_outline, size: 20),
-                        filled: true,
-                        fillColor: AppTheme.darkBase,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        errorText: _nombreError,
-                        errorStyle: const TextStyle(color: AppTheme.error),
-                      ),
-                    );
-                  },
-                  optionsViewBuilder: (context, onSelected, options) {
-                    return Align(
-                      alignment: Alignment.topLeft,
-                      child: Material(
-                        elevation: 4,
-                        color: AppTheme.darkCard,
-                        child: SizedBox(
-                          height: 200,
-                          // Responsive: less margin on phones
-                          width: MediaQuery.of(context).size.width -
-                              Responsive.value(context,
-                                  phone: 40, desktop: 80,), // Adjust width
-                          child: ListView.builder(
-                            padding: const EdgeInsets.all(8),
-                            itemCount: options.length,
-                            itemBuilder: (BuildContext context, int index) {
-                              final option = options.elementAt(index);
-                              return ListTile(
-                                tileColor: AppTheme.darkBase,
-                                title: Text(option,
-                                    style: const TextStyle(
-                                        color: AppTheme.textPrimary,),),
-                                onTap: () {
-                                  onSelected(option);
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-
-                const SizedBox(height: 12),
-
-                // DNI Autocomplete
-                RawAutocomplete<String>(
-                  textEditingController: _dniController,
-                  focusNode: _dniFocus,
-                  optionsBuilder: (TextEditingValue textEditingValue) {
-                    if (textEditingValue.text.isEmpty) {
-                      return const Iterable<String>.empty();
-                    }
-                    return _suggestedDnis.where((String option) {
-                      return option
-                          .toUpperCase()
-                          .contains(textEditingValue.text.toUpperCase());
-                    });
-                  },
-                  fieldViewBuilder:
-                      (context, controller, focusNode, onEditingComplete) {
-                    return TextField(
-                      controller: controller,
-                      focusNode: focusNode,
-                      onEditingComplete: onEditingComplete,
-                      onChanged: (_) {
-                        // Clear error when user starts typing
-                        if (_dniError != null) {
-                          setState(() => _dniError = null);
-                        }
-                      },
-                      style: const TextStyle(color: AppTheme.textPrimary),
-                      decoration: InputDecoration(
-                        labelText: 'DNI / NIF *',
-                        prefixIcon: const Icon(Icons.badge_outlined, size: 20),
-                        filled: true,
-                        fillColor: AppTheme.darkBase,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        errorText: _dniError,
-                        errorStyle: const TextStyle(color: AppTheme.error),
-                      ),
-                    );
-                  },
-                  optionsViewBuilder: (context, onSelected, options) {
-                    return Align(
-                      alignment: Alignment.topLeft,
-                      child: Material(
-                        elevation: 4,
-                        color: AppTheme.darkCard,
-                        child: SizedBox(
-                          height: 200,
-                          // Responsive: less margin on phones
-                          width: MediaQuery.of(context).size.width -
-                              Responsive.value(context, phone: 40, desktop: 80),
-                          child: ListView.builder(
-                            padding: const EdgeInsets.all(8),
-                            itemCount: options.length,
-                            itemBuilder: (BuildContext context, int index) {
-                              final option = options.elementAt(index);
-                              return ListTile(
-                                tileColor: AppTheme.darkBase,
-                                title: Text(option,
-                                    style: const TextStyle(
-                                        color: AppTheme.textPrimary,),),
-                                onTap: () {
-                                  onSelected(option);
-                                  // Try to auto-fill regular name if possible?
-                                  // For now keeping it simple.
-                                },
-                              );
-                            },
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
+            body: PDFView(
+              filePath: filePath,
+              onError: (error) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error al abrir PDF: $error')),
+                );
+              },
             ),
           ),
-
-          const SizedBox(height: 16),
-
-          // Orange warning when quantities modified
-          if (_items.any((item) =>
-              (_productQuantities[item.codigoArticulo] ??
-                  item.cantidadPedida.toInt()) !=
-              item.cantidadPedida.toInt(),))
-            Container(
-              padding: const EdgeInsets.all(8),
-              margin: const EdgeInsets.only(bottom: 8),
-              decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.15),
-                border: Border.all(color: Colors.orange),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Text(
-                'ATENCIÓN: Si marca en verde sin modificar cantidades, '
-                'la entrega está OK. Si modifica o quita cantidades, la '
-                'entrega NO coincide — debe añadir observaciones en la '
-                "pestaña 'Observaciones' antes de confirmar.",
-                style: TextStyle(
-                  color: Colors.orange,
-                  fontSize: 13,
-                ),
-              ),
-            ),
-
-          // Observations
-          TextField(
-            controller: _observacionesController,
-            maxLines: 3,
-            onChanged: (_) {
-              if (_observacionesError != null) {
-                setState(() => _observacionesError = null);
-              }
-            },
-            style: const TextStyle(color: AppTheme.textPrimary),
-            decoration: InputDecoration(
-              labelText: 'Observaciones',
-              hintText: 'Añadir nota sobre la entrega...',
-              alignLabelWithHint: true,
-              errorText: _observacionesError,
-              filled: true,
-              fillColor: AppTheme.darkCard,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-          _buildPrinterConfigSection(),
-          const SizedBox(height: 20),
-
-          // Signature
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
-                children: [
-                  Icon(Icons.draw, color: AppTheme.neonBlue, size: 20),
-                  SizedBox(width: 8),
-                  Text(
-                    'FIRMA DEL CLIENTE *',
-                    style: TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-              TextButton.icon(
-                onPressed: _signatureController.clear,
-                icon: const Icon(Icons.refresh, size: 16),
-                label: const Text('Borrar'),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppTheme.error,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          // Responsive signature canvas: shorter in landscape, scales on phones
-          Container(
-            height: Responsive.isLandscape(context)
-                ? 120.0
-                : Responsive.value(context, phone: 120, desktop: 160),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color:
-                    _firmaError != null ? AppTheme.error : AppTheme.borderColor,
-                width: _firmaError != null ? 2 : 1,
-              ),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
-              child: Signature(
-                controller: _signatureController,
-                backgroundColor: Colors.white,
-              ),
-            ),
-          ),
-          if (_firmaError != null) ...[
-            const SizedBox(height: 6),
-            Text(
-              _firmaError!,
-              style: const TextStyle(color: AppTheme.error, fontSize: 12),
-            ),
-          ],
-
-          const SizedBox(height: 24),
-
-          // Submit button
-          Container(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppTheme.neonBlue, AppTheme.neonCyan],
-              ),
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.neonBlue.withOpacity(0.3),
-                  blurRadius: 16,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: ElevatedButton(
-              onPressed: _isSubmitting ? null : _submitDelivery,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                shadowColor: Colors.transparent,
-                foregroundColor: AppTheme.darkBase,
-                padding: const EdgeInsets.symmetric(vertical: 18),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              child: _isSubmitting
-                  ? const SizedBox(
-                      height: 24,
-                      width: 24,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: AppTheme.darkBase,
-                      ),
-                    )
-                  : const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.check_circle, size: 24),
-                        SizedBox(width: 12),
-                        Text(
-                          'CONFIRMAR ENTREGA',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-            ),
-          ),
-
-          const SizedBox(height: 24),
-        ],
-      ),
-    );
+        ),
+      );
+    } catch (e) {
+      if (navigator.canPop()) navigator.pop();
+      final msg = e.toString().contains('404')
+          ? 'No hay ficha técnica para este producto'
+          : 'Error al descargar: $e';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(msg)),
+      );
+    }
   }
 
   String _getPaymentTypeLabel() {
@@ -2513,7 +1029,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     return code;
   }
 
-  /// Clear inline validation errors
   void _clearValidationErrors() {
     setState(() {
       _nombreError = null;
@@ -2524,20 +1039,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     });
   }
 
-  /// Validate all fields, return true if valid
   bool _validateFields() {
     var isValid = true;
-
-    // Clear previous errors
     _clearValidationErrors();
 
-    // Validate nombre
     if (_nombreController.text.trim().isEmpty) {
       _nombreError = 'El nombre del receptor es obligatorio';
       isValid = false;
     }
 
-    // Validate DNI format (Spanish DNI/NIE)
     final dniText = _dniController.text.trim();
     if (dniText.isEmpty) {
       _dniError = 'El DNI/NIF es obligatorio';
@@ -2547,11 +1057,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       isValid = false;
     }
 
-    // Require observations when quantities are modified OR any product unchecked
     final anyQtyModified = _items.any((item) =>
         (_productQuantities[item.codigoArticulo] ??
             item.cantidadPedida.toInt()) !=
-        item.cantidadPedida.toInt(),);
+        item.cantidadPedida.toInt());
     final anyUnchecked =
         _items.any((item) => !(_productChecked[item.codigoArticulo] ?? true));
     final hasDiscrepancy = anyQtyModified || anyUnchecked;
@@ -2560,27 +1069,24 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           ? 'Obligatorio: hay productos sin marcar como entregados'
           : 'Obligatorio cuando se modifican cantidades';
       isValid = false;
-      // Navigate to finalize tab so they see the error
       _tabController.animateTo(2);
     }
 
-    // Validate signature (always required; extra emphasis when quantities differ)
     if (_signatureController.isEmpty) {
       _firmaError = anyQtyModified
           ? 'FIRMA OBLIGATORIA: las cantidades no coinciden con el pedido'
           : 'La firma es obligatoria';
-      _tabController.animateTo(2); // Switch to signature tab
+      _tabController.animateTo(2);
       isValid = false;
     }
 
-    // CTR payment validation
     if (_isUrgent && !_isPaid) {
       _pagoError = '⚠️ COBRO OBLIGATORIO';
-      _tabController.animateTo(1); // Switch to payment tab
+      _tabController.animateTo(1);
       isValid = false;
     }
 
-    setState(() {}); // Trigger rebuild to show errors
+    setState(() {});
 
     if (!isValid) {
       HapticFeedback.heavyImpact();
@@ -2589,7 +1095,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     return isValid;
   }
 
-  /// Show confirmation dialog before submitting
   Future<bool> _showConfirmationDialog() async {
     final result = await showDialog<bool>(
       context: context,
@@ -2600,12 +1105,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         title: const Row(
           children: [
             Icon(Icons.check_circle_outline,
-                color: AppTheme.neonBlue, size: 28,),
+                color: AppTheme.neonBlue, size: 28),
             SizedBox(width: 12),
             Text(
               'Confirmar Entrega',
               style: TextStyle(
-                  color: AppTheme.textPrimary, fontWeight: FontWeight.bold,),
+                  color: AppTheme.textPrimary, fontWeight: FontWeight.bold),
             ),
           ],
         ),
@@ -2631,7 +1136,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   Row(
                     children: [
                       const Icon(Icons.description,
-                          size: 16, color: AppTheme.textTertiary,),
+                          size: 16, color: AppTheme.textTertiary),
                       const SizedBox(width: 8),
                       Text(
                         _isFactura
@@ -2639,7 +1144,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                             : 'Albarán ${widget.albaran.numeroAlbaran}',
                         style: const TextStyle(
                             color: AppTheme.textPrimary,
-                            fontWeight: FontWeight.w500,),
+                            fontWeight: FontWeight.w500),
                       ),
                     ],
                   ),
@@ -2647,13 +1152,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   Row(
                     children: [
                       const Icon(Icons.person,
-                          size: 16, color: AppTheme.textTertiary,),
+                          size: 16, color: AppTheme.textTertiary),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           '${_nombreController.text} (${_dniController.text})',
                           style: const TextStyle(
-                              color: AppTheme.textSecondary, fontSize: 13,),
+                              color: AppTheme.textSecondary, fontSize: 13),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
@@ -2663,12 +1168,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                     const SizedBox(height: 8),
                     Row(
                       children: [
-                        const Icon(Icons.payment, size: 16, color: AppTheme.success),
+                        const Icon(Icons.payment,
+                            size: 16, color: AppTheme.success),
                         const SizedBox(width: 8),
                         Text(
                           'Cobrado: $_selectedPaymentMethod',
-                          style:
-                              const TextStyle(color: AppTheme.success, fontSize: 13),
+                          style: const TextStyle(
+                              color: AppTheme.success, fontSize: 13),
                         ),
                       ],
                     ),
@@ -2682,7 +1188,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           TextButton(
             onPressed: () => Navigator.pop(context, false),
             child: const Text('CANCELAR',
-                style: TextStyle(color: AppTheme.textSecondary),),
+                style: TextStyle(color: AppTheme.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(context, true),
@@ -2699,12 +1205,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Future<void> _submitDelivery() async {
-    // Inline validation
     if (!_validateFields()) {
       return;
     }
 
-    // Show confirmation dialog
     final confirmed = await _showConfirmationDialog();
     if (!confirmed) return;
 
@@ -2713,12 +1217,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     try {
       final notifier = widget.ref.read(entregasProvider.notifier);
 
-      // Get signature
       final sigBytes = await _signatureController.toPngBytes();
       if (sigBytes == null) throw Exception('Error al procesar firma');
       final base64Sig = base64Encode(sigBytes);
 
-      // Build observations with quantity changes
       var finalObs = _observacionesController.text.trim();
       final qtyChanges = <String>[];
       for (final item in _items) {
@@ -2741,7 +1243,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         finalObs += '\nCobrado: $_selectedPaymentMethod';
       }
 
-      // Submit
       final success = await notifier.marcarEntregado(
         albaranId: widget.albaran.id,
         firma: base64Sig,
@@ -2757,7 +1258,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
       if (success) {
         HapticFeedback.heavyImpact();
-        // Sync firma path from provider (marcarEntregado uploaded and got server path)
         final state = widget.ref.read(entregasProvider);
         final updated = state.albaranes.firstWhere(
           (a) => a.id == widget.albaran.id,
@@ -2765,14 +1265,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         );
         widget.albaran.firma = updated.firma;
         widget.albaran.estado = EstadoEntrega.entregado;
-        // Print on Zebra if configured
         if (_tieneImpresora) {
           await _showZebraPrintPreview();
         }
-        // Show share dialog before closing
         await _showShareReceiptDialog();
         if (!mounted) return;
-        // Capture messenger BEFORE pop (context dies after pop)
         final messenger = ScaffoldMessenger.of(context);
         Navigator.pop(context);
         messenger.showSnackBar(
@@ -2781,13 +1278,12 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               Icon(Icons.check_circle, color: Colors.white),
               SizedBox(width: 12),
               Text('Entrega registrada correctamente'),
-            ],),
+            ]),
             backgroundColor: Colors.green,
             duration: Duration(seconds: 2),
           ),
         );
       } else {
-        // Handle already delivered error specially
         final state = widget.ref.read(entregasProvider);
         final errorMsg = state.error ?? 'Error al guardar entrega';
         if (errorMsg.contains('ya fue confirmada')) {
@@ -2804,7 +1300,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
   }
 
-  /// Show dialog when delivery was already confirmed
   void _showAlreadyDeliveredDialog() {
     showDialog(
       context: context,
@@ -2814,14 +1309,14 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         title: const Row(
           children: [
             Icon(Icons.warning_amber_rounded,
-                color: AppTheme.warning, size: 28,),
+                color: AppTheme.warning, size: 28),
             SizedBox(width: 12),
             Text(
               'Entrega ya confirmada',
               style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontWeight: FontWeight.bold,
-                  fontSize: 16,),
+                  fontSize: 16),
             ),
           ],
         ),
@@ -2832,8 +1327,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         actions: [
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context); // Close dialog
-              Navigator.pop(context); // Close modal
+              Navigator.pop(context);
+              Navigator.pop(context);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.neonBlue,
@@ -2861,16 +1356,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
   }
 
-  /// Show Zebra print preview with editable observations
   Future<void> _showZebraPrintPreview() async {
     final obsController = TextEditingController(
       text: _observacionesController.text.trim(),
     );
     var isPrinting = false;
-    // Capture parent scaffold messenger before entering dialog
     final parentMessenger = ScaffoldMessenger.of(context);
 
-    // Pre-compute signature GRF if signature exists
     String? signatureGrf;
     if (_signatureController.isNotEmpty) {
       try {
@@ -2909,7 +1401,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                 Icon(Icons.print, color: AppTheme.neonCyan),
                 SizedBox(width: 12),
                 Text('Imprimir Ticket',
-                    style: TextStyle(color: AppTheme.textPrimary),),
+                    style: TextStyle(color: AppTheme.textPrimary)),
               ],
             ),
             content: SizedBox(
@@ -2919,7 +1411,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Preview header
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -2933,24 +1424,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                               style: TextStyle(
                                   color: AppTheme.textPrimary,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 16,),),
+                                  fontSize: 16)),
                           const SizedBox(height: 4),
                           Text(
                             widget.albaran.numeroFactura > 0
                                 ? 'Factura: ${widget.albaran.serieFactura}/${widget.albaran.numeroFactura}'
                                 : 'Albarán: ${widget.albaran.serie}/${widget.albaran.numeroAlbaran}',
                             style: const TextStyle(
-                                color: AppTheme.neonCyan, fontSize: 14,),
+                                color: AppTheme.neonCyan, fontSize: 14),
                           ),
                           Text('Fecha: ${widget.albaran.fecha}',
                               style: const TextStyle(
-                                  color: AppTheme.textSecondary, fontSize: 13,),),
+                                  color: AppTheme.textSecondary, fontSize: 13)),
                           const Divider(color: AppTheme.textTertiary),
                           Text('Cliente: ${widget.albaran.nombreCliente}',
                               style: const TextStyle(
-                                  color: AppTheme.textPrimary, fontSize: 13,),),
+                                  color: AppTheme.textPrimary, fontSize: 13)),
                           const SizedBox(height: 8),
-                          // Item summary
                           ...(_items.take(5).map((item) => Padding(
                                 padding: const EdgeInsets.only(bottom: 2),
                                 child: Row(
@@ -2959,57 +1449,58 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                                       child: Text(item.descripcion,
                                           style: const TextStyle(
                                               color: AppTheme.textSecondary,
-                                              fontSize: 12,),
+                                              fontSize: 12),
                                           maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,),
+                                          overflow: TextOverflow.ellipsis),
                                     ),
                                     Text(
                                       'x${item.cantidadPedida.toStringAsFixed(0)}  ${(item.cantidadPedida * item.precioUnitario).toStringAsFixed(2)}€',
                                       style: const TextStyle(
                                           color: AppTheme.textSecondary,
-                                          fontSize: 12,),
+                                          fontSize: 12),
                                     ),
                                   ],
                                 ),
-                              ),)),
+                              ))),
                           if (_items.length > 5)
                             Text('... +${_items.length - 5} más',
                                 style: const TextStyle(
                                     color: AppTheme.textTertiary,
-                                    fontSize: 11,),),
+                                    fontSize: 11)),
                           const Divider(color: AppTheme.textTertiary),
                           Text(
                               'TOTAL: ${widget.albaran.importeTotal.toStringAsFixed(2)} €',
                               style: const TextStyle(
                                   color: AppTheme.textPrimary,
                                   fontWeight: FontWeight.bold,
-                                  fontSize: 16,),),
+                                  fontSize: 16)),
                         ],
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // Editable observations
                     const Text('Observaciones (editable):',
                         style: TextStyle(
-                            color: AppTheme.textSecondary, fontSize: 13,),),
+                            color: AppTheme.textSecondary, fontSize: 13)),
                     const SizedBox(height: 8),
                     TextField(
                       controller: obsController,
                       maxLines: 3,
                       decoration: InputDecoration(
                         hintText: 'Añadir observaciones para el ticket...',
-                        hintStyle: const TextStyle(color: AppTheme.textTertiary),
+                        hintStyle:
+                            const TextStyle(color: AppTheme.textTertiary),
                         filled: true,
                         fillColor: AppTheme.darkBase,
                         border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide.none,),
+                            borderSide: BorderSide.none),
                         focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: AppTheme.neonCyan),),
+                            borderSide:
+                                const BorderSide(color: AppTheme.neonCyan)),
                       ),
                       style: const TextStyle(
-                          color: AppTheme.textPrimary, fontSize: 14,),
+                          color: AppTheme.textPrimary, fontSize: 14),
                     ),
                   ],
                 ),
@@ -3019,7 +1510,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               TextButton(
                 onPressed: isPrinting ? null : () => Navigator.pop(ctx),
                 child: const Text('Omitir',
-                    style: TextStyle(color: AppTheme.textTertiary),),
+                    style: TextStyle(color: AppTheme.textTertiary)),
               ),
               ElevatedButton.icon(
                 onPressed: isPrinting
@@ -3037,7 +1528,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                                 Icon(Icons.check_circle, color: Colors.white),
                                 SizedBox(width: 12),
                                 Text('Ticket enviado a impresora'),
-                              ],),
+                              ]),
                               backgroundColor: Colors.green,
                             ),
                           );
@@ -3049,8 +1540,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                                 SizedBox(width: 12),
                                 Expanded(
                                     child: Text(
-                                        'Error al imprimir. Verifica que la Zebra está encendida y vinculada.',),),
-                              ],),
+                                        'Error al imprimir. Verifica que la Zebra está encendida y vinculada.')),
+                              ]),
                               backgroundColor: AppTheme.error,
                             ),
                           );
@@ -3061,7 +1552,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         width: 18,
                         height: 18,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white,),)
+                            strokeWidth: 2, color: Colors.white))
                     : const Icon(Icons.print),
                 label:
                     Text(isPrinting ? 'Imprimiendo...' : 'Imprimir en Zebra'),
@@ -3069,7 +1560,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                   backgroundColor: AppTheme.neonCyan,
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),),
+                      borderRadius: BorderRadius.circular(8)),
                 ),
               ),
             ],
@@ -3079,7 +1570,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
   }
 
-  /// Show dialog to share delivery receipt via WhatsApp or Email
   Future<void> _showShareReceiptDialog() async {
     return showDialog<void>(
       context: context,
@@ -3092,7 +1582,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             Icon(Icons.share, color: AppTheme.neonBlue),
             SizedBox(width: 12),
             Text('Compartir Nota',
-                style: TextStyle(color: AppTheme.textPrimary),),
+                style: TextStyle(color: AppTheme.textPrimary)),
           ],
         ),
         content: Column(
@@ -3103,7 +1593,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               style: TextStyle(color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 20),
-            // View PDF
             _buildShareButton(
               icon: Icons.visibility,
               label: 'Ver PDF',
@@ -3114,7 +1603,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               },
             ),
             const SizedBox(height: 12),
-            // Download PDF
             _buildShareButton(
               icon: Icons.download,
               label: 'Descargar PDF',
@@ -3125,7 +1613,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               },
             ),
             const SizedBox(height: 12),
-            // WhatsApp button
             _buildShareButton(
               icon: Icons.chat,
               label: 'Enviar por WhatsApp',
@@ -3136,7 +1623,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               },
             ),
             const SizedBox(height: 12),
-            // Email button
             _buildShareButton(
               icon: Icons.email,
               label: 'Enviar por Email',
@@ -3151,8 +1637,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child:
-                const Text('Omitir', style: TextStyle(color: AppTheme.textTertiary)),
+            child: const Text('Omitir',
+                style: TextStyle(color: AppTheme.textTertiary)),
           ),
         ],
       ),
@@ -3178,7 +1664,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               Icon(icon, color: color, size: 24),
               const SizedBox(width: 12),
               Text(label,
-                  style: TextStyle(color: color, fontWeight: FontWeight.w600),),
+                  style: TextStyle(color: color, fontWeight: FontWeight.w600)),
               const Spacer(),
               Icon(Icons.chevron_right, color: color.withOpacity(0.6)),
             ],
@@ -3186,6 +1672,97 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         ),
       ),
     );
+  }
+
+  Future<void> _previewReceiptPdf() async {
+    final modal =
+        AsyncOperationModal.show(context, text: 'Generando vista previa...');
+    try {
+      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
+      if (pdfData == null) throw Exception('No se pudo generar el PDF');
+      _cachedPdfBase64 = pdfData;
+
+      modal.close();
+      if (!mounted) return;
+
+      final pdfBytes = base64Decode(pdfData);
+      final docLabel = widget.albaran.numeroFactura > 0
+          ? 'Factura ${widget.albaran.numeroFactura}'
+          : 'Albarán ${widget.albaran.numeroAlbaran}';
+      final fileName =
+          'Nota_Entrega_${widget.albaran.numeroFactura > 0 ? "F${widget.albaran.numeroFactura}" : "A${widget.albaran.numeroAlbaran}"}.pdf';
+
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PdfPreviewScreen(
+            pdfBytes: pdfBytes,
+            title: docLabel,
+            fileName: fileName,
+            onEmailTap: () {
+              Navigator.pop(context);
+              _shareViaEmail();
+            },
+            onWhatsAppTap: () {
+              Navigator.pop(context);
+              _shareViaWhatsApp();
+            },
+          ),
+        ),
+      );
+    } catch (e) {
+      modal.error('Error al visualizar: $e', onRetry: _previewReceiptPdf);
+    }
+  }
+
+  Future<void> _downloadReceiptPdf() async {
+    final modal = AsyncOperationModal.show(context, text: 'Preparando PDF...');
+    try {
+      final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
+      if (pdfData == null) {
+        throw Exception('Error al generar el PDF');
+      }
+      _cachedPdfBase64 = pdfData;
+
+      final tempDir = await getTemporaryDirectory();
+      final docLabel = widget.albaran.numeroFactura > 0
+          ? 'Factura_${widget.albaran.numeroFactura}'
+          : 'Albaran_${widget.albaran.numeroAlbaran}';
+      final dlTs = DateTime.now().millisecondsSinceEpoch;
+      final file = File('${tempDir.path}/Nota_Entrega_${docLabel}_$dlTs.pdf');
+      await file.writeAsBytes(base64Decode(pdfData));
+
+      modal.close();
+      if (!mounted) return;
+
+      final renderBox = context.findRenderObject() as RenderBox?;
+      final origin = renderBox != null
+          ? Rect.fromCenter(
+              center:
+                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              width: 1,
+              height: 1,
+            )
+          : null;
+
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf')],
+        text: 'Guardar $docLabel',
+        subject: docLabel,
+        sharePositionOrigin: origin,
+      );
+    } catch (e) {
+      modal.close();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error al descargar PDF: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _shareViaWhatsApp() async {
@@ -3196,14 +1773,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     );
     if (result == null || !mounted) return;
 
-    final modal = AsyncOperationModal.show(context, text: 'Preparando documento...');
+    final modal =
+        AsyncOperationModal.show(context, text: 'Preparando documento...');
     try {
-      // Generate receipt PDF via API (use cache if available)
       final pdfData = _cachedPdfBase64 ?? await _generateReceiptPdf();
       if (pdfData == null) throw Exception('Error generando PDF');
       _cachedPdfBase64 = pdfData;
 
-      // Save PDF temporarily
       final tempDir = await getTemporaryDirectory();
       final ts = DateTime.now().millisecondsSinceEpoch;
       final file = File(
@@ -3211,7 +1787,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       );
       await file.writeAsBytes(base64Decode(pdfData));
 
-      // Get WhatsApp URL from backend
       final response = await ApiClient.post(
         '/entregas/receipt/${widget.albaran.id}/whatsapp',
         {
@@ -3223,11 +1798,11 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       modal.close();
       if (!mounted) return;
 
-      // Share PDF via system share - user selects WhatsApp
       final renderBox = context.findRenderObject() as RenderBox?;
       final origin = renderBox != null
           ? Rect.fromCenter(
-              center: Offset(renderBox.size.width / 2, renderBox.size.height / 2),
+              center:
+                  Offset(renderBox.size.width / 2, renderBox.size.height / 2),
               width: 1,
               height: 1,
             )
@@ -3240,7 +1815,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         sharePositionOrigin: origin,
       );
 
-      // If WhatsApp URL available, also open WhatsApp chat
       if (response['success'] == true && response['whatsappUrl'] != null) {
         final whatsappUrl = response['whatsappUrl'] as String;
         final uri = Uri.parse(whatsappUrl);
@@ -3275,7 +1849,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
 
     final modal = AsyncOperationModal.show(context, text: 'Enviando email...');
     try {
-      // Send via API
       final response = await ApiClient.post(
         '/entregas/receipt/${widget.albaran.id}/email',
         {
@@ -3307,7 +1880,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         i.cantidadPedida.toInt(),
                     'descripcion': i.descripcion,
                     'precio': i.precioUnitario,
-                  },)
+                  })
               .toList(),
         },
       );
@@ -3320,139 +1893,6 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     } catch (e) {
       modal.error('Error al enviar email: $e');
     }
-  }
-
-  Future<String?> _showEmailInputDialog() async {
-    final controller = TextEditingController(text: widget.albaran.emailCliente);
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkCard,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.email, color: AppTheme.neonBlue, size: 24),
-            SizedBox(width: 12),
-            Text('Enviar por Email',
-                style: TextStyle(color: AppTheme.textPrimary, fontSize: 18),),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Confirmar dirección de correo:',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              keyboardType: TextInputType.emailAddress,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: 'correo@ejemplo.com',
-                hintStyle: const TextStyle(color: AppTheme.textTertiary),
-                prefixIcon: const Icon(Icons.alternate_email,
-                    color: AppTheme.textTertiary,),
-                filled: true,
-                fillColor: AppTheme.darkBase,
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,),
-                focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppTheme.neonBlue),),
-              ),
-              style: const TextStyle(color: AppTheme.textPrimary),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('CANCELAR',
-                style: TextStyle(color: AppTheme.textTertiary),),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonBlue,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),),
-            ),
-            child: const Text('ENVIAR'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<String?> _showWhatsAppInputDialog() async {
-    final controller = TextEditingController(text: widget.albaran.telefono);
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkCard,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.chat, color: Color(0xFF25D366), size: 24),
-            SizedBox(width: 12),
-            Text('Enviar por WhatsApp',
-                style: TextStyle(color: AppTheme.textPrimary, fontSize: 18),),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Confirmar número de teléfono:',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              keyboardType: TextInputType.phone,
-              autofocus: true,
-              decoration: InputDecoration(
-                hintText: '600000000',
-                hintStyle: const TextStyle(color: AppTheme.textTertiary),
-                prefixIcon:
-                    const Icon(Icons.phone, color: AppTheme.textTertiary),
-                filled: true,
-                fillColor: AppTheme.darkBase,
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,),
-                focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFF25D366)),),
-              ),
-              style: const TextStyle(color: AppTheme.textPrimary),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('CANCELAR',
-                style: TextStyle(color: AppTheme.textTertiary),),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF25D366),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),),
-            ),
-            child: const Text('COMPARTIR'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<String?> _generateReceiptPdf() async {
@@ -3485,7 +1925,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                         i.cantidadPedida.toInt(),
                     'descripcion': i.descripcion,
                     'precio': i.precioUnitario,
-                  },)
+                  })
               .toList(),
         },
       );

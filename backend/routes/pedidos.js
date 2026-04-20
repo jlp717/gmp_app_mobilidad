@@ -12,7 +12,14 @@ const logger = require('../middleware/logger');
 const { sanitizeForSQL } = require('../utils/common');
 const { queryWithParams, query } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
+const { verifyToken } = require('../middleware/auth');
 const { TTL } = require('../services/redis-cache');
+
+// =============================================================================
+// ALL ROUTES REQUIRE AUTHENTICATION
+// =============================================================================
+
+router.use(verifyToken);
 
 // =============================================================================
 // INITIALIZATION (called from server.js startServer after initDb)

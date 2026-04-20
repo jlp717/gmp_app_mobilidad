@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { verifyToken } = require('../middleware/auth');
 const logger = require('../middleware/logger');
 const { query, queryWithParams } = require('../config/db');
 const {
@@ -74,21 +75,20 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
 async function getClientsMonthlySales(clientCodes, year) {
     if (!clientCodes || clientCodes.length === 0) return {};
 
-    const clientList = clientCodes.map(c => `'${sanitizeForSQL(c)}'`).join(',');
+    const safeCodes = clientCodes.map(c => sanitizeForSQL(c));
 
-    // PERF: Removed TRIM(L.LCCDCL) - DB2 CHAR comparison handles trailing spaces
-    const rows = await query(`
+    const rows = await queryWithParams(`
         SELECT 
             L.LCMMDC as MONTH,
             SUM(L.LCIMVT) as SALES,
             SUM(L.LCIMCT) as COST,
             COUNT(DISTINCT L.LCCDCL) as CLIENTS
         FROM DSED.LACLAE L
-        WHERE L.LCCDCL IN (${clientList})
-          AND L.LCAADC = ${year}
+        WHERE L.LCCDCL IN (${safeCodes.map(() => '?').join(',')})
+          AND L.LCAADC = ?
           AND ${LACLAE_SALES_FILTER}
         GROUP BY L.LCMMDC
-    `, false);
+    `, [...safeCodes, year], false);
 
     // Build map: month -> {sales, cost, clients}
     const monthlyMap = {};
@@ -122,11 +122,11 @@ async function getVendorTargetConfig(vendorCode) {
     if (!vendorCode || vendorCode === 'ALL') return 10.0;
     try {
         const code = vendorCode.split(',')[0].trim();
-        const rows = await query(`
+        const rows = await queryWithParams(`
             SELECT TARGET_PERCENTAGE 
             FROM JAVIER.OBJ_CONFIG 
-            WHERE CODIGOVENDEDOR = '${code}'
-        `, false);
+            WHERE CODIGOVENDEDOR = ?
+        `, [code], false);
 
         if (rows.length > 0) {
             return parseFloat(rows[0].TARGET_PERCENTAGE) || 10.0;
@@ -141,7 +141,7 @@ async function getVendorTargetConfig(vendorCode) {
 // =============================================================================
 // OBJECTIVES SUMMARY (Quota vs Actual)
 // =============================================================================
-router.get('/', async (req, res) => {
+router.get('/', verifyToken, async (req, res) => {
     try {
         const { vendedorCodes, year, month } = req.query;
         const now = getCurrentDate();
@@ -180,15 +180,15 @@ router.get('/', async (req, res) => {
         }
 
         // Intentar obtener objetivo de CMV (por vendedor) si no hay cuota global y se pide un vendedor
-        if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
+if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
             try {
                 const code = vendedorCodes.split(',')[0].trim();
-                const cmvResult = await query(`
-          SELECT COALESCE(IMPORTEOBJETIVO, 0) as objetivo,
-                 COALESCE(PORCENTAJEOBJETIVO, 0) as porcentaje
-          FROM DSEDAC.CMV 
-          WHERE CODIGOVENDEDOR = '${code}'
-        `, false);
+                const cmvResult = await queryWithParams(`
+                    SELECT COALESCE(IMPORTEOBJETIVO, 0) as objetivo,
+                           COALESCE(PORCENTAJEOBJETIVO, 0) as porcentaje
+                    FROM DSEDAC.CMV 
+                    WHERE CODIGOVENDEDOR = ?
+                `, [code], false);
 
                 if (cmvResult[0]) {
                     const cmvObjective = parseFloat(cmvResult[0].OBJETIVO) || 0;
@@ -208,30 +208,27 @@ router.get('/', async (req, res) => {
 
         // Parallelize 3 independent sales queries
         const [currentSales, lastYearSales, prevYearAnnual] = await Promise.all([
-            // Ventas del mes actual (usando LAC)
-            query(`
-      SELECT 
-        COALESCE(SUM(IMPORTEVENTA), 0) as sales,
-        COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
-        COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
-      FROM DSEDAC.LAC L
-      WHERE ANODOCUMENTO = ${targetYear} AND MESDOCUMENTO = ${targetMonth} ${vendedorFilter}
-    `),
-            // Ventas del mismo mes año anterior (usando LAC)
-            query(`
-      SELECT 
-        COALESCE(SUM(IMPORTEVENTA), 0) as sales,
-        COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
-        COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
-      FROM DSEDAC.LAC
-      WHERE ANODOCUMENTO = ${targetYear - 1} AND MESDOCUMENTO = ${targetMonth} ${vendedorFilter}
-    `),
-            // Annual Totals of Previous Year for Seasonality Calculation
-            query(`
-            SELECT COALESCE(SUM(IMPORTEVENTA), 0) as TOTAL_SALES
-            FROM DSEDAC.LAC
-            WHERE ANODOCUMENTO = ${targetYear - 1} ${vendedorFilter}
-        `, false)
+            queryWithParams(`
+                SELECT 
+                    COALESCE(SUM(IMPORTEVENTA), 0) as sales,
+                    COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
+                    COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
+                FROM DSEDAC.LAC L
+                WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? ${vendedorFilter}
+            `, [targetYear, targetMonth]),
+            queryWithParams(`
+                SELECT 
+                    COALESCE(SUM(IMPORTEVENTA), 0) as sales,
+                    COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
+                    COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
+                FROM DSEDAC.LAC
+                WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? ${vendedorFilter}
+            `, [targetYear - 1, targetMonth]),
+            queryWithParams(`
+                SELECT COALESCE(SUM(IMPORTEVENTA), 0) as TOTAL_SALES
+                FROM DSEDAC.LAC
+                WHERE ANODOCUMENTO = ? ${vendedorFilter}
+            `, [targetYear - 1], false)
         ]);
 
         const curr = currentSales[0] || {};
@@ -339,7 +336,7 @@ router.get('/', async (req, res) => {
 // =============================================================================
 // OBJECTIVES EVOLUTION
 // =============================================================================
-router.get('/evolution', async (req, res) => {
+router.get('/evolution', verifyToken, async (req, res) => {
     try {
         const { vendedorCodes, years } = req.query;
         const now = getCurrentDate();
@@ -386,20 +383,20 @@ router.get('/evolution', async (req, res) => {
 
         // Single optimized query - get monthly totals per year
         // Using DSED.LACLAE with LCIMVT for sales WITHOUT VAT (matches 15,220,182.87€ for 2025)
-        const rows = await query(`
-          SELECT 
-            L.LCAADC as YEAR,
-            L.LCMMDC as MONTH,
-            SUM(L.LCIMVT) as SALES,
-            SUM(L.LCIMCT) as COST,
-            COUNT(DISTINCT L.LCCDCL) as CLIENTS
-          FROM DSED.LACLAE L
-          WHERE L.LCAADC IN (${yearsFilter})
-            AND ${LACLAE_SALES_FILTER}
-            ${vendedorFilter}
-          GROUP BY L.LCAADC, L.LCMMDC
-          ORDER BY YEAR, MONTH
-        `);
+        const rows = await queryWithParams(`
+            SELECT 
+                L.LCAADC as YEAR,
+                L.LCMMDC as MONTH,
+                SUM(L.LCIMVT) as SALES,
+                SUM(L.LCIMCT) as COST,
+                COUNT(DISTINCT L.LCCDCL) as CLIENTS
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC IN (${uniqueYears.map(() => '?').join(',')})
+              AND ${LACLAE_SALES_FILTER}
+              ${vendedorFilter}
+            GROUP BY L.LCAADC, L.LCMMDC
+            ORDER BY YEAR, MONTH
+        `, uniqueYears);
 
 
         // =====================================================================
@@ -465,16 +462,16 @@ router.get('/evolution', async (req, res) => {
             const currentMonth = now.getMonth() + 1;
 
             try {
-                const fixedRows = await query(`
+                const fixedRows = await queryWithParams(`
                     SELECT IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION
                     FROM JAVIER.COMMERCIAL_TARGETS
-                    WHERE CODIGOVENDEDOR = '${firstCode}'
-                      AND ANIO = ${currentYear}
-                      AND (MES = ${currentMonth} OR MES IS NULL)
+                    WHERE CODIGOVENDEDOR = ?
+                      AND ANIO = ?
+                      AND (MES = ? OR MES IS NULL)
                       AND ACTIVO = 1
                     ORDER BY MES DESC
                     FETCH FIRST 1 ROWS ONLY
-                `, false);
+                `, [firstCode, currentYear, currentMonth], false);
 
                 if (fixedRows && fixedRows.length > 0) {
                     fixedMonthlyTarget = parseFloat(fixedRows[0].IMPORTE_OBJETIVO) || null;
@@ -634,7 +631,7 @@ router.get('/evolution', async (req, res) => {
 // =============================================================================
 // OBJECTIVES MATRIX
 // =============================================================================
-router.get('/matrix', async (req, res) => {
+router.get('/matrix', verifyToken, async (req, res) => {
     try {
         const {
             clientCode, years, startMonth = '1', endMonth = '12',
@@ -662,14 +659,14 @@ router.get('/matrix', async (req, res) => {
         let editableNotes = null;
 
         const [contactRows, notesRows] = await Promise.all([
-            query(`
+            queryWithParams(`
                 SELECT TELEFONO1 as PHONE, TELEFONO2 as PHONE2 
-                FROM DSEDAC.CLI WHERE CODIGOCLIENTE = '${clientCode}' FETCH FIRST 1 ROWS ONLY
-            `).catch(e => { logger.warn(`Could not load contact info: ${e.message}`); return []; }),
-            query(`
+                FROM DSEDAC.CLI WHERE CODIGOCLIENTE = ? FETCH FIRST 1 ROWS ONLY
+            `, [clientCode]).catch(e => { logger.warn(`Could not load contact info: ${e.message}`); return []; }),
+            queryWithParams(`
                 SELECT OBSERVACIONES, MODIFIED_BY FROM JAVIER.CLIENT_NOTES 
-                WHERE CLIENT_CODE = '${sanitizeForSQL(clientCode)}' FETCH FIRST 1 ROWS ONLY
-            `, false).catch(e => { logger.debug(`Notes table not available: ${e.message}`); return []; })
+                WHERE CLIENT_CODE = ? FETCH FIRST 1 ROWS ONLY
+            `, [clientCode], false).catch(e => { logger.debug(`Notes table not available: ${e.message}`); return []; })
         ]);
 
         if (contactRows.length > 0) {
@@ -692,89 +689,94 @@ router.get('/matrix', async (req, res) => {
         }
         // -------------------------------------------
 
-        // Build filter conditions (using LACLAE column names)
         let filterConditions = '';
+        const filterParams = [];
         if (productCode && productCode.trim()) {
-            filterConditions += ` AND UPPER(L.LCCDRF) LIKE '%${sanitizeForSQL(productCode.trim()).toUpperCase()}%'`;
+            const safeProdCode = `%${sanitizeForSQL(productCode.trim()).toUpperCase()}%`;
+            filterConditions += ` AND UPPER(L.LCCDRF) LIKE ?`;
+            filterParams.push(safeProdCode);
         }
         if (productName && productName.trim()) {
-            const safeProdName = sanitizeForSQL(productName.trim()).toUpperCase();
-            filterConditions += ` AND (UPPER(A.DESCRIPCIONARTICULO) LIKE '%${safeProdName}%' OR UPPER(L.LCDESC) LIKE '%${safeProdName}%')`;
+            const safeProdName = `%${sanitizeForSQL(productName.trim()).toUpperCase()}%`;
+            filterConditions += ` AND (UPPER(A.DESCRIPCIONARTICULO) LIKE ? OR UPPER(L.LCDESC) LIKE ?)`;
+            filterParams.push(safeProdName, safeProdName);
         }
-        // Legacy family/subfamily filters (mantener compatibilidad)
         if (familyCode && familyCode.trim()) {
-            filterConditions += ` AND A.CODIGOFAMILIA = '${sanitizeForSQL(familyCode.trim())}'`;
+            filterConditions += ` AND A.CODIGOFAMILIA = ?`;
+            filterParams.push(familyCode.trim());
         }
         if (subfamilyCode && subfamilyCode.trim()) {
-            filterConditions += ` AND A.CODIGOSUBFAMILIA = '${sanitizeForSQL(subfamilyCode.trim())}'`;
+            filterConditions += ` AND A.CODIGOSUBFAMILIA = ?`;
+            filterParams.push(subfamilyCode.trim());
         }
 
-        // NEW: FI hierarchical filters (join con ARTX)
         let needsArtxJoin = false;
         if (fi1 && fi1.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO01) = '${sanitizeForSQL(fi1.trim())}'`;
+            filterConditions += ` AND TRIM(AX.FILTRO01) = ?`;
+            filterParams.push(fi1.trim());
             needsArtxJoin = true;
         }
         if (fi2 && fi2.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO02) = '${sanitizeForSQL(fi2.trim())}'`;
+            filterConditions += ` AND TRIM(AX.FILTRO02) = ?`;
+            filterParams.push(fi2.trim());
             needsArtxJoin = true;
         }
         if (fi3 && fi3.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO03) = '${sanitizeForSQL(fi3.trim())}'`;
+            filterConditions += ` AND TRIM(AX.FILTRO03) = ?`;
+            filterParams.push(fi3.trim());
             needsArtxJoin = true;
         }
         if (fi4 && fi4.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO04) = '${sanitizeForSQL(fi4.trim())}'`;
+            filterConditions += ` AND TRIM(AX.FILTRO04) = ?`;
+            filterParams.push(fi4.trim());
             needsArtxJoin = true;
         }
         if (fi5 && fi5.trim()) {
-            filterConditions += ` AND TRIM(A.CODIGOSECCIONLARGA) = '${sanitizeForSQL(fi5.trim())}'`;
+            filterConditions += ` AND TRIM(A.CODIGOSECCIONLARGA) = ?`;
+            filterParams.push(fi5.trim());
         }
 
         // Build ARTX join if needed
         const artxJoin = needsArtxJoin ? 'LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO' : '';
 
         // Get product purchases for this client - USING DSED.LACLAE (which has data for all clients including PUA)
-        const rows = await query(`
-      SELECT 
-        L.LCCDRF as PRODUCT_CODE,
-        COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.LCDESC)) as PRODUCT_NAME,
-        COALESCE(A.CODIGOFAMILIA, 'SIN_FAM') as FAMILY_CODE,
-        COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') as SUBFAMILY_CODE,
-        COALESCE(TRIM(A.UNIDADMEDIDA), 'UDS') as UNIT_TYPE,
-        L.LCAADC as YEAR,
-        L.LCMMDC as MONTH,
-        SUM(L.LCIMVT) as SALES,
-        SUM(L.LCIMCT) as COST,
-        SUM(L.LCCTUD) as UNITS,
-        -- Discount detection AND details (using LACLAE equivalents)
-        SUM(CASE WHEN L.LCPRTC <> 0 AND L.LCPRT1 <> 0 
-                  AND L.LCPRTC <> L.LCPRT1 THEN 1 ELSE 0 END) as HAS_SPECIAL_PRICE,
-        SUM(CASE WHEN L.LCPJDT <> 0 THEN 1 ELSE 0 END) as HAS_DISCOUNT,
-        AVG(CASE WHEN L.LCPJDT <> 0 THEN L.LCPJDT ELSE NULL END) as AVG_DISCOUNT_PCT,
-        CAST(NULL AS DECIMAL(10,2)) as AVG_DISCOUNT_EUR,
-        -- Average prices for comparison
-        AVG(L.LCPRTC) as AVG_CLIENT_TARIFF,
-        AVG(L.LCPRT1) as AVG_BASE_TARIFF,
-        -- FI codes for 5-level hierarchy grouping
-        COALESCE(TRIM(AX.FILTRO01), '') as FI1_CODE,
-        COALESCE(TRIM(AX.FILTRO02), '') as FI2_CODE,
-        COALESCE(TRIM(AX.FILTRO03), '') as FI3_CODE,
-        COALESCE(TRIM(AX.FILTRO04), '') as FI4_CODE,
-        COALESCE(TRIM(A.CODIGOSECCIONLARGA), '') as FI5_CODE
-      FROM DSED.LACLAE L
-      LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
-      LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO
-      WHERE L.LCCDCL = '${clientCode}'
-        AND L.LCAADC IN(${yearsFilter})
-        AND L.LCMMDC BETWEEN ${monthStart} AND ${monthEnd}
-        -- FILTERS to match LACLAE logic
-        AND ${LACLAE_SALES_FILTER}
-        ${filterConditions}
-      GROUP BY L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.LCAADC, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04, A.CODIGOSECCIONLARGA
-      ORDER BY SALES DESC
-      FETCH FIRST 1000 ROWS ONLY
-    `);
+        const clientParams = [clientCode, ...filterParams];
+        const rows = await queryWithParams(`
+            SELECT 
+                L.LCCDRF as PRODUCT_CODE,
+                COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.LCDESC)) as PRODUCT_NAME,
+                COALESCE(A.CODIGOFAMILIA, 'SIN_FAM') as FAMILY_CODE,
+                COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') as SUBFAMILY_CODE,
+                COALESCE(TRIM(A.UNIDADMEDIDA), 'UDS') as UNIT_TYPE,
+                L.LCAADC as YEAR,
+                L.LCMMDC as MONTH,
+                SUM(L.LCIMVT) as SALES,
+                SUM(L.LCIMCT) as COST,
+                SUM(L.LCCTUD) as UNITS,
+                SUM(CASE WHEN L.LCPRTC <> 0 AND L.LCPRT1 <> 0 
+                    AND L.LCPRTC <> L.LCPRT1 THEN 1 ELSE 0 END) as HAS_SPECIAL_PRICE,
+                SUM(CASE WHEN L.LCPJDT <> 0 THEN 1 ELSE 0 END) as HAS_DISCOUNT,
+                AVG(CASE WHEN L.LCPJDT <> 0 THEN L.LCPJDT ELSE NULL END) as AVG_DISCOUNT_PCT,
+                CAST(NULL AS DECIMAL(10,2)) as AVG_DISCOUNT_EUR,
+                AVG(L.LCPRTC) as AVG_CLIENT_TARIFF,
+                AVG(L.LCPRT1) as AVG_BASE_TARIFF,
+                COALESCE(TRIM(AX.FILTRO01), '') as FI1_CODE,
+                COALESCE(TRIM(AX.FILTRO02), '') as FI2_CODE,
+                COALESCE(TRIM(AX.FILTRO03), '') as FI3_CODE,
+                COALESCE(TRIM(AX.FILTRO04), '') as FI4_CODE,
+                COALESCE(TRIM(A.CODIGOSECCIONLARGA), '') as FI5_CODE
+            FROM DSED.LACLAE L
+            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+            LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO
+            WHERE L.LCCDCL = ?
+              AND L.LCAADC IN(${uniqueYears.map(() => '?').join(',')})
+              AND L.LCMMDC BETWEEN ? AND ?
+              AND ${LACLAE_SALES_FILTER}
+              ${filterConditions}
+            GROUP BY L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.LCAADC, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04, A.CODIGOSECCIONLARGA
+            ORDER BY SALES DESC
+            FETCH FIRST 1000 ROWS ONLY
+        `, [clientCode, ...uniqueYears, monthStart, monthEnd, ...filterParams]);
 
         // Get family names and available filters properly
         const familyNames = {};
@@ -1685,12 +1687,23 @@ router.get('/by-client', async (req, res) => {
         const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes, 'L');
 
         let extraFilters = '';
-        if (city && city.trim()) extraFilters += ` AND UPPER(C.POBLACION) = '${sanitizeForSQL(city.trim()).toUpperCase()}'`;
-        if (code && code.trim()) extraFilters += ` AND C.CODIGOCLIENTE LIKE '%${sanitizeForSQL(code.trim())}%'`;
-        if (nif && nif.trim()) extraFilters += ` AND C.NIF LIKE '%${sanitizeForSQL(nif.trim())}%'`;
+        const extraFilterParams = [];
+        if (city && city.trim()) {
+            extraFilters += ` AND UPPER(C.POBLACION) = ?`;
+            extraFilterParams.push(city.trim().toUpperCase());
+        }
+        if (code && code.trim()) {
+            extraFilters += ` AND C.CODIGOCLIENTE LIKE ?`;
+            extraFilterParams.push(`%${code.trim()}%`);
+        }
+        if (nif && nif.trim()) {
+            extraFilters += ` AND C.NIF LIKE ?`;
+            extraFilterParams.push(`%${nif.trim()}%`);
+        }
         if (name && name.trim()) {
-            const safeName = sanitizeForSQL(name.trim()).toUpperCase();
-            extraFilters += ` AND (UPPER(C.NOMBRECLIENTE) LIKE '%${safeName}%' OR UPPER(C.NOMBREALTERNATIVO) LIKE '%${safeName}%')`;
+            const safeName = `%${sanitizeForSQL(name.trim()).toUpperCase()}%`;
+            extraFilters += ` AND (UPPER(C.NOMBRECLIENTE) LIKE ? OR UPPER(C.NOMBREALTERNATIVO) LIKE ?)`;
+            extraFilterParams.push(safeName, safeName);
         }
 
         // Main year for objective calculation
@@ -1704,80 +1717,80 @@ router.get('/by-client', async (req, res) => {
         let currentRows = [];
 
         if (cachedClientCodes && cachedClientCodes.length > 0) {
-            // Use cached client codes for fast filtering - SECURITY: sanitize codes
-            const clientCodesFilter = cachedClientCodes.map(c => `'${sanitizeForSQL(c)}'`).join(',');
+            const safeClientCodes = cachedClientCodes.map(c => sanitizeForSQL(c));
 
             // Query 0: Count clients from cache (filtered by extra filters if any)
             if (extraFilters) {
-                const countResult = await query(`
+                const countResult = await queryWithParams(`
                     SELECT COUNT(*) as TOTAL
                     FROM DSEDAC.CLI C
-                    WHERE C.CODIGOCLIENTE IN (${clientCodesFilter})
+                    WHERE C.CODIGOCLIENTE IN (${safeClientCodes.map(() => '?').join(',')})
                       AND C.ANOBAJA = 0
                       ${extraFilters}
-                `, false);
+                `, [...safeClientCodes, ...extraFilterParams], false);
                 totalClientsCount = countResult[0] ? parseInt(countResult[0].TOTAL) : 0;
             } else {
                 totalClientsCount = cachedClientCodes.length;
             }
 
             // Query 1: Get client info + sales data (optimized with IN clause)
-            currentRows = await query(`
-              SELECT 
-                C.CODIGOCLIENTE as CODE,
-                COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), C.NOMBRECLIENTE) as NAME,
-                C.DIRECCION as ADDRESS,
-                C.CODIGOPOSTAL as POSTALCODE,
-                C.POBLACION as CITY,
-                COALESCE(S.SALES, 0) as SALES,
-                COALESCE(S.COST, 0) as COST
-              FROM DSEDAC.CLI C
-              LEFT JOIN (
-                SELECT LCCDCL, SUM(LCIMVT) as SALES, SUM(LCIMCT) as COST
-                FROM DSED.LACLAE
-                WHERE LCAADC IN(${yearsFilter})
-                  AND LCMMDC IN(${monthsFilter})
-                  AND ${LACLAE_SALES_FILTER.replace(/L\./g, '')}
-                  AND LCCDCL IN (${clientCodesFilter})
-                GROUP BY LCCDCL
-              ) S ON C.CODIGOCLIENTE = S.LCCDCL
-              WHERE C.CODIGOCLIENTE IN (${clientCodesFilter})
-                AND C.ANOBAJA = 0
-                ${extraFilters}
-              ORDER BY COALESCE(S.SALES, 0) DESC
-              FETCH FIRST ${rowsLimit} ROWS ONLY
-            `);
+            currentRows = await queryWithParams(`
+                SELECT 
+                    C.CODIGOCLIENTE as CODE,
+                    COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), C.NOMBRECLIENTE) as NAME,
+                    C.DIRECCION as ADDRESS,
+                    C.CODIGOPOSTAL as POSTALCODE,
+                    C.POBLACION as CITY,
+                    COALESCE(S.SALES, 0) as SALES,
+                    COALESCE(S.COST, 0) as COST
+                FROM DSEDAC.CLI C
+                LEFT JOIN (
+                    SELECT LCCDCL, SUM(LCIMVT) as SALES, SUM(LCIMCT) as COST
+                    FROM DSED.LACLAE
+                    WHERE LCAADC IN (${yearsArray.map(() => '?').join(',')})
+                      AND LCMMDC IN (${monthsArray.map(() => '?').join(',')})
+                      AND ${LACLAE_SALES_FILTER.replace(/L\./g, '')}
+                      AND LCCDCL IN (${safeClientCodes.map(() => '?').join(',')})
+                    GROUP BY LCCDCL
+                ) S ON C.CODIGOCLIENTE = S.LCCDCL
+                WHERE C.CODIGOCLIENTE IN (${safeClientCodes.map(() => '?').join(',')})
+                  AND C.ANOBAJA = 0
+                  ${extraFilters}
+                ORDER BY COALESCE(S.SALES, 0) DESC
+                FETCH FIRST ? ROWS ONLY
+            `, [...yearsArray, ...monthsArray, ...safeClientCodes, ...safeClientCodes, ...extraFilterParams, rowsLimit]);
         } else {
             // Fallback: Use original query with vendedor filter if cache not available
             const vendedorFilterSales = buildVendedorFilterLACLAE(vendedorCodes, 'L');
 
-            currentRows = await query(`
-              SELECT 
-                L.LCCDCL as CODE,
-                COALESCE(NULLIF(TRIM(MIN(C.NOMBREALTERNATIVO)), ''), MIN(C.NOMBRECLIENTE)) as NAME,
-                MIN(C.DIRECCION) as ADDRESS,
-                MIN(C.CODIGOPOSTAL) as POSTALCODE,
-                MIN(C.POBLACION) as CITY,
-                SUM(L.LCIMVT) as SALES,
-                SUM(L.LCIMCT) as COST
-              FROM DSED.LACLAE L
-              LEFT JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
-              WHERE L.LCAADC IN(${yearsFilter})
-                AND L.LCMMDC IN(${monthsFilter})
-                AND ${LACLAE_SALES_FILTER}
-                ${vendedorFilterSales}
-                ${extraFilters}
-              GROUP BY L.LCCDCL
-              ORDER BY SALES DESC
-              FETCH FIRST ${rowsLimit} ROWS ONLY
-            `);
+            currentRows = await queryWithParams(`
+                SELECT 
+                    L.LCCDCL as CODE,
+                    COALESCE(NULLIF(TRIM(MIN(C.NOMBREALTERNATIVO)), ''), MIN(C.NOMBRECLIENTE)) as NAME,
+                    MIN(C.DIRECCION) as ADDRESS,
+                    MIN(C.CODIGOPOSTAL) as POSTALCODE,
+                    MIN(C.POBLACION) as CITY,
+                    SUM(L.LCIMVT) as SALES,
+                    SUM(L.LCIMCT) as COST
+                FROM DSED.LACLAE L
+                LEFT JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
+                WHERE L.LCAADC IN (${yearsArray.map(() => '?').join(',')})
+                  AND L.LCMMDC IN (${monthsArray.map(() => '?').join(',')})
+                  AND ${LACLAE_SALES_FILTER}
+                  ${vendedorFilterSales}
+                  ${extraFilters}
+                GROUP BY L.LCCDCL
+                ORDER BY SALES DESC
+                FETCH FIRST ? ROWS ONLY
+            `, [...yearsArray, ...monthsArray, ...extraFilterParams, rowsLimit]);
             totalClientsCount = currentRows.length;
         }
 
         // Query 2: Get previous year data for same period (for objective calculation)
         // Optimization: Only fetch previous data for the clients we actually retrieved in currentRows
         // to avoid huge joins if only showing top 100
-        const retrievedCodes = currentRows.map(r => `'${r.CODE}'`).join(',');
+        const retrievedCodes = currentRows.map(r => r.CODE);
+        const retrievedCodesParams = retrievedCodes.map(c => sanitizeForSQL(c));
 
         let prevSalesMap = new Map();
         let objectiveConfigMap = new Map();
@@ -1794,37 +1807,34 @@ router.get('/by-client', async (req, res) => {
             const currentYear = now.getFullYear();
 
             const [prevRows, confRows, fixedRows] = await Promise.all([
-                // Previous year sales for retrieved clients
-                query(`
-              SELECT 
-                L.LCCDCL as CODE,
-                SUM(L.LCIMVT) as PREV_SALES
-              FROM DSED.LACLAE L
-              WHERE L.LCAADC = ${prevYear}
-                AND L.LCMMDC IN(${monthsFilter})
-                AND ${LACLAE_SALES_FILTER}
-                AND L.LCCDCL IN (${retrievedCodes})
-              GROUP BY L.LCCDCL
-            `),
-                // Objective configuration
-                query(`
-                SELECT CODIGOCLIENTE, TARGET_PERCENTAGE 
-                FROM JAVIER.OBJ_CONFIG 
-                WHERE CODIGOCLIENTE IN (${retrievedCodes}, '*') 
-                   OR CODIGOCLIENTE = '*'
-             `).catch(err => { logger.warn(`Could not load objective config: ${err.message}`); return []; }),
-                // Fixed monthly targets from COMMERCIAL_TARGETS
+                queryWithParams(`
+                    SELECT 
+                        L.LCCDCL as CODE,
+                        SUM(L.LCIMVT) as PREV_SALES
+                    FROM DSED.LACLAE L
+                    WHERE L.LCAADC = ?
+                      AND L.LCMMDC IN (${monthsArray.map(() => '?').join(',')})
+                      AND ${LACLAE_SALES_FILTER}
+                      AND L.LCCDCL IN (${retrievedCodesParams.map(() => '?').join(',')})
+                    GROUP BY L.LCCDCL
+                `, [prevYear, ...monthsArray, ...retrievedCodesParams]),
+                queryWithParams(`
+                    SELECT CODIGOCLIENTE, TARGET_PERCENTAGE 
+                    FROM JAVIER.OBJ_CONFIG 
+                    WHERE CODIGOCLIENTE IN (${retrievedCodesParams.map(() => '?').join(',')}, '*') 
+                       OR CODIGOCLIENTE = '*'
+                `, [...retrievedCodesParams]).catch(err => { logger.warn(`Could not load objective config: ${err.message}`); return []; }),
                 vendorCodesArray.length > 0
-                    ? query(`
-                    SELECT CODIGOVENDEDOR, IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION, PORCENTAJE_MEJORA
-                    FROM JAVIER.COMMERCIAL_TARGETS
-                    WHERE CODIGOVENDEDOR IN (${vendorCodesArray.map(v => `'${v}'`).join(',')})
-                      AND ANIO = ${currentYear}
-                      AND (MES = ${currentMonth} OR MES IS NULL)
-                      AND ACTIVO = 1
-                    ORDER BY MES DESC
-                    FETCH FIRST 1 ROWS ONLY
-                `, false).catch(err => { logger.warn(`Could not load fixed commercial targets: ${err.message}`); return []; })
+                    ? queryWithParams(`
+                        SELECT CODIGOVENDEDOR, IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION, PORCENTAJE_MEJORA
+                        FROM JAVIER.COMMERCIAL_TARGETS
+                        WHERE CODIGOVENDEDOR IN (${vendorCodesArray.map(() => '?').join(',')})
+                          AND ANIO = ?
+                          AND (MES = ? OR MES IS NULL)
+                          AND ACTIVO = 1
+                        ORDER BY MES DESC
+                        FETCH FIRST 1 ROWS ONLY
+                    `, [...vendorCodesArray, currentYear, currentMonth], false).catch(err => { logger.warn(`Could not load fixed commercial targets: ${err.message}`); return []; })
                     : Promise.resolve([])
             ]);
 

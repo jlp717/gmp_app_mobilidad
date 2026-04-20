@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
+const { verifyToken } = require('../middleware/auth');
 const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
@@ -20,10 +21,51 @@ const {
     handleRouteError
 } = require('../utils/common');
 
-// =============================================================================
-// KPI CARDS ENDPOINT (Updated to use DSEDAC.LAC for proper history)
-// =============================================================================
-router.get('/metrics', async (req, res) => {
+function buildVendedorFilterParameterized(vendedorCodes, tableAlias = 'L') {
+    if (!vendedorCodes || vendedorCodes === 'ALL') return { filter: '', params: [] };
+    const prefix = tableAlias ? `${tableAlias}.` : '';
+    const col = `${prefix}LCCDVD`;
+
+    const codeList = vendedorCodes.split(',').map(c => c.trim());
+    const validCodes = codeList
+        .filter(c => c !== 'UNK' && /^[a-zA-Z0-9]+$/.test(c));
+
+    if (validCodes.length === 0) return { filter: 'AND 1=0', params: [] };
+
+    const placeholders = validCodes.map(() => '?').join(',');
+    return {
+        filter: `AND ${col} IN (${placeholders})`,
+        params: validCodes
+    };
+}
+
+function buildVendedorFilterLACLAEParameterized(vendedorCodes, tableAlias = 'L', year, month) {
+    if (!vendedorCodes || vendedorCodes === 'ALL') return { filter: '', params: [] };
+    const prefix = tableAlias ? `${tableAlias}.` : '';
+    const col = `${prefix}LCCDVD`;
+
+    const codeList = vendedorCodes.split(',').map(c => c.trim());
+    const hasUnk = codeList.includes('UNK');
+    const validCodes = codeList.filter(c => c !== 'UNK' && /^[a-zA-Z0-9]+$/.test(c));
+
+    if (validCodes.length === 0 && !hasUnk) return { filter: 'AND 1=0', params: [] };
+
+    const conditions = [];
+    const params = [];
+
+    if (validCodes.length > 0) {
+        const placeholders = validCodes.map(() => '?').join(',');
+        conditions.push(`${col} IN (${placeholders})`);
+        params.push(...validCodes);
+    }
+    if (hasUnk) {
+        conditions.push(`(${col} IS NULL OR ${col} = '')`);
+    }
+
+    return { filter: `AND (${conditions.join(' OR ')})`, params };
+}
+
+router.get('/metrics', verifyToken, async (req, res) => {
     try {
         const { vendedorCodes, year, month } = req.query;
         const now = getCurrentDate();
@@ -31,50 +73,46 @@ router.get('/metrics', async (req, res) => {
         const currentMonth = parseInt(month) || (now.getMonth() + 1);
         const cacheKey = `dashboard:metrics:${currentYear}:${currentMonth || 'all'}:${vendedorCodes || 'ALL'}`;
 
-        // -- FETCH FROM REDIS CACHE (L2) --
-        // Determine Filter Column based on transition
-        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, [currentYear, currentYear - 1], 'L');
-
-        // OPTIMIZATION v2: Use LONGER TTL for ALL vendors (JEFE_VENTAS needs faster loads)
         const isAllVendors = !vendedorCodes || vendedorCodes === 'ALL';
-        const currentTTL = isAllVendors ? TTL.MEDIUM : TTL.SHORT; // 30 min for ALL, 5 min for individual
-        const prevTTL = TTL.LONG; // Prev year is static
+        const currentTTL = isAllVendors ? TTL.MEDIUM : TTL.SHORT;
+        const prevTTL = TTL.LONG;
 
+        const vendedorResult = buildVendedorFilterParameterized(vendedorCodes);
         const currentDataSql = `
-          SELECT 
+          SELECT
             COALESCE(SUM(L.LCIMVT), 0) as sales,
             COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) as margin,
             COALESCE(SUM(L.LCCTEV), 0) as boxes,
             COUNT(DISTINCT L.LCCDCL) as activeClients
           FROM DSED.LACLAE L
-          WHERE L.LCAADC = ${currentYear}
-            AND L.LCMMDC = ${currentMonth}
+          WHERE L.LCAADC = ?
+            AND L.LCMMDC = ?
             AND L.TPDC = 'LAC'
             AND L.LCTPVT IN ('CC', 'VC')
             AND L.LCCLLN IN ('AB', 'VT')
             AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
-            ${vendedorFilter}
+            ${vendedorResult.filter}
         `;
+        const currentDataParams = [currentYear, currentMonth, ...vendedorResult.params];
 
         const lastDataSql = `
-          SELECT 
+          SELECT
             COALESCE(SUM(L.LCIMVT), 0) as sales,
             COALESCE(SUM(L.LCIMVT - L.LCIMCT), 0) as margin,
             COALESCE(SUM(L.LCCTEV), 0) as boxes
           FROM DSED.LACLAE L
-          WHERE L.LCAADC = ${currentYear - 1}
-            AND L.LCMMDC = ${currentMonth}
+          WHERE L.LCAADC = ?
+            AND L.LCMMDC = ?
             AND ${LACLAE_SALES_FILTER}
-            ${vendedorFilter}
+            ${vendedorResult.filter}
         `;
+        const lastDataParams = [currentYear - 1, currentMonth, ...vendedorResult.params];
 
-        // Execute in parallel with cache - longer TTLs for ALL vendors
         const [currentData, lastData] = await Promise.all([
-            cachedQuery(query, currentDataSql, `${cacheKey}:curr`, currentTTL),
-            cachedQuery(query, lastDataSql, `${cacheKey}:prev`, prevTTL)
+            cachedQuery(queryWithParams, currentDataSql, `${cacheKey}:curr`, currentTTL, currentDataParams),
+            cachedQuery(queryWithParams, lastDataSql, `${cacheKey}:prev`, prevTTL, lastDataParams)
         ]);
 
-        // Today's metrics (Real-time, short cache)
         const today = now.getDate();
         let todaySales = 0;
         let todayOrders = 0;
@@ -83,9 +121,10 @@ router.get('/metrics', async (req, res) => {
             const todayDataSql = `
                 SELECT COALESCE(SUM(L.LCIMVT), 0) as sales, COUNT(DISTINCT L.LCNRAB) as orders
                 FROM DSED.LACLAE L
-                WHERE L.LCAADC = ${currentYear} AND L.LCMMDC = ${currentMonth} AND L.LCDDDC = ${today} AND ${LACLAE_SALES_FILTER} ${vendedorFilter}
+                WHERE L.LCAADC = ? AND L.LCMMDC = ? AND L.LCDDDC = ? AND ${LACLAE_SALES_FILTER} ${vendedorResult.filter}
             `;
-            const todayData = await cachedQuery(query, todayDataSql, `${cacheKey}:today`, TTL.SHORT); // 5 min cache for today
+            const todayDataParams = [currentYear, currentMonth, today, ...vendedorResult.params];
+            const todayData = await cachedQuery(queryWithParams, todayDataSql, `${cacheKey}:today`, TTL.SHORT, todayDataParams);
             todaySales = parseFloat(todayData[0]?.SALES) || 0;
             todayOrders = parseInt(todayData[0]?.ORDERS) || 0;
         }
@@ -96,7 +135,6 @@ router.get('/metrics', async (req, res) => {
         let currentSales = parseFloat(curr.SALES) || 0;
         let lastSales = parseFloat(last.SALES) || 0;
 
-        // Add B-sales for consistency with commissions/objectives
         if (vendedorCodes && vendedorCodes !== 'ALL') {
             const firstCode = vendedorCodes.split(',')[0]?.trim();
             if (firstCode) {
@@ -107,7 +145,6 @@ router.get('/metrics', async (req, res) => {
             }
         }
 
-        // Calculate variations
         const calcVar = (curr, prev) => prev && prev !== 0 ? ((curr - prev) / prev) * 100 : 0;
         const growthPercent = calcVar(currentSales, lastSales);
 
@@ -152,21 +189,11 @@ router.get('/metrics', async (req, res) => {
     }
 });
 
-// =============================================================================
-// MATRIX DATA 
-// =============================================================================
-router.get('/matrix-data', async (req, res) => {
+router.get('/matrix-data', verifyToken, async (req, res) => {
     try {
         const { vendedorCodes, groupBy = 'vendor', year, years, clientCodes, productCodes, familyCodes } = req.query;
-        // Use a hash of query params as key
         const cacheKey = `dashboard:matrix:${JSON.stringify(req.query)}`;
 
-        // This endpoint is heavy, use cachedQuery logic inside? 
-        // Since we have complex logic with multiple steps (aggregates + lookups),
-        // we should wrap the WHOLE thing or use Redis middleware.
-        // We will cache manually here to reuse existing logic but put it in Redis.
-
-        // Check cache manually for the final JSON result
         const { redisCache } = require('../services/redis-cache');
         const cachedResult = await redisCache.get('matrix', cacheKey);
         if (cachedResult) {
@@ -174,22 +201,26 @@ router.get('/matrix-data', async (req, res) => {
             return res.json(cachedResult);
         }
 
-        let yearFilter = '';
         let selectedYear = parseInt(year) || getCurrentDate().getFullYear();
         let prevYear = selectedYear - 1;
+        let yearParams = [];
+        let yearFilter = '';
 
         if (years && years.trim().length > 0) {
             const yearList = years.split(',').map(y => parseInt(y.trim())).filter(y => !isNaN(y));
             if (yearList.length > 0) {
-                yearFilter = `AND L.LCAADC IN (${yearList.join(',')})`;
+                const placeholders = yearList.map(() => '?').join(',');
+                yearFilter = `AND L.LCAADC IN (${placeholders})`;
+                yearParams = yearList;
             } else {
-                yearFilter = `AND L.LCAADC = ${selectedYear}`;
+                yearFilter = 'AND L.LCAADC = ?';
+                yearParams = [selectedYear];
             }
         } else {
-            yearFilter = `AND L.LCAADC IN (${selectedYear}, ${prevYear})`;
+            yearFilter = 'AND L.LCAADC IN (?, ?)';
+            yearParams = [selectedYear, prevYear];
         }
 
-        // Determine which years this query spans for date-aware vendor column
         let queryYears = [];
         if (years && years.trim().length > 0) {
             queryYears = years.split(',').map(y => parseInt(y.trim())).filter(y => !isNaN(y));
@@ -198,31 +229,48 @@ router.get('/matrix-data', async (req, res) => {
             queryYears = [selectedYear, prevYear];
         }
 
-        // Use LCCDVD only — DSEDAC.LAC does NOT have R1_T8CDVD column
-        // DB2 validates all column refs at parse time, so CASE with R1_T8CDVD fails with -205
-        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, queryYears, 'L', { forLACTable: true });
+        const vendedorResult = buildVendedorFilterParameterized(vendedorCodes);
+        const vendedorParams = vendedorResult.params;
 
-        const clientFilter = clientCodes && clientCodes !== 'ALL'
-            ? `AND L.LCCDCL IN (${clientCodes.split(',').map(c => `'${sanitizeForSQL(c.trim())}'`).join(',')})`
-            : '';
+        let clientFilter = '';
+        let clientParams = [];
+        if (clientCodes && clientCodes !== 'ALL') {
+            const codes = clientCodes.split(',').map(c => c.trim()).filter(c => /^[a-zA-Z0-9]+$/.test(c));
+            if (codes.length > 0) {
+                const placeholders = codes.map(() => '?').join(',');
+                clientFilter = `AND L.LCCDCL IN (${placeholders})`;
+                clientParams = codes;
+            }
+        }
 
-        const productFilter = productCodes && productCodes !== 'ALL'
-            ? `AND L.CODIGOARTICULO IN (${productCodes.split(',').map(c => `'${sanitizeForSQL(c.trim())}'`).join(',')})`
-            : '';
+        let productFilter = '';
+        let productParams = [];
+        if (productCodes && productCodes !== 'ALL') {
+            const codes = productCodes.split(',').map(c => c.trim()).filter(c => /^[a-zA-Z0-9]+$/.test(c));
+            if (codes.length > 0) {
+                const placeholders = codes.map(() => '?').join(',');
+                productFilter = `AND L.CODIGOARTICULO IN (${placeholders})`;
+                productParams = codes;
+            }
+        }
 
         let familyProductFilter = '';
+        let familyProductParams = [];
         if (familyCodes && familyCodes !== 'ALL') {
-            const fCodes = familyCodes.split(',').map(f => `'${sanitizeForSQL(f.trim())}'`).filter(c => c !== "''").join(',');
-            if (!fCodes) {
-                familyProductFilter = 'AND 1=0';
-            } else {
-                const famProducts = await cachedQuery(query, `SELECT TRIM(CODIGOARTICULO) as CODE FROM DSEDAC.ART WHERE CODIGOFAMILIA IN (${fCodes})`, `fam_prods:${fCodes}`, TTL.LONG);
+            const fCodes = familyCodes.split(',').map(f => f.trim()).filter(f => /^[a-zA-Z0-9]+$/.test(f) && f !== '');
+            if (fCodes.length > 0) {
+                const famProductsSql = `SELECT TRIM(CODIGOARTICULO) as CODE FROM DSEDAC.ART WHERE CODIGOFAMILIA IN (${fCodes.map(() => '?').join(',')})`;
+                const famProducts = await cachedQuery(queryWithParams, famProductsSql, `fam_prods:${fCodes.join(',')}`, TTL.LONG, fCodes);
                 if (famProducts.length > 0) {
-                    const pCodes = famProducts.slice(0, 1000).map(p => `'${p.CODE}'`).join(','); // Safety limit
-                    familyProductFilter = `AND L.CODIGOARTICULO IN (${pCodes})`;
+                    const pCodes = famProducts.slice(0, 1000).map(p => p.CODE);
+                    const placeholders = pCodes.map(() => '?').join(',');
+                    familyProductFilter = `AND L.CODIGOARTICULO IN (${placeholders})`;
+                    familyProductParams = pCodes;
                 } else {
                     familyProductFilter = 'AND 1=0';
                 }
+            } else {
+                familyProductFilter = 'AND 1=0';
             }
         }
 
@@ -230,7 +278,6 @@ router.get('/matrix-data', async (req, res) => {
         const selectClauses = ['L.LCAADC as YEAR', 'L.LCMMDC as MONTH'];
         const groupClauses = ['L.LCAADC', 'L.LCMMDC'];
 
-        // Build vendor column expression — force LCCDVD for DSEDAC.LAC (no R1_T8CDVD)
         const vendorColExpr = getVendorColumnExpr('L', { forLACTable: true });
 
         hierarchy.forEach((level, index) => {
@@ -248,19 +295,14 @@ router.get('/matrix-data', async (req, res) => {
                 selectClauses.push(`RTRIM(L.CODIGOARTICULO) as ID_${levelIdx}`);
                 groupClauses.push('L.CODIGOARTICULO');
             } else if (level === 'subfamily') {
-                // FIX Bug #5: Support subfamily level in hierarchy for proper FI classification
                 selectClauses.push(`COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') as ID_${levelIdx}`);
                 groupClauses.push('A.CODIGOSUBFAMILIA');
             }
         });
 
-        // Matrix uses DSEDAC.LAC (has CODIGOARTICULO for product grouping).
-        // DSEDAC.LAC does NOT have TPDC column, so must use LAC_SALES_FILTER (not LACLAE).
-        // LCIMVT/LCIMCT short column names work on both LAC and LACLAE tables.
         selectClauses.push('SUM(L.LCIMVT) as SALES');
         selectClauses.push('SUM(L.LCIMVT - L.LCIMCT) as MARGIN');
 
-        // FIX: Add ART join when subfamily hierarchy is requested
         const needsArtJoin = hierarchy.includes('subfamily');
         const artJoinClause = needsArtJoin ? 'LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO' : '';
 
@@ -271,7 +313,7 @@ router.get('/matrix-data', async (req, res) => {
               WHERE 1=1
               AND ${LAC_SALES_FILTER}
               ${yearFilter}
-              ${vendedorFilter}
+              ${vendedorResult.filter}
               ${clientFilter}
               ${productFilter}
               ${familyProductFilter}
@@ -279,53 +321,58 @@ router.get('/matrix-data', async (req, res) => {
             ORDER BY SUM(L.LCIMVT) DESC
             FETCH FIRST 1000 ROWS ONLY
         `;
+        const aggregateParams = [...yearParams, ...vendedorParams, ...clientParams, ...productParams, ...familyProductParams];
 
-        // Log full SQL for debugging (only first time, not on cache hit)
-        logger.info(`[MATRIX] Full SQL (${aggregateSQL.replace(/\s+/g, ' ').length} chars): ${aggregateSQL.replace(/\s+/g, ' ').trim()}`);
+        logger.info(`[MATRIX] Full SQL (${aggregateSQL.replace(/\s+/g, ' ').length} chars)`);
 
-        // We cache the RAW aggregate data
         const rawKey = `matrix:raw:${cacheKey}`;
-        const rawData = await cachedQuery(query, aggregateSQL, rawKey, TTL.MEDIUM);
+        const rawData = await cachedQuery(queryWithParams, aggregateSQL, rawKey, TTL.MEDIUM, aggregateParams);
 
         const nameLookups = [];
-        // Helper
-        const lookup = (sql, key) => cachedQuery(query, sql, key, TTL.LONG);
+        const lookup = (sql, key, params = []) => cachedQuery(queryWithParams, sql, key, TTL.LONG, params);
 
         if (hierarchy.includes('vendor')) {
             const vCodes = [...new Set(rawData.map(r => r.ID_1).filter(Boolean))];
-            if (vCodes.length) nameLookups.push(lookup(`SELECT TRIM(CODIGOVENDEDOR) as CODE, TRIM(NOMBREVENDEDOR) as NAME FROM DSEDAC.VDD WHERE CODIGOVENDEDOR IN (${vCodes.map(c => `'${c}'`).join(',')})`, `names:vendors:${vCodes.length}`).then(d => ({ type: 'vendor', data: d })));
+            if (vCodes.length) {
+                const placeholders = vCodes.map(() => '?').join(',');
+                nameLookups.push(lookup(
+                    `SELECT TRIM(CODIGOVENDEDOR) as CODE, TRIM(NOMBREVENDEDOR) as NAME FROM DSEDAC.VDD WHERE CODIGOVENDEDOR IN (${placeholders})`,
+                    `names:vendors:${vCodes.length}`,
+                    vCodes
+                ).then(d => ({ type: 'vendor', data: d })));
+            }
         }
 
-        // ... (Lookups logic similar to before but utilizing lookup helper) ...
-        // Simplification: We need to recreate the map logic. 
-        // Since I'm overwriting, I'll copy the logic but using fast optimized queries.
-
-        // ... [Full Hydration Logic Omitted for Brevity - I will ensure it's in the final file] ...
-
-        // RE-RUNNING THE FULL LOGIC CAREFULLY
-
-        // Re-implement the loop and maps
         if (hierarchy.includes('client')) {
             const idx = hierarchy.indexOf('client') + 1;
             const cCodes = [...new Set(rawData.map(r => r[`ID_${idx}`]).filter(Boolean))];
-            if (cCodes.length) nameLookups.push(lookup(`SELECT TRIM(CODIGOCLIENTE) as CODE, COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), TRIM(NOMBRECLIENTE)) as NAME FROM DSEDAC.CLI WHERE CODIGOCLIENTE IN (${cCodes.slice(0, 2000).map(c => `'${c}'`).join(',')})`, `names:clients:${cCodes.length}`).then(d => ({ type: 'client', data: d })));
+            if (cCodes.length) {
+                const codesToQuery = cCodes.slice(0, 2000);
+                const placeholders = codesToQuery.map(() => '?').join(',');
+                nameLookups.push(lookup(
+                    `SELECT TRIM(CODIGOCLIENTE) as CODE, COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), TRIM(NOMBRECLIENTE)) as NAME FROM DSEDAC.CLI WHERE CODIGOCLIENTE IN (${placeholders})`,
+                    `names:clients:${cCodes.length}`,
+                    codesToQuery
+                ).then(d => ({ type: 'client', data: d })));
+            }
         }
 
         if (hierarchy.includes('product') || hierarchy.includes('family')) {
             const prodIndices = [];
             hierarchy.forEach((h, i) => { if (h === 'product' || h === 'family') prodIndices.push(i + 1); });
-            const productCodes = new Set();
-            prodIndices.forEach(idx => rawData.forEach(r => { if (r[`ID_${idx}`]) productCodes.add(r[`ID_${idx}`]); }));
+            const productCodesSet = new Set();
+            prodIndices.forEach(idx => rawData.forEach(r => { if (r[`ID_${idx}`]) productCodesSet.add(r[`ID_${idx}`]); }));
 
-            const codesArr = [...productCodes].slice(0, 2000);
+            const codesArr = [...productCodesSet].slice(0, 2000);
             if (codesArr.length > 0) {
-                const pSql = `
-                    SELECT TRIM(A.CODIGOARTICULO) as CODE, TRIM(A.DESCRIPCIONARTICULO) as NAME,
-                           TRIM(A.CODIGOFAMILIA) as FAM_CODE, COALESCE(TRIM(F.DESCRIPCIONFAMILIA), TRIM(A.CODIGOFAMILIA)) as FAM_NAME
-                    FROM DSEDAC.ART A LEFT JOIN DSEDAC.FAM F ON A.CODIGOFAMILIA = F.CODIGOFAMILIA 
-                    WHERE A.CODIGOARTICULO IN (${codesArr.map(c => `'${c}'`).join(',')})
-                 `;
-                nameLookups.push(lookup(pSql, `names:products:${codesArr.length}`).then(d => ({ type: 'art_mix', data: d })));
+                const placeholders = codesArr.map(() => '?').join(',');
+                nameLookups.push(lookup(
+                    `SELECT TRIM(A.CODIGOARTICULO) as CODE, TRIM(A.DESCRIPCIONARTICULO) as NAME, TRIM(A.CODIGOFAMILIA) as FAM_CODE, COALESCE(TRIM(F.DESCRIPCIONFAMILIA), TRIM(A.CODIGOFAMILIA)) as FAM_NAME
+                     FROM DSEDAC.ART A LEFT JOIN DSEDAC.FAM F ON A.CODIGOFAMILIA = F.CODIGOFAMILIA
+                     WHERE A.CODIGOARTICULO IN (${placeholders})`,
+                    `names:products:${codesArr.length}`,
+                    codesArr
+                ).then(d => ({ type: 'art_mix', data: d })));
             }
         }
 
@@ -392,31 +439,30 @@ router.get('/matrix-data', async (req, res) => {
     }
 });
 
-// =============================================================================
-// SALES EVOLUTION 
-// =============================================================================
-router.get('/sales-evolution', async (req, res) => {
+router.get('/sales-evolution', verifyToken, async (req, res) => {
     try {
         const { vendedorCodes, years, granularity = 'month', upToToday = 'false', months = 36 } = req.query;
-        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
         const now = getCurrentDate();
         const selectedYears = years
             ? years.split(',').map(y => parseInt(y.trim()))
             : [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2];
-        const yearsFilter = `AND L.LCAADC IN (${selectedYears.join(',')})`;
+
+        const yearsFilter = `AND L.LCAADC IN (${selectedYears.map(() => '?').join(',')})`;
 
         let dateFilter = '';
+        let dateParams = [];
         if (upToToday === 'true') {
             const currentMonth = now.getMonth() + 1;
             const currentDay = now.getDate();
-            dateFilter = `AND (L.LCAADC < ${now.getFullYear()} OR (L.LCAADC = ${now.getFullYear()} AND L.LCMMDC < ${currentMonth}) OR (L.LCAADC = ${now.getFullYear()} AND L.LCMMDC = ${currentMonth} AND L.LCDDDC <= ${currentDay}))`;
+            dateFilter = `AND (L.LCAADC < ? OR (L.LCAADC = ? AND L.LCMMDC < ?) OR (L.LCAADC = ? AND L.LCMMDC = ? AND L.LCDDDC <= ?))`;
+            dateParams = [now.getFullYear(), now.getFullYear(), currentMonth, now.getFullYear(), currentMonth, currentDay];
         }
 
         const cacheKey = `dashboard:evolution:${years || 'default'}:${granularity}:${upToToday}:${vendedorCodes || 'ALL'}`;
-        let resultData = [];
 
-        // OPTIMIZATION: Longer cache for ALL vendors (JEFE_VENTAS pattern)
         const evolutionTTL = (!vendedorCodes || vendedorCodes === 'ALL') ? TTL.LONG : TTL.MEDIUM;
+
+        let resultData = [];
 
         if (granularity === 'week') {
             const dailyQuery = `
@@ -425,11 +471,12 @@ router.get('/sales-evolution', async (req, res) => {
                COUNT(DISTINCT L.LCNRAB) as orders,
                COUNT(DISTINCT L.LCCDCL) as clients
         FROM DSED.LACLAE L
-        WHERE ${LACLAE_SALES_FILTER} ${yearsFilter} ${dateFilter} ${vendedorFilter}
+        WHERE ${LACLAE_SALES_FILTER} ${yearsFilter} ${dateFilter}
         GROUP BY L.LCAADC, L.LCMMDC, L.LCDDDC
         ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
       `;
-            const dailyData = await cachedQuery(query, dailyQuery, `${cacheKey}:daily`, evolutionTTL);
+            const dailyParams = [...selectedYears, ...dateParams];
+            const dailyData = await cachedQuery(queryWithParams, dailyQuery, `${cacheKey}:daily`, evolutionTTL, dailyParams);
 
             const weeklyMap = {};
             dailyData.forEach(row => {
@@ -455,11 +502,12 @@ router.get('/sales-evolution', async (req, res) => {
                COUNT(DISTINCT L.LCNRAB) as totalOrders,
                COUNT(DISTINCT L.LCCDCL) as uniqueClients
         FROM DSED.LACLAE L
-        WHERE ${LACLAE_SALES_FILTER} ${yearsFilter} ${dateFilter} ${vendedorFilter}
+        WHERE ${LACLAE_SALES_FILTER} ${yearsFilter} ${dateFilter}
         GROUP BY L.LCAADC, L.LCMMDC
         ORDER BY L.LCAADC DESC, L.LCMMDC DESC
       `;
-            const rows = await cachedQuery(query, monthlyQuery, `${cacheKey}:monthly`, evolutionTTL);
+            const monthlyParams = [...selectedYears, ...dateParams];
+            const rows = await cachedQuery(queryWithParams, monthlyQuery, `${cacheKey}:monthly`, evolutionTTL, monthlyParams);
             resultData = rows.map(r => ({
                 year: r.YEAR, month: r.MONTH,
                 totalSales: parseFloat(r.TOTALSALES) || 0,
@@ -476,20 +524,16 @@ router.get('/sales-evolution', async (req, res) => {
     }
 });
 
-// =============================================================================
-// RECENT SALES (Optimized with short cache)
-// =============================================================================
-router.get('/recent-sales', async (req, res) => {
+router.get('/recent-sales', verifyToken, async (req, res) => {
     try {
         const { vendedorCodes, limit = 20 } = req.query;
-        const vendedorFilter = buildVendedorFilter(vendedorCodes, 'L');
+        const vendedorResult = buildVendedorFilter(vendedorCodes, 'L');
         const cacheKey = `dashboard:recent_sales:${vendedorCodes || 'ALL'}:${limit}`;
 
-        // OPTIMIZATION: Longer TTL for ALL vendors (JEFE_VENTAS)
         const recentTTL = (!vendedorCodes || vendedorCodes === 'ALL') ? TTL.MEDIUM : TTL.SHORT;
 
         const sql = `
-      SELECT 
+      SELECT
         L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
         L.CODIGOCLIENTEALBARAN as clientCode,
         C.NOMBRECLIENTE as clientName, L.CODIGOVENDEDOR as vendedorCode,
@@ -500,7 +544,7 @@ router.get('/recent-sales', async (req, res) => {
         COUNT(*) as numLines
       FROM DSEDAC.LINDTO L
       LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
-      WHERE L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorFilter}
+      WHERE L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorResult}
       GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO, L.DIADOCUMENTO,
         L.CODIGOCLIENTEALBARAN, C.NOMBRECLIENTE, L.CODIGOVENDEDOR, L.SERIEDOCUMENTO
       ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
@@ -528,21 +572,20 @@ router.get('/recent-sales', async (req, res) => {
     }
 });
 
-// =============================================================================
-// PRODUCT SEARCH
-// =============================================================================
-router.get('/products-search', async (req, res) => {
+router.get('/products-search', verifyToken, async (req, res) => {
     try {
         const { query: searchTerm, limit = 50 } = req.query;
 
         let whereClause = "WHERE 1=1";
+        const params = [];
         if (searchTerm) {
             const term = searchTerm.toUpperCase().trim();
-            whereClause += ` AND (UPPER(DESCRIPCIONARTICULO) LIKE '%${term}%' OR CODIGOARTICULO LIKE '%${term}%')`;
+            whereClause += " AND (UPPER(DESCRIPCIONARTICULO) LIKE ? OR CODIGOARTICULO LIKE ?)";
+            params.push(`%${term}%`, `%${term}%`);
         }
 
         const sql = `
-            SELECT TRIM(CODIGOARTICULO) as CODE, 
+            SELECT TRIM(CODIGOARTICULO) as CODE,
                    TRIM(DESCRIPCIONARTICULO) as NAME,
                    TRIM(CODIGOFAMILIA) as FAMILY
             FROM DSEDAC.ART
@@ -551,9 +594,8 @@ router.get('/products-search', async (req, res) => {
             FETCH FIRST ${parseInt(limit)} ROWS ONLY
         `;
 
-        // Cache product searches as they are repetitive
         const cacheKey = `search:products:${searchTerm || 'all'}:${limit}`;
-        const products = await cachedQuery(query, sql, cacheKey, TTL.MEDIUM);
+        const products = await cachedQuery(queryWithParams, sql, cacheKey, TTL.MEDIUM, params);
 
         res.json(products.map(p => ({
             code: p.CODE,

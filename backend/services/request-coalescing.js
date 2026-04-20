@@ -3,6 +3,8 @@
  * Prevents duplicate requests: if same request is in-flight, wait for it instead of spawning new query
  */
 
+const logger = require('../middleware/logger');
+
 // In-flight requests map
 const inFlightRequests = new Map();
 

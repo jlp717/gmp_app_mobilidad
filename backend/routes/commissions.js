@@ -6,6 +6,7 @@ const logger = require('../middleware/logger');
 const { auditDataAccess } = require('../middleware/audit');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
 const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, getVendorColumn, buildVendedorFilterLACLAE, buildColumnaVendedorFilter, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL, handleRouteError } = require('../utils/common');
+const { verifyToken } = require('../middleware/auth');
 const { redisCache, TTL, invalidateCachePattern } = require('../services/redis-cache');
 
 const router = express.Router();
@@ -129,7 +130,7 @@ async function initCommissionTables() {
             if (count && count[0].CNT == 0) {
                 const defaultExcluded = ['03', '13', '93', '80'];
                 for (const code of defaultExcluded) {
-                    await conn.query(`INSERT INTO JAVIER.COMMISSION_EXCEPTIONS (CODIGOVENDEDOR, HIDE_COMMISSIONS, EXCLUIDO_COMISIONES) VALUES ('${code}', 'N', 'Y')`);
+                    await conn.query(`INSERT INTO JAVIER.COMMISSION_EXCEPTIONS (CODIGOVENDEDOR, HIDE_COMMISSIONS, EXCLUIDO_COMISIONES) VALUES (?, 'N', 'Y')`, [code]);
                 }
                 logger.info(`🌱 Seeded default excluded vendors.`);
             }
@@ -448,20 +449,29 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
     }
 
     // D. Fetch Sales Data (Using LACLAE with LCIMVT = sin IVA)
-    const vendedorFilter = buildColumnaVendedorFilter(vendedorCode, [selectedYear, prevYear], 'L');
+    const safeYear = parseInt(selectedYear);
+    const safePrevYear = parseInt(prevYear);
+    const vendedorFilter = buildColumnaVendedorFilter(vendedorCode, [safeYear, safePrevYear], 'L');
     const salesQuery = `
         SELECT 
             L.LCAADC as YEAR,
             LCMMDC as MONTH,
             SUM(L.LCIMVT) as SALES
         FROM DSED.LACLAE L
-        WHERE L.LCAADC IN (${selectedYear}, ${prevYear})
+        WHERE L.LCAADC IN (?, ?)
             AND ${LACLAE_SALES_FILTER}
             ${vendedorFilter}
         GROUP BY L.LCAADC, LCMMDC
         ORDER BY YEAR, MONTH
     `;
-    const salesRows = await cachedQuery(query, salesQuery, `commissions:sales:${vendedorCode}:${selectedYear}`, TTL.SHORT);
+    const cacheKey = `commissions:sales:${vendedorCode}:${safeYear}`;
+    let salesRows = await redisCache.get('route', cacheKey);
+    if (!salesRows) {
+        salesRows = await queryWithParams(salesQuery, [safeYear, safePrevYear], false);
+        if (salesRows.length > 0) {
+            redisCache.set('route', cacheKey, salesRows, TTL.SHORT).catch(() => {});
+        }
+    }
 
     // =====================================================================
     // INHERITED OBJECTIVES: Pre-load inherited sales for new vendors
@@ -478,16 +488,24 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
             try {
                 const currentMonth = new Date().getMonth() + 1;
                 const safeVendor = vendedorCode.replace(/[^a-zA-Z0-9]/g, '');
-                return await cachedQuery(query, `
-                    SELECT IMPORTE_BASE_COMISION
-                    FROM JAVIER.COMMERCIAL_TARGETS
-                    WHERE CODIGOVENDEDOR = '${safeVendor}'
-                      AND ANIO = ${parseInt(selectedYear)}
-                      AND (MES = ${parseInt(currentMonth)} OR MES IS NULL)
-                      AND ACTIVO = 1
-                    ORDER BY MES DESC
-                    FETCH FIRST 1 ROWS ONLY
-                `, `commissions:fixedTarget:${vendedorCode}:${selectedYear}`, TTL.MEDIUM);
+                const fixedTargetCacheKey = `commissions:fixedTarget:${safeVendor}:${safeYear}`;
+                let rows = await redisCache.get('route', fixedTargetCacheKey);
+                if (!rows) {
+                    rows = await queryWithParams(`
+                        SELECT IMPORTE_BASE_COMISION
+                        FROM JAVIER.COMMERCIAL_TARGETS
+                        WHERE CODIGOVENDEDOR = ?
+                          AND ANIO = ?
+                          AND (MES = ? OR MES IS NULL)
+                          AND ACTIVO = 1
+                        ORDER BY MES DESC
+                        FETCH FIRST 1 ROWS ONLY
+                    `, [safeVendor, safeYear, currentMonth], false);
+                    if (rows.length > 0) {
+                        redisCache.set('route', fixedTargetCacheKey, rows, TTL.MEDIUM).catch(() => {});
+                    }
+                }
+                return rows;
             } catch (err) {
                 logger.debug(`📊 [COMMISSIONS] COMMERCIAL_TARGETS lookup error: ${err.message}`);
                 return [];
@@ -701,7 +719,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
 // ROUTES
 // =============================================================================
 
-router.get('/summary', async (req, res) => {
+router.get('/summary', verifyToken, async (req, res) => {
     try {
         const { vendedorCode, year, forceRefresh } = req.query;
         if (!vendedorCode) return res.status(400).json({ success: false, error: 'Falta codigo vendedor' });
@@ -1015,7 +1033,7 @@ router.get('/summary', async (req, res) => {
 // FIX #5: Endpoint to register a payment (Restricted to ADMIN users via TIPOVENDEDOR lookup)
 // NEW: Validates observaciones requirement and captures venta_comision snapshot
 // Pagos son solo INSERT – no UPDATE. Snapshot histórico intencional.
-router.post('/pay', async (req, res) => {
+router.post('/pay', verifyToken, async (req, res) => {
     const { vendedorCode, year, month, quarter, amount, generatedAmount, concept, adminCode, observaciones, objetivoMes, ventasSobreObjetivo } = req.body;
 
     // Security check: Verify that the user has TIPOVENDEDOR = 'ADMIN' or is specifically authorized (code 98 = DIEGO)
@@ -1068,16 +1086,18 @@ router.post('/pay', async (req, res) => {
         let ventaComision = 0;
         if (month && month > 0) {
             try {
+                const safeYearNum = parseInt(year);
+                const safeMonthNum = parseInt(month);
                 const vendedorFilter = buildVendedorFilterLACLAE(vendedorCode, 'L');
                 const salesQuery = `
                     SELECT SUM(L.LCIMVT) as SALES
                     FROM DSED.LACLAE L
-                    WHERE L.LCAADC = ${year}
-                      AND L.LCMMDC = ${month}
+                    WHERE L.LCAADC = ?
+                      AND L.LCMMDC = ?
                       AND ${LACLAE_SALES_FILTER}
                       ${vendedorFilter}
                 `;
-                const salesRows = await query(salesQuery, false, false);
+                const salesRows = await queryWithParams(salesQuery, [safeYearNum, safeMonthNum], false);
                 if (salesRows && salesRows.length > 0) {
                     ventaComision = parseFloat(salesRows[0].SALES) || 0;
                 }
@@ -1127,7 +1147,7 @@ router.post('/pay', async (req, res) => {
 // PDF REPORT — DIEGO ONLY
 // =============================================================================
 
-router.get('/pdf', async (req, res) => {
+router.get('/pdf', verifyToken, async (req, res) => {
     try {
         const { year, months, range } = req.query;
         
@@ -1248,7 +1268,7 @@ router.get('/pdf', async (req, res) => {
 });
 
 // FIX #1: Route to get excluded vendor codes (for frontend dynamic loading)
-router.get('/excluded-vendors', async (req, res) => {
+router.get('/excluded-vendors', verifyToken, async (req, res) => {
     try {
         await loadExcludedVendors(); // Force fresh load
         logger.debug(`[COMMISSIONS] /excluded-vendors returning: [${EXCLUDED_VENDORS.join(', ')}]`);

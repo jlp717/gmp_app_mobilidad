@@ -2281,7 +2281,8 @@ async function cloneOrder(orderId) {
 async function getComplementaryProducts(productCodes, clientCode) {
     if (!productCodes || productCodes.length === 0) return [];
 
-    const codeList = productCodes.map(c => `'${sanitize(c.trim())}'`).join(',');
+    const trimmedCodes = productCodes.map(c => c.trim());
+    const placeholders = trimmedCodes.map(() => '?').join(',');
     const cacheKey = `pedidos:complementary:${productCodes.sort().join(',')}`;
 
     const sql = `
@@ -2297,7 +2298,7 @@ async function getComplementaryProducts(productCodes, clientCode) {
             ON L2.CODIGOCLIENTEALBARAN = L1.CODIGOCLIENTEALBARAN
             AND L2.ANODOCUMENTO = L1.ANODOCUMENTO
             AND L2.NUMERODOCUMENTO = L1.NUMERODOCUMENTO
-            AND TRIM(L2.CODIGOARTICULO) NOT IN (${codeList})
+            AND TRIM(L2.CODIGOARTICULO) NOT IN (${placeholders})
         JOIN DSEDAC.ART A ON TRIM(A.CODIGOARTICULO) = TRIM(L2.CODIGOARTICULO)
         LEFT JOIN DSEDAC.ARA T ON TRIM(L2.CODIGOARTICULO) = TRIM(T.CODIGOARTICULO) AND T.CODIGOTARIFA = 1
         LEFT JOIN (
@@ -2307,7 +2308,7 @@ async function getComplementaryProducts(productCodes, clientCode) {
             FROM DSEDAC.ARO WHERE CODIGOALMACEN = 1
             GROUP BY CODIGOARTICULO
         ) S ON TRIM(L2.CODIGOARTICULO) = TRIM(S.CODIGOARTICULO)
-        WHERE TRIM(L1.CODIGOARTICULO) IN (${codeList})
+        WHERE TRIM(L1.CODIGOARTICULO) IN (${placeholders})
           AND L1.ANODOCUMENTO >= YEAR(CURRENT_DATE) - 1
           AND L1.TIPOVENTA IN ('CC','VC')
           AND L1.CLASELINEA IN ('AB','VT')
@@ -2319,9 +2320,11 @@ async function getComplementaryProducts(productCodes, clientCode) {
         FETCH FIRST 10 ROWS ONLY
     `;
 
+    const params = [...trimmedCodes, ...trimmedCodes];
+
     try {
         const rows = await cachedQuery(
-            (s) => query(s),
+            (s) => queryWithParams(s, params),
             sql, cacheKey, TTL.MEDIUM
         );
         return rows.map(r => ({
@@ -2854,14 +2857,19 @@ async function getSimilarProducts(productCode) {
 async function getOrderAnalytics(vendedorCodes) {
     const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
     let vendorFilter = '';
+    const vendorParams = [];
+    
     if (!isAll) {
-        const vendorList = vendedorCodes.split(',').map(v => `'${sanitize(v.trim())}'`).join(',');
-        vendorFilter = `AND TRIM(CODIGOVENDEDOR) IN (${vendorList})`;
+        const vendorList = vendedorCodes.split(',').map(v => v.trim()).filter(Boolean);
+        if (vendorList.length > 0) {
+            const placeholders = vendorList.map(() => '?').join(',');
+            vendorFilter = `AND TRIM(CODIGOVENDEDOR) IN (${placeholders})`;
+            vendorParams.push(...vendorList);
+        }
     }
 
     const cacheKey = `pedidos:analytics:${vendedorCodes}`;
 
-    // Current month vs previous month
     const sql = `
         SELECT
             ANODOCUMENTO AS year, MESDOCUMENTO AS month,
@@ -2879,7 +2887,6 @@ async function getOrderAnalytics(vendedorCodes) {
         FETCH FIRST 6 ROWS ONLY
     `;
 
-    // Top products
     const topSql = `
         SELECT TRIM(L.CODIGOARTICULO) AS code,
                TRIM(L.DESCRIPCION) AS name,
@@ -2896,7 +2903,6 @@ async function getOrderAnalytics(vendedorCodes) {
         FETCH FIRST 10 ROWS ONLY
     `;
 
-    // Status distribution
     const statusSql = `
         SELECT TRIM(ESTADO) AS status, COUNT(*) AS count
         FROM JAVIER.PEDIDOS_CAB
@@ -2907,9 +2913,9 @@ async function getOrderAnalytics(vendedorCodes) {
 
     try {
         const [monthly, topProducts, statusDist] = await Promise.all([
-            cachedQuery((s) => query(s), sql, cacheKey + ':monthly', TTL.SHORT),
-            cachedQuery((s) => query(s), topSql, cacheKey + ':top', TTL.SHORT),
-            cachedQuery((s) => query(s), statusSql, cacheKey + ':status', TTL.SHORT),
+            cachedQuery((s) => queryWithParams(s, vendorParams), sql, cacheKey + ':monthly', TTL.SHORT),
+            cachedQuery((s) => queryWithParams(s, vendorParams), topSql, cacheKey + ':top', TTL.SHORT),
+            cachedQuery((s) => queryWithParams(s, vendorParams), statusSql, cacheKey + ':status', TTL.SHORT),
         ]);
 
         return {

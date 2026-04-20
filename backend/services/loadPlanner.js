@@ -88,25 +88,31 @@ function estimateBoxDimensions(pesoUnidad, unidadesCaja, articleName) {
  * Si CARGAMAXIMA=0, estima desde CONTENEDORVOLUMEN
  */
 async function getTruckConfig(vehicleCode) {
-    const rows = await query(`
-    SELECT
-      TRIM(V.CODIGOVEHICULO) AS CODE,
-      TRIM(V.DESCRIPCIONVEHICULO) AS DESCRIPCION,
-      TRIM(V.MATRICULA) AS MATRICULA,
-      V.CARGAMAXIMA,
-      V.TARA,
-      V.VOLUMEN AS VOLUMEN_VEH,
-      V.CONTENEDORVOLUMEN,
-      COALESCE(V.NUMEROCONTENEDORES, 0) AS NUM_PALETS,
-      COALESCE(C.LARGO_INTERIOR_CM, 0) AS LARGO_CM,
-      COALESCE(C.ANCHO_INTERIOR_CM, 0) AS ANCHO_CM,
-      COALESCE(C.ALTO_INTERIOR_CM, 0) AS ALTO_CM,
-      COALESCE(C.TOLERANCIA_EXCESO, 5.00) AS TOLERANCIA
-    FROM DSEDAC.VEH V
-    LEFT JOIN JAVIER.ALMACEN_CAMIONES_CONFIG C
-      ON TRIM(V.CODIGOVEHICULO) = C.CODIGOVEHICULO
-    WHERE TRIM(V.CODIGOVEHICULO) = '${vehicleCode.replace(/'/g, "''")}'
-  `);
+    let rows;
+    try {
+        rows = await query(`
+        SELECT
+          TRIM(V.CODIGOVEHICULO) AS CODE,
+          TRIM(V.DESCRIPCIONVEHICULO) AS DESCRIPCION,
+          TRIM(V.MATRICULA) AS MATRICULA,
+          V.CARGAMAXIMA,
+          V.TARA,
+          V.VOLUMEN AS VOLUMEN_VEH,
+          V.CONTENEDORVOLUMEN,
+          COALESCE(V.NUMEROCONTENEDORES, 0) AS NUM_PALETS,
+          COALESCE(C.LARGO_INTERIOR_CM, 0) AS LARGO_CM,
+          COALESCE(C.ANCHO_INTERIOR_CM, 0) AS ANCHO_CM,
+          COALESCE(C.ALTO_INTERIOR_CM, 0) AS ALTO_CM,
+          COALESCE(C.TOLERANCIA_EXCESO, 5.00) AS TOLERANCIA
+        FROM DSEDAC.VEH V
+        LEFT JOIN JAVIER.ALMACEN_CAMIONES_CONFIG C
+          ON TRIM(V.CODIGOVEHICULO) = C.CODIGOVEHICULO
+        WHERE TRIM(V.CODIGOVEHICULO) = ?
+      `, [vehicleCode]);
+    } catch (err) {
+        logger.error(`getTruckConfig error: ${err.message}`);
+        throw err;
+    }
 
     if (!rows.length) return null;
 
@@ -205,20 +211,24 @@ async function getTruckConfig(vehicleCode) {
 async function getArticleDimensions(articleCodes) {
     if (!articleCodes.length) return {};
 
-    const codeList = articleCodes.map(c => `'${c.replace(/'/g, "''")}'`).join(',');
-
-    const rows = await query(`
-    SELECT
-      TRIM(A.CODIGOARTICULO) AS CODE,
-      TRIM(A.DESCRIPCIONARTICULO) AS NOMBRE,
-      COALESCE(A.PESO, 0) AS PESO,
-      COALESCE(A.UNIDADESCAJA, 1) AS UDS_CAJA,
-      D.LARGO_CM, D.ANCHO_CM, D.ALTO_CM, D.PESO_CAJA_KG
-    FROM DSEDAC.ART A
-    LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D
-      ON TRIM(A.CODIGOARTICULO) = D.CODIGOARTICULO
-    WHERE TRIM(A.CODIGOARTICULO) IN (${codeList})
-  `);
+    let rows;
+    try {
+        rows = await query(`
+        SELECT
+          TRIM(A.CODIGOARTICULO) AS CODE,
+          TRIM(A.DESCRIPCIONARTICULO) AS NOMBRE,
+          COALESCE(A.PESO, 0) AS PESO,
+          COALESCE(A.UNIDADESCAJA, 1) AS UDS_CAJA,
+          D.LARGO_CM, D.ANCHO_CM, D.ALTO_CM, D.PESO_CAJA_KG
+        FROM DSEDAC.ART A
+        LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D
+          ON TRIM(A.CODIGOARTICULO) = D.CODIGOARTICULO
+        WHERE TRIM(A.CODIGOARTICULO) IN (${articleCodes.map(() => '?').join(',')})
+      `, articleCodes);
+    } catch (err) {
+        logger.error(`getArticleDimensions error: ${err.message}`);
+        throw err;
+    }
 
     const result = {};
     for (const r of rows) {
@@ -266,33 +276,39 @@ async function getArticleDimensions(articleCodes) {
  * Recupera las órdenes OPP para un vehículo y fecha
  */
 async function getOrdersForVehicle(vehicleCode, year, month, day) {
-    const rows = await query(`
-    SELECT
-      OPP.EJERCICIOORDENPREPARACION AS EJERCICIO,
-      OPP.NUMEROORDENPREPARACION AS NUM_ORDEN,
-      TRIM(OPP.CODIGOREPARTIDOR) AS REPARTIDOR,
-      TRIM(OPP.CODIGOVEHICULO) AS VEHICULO,
-      OPP.DIAREPARTO, OPP.MESREPARTO, OPP.ANOREPARTO,
-      TRIM(CPC.CODIGOCLIENTEALBARAN) AS CLIENTE,
-      TRIM(LAC.CODIGOARTICULO) AS ARTICULO,
-      LAC.CANTIDADUNIDADES AS CANTIDAD,
-      LAC.CANTIDADENVASES AS CAJAS,
-      COALESCE(LAC.IMPORTEVENTA, 0) AS IMPORTE_VENTA,
-      COALESCE(LAC.IMPORTECOSTO, 0) AS IMPORTE_COSTO
-    FROM DSEDAC.OPP OPP
-    INNER JOIN DSEDAC.CPC CPC
-      ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-      AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
-    INNER JOIN DSEDAC.LAC LAC
-      ON CPC.NUMEROALBARAN = LAC.NUMEROALBARAN
-      AND CPC.EJERCICIOALBARAN = LAC.EJERCICIOALBARAN
-      AND TRIM(CPC.SERIEALBARAN) = TRIM(LAC.SERIEALBARAN)
-    WHERE TRIM(OPP.CODIGOVEHICULO) = '${vehicleCode.replace(/'/g, "''")}'
-      AND OPP.ANOREPARTO = ${parseInt(year)}
-      AND OPP.MESREPARTO = ${parseInt(month)}
-      AND OPP.DIAREPARTO = ${parseInt(day)}
-    ORDER BY OPP.NUMEROORDENPREPARACION
-  `);
+    let rows;
+    try {
+        rows = await query(`
+        SELECT
+          OPP.EJERCICIOORDENPREPARACION AS EJERCICIO,
+          OPP.NUMEROORDENPREPARACION AS NUM_ORDEN,
+          TRIM(OPP.CODIGOREPARTIDOR) AS REPARTIDOR,
+          TRIM(OPP.CODIGOVEHICULO) AS VEHICULO,
+          OPP.DIAREPARTO, OPP.MESREPARTO, OPP.ANOREPARTO,
+          TRIM(CPC.CODIGOCLIENTEALBARAN) AS CLIENTE,
+          TRIM(LAC.CODIGOARTICULO) AS ARTICULO,
+          LAC.CANTIDADUNIDADES AS CANTIDAD,
+          LAC.CANTIDADENVASES AS CAJAS,
+          COALESCE(LAC.IMPORTEVENTA, 0) AS IMPORTE_VENTA,
+          COALESCE(LAC.IMPORTECOSTO, 0) AS IMPORTE_COSTO
+        FROM DSEDAC.OPP OPP
+        INNER JOIN DSEDAC.CPC CPC
+          ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+          AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
+        INNER JOIN DSEDAC.LAC LAC
+          ON CPC.NUMEROALBARAN = LAC.NUMEROALBARAN
+          AND CPC.EJERCICIOALBARAN = LAC.EJERCICIOALBARAN
+          AND TRIM(CPC.SERIEALBARAN) = TRIM(LAC.SERIEALBARAN)
+        WHERE TRIM(OPP.CODIGOVEHICULO) = ?
+          AND OPP.ANOREPARTO = ?
+          AND OPP.MESREPARTO = ?
+          AND OPP.DIAREPARTO = ?
+        ORDER BY OPP.NUMEROORDENPREPARACION
+      `, [vehicleCode, parseInt(year), parseInt(month), parseInt(day)]);
+    } catch (err) {
+        logger.error(`getOrdersForVehicle error: ${err.message}`);
+        throw err;
+    }
 
     return rows.map(r => ({
         id: r.EJERCICIO + '-' + r.NUM_ORDEN,

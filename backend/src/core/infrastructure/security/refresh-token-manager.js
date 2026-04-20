@@ -10,6 +10,10 @@ const REFRESH_TOKEN_TTL = 604800; // 7 days
 const REDIS_KEY_PREFIX = 'gmp:session:';
 const REDIS_BLACKLIST_PREFIX = 'gmp:blacklist:';
 const REDIS_USER_SESSIONS_PREFIX = 'gmp:user-sessions:';
+const MAX_BLACKLIST_SIZE = 10000;
+const MAX_SESSIONS_SIZE = 5000;
+const SESSION_TTL_MS = REFRESH_TOKEN_TTL * 1000;
+const CLEANUP_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
 class RefreshTokenManager {
   /**
@@ -17,9 +21,51 @@ class RefreshTokenManager {
    */
   constructor(redisClient = null) {
     this._redis = redisClient;
-    this._sessions = new Map(); // Fallback for when Redis is unavailable
+    this._sessions = new Map();
     this._blacklist = new Map();
     this._useRedis = !!redisClient;
+    this._cleanupInterval = null;
+    this._startCleanup();
+  }
+
+  _startCleanup() {
+    this._cleanupInterval = setInterval(() => {
+      this._purgeExpiredEntries();
+    }, CLEANUP_INTERVAL_MS);
+    this._cleanupInterval.unref();
+  }
+
+  _purgeExpiredEntries() {
+    if (!this._useRedis) {
+      const now = Date.now();
+      for (const [token, expiresAt] of this._blacklist) {
+        if (expiresAt < now) this._blacklist.delete(token);
+      }
+      for (const [token, session] of this._sessions) {
+        if (session.createdAt + SESSION_TTL_MS < now) {
+          this._sessions.delete(token);
+        }
+      }
+      if (this._blacklist.size > MAX_BLACKLIST_SIZE) {
+        const entries = [...this._blacklist.entries()];
+        entries.sort((a, b) => a[1] - b[1]);
+        const toRemove = entries.slice(0, entries.length - MAX_BLACKLIST_SIZE);
+        for (const [token] of toRemove) this._blacklist.delete(token);
+      }
+      if (this._sessions.size > MAX_SESSIONS_SIZE) {
+        const entries = [...this._sessions.entries()];
+        entries.sort((a, b) => a[1].createdAt - b[1].createdAt);
+        const toRemove = entries.slice(0, entries.length - MAX_SESSIONS_SIZE);
+        for (const [token] of toRemove) this._sessions.delete(token);
+      }
+    }
+  }
+
+  stopCleanup() {
+    if (this._cleanupInterval) {
+      clearInterval(this._cleanupInterval);
+      this._cleanupInterval = null;
+    }
   }
 
   /**
@@ -319,4 +365,10 @@ function initRefreshTokenManager(redisClient) {
   return refreshTokenManager;
 }
 
-module.exports = { refreshTokenManager, initRefreshTokenManager, RefreshTokenManager, TokenError, ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL };
+function stopCleanup() {
+  if (refreshTokenManager) {
+    refreshTokenManager.stopCleanup();
+  }
+}
+
+module.exports = { refreshTokenManager, initRefreshTokenManager, stopCleanup, RefreshTokenManager, TokenError, ACCESS_TOKEN_TTL, REFRESH_TOKEN_TTL };

@@ -11,7 +11,6 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart';
 
 class CobrosProvider extends ChangeNotifier {
-
   CobrosProvider({
     required this.employeeCode,
     this.isRepartidor = false,
@@ -66,11 +65,13 @@ class CobrosProvider extends ChangeNotifier {
     }
     if (_filtroCliente.isNotEmpty) {
       resultado = resultado
-          .where((a) =>
-              a.nombreCliente
-                  .toLowerCase()
-                  .contains(_filtroCliente.toLowerCase()) ||
-              a.codigoCliente.contains(_filtroCliente),)
+          .where(
+            (a) =>
+                a.nombreCliente
+                    .toLowerCase()
+                    .contains(_filtroCliente.toLowerCase()) ||
+                a.codigoCliente.contains(_filtroCliente),
+          )
           .toList();
     }
     return resultado;
@@ -196,18 +197,23 @@ class CobrosProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> completarEntrega(String albaranId,
-      {String? observaciones,}) async {
-    final albaran = _albaranesPendientes.firstWhere((a) => a.id == albaranId,
-        orElse: () => throw Exception('Albarán no encontrado'),);
+  Future<bool> completarEntrega(
+    String albaranId, {
+    String? observaciones,
+  }) async {
+    final albaran = _albaranesPendientes.firstWhere(
+      (a) => a.id == albaranId,
+      orElse: () => throw Exception('Albarán no encontrado'),
+    );
     var allSucceeded = true;
     for (final item in albaran.items) {
       if (item.estado != EstadoEntrega.entregado) {
         final ok = await actualizarEstadoEntrega(
-            itemId: item.itemId,
-            estado: EstadoEntrega.entregado,
-            cantidadEntregada: item.cantidadPedida,
-            observaciones: observaciones,);
+          itemId: item.itemId,
+          estado: EstadoEntrega.entregado,
+          cantidadEntregada: item.cantidadPedida,
+          observaciones: observaciones,
+        );
         if (!ok) allSucceeded = false;
       }
     }
@@ -220,8 +226,10 @@ class CobrosProvider extends ChangeNotifier {
     return allSucceeded;
   }
 
-  Future<void> cargarPendingSummary(String? vendedorCode,
-      {List<String>? vendedorCodes,}) async {
+  Future<void> cargarPendingSummary(
+    String? vendedorCode, {
+    List<String>? vendedorCodes,
+  }) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -273,7 +281,8 @@ class CobrosProvider extends ChangeNotifier {
             [];
         if (payload['resumen'] != null) {
           _resumenCobros = ResumenCobros.fromJson(
-              payload['resumen'] as Map<String, dynamic>,);
+            payload['resumen'] as Map<String, dynamic>,
+          );
         }
       }
     } catch (e) {
@@ -289,7 +298,8 @@ class CobrosProvider extends ChangeNotifier {
       final response = await ApiClient.get('/cobros/$codigoCliente/estado');
       if (response['success'] == true && response['estadoCliente'] != null) {
         _estadoClienteActual = EstadoCliente.fromJson(
-            response['estadoCliente'] as Map<String, dynamic>,);
+          response['estadoCliente'] as Map<String, dynamic>,
+        );
         notifyListeners();
       }
     } catch (e) {
@@ -335,41 +345,46 @@ class CobrosProvider extends ChangeNotifier {
     final now = DateTime.now();
     _albaranesPendientes = [
       Albaran(
-          id: '2026-A-1001',
-          numeroAlbaran: 1001,
-          codigoCliente: '9900',
-          nombreCliente: 'BAR EL RINCÓN',
-          direccion: 'C/ Mayor, 15 - Madrid',
-          fecha: now,
-          importeTotal: 245.80,
-          esCTR: true,
-          items: [
-            EntregaItem(
-                itemId: '1001-1',
-                codigoArticulo: 'COCA2L',
-                descripcion: 'Coca-Cola 2L Pack 6',
-                cantidadPedida: 5,),
-            EntregaItem(
-                itemId: '1001-2',
-                codigoArticulo: 'AGUA1L',
-                descripcion: 'Agua Mineral 1.5L Pack 6',
-                cantidadPedida: 10,),
-          ],),
+        id: '2026-A-1001',
+        numeroAlbaran: 1001,
+        codigoCliente: '9900',
+        nombreCliente: 'BAR EL RINCÓN',
+        direccion: 'C/ Mayor, 15 - Madrid',
+        fecha: now,
+        importeTotal: 245.80,
+        esCTR: true,
+        items: [
+          EntregaItem(
+            itemId: '1001-1',
+            codigoArticulo: 'COCA2L',
+            descripcion: 'Coca-Cola 2L Pack 6',
+            cantidadPedida: 5,
+          ),
+          EntregaItem(
+            itemId: '1001-2',
+            codigoArticulo: 'AGUA1L',
+            descripcion: 'Agua Mineral 1.5L Pack 6',
+            cantidadPedida: 10,
+          ),
+        ],
+      ),
       Albaran(
-          id: '2026-A-1002',
-          numeroAlbaran: 1002,
-          codigoCliente: '8801',
-          nombreCliente: 'RESTAURANTE LA PLAZA',
-          direccion: 'Plaza España, 3 - Madrid',
-          fecha: now,
-          importeTotal: 532.40,
-          items: [
-            EntregaItem(
-                itemId: '1002-1',
-                codigoArticulo: 'CERV33',
-                descripcion: 'Cerveza 33cl Caja 24',
-                cantidadPedida: 8,),
-          ],),
+        id: '2026-A-1002',
+        numeroAlbaran: 1002,
+        codigoCliente: '8801',
+        nombreCliente: 'RESTAURANTE LA PLAZA',
+        direccion: 'Plaza España, 3 - Madrid',
+        fecha: now,
+        importeTotal: 532.40,
+        items: [
+          EntregaItem(
+            itemId: '1002-1',
+            codigoArticulo: 'CERV33',
+            descripcion: 'Cerveza 33cl Caja 24',
+            cantidadPedida: 8,
+          ),
+        ],
+      ),
     ];
   }
 
@@ -381,6 +396,11 @@ class CobrosProvider extends ChangeNotifier {
     _estadoClienteActual = null;
     _error = null;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 }
 

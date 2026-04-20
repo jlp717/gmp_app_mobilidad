@@ -34,8 +34,10 @@ const { setDeliveryStatusAvailable } = require('./utils/delivery-status-check');
 // ==================== OPTIMIZATION IMPORTS ====================
 const { initCache, getCacheStats } = require('./services/redis-cache');
 const { networkOptimizer, responseCoalescing } = require('./middleware/network-optimizer');
+const { cacheMiddleware, invalidationMiddleware, getCacheStats: getHttpCacheStats } = require('./middleware/http-cache');
 const { createOptimizedQuery } = require('./services/query-optimizer');
 const { auditMiddleware, getRecentAuditEntries, getActiveSessions } = require('./middleware/audit');
+const { createCompressionMiddleware } = require('./middleware/compression');
 const { AdvancedRateLimiter } = require('./src/core/infrastructure/security/advanced-rate-limiter');
 const { refreshTokenManager } = require('./src/core/infrastructure/security/refresh-token-manager');
 
@@ -188,12 +190,15 @@ app.use(compression({
         return compression.filter(req, res);
     }
 }));
+app.use(createCompressionMiddleware);
 app.use(express.json({ limit: '2mb' }));
 app.use(validateContentType);
 
 // ==================== OPTIMIZATION MIDDLEWARE ====================
 app.use(networkOptimizer);  // HTTP/2 hints, ETag, cache headers
 app.use(responseCoalescing); // Combine identical concurrent requests
+app.use(cacheMiddleware);    // In-memory HTTP cache with TTL
+app.use(invalidationMiddleware); // Cache invalidation on mutations
 
 // ==================== AUDIT MIDDLEWARE (logs IP, user, action) ====================
 app.use(auditMiddleware);
@@ -253,6 +258,7 @@ app.get('/api/admin/cache-stats', verifyToken, (req, res) => {
   const { performanceCache } = require('./src/core/infrastructure/cache/performance-cache');
   res.json({
     performance: performanceCache.getStats(),
+    httpCache: getHttpCacheStats(),
     timestamp: new Date().toISOString()
   });
 });

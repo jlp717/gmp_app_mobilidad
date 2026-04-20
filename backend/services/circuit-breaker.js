@@ -5,7 +5,6 @@
 
 'use strict';
 const logger = require('../middleware/logger');
-const CircuitBreakerClass = null;
 
 // Circuit breaker states
 const CLOSED = 'closed';

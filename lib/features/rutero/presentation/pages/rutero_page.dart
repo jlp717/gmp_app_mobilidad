@@ -14,7 +14,11 @@ import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Impor
 import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/enhanced_client_matrix_page.dart';
-import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_dialogs.dart'; // NEW: Import dialogs
+import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_dialogs.dart';
+import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_filter_bar.dart';
+import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_header.dart';
+import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_week_summary.dart';
+import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_client_list_item.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -497,18 +501,14 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
   @override
   Widget build(BuildContext context) {
-    // Responsive sizing based on screen height
     final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenHeight < 850; // Smaller tablet threshold
-    final isVerySmallScreen = screenHeight < 700;
+    final isSmallScreen = screenHeight < 850;
 
     return Scaffold(
       backgroundColor: AppTheme.darkBase,
       body: SafeArea(
         child: Column(
           children: [
-            // Smart Sync Header
             SmartSyncHeader(
               title: 'Rutero Comercial',
               subtitle: _periodLabel.isNotEmpty
@@ -518,294 +518,53 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               isLoading: _isLoadingWeek || _isLoadingClients,
               onSync: _refreshData,
             ),
-
-            // Cache warming banner
-            if (_isCacheLoading)
-              Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-                color: AppTheme.neonBlue.withOpacity(0.15),
-                child: Row(
+            if (_isCacheLoading) _buildCacheBanner(),
+            RuteroHeader(
+              selectedRole: _selectedRole,
+              isJefeVentas: widget.isJefeVentas,
+              isSmallScreen: isSmallScreen,
+              onRoleChanged: _onRoleChanged,
+              onSortTap: _openReorderModal,
+            ),
+            RuteroWeekSummary(
+              selectedYear: _selectedYear,
+              selectedMonth: _selectedMonth,
+              selectedWeek: _selectedWeek,
+              weeksInMonth: _weeksInMonth,
+              totalUniqueClients: _totalUniqueClients,
+              weekData: _weekData,
+              selectedDay: _selectedDay,
+              onWeekChange: _changeWeek,
+              onDaySelected: _onDaySelected,
+              monthNames: _monthNames,
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const SizedBox(
-                      width: 12,
-                      height: 12,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 1.5,
-                        color: AppTheme.neonBlue,
-                      ),
+                    RuteroFilterBar(
+                      searchQuery: _searchQuery,
+                      searchController: _searchController,
+                      sortMode: _sortMode,
+                      selectedAlertType: _selectedAlertType,
+                      onlyWithAlerts: _onlyWithAlerts,
+                      onSearchChanged: (v) =>
+                          setState(() => _searchQuery = v.toLowerCase()),
+                      onSortChanged: _onSortChanged,
+                      onAlertTypeChanged: (v) => setState(() {
+                        _selectedAlertType = v;
+                        _loadDayClients();
+                      }),
+                      onOnlyWithAlertsChanged: (v) => setState(() {
+                        _onlyWithAlerts = v;
+                        _loadDayClients();
+                      }),
                     ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Preparando datos… se actualizará automáticamente',
-                      style: TextStyle(
-                        color: AppTheme.neonBlue.withOpacity(0.9),
-                        fontSize: 11,
-                      ),
-                    ),
+                    _buildClientList(),
                   ],
                 ),
               ),
-
-            // Unified Compact Header Region
-            _buildUnifiedHeader(isSmallScreen),
-
-            // KPI Filters (Compact)
-            _buildKpiFilters(),
-
-            // Search Bar (dense)
-            _buildSearchBar(isSmallScreen: isSmallScreen),
-
-            // Sort Selector
-            _buildSortSelector(),
-
-            // List Area
-            Expanded(child: _buildClientList()),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Main layout wrapper to organize header elements effectively
-  Widget _buildUnifiedHeader(bool isSmallScreen) {
-    return ColoredBox(
-      color: AppTheme.darkBase,
-      child: Column(
-        mainAxisSize: MainAxisSize.min, // Shrink to fit children
-        children: [
-          // 1. Top Bar: Back, Title, Role Toggle, Sort
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: Row(
-              children: [
-                // Title + Role Switcher in one row
-                const SizedBox(width: 12), // Spacing from left edge
-                // Title + Role Switcher in one row
-                Expanded(
-                  child: InkWell(
-                    onTap: () {
-                      // Toggle role on title tap
-                      _onRoleChanged(
-                        _selectedRole == 'comercial'
-                            ? 'repartidor'
-                            : 'comercial',
-                      );
-                    },
-                    child: Row(
-                      children: [
-                        ShaderMask(
-                          shaderCallback: (bounds) => const LinearGradient(
-                            colors: [AppTheme.neonPink, AppTheme.neonPurple],
-                          ).createShader(bounds),
-                          child: Text(
-                            'RUTERO',
-                            style: TextStyle(
-                              fontSize: isSmallScreen ? 18 : 20,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Current Role Badge (Compact)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: (_selectedRole == 'comercial'
-                                    ? AppTheme.neonPink
-                                    : AppTheme.neonBlue)
-                                .withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: (_selectedRole == 'comercial'
-                                      ? AppTheme.neonPink
-                                      : AppTheme.neonBlue)
-                                  .withOpacity(0.5),
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _selectedRole == 'comercial'
-                                    ? Icons.shopping_bag_outlined
-                                    : Icons.local_shipping_outlined,
-                                size: 12,
-                                color: _selectedRole == 'comercial'
-                                    ? AppTheme.neonPink
-                                    : AppTheme.neonBlue,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                _selectedRole == 'comercial'
-                                    ? 'VISITA'
-                                    : 'REPARTO',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                  color: _selectedRole == 'comercial'
-                                      ? AppTheme.neonPink
-                                      : AppTheme.neonBlue,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                // Sort Action
-                IconButton(
-                  onPressed: _openReorderModal,
-                  icon: const Icon(Icons.sort, color: Colors.white, size: 22),
-                  tooltip: 'Ordenar',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                ),
-              ],
-            ),
-          ),
-
-          // 2. Vendor Selector for Manager
-          // Note: Do NOT pass onChanged - ref.listen handles vendor sync across pages
-          if (widget.isJefeVentas)
-            GlobalVendorSelector(
-              isJefeVentas: true,
-            ),
-
-          // 3. Compact Week/Month Navigator
-          _buildCompactWeekSelector(),
-
-          // 4. Horizontal Day Strip (Very compact)
-          SizedBox(
-            height: 50, // Fixed small height
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              itemCount: _weekdays.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final day = _weekdays[index];
-                final isSelected = day == _selectedDay;
-                final count = _weekData[day] ?? 0;
-                return _buildCompactDayChip(day, count, isSelected);
-              },
-            ),
-          ),
-          const SizedBox(height: 4),
-        ],
-      ),
-    );
-  }
-
-  // Replacement for _buildHeader - removed to avoid duplication error if I kept the name
-  // keeping empty to satisfy potential calls I missed replacing if any, but I replaced the call site.
-  // Actually, I'll just rely on the new _buildUnifiedHeader.
-
-  Widget _buildCompactWeekSelector() {
-    // Obtener fechas de la semana
-    final (startDay, endDay) =
-        _getWeekDates(_selectedYear, _selectedMonth, _selectedWeek);
-    final monthName = _monthNames[_selectedMonth - 1];
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          // Month/Week info con fechas
-          Row(
-            children: [
-              IconButton(
-                onPressed: () => _changeWeek(-1),
-                icon: const Icon(
-                  Icons.chevron_left,
-                  size: 20,
-                  color: Colors.white,
-                ),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Semana $_selectedWeek ($startDay - $endDay $monthName)',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: Responsive.isSmall(context) ? 12 : 13,
-                ),
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                onPressed: () => _changeWeek(1),
-                icon: const Icon(
-                  Icons.chevron_right,
-                  size: 20,
-                  color: Colors.white,
-                ),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-            ],
-          ),
-          // Total clients badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: AppTheme.neonPink.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              'Total: $_totalUniqueClients',
-              style: TextStyle(
-                color: AppTheme.neonPink,
-                fontSize: Responsive.isSmall(context) ? 10 : 11,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCompactDayChip(String day, int count, bool isSelected) {
-    final label = _weekdayLabels[day] ?? day.substring(0, 3).toUpperCase();
-    return GestureDetector(
-      onTap: () => _onDaySelected(day),
-      child: Container(
-        width: 50,
-        decoration: BoxDecoration(
-          color: isSelected ? AppTheme.neonPink : AppTheme.surfaceColor,
-          borderRadius: BorderRadius.circular(8),
-          border: isSelected ? null : Border.all(color: AppTheme.borderColor),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 10,
-                color: isSelected ? Colors.white : AppTheme.textSecondary,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 12,
-                color: isSelected ? Colors.white : AppTheme.textPrimary,
-                fontWeight: FontWeight.bold,
-              ),
             ),
           ],
         ),
@@ -813,109 +572,40 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     );
   }
 
-  // Removed obsolete methods (_buildVendedorSelector, _buildRoleToggle, _buildMonthSelector, _buildDayHeader)
-  // Replaced by _buildUnifiedHeader and compact components.
-
-  Widget _buildSearchBar({bool isSmallScreen = false}) {
+  Widget _buildCacheBanner() {
     return Container(
-      height: 36, // Force compact height
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: TextField(
-        controller: _searchController,
-        style: const TextStyle(fontSize: 13),
-        textAlignVertical: TextAlignVertical.center,
-        onChanged: (value) {
-          setState(() {
-            _searchQuery = value.toLowerCase();
-          });
-        },
-        decoration: InputDecoration(
-          hintText: 'Buscar...',
-          hintStyle: TextStyle(
-            color: AppTheme.textSecondary.withOpacity(0.7),
-            fontSize: 13,
-          ),
-          prefixIcon:
-              const Icon(Icons.search, size: 16, color: AppTheme.textSecondary),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-          isDense: true,
-          filled: true,
-          fillColor: AppTheme.surfaceColor,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide.none,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSortSelector() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+      color: AppTheme.neonBlue.withOpacity(0.15),
       child: Row(
         children: [
-          const Icon(Icons.sort, size: 16, color: AppTheme.textSecondary),
-          const SizedBox(width: 8),
-          const Text(
-            'Ordenar:',
-            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          const SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.5,
+              color: AppTheme.neonBlue,
+            ),
           ),
           const SizedBox(width: 8),
-          Expanded(
-            child: Container(
-              height: 32,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceColor,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.borderColor),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _sortMode,
-                  isExpanded: true,
-                  icon: const Icon(
-                    Icons.arrow_drop_down,
-                    size: 16,
-                    color: AppTheme.textSecondary,
-                  ),
-                  dropdownColor: AppTheme.surfaceColor,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.textPrimary,
-                  ),
-                  items: _sortModeLabels.entries
-                      .map(
-                        (e) => DropdownMenuItem(
-                          value: e.key,
-                          child: Text(
-                            e.value,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      final oldMode = _sortMode;
-                      setState(() => _sortMode = value);
-
-                      // If we are switching TO or FROM 'route' (Original), we need to fetch fresh data
-                      // because the backend returns different datasets (ignored vs respected overrides).
-                      // We use _loadWeekData instead of _loadDayClients to ensure counters refresh too.
-                      if (value == 'route' || oldMode == 'route') {
-                        _loadWeekData();
-                      }
-                    }
-                  },
-                ),
-              ),
+          Text(
+            'Preparando datos… se actualizará automáticamente',
+            style: TextStyle(
+              color: AppTheme.neonBlue.withOpacity(0.9),
+              fontSize: 11,
             ),
           ),
         ],
       ),
     );
+  }
+
+  void _onSortChanged(String value) {
+    final oldMode = _sortMode;
+    setState(() => _sortMode = value);
+    if (value == 'route' || oldMode == 'route') {
+      _loadWeekData();
+    }
   }
 
   Widget _buildClientList() {
@@ -1118,9 +808,9 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         itemCount: filteredClients.length,
         itemBuilder: (context, index) {
           final client = filteredClients[index];
-          return _ClientCard(
-            index: index + 1, // Pass 1-based index
+          return RuteroClientListItem(
             client: client,
+            index: index + 1,
             formatCurrency: _formatCurrency,
             formatVariation: _formatVariation,
             onTap: () => _navigateToMatrix(client),
@@ -1131,8 +821,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             showMargin: widget.isJefeVentas,
             selectedYear: _selectedYear,
             completedWeeks: _completedWeeks,
-            periodLabel:
-                _periodLabel, // Pass period label like "1 Ene - 12 Ene"
+            periodLabel: _periodLabel,
           );
         },
       ),
@@ -1623,732 +1312,6 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         );
       }
     }
-  }
-
-  Widget _buildKpiFilters() {
-    final alertTypes = {
-      'ALL': 'Filtro Alertas: Todas',
-      'DESVIACION_VENTAS': 'Ventas vs Objetivo',
-      'CUOTA_SIN_COMPRA': 'Sin Compras',
-      'DESVIACION_REFERENCIACION': 'Productos Pendientes',
-      'PROMOCION': 'Promociones',
-      'ALTA_CLIENTE': 'Cliente Nuevo',
-      'AVISO': 'Avisos',
-      'MEDIOS_CLIENTE': 'Equipamiento',
-    };
-
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: Column(
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  height: 32,
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceColor,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: _selectedAlertType != 'ALL'
-                          ? AppTheme.neonPink
-                          : AppTheme.borderColor,
-                    ),
-                  ),
-                  child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
-                      value: _selectedAlertType,
-                      isExpanded: true,
-                      dropdownColor: AppTheme.surfaceColor,
-                      icon: Icon(
-                        Icons.bolt,
-                        size: 14,
-                        color: _selectedAlertType != 'ALL'
-                            ? AppTheme.neonPink
-                            : AppTheme.textSecondary,
-                      ),
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: _selectedAlertType != 'ALL'
-                            ? AppTheme.neonPink
-                            : AppTheme.textPrimary,
-                        fontWeight: _selectedAlertType != 'ALL'
-                            ? FontWeight.bold
-                            : FontWeight.normal,
-                      ),
-                      items: alertTypes.entries
-                          .map(
-                            (e) => DropdownMenuItem(
-                              value: e.key,
-                              child: Text(e.value),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => _selectedAlertType = value);
-                          _loadDayClients();
-                        }
-                      },
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              SizedBox(
-                height: 32,
-                child: FilterChip(
-                  label: const Text('Con Alertas'),
-                  selected: _onlyWithAlerts,
-                  selectedColor: AppTheme.neonPink.withOpacity(0.2),
-                  checkmarkColor: AppTheme.neonPink,
-                  padding: EdgeInsets.zero,
-                  labelStyle: TextStyle(
-                    fontSize: 10,
-                    color: _onlyWithAlerts
-                        ? AppTheme.neonPink
-                        : AppTheme.textSecondary,
-                    fontWeight:
-                        _onlyWithAlerts ? FontWeight.bold : FontWeight.normal,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                    side: BorderSide(
-                      color: _onlyWithAlerts
-                          ? AppTheme.neonPink
-                          : AppTheme.borderColor,
-                    ),
-                  ),
-                  onSelected: (val) {
-                    setState(() => _onlyWithAlerts = val);
-                    _loadDayClients();
-                  },
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// Role toggle button widget
-class _RoleButton extends StatelessWidget {
-  const _RoleButton({
-    required this.label,
-    required this.icon,
-    required this.isSelected,
-    required this.color,
-    required this.onTap,
-  });
-  final String label;
-  final IconData icon;
-  final bool isSelected;
-  final Color color;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          gradient: isSelected
-              ? LinearGradient(
-                  colors: [color.withOpacity(0.3), color.withOpacity(0.1)],
-                )
-              : null,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: isSelected ? color : Colors.grey, size: 18),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? color : Colors.grey,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// Premium client card with YoY display
-class _ClientCard extends StatelessWidget {
-  // NEW: Index to show position
-
-  const _ClientCard({
-    required this.client,
-    required this.formatCurrency,
-    required this.formatVariation,
-    required this.onTap,
-    required this.onMapTap,
-    required this.onCallTap,
-    required this.selectedYear,
-    required this.index,
-    this.onWhatsAppTap,
-    this.onNotesTap,
-    this.showMargin = false,
-    this.completedWeeks = 0,
-    this.periodLabel = '',
-  });
-  final Map<String, dynamic> client;
-  final String Function(double) formatCurrency;
-  final String Function(double) formatVariation;
-  final VoidCallback onTap;
-  final VoidCallback onMapTap;
-  final VoidCallback onCallTap;
-  final VoidCallback? onWhatsAppTap;
-  final VoidCallback? onNotesTap;
-  final bool showMargin;
-  final int selectedYear;
-  final int completedWeeks;
-  final String periodLabel; // NEW: "1 Ene - 12 Ene"
-  final int index;
-
-  @override
-  Widget build(BuildContext context) {
-    final name = client['name'] as String? ?? 'Sin nombre';
-    final code = client['code'] as String? ?? '';
-    final address = client['address'] as String? ?? '';
-    final city = client['city'] as String? ?? '';
-    final status = client['status'] as Map<String, dynamic>? ?? {};
-    final observaciones = client['observaciones'] as Map<String, dynamic>?;
-    final phones = (client['phones'] as List?)
-            ?.map((p) => Map<String, dynamic>.from(p as Map))
-            .toList() ??
-        [];
-
-    final isPositive = status['isPositive'] == true;
-    // Use ytdSales (YTD accumulated sales) as main value
-    final ytdSales = (status['ytdSales'] as num?)?.toDouble() ??
-        (status['currentMonthSales'] as num?)?.toDouble() ??
-        0;
-    final margin = (status['margin'] as num?)?.toDouble() ?? 0;
-    // Use yoyVariation (Year-over-Year % change)
-    final yoyVariation = (status['yoyVariation'] as num?)?.toDouble() ??
-        (status['variation'] as num?)?.toDouble() ??
-        0;
-    final ytdPrevYear = (status['ytdPrevYear'] as num?)?.toDouble() ??
-        (status['prevMonthSales'] as num?)?.toDouble() ??
-        0;
-    // NEW: Total sales in entire previous year (for NEW client detection)
-    final prevYearTotal = (status['prevYearTotal'] as num?)?.toDouble() ?? 0;
-
-    // Lógica de colores CORREGIDA:
-    // 1) Gris "SIN VENTAS": Sin ventas en las semanas comparadas de ambos años (ytdSales ≈ 0 Y ytdPrevYear ≈ 0)
-    // 2) Azul "NUEVO": Tiene ventas este período, pero NO tuvo ventas en TODO el año anterior (prevYearTotal ≈ 0)
-    // 3) Verde/Rojo: En cualquier otro caso, compara las semanas equivalentes
-    final noSalesThisPeriod = ytdSales < 0.01;
-    final noSalesLastPeriod = ytdPrevYear < 0.01;
-    final noSalesEntireLastYear = prevYearTotal < 0.01;
-
-    final isInactive = noSalesThisPeriod &&
-        noSalesLastPeriod; // Gris - sin ventas ambos períodos
-    final isNewClient = !noSalesThisPeriod &&
-        noSalesEntireLastYear; // Azul - ventas ahora, pero 0 en TODO el año anterior
-
-    Color accentColor;
-    if (isInactive) {
-      accentColor = AppTheme.error; // Rojo para sin ventas
-    } else if (isNewClient) {
-      accentColor = AppTheme.success; // Verde para nuevo
-    } else if (isPositive) {
-      accentColor = AppTheme.success;
-    } else {
-      accentColor = AppTheme.error;
-    }
-
-    // Check if has observations
-    final hasObservaciones = observaciones != null &&
-        observaciones['text'] != null &&
-        (observaciones['text'] as String).isNotEmpty;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: hasObservaciones
-              ? AppTheme.warning.withOpacity(0.8)
-              : accentColor.withOpacity(0.5),
-          width: hasObservaciones ? 2 : 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: (hasObservaciones ? AppTheme.warning : accentColor)
-                .withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Observations Banner
-            if (hasObservaciones)
-              InkWell(
-                // Make banner clickable to edit
-                onTap: onNotesTap,
-                child: Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: const BoxDecoration(
-                    color: AppTheme.warning,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(12),
-                      topRight: Radius.circular(12),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.warning_amber_rounded,
-                        color: Colors.black87,
-                        size: 16,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          observaciones!['text'] as String,
-                          style: const TextStyle(
-                            color: Colors.black87,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const Icon(
-                        Icons.edit,
-                        size: 14,
-                        color: Colors.black54,
-                      ), // Edit hint
-                    ],
-                  ),
-                ),
-              ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  // Progress indicator - shows YoY variation, NEW badge, or inactive state
-                  Container(
-                    width: 85,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: accentColor.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          isInactive
-                              ? Icons.remove_circle_outline
-                              : (isNewClient
-                                  ? Icons.star
-                                  : (isPositive
-                                      ? Icons.trending_up
-                                      : Icons.trending_down)),
-                          color: accentColor,
-                          size: 26,
-                        ),
-                        const SizedBox(height: 4),
-                        // Show different states: INACTIVE, NUEVO, or YoY percentage
-                        if (isInactive) ...[
-                          const Text(
-                            'SIN VENTAS',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.error,
-                            ),
-                          ),
-                          Text(
-                            'Este período (acumulativo de semanas)',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 8,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ] else if (isNewClient) ...[
-                          const Text(
-                            'NUEVO',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: AppTheme.success,
-                            ),
-                          ),
-                          Text(
-                            'No vendió en ${selectedYear - 1}',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 8,
-                              color: accentColor.withOpacity(0.8),
-                            ),
-                          ),
-                        ] else ...[
-                          Text(
-                            '${yoyVariation >= 0 ? '+' : ''}${yoyVariation.toStringAsFixed(1)}%',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: accentColor,
-                            ),
-                          ),
-                          Text(
-                            'vs ${selectedYear - 1}',
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: accentColor.withOpacity(0.8),
-                            ),
-                          ),
-                        ],
-                        // Margin badge - only for jefe de ventas
-                        if (margin > 0 && showMargin)
-                          Container(
-                            margin: const EdgeInsets.only(top: 4),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 6,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: margin >= 15
-                                  ? AppTheme.success.withOpacity(0.2)
-                                  : AppTheme.warning.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              'M:${margin.toStringAsFixed(0)}%',
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                                color: margin >= 15
-                                    ? AppTheme.success
-                                    : AppTheme.warning,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-
-                  // Client info - larger fonts
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Client name and order index header
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // Order Number Badge
-                            Container(
-                              margin: const EdgeInsets.only(right: 8, top: 2),
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: AppTheme.neonPink,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppTheme.neonPink.withOpacity(0.4),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: Text(
-                                '$index',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              child: Text(
-                                name,
-                                style: TextStyle(
-                                  fontSize:
-                                      Responsive.isSmall(context) ? 15 : 17,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        // Code badge
-                        if (code.isNotEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.neonBlue.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              code,
-                              style: const TextStyle(
-                                fontSize: 11,
-                                color: AppTheme.neonBlue,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        // KPI Alert Badges (compact)
-                        ClientAlertsWidget(
-                          clientId: code,
-                          compact: true,
-                        ),
-                        const SizedBox(height: 6),
-                        if (address.isNotEmpty || city.isNotEmpty)
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.place,
-                                size: 14,
-                                color: Colors.grey.shade500,
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  [address, city]
-                                      .where((s) => s.isNotEmpty)
-                                      .join(', '),
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: Colors.grey.shade400,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
-                        // Sales and comparison row with clear year labels
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              completedWeeks > 1
-                                  ? 'Acumulado Sem. 1-$completedWeeks${periodLabel.isNotEmpty ? ' (hasta ${periodLabel.split(' - ').last})' : ''}:'
-                                  : completedWeeks == 1
-                                      ? 'Acumulado Sem. 1${periodLabel.isNotEmpty ? ' (hasta ${periodLabel.split(' - ').last})' : ''}:'
-                                      : 'Sin semanas completadas:',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey.shade500,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                // Current Year
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                    vertical: 2,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: AppTheme.neonBlue.withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    '$selectedYear',
-                                    style: TextStyle(
-                                      fontSize:
-                                          Responsive.isSmall(context) ? 9 : 10,
-                                      color: AppTheme.neonBlue,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  formatCurrency(ytdSales),
-                                  style: TextStyle(
-                                    fontSize:
-                                        Responsive.isSmall(context) ? 13 : 14,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                // Previous Year
-                                if (ytdPrevYear > 0) ...[
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 6,
-                                      vertical: 2,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade700,
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      '${selectedYear - 1}',
-                                      style: TextStyle(
-                                        fontSize: Responsive.isSmall(context)
-                                            ? 9
-                                            : 10,
-                                        color: Colors.grey.shade300,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    formatCurrency(ytdPrevYear),
-                                    style: TextStyle(
-                                      fontSize:
-                                          Responsive.isSmall(context) ? 11 : 12,
-                                      color: Colors.grey.shade400,
-                                    ),
-                                  ),
-                                ] else if (selectedYear ==
-                                        DateTime.now().year &&
-                                    DateTime.now().day <= 7 &&
-                                    DateTime.now().month == 1) ...[
-                                  const SizedBox(width: 4),
-                                  Tooltip(
-                                    triggerMode: TooltipTriggerMode.tap,
-                                    showDuration: const Duration(seconds: 4),
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 20,
-                                    ),
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.darkBase,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: Colors.grey.shade700,
-                                      ),
-                                    ),
-                                    textStyle: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 13,
-                                    ),
-                                    message:
-                                        'El acumulado del año anterior aparecerá a partir de la 2ª semana.',
-                                    child: Icon(
-                                      Icons.info_outline,
-                                      size: 14,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Action buttons - larger
-                  Column(
-                    children: [
-                      IconButton(
-                        onPressed: onMapTap,
-                        icon: const Icon(
-                          Icons.directions,
-                          color: AppTheme.neonPink,
-                          size: 26,
-                        ),
-                        tooltip: 'Cómo llegar',
-                        splashRadius: 24,
-                        padding: const EdgeInsets.all(4),
-                        constraints:
-                            const BoxConstraints(minWidth: 44, minHeight: 44),
-                      ),
-                      if (onNotesTap != null)
-                        IconButton(
-                          onPressed: onNotesTap,
-                          icon: Icon(
-                            hasObservaciones ? Icons.edit_note : Icons.note_add,
-                            color: hasObservaciones
-                                ? AppTheme.warning
-                                : Colors.grey.shade400,
-                            size: 26,
-                          ),
-                          tooltip: 'Observaciones',
-                          splashRadius: 24,
-                          padding: const EdgeInsets.all(4),
-                          constraints:
-                              const BoxConstraints(minWidth: 44, minHeight: 44),
-                        ),
-                      // Compact Contact Row
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (phones.isNotEmpty && onWhatsAppTap != null)
-                            IconButton(
-                              onPressed: onWhatsAppTap,
-                              icon: const Icon(
-                                Icons.chat,
-                                color: Color(0xFF25D366),
-                                size: 26,
-                              ),
-                              tooltip: 'WhatsApp',
-                              splashRadius: 24,
-                              padding: const EdgeInsets.all(4),
-                              constraints: const BoxConstraints(
-                                minWidth: 44,
-                                minHeight: 44,
-                              ),
-                            ),
-                          IconButton(
-                            onPressed: onCallTap,
-                            icon: const Icon(
-                              Icons.phone,
-                              color: AppTheme.neonBlue,
-                              size: 26,
-                            ),
-                            tooltip: 'Llamar',
-                            splashRadius: 24,
-                            padding: const EdgeInsets.all(4),
-                            constraints: const BoxConstraints(
-                              minWidth: 44,
-                              minHeight: 44,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }
 

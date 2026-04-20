@@ -38,7 +38,8 @@ class ApiClient {
       await ApiConfig.initialize();
       _isInitialized = true;
       debugPrint(
-          '[ApiClient] ✅ Inicializado con servidor: ${ApiConfig.baseUrl}',);
+        '[ApiClient] ✅ Inicializado con servidor: ${ApiConfig.baseUrl}',
+      );
     } catch (e) {
       debugPrint('[ApiClient] ⚠️ Error en inicialización: $e');
       // Continuar con configuración por defecto
@@ -58,52 +59,138 @@ class ApiClient {
   /// - Optimized timeouts for mobile networks
   /// - Certificate pinning for production
   static Dio _createDio() {
-    final dio = Dio(BaseOptions(
-      baseUrl: ApiConfig.baseUrl,
-      connectTimeout: ApiConfig.connectTimeout,
-      receiveTimeout: ApiConfig.receiveTimeout,
-      sendTimeout: const Duration(seconds: 30),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Accept-Encoding': 'gzip, deflate', // Enable gzip compression
-        'Connection': 'keep-alive', // Connection pooling
-        // AUDIT: Device fingerprint on every request
-        ...DeviceFingerprint.headers,
-      },
-      // Only accept 2xx responses as successful — 4xx/5xx trigger DioException
-      validateStatus: (status) =>
-          status != null && status >= 200 && status < 300,
-    ),);
+    final dio = Dio(
+      BaseOptions(
+        baseUrl: ApiConfig.baseUrl,
+        connectTimeout: ApiConfig.connectTimeout,
+        receiveTimeout: ApiConfig.receiveTimeout,
+        sendTimeout: const Duration(seconds: 30),
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Accept-Encoding': 'gzip, deflate', // Enable gzip compression
+          'Connection': 'keep-alive', // Connection pooling
+          // AUDIT: Device fingerprint on every request
+          ...DeviceFingerprint.headers,
+        },
+        // Only accept 2xx responses as successful — 4xx/5xx trigger DioException
+        validateStatus: (status) =>
+            status != null && status >= 200 && status < 300,
+      ),
+    );
 
-    // Configure certificate handling
+    // Configure certificate handling with SSL pinning support
     (dio.httpClientAdapter as IOHttpClientAdapter).createHttpClient = () {
       final client = HttpClient();
+
+      // SECURITY CONFIGURATION:
+      // 1. Pinning is DISABLED by default (PINNED_CERT_HASH = '')
+      //    - Certificate pinning requires the server's certificate hash
+      //    - Dart's X509Certificate provides SHA1, so we use SHA1 for pinning
+      //    - Hash must be provided by your backend/ops team for production
+      //    - Using an incorrect hash will cause ALL connections to fail
+      //
+      // 2. To enable pinning for production:
+      //    - Obtain the server certificate's SHA1 fingerprint:
+      //      openssl s_client -connect yourserver.com:443 </dev/null 2>/dev/null \
+      //        | openssl x509 -fingerprint -sha1 -noout
+      //    - Or compute from the DER bytes (for SHA256):
+      //      openssl s_client -connect yourserver.com:443 </dev/null 2>/dev/null \
+      //        | openssl x509 -outform DER > cert.der
+      //      openssl dgst -sha256 cert.der
+      //
+      // 3. Set the hash below and change PINNED_CERT_ENABLED to true
+      //
+      // SECURITY NOTE: badCertificateCallback is called AFTER the platform
+      // (Android/iOS) has validated the certificate chain. This callback
+      // allows custom pinning logic on top of platform validation.
+
+      // Set to true when hash is configured
+      const pinnedCertEnabled = false;
+
+      // SHA1 hash of the production server certificate (Dart X509Certificate API)
+      // For SHA256, compute from cert.der bytes using crypto package
+      // REPLACE with actual hash from your server certificate
+      const pinnedCertHash = '';
+
       client.badCertificateCallback =
           (X509Certificate cert, String host, int port) {
-        // Allow development IPs without pinning
-        const devHosts = [
-          '127.0.0.1',
-          '10.0.2.2',
-          '192.168.1.52',
-          '172.31.192.1',
-          'localhost',
-        ];
-        if (devHosts.contains(host)) return true;
-
-        // Production: pin certificate SHA256 fingerprint
-        const pinnedCertSha256 = '';
-        if (pinnedCertSha256.isNotEmpty) {
-          return cert.sha1 == pinnedCertSha256;
+        // Log certificate details for debugging (only in debug mode)
+        if (kDebugMode) {
+          debugPrint(
+            '[ApiClient] 🔐 Certificate validation for $host:$port',
+          );
+          debugPrint('[ApiClient]   Subject: ${cert.subject}');
+          debugPrint('[ApiClient]   Issuer: ${cert.issuer}');
+          debugPrint('[ApiClient]   SHA1: ${cert.sha1}');
+          debugPrint(
+            '[ApiClient]   Valid from: ${cert.startValidity} '
+            'to ${cert.endValidity}',
+          );
         }
 
-        // No pinning configured: trust platform default cert validation.
-        // Returning true here means Dart accepts the cert even if the
-        // platform flagged it — safe because the platform already
-        // validated the chain on Android/iOS before this callback fires.
-        // In debug mode this allows self-signed certs for local servers.
+        // Allow development/local hosts without pinning
+        // These IPs are for local development servers (emulator, local backend)
+        const devHosts = {
+          '127.0.0.1',
+          '10.0.2.2', // Android emulator host
+          '192.168.1.52', // Local dev server
+          '172.31.192.1', // AWS/local network
+          'localhost',
+        };
+        if (devHosts.contains(host)) {
+          if (kDebugMode) {
+            debugPrint(
+              '[ApiClient]   ✅ Dev host bypass - no pinning required',
+            );
+          }
+          return true;
+        }
+
+        // If pinning is enabled, validate against pinned certificate
+        if (pinnedCertEnabled && pinnedCertHash.isNotEmpty) {
+          // Note: Using SHA1 as Dart X509Certificate provides sha1 property
+          // For SHA256, import 'crypto' and compute:
+          //   import 'dart:convert';
+          //   import 'package:crypto/crypto.dart';
+          //   final sha256 = sha256.convert(cert.der).toString();
+          final isPinned = cert.sha1 == pinnedCertHash;
+          if (kDebugMode) {
+            debugPrint(
+              '[ApiClient]   ${isPinned ? "✅" : "❌"} '
+              'Certificate ${isPinned ? "matches pinned hash" : "DOES NOT MATCH pinned hash"}',
+            );
+          }
+          return isPinned;
+        }
+
+        // Pinning disabled: trust platform's default certificate validation
+        // Platform validation includes:
+        //   - Certificate chain verification
+        //   - Expiration check
+        //   - Revocation status (on supported platforms)
+        //   - Root CA trust verification
+        //
+        // WARNING: When PINNED_CERT_ENABLED=false, the app trusts any
+        // certificate validated by the platform. This is less secure but
+        // necessary when:
+        //   - Using custom/internal CAs
+        //   - During development before production cert is available
+        //   - When server certificate rotation is frequent
+        //
+        // RECOMMENDATION: Enable pinning for production builds
+
+        if (kDebugMode) {
+          debugPrint(
+            '[ApiClient]   ⚠️ Pinning disabled - trusting platform validation',
+          );
+        }
         return true;
       };
+
+      // Configure security context options
+      client.connectionTimeout = ApiConfig.connectTimeout;
+
       return client;
     };
 
@@ -115,9 +202,11 @@ class ApiClient {
 
     // Add performance logging interceptor in debug mode
     if (kDebugMode) {
-      dio.interceptors.add(LogInterceptor(
-        logPrint: (log) => debugPrint('[API] $log'),
-      ),);
+      dio.interceptors.add(
+        LogInterceptor(
+          logPrint: (log) => debugPrint('[API] $log'),
+        ),
+      );
     }
 
     return dio;
@@ -207,7 +296,8 @@ class ApiClient {
           throw ApiException('Response is a List, use getList() instead');
         }
         throw ApiException(
-            'Expected Map response but got ${rawData.runtimeType}',);
+          'Expected Map response but got ${rawData.runtimeType}',
+        );
       }
       final data = Map<String, dynamic>.from(rawData);
 
@@ -360,28 +450,36 @@ class ApiClient {
   static ApiException _handleError(DioException e) {
     // Always log raw error details for diagnostics (visible in adb logcat)
     debugPrint(
-        '[ApiClient] DioException type=${e.type} error=${e.error.runtimeType}: ${e.error}',);
+      '[ApiClient] DioException type=${e.type} error=${e.error.runtimeType}: ${e.error}',
+    );
     if (e.type == DioExceptionType.connectionTimeout) {
       return ApiException(
-          'Timeout de conexión. Verifica tu conexión a internet e inténtalo de nuevo.',
-          statusCode: 0,);
+        'Timeout de conexión. Verifica tu conexión a internet e inténtalo de nuevo.',
+        statusCode: 0,
+      );
     } else if (e.type == DioExceptionType.connectionError) {
       // Verificar si es error de socket (sin internet)
       if (e.error is SocketException ||
           (e.error?.toString().contains('SocketException') ?? false)) {
         return ApiException(
-            'No hay conexión a internet. Verifica tu WiFi o datos móviles.',
-            statusCode: 0,);
+          'No hay conexión a internet. Verifica tu WiFi o datos móviles.',
+          statusCode: 0,
+        );
       }
-      return ApiException('Error de conexión. Verifica tu conexión a internet.',
-          statusCode: 0,);
+      return ApiException(
+        'Error de conexión. Verifica tu conexión a internet.',
+        statusCode: 0,
+      );
     } else if (e.type == DioExceptionType.receiveTimeout) {
       return ApiException(
-          'El servidor está tardando demasiado. Inténtalo de nuevo.',
-          statusCode: 0,);
+        'El servidor está tardando demasiado. Inténtalo de nuevo.',
+        statusCode: 0,
+      );
     } else if (e.type == DioExceptionType.sendTimeout) {
-      return ApiException('Error al enviar datos. Verifica tu conexión.',
-          statusCode: 0,);
+      return ApiException(
+        'Error al enviar datos. Verifica tu conexión.',
+        statusCode: 0,
+      );
     } else if (e.response != null) {
       final statusCode = e.response?.statusCode ?? 0;
       final data = e.response?.data;
@@ -404,45 +502,59 @@ class ApiClient {
           onUnauthorized?.call();
           // Reset flag after short delay to allow re-login
           Future.delayed(
-              const Duration(seconds: 2), () => _isLoggingOut = false,);
+            const Duration(seconds: 2),
+            () => _isLoggingOut = false,
+          );
         }
         return ApiException(
-            serverMessage ?? 'Credenciales inválidas. Verifica usuario y PIN.',
-            statusCode: 401,);
+          serverMessage ?? 'Credenciales inválidas. Verifica usuario y PIN.',
+          statusCode: 401,
+        );
       } else if (statusCode == 403) {
         return ApiException(
-            serverMessage ?? 'Acceso denegado. No tienes permisos.',
-            statusCode: 403,);
+          serverMessage ?? 'Acceso denegado. No tienes permisos.',
+          statusCode: 403,
+        );
       } else if (statusCode == 404) {
-        return ApiException(serverMessage ?? 'Recurso no encontrado.',
-            statusCode: 404,);
+        return ApiException(
+          serverMessage ?? 'Recurso no encontrado.',
+          statusCode: 404,
+        );
       } else if (statusCode == 429) {
         return ApiException(
-            serverMessage ?? 'Demasiados intentos. Espera un momento.',
-            statusCode: 429,);
+          serverMessage ?? 'Demasiados intentos. Espera un momento.',
+          statusCode: 429,
+        );
       } else if (statusCode >= 500) {
         return ApiException(
-            'Error del servidor ($statusCode). Inténtalo más tarde.',
-            statusCode: statusCode,);
+          'Error del servidor ($statusCode). Inténtalo más tarde.',
+          statusCode: statusCode,
+        );
       }
-      return ApiException(serverMessage ?? 'Error ($statusCode)',
-          statusCode: statusCode,);
+      return ApiException(
+        serverMessage ?? 'Error ($statusCode)',
+        statusCode: statusCode,
+      );
     } else if (e.type == DioExceptionType.unknown) {
       final errorMsg = e.error?.toString().toLowerCase() ?? '';
       if (errorMsg.contains('socket')) {
         return ApiException(
-            'No hay conexión a internet. Verifica WiFi o datos móviles.',
-            statusCode: 0,);
+          'No hay conexión a internet. Verifica WiFi o datos móviles.',
+          statusCode: 0,
+        );
       } else if (errorMsg.contains('ssl') || errorMsg.contains('certificate')) {
-        return ApiException('Error de seguridad. Verifica tu conexión.',
-            statusCode: 0,);
+        return ApiException(
+          'Error de seguridad. Verifica tu conexión.',
+          statusCode: 0,
+        );
       }
     }
 
     // Default error
     return ApiException(
-        'Error de conexión. Verifica tu internet e inténtalo de nuevo.',
-        statusCode: 0,);
+      'Error de conexión. Verifica tu internet e inténtalo de nuevo.',
+      statusCode: 0,
+    );
   }
 
   /// Deduplicated GET request - prevents duplicate concurrent API calls
@@ -485,21 +597,22 @@ class ApiClient {
 
 /// Retry interceptor for handling transient failures
 class _RetryInterceptor extends Interceptor {
-
   _RetryInterceptor(this._dio, this._maxRetries, this._retryDelay);
   final Dio _dio;
   final int _maxRetries;
   final Duration _retryDelay;
 
   @override
-  Future<void> onError(DioException err, ErrorInterceptorHandler handler) async {
+  Future<void> onError(
+      DioException err, ErrorInterceptorHandler handler) async {
     final shouldRetry = _shouldRetry(err);
     final retryCount = err.requestOptions.extra['retryCount'] as int? ?? 0;
 
     if (retryCount == 0) {
       // Log full request details on first failure
       debugPrint(
-          '[ApiClient] ❌ Request failed: ${err.requestOptions.method} ${err.requestOptions.uri}',);
+        '[ApiClient] ❌ Request failed: ${err.requestOptions.method} ${err.requestOptions.uri}',
+      );
       debugPrint('[ApiClient] Headers sent: ${err.requestOptions.headers}');
       debugPrint('[ApiClient] Error type: ${err.type}, Error: ${err.error}');
     }
@@ -511,7 +624,8 @@ class _RetryInterceptor extends Interceptor {
       final delay = baseDelay * (retryCount + 1);
 
       debugPrint(
-          '[ApiClient] Retrying request (${retryCount + 1}/$_maxRetries) in ${delay.inSeconds}s...',);
+        '[ApiClient] Retrying request (${retryCount + 1}/$_maxRetries) in ${delay.inSeconds}s...',
+      );
 
       // Exponential backoff
       await Future<void>.delayed(delay);
@@ -558,7 +672,6 @@ class _RetryInterceptor extends Interceptor {
 }
 
 class ApiException implements Exception {
-
   ApiException(this.message, {this.statusCode});
   final String message;
   final int? statusCode;

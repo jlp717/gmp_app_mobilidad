@@ -18,6 +18,7 @@ const { sanitizeCodeList, sanitizeForSQL } = require('../utils/common');
 const { generateInvoicePDF } = require('../app/services/pdfService');
 const { isDeliveryStatusAvailable } = require('../utils/delivery-status-check');
 const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
+const { verifyToken } = require('../middleware/auth');
 const { CircuitBreaker: RepartidorCircuitBreaker } = require('../services/circuit-breaker');
 
 const repartidorBreaker = new RepartidorCircuitBreaker({
@@ -45,7 +46,7 @@ const REPARTIDOR_CONFIG = {
 // GET /collections/summary/:repartidorId
 // Resumen de cobros por cliente para un repartidor
 // =============================================================================
-router.get('/collections/summary/:repartidorId', async (req, res) => {
+router.get('/collections/summary/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { year, month } = req.query;
@@ -73,6 +74,8 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
 
         const cacheKey = `repartidor:collections:summary:${cleanIds}:${selectedYear}:${selectedMonth}`;
 
+        const repartidorParams = cleanIds.split(',').map(id => id.trim());
+
         // CORRECTO: Usar OPP → CPC → CAC para repartidores
         // OPP tiene CODIGOREPARTIDOR, CPC vincula con documentos de CAC
         const sql = `
@@ -96,17 +99,19 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
                 AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
                 AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-            WHERE OPP.MESREPARTO = ${selectedMonth}
-              AND OPP.ANOREPARTO = ${selectedYear}
-              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})
+            WHERE OPP.MESREPARTO = ?
+              AND OPP.ANOREPARTO = ?
+              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorParams.map(() => '?').join(',')})
             GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), CPC.CODIGOFORMAPAGO
             ORDER BY TOTAL_COBRABLE DESC
             FETCH FIRST 100 ROWS ONLY
         `;
 
+        const sqlParams = [selectedMonth, selectedYear, ...repartidorParams];
+
         let rows = [];
         try {
-            rows = await cachedQuery(query, sql, cacheKey, TTL.MEDIUM) || [];
+            rows = await cachedQuery(queryWithParams, sql, cacheKey, TTL.MEDIUM, sqlParams) || [];
         } catch (queryError) {
             logger.warn(`[REPARTIDOR] Query error in collections/summary: ${queryError.message}`);
             // Devolver respuesta vacía en lugar de error 500
@@ -194,7 +199,7 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
 // GET /collections/daily/:repartidorId
 // Acumulado diario de cobros del mes
 // =============================================================================
-router.get('/collections/daily/:repartidorId', async (req, res) => {
+router.get('/collections/daily/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { year, month } = req.query;
@@ -266,7 +271,7 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
 // Historial de documentos (albaranes/facturas) de un cliente
 // FIX: GROUP BY to eliminate duplicates, JOIN DELIVERY_STATUS for real status
 // =============================================================================
-router.get('/history/documents/:clientId', async (req, res) => {
+router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
     try {
         const { clientId } = req.params;
         const { repartidorId, limit, offset, dateFrom, dateTo } = req.query;
@@ -274,30 +279,36 @@ router.get('/history/documents/:clientId', async (req, res) => {
         logger.info(`[REPARTIDOR] Getting documents for client ${clientId} (dateFrom=${dateFrom}, dateTo=${dateTo})`);
 
         let repartidorJoin = '';
+        const repartidorParams = [];
         if (repartidorId) {
             const cleanIds = sanitizeCodeList(repartidorId);
             if (cleanIds) {
+                const ids = cleanIds.split(',').map(id => id.trim());
+                repartidorParams.push(...ids);
                 repartidorJoin = `
                     INNER JOIN DSEDAC.OPP OPP
                         ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-                        AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})`;
+                        AND TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(() => '?').join(',')})`;
             }
         }
 
         // Date range filter (YYYY-MM-DD format)
         let dateFilter = '';
+        const dateParams = [];
         if (dateFrom) {
             const parts = dateFrom.split('-');
             if (parts.length === 3) {
                 const numFrom = parseInt(parts[0]) * 10000 + parseInt(parts[1]) * 100 + parseInt(parts[2]);
-                dateFilter += ` AND (CPC.ANODOCUMENTO * 10000 + CPC.MESDOCUMENTO * 100 + CPC.DIADOCUMENTO) >= ${numFrom}`;
+                dateFilter += ` AND (CPC.ANODOCUMENTO * 10000 + CPC.MESDOCUMENTO * 100 + CPC.DIADOCUMENTO) >= ?`;
+                dateParams.push(numFrom);
             }
         }
         if (dateTo) {
             const parts = dateTo.split('-');
             if (parts.length === 3) {
                 const numTo = parseInt(parts[0]) * 10000 + parseInt(parts[1]) * 100 + parseInt(parts[2]);
-                dateFilter += ` AND (CPC.ANODOCUMENTO * 10000 + CPC.MESDOCUMENTO * 100 + CPC.DIADOCUMENTO) <= ${numTo}`;
+                dateFilter += ` AND (CPC.ANODOCUMENTO * 10000 + CPC.MESDOCUMENTO * 100 + CPC.DIADOCUMENTO) <= ?`;
+                dateParams.push(numTo);
             }
         }
 
@@ -318,6 +329,13 @@ router.get('/history/documents/:clientId', async (req, res) => {
         const dsUpdatedCol = dsAvail ? 'DS.UPDATED_AT as DELIVERY_UPDATED_AT' : "CAST(NULL AS TIMESTAMP) as DELIVERY_UPDATED_AT";
         const dsFirmaCol = dsAvail ? 'DS.FIRMA_PATH' : "CAST(NULL AS VARCHAR(255)) as FIRMA_PATH";
         const dsObsCol = dsAvail ? 'DS.OBSERVACIONES' : "CAST(NULL AS VARCHAR(512)) as OBSERVACIONES";
+
+        let yearFilter = '';
+        const yearFilterParams = [];
+        if (yearParam) {
+            yearFilter = ` AND CPC.EJERCICIOALBARAN = ?`;
+            yearFilterParams.push(parseInt(yearParam));
+        }
 
         const sql = `
             SELECT 
@@ -355,14 +373,15 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 AND TRIM(CF_J.SERIEALBARAN) = TRIM(CPC.SERIEALBARAN)
                 AND CF_J.TERMINALALBARAN = CPC.TERMINALALBARAN
                 AND CF_J.NUMEROALBARAN = CPC.NUMEROALBARAN
-            WHERE CPC.CODIGOCLIENTEALBARAN = '${sanitizeForSQL(clientCode)}'
+            WHERE CPC.CODIGOCLIENTEALBARAN = ?
               AND CPC.NUMEROALBARAN < 900000 AND CPC.EJERCICIOALBARAN > 0
-              ${yearParam ? `AND CPC.EJERCICIOALBARAN = ${parseInt(yearParam)}` : ''}
+              ${yearFilter}
               ${dateFilter}
             ORDER BY CPC.EJERCICIOALBARAN DESC, CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC, CPC.NUMEROALBARAN DESC
         `;
 
-        const rows = await query(sql);
+        const allParams = [clientCode, ...repartidorParams, ...yearFilterParams, ...dateParams];
+        const rows = await queryWithParams(sql, allParams);
 
         // --- DEDUPLICATION PASS 1: Eliminate duplicate CPC rows per albaran ---
         // JOINs with CAC/CACFIRMAS can produce multiple rows per albaran
@@ -546,7 +565,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
 // GET /history/objectives/:repartidorId
 // Seguimiento del objetivo 30% por mes
 // =============================================================================
-router.get('/history/objectives/:repartidorId', async (req, res) => {
+router.get('/history/objectives/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { clientId } = req.query;
@@ -625,7 +644,7 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
 // GET /history/objectives-detail/:repartidorId
 // Desglose jerárquico: Año → Cliente → FI1 → FI2 → FI3 → FI4 → Productos
 // =============================================================================
-router.get('/history/objectives-detail/:repartidorId', async (req, res) => {
+router.get('/history/objectives-detail/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { year, clientId } = req.query;
@@ -641,23 +660,27 @@ router.get('/history/objectives-detail/:repartidorId', async (req, res) => {
 
         // 1. Get client codes delivered by this repartidor in this year
         let clientFilter = '';
+        const clientFilterParams = [];
         if (clientId) {
-            clientFilter = `AND TRIM(CPC.CODIGOCLIENTEALBARAN) = '${clientId.trim()}'`;
+            clientFilter = `AND TRIM(CPC.CODIGOCLIENTEALBARAN) = ?`;
+            clientFilterParams.push(clientId.trim());
         }
 
+        const repartidorIdList = cleanIds.split(',').map(id => id.trim());
         const clientsSql = `
             SELECT DISTINCT TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENT_CODE,
                 TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as CLIENT_NAME
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})
-              AND OPP.ANOREPARTO = ${selectedYear}
+            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+              AND OPP.ANOREPARTO = ?
               ${clientFilter}
             FETCH FIRST 1000 ROWS ONLY
         `;
 
-        const clientRows = await cachedQuery(query, clientsSql, `repartidor:objDetail:${cleanIds}:${selectedYear}:${clientId || 'all'}`, TTL.REALTIME);
+        const clientSqlParams = [...repartidorIdList, selectedYear, ...clientFilterParams];
+        const clientRows = await cachedQuery(queryWithParams, clientsSql, `repartidor:objDetail:${cleanIds}:${selectedYear}:${clientId || 'all'}`, TTL.REALTIME, clientSqlParams);
         if (clientRows.length === 0) {
             return res.json({ success: true, clients: [], year: selectedYear });
         }
@@ -672,10 +695,12 @@ router.get('/history/objectives-detail/:repartidorId', async (req, res) => {
         // 2. Query LACLAE for all those clients with FI hierarchy
         const CHUNK_SIZE = 500;
         const allCodes = Object.keys(clientNames);
+        const laclaeParams = [];
         const chunks = [];
         for (let i = 0; i < allCodes.length; i += CHUNK_SIZE) {
-            const chunk = allCodes.slice(i, i + CHUNK_SIZE).map(c => `'${c}'`).join(',');
-            chunks.push(`L.LCCDCL IN (${chunk})`);
+            const chunk = allCodes.slice(i, i + CHUNK_SIZE);
+            chunks.push(`L.LCCDCL IN (${chunk.map(() => '?').join(',')})`);
+            laclaeParams.push(...chunk);
         }
         const clientInFilter = `(${chunks.join(' OR ')})`;
 
@@ -699,13 +724,14 @@ router.get('/history/objectives-detail/:repartidorId', async (req, res) => {
             LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
             LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO
             WHERE ${clientInFilter}
-              AND L.LCAADC = ${selectedYear}
+              AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
             GROUP BY L.LCCDCL, L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.UNIDADMEDIDA, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04
             ORDER BY SALES DESC
         `;
 
-        const rows = await query(dataSql, false);
+        const dataParams = [...laclaeParams, selectedYear];
+        const rows = await queryWithParams(dataSql, dataParams, false);
 
         // 3. Load FI names from metadata cache
         let fi1Names = {}, fi2Names = {}, fi3Names = {}, fi4Names = {};
@@ -889,7 +915,7 @@ router.get('/history/objectives-detail/:repartidorId', async (req, res) => {
 // GET /history/signature
 // Retrieve real signature (base64) for a given albaran
 // =============================================================================
-router.get('/history/signature', async (req, res) => {
+router.get('/history/signature', verifyToken, async (req, res) => {
     try {
         const { ejercicio, serie, terminal, numero } = req.query;
         if (!ejercicio || !numero) {
@@ -1067,7 +1093,7 @@ router.get('/history/signature', async (req, res) => {
 // GET /debug/signatures - Find albaranes with actual signatures in CACFIRMAS
 // Temporary diagnostic endpoint
 // =============================================================================
-router.get('/debug/signatures', async (req, res) => {
+router.get('/debug/signatures', verifyToken, async (req, res) => {
     try {
         // Find recent albaranes that have signatures in CACFIRMAS
         const rows = await query(`
@@ -1118,7 +1144,7 @@ router.get('/debug/signatures', async (req, res) => {
 // GET /history/delivery-summary/:repartidorId
 // Summary of deliveries: totals entregados/pendientes by date range
 // =============================================================================
-router.get('/history/delivery-summary/:repartidorId', async (req, res) => {
+router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { year, month } = req.query;
@@ -1135,7 +1161,8 @@ router.get('/history/delivery-summary/:repartidorId', async (req, res) => {
         // This prevents future pre-loaded albaranes from inflating the % entrega
         const now = new Date();
         const isCurrentPeriod = selectedYear === now.getFullYear() && selectedMonth === (now.getMonth() + 1);
-        const dayFilter = isCurrentPeriod ? `AND OPP.DIAREPARTO <= ${now.getDate()}` : '';
+        const dayFilter = isCurrentPeriod ? `AND OPP.DIAREPARTO <= ?` : '';
+        const dayFilterParams = isCurrentPeriod ? [now.getDate()] : [];
 
         logger.info(`[REPARTIDOR] Delivery summary for ${repartidorId}, ${selectedMonth}/${selectedYear}${isCurrentPeriod ? ` (capped to day ${now.getDate()})` : ''}`);
 
@@ -1147,6 +1174,7 @@ router.get('/history/delivery-summary/:repartidorId', async (req, res) => {
                 ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))`
             : '';
 
+        const repartidorIdList = cleanIds.split(',').map(id => id.trim());
         const sql = `
             SELECT DIA,
                 COUNT(*) as TOTAL_ALBARANES,
@@ -1165,17 +1193,18 @@ router.get('/history/delivery-summary/:repartidorId', async (req, res) => {
                 FROM DSEDAC.OPP OPP
                 INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
                 ${dsJoinSub}
-                WHERE OPP.ANOREPARTO = ${selectedYear}
-                  AND OPP.MESREPARTO = ${selectedMonth}
+                WHERE OPP.ANOREPARTO = ?
+                  AND OPP.MESREPARTO = ?
                   ${dayFilter}
-                  AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})
+                  AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
                 GROUP BY OPP.DIAREPARTO, CPC.EJERCICIOALBARAN, TRIM(CPC.SERIEALBARAN), CPC.TERMINALALBARAN, CPC.NUMEROALBARAN
             ) ALBS
             GROUP BY DIA
             ORDER BY DIA
         `;
 
-        const rows = await query(sql, false) || [];
+        const sqlParams = [selectedYear, selectedMonth, ...dayFilterParams, ...repartidorIdList];
+        const rows = await queryWithParams(sql, sqlParams, false) || [];
 
         let totalAlbaranes = 0, totalEntregados = 0, totalNoEntregados = 0, totalParciales = 0, totalImporte = 0;
 
@@ -1229,7 +1258,7 @@ router.get('/history/delivery-summary/:repartidorId', async (req, res) => {
 // GET /document/albaran/:year/:serie/:terminal/:number/pdf
 // Generate Albaran PDF with optional embedded signature
 // =============================================================================
-router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, res) => {
+router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, async (req, res) => {
     try {
         const { year, terminal, number } = req.params;
         const parsedYear = parseInt(year);
@@ -1410,7 +1439,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
 // GET /config
 // Get commission configuration
 // =============================================================================
-router.get('/config', (req, res) => {
+router.get('/config', verifyToken, (req, res) => {
     res.json({
         success: true,
         config: {
@@ -1429,7 +1458,7 @@ router.get('/config', (req, res) => {
 // POST /entregas
 // Crear o actualizar una entrega
 // =============================================================================
-router.post('/entregas', async (req, res) => {
+router.post('/entregas', verifyToken, async (req, res) => {
     try {
         const {
             numeroAlbaran,
@@ -1512,7 +1541,7 @@ router.post('/entregas', async (req, res) => {
 // POST /entregas/:entregaId/firma
 // Guardar firma digital de una entrega
 // =============================================================================
-router.post('/entregas/:entregaId/firma', async (req, res) => {
+router.post('/entregas/:entregaId/firma', verifyToken, async (req, res) => {
     try {
         const { entregaId } = req.params;
         const {
@@ -1572,7 +1601,7 @@ router.post('/entregas/:entregaId/firma', async (req, res) => {
 // POST /entregas/:entregaId/lineas
 // Guardar estado de líneas de artículos
 // =============================================================================
-router.post('/entregas/:entregaId/lineas', async (req, res) => {
+router.post('/entregas/:entregaId/lineas', verifyToken, async (req, res) => {
     try {
         const { entregaId } = req.params;
         const { lineas } = req.body;
@@ -1633,7 +1662,7 @@ router.post('/entregas/:entregaId/lineas', async (req, res) => {
 // POST /cobros
 // Registrar un cobro realizado
 // =============================================================================
-router.post('/cobros', async (req, res) => {
+router.post('/cobros', verifyToken, async (req, res) => {
     try {
         const {
             entregaId,
@@ -1698,7 +1727,7 @@ router.post('/cobros', async (req, res) => {
 // GET /entregas/:entregaId/firma
 // Obtener firma de una entrega
 // =============================================================================
-router.get('/entregas/:entregaId/firma', async (req, res) => {
+router.get('/entregas/:entregaId/firma', verifyToken, async (req, res) => {
     try {
         const { entregaId } = req.params;
 
@@ -1734,7 +1763,7 @@ router.get('/entregas/:entregaId/firma', async (req, res) => {
 // Resumen semanal para el calendario (LUN 30, MAR 31...)
 // Estado basado en cobros de CONTADO, REPOSICION, MENSUAL
 // =============================================================================
-router.get('/rutero/week/:repartidorId', async (req, res) => {
+router.get('/rutero/week/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { date } = req.query; // Fecha de referencia (ej. hoy)
@@ -1772,10 +1801,13 @@ router.get('/rutero/week/:repartidorId', async (req, res) => {
         // Today's numeric date for past-date logic
         const now = new Date();
         const todayNum = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+        const weekStartNum = weekDays[0].syear * 10000 + weekDays[0].smonth * 100 + weekDays[0].sday;
+        const weekEndNum = weekDays[6].syear * 10000 + weekDays[6].smonth * 100 + weekDays[6].sday;
 
         // Query to get daily aggregates
         // ENTREGADOS: ERP-confirmed (CONFORMADOSN) + app-confirmed (DELIVERY_STATUS) + past dates
         const dsWeekAvail = isDeliveryStatusAvailable();
+        const repartidorIdList = cleanRepartidorId.split(',').map(id => id.trim());
         const sql = `
             SELECT
                 OPP.DIAREPARTO as DIA,
@@ -1785,7 +1817,7 @@ router.get('/rutero/week/:repartidorId', async (req, res) => {
                 COUNT(DISTINCT CASE
                     WHEN TRIM(CPC.CONFORMADOSN) = 'S' OR CPC.SITUACIONALBARAN IN ('F', 'R') THEN CPC.NUMEROALBARAN
                     ${dsWeekAvail ? "WHEN DS.STATUS = 'ENTREGADO' THEN CPC.NUMEROALBARAN" : ''}
-                    WHEN (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) < ${todayNum}
+                    WHEN (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) < ?
                          THEN CPC.NUMEROALBARAN
                     ELSE NULL
                 END) as ENTREGADOS
@@ -1795,13 +1827,13 @@ router.get('/rutero/week/:repartidorId', async (req, res) => {
             ${dsWeekAvail ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS
                 ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))` : ''}
             WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO)
-                BETWEEN ${weekDays[0].syear * 10000 + weekDays[0].smonth * 100 + weekDays[0].sday}
-                    AND ${weekDays[6].syear * 10000 + weekDays[6].smonth * 100 + weekDays[6].sday}
-              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId.split(',').map(id => `'${id.trim()}'`).join(',')})
+                BETWEEN ? AND ?
+              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
             GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO, OPP.DIAREPARTO
         `;
 
-        const rows = await query(sql, false);
+        const sqlParams = [todayNum, weekStartNum, weekEndNum, ...repartidorIdList];
+        const rows = await queryWithParams(sql, sqlParams, false);
 
         // Map results to weekDays
         const days = weekDays.map(wd => {
@@ -1849,7 +1881,7 @@ router.get('/rutero/week/:repartidorId', async (req, res) => {
 // GET /history/:repartidorId
 // Retrieve historical deliveries with filtering
 // =============================================================================
-router.get('/history/:repartidorId', async (req, res) => {
+router.get('/history/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { startDate, endDate, search } = req.query;
@@ -1861,7 +1893,7 @@ router.get('/history/:repartidorId', async (req, res) => {
         // Convert dates to integers YYYYMMDD
         const startInt = parseInt(startDate.replace(/-/g, ''));
         const endInt = parseInt(endDate.replace(/-/g, ''));
-        const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+        const repartidorIdList = repartidorId.split(',').map(id => id.trim());
 
         logger.info(`[REPARTIDOR] History for ${repartidorId} from ${startInt} to ${endInt}`);
 
@@ -1892,23 +1924,26 @@ router.get('/history/:repartidorId', async (req, res) => {
                 ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
             ${dsHistAvail ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS 
                 ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))` : ''}
-            WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ${startInt} AND ${endInt}
-              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
+            WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ? AND ?
+              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
         `;
 
+        const sqlParams = [startInt, endInt, ...repartidorIdList];
+
         if (search) {
-            const cleanSearch = sanitizeForSQL(search.toUpperCase());
+            const cleanSearch = `%${search.toUpperCase()}%`;
             sql += ` AND (
-                UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR 
-                UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR
-                CAST(CPC.NUMEROALBARAN AS CHAR(20)) LIKE '%${cleanSearch}%' OR
-                CAST(CAC.NUMEROFACTURA AS CHAR(20)) LIKE '%${cleanSearch}%'
+                UPPER(CLI.NOMBRECLIENTE) LIKE ? OR 
+                UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR
+                CAST(CPC.NUMEROALBARAN AS CHAR(20)) LIKE ? OR
+                CAST(CAC.NUMEROFACTURA AS CHAR(20)) LIKE ?
             )`;
+            sqlParams.push(cleanSearch, cleanSearch, cleanSearch, cleanSearch);
         }
 
         sql += ` ORDER BY FECHA DESC, CPC.NUMEROALBARAN DESC FETCH FIRST 200 ROWS ONLY`;
 
-        const rows = await query(sql, false) || [];
+        const rows = await queryWithParams(sql, sqlParams, false) || [];
 
         res.json({ success: true, count: rows.length, data: rows });
     } catch (e) {
@@ -1921,7 +1956,7 @@ router.get('/history/:repartidorId', async (req, res) => {
 // GET /document/invoice/:year/:serie/:number/pdf
 // Generate formal Invoice PDF
 // =============================================================================
-router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
+router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, async (req, res) => {
     try {
         const { year, number } = req.params;
         const { albaranNumber, albaranSerie, albaranTerminal, albaranYear } = req.query;
@@ -2144,12 +2179,12 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
 // Uses ONLY columns verified to exist: OPP.CODIGOREPARTIDOR, CLI.CODIGOCLIENTE,
 // CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, CLI.DIRECCION, CLI.ANOBAJA
 // =============================================================================
-router.get('/history/clients/:repartidorId', async (req, res) => {
+router.get('/history/clients/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { search } = req.query;
 
-        const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+        const repartidorIdList = repartidorId.split(',').map(id => id.trim());
 
         // FIX: Use DISTINCT subquery to deduplicate OPP-CPC joins (one albaran can have multiple OPP records)
         // FIX: Remove 6-month cutoff so client list counts match what the documents endpoint returns
@@ -2170,7 +2205,7 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
                     CPC.ANODOCUMENTO, CPC.MESDOCUMENTO, CPC.DIADOCUMENTO
                 FROM DSEDAC.CPC CPC
                 INNER JOIN DSEDAC.OPP OPP ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-                WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
+                WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
                   AND CPC.NUMEROALBARAN < 900000
                   AND CPC.EJERCICIOALBARAN > 0
             ) UNIQ
@@ -2179,9 +2214,12 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
             WHERE (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL)
         `;
 
+        const mainSqlParams = [...repartidorIdList];
+
         if (search) {
-            const cleanSearch = sanitizeForSQL(search.toUpperCase());
-            mainSql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR TRIM(UNIQ.CODIGOCLIENTEALBARAN) LIKE '%${cleanSearch}%')`;
+            const cleanSearch = `%${search.toUpperCase()}%`;
+            mainSql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR TRIM(UNIQ.CODIGOCLIENTEALBARAN) LIKE ?)`;
+            mainSqlParams.push(cleanSearch, cleanSearch, cleanSearch);
         }
 
         mainSql += ` GROUP BY TRIM(UNIQ.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, ''))`;
@@ -2189,7 +2227,7 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
         mainSql += ` FETCH FIRST 500 ROWS ONLY`;
 
         logger.info(`[REPARTIDOR] Clients SQL for repartidorId ${repartidorId}`);
-        const rows = await cachedQuery(query, mainSql, `repartidor:clients:${cleanRepartidorId}:${search || ''}`, TTL.REALTIME);
+        const rows = await cachedQuery(queryWithParams, mainSql, `repartidor:clients:${repartidorIdList.join(',')}:${search || ''}`, TTL.REALTIME, mainSqlParams);
         logger.info(`[REPARTIDOR] Found ${rows.length} clients with deliveries for ${repartidorId}`);
 
         // Deduplicate by client ID (a client may appear with different repartidors)
@@ -2236,8 +2274,8 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 // =============================================================================
 // GET /history/legacy-signature/:id
 // Returns the Base64 signature from CACFIRMAS as an image
-// ===================================
-router.get('/history/legacy-signature/:id', async (req, res) => {
+// =============================================================================
+router.get('/history/legacy-signature/:id', verifyToken, async (req, res) => {
     try {
         const { id } = req.params; // Format: YEAR-SERIES-TERMINAL-NUMBER
         const parts = id.split('-');
@@ -2277,7 +2315,7 @@ router.get('/history/legacy-signature/:id', async (req, res) => {
 // POST /document/send-email
 // Server-side email sending with PDF attachment for repartidor documents
 // =============================================================================
-router.post('/document/send-email', async (req, res) => {
+router.post('/document/send-email', verifyToken, async (req, res) => {
     try {
         const { ejercicio, serie, terminal, numero, type, destinatario, asunto, cuerpo, clienteNombre } = req.body;
 
@@ -2376,7 +2414,7 @@ router.post('/document/send-email', async (req, res) => {
 // POST /document/share/whatsapp
 // WhatsApp share with PDF base64 for repartidor documents (albaranes/facturas)
 // =============================================================================
-router.post('/document/share/whatsapp', async (req, res) => {
+router.post('/document/share/whatsapp', verifyToken, async (req, res) => {
     try {
         const { ejercicio, serie, terminal, numero, type, telefono, clienteNombre } = req.body;
 

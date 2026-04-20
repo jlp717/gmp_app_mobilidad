@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
+const { verifyToken } = require('../middleware/auth');
 const { query, queryWithParams } = require('../config/db');
 const {
   buildVendedorFilter,
@@ -222,13 +223,13 @@ const getClientsHandler = async (req, res) => {
   }
 };
 
-router.get('/', getClientsHandler);
-router.get('/list', getClientsHandler);
+router.get('/', verifyToken, getClientsHandler);
+router.get('/list', verifyToken, getClientsHandler);
 
 // =============================================================================
 // CLIENT NOTES
 // =============================================================================
-router.put('/notes', async (req, res) => {
+router.put('/notes', verifyToken, async (req, res) => {
   try {
     const { clientCode, notes } = req.body;
     if (!clientCode) return res.status(400).json({ error: 'Client code required' });
@@ -280,7 +281,7 @@ router.put('/notes', async (req, res) => {
 // =============================================================================
 // CLIENT DETAIL
 // =============================================================================
-router.get('/:code', async (req, res) => {
+router.get('/:code', verifyToken, async (req, res) => {
   try {
     const { code } = req.params;
     const { vendedorCodes } = req.query;
@@ -311,12 +312,12 @@ if (clientInfo.length === 0) {
       // Query 1: Editable observations
       (async () => {
         try {
-          const notesResult = await query(`
+          const notesResult = await queryWithParams(`
             SELECT OBSERVACIONES, MODIFIED_BY, MODIFIED_AT
             FROM JAVIER.CLIENT_NOTES
-            WHERE CLIENT_CODE = '${clientCode}'
+            WHERE CLIENT_CODE = ?
             FETCH FIRST 1 ROWS ONLY
-          `, false);
+          `, [clientCode], false);
           return notesResult[0] || null;
         } catch (e) { return null; }
       })(),
@@ -486,7 +487,7 @@ if (clientInfo.length === 0) {
 // =============================================================================
 // CLIENT EDITABLE NOTES (GET/PUT)
 // =============================================================================
-router.get('/:code/notes', async (req, res) => {
+router.get('/:code/notes', verifyToken, async (req, res) => {
   try {
     const clientCode = req.params.code.trim();
 
@@ -504,11 +505,11 @@ router.get('/:code/notes', async (req, res) => {
       // Table may already exist
     }
 
-    const result = await query(`
+    const result = await queryWithParams(`
       SELECT OBSERVACIONES, MODIFIED_BY, MODIFIED_AT
       FROM JAVIER.CLIENT_NOTES
-      WHERE CLIENT_CODE = '${clientCode}'
-    `, false);
+      WHERE CLIENT_CODE = ?
+    `, [clientCode], false);
 
     if (result[0]) {
       res.json({
@@ -525,7 +526,7 @@ router.get('/:code/notes', async (req, res) => {
   }
 });
 
-router.put('/:code/notes', async (req, res) => {
+router.put('/:code/notes', verifyToken, async (req, res) => {
   try {
     const clientCode = req.params.code.trim();
     const { notes, vendorCode, vendorName } = req.body;
@@ -575,7 +576,7 @@ router.put('/:code/notes', async (req, res) => {
 // =============================================================================
 // CLIENT SALES HISTORY
 // =============================================================================
-router.get('/:code/sales-history', async (req, res) => {
+router.get('/:code/sales-history', verifyToken, async (req, res) => {
   try {
     const { code } = req.params;
     const { vendedorCodes, limit = 50, offset = 0 } = req.query;
@@ -626,7 +627,7 @@ router.get('/:code/sales-history', async (req, res) => {
 // =============================================================================
 // CLIENT COMPARISON
 // =============================================================================
-router.get('/compare', async (req, res) => {
+router.get('/compare', verifyToken, async (req, res) => {
   try {
     const { codes, vendedorCodes } = req.query;
     if (!codes) {

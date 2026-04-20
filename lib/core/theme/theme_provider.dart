@@ -5,7 +5,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// Provider para gestionar el tema de la aplicación
 /// Permite cambiar entre tema claro y oscuro
 class ThemeProvider extends ChangeNotifier {
-
   ThemeProvider() {
     _loadThemeFromPrefs();
   }
@@ -34,6 +33,11 @@ class ThemeProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('isDarkMode', isDark);
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    super.dispose();
   }
 }
 

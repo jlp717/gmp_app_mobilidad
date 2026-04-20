@@ -203,7 +203,8 @@ router.get('/rutero/week', async (req, res) => {
         // Fallback: Cache not ready, try direct DB query 
         logger.warn(`[RUTERO WEEK] Cache not ready, querying DB for basic counts`);
         try {
-            const cleanCodes = vendedorCodes ? vendedorCodes.split(',').map(c => `'${c.trim()}'`).join(',') : "''";
+            // SECURITY: Use parameterized query to prevent SQL injection
+            const cleanCodes = vendedorCodes ? vendedorCodes.split(',').map(c => c.trim()).filter(c => c) : [];
             // CDVI uses SN columns for days: DIAVISITALUNESSN, DIAVISITAMARTESSN, etc.
             const fallbackSql = `
                 SELECT 
@@ -215,10 +216,15 @@ router.get('/rutero/week', async (req, res) => {
                     SUM(CASE WHEN DIAVISITASABADOSN = 'S' THEN 1 ELSE 0 END) as SABADO,
                     SUM(CASE WHEN DIAVISITADOMINGOSN = 'S' THEN 1 ELSE 0 END) as DOMINGO
                 FROM DSEDAC.CDVI
-                WHERE TRIM(CODIGOVENDEDOR) IN (${cleanCodes})
+                WHERE 1=1
             `;
-
-            const fbRows = await query(fallbackSql, false);
+            
+            let fbRows = [];
+            if (cleanCodes.length > 0) {
+                const placeholders = cleanCodes.map(() => '?').join(',');
+                const fullSql = fallbackSql.replace('WHERE 1=1', `WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})`);
+                fbRows = await queryWithParams(fullSql, cleanCodes, false, false);
+            }
             const fallbackCounts = { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0, sabado: 0, domingo: 0 };
             let fallbackTotal = 0;
 
@@ -281,7 +287,8 @@ router.get('/rutero/vendedores', async (req, res) => {
         } else {
             // Default: Commercials (Sales Reps)
             // Use strict whitelist of known active comerciales matching comision system
-            const inList = ACTIVE_COMERCIALES.map(c => `'${c}'`).join(',');
+            // SECURITY: Use parameterized query (hardcoded values but consistent pattern)
+            const inList = ACTIVE_COMERCIALES.map(() => '?').join(',');
             sql = `
                     SELECT TRIM(VDD.CODIGOVENDEDOR) as code, TRIM(VDD.NOMBREVENDEDOR) as name
                     FROM DSEDAC.VDD VDD
@@ -292,7 +299,8 @@ router.get('/rutero/vendedores', async (req, res) => {
 
         // Cache 1 hour
         const cacheKey = `vendedores:active:${currentYear}:${role || 'comercial'}`;
-        const vendedores = await cachedQuery(query, sql, cacheKey, TTL.LONG);
+        const params = role === 'repartidor' ? [] : ACTIVE_COMERCIALES;
+        const vendedores = await cachedQuery(queryWithParams, sql, cacheKey, TTL.LONG, params);
 
         // Defensive mapping: DB2 column name case varies by driver config
         const mapped = vendedores.map(v => {
@@ -897,9 +905,9 @@ router.get('/rutero/day-direct/:day', async (req, res) => {
 
         const batchSize = 200;
         const clientBatch = dayClientCodes.slice(0, batchSize);
-        const safeClientFilter = clientBatch.map(c => `'${sanitizeForSQL(c)}'`).join(',');
 
-        // Query directly without cache
+        // SECURITY: Use parameterized query to prevent SQL injection
+        const placeholders = clientBatch.map(() => '?').join(',');
         const clientDetailsSql = `
             SELECT 
                 CODIGOCLIENTE as CODE,
@@ -909,10 +917,10 @@ router.get('/rutero/day-direct/:day', async (req, res) => {
                 TELEFONO1 as PHONE,
                 TELEFONO2 as PHONE2
             FROM DSEDAC.CLI
-            WHERE CODIGOCLIENTE IN (${safeClientFilter})
+            WHERE CODIGOCLIENTE IN (${placeholders})
               AND (ANOBAJA = 0 OR ANOBAJA IS NULL)
         `;
-        const clientDetails = await query(clientDetailsSql, false, false);
+        const clientDetails = await queryWithParams(clientDetailsSql, clientBatch, false, false);
 
         // Get RUTERO_CONFIG order for sorting
         // SECURITY: Use parameterized query to prevent SQL injection
@@ -1145,17 +1153,16 @@ router.get('/rutero/day/:day', async (req, res) => {
             });
         }
 
-        // Limit clients for safety
+// Limit clients for safety
         const batchSize = 200;
         const clientBatch = dayClientCodes.slice(0, batchSize);
-        const safeClientFilter = clientBatch.map(c => `'${sanitizeForSQL(c)}'`).join(',');
 
-        // --- 2. Heavy Queries with Caching ---
-
-        // Cache Key Components
-        const clientsHash = crypto.createHash('md5').update(safeClientFilter).digest('hex');
+        // SECURITY: Use parameterized query to prevent SQL injection
+        const clientPlaceholders = clientBatch.map(() => '?').join(',');
+        const clientsHash = crypto.createHash('md5').update(clientBatch.join(',')).digest('hex');
         const cacheTTL = TTL.MEDIUM; // 5 minutes
 
+        // --- 2. Heavy Queries with Caching ---
         // Parallelize all heavy queries for maximum performance
         const detailsSql = `
             SELECT 
@@ -1163,10 +1170,10 @@ router.get('/rutero/day/:day', async (req, res) => {
                 COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), NOMBRECLIENTE) as NAME,
                 DIRECCION as ADDRESS,
                 POBLACION as CITY,
-                TELEFONO1 as PHONE,
+                TELEFON1 as PHONE,
                 TELEFONO2 as PHONE2
             FROM DSEDAC.CLI
-            WHERE CODIGOCLIENTE IN (${safeClientFilter})
+            WHERE CODIGOCLIENTE IN (${clientPlaceholders})
               AND (ANOBAJA = 0 OR ANOBAJA IS NULL)
         `;
         const currentSalesSql = `
@@ -1175,10 +1182,10 @@ router.get('/rutero/day/:day', async (req, res) => {
                 SUM(L.LCIMVT) as SALES,
                 SUM(L.LCIMCT) as COST
             FROM DSED.LACLAE L
-            WHERE L.LCCDCL IN (${safeClientFilter})
-              AND L.LCAADC = ${currentYear}
+            WHERE L.LCCDCL IN (${clientPlaceholders})
+              AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
-              AND (L.LCMMDC < ${endMonthCurrent} OR (L.LCMMDC = ${endMonthCurrent} AND L.LCDDDC <= ${endDayCurrent}))
+              AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?))
             GROUP BY L.LCCDCL
         `;
         const prevSalesSql = endMonthPrevious > 0 ? `
@@ -1187,10 +1194,10 @@ router.get('/rutero/day/:day', async (req, res) => {
                 SUM(L.LCIMVT) as SALES,
                 SUM(L.LCIMCT) as COST
             FROM DSED.LACLAE L
-            WHERE L.LCCDCL IN (${safeClientFilter})
-              AND L.LCAADC = ${previousYear}
+            WHERE L.LCCDCL IN (${clientPlaceholders})
+              AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
-              AND (L.LCMMDC < ${endMonthPrevious} OR (L.LCMMDC = ${endMonthPrevious} AND L.LCDDDC <= ${endDayPrevious}))
+              AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?))
             GROUP BY L.LCCDCL
         ` : null;
         const prevYearTotalSql = `
@@ -1198,21 +1205,21 @@ router.get('/rutero/day/:day', async (req, res) => {
                 L.LCCDCL as CODE,
                 SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L
-            WHERE L.LCCDCL IN (${safeClientFilter})
-              AND L.LCAADC = ${previousYear}
+            WHERE L.LCCDCL IN (${clientPlaceholders})
+              AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
             GROUP BY L.LCCDCL
         `;
         const gpsSql = `
             SELECT CODIGO, LATITUD, LONGITUD
             FROM DSEMOVIL.CLIENTES
-            WHERE CODIGO IN (${safeClientFilter})
+            WHERE CODIGO IN (${clientPlaceholders})
               AND LATITUD IS NOT NULL AND LATITUD <> 0
         `;
         const notesSql = `
             SELECT CLIENT_CODE, OBSERVACIONES, MODIFIED_BY
             FROM JAVIER.CLIENT_NOTES
-            WHERE CLIENT_CODE IN (${safeClientFilter})
+            WHERE CLIENT_CODE IN (${clientPlaceholders})
         `;
 
         // Execute all queries in parallel
@@ -1224,12 +1231,12 @@ router.get('/rutero/day/:day', async (req, res) => {
             gpsResult,
             notesResult
         ] = await Promise.all([
-            cachedQuery(query, detailsSql, `rutero:details:v3:${clientsHash}`, TTL.LONG),
-            cachedQuery(query, currentSalesSql, `rutero:sales:v2:${currentYear}:${endMonthCurrent}:${endDayCurrent}:${clientsHash}`, cacheTTL),
-            prevSalesSql ? cachedQuery(query, prevSalesSql, `rutero:sales:v2:${previousYear}:${endMonthPrevious}:${endDayPrevious}:${clientsHash}`, cacheTTL) : Promise.resolve([]),
-            cachedQuery(query, prevYearTotalSql, `rutero:sales:total:${previousYear}:${clientsHash}`, TTL.LONG),
-            cachedQuery(query, gpsSql, `rutero:gps:v3:${clientsHash}`, TTL.LONG).catch(e => { logger.warn(`GPS query failed: ${e.message}`); return []; }),
-            cachedQuery(query, notesSql, `rutero:notes:v1:${clientsHash}`, TTL.SHORT).catch(e => { logger.warn(`Notes query failed: ${e.message}`); return []; })
+            cachedQuery(queryWithParams, detailsSql, `rutero:details:v3:${clientsHash}`, TTL.LONG, clientBatch),
+            cachedQuery(queryWithParams, currentSalesSql, `rutero:sales:v2:${currentYear}:${endMonthCurrent}:${endDayCurrent}:${clientsHash}`, cacheTTL, [...clientBatch, currentYear, endMonthCurrent, endMonthCurrent, endDayCurrent]),
+            prevSalesSql ? cachedQuery(queryWithParams, prevSalesSql, `rutero:sales:v2:${previousYear}:${endMonthPrevious}:${endDayPrevious}:${clientsHash}`, cacheTTL, [...clientBatch, previousYear, endMonthPrevious, endMonthPrevious, endDayPrevious]) : Promise.resolve([]),
+            cachedQuery(queryWithParams, prevYearTotalSql, `rutero:sales:total:${previousYear}:${clientsHash}`, TTL.LONG, [...clientBatch, previousYear]),
+            cachedQuery(queryWithParams, gpsSql, `rutero:gps:v3:${clientsHash}`, TTL.LONG, clientBatch).catch(e => { logger.warn(`GPS query failed: ${e.message}`); return []; }),
+            cachedQuery(queryWithParams, notesSql, `rutero:notes:v1:${clientsHash}`, TTL.SHORT, clientBatch).catch(e => { logger.warn(`Notes query failed: ${e.message}`); return []; })
         ]);
 
         // Build maps from results

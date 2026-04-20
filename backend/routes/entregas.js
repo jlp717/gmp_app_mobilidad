@@ -7,6 +7,7 @@ const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const logger = require('../middleware/logger');
+const { verifyToken } = require('../middleware/auth');
 const { sanitizeCodeList, sanitizeForSQL } = require('../utils/common');
 const { isDeliveryStatusAvailable } = require('../utils/delivery-status-check');
 
@@ -151,7 +152,7 @@ function getSmartSuggestions(albaranes) {
 // ===================================
 // GET /pendientes/:repartidorId
 // ===================================
-router.get('/pendientes/:repartidorId', async (req, res) => {
+router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { date } = req.query; // Support ?date=YYYY-MM-DD
@@ -167,11 +168,12 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
 
         logger.info(`[ENTREGAS] Getting pending deliveries for repartidor ${repartidorId} (${dia}/${mes}/${ano})`);
 
-        // Handle multiple IDs (comma separated) case - SECURITY: sanitize
-        const ids = sanitizeCodeList(repartidorId);
-        if (!ids) {
+        // Handle multiple IDs (comma separated) case
+        const idList = sanitizeCodeList(repartidorId);
+        if (!idList || idList.length === 0) {
             return res.status(400).json({ error: 'Invalid repartidor ID format' });
         }
+        const placeholders = idList.map(() => '?').join(',');
 
         // Load payment conditions from JAVIER.PAYMENT_CONDITIONS table
         let paymentConditions = {};
@@ -269,10 +271,10 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
             LEFT JOIN DSEDAC.VDD VDD ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
             ${dsJoin}
-            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${ids})
-              AND OPP.DIAREPARTO = ${dia}
-              AND OPP.MESREPARTO = ${mes}
-              AND OPP.ANOREPARTO = ${ano}
+            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${placeholders})
+              AND OPP.DIAREPARTO = ?
+              AND OPP.MESREPARTO = ?
+              AND OPP.ANOREPARTO = ?
             ORDER BY CAC.NUMEROALBARAN
         `;
 
@@ -281,7 +283,8 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
 
         let rows = [];
         try {
-            rows = await query(sql, false) || [];
+            const queryParams = [...idList, dia, mes, ano];
+            rows = await queryWithParams(sql, queryParams) || [];
         } catch (queryError) {
             logger.error(`[ENTREGAS] Query error in pendientes: ${queryError.message}`);
             return res.json({ success: true, albaranes: [], total: 0 });
@@ -580,7 +583,7 @@ router.get('/pendientes/:repartidorId', async (req, res) => {
 // ===================================
 // GET /payment-conditions - List available payment conditions
 // ===================================
-router.get('/payment-conditions', async (req, res) => {
+router.get('/payment-conditions', verifyToken, async (req, res) => {
     try {
         const conditions = await query(`
             SELECT CODIGO, DESCRIPCION, TIPO, DIAS_PAGO, DEBE_COBRAR, PUEDE_COBRAR, COLOR
@@ -610,7 +613,7 @@ router.get('/payment-conditions', async (req, res) => {
 // ===================================
 // GET /albaran/:numero/:ejercicio
 // ===================================
-router.get('/albaran/:numero/:ejercicio', async (req, res) => {
+router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
     try {
         const { numero, ejercicio } = req.params;
         const serie = req.query.serie;
@@ -761,7 +764,7 @@ router.get('/albaran/:numero/:ejercicio', async (req, res) => {
 // ===================================
 // POST /update - Update delivery status with duplicate prevention
 // ===================================
-router.post('/update', async (req, res) => {
+router.post('/update', verifyToken, async (req, res) => {
     try {
         const { itemId: reqItemId, albaranId, status, repartidorId, observaciones, firma, fotos, latitud, longitud, forceUpdate } = req.body;
         const itemId = reqItemId || albaranId; // Support both naming conventions
@@ -864,7 +867,7 @@ router.post('/update', async (req, res) => {
 // ===================================
 // POST /uploads/photo
 // ===================================
-router.post('/uploads/photo', upload.single('photo'), (req, res) => {
+router.post('/uploads/photo', verifyToken, upload.single('photo'), (req, res) => {
     if (!req.file) return res.status(400).json({ success: false, error: 'No file' });
     res.json({ success: true, path: req.file.path });
 });
@@ -872,7 +875,7 @@ router.post('/uploads/photo', upload.single('photo'), (req, res) => {
 // ===================================
 // POST /uploads/signature
 // ===================================
-router.post('/uploads/signature', async (req, res) => {
+router.post('/uploads/signature', verifyToken, async (req, res) => {
     try {
         const { entregaId, firma, clientCode, dni, nombre } = req.body; // firma is base64
         if (!firma) return res.status(400).json({ success: false, error: 'No signature' });
@@ -946,7 +949,7 @@ router.post('/uploads/signature', async (req, res) => {
 // ===================================
 // GET /signers/:clientCode
 // ===================================
-router.get('/signers/:clientCode', async (req, res) => {
+router.get('/signers/:clientCode', verifyToken, async (req, res) => {
     try {
         const { clientCode } = req.params;
         const rows = await queryWithParams(`
@@ -967,7 +970,7 @@ router.get('/signers/:clientCode', async (req, res) => {
 // ===================================
 // POST /receipt/:entregaId - Generate delivery receipt PDF
 // ===================================
-router.post('/receipt/:entregaId', async (req, res) => {
+router.post('/receipt/:entregaId', verifyToken, async (req, res) => {
     try {
         const { entregaId } = req.params;
         const { signaturePath, items, clientCode, clientName, albaranNum, facturaNum, fecha, subtotal, iva, total, formaPago, repartidor, ordenPreparacion, firmante, firmanteDni } = req.body;
@@ -1082,7 +1085,7 @@ router.post('/receipt/:entregaId', async (req, res) => {
 // ===================================
 // POST /receipt/:entregaId/email - Send receipt via email
 // ===================================
-router.post('/receipt/:entregaId/email', async (req, res) => {
+router.post('/receipt/:entregaId/email', verifyToken, async (req, res) => {
     try {
         const { entregaId } = req.params;
         const { email, signaturePath, items, clientCode, clientName, albaranNum, facturaNum, fecha, subtotal, iva, total, formaPago, repartidor, ordenPreparacion, firmante, firmanteDni } = req.body;
@@ -1119,14 +1122,21 @@ router.post('/receipt/:entregaId/email', async (req, res) => {
             firmanteDni
         };
 
-        // Resolve signature path
+        // Resolve signature path - SECURITY: prevent path traversal
         let fullSignaturePath = null;
         if (signaturePath) {
-            fullSignaturePath = path.join(photosDir, signaturePath);
-            if (!fs.existsSync(fullSignaturePath)) {
-                if (fs.existsSync(signaturePath)) {
-                    fullSignaturePath = signaturePath;
-                } else {
+            const normalizedSig = path.normalize(signaturePath).replace(/\\/g, '/');
+            if (normalizedSig.includes('..') || path.isAbsolute(normalizedSig)) {
+                logger.warn(`[RECEIPT-EMAIL] Rejected suspicious signature path: ${signaturePath}`);
+                fullSignaturePath = null;
+            } else {
+                fullSignaturePath = path.join(photosDir, normalizedSig);
+                const resolvedPath = path.resolve(fullSignaturePath);
+                const resolvedBase = path.resolve(photosDir);
+                if (!resolvedPath.startsWith(resolvedBase)) {
+                    logger.warn(`[RECEIPT-EMAIL] Path traversal attempt blocked: ${signaturePath}`);
+                    fullSignaturePath = null;
+                } else if (!fs.existsSync(fullSignaturePath)) {
                     fullSignaturePath = null;
                     logger.warn(`[RECEIPT-EMAIL] Signature not found: ${signaturePath}`);
                 }
@@ -1154,7 +1164,7 @@ router.post('/receipt/:entregaId/email', async (req, res) => {
 // ===================================
 // POST /receipt/:entregaId/whatsapp - WhatsApp share with PDF base64
 // ===================================
-router.post('/receipt/:entregaId/whatsapp', async (req, res) => {
+router.post('/receipt/:entregaId/whatsapp', verifyToken, async (req, res) => {
     try {
         const { entregaId } = req.params;
         const { telefono, signaturePath, items, clientCode, clientName, albaranNum, facturaNum, fecha, subtotal, iva, total, formaPago, repartidor, ordenPreparacion, firmante, firmanteDni } = req.body;
@@ -1196,14 +1206,21 @@ router.post('/receipt/:entregaId/whatsapp', async (req, res) => {
         let pdfBuffer = getCachedPdf(cacheKey);
 
         if (!pdfBuffer) {
-            // Resolve signature path
+            // Resolve signature path - SECURITY: prevent path traversal
             let fullSignaturePath = null;
             if (signaturePath) {
-                fullSignaturePath = path.join(photosDir, signaturePath);
-                if (!fs.existsSync(fullSignaturePath)) {
-                    if (fs.existsSync(signaturePath)) {
-                        fullSignaturePath = signaturePath;
-                    } else {
+                const normalizedSig = path.normalize(signaturePath).replace(/\\/g, '/');
+                if (normalizedSig.includes('..') || path.isAbsolute(normalizedSig)) {
+                    logger.warn(`[RECEIPT-WHATSAPP] Rejected suspicious signature path: ${signaturePath}`);
+                    fullSignaturePath = null;
+                } else {
+                    fullSignaturePath = path.join(photosDir, normalizedSig);
+                    const resolvedPath = path.resolve(fullSignaturePath);
+                    const resolvedBase = path.resolve(photosDir);
+                    if (!resolvedPath.startsWith(resolvedBase)) {
+                        logger.warn(`[RECEIPT-WHATSAPP] Path traversal attempt blocked: ${signaturePath}`);
+                        fullSignaturePath = null;
+                    } else if (!fs.existsSync(fullSignaturePath)) {
                         fullSignaturePath = null;
                         logger.warn(`[RECEIPT-WHATSAPP] Signature not found: ${signaturePath}`);
                     }

@@ -1246,4 +1246,9 @@ class PedidosProvider with ChangeNotifier {
       return 0;
     }
   }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
 }

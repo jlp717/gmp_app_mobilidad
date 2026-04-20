@@ -1,3 +1,5 @@
+const { verifyToken, requireRoles } = require('../middleware/auth');
+
 /**
  * ═══════════════════════════════════════════════════════════════════════════
  * WAREHOUSE ROUTES — API para Almacén / Expediciones / Load Planner 3D
@@ -278,7 +280,7 @@ function getVehiclePhotoUrl(description) {
  * GET /warehouse/dashboard?year=2026&month=2&day=19
  * Devuelve resumen de camiones/rutas del día con KPIs
  */
-router.get('/dashboard', async (req, res) => {
+router.get('/dashboard', verifyToken, async (req, res) => {
     try {
         const now = new Date();
         const year = parseInt(req.query.year) || now.getFullYear();
@@ -303,9 +305,9 @@ router.get('/dashboard', async (req, res) => {
       LEFT JOIN DSEDAC.VEH V ON TRIM(V.CODIGOVEHICULO) = TRIM(OPP.CODIGOVEHICULO)
       LEFT JOIN DSEDAC.VDD VDD ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
       LEFT JOIN JAVIER.ALMACEN_CAMIONES_CONFIG C ON TRIM(OPP.CODIGOVEHICULO) = C.CODIGOVEHICULO
-      WHERE OPP.ANOREPARTO = ${year}
-        AND OPP.MESREPARTO = ${month}
-        AND OPP.DIAREPARTO = ${day}
+      WHERE OPP.ANOREPARTO = ?
+        AND OPP.MESREPARTO = ?
+        AND OPP.DIAREPARTO = ?
         AND TRIM(OPP.CODIGOVEHICULO) <> ''
       GROUP BY TRIM(OPP.CODIGOVEHICULO), TRIM(V.DESCRIPCIONVEHICULO),
                TRIM(V.MATRICULA), TRIM(OPP.CODIGOREPARTIDOR),
@@ -313,7 +315,7 @@ router.get('/dashboard', async (req, res) => {
                COALESCE(V.NUMEROCONTENEDORES, 0),
                COALESCE(C.TOLERANCIA_EXCESO, 5)
       ORDER BY TRIM(OPP.CODIGOVEHICULO)
-    `, cacheKey, TTL.MEDIUM);
+    `, cacheKey, TTL.MEDIUM, [year, month, day]);
 
         res.json({
             date: { year, month, day },
@@ -360,7 +362,7 @@ router.get('/dashboard', async (req, res) => {
  * Body: { vehicleCode, year, month, day, tolerance? }
  * Ejecuta el algoritmo 3D bin packing y devuelve posiciones de cajas
  */
-router.post('/load-plan', async (req, res) => {
+router.post('/load-plan', verifyToken, async (req, res) => {
     try {
         const { vehicleCode, year, month, day, tolerance } = req.body;
         logger.info(`[LOAD-PLAN] Request received: vehicle=${vehicleCode}, date=${year}-${month}-${day}`);
@@ -467,7 +469,7 @@ router.post('/load-plan', async (req, res) => {
  * Body: { vehicleCode, year, month, day }
  * Optimiza la carga para máximo beneficio (greedy knapsack)
  */
-router.post('/load-plan/optimize', async (req, res) => {
+router.post('/load-plan/optimize', verifyToken, async (req, res) => {
     try {
         const { vehicleCode, year, month, day } = req.body;
         if (!vehicleCode) {
@@ -490,7 +492,7 @@ router.post('/load-plan/optimize', async (req, res) => {
  * Body: { vehicleCode, year, month, day, mustDeliverOrders?: number[] }
  * Optimización inteligente: must-deliver + máximo margen EUR
  */
-router.post('/load-plan/smart-optimize', async (req, res) => {
+router.post('/load-plan/smart-optimize', verifyToken, async (req, res) => {
     try {
         const { vehicleCode, year, month, day, mustDeliverOrders } = req.body;
         if (!vehicleCode) {
@@ -514,7 +516,7 @@ router.post('/load-plan/smart-optimize', async (req, res) => {
  * Body: { placed: [...], interior: { lengthCm, widthCm, heightCm } }
  * Calcula equilibrio de ejes a partir de cajas colocadas
  */
-router.post('/load-plan/axle-balance', async (req, res) => {
+router.post('/load-plan/axle-balance', verifyToken, async (req, res) => {
     try {
         const { placed, interior } = req.body;
         if (!placed || !interior) {
@@ -533,7 +535,7 @@ router.post('/load-plan/axle-balance', async (req, res) => {
  * Body: { vehicleCode, items: [{articleCode, quantity, ...}], tolerance? }
  * Para simulaciones "what-if" desde el frontend
  */
-router.post('/load-plan-manual', async (req, res) => {
+router.post('/load-plan-manual', verifyToken, async (req, res) => {
     try {
         const { vehicleCode, items, tolerance } = req.body;
         if (!vehicleCode || !items?.length) {
@@ -555,7 +557,7 @@ router.post('/load-plan-manual', async (req, res) => {
  * GET /warehouse/vehicles
  * Lista todos los vehículos con sus capacidades y configuración
  */
-router.get('/vehicles', async (req, res) => {
+router.get('/vehicles', verifyToken, async (req, res) => {
     try {
         const vehicles = await cachedQuery(query, `
       SELECT
@@ -630,7 +632,7 @@ router.get('/vehicles', async (req, res) => {
 /**
  * GET /warehouse/truck-config/:vehicleCode
  */
-router.get('/truck-config/:vehicleCode', async (req, res) => {
+router.get('/truck-config/:vehicleCode', verifyToken, async (req, res) => {
     try {
         const config = await loadPlanner.getTruckConfig(req.params.vehicleCode);
         if (!config) return res.status(404).json({ error: 'Vehículo no encontrado' });
@@ -645,7 +647,7 @@ router.get('/truck-config/:vehicleCode', async (req, res) => {
  * PUT /warehouse/truck-config/:vehicleCode
  * Body: { largoInteriorCm, anchoInteriorCm, altoInteriorCm, toleranciaExceso, notas }
  */
-router.put('/truck-config/:vehicleCode', async (req, res) => {
+router.put('/truck-config/:vehicleCode', verifyToken, async (req, res) => {
     try {
         const code = sanitizeForSQL(req.params.vehicleCode);
         const { largoInteriorCm, anchoInteriorCm, altoInteriorCm, toleranciaExceso, notas } = req.body;
@@ -703,7 +705,7 @@ router.put('/truck-config/:vehicleCode', async (req, res) => {
 /**
  * GET /warehouse/personnel
  */
-router.get('/personnel', async (req, res) => {
+router.get('/personnel', verifyToken, async (req, res) => {
     try {
         // Get custom personnel from ALMACEN_PERSONAL
         const customRows = await cachedQuery(query, `
@@ -742,7 +744,7 @@ router.get('/personnel', async (req, res) => {
  * POST /warehouse/personnel
  * Body: { nombre, codigoVendedor?, rol?, telefono?, email? }
  */
-router.post('/personnel', async (req, res) => {
+router.post('/personnel', verifyToken, async (req, res) => {
     try {
         const { nombre, codigoVendedor, rol, telefono, email } = req.body;
         if (!nombre) return res.status(400).json({ error: 'nombre es obligatorio' });
@@ -768,7 +770,7 @@ router.post('/personnel', async (req, res) => {
 /**
  * PUT /warehouse/personnel/:id
  */
-router.put('/personnel/:id', async (req, res) => {
+router.put('/personnel/:id', verifyToken, async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         const { nombre, codigoVendedor, rol, telefono, email, activo } = req.body;
@@ -795,7 +797,7 @@ router.put('/personnel/:id', async (req, res) => {
 /**
  * POST /warehouse/personnel/:id/delete — Soft delete (ACTIVO = 'N')
  */
-router.post('/personnel/:id/delete', async (req, res) => {
+router.post('/personnel/:id/delete', verifyToken, async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         await queryWithParams(`UPDATE JAVIER.ALMACEN_PERSONAL SET ACTIVO = 'N', UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`, [id]);
@@ -813,7 +815,7 @@ router.post('/personnel/:id/delete', async (req, res) => {
 /**
  * GET /warehouse/articles?search=&onlyWithDimensions=true&limit=50
  */
-router.get('/articles', async (req, res) => {
+router.get('/articles', verifyToken, async (req, res) => {
     try {
         const { search, onlyWithDimensions, limit = 500 } = req.query;
         let where = "TRIM(A.CODIGOARTICULO) <> '' AND (A.ANOBAJA = 0 OR A.ANOBAJA IS NULL)";
@@ -828,14 +830,21 @@ router.get('/articles', async (req, res) => {
             'ALMACENADOR DE', 'P E D I R'
         ];
         for (const kw of garbageKeywords) {
-            where += ` AND UPPER(A.DESCRIPCIONARTICULO) NOT LIKE '%${kw}%'`;
+            where += ` AND UPPER(A.DESCRIPCIONARTICULO) NOT LIKE ?`;
         }
+
+        let queryParams = [];
+        for (const kw of garbageKeywords) {
+            queryParams.push(`%${kw}%`);
+        }
+
         where += " AND NOT (LENGTH(TRIM(A.CODIGOARTICULO)) = 1)";
         where += " AND TRIM(A.CODIGOARTICULO) NOT IN ('0000','0006','0022','0043','0045','0046','0047','0051','0053','0054','0056','0058','0061','0070','0071','D001','K')";
 
         if (search) {
-            const s = sanitizeForSQL(search.trim().toUpperCase());
-            where += ` AND (UPPER(TRIM(A.CODIGOARTICULO)) LIKE '%${s}%' OR UPPER(A.DESCRIPCIONARTICULO) LIKE '%${s}%')`;
+            const s = search.trim().toUpperCase();
+            where += ` AND (UPPER(TRIM(A.CODIGOARTICULO)) LIKE ? OR UPPER(A.DESCRIPCIONARTICULO) LIKE ?)`;
+            queryParams.push(`%${s}%`, `%${s}%`);
         }
         if (onlyWithDimensions === 'true') {
             where += ' AND D.CODIGOARTICULO IS NOT NULL';
@@ -850,7 +859,7 @@ router.get('/articles', async (req, res) => {
                 const y = now.getFullYear();
                 const m = now.getMonth() + 1;
                 const d = now.getDate();
-                const recentRows = await query(`
+                const recentRows = await queryWithParams(`
                     SELECT DISTINCT TRIM(LAC2.CODIGOARTICULO) AS ART_CODE
                     FROM DSEDAC.OPP OPP2
                     INNER JOIN DSEDAC.CPC CPC2
@@ -860,9 +869,9 @@ router.get('/articles', async (req, res) => {
                         ON CPC2.NUMEROALBARAN = LAC2.NUMEROALBARAN
                         AND CPC2.EJERCICIOALBARAN = LAC2.EJERCICIOALBARAN
                         AND TRIM(CPC2.SERIEALBARAN) = TRIM(LAC2.SERIEALBARAN)
-                    WHERE OPP2.ANOREPARTO = ${y} AND OPP2.MESREPARTO = ${m} AND OPP2.DIAREPARTO BETWEEN ${Math.max(1, d - 7)} AND ${d}
+                    WHERE OPP2.ANOREPARTO = ? AND OPP2.MESREPARTO = ? AND OPP2.DIAREPARTO BETWEEN ? AND ?
                     FETCH FIRST 2000 ROWS ONLY
-                `);
+                `, [y, m, Math.max(1, d - 7), d]);
                 recentArticleCodes = new Set(recentRows.map(r => (r.ART_CODE || '').trim()));
             } catch (e) {
                 logger.warn(`Recent articles query failed (non-blocking): ${e.message}`);
@@ -870,7 +879,8 @@ router.get('/articles', async (req, res) => {
             orderBy = 'CASE WHEN D.CODIGOARTICULO IS NOT NULL THEN 0 ELSE 1 END, A.CODIGOARTICULO';
         }
 
-        const rows = await query(`
+        let limitVal = parseInt(limit);
+        const rows = await queryWithParams(`
             SELECT TRIM(A.CODIGOARTICULO) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NOMBRE,
                    COALESCE(A.PESO, 0) AS PESO, COALESCE(A.UNIDADESCAJA, 1) AS UNIDADESCAJA,
                    D.LARGO_CM, D.ANCHO_CM, D.ALTO_CM, D.PESO_CAJA_KG, D.NOTAS
@@ -878,8 +888,8 @@ router.get('/articles', async (req, res) => {
             LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D ON TRIM(A.CODIGOARTICULO) = D.CODIGOARTICULO
             WHERE ${where}
             ORDER BY ${orderBy}
-            FETCH FIRST ${parseInt(limit)} ROWS ONLY
-        `);
+            FETCH FIRST ? ROWS ONLY
+        `, [...queryParams, limitVal]);
 
         const estimateFn = estimateBoxDimensions;
 
@@ -930,7 +940,7 @@ router.get('/articles', async (req, res) => {
 /**
  * GET /warehouse/article-dimensions/:code
  */
-router.get('/article-dimensions/:code', async (req, res) => {
+router.get('/article-dimensions/:code', verifyToken, async (req, res) => {
     try {
         const code = sanitizeForSQL(req.params.code.trim());
         const rows = await queryWithParams(`
@@ -971,7 +981,7 @@ router.get('/article-dimensions/:code', async (req, res) => {
  * PUT /warehouse/article-dimensions/:code
  * Body: { largoCm, anchoCm, altoCm, pesoCajaKg?, notas? }
  */
-router.put('/article-dimensions/:code', async (req, res) => {
+router.put('/article-dimensions/:code', verifyToken, async (req, res) => {
     try {
         const code = sanitizeForSQL(req.params.code.trim());
         const { largoCm, anchoCm, altoCm, pesoCajaKg, notas } = req.body;
@@ -1006,7 +1016,7 @@ router.put('/article-dimensions/:code', async (req, res) => {
  * POST /warehouse/article-dimensions/:code/delete
  * Elimina dimensiones reales de un artículo (vuelve a estimado)
  */
-router.post('/article-dimensions/:code/delete', async (req, res) => {
+router.post('/article-dimensions/:code/delete', verifyToken, async (req, res) => {
     try {
         const code = sanitizeForSQL(req.params.code.trim());
         await queryWithParams(`DELETE FROM JAVIER.ALMACEN_ART_DIMENSIONES WHERE CODIGOARTICULO = ?`, [code]);
@@ -1022,7 +1032,7 @@ router.post('/article-dimensions/:code/delete', async (req, res) => {
  * Elimina TODAS las dimensiones reales guardadas (vuelve todo a estimado)
  * Útil cuando se confirmaron dimensiones por error en masa
  */
-router.post('/articles/reset-all-dimensions', async (req, res) => {
+router.post('/articles/reset-all-dimensions', verifyToken, async (req, res) => {
     try {
         const countResult = await query(`SELECT COUNT(*) AS CNT FROM JAVIER.ALMACEN_ART_DIMENSIONES`);
         const total = parseInt(countResult[0]?.CNT) || 0;
@@ -1040,16 +1050,15 @@ router.post('/articles/reset-all-dimensions', async (req, res) => {
  * Proxy endpoint for vehicle photos — avoids Wikipedia User-Agent blocks in Flutter
  * Streams the image directly from Wikimedia Commons
  */
-router.get('/vehicle-photo/:code', async (req, res) => {
+router.get('/vehicle-photo/:code', verifyToken, async (req, res) => {
     try {
         const code = req.params.code.trim();
-        // Get vehicle description from DB
-        const rows = await cachedQuery(query, `
+        const rows = await cachedQuery(queryWithParams, `
             SELECT TRIM(V.DESCRIPCIONVEHICULO) AS DESC
             FROM DSEDAC.VEH V
-            WHERE TRIM(V.CODIGOVEHICULO) = '${sanitizeForSQL(code)}'
+            WHERE TRIM(V.CODIGOVEHICULO) = ?
             FETCH FIRST 1 ROWS ONLY
-        `, `warehouse:veh-desc:${code}`, TTL.LONG);
+        `, [code], `warehouse:veh-desc:${code}`, TTL.LONG);
 
         const desc = (rows[0]?.DESC || '').trim();
         const photoUrl = getVehiclePhotoUrl(desc);
@@ -1108,7 +1117,7 @@ router.get('/vehicle-photo/:code', async (req, res) => {
  * POST /warehouse/personnel/cleanup-test
  * Remove test personnel entries (like test_operario_script)
  */
-router.post('/personnel/cleanup-test', async (req, res) => {
+router.post('/personnel/cleanup-test', verifyToken, async (req, res) => {
     try {
         const result = await query(`
             UPDATE JAVIER.ALMACEN_PERSONAL
@@ -1127,7 +1136,7 @@ router.post('/personnel/cleanup-test', async (req, res) => {
  * POST /warehouse/articles/bulk-estimate
  * Auto-estimate and save dimensions for articles without real dimensions
  */
-router.post('/articles/bulk-estimate', async (req, res) => {
+router.post('/articles/bulk-estimate', verifyToken, async (req, res) => {
     try {
         const estimateFn = estimateBoxDimensions;
         const rows = await query(`
@@ -1170,7 +1179,7 @@ router.post('/articles/bulk-estimate', async (req, res) => {
 /**
  * GET /warehouse/truck/:vehicleCode/orders?year=&month=&day=
  */
-router.get('/truck/:vehicleCode/orders', async (req, res) => {
+router.get('/truck/:vehicleCode/orders', verifyToken, async (req, res) => {
     try {
         const code = sanitizeForSQL(req.params.vehicleCode);
         const now = new Date();
@@ -1178,7 +1187,7 @@ router.get('/truck/:vehicleCode/orders', async (req, res) => {
         const month = parseInt(req.query.month) || (now.getMonth() + 1);
         const day = parseInt(req.query.day) || now.getDate();
 
-        const rows = await query(`
+        const rows = await queryWithParams(`
       SELECT
         OPP.EJERCICIOORDENPREPARACION AS EJERCICIO,
         OPP.NUMEROORDENPREPARACION AS NUM_ORDEN,
@@ -1201,12 +1210,12 @@ router.get('/truck/:vehicleCode/orders', async (req, res) => {
       LEFT JOIN DSEDAC.ART A ON TRIM(LAC.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
       LEFT JOIN DSEDAC.CLI CLI ON TRIM(CPC.CODIGOCLIENTEALBARAN) = TRIM(CLI.CODIGOCLIENTE)
       LEFT JOIN JAVIER.ALMACEN_ART_DIMENSIONES D ON TRIM(LAC.CODIGOARTICULO) = D.CODIGOARTICULO
-      WHERE TRIM(OPP.CODIGOVEHICULO) = '${code}'
-        AND OPP.ANOREPARTO = ${year}
-        AND OPP.MESREPARTO = ${month}
-        AND OPP.DIAREPARTO = ${day}
+      WHERE TRIM(OPP.CODIGOVEHICULO) = ?
+        AND OPP.ANOREPARTO = ?
+        AND OPP.MESREPARTO = ?
+        AND OPP.DIAREPARTO = ?
       ORDER BY OPP.NUMEROORDENPREPARACION, TRIM(CPC.CODIGOCLIENTEALBARAN)
-    `);
+    `, [code, year, month, day]);
 
         res.json({
             vehicleCode: code,
@@ -1245,20 +1254,25 @@ router.get('/truck/:vehicleCode/orders', async (req, res) => {
 /**
  * GET /warehouse/load-history?vehicleCode=&limit=20
  */
-router.get('/load-history', async (req, res) => {
+router.get('/load-history', verifyToken, async (req, res) => {
     try {
         const { vehicleCode, dateFrom, dateTo, limit = 50 } = req.query;
         let where = '1=1';
+        let params = [];
         if (vehicleCode) {
-            where += ` AND H.CODIGOVEHICULO = '${sanitizeForSQL(vehicleCode)}'`;
+            where += ' AND H.CODIGOVEHICULO = ?';
+            params.push(vehicleCode);
         }
         if (dateFrom) {
-            where += ` AND H.FECHA_PLANIFICACION >= '${sanitizeForSQL(dateFrom)}'`;
+            where += ' AND H.FECHA_PLANIFICACION >= ?';
+            params.push(dateFrom);
         }
         if (dateTo) {
-            where += ` AND H.FECHA_PLANIFICACION <= '${sanitizeForSQL(dateTo)}'`;
+            where += ' AND H.FECHA_PLANIFICACION <= ?';
+            params.push(dateTo);
         }
-        const rows = await query(`
+        let limitVal = parseInt(limit);
+        const rows = await queryWithParams(`
             SELECT H.ID, H.CODIGOVEHICULO, H.FECHA_PLANIFICACION,
                    H.PESO_TOTAL_KG, H.VOLUMEN_TOTAL_CM3, H.PCT_VOLUMEN, H.PCT_PESO,
                    H.NUM_ORDENES, H.NUM_BULTOS, H.ESTADO, H.CREATED_BY, H.CREATED_AT,
@@ -1271,8 +1285,8 @@ router.get('/load-history', async (req, res) => {
             LEFT JOIN DSEDAC.VEH V ON TRIM(H.CODIGOVEHICULO) = TRIM(V.CODIGOVEHICULO)
             WHERE ${where}
             ORDER BY H.CREATED_AT DESC
-            FETCH FIRST ${parseInt(limit)} ROWS ONLY
-        `);
+            FETCH FIRST ? ROWS ONLY
+        `, [...params, limitVal]);
         res.json({
             history: rows.map(r => {
                 let detalles = null;
@@ -1311,16 +1325,21 @@ router.get('/load-history', async (req, res) => {
         try {
             const { vehicleCode, limit = 50 } = req.query;
             let where = '1=1';
-            if (vehicleCode) where = `CODIGOVEHICULO = '${sanitizeForSQL(vehicleCode)}'`;
-            const rows = await query(`
+            let params = [];
+            if (vehicleCode) {
+                where = 'CODIGOVEHICULO = ?';
+                params.push(vehicleCode);
+            }
+            let limitVal = parseInt(limit);
+            const rows = await queryWithParams(`
                 SELECT ID, CODIGOVEHICULO, FECHA_PLANIFICACION,
                        PESO_TOTAL_KG, VOLUMEN_TOTAL_CM3, PCT_VOLUMEN, PCT_PESO,
                        NUM_ORDENES, NUM_BULTOS, ESTADO, CREATED_BY, CREATED_AT
                 FROM JAVIER.ALMACEN_CARGA_HISTORICO
                 WHERE ${where}
                 ORDER BY CREATED_AT DESC
-                FETCH FIRST ${parseInt(limit)} ROWS ONLY
-            `);
+                FETCH FIRST ? ROWS ONLY
+            `, [...params, limitVal]);
             return res.json({
                 history: rows.map(r => ({
                     id: r.ID, vehicleCode: (r.CODIGOVEHICULO || '').trim(),
@@ -1350,7 +1369,7 @@ router.get('/load-history', async (req, res) => {
  * GET /warehouse/manual-layout/:vehicleCode/:date
  * Recupera el layout manual guardado para un camion y fecha
  */
-router.get('/manual-layout/:vehicleCode/:date', async (req, res) => {
+router.get('/manual-layout/:vehicleCode/:date', verifyToken, async (req, res) => {
     try {
         const code = sanitizeForSQL(req.params.vehicleCode.trim());
         const date = sanitizeForSQL(req.params.date.trim());
@@ -1399,7 +1418,7 @@ router.get('/manual-layout/:vehicleCode/:date', async (req, res) => {
  * Guardar o actualizar layout manual (upsert por vehicleCode + date)
  * Body: { vehicleCode, date, vendor?, layoutJson, metricsJson? }
  */
-router.post('/manual-layout', async (req, res) => {
+router.post('/manual-layout', verifyToken, async (req, res) => {
     try {
         const { vehicleCode, date, vendor, layoutJson, metricsJson } = req.body;
 
@@ -1450,7 +1469,7 @@ router.post('/manual-layout', async (req, res) => {
  * DELETE /warehouse/manual-layout/:id
  * Eliminar layout manual
  */
-router.post('/manual-layout/:id/delete', async (req, res) => {
+router.post('/manual-layout/:id/delete', verifyToken, async (req, res) => {
     try {
         const id = parseInt(req.params.id);
         if (isNaN(id)) return res.status(400).json({ error: 'ID invalido' });
@@ -1474,7 +1493,7 @@ router.post('/manual-layout/:id/delete', async (req, res) => {
  * GET /warehouse/config
  * Devuelve toda la configuración global del almacén
  */
-router.get('/config', async (req, res) => {
+router.get('/config', verifyToken, async (req, res) => {
     try {
         const rows = await query('SELECT CLAVE, VALOR, DESCRIPCION FROM JAVIER.ALMACEN_CONFIG_GLOBAL ORDER BY CLAVE');
         const config = {};
@@ -1499,7 +1518,7 @@ router.get('/config', async (req, res) => {
  * Body: { updates: { CLAVE: VALOR, ... } }
  * Actualiza configuración global (upsert por clave)
  */
-router.put('/config', async (req, res) => {
+router.put('/config', verifyToken, async (req, res) => {
     try {
         const { updates } = req.body;
         if (!updates || typeof updates !== 'object') {
@@ -1546,7 +1565,7 @@ router.put('/config', async (req, res) => {
  * POST /warehouse/config/seed
  * Inserta valores por defecto si no existen (idempotente)
  */
-router.post('/config/seed', async (req, res) => {
+router.post('/config/seed', verifyToken, async (req, res) => {
     try {
         const defaults = [
             { key: 'MAX_ALTURA_APILADO_CM', value: '150', desc: 'Altura máxima de apilado en cm' },
@@ -1562,8 +1581,9 @@ router.post('/config/seed', async (req, res) => {
         let inserted = 0;
         for (const d of defaults) {
             try {
-                await query(
-                    `INSERT INTO JAVIER.ALMACEN_CONFIG_GLOBAL (CLAVE, VALOR, DESCRIPCION, UPDATED_BY) VALUES ('${d.key}', '${d.value}', '${d.desc}', 'SYSTEM')`
+                await queryWithParams(
+                    `INSERT INTO JAVIER.ALMACEN_CONFIG_GLOBAL (CLAVE, VALOR, DESCRIPCION, UPDATED_BY) VALUES (?, ?, ?, ?)`,
+                    [d.key, d.value, d.desc, 'SYSTEM']
                 );
                 inserted++;
             } catch (e) {
@@ -1585,7 +1605,7 @@ router.post('/config/seed', async (req, res) => {
  * Body: { vehicleCode, year, month, day, metrics, placed, overflow }
  * Guarda explícitamente la carga actual al histórico
  */
-router.post('/save-load', async (req, res) => {
+router.post('/save-load', verifyToken, async (req, res) => {
     try {
         const { vehicleCode, year, month, day, metrics, placed, overflow } = req.body;
         if (!vehicleCode || !metrics) {
