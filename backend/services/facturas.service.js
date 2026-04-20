@@ -63,7 +63,7 @@ class FacturasService {
         }
 
         const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
-        const vendors = isAll ? [] : vendedorCodes.split(',').map(v => v.trim()).filter(v => v);
+        const vendors = isAll ? [] : vendedorCodes.split(',').map(v => v.trim()).filter(v => v && v !== 'UNK' && /^[A-Z0-9]+$/.test(v));
 
         const currentYear = year || new Date().getFullYear();
         const dateFilterApplied = dateFrom && dateTo;
@@ -237,7 +237,7 @@ class FacturasService {
             }
         }
 
-        const vendors = vendedorCodes.split(',').map(v => v.trim()).filter(v => v);
+        const vendors = vendedorCodes.split(',').map(v => v.trim()).filter(v => v && v !== 'UNK' && /^[A-Z0-9]+$/.test(v));
 
         const baseSql = `
       SELECT DISTINCT EJERCICIOFACTURA as YEAR
@@ -269,7 +269,7 @@ class FacturasService {
         }
 
         const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
-        const vendors = isAll ? [] : vendedorCodes.split(',').map(v => v.trim()).filter(v => v);
+        const vendors = isAll ? [] : vendedorCodes.split(',').map(v => v.trim()).filter(v => v && v !== 'UNK' && /^[A-Z0-9]+$/.test(v));
 
         const dateFilterApplied = dateFrom && dateTo;
         const dateFromInt = dateFilterApplied ? parseInt(dateFrom.replace(/-/g, '')) : null;
