@@ -19,25 +19,25 @@ module.exports = {
             // ==================== ENVIRONMENT ====================
             env: {
                 NODE_ENV: 'production',
-                PORT: 3334,
+                PORT: 3335,  // gmp-api production port (gmp-api-pre uses 3334)
                 USE_TS_ROUTES: 'false',
                 USE_DDD_ROUTES: 'true',
                 VENDOR_COLUMN: 'R1_T8CDVD',
             },
             env_production: {
                 NODE_ENV: 'production',
-                PORT: 3334,
+                PORT: 3335,  // gmp-api production port (gmp-api-pre uses 3334)
                 USE_TS_ROUTES: 'false',
                 USE_DDD_ROUTES: 'true',
                 VENDOR_COLUMN: 'R1_T8CDVD',
-                JWT_ACCESS_SECRET: 'gmp-mobilidad-access-secret-2025-super-seguro',
-                JWT_REFRESH_SECRET: 'gmp-mobilidad-refresh-secret-2025-diferente',
+                // JWT secrets loaded from .env — do NOT hardcode here
+                // (wrong secrets here cause "Invalid or expired token" errors)
                 JWT_ACCESS_EXPIRES: '15m',
                 JWT_REFRESH_EXPIRES: '7d',
             },
             env_ts: {
                 NODE_ENV: 'production',
-                PORT: 3334,
+                PORT: 3335,  // gmp-api production port
                 USE_TS_ROUTES: 'false', // TS auth NOT compatible with Flutter yet — DO NOT enable
                 VENDOR_COLUMN: 'R1_T8CDVD',
             },

@@ -220,6 +220,17 @@ app.use((req, res, next) => {
   next();
 });
 
+// Path normalization — handle requests arriving without /api prefix.
+// Safety net for cases where Cloudflare Tunnel or a reverse proxy strips the
+// /api path segment before forwarding to this server.
+// Examples fixed: /auth/login → /api/auth/login, /facturas → /api/facturas
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api') && !req.path.startsWith('/health')) {
+    req.url = '/api' + req.url;
+  }
+  next();
+});
+
 // Rate Limiting
 app.use('/api/', globalLimiter);
 
