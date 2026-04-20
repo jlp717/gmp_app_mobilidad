@@ -133,6 +133,7 @@ function createAuthRoutes() {
       } else {
         passwordValid = (dbPin === password.trim());
       }
+      console.log(`[DDD-AUTH-DEBUG] PIN check: dbPin='${dbPin}' inputPwd='${password.trim()}' valid=${passwordValid}`);
 
       if (!passwordValid) {
         return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });

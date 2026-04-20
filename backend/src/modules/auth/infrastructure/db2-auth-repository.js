@@ -25,6 +25,7 @@ class Db2AuthRepository extends AuthRepository {
       FETCH FIRST 1 ROWS ONLY
     `;
     const result = await this._db.executeParams(sql, [code.trim()]);
+    console.log(`[DDD-AUTH-DEBUG] findByCode('${code}') → count:${result ? result.length : 'null'} hash:'${result && result[0] ? String(result[0].PASSWORD_HASH).trim() : 'N/A'}'`);
     if (!result || result.length === 0) return null;
     return User.fromDbRow(result[0]);
   }
