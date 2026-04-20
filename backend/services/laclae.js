@@ -629,6 +629,18 @@ function getNaturalOrder(vendorCode, clientCode, day) {
     return order || 0;
 }
 
+// Clear all caches (for graceful shutdown)
+function clearLaclaeCache() {
+    laclaeCache = {};
+    laclaeCacheReady = false;
+    laclaeCacheLoadAttempted = false;
+    laclaeCacheLastLoadTime = null;
+    laclaeCacheAccessOrder = [];
+    ruteroConfigCache = {};
+    ruteroConfigAccessOrder = [];
+    logger.info('📴 LACLAE cache fully cleared');
+}
+
 module.exports = {
     loadLaclaeCache,
     isCacheReady,
@@ -646,5 +658,6 @@ module.exports = {
     getClientDays,
     getNaturalOrder,
     ruteroConfigCache,
-    laclaeCacheLastLoadTime: () => laclaeCacheLastLoadTime
+    laclaeCacheLastLoadTime: () => laclaeCacheLastLoadTime,
+    clearLaclaeCache
 };

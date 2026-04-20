@@ -782,15 +782,7 @@ const gracefulShutdown = async (signal) => {
     logger.warn(`📴 Auth cleanup error: ${e.message}`);
   }
   
-  // 6. Stop rate limiter cleanup interval
-  try {
-    if (globalLimiter && typeof globalLimiter.stopCleanup === 'function') {
-      globalLimiter.stopCleanup();
-      logger.info('📴 Rate limiter cleanup stopped');
-    }
-  } catch (e) {
-    logger.warn(`📴 Rate limiter cleanup error: ${e.message}`);
-  }
+  // 6. Rate limiter (security.js globalLimiter is express-rate-limit, no stopCleanup needed)
   
   logger.info('📴 Graceful shutdown complete');
   process.exit(0);
