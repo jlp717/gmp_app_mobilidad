@@ -208,6 +208,24 @@ class ApiClient {
     // OPTIMIZATION: Parse JSON in background isolate
     dio.transformer = IsolateTransformer();
 
+    // Stamp the current auth token directly into each request's own headers.
+    // This makes the stale-token detection in _handleError reliable:
+    // requestOptions.headers['Authorization'] will reflect the token that was
+    // in use AT THE MOMENT the request was created, not the current token.
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          final token = _savedAuthToken;
+          if (token != null) {
+            options.headers['Authorization'] = 'Bearer $token';
+          } else {
+            options.headers.remove('Authorization');
+          }
+          handler.next(options);
+        },
+      ),
+    );
+
     // Add retry interceptor
     dio.interceptors.add(_RetryInterceptor(dio, _maxRetries, _retryDelay));
 

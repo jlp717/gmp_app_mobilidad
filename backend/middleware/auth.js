@@ -117,26 +117,40 @@ function verifyTokenData(token, secret, ttlMs) {
     
     const expectedSig = crypto.createHmac('sha256', secret).update(data).digest('hex');
     
-    if (sig.length !== expectedSig.length) return null;
+    if (sig.length !== expectedSig.length) {
+        logger.warn('[AUTH-DEBUG] Token rejected: sig length mismatch (wrong secret?)');
+        return null;
+    }
     
     try {
         const sigBuffer = Buffer.from(sig, 'hex');
         const expectedBuffer = Buffer.from(expectedSig, 'hex');
         
-        if (!crypto.timingSafeEqual(sigBuffer, expectedBuffer)) return null;
+        if (!crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
+            logger.warn('[AUTH-DEBUG] Token rejected: SIGNATURE MISMATCH (secret changed after token was issued?)');
+            return null;
+        }
     } catch (e) {
+        logger.warn(`[AUTH-DEBUG] Token rejected: HMAC comparison error: ${e.message}`);
         return null;
     }
     
     try {
         const payload = JSON.parse(Buffer.from(data, 'base64').toString('utf8'));
-        if (!payload.timestamp) return null;
+        if (!payload.timestamp) {
+            logger.warn('[AUTH-DEBUG] Token rejected: no timestamp field');
+            return null;
+        }
         
         const age = Date.now() - payload.timestamp;
-        if (age > ttlMs) return null;
+        if (age > ttlMs) {
+            logger.warn(`[AUTH-DEBUG] Token rejected: EXPIRED age=${age}ms ttl=${ttlMs}ms user=${payload.user || '?'}`);
+            return null;
+        }
         
         return payload;
     } catch (e) {
+        logger.warn(`[AUTH-DEBUG] Token rejected: JSON parse error: ${e.message}`);
         return null;
     }
 }
