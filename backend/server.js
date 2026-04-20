@@ -716,14 +716,14 @@ app.use((err, req, res, next) => {
 
 // Prevent crashes from unhandled exceptions (like header errors)
 process.on('uncaughtException', (err) => {
-  logger.error(`🔥 UNCAUGHT EXCEPTION: ${err.message}`, { stack: err.stack });
+  console.error(`🔥 UNCAUGHT EXCEPTION: ${err.message}`, err.stack);
   if (err.code !== 'ERR_HTTP_HEADERS_SENT') {
     // process.exit(1); // Let PM2 restart for critical state corruption
   }
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  logger.error(`🔥 UNHANDLED REJECTION: ${reason}`);
+  console.error(`🔥 UNHANDLED REJECTION: ${reason}`);
   process.exit(1);
 });
 
