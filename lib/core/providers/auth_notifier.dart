@@ -126,6 +126,31 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     return _tryAutoLogin();
   }
 
+  /// Returns true if the JWT token is expired (checks 'exp' claim locally)
+  bool _isTokenExpired(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return true;
+      // Decode base64url payload (pad to multiple of 4)
+      var payload = parts[1].replaceAll('-', '+').replaceAll('_', '/');
+      switch (payload.length % 4) {
+        case 2: payload += '=='; break;
+        case 3: payload += '='; break;
+        default: break;
+      }
+      final decoded = utf8.decode(base64.decode(payload));
+      final data = jsonDecode(decoded) as Map<String, dynamic>;
+      final exp = data['exp'];
+      if (exp == null) return false;
+      final expSeconds = exp is int ? exp : int.tryParse(exp.toString()) ?? 0;
+      return DateTime.now().isAfter(
+        DateTime.fromMillisecondsSinceEpoch(expSeconds * 1000),
+      );
+    } catch (_) {
+      return true; // can't decode → treat as expired
+    }
+  }
+
   /// Attempt to restore session from storage
   Future<AuthState> _tryAutoLogin() async {
     try {
@@ -135,6 +160,14 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       final codes = prefs.getStringList('vendedor_codes');
 
       if (token != null && userDataStr != null) {
+        // Check token expiry BEFORE restoring session to avoid a burst of 401s
+        if (_isTokenExpired(token)) {
+          debugPrint('[AuthNotifier] Stored token expired — clearing session');
+          await SecureStorage.deleteSecureData('user_token');
+          await SecureStorage.deleteSecureData('user_data');
+          await prefs.remove('vendedor_codes');
+          return const AuthState(isInitialized: true);
+        }
         ApiClient.setAuthToken(token);
         final user = UserModel.fromJson(
           jsonDecode(userDataStr) as Map<String, dynamic>,
