@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 /// Si la imagen no está disponible (ej. 404), muestra un gradiente con el código del producto
 /// o sus iniciales, eliminando el fallo visual y manteniendo la UX.
 class SmartProductImage extends StatelessWidget {
-
   const SmartProductImage({
-    required this.imageUrl, required this.productCode, super.key,
+    required this.imageUrl,
+    required this.productCode,
+    super.key,
     this.productName,
     this.width = double.infinity,
     this.height = double.infinity,
@@ -31,6 +32,9 @@ class SmartProductImage extends StatelessWidget {
       return _buildFallback();
     }
 
+    final cacheW = width.isFinite ? (width * 2).toInt() : null;
+    final cacheH = height.isFinite ? (height * 2).toInt() : null;
+
     return ClipRRect(
       borderRadius: borderRadius ?? BorderRadius.circular(8),
       child: Image.network(
@@ -39,8 +43,8 @@ class SmartProductImage extends StatelessWidget {
         width: width,
         height: height,
         fit: fit,
-        cacheWidth: (width * 2).toInt(),
-        cacheHeight: (height * 2).toInt(),
+        cacheWidth: cacheW,
+        cacheHeight: cacheH,
         errorBuilder: (context, error, stackTrace) {
           // La imagen ha dado 404 o fetch failed. Reemplazar por contenedor premium.
           return _buildFallback();
