@@ -6,7 +6,11 @@
  */
 
 // Load environment variables FIRST, before any other module
-require('dotenv').config();
+// Use explicit path to ensure .env is found regardless of CWD
+const path = require('path');
+require('dotenv').config({
+  path: path.resolve(__dirname, '.env')
+});
 
 const express = require('express');
 const cors = require('cors');

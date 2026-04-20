@@ -15,6 +15,7 @@ class ApiClient {
   static const int _maxRetries = 3;
   static const Duration _retryDelay = Duration(seconds: 1);
   static bool _isInitialized = false;
+  static String? _savedAuthToken;
 
   /// Pending requests map for request deduplication
   /// Prevents duplicate API calls when multiple widgets request the same data
@@ -214,8 +215,12 @@ class ApiClient {
 
   /// Reinitialize Dio (useful when base URL changes)
   static void reinitialize() {
+    final token = _savedAuthToken;
     _dio = null;
     _pendingRequests.clear();
+    if (token != null) {
+      setAuthToken(token);
+    }
   }
 
   /// Intenta reconectar a otro servidor disponible
@@ -249,11 +254,13 @@ class ApiClient {
 
   /// Set authentication token
   static void setAuthToken(String token) {
+    _savedAuthToken = token;
     dio.options.headers['Authorization'] = 'Bearer $token';
   }
 
   /// Clear authentication token
   static void clearAuthToken() {
+    _savedAuthToken = null;
     dio.options.headers.remove('Authorization');
   }
 
