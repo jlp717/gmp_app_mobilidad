@@ -7,7 +7,7 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 
 const getLogLevel = () => {
     if (NODE_ENV === 'production') {
-        return 'warn';
+        return 'info'; // changed from 'warn' — startup messages must be visible
     }
     if (NODE_ENV === 'staging') {
         return 'info';
