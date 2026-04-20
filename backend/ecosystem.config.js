@@ -30,6 +30,10 @@ module.exports = {
                 USE_TS_ROUTES: 'false',
                 USE_DDD_ROUTES: 'true',
                 VENDOR_COLUMN: 'R1_T8CDVD',
+                JWT_ACCESS_SECRET: 'gmp-mobilidad-access-secret-2025-super-seguro',
+                JWT_REFRESH_SECRET: 'gmp-mobilidad-refresh-secret-2025-diferente',
+                JWT_ACCESS_EXPIRES: '15m',
+                JWT_REFRESH_EXPIRES: '7d',
             },
             env_ts: {
                 NODE_ENV: 'production',
