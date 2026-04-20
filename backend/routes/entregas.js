@@ -53,7 +53,13 @@ const storage = multer.diskStorage({
         cb(null, `entrega-${uniqueSuffix}${ext}`);
     }
 });
-const upload = multer({ storage: storage });
+const upload = multer({ 
+    storage: storage,
+    limits: {
+        fileSize: 5 * 1024 * 1024, // 5MB max
+        files: 1 // Max 1 file per request
+    }
+});
 const moment = require('moment'); // Ensure moment is available
 
 // --- HELPER: Get Gamification Stats (Real DB) ---

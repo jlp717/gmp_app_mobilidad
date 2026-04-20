@@ -40,9 +40,7 @@ const SMTP_CONFIG = {
     tls: {
         rejectUnauthorized: false
     },
-    pool: false,
-    maxConnections: 3,
-    maxMessages: 50
+    logger: false
 };
 
 // Fallback ports to try when primary fails (in order)

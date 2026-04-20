@@ -910,25 +910,35 @@ router.post('/debug/set-estado', async (req, res) => {
 router.get('/debug/list-estados', async (req, res) => {
     try {
         const limit = Math.min(parseInt(req.query.limit) || 50, 200);
-        const vendedorCode = (req.query.vendedorCode || '').trim();
-        
-        let sql = `
-            SELECT ID, NUMEROPEDIDO, SERIE, CODIGOCLIENTE, ESTADO, IMPORTETOTAL, 
-                   DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO
-            FROM JAVIER.PEDIDOS_CAB
-        `;
-        
+        const vendedorCode = (req.query.vendedorCode || '').replace(/[^a-zA-Z0-9]/g, '').trim();
+
+        let sql;
+        let params;
+
         if (vendedorCode) {
-            sql += ` WHERE TRIM(CODIGOVENDEDOR) = '${vendedorCode}'`;
+            sql = `
+                SELECT ID, NUMEROPEDIDO, SERIE, CODIGOCLIENTE, ESTADO, IMPORTETOTAL,
+                       DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO
+                FROM JAVIER.PEDIDOS_CAB
+                WHERE TRIM(CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
+                ORDER BY ID DESC FETCH FIRST ${limit} ROWS ONLY
+            `;
+            params = [vendedorCode];
+        } else {
+            sql = `
+                SELECT ID, NUMEROPEDIDO, SERIE, CODIGOCLIENTE, ESTADO, IMPORTETOTAL,
+                       DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO
+                FROM JAVIER.PEDIDOS_CAB
+                ORDER BY ID DESC FETCH FIRST ${limit} ROWS ONLY
+            `;
+            params = [];
         }
-        
-        sql += ` ORDER BY ID DESC FETCH FIRST ${limit} ROWS ONLY`;
-        
-        const rows = await queryWithParams(sql, [], false);
+
+        const rows = await queryWithParams(sql, params, false);
         res.json({ success: true, pedidos: rows });
     } catch (error) {
         logger.error(`[DEBUG] Error list-estados: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Internal server error' });
     }
 });
 

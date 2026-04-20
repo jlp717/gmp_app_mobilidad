@@ -317,11 +317,10 @@ function sanitizeQuery(queryObj) {
 // =============================================================================
 // Cleanup function for memory management
 function cleanup() {
-    // Clear audit ring buffer
+    const _logger = require('./logger');
     auditRingBuffer.length = 0;
-    // Clear sessions
     activeSessions.clear();
-    logger.info('[AUDIT] Cleanup complete');
+    _logger.info('[AUDIT] Cleanup complete');
 }
 
 module.exports = {

@@ -22,7 +22,8 @@ const {
     reloadRuteroConfig,
     loadLaclaeCache,
     getClientCurrentDay,
-    getNaturalOrder
+    getNaturalOrder,
+    laclaeCacheLastLoadTime
 } = require('../services/laclae');
 const { sendAuditEmail, sendAuditEmailNow } = require('../services/emailService');
 
@@ -131,7 +132,8 @@ router.get('/rutero/week', async (req, res) => {
             try {
                     const todayClients = cachedCounts[todayName] || 0;
                     if (todayClients > 0) {
-                        const cleanCodes = vendedorCodes ? vendedorCodes.split(',').map(c => c.trim()) : [];
+                            const UNK_SENTINEL = new Set(['UNK', 'NONE', 'NULL', 'N/A', '0', '', 'undefined', 'null']);
+                            const cleanCodes = vendedorCodes ? vendedorCodes.split(',').map(c => c.trim()).filter(c => !UNK_SENTINEL.has(c.toUpperCase())) : [];
                         let deliveredToday = 0;
                         if (cleanCodes.length > 0) {
                             // HYBRID approach: Count from ERP data (primary) + App status (supplement)
@@ -854,6 +856,8 @@ router.post('/rutero/reload-cache', async (req, res) => {
 
 // =============================================================================
 // RUTERO DAY - DIRECT DB QUERY (NO CACHE) - For refresh button
+// NOTE: This endpoint intentionally reloads cache to ensure fresh data.
+// For normal requests, use /rutero/day/:day which uses cached data.
 // =============================================================================
 router.get('/rutero/day-direct/:day', async (req, res) => {
     try {
@@ -873,9 +877,15 @@ router.get('/rutero/day-direct/:day', async (req, res) => {
         
         logger.info(`[RUTERO DAY DIRECT] Query without cache for ${vendedorCodes} on ${normalizedDay}`);
         
-        // First, reload the cache to ensure we have latest data
-        await loadLaclaeCache();
-        await reloadRuteroConfig();
+        // FIX: Only reload if cache is stale (>5 min old), otherwise use cached data
+        // The cache reload was causing 15-20 second delays on EVERY request
+        const shouldReload = !laclaeCacheLastLoadTime || (Date.now() - laclaeCacheLastLoadTime > 5 * 60 * 1000);
+        
+        if (shouldReload) {
+            logger.info('[RUTERO DAY DIRECT] Cache stale, reloading...');
+            await loadLaclaeCache();
+            await reloadRuteroConfig();
+        }
         
         // Now use the fresh cache
         const shouldIgnoreOverrides = ignoreOverrides === 'true' || ignoreOverrides === '1' || ignoreOverrides === true;
@@ -1146,7 +1156,7 @@ router.get('/rutero/day/:day', async (req, res) => {
         const clientsHash = crypto.createHash('md5').update(safeClientFilter).digest('hex');
         const cacheTTL = TTL.MEDIUM; // 5 minutes
 
-        // A. Client Details
+        // Parallelize all heavy queries for maximum performance
         const detailsSql = `
             SELECT 
                 CODIGOCLIENTE as CODE,
@@ -1159,9 +1169,6 @@ router.get('/rutero/day/:day', async (req, res) => {
             WHERE CODIGOCLIENTE IN (${safeClientFilter})
               AND (ANOBAJA = 0 OR ANOBAJA IS NULL)
         `;
-        const clientDetailsRows = await cachedQuery(query, detailsSql, `rutero:details:v3:${clientsHash}`, TTL.LONG);
-
-        // B. Current Sales (Heavy)
         const currentSalesSql = `
             SELECT 
                 L.LCCDCL as CODE,
@@ -1174,46 +1181,18 @@ router.get('/rutero/day/:day', async (req, res) => {
               AND (L.LCMMDC < ${endMonthCurrent} OR (L.LCMMDC = ${endMonthCurrent} AND L.LCDDDC <= ${endDayCurrent}))
             GROUP BY L.LCCDCL
         `;
-        const currentSalesRows = await cachedQuery(query, currentSalesSql, `rutero:sales:v2:${currentYear}:${endMonthCurrent}:${endDayCurrent}:${clientsHash}`, cacheTTL);
-
-        // Map Sales Data
-        const currentSalesMap = new Map();
-        currentSalesRows.forEach(r => {
-            currentSalesMap.set(r.CODE.trim(), {
-                sales: parseFloat(r.SALES) || 0,
-                cost: parseFloat(r.COST) || 0
-            });
-        });
-
-        // C. Prev Sales (Heavy)
-        let prevYearRows = [];
-        if (endMonthPrevious > 0) {
-            const prevSalesSql = `
-                SELECT 
-                    L.LCCDCL as CODE,
-                    SUM(L.LCIMVT) as SALES,
-                    SUM(L.LCIMCT) as COST
-                FROM DSED.LACLAE L
-                WHERE L.LCCDCL IN (${safeClientFilter})
-                  AND L.LCAADC = ${previousYear}
-                  AND ${LACLAE_SALES_FILTER}
-                  AND (L.LCMMDC < ${endMonthPrevious} OR (L.LCMMDC = ${endMonthPrevious} AND L.LCDDDC <= ${endDayPrevious}))
-                GROUP BY L.LCCDCL
-            `;
-            prevYearRows = await cachedQuery(query, prevSalesSql, `rutero:sales:v2:${previousYear}:${endMonthPrevious}:${endDayPrevious}:${clientsHash}`, cacheTTL);
-        }
-
-        const prevYearMap = new Map();
-        prevYearRows.forEach(r => {
-            prevYearMap.set(r.CODE.trim(), {
-                sales: parseFloat(r.SALES) || 0,
-                cost: parseFloat(r.COST) || 0
-            });
-        });
-
-        // C2. TOTAL Prev Year Sales (Full Year) - To determine if client is "NEW" vs just no sales in period
-        // A client is "NEW" only if they had ZERO sales in the ENTIRE previous year
-        let prevYearTotalMap = new Map();
+        const prevSalesSql = endMonthPrevious > 0 ? `
+            SELECT 
+                L.LCCDCL as CODE,
+                SUM(L.LCIMVT) as SALES,
+                SUM(L.LCIMCT) as COST
+            FROM DSED.LACLAE L
+            WHERE L.LCCDCL IN (${safeClientFilter})
+              AND L.LCAADC = ${previousYear}
+              AND ${LACLAE_SALES_FILTER}
+              AND (L.LCMMDC < ${endMonthPrevious} OR (L.LCMMDC = ${endMonthPrevious} AND L.LCDDDC <= ${endDayPrevious}))
+            GROUP BY L.LCCDCL
+        ` : null;
         const prevYearTotalSql = `
             SELECT 
                 L.LCCDCL as CODE,
@@ -1224,9 +1203,68 @@ router.get('/rutero/day/:day', async (req, res) => {
               AND ${LACLAE_SALES_FILTER}
             GROUP BY L.LCCDCL
         `;
-        const prevYearTotalRows = await cachedQuery(query, prevYearTotalSql, `rutero:sales:total:${previousYear}:${clientsHash}`, TTL.LONG);
+        const gpsSql = `
+            SELECT CODIGO, LATITUD, LONGITUD
+            FROM DSEMOVIL.CLIENTES
+            WHERE CODIGO IN (${safeClientFilter})
+              AND LATITUD IS NOT NULL AND LATITUD <> 0
+        `;
+        const notesSql = `
+            SELECT CLIENT_CODE, OBSERVACIONES, MODIFIED_BY
+            FROM JAVIER.CLIENT_NOTES
+            WHERE CLIENT_CODE IN (${safeClientFilter})
+        `;
+
+        // Execute all queries in parallel
+        const [
+            clientDetailsRows,
+            currentSalesRows,
+            prevYearRowsResult,
+            prevYearTotalRows,
+            gpsResult,
+            notesResult
+        ] = await Promise.all([
+            cachedQuery(query, detailsSql, `rutero:details:v3:${clientsHash}`, TTL.LONG),
+            cachedQuery(query, currentSalesSql, `rutero:sales:v2:${currentYear}:${endMonthCurrent}:${endDayCurrent}:${clientsHash}`, cacheTTL),
+            prevSalesSql ? cachedQuery(query, prevSalesSql, `rutero:sales:v2:${previousYear}:${endMonthPrevious}:${endDayPrevious}:${clientsHash}`, cacheTTL) : Promise.resolve([]),
+            cachedQuery(query, prevYearTotalSql, `rutero:sales:total:${previousYear}:${clientsHash}`, TTL.LONG),
+            cachedQuery(query, gpsSql, `rutero:gps:v3:${clientsHash}`, TTL.LONG).catch(e => { logger.warn(`GPS query failed: ${e.message}`); return []; }),
+            cachedQuery(query, notesSql, `rutero:notes:v1:${clientsHash}`, TTL.SHORT).catch(e => { logger.warn(`Notes query failed: ${e.message}`); return []; })
+        ]);
+
+        // Build maps from results
+        const prevYearRows = prevYearRowsResult || [];
+        const currentSalesMap = new Map();
+        currentSalesRows.forEach(r => {
+            currentSalesMap.set(r.CODE.trim(), {
+                sales: parseFloat(r.SALES) || 0,
+                cost: parseFloat(r.COST) || 0
+            });
+        });
+        const prevYearMap = new Map();
+        prevYearRows.forEach(r => {
+            prevYearMap.set(r.CODE.trim(), {
+                sales: parseFloat(r.SALES) || 0,
+                cost: parseFloat(r.COST) || 0
+            });
+        });
+        const prevYearTotalMap = new Map();
         prevYearTotalRows.forEach(r => {
             prevYearTotalMap.set(r.CODE.trim(), parseFloat(r.SALES) || 0);
+        });
+        const gpsMap = new Map();
+        gpsResult.forEach(g => {
+            gpsMap.set(g.CODIGO?.trim() || '', {
+                lat: parseFloat(g.LATITUD) || null,
+                lon: parseFloat(g.LONGITUD) || null
+            });
+        });
+        const notesMap = new Map();
+        (notesResult || []).forEach(n => {
+            notesMap.set(n.CLIENT_CODE?.trim(), {
+                text: n.OBSERVACIONES,
+                modifiedBy: n.MODIFIED_BY
+            });
         });
 
         // Merge Data
@@ -1239,44 +1277,6 @@ router.get('/rutero/day/:day', async (req, res) => {
                 COST: salesData.cost
             };
         });
-
-        // D. GPS (Cacheable)
-        let gpsMap = new Map();
-        try {
-            const gpsSql = `
-                SELECT CODIGO, LATITUD, LONGITUD
-                FROM DSEMOVIL.CLIENTES
-                WHERE CODIGO IN (${safeClientFilter})
-                  AND LATITUD IS NOT NULL AND LATITUD <> 0
-            `;
-            const gpsResult = await cachedQuery(query, gpsSql, `rutero:gps:v3:${clientsHash}`, TTL.LONG);
-            gpsResult.forEach(g => {
-                gpsMap.set(g.CODIGO?.trim() || '', {
-                    lat: parseFloat(g.LATITUD) || null,
-                    lon: parseFloat(g.LONGITUD) || null
-                });
-            });
-        } catch (e) {
-            logger.warn(`Could not load GPS data: ${e.message}`);
-        }
-
-        // E. Client Notes (No Cache - Realtime)
-        let notesMap = new Map();
-        try {
-            const notesRows = await query(`
-                SELECT CLIENT_CODE, OBSERVACIONES, MODIFIED_BY
-                FROM JAVIER.CLIENT_NOTES
-                WHERE CLIENT_CODE IN (${safeClientFilter})
-            `, false, false);
-            notesRows.forEach(n => {
-                notesMap.set(n.CLIENT_CODE?.trim(), {
-                    text: n.OBSERVACIONES,
-                    modifiedBy: n.MODIFIED_BY
-                });
-            });
-        } catch (e) {
-            // Table may not exist yet
-        }
 
         // Retrieve custom order from cache if possible, or query
         const primaryVendor = vendedorCodes ? vendedorCodes.split(',')[0].trim() : '';

@@ -221,7 +221,7 @@ app.post('/api/auth/refresh', async (req, res) => {
     if (!refreshToken) {
       return res.status(400).json({ error: 'refreshToken required' });
     }
-    const tokens = refreshTokenManager.rotateToken(refreshToken);
+    const tokens = await refreshTokenManager.rotateToken(refreshToken);
     res.json(tokens);
   } catch (err) {
     if (err.name === 'TokenError') {
@@ -754,6 +754,27 @@ const gracefulShutdown = async (signal) => {
     logger.info('📴 LACLAE memory cache cleared');
   } catch (e) {
     logger.warn(`📴 LACLAE cache clear error: ${e.message}`);
+  }
+  
+  // 5. Stop auth session cleanup interval
+  try {
+    const auth = require('./middleware/auth');
+    if (auth.stopSessionCleanup) {
+      auth.stopSessionCleanup();
+      logger.info('📴 Auth session cleanup stopped');
+    }
+  } catch (e) {
+    logger.warn(`📴 Auth cleanup error: ${e.message}`);
+  }
+  
+  // 6. Stop rate limiter cleanup interval
+  try {
+    if (globalLimiter && globalLimiter.stopCleanup) {
+      globalLimiter.stopCleanup();
+      logger.info('📴 Rate limiter cleanup stopped');
+    }
+  } catch (e) {
+    logger.warn(`📴 Rate limiter cleanup error: ${e.message}`);
   }
   
   logger.info('📴 Graceful shutdown complete');

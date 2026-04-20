@@ -307,7 +307,7 @@ if (clientInfo.length === 0) {
     }
 
     // OPTIMIZED: Execute ALL detail queries in PARALLEL for 6x speedup
-    const [editableNotesResult, salesSummaryResult, monthlyTrendResult, topProductsResult, paymentStatusResult] = await Promise.all([
+    const queryResults = await Promise.all([
       // Query 1: Editable observations
       (async () => {
         try {
@@ -374,17 +374,14 @@ if (clientInfo.length === 0) {
         FROM DSEDAC.CVC CVC
         WHERE CVC.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND CVC.ANOEMISION >= ${MIN_YEAR}
       `),
-    ]).then(results => {
-      // Parse results
-      const notes = results[0];
-      return {
-        notes: notes ? { text: notes.OBSERVACIONES, modifiedBy: notes.MODIFIED_BY, modifiedAt: notes.MODIFIED_AT } : null,
-        salesSummary: results[1]?.[0] || {},
-        monthlyTrend: results[2] || [],
-        topProducts: results[3] || [],
-        paymentStatus: results[4]?.[0] || {}
-      };
-    });
+    ]);
+
+    // Transform raw results into structured format
+    const editableNotes = queryResults[0];
+    const salesSummary = queryResults[1]?.[0] || {};
+    const monthlyTrend = queryResults[2] || [];
+    const topProducts = queryResults[3] || [];
+    const paymentStatusResult = queryResults[4]?.[0] || {};
 
     // Payment status from CVC with CAC cross-validation
     // CVC tracks payment/vencimiento records; CAC has the actual invoice totals.
@@ -415,7 +412,7 @@ if (clientInfo.length === 0) {
     }
 
     const c = clientInfo[0];
-    const s = salesSummary[0] || {};
+    const s = salesSummary;
     const p = paymentStatus[0] || {};
 
     // Build phone list for WhatsApp feature

@@ -128,15 +128,18 @@ class _MainShellState extends ConsumerState<MainShell> {
     showDialog(
       context: context,
       barrierDismissible: !isMandatory,
-      builder: (context) => WillPopScope(
-        onWillPop: () async => !isMandatory,
+      builder: (context) => PopScope(
+        canPop: !isMandatory,
         child: AlertDialog(
           title: Text(
             isMandatory
                 ? 'Actualización Obligatoria'
                 : 'Actualización Disponible',
             style: const TextStyle(
-                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20,),
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+            ),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -153,9 +156,10 @@ class _MainShellState extends ConsumerState<MainShell> {
                 const Text(
                   'Esta actualización es necesaria para garantizar la integridad de los datos y el correcto funcionamiento.',
                   style: TextStyle(
-                      color: Colors.orange,
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,),
+                    color: Colors.orange,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ],
@@ -165,14 +169,18 @@ class _MainShellState extends ConsumerState<MainShell> {
             if (!isMandatory)
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('MÁS TARDE',
-                    style: TextStyle(color: Colors.white54),),
+                child: const Text(
+                  'MÁS TARDE',
+                  style: TextStyle(color: Colors.white54),
+                ),
               )
             else
               const TextButton(
                 onPressed: SystemNavigator.pop,
-                child: Text('CERRAR APP',
-                    style: TextStyle(color: AppTheme.error),),
+                child: Text(
+                  'CERRAR APP',
+                  style: TextStyle(color: AppTheme.error),
+                ),
               ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -181,7 +189,8 @@ class _MainShellState extends ConsumerState<MainShell> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),),
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               onPressed: () {
                 launchUrl(
@@ -189,8 +198,10 @@ class _MainShellState extends ConsumerState<MainShell> {
                   mode: LaunchMode.externalApplication,
                 );
               },
-              child: const Text('ACTUALIZAR AHORA',
-                  style: TextStyle(fontWeight: FontWeight.bold),),
+              child: const Text(
+                'ACTUALIZAR AHORA',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         ),
@@ -240,10 +251,12 @@ class _MainShellState extends ConsumerState<MainShell> {
       debugPrint('[MainShell] _fetchRepartidores: calling API...');
       final res = await ApiClient.getList('/auth/repartidores');
       debugPrint(
-          '[MainShell] _fetchRepartidores: got ${res.length} items, type=${res.runtimeType}',);
+        '[MainShell] _fetchRepartidores: got ${res.length} items, type=${res.runtimeType}',
+      );
       if (res.isNotEmpty) {
         debugPrint(
-            '[MainShell] First item: ${res.first} (type=${res.first.runtimeType})',);
+          '[MainShell] First item: ${res.first} (type=${res.first.runtimeType})',
+        );
       }
       if (!mounted) return;
       setState(() {
@@ -270,16 +283,21 @@ class _MainShellState extends ConsumerState<MainShell> {
                     'Desconocido',
               };
             })
-            .where((item) =>
-                item['code'] != null && item['code'].toString().isNotEmpty,)
+            .where(
+              (item) =>
+                  item['code'] != null && item['code'].toString().isNotEmpty,
+            )
             .toList();
 
         // Sort by code ascending
-        _repartidoresOptions.sort((a, b) => (a['code']?.toString() ?? '')
-            .compareTo(b['code']?.toString() ?? ''),);
+        _repartidoresOptions.sort(
+          (a, b) => (a['code']?.toString() ?? '')
+              .compareTo(b['code']?.toString() ?? ''),
+        );
 
         debugPrint(
-            '[MainShell] _fetchRepartidores: mapped ${_repartidoresOptions.length} options',);
+          '[MainShell] _fetchRepartidores: mapped ${_repartidoresOptions.length} options',
+        );
         _isLoadingRepartidores = false;
       });
     } catch (e, stack) {
@@ -301,12 +319,14 @@ class _MainShellState extends ConsumerState<MainShell> {
     );
 
     return navItems
-        .map((item) => _NavItem(
-              icon: item.icon,
-              selectedIcon: item.selectedIcon,
-              label: item.label,
-              color: item.color,
-            ),)
+        .map(
+          (item) => _NavItem(
+            icon: item.icon,
+            selectedIcon: item.selectedIcon,
+            label: item.label,
+            color: item.color,
+          ),
+        )
         .toList();
   }
 
@@ -340,7 +360,8 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     // PERFORMANCE: Use select() to only rebuild when vendedorCodes changes
     final vendedorCodes = ref.watch(
-        authProvider.select((state) => state.value?.vendedorCodes ?? []),);
+      authProvider.select((state) => state.value?.vendedorCodes ?? []),
+    );
     final navItems = _getNavItems(isJefeVentas, vendedorCodes);
     final safeIndex = _currentIndex.clamp(0, navItems.length - 1);
     final useBottomNav = Responsive.useBottomNav(context);
@@ -479,9 +500,10 @@ class _MainShellState extends ConsumerState<MainShell> {
                   child: Text(
                     user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
                     style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,),
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -563,10 +585,15 @@ class _MainShellState extends ConsumerState<MainShell> {
             const Divider(color: Colors.white10),
             // Logout
             ListTile(
-              leading: const Icon(Icons.logout_rounded,
-                  color: AppTheme.error, size: 20,),
-              title: const Text('Cerrar Sesión',
-                  style: TextStyle(color: AppTheme.error, fontSize: 13),),
+              leading: const Icon(
+                Icons.logout_rounded,
+                color: AppTheme.error,
+                size: 20,
+              ),
+              title: const Text(
+                'Cerrar Sesión',
+                style: TextStyle(color: AppTheme.error, fontSize: 13),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 ref.read(authProvider.notifier).logout();
@@ -605,7 +632,8 @@ class _MainShellState extends ConsumerState<MainShell> {
                         color: AppTheme.surfaceColor,
                         border: Border(
                           right: BorderSide(
-                              color: Colors.white.withOpacity(0.05),),
+                            color: Colors.white.withOpacity(0.05),
+                          ),
                         ),
                       ),
                       child: Column(
@@ -664,19 +692,26 @@ class _MainShellState extends ConsumerState<MainShell> {
                   decoration: BoxDecoration(
                     color: AppTheme.surfaceColor,
                     border: Border(
-                        right: BorderSide(
-                            color: Colors.white.withOpacity(0.05),),),
+                      right: BorderSide(
+                        color: Colors.white.withOpacity(0.05),
+                      ),
+                    ),
                   ),
                   child: Center(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          vertical: 20, horizontal: 4,),
+                        vertical: 20,
+                        horizontal: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: AppTheme.neonBlue.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(Icons.chevron_right_rounded,
-                          color: AppTheme.neonBlue, size: 16,),
+                      child: const Icon(
+                        Icons.chevron_right_rounded,
+                        color: AppTheme.neonBlue,
+                        size: 16,
+                      ),
                     ),
                   ),
                 ),
@@ -757,8 +792,11 @@ class _MainShellState extends ConsumerState<MainShell> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const Icon(Icons.arrow_drop_down,
-                  color: Colors.white54, size: 18,),
+              const Icon(
+                Icons.arrow_drop_down,
+                color: Colors.white54,
+                size: 18,
+              ),
             ],
           ),
           itemBuilder: (context) => [
@@ -1064,11 +1102,14 @@ class _MainShellState extends ConsumerState<MainShell> {
             children: [
               Icon(Icons.visibility, color: AppTheme.neonBlue, size: 16),
               SizedBox(width: 8),
-              Text('Ver Como',
-                  style: TextStyle(
-                      color: Colors.white70,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,),),
+              Text(
+                'Ver Como',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                ),
+              ),
             ],
           ),
           const SizedBox(width: 16),
@@ -1083,27 +1124,37 @@ class _MainShellState extends ConsumerState<MainShell> {
               child: _isLoadingRepartidores
                   ? const Center(
                       child: SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: AppTheme.neonPurple,),),)
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppTheme.neonPurple,
+                        ),
+                      ),
+                    )
                   : DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: _selectedRepartidor,
-                        hint: const Text('Seleccionar Repartidor',
-                            style: TextStyle(color: Colors.white54),),
+                        hint: const Text(
+                          'Seleccionar Repartidor',
+                          style: TextStyle(color: Colors.white54),
+                        ),
                         isExpanded: true,
                         dropdownColor: AppTheme.surfaceColor,
-                        icon: const Icon(Icons.keyboard_arrow_down,
-                            color: AppTheme.neonPurple,),
+                        icon: const Icon(
+                          Icons.keyboard_arrow_down,
+                          color: AppTheme.neonPurple,
+                        ),
                         style:
                             const TextStyle(color: Colors.white, fontSize: 13),
                         items: [
                           const DropdownMenuItem(
-                              value: 'ALL',
-                              child: Text('Todos los Repartidores',
-                                  style:
-                                      TextStyle(fontWeight: FontWeight.bold),),),
+                            value: 'ALL',
+                            child: Text(
+                              'Todos los Repartidores',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
                           ..._repartidoresOptions.map((r) {
                             return DropdownMenuItem(
                               value: r['code'].toString(),
@@ -1202,8 +1253,9 @@ class _MainShellState extends ConsumerState<MainShell> {
         }
         if (label == 'Rutero') {
           return RepartidorRuteroPage(
-              repartidorId: effectiveRepartidorId,
-              repartidorNames: repNamesMap,);
+            repartidorId: effectiveRepartidorId,
+            repartidorNames: repNamesMap,
+          );
         }
         if (label == 'Comisiones') {
           return const ComingSoonPlaceholder(
@@ -1216,9 +1268,10 @@ class _MainShellState extends ConsumerState<MainShell> {
         }
         if (label == 'Histórico') {
           return RepartidorHistoricoPage(
-              repartidorId: effectiveRepartidorId,
-              initialClientId: _pendingClientId,
-              initialClientName: _pendingClientName,);
+            repartidorId: effectiveRepartidorId,
+            initialClientId: _pendingClientId,
+            initialClientName: _pendingClientName,
+          );
         }
         if (label == 'Chat IA') {
           return const ComingSoonPlaceholder(
@@ -1237,7 +1290,8 @@ class _MainShellState extends ConsumerState<MainShell> {
         children: List.generate(navItems.length, (idx) {
           return KeyedSubtree(
             key: ValueKey(
-                'rutero_view_${effectiveRepartidorId}_${idx}_${_pendingClientId ?? ""}',),
+              'rutero_view_${effectiveRepartidorId}_${idx}_${_pendingClientId ?? ""}',
+            ),
             child: pageForIndex(idx),
           );
         }),
@@ -1294,7 +1348,8 @@ class _MainShellState extends ConsumerState<MainShell> {
       switch (label) {
         case 'Clientes':
           return SimpleClientListPage(
-              employeeCode: empCode,);
+            employeeCode: empCode,
+          );
         case 'Ruta':
           return RuteroPage(employeeCode: empCode);
         case 'Objetivos':
@@ -1325,14 +1380,15 @@ class _MainShellState extends ConsumerState<MainShell> {
     return LazyIndexedStack(
       index: _currentIndex,
       children: List.generate(
-          comercialNav.length, comercialPageForIndex,),
+        comercialNav.length,
+        comercialPageForIndex,
+      ),
     );
   }
 }
 
 // Helper class for nav items
 class _NavItem {
-
   _NavItem({
     required this.icon,
     required this.selectedIcon,
@@ -1347,7 +1403,6 @@ class _NavItem {
 
 // Futuristic Logout Confirmation Dialog
 class _LogoutConfirmationDialog extends StatelessWidget {
-
   const _LogoutConfirmationDialog({required this.userName});
   final String userName;
 
@@ -1495,8 +1550,11 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.logout_rounded,
-                                  color: Colors.white, size: 18,),
+                              Icon(
+                                Icons.logout_rounded,
+                                color: Colors.white,
+                                size: 18,
+                              ),
                               SizedBox(width: 8),
                               Text(
                                 'Salir',

@@ -351,7 +351,12 @@ class EntregasNotifier extends Notifier<EntregasState> {
   bool _initialLoadDone = false;
 
   @override
-  EntregasState build() => EntregasState();
+  EntregasState build() {
+    ref.onDispose(() {
+      _debounceTimer?.cancel();
+    });
+    return EntregasState();
+  }
 
   void _debouncedLoad() {
     _debounceTimer?.cancel();

@@ -3,6 +3,7 @@
  * Prevents abuse while allowing legitimate heavy usage (JEFE ALL queries)
  */
 
+const logger = require('../../../../middleware/logger');
 const rateLimitStore = new Map();
 
 const ROLE_LIMITS = {
@@ -37,6 +38,27 @@ class AdvancedRateLimiter {
     this._ipStore = new Map();
     this._endpointStore = new Map();
     this._concurrentStore = new Map();
+    this._cleanupInterval = null;
+  }
+
+  /**
+   * Start periodic cleanup
+   */
+  startCleanup() {
+    if (this._cleanupInterval) return; // Already running
+    this._cleanupInterval = setInterval(() => this.cleanup(), 300000);
+    logger.info('[RateLimiter] Cleanup interval started');
+  }
+
+  /**
+   * Stop periodic cleanup - call on shutdown
+   */
+  stopCleanup() {
+    if (this._cleanupInterval) {
+      clearInterval(this._cleanupInterval);
+      this._cleanupInterval = null;
+      logger.info('[RateLimiter] Cleanup interval stopped');
+    }
   }
 
   /**
@@ -147,8 +169,8 @@ class AdvancedRateLimiter {
    * Express middleware
    */
   middleware() {
-    // Cleanup every 5 minutes
-    setInterval(() => this.cleanup(), 300000);
+    // Start cleanup interval if not already running
+    this.startCleanup();
 
     return (req, res, next) => {
       const role = req.user?.role || 'COMERCIAL';

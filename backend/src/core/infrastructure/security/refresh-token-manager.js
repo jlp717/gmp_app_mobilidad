@@ -287,9 +287,9 @@ class RefreshTokenManager {
     };
     const encodedHeader = Buffer.from(JSON.stringify(header)).toString('base64url');
     const encodedPayload = Buffer.from(JSON.stringify(tokenPayload)).toString('base64url');
-    const secret = process.env.JWT_SECRET;
+    const secret = process.env.JWT_ACCESS_SECRET;
     if (!secret || secret === 'default-secret' || secret.length < 32) {
-      throw new Error('JWT_SECRET environment variable is required and must be at least 32 characters.');
+      throw new Error('JWT_ACCESS_SECRET environment variable is required and must be at least 32 characters.');
     }
     const signature = crypto
       .createHmac('sha256', secret)

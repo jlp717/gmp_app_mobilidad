@@ -2632,9 +2632,20 @@ class _ReorderDialogState extends State<ReorderDialog> {
   }
 
   @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _confirmDiscard,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (!didPop) {
+          await _confirmDiscard();
+        }
+      },
       child: Dialog(
         insetPadding: const EdgeInsets.all(10),
         backgroundColor: AppTheme.darkBase,

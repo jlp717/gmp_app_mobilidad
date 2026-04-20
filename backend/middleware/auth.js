@@ -11,18 +11,24 @@ const logger = require('./logger');
 // CONFIGURATION
 // =============================================================================
 
-const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || crypto.randomBytes(32).toString('hex');
-const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || crypto.randomBytes(32).toString('hex');
-
-// SECURITY: Warn but allow production with auto-generated secrets
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const isProduction = NODE_ENV === 'production';
 
 if (isProduction && !process.env.JWT_ACCESS_SECRET) {
-    logger.warn('[AUTH] ⚠️ Using auto-generated JWT_ACCESS_SECRET in production');
+    throw new Error('[AUTH] FATAL: JWT_ACCESS_SECRET must be set in production. Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
 }
 if (isProduction && !process.env.JWT_REFRESH_SECRET) {
-    logger.warn('[AUTH] ⚠️ Using auto-generated JWT_REFRESH_SECRET in production');
+    throw new Error('[AUTH] FATAL: JWT_REFRESH_SECRET must be set in production. Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+}
+
+const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || crypto.randomBytes(32).toString('hex');
+const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || crypto.randomBytes(32).toString('hex');
+
+if (!isProduction && !process.env.JWT_ACCESS_SECRET) {
+    logger.warn('[AUTH] ⚠️ JWT_ACCESS_SECRET not set — using ephemeral secret (dev only, all sessions reset on restart)');
+}
+if (!isProduction && !process.env.JWT_REFRESH_SECRET) {
+    logger.warn('[AUTH] ⚠️ JWT_REFRESH_SECRET not set — using ephemeral secret (dev only, all sessions reset on restart)');
 }
 
 if (ACCESS_SECRET.length < 32) {
@@ -42,26 +48,53 @@ const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
 // =============================================================================
 
 const activeSessions = new Map();
+let sessionCleanupInterval = null;
 
-setInterval(() => {
-    const now = Date.now();
-    let cleanedCount = 0;
-    
-    for (const [userId, sessions] of activeSessions.entries()) {
-        const validSessions = sessions.filter(s => s.expiresAt > now);
-        if (validSessions.length !== sessions.length) {
-            activeSessions.set(userId, validSessions);
-            cleanedCount += sessions.length - validSessions.length;
+function startSessionCleanup() {
+    if (sessionCleanupInterval) return; // Already running
+    sessionCleanupInterval = setInterval(() => {
+        const now = Date.now();
+        let cleanedCount = 0;
+        
+        for (const [userId, sessions] of activeSessions.entries()) {
+            const validSessions = sessions.filter(s => s.expiresAt > now);
+            if (validSessions.length !== sessions.length) {
+                activeSessions.set(userId, validSessions);
+                cleanedCount += sessions.length - validSessions.length;
+            }
+            if (validSessions.length === 0) {
+                activeSessions.delete(userId);
+            }
         }
-        if (validSessions.length === 0) {
-            activeSessions.delete(userId);
+        
+        if (cleanedCount > 0) {
+            logger.info(`[AUTH] Cleaned up ${cleanedCount} expired sessions`);
         }
+    }, SESSION_CLEANUP_INTERVAL_MS);
+}
+
+function stopSessionCleanup() {
+    if (sessionCleanupInterval) {
+        clearInterval(sessionCleanupInterval);
+        sessionCleanupInterval = null;
+        logger.info('[AUTH] Session cleanup stopped');
     }
-    
-    if (cleanedCount > 0) {
-        logger.info(`[AUTH] Cleaned up ${cleanedCount} expired sessions`);
-    }
-}, SESSION_CLEANUP_INTERVAL_MS);
+}
+
+startSessionCleanup();
+
+// Graceful shutdown helper - call this on server shutdown
+function shutdown() {
+    stopSessionCleanup();
+    activeSessions.clear();
+    logger.info('[AUTH] Auth subsystem shut down');
+}
+
+module.exports = {
+    shutdown,
+    stopSessionCleanup,
+    startSessionCleanup
+};
 
 // =============================================================================
 // TOKEN SIGNING & VERIFICATION

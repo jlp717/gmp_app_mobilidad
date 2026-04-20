@@ -3,22 +3,69 @@ const { getPool } = require('../config/db');
 
 // LACLAE Cache for fast visit/delivery day lookups
 // Structure: { vendedor: { clientCode: { visitDays: [], deliveryDays: [] } } }
+// PRODUCTION-READY: LRU eviction with MAX_ENTRIES limit to prevent memory exhaustion
+const MAX_CACHE_ENTRIES = 50000; // Max vendor-client pairs (50k entries ~ 50-100MB)
+const MAX_CONFIG_ENTRIES = 10000; // Max rutero config entries
 let laclaeCache = {};
 let laclaeCacheReady = false;
-let laclaeCacheLoadAttempted = false; // P2: Singleton - never try to reload after first attempt
+let laclaeCacheLoadAttempted = false;
+let laclaeCacheLastLoadTime = null;
+let laclaeCacheAccessOrder = []; // LRU tracking: [vendor-client-key, ...]
+let ruteroConfigCache = {};
+let ruteroConfigAccessOrder = []; // LRU tracking for config
+
+// Evict oldest entries when cache exceeds limit
+function evictLaclaeCache(maxEntries) {
+    while (laclaeCacheAccessOrder.length > maxEntries) {
+        const oldest = laclaeCacheAccessOrder.shift();
+        if (oldest) {
+            const [vendor, client] = oldest.split('::');
+            if (vendor && client && laclaeCache[vendor]) {
+                delete laclaeCache[vendor][client];
+                if (Object.keys(laclaeCache[vendor]).length === 0) {
+                    delete laclaeCache[vendor];
+                }
+            }
+        }
+    }
+}
+
+function evictRuteroConfigCache(maxEntries) {
+    while (ruteroConfigAccessOrder.length > maxEntries) {
+        const oldest = ruteroConfigAccessOrder.shift();
+        if (oldest) {
+            const [vendor, client] = oldest.split('::');
+            if (vendor && client && ruteroConfigCache[vendor]) {
+                delete ruteroConfigCache[vendor][client];
+                if (Object.keys(ruteroConfigCache[vendor]).length === 0) {
+                    delete ruteroConfigCache[vendor];
+                }
+            }
+        }
+    }
+}
+
+// Track access for LRU
+function trackLaclaeAccess(vendor, client) {
+    const key = `${vendor}::${client}`;
+    const idx = laclaeCacheAccessOrder.indexOf(key);
+    if (idx !== -1) laclaeCacheAccessOrder.splice(idx, 1);
+    laclaeCacheAccessOrder.push(key);
+    evictLaclaeCache(MAX_CACHE_ENTRIES);
+}
+
+function trackRuteroConfigAccess(vendor, client) {
+    const key = `${vendor}::${client}`;
+    const idx = ruteroConfigAccessOrder.indexOf(key);
+    if (idx !== -1) ruteroConfigAccessOrder.splice(idx, 1);
+    ruteroConfigAccessOrder.push(key);
+    evictRuteroConfigCache(MAX_CONFIG_ENTRIES);
+}
 
 // P2: Prevent reload - once attempted, stay in same state
 function isCacheReady() {
     return laclaeCacheReady;
 }
-
-// Load LACLAE visit/delivery data into memory cache
-// Rutero Configuration Cache (Overrides)
-// Structure: { clientCode: { day: 'lunes', order: 1, vendedor: 'XX' } }
-// Note: clientCode is unique enough, but technically a client could be visited by multiple vendors?
-// Assuming JAVIER.RUTERO_CONFIG is per pair VENDEDOR-CLIENTE.
-// Structure: { vendor: { clientCode: { day: 'lunes', order: 1 } } }
-let ruteroConfigCache = {};
 
 async function loadRuteroConfigCache(conn) {
     try {
@@ -217,6 +264,7 @@ async function loadLaclaeCache() {
 
             logger.info(`📅 LACLAE/CDVI cache loaded: ${vendorCount} vendors, ${totalClients} clients in ${duration}ms`);
             laclaeCacheReady = true;
+            laclaeCacheLastLoadTime = Date.now();
 
         } finally {
             await conn.close();
@@ -597,5 +645,6 @@ module.exports = {
     getClientCurrentDay,
     getClientDays,
     getNaturalOrder,
-    ruteroConfigCache
+    ruteroConfigCache,
+    laclaeCacheLastLoadTime: () => laclaeCacheLastLoadTime
 };

@@ -7,7 +7,6 @@ final appRouterProvider = Provider<AppRouter>((ref) {
 });
 
 class AppRouter {
-
   AppRouter() {
     _initPages();
   }
@@ -103,7 +102,7 @@ class AppRouter {
   List<PageConfig> getPagesForUser(UserModel? user) {
     if (user == null) return [];
 
-    final role = user.role ?? '';
+    final role = user.role;
 
     return pages.values
         .where((page) => page.allowedRoles.contains(role))
@@ -123,7 +122,7 @@ class AppRouter {
 
   int getDefaultIndex(UserModel? user) {
     if (user == null) return 0;
-    final role = user.role ?? '';
+    final role = user.role;
 
     switch (role) {
       case 'JEFE_VENTAS':
@@ -154,7 +153,6 @@ class AppRouter {
 }
 
 class PageConfig {
-
   const PageConfig({
     required this.route,
     required this.title,

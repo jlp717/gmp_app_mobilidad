@@ -20,7 +20,7 @@ const DB_UID_FINAL = DB_UID || 'JAVIER';
 const DB_PWD_FINAL = DB_PWD || (NODE_ENV === 'development' ? 'JAVIER' : '');
 
 // OPTIMIZED: Connection pool settings for better performance
-const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID_FINAL};PWD=${DB_PWD_FINAL};NAM=1;CCSID=1208;
+const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID_FINAL};PWD=${DB_PWD_FINAL};NAM=1;CCSID=1208;CMPTDM=1;
     CPOOLMAX=${parseInt(process.env.ODBC_POOL_MAX) || 20};
     CPOOLMIN=${parseInt(process.env.ODBC_POOL_MIN) || 3};
     CPTOUT=${parseInt(process.env.ODBC_TIMEOUT) || 60};

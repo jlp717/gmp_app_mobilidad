@@ -9,6 +9,9 @@ build/
 .env
 .env.local
 .env.production
+.env.produccion
+.env.*.local
+.env.*
 
 # Logs
 logs/

@@ -1231,9 +1231,18 @@ router.get('/history/delivery-summary/:repartidorId', async (req, res) => {
 // =============================================================================
 router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, res) => {
     try {
-        const { year, serie, terminal, number } = req.params;
+        const { year, terminal, number } = req.params;
+        const parsedYear = parseInt(year);
+        const parsedTerminal = parseInt(terminal);
+        const parsedNumber = parseInt(number);
+        if (!parsedYear || !parsedNumber) {
+            return res.status(400).json({ success: false, error: 'Parámetros year/number/terminal inválidos' });
+        }
+        const SENTINEL_SERIES = new Set(['UNK', 'NONE', 'NULL', 'N/A', '0', 'undefined', 'null']);
+        const rawSerie = req.params.serie || '';
+        const serie = SENTINEL_SERIES.has(rawSerie.toUpperCase()) ? '' : rawSerie.replace(/[^A-Z0-9]/gi, '').substring(0, 3);
 
-        logger.info(`[PDF] Generating Albaran PDF: ${year}-${serie}-${terminal}-${number}`);
+        logger.info(`[PDF] Generating Albaran PDF: ${parsedYear}-${serie}-${parsedTerminal}-${parsedNumber}`);
 
         // 1. Fetch Header from CAC + IVA breakdown from CPC
         const headers = await queryWithParams(`
@@ -1250,12 +1259,12 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
                 TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA
             FROM DSEDAC.CAC CAC
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
-            WHERE CAC.NUMEROALBARAN = ? 
-              AND TRIM(CAC.SERIEALBARAN) = ? 
+            WHERE CAC.NUMEROALBARAN = ?
+              AND (? = '' OR TRIM(CAC.SERIEALBARAN) = ?)
               AND CAC.EJERCICIOALBARAN = ?
               AND CAC.TERMINALALBARAN = ?
             FETCH FIRST 1 ROW ONLY
-        `, [number, (serie || '').trim(), year, terminal], false);
+        `, [parsedNumber, serie, serie, parsedYear, parsedTerminal], false);
 
         if (!headers || headers.length === 0) {
             return res.status(404).json({ success: false, error: 'Albarán no encontrado' });
@@ -1303,12 +1312,12 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
               AND LAC.TERMINALALBARAN = ?
               AND LAC.NUMEROALBARAN = ?
             ORDER BY LAC.SECUENCIA
-        `, [year, (serie || '').trim(), terminal, number], false) || [];
+        `, [parsedYear, serie, parsedTerminal, parsedNumber], false) || [];
 
         // 3. Try to get signature - comprehensive cascade lookup
         let signatureBase64 = null;
         let signatureSource = null;
-        const albId = `${year}-${serie.trim()}-${terminal}-${number}`;
+        const albId = `${parsedYear}-${serie}-${parsedTerminal}-${parsedNumber}`;
 
         // Step 3a: Check DELIVERY_STATUS for FIRMA_PATH
         try {
@@ -1342,7 +1351,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
                       AND RE.EJERCICIO_ALBARAN = ?
                       AND TRIM(RE.SERIE_ALBARAN) = ?
                     FETCH FIRST 1 ROW ONLY
-                `, [number, year, serie.trim()], false);
+                `, [parsedNumber, parsedYear, serie], false);
                 if (firmaRows.length > 0 && firmaRows[0].FIRMA_BASE64) {
                     signatureBase64 = firmaRows[0].FIRMA_BASE64;
                     signatureSource = 'REPARTIDOR_FIRMAS';
@@ -1363,7 +1372,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
                       AND TERMINALALBARAN = ?
                       AND NUMEROALBARAN = ?
                     FETCH FIRST 1 ROW ONLY
-                `, [year, serie.trim(), terminal, number], false);
+                `, [parsedYear, serie, parsedTerminal, parsedNumber], false);
                 if (cacRows.length > 0 && cacRows[0].FIRMABASE64) {
                     let b64 = cacRows[0].FIRMABASE64;
                     b64 = b64.replace(/^data:image\/\w+;base64,/, '');
@@ -1381,7 +1390,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
         // 4. Generate PDF with optional signature (documentType = albaran)
         const buffer = await generateInvoicePDF({ header, lines, signatureBase64, signatureSource, documentType: 'albaran' });
 
-        const safeFilename = `Albaran_${year}_${serie}_${number}.pdf`.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const safeFilename = `Albaran_${parsedYear}_${serie}_${parsedNumber}.pdf`.replace(/[^a-zA-Z0-9._-]/g, '_');
         res.set({
             'Content-Type': 'application/pdf',
             'Content-Disposition': `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(safeFilename)}`,
@@ -1914,9 +1923,17 @@ router.get('/history/:repartidorId', async (req, res) => {
 // =============================================================================
 router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
     try {
-        const { year, serie, number } = req.params;
-        // Optional query params for albaran-level fallback lookup
+        const { year, number } = req.params;
         const { albaranNumber, albaranSerie, albaranTerminal, albaranYear } = req.query;
+
+        const parsedYear = parseInt(req.params.year);
+        const parsedNumber = parseInt(req.params.number);
+        if (!parsedYear || !parsedNumber) {
+            return res.status(400).json({ success: false, error: 'Parámetros year/number inválidos' });
+        }
+        const SENTINEL_SERIES = new Set(['UNK', 'NONE', 'NULL', 'N/A', '0', 'undefined', 'null']);
+        const rawSerie = req.params.serie || '';
+        const serie = SENTINEL_SERIES.has(rawSerie.toUpperCase()) ? '' : rawSerie.replace(/[^A-Z0-9]/gi, '').substring(0, 3);
 
         logger.info(`[PDF] Generating Invoice PDF: ${year}-${serie}-${number} (albaran fallback: ${albaranNumber || 'none'})`);
 
@@ -1934,44 +1951,49 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
                 TRIM(COALESCE(CLI.CODIGOPOSTAL, '')) as CPCLIENTEFACTURA,
                 TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA`;
 
-        // 1A. Primary: Try by NUMEROFACTURA/SERIEFACTURA/EJERCICIOFACTURA
         let headers = await queryWithParams(`
             SELECT ${headerCols}
             FROM DSEDAC.CAC CAC
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
-            WHERE CAC.NUMEROFACTURA = ? 
-              AND TRIM(CAC.SERIEFACTURA) = ? 
+            WHERE CAC.NUMEROFACTURA = ?
+              AND (? = '' OR TRIM(CAC.SERIEFACTURA) = ?)
               AND CAC.EJERCICIOFACTURA = ?
             FETCH FIRST 1 ROW ONLY
-        `, [number, (serie || '').trim(), year], false);
+        `, [parsedNumber, serie, serie, parsedYear], false);
 
-        // 1B. Fallback: Try by albaran fields if factura query failed
-        if ((!headers || headers.length === 0) && albaranNumber) {
-            logger.info(`[PDF] Factura query returned 0 rows, trying albaran fallback: ${albaranYear || year}-${albaranSerie || serie}-${albaranTerminal || 0}-${albaranNumber}`);
-            headers = await queryWithParams(`
-                SELECT ${headerCols}
-                FROM DSEDAC.CAC CAC
-                LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
-                WHERE CAC.NUMEROALBARAN = ? 
-                  AND TRIM(CAC.SERIEALBARAN) = ?
-                  AND CAC.EJERCICIOALBARAN = ?
-                  AND CAC.TERMINALALBARAN = ?
-                FETCH FIRST 1 ROW ONLY
-            `, [albaranNumber, (albaranSerie || serie || '').trim(), albaranYear || year, albaranTerminal || 0], false);
-        }
+        const parsedAlbaranNumber = parseInt(albaranNumber);
+        const parsedAlbaranYear = parseInt(albaranYear || year);
+        const parsedAlbaranTerminal = parseInt(albaranTerminal || 0);
+        const albaranSerieNorm = albaranNumber
+            ? (SENTINEL_SERIES.has((albaranSerie || '').toUpperCase()) ? '' : (albaranSerie || '').replace(/[^A-Z0-9]/gi, '').substring(0, 3))
+            : null;
 
-        // 1C. Last resort: Try factura number as albaran number (Flutter may pass albaran number)
-        if (!headers || headers.length === 0) {
-            logger.info(`[PDF] Both queries failed, trying albaran-as-number fallback: ${year}-${serie}-${number}`);
+        if ((!headers || headers.length === 0) && parsedAlbaranNumber) {
+            logger.info(`[PDF] Factura query returned 0 rows, trying albaran fallback: ${parsedAlbaranYear}-${albaranSerieNorm}-${parsedAlbaranTerminal}-${parsedAlbaranNumber}`);
             headers = await queryWithParams(`
                 SELECT ${headerCols}
                 FROM DSEDAC.CAC CAC
                 LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
                 WHERE CAC.NUMEROALBARAN = ?
-                  AND TRIM(CAC.SERIEALBARAN) = ?
+                  AND (? = '' OR TRIM(CAC.SERIEALBARAN) = ?)
+                  AND CAC.EJERCICIOALBARAN = ?
+                  AND CAC.TERMINALALBARAN = ?
+                FETCH FIRST 1 ROW ONLY
+            `, [parsedAlbaranNumber, albaranSerieNorm, albaranSerieNorm, parsedAlbaranYear, parsedAlbaranTerminal], false);
+        }
+
+        // 1C. Last resort: Try factura number as albaran number (Flutter may pass albaran number)
+        if (!headers || headers.length === 0) {
+            logger.info(`[PDF] Both queries failed, trying albaran-as-number fallback: ${parsedYear}-${serie}-${parsedNumber}`);
+            headers = await queryWithParams(`
+                SELECT ${headerCols}
+                FROM DSEDAC.CAC CAC
+                LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
+                WHERE CAC.NUMEROALBARAN = ?
+                  AND (? = '' OR TRIM(CAC.SERIEALBARAN) = ?)
                   AND CAC.EJERCICIOALBARAN = ?
                 FETCH FIRST 1 ROW ONLY
-            `, [number, (serie || '').trim(), year], false);
+            `, [parsedNumber, serie, serie, parsedYear], false);
         }
 
         if (!headers || headers.length === 0) {

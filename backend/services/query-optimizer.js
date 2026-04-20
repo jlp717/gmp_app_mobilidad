@@ -159,7 +159,7 @@ async function cachedQuery(queryFn, sql, cacheKey, ttl = TTL.MEDIUM) {
     // Try cache first
     const cached = await redisCache.get('query', cacheKey);
     if (cached) {
-        logger.info(`[QueryOptimizer] 📦 Cache HIT: ${cacheKey}`);
+        logger.debug(`[QueryOptimizer] Cache HIT: ${cacheKey}`);
         return cached;
     }
 

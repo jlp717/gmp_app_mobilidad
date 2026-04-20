@@ -1783,7 +1783,9 @@ router.get('/by-client', async (req, res) => {
         let objectiveConfigMap = new Map();
         let defaultObjectiveData = { percentage: 10 };
         let fixedTargetsMap = new Map();
-        const vendorCodesArray = vendedorCodes ? vendedorCodes.split(',').map(v => v.trim()) : [];
+        const vendorCodesArray = vendedorCodes
+            ? vendedorCodes.split(',').map(v => v.replace(/[^a-zA-Z0-9]/g, '').trim()).filter(Boolean)
+            : [];
 
         if (retrievedCodes.length > 0) {
             // Parallelize 3 independent queries: prevSales + OBJ_CONFIG + COMMERCIAL_TARGETS

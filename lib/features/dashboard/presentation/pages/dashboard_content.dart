@@ -346,8 +346,6 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
 
       if (!mounted) return;
 
-      if (!mounted) return;
-
       // Safe type conversion for API response
       final matrixData = Map<String, dynamic>.from(results[0] as Map);
       final rawList = matrixData['rows'] ?? [];
@@ -655,7 +653,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                   _clientsDisponibles.clear();
                 });
                 await _loadClients();
-                _fetchAllData();
+                await _fetchAllData();
               },
             ),
           ),
