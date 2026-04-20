@@ -83,14 +83,15 @@ class Db2AuthRepository extends AuthRepository {
   }
 
   async logLoginAttempt(userId, success, ip) {
-    const sql = `
-      INSERT INTO JAVIER.APP_LOGIN_LOG (USUARIO, EXITO, IP, FECHA)
-      VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-    `;
+    // JAVIER.APP_LOGIN_LOG may not exist yet - silently skip if missing
     try {
-      await this._db.executeParams(sql, [userId || 'UNKNOWN', success ? 1 : 0, ip || 'unknown']);
+      const sql = `
+        INSERT INTO JAVIER.APP_LOGIN_LOG (USUARIO, EXITO, IP, FECHA)
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+      `;
+      await this._db.executeParamsSilent(sql, [userId || 'UNKNOWN', success ? 1 : 0, ip || 'unknown']);
     } catch (err) {
-      // Log table might not exist yet - non-fatal
+      // non-fatal: log table does not exist yet
     }
   }
 }
