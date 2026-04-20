@@ -436,7 +436,20 @@ function getClientCodesFromCache(vendedorCodes) {
 
     const allClients = new Set();
 
-    const vendedors = vendedorCodes ? vendedorCodes.split(',').map(c => c.trim()) : Object.keys(laclaeCache);
+    // Handle 'ALL' or empty string - use all vendors
+    if (!vendedorCodes || vendedorCodes === 'ALL' || vendedorCodes.trim() === '') {
+        Object.keys(laclaeCache).forEach(vendedor => {
+            const vendorClients = laclaeCache[vendedor] || {};
+            Object.entries(vendorClients).forEach(([clientCode, data]) => {
+                if (data.visitDays && data.visitDays.length > 0) {
+                    allClients.add(clientCode);
+                }
+            });
+        });
+        return Array.from(allClients);
+    }
+
+    const vendedors = vendedorCodes.split(',').map(c => c.trim()).filter(c => c);
 
     vendedors.forEach(vendedor => {
         const vendorClients = laclaeCache[vendedor] || {};

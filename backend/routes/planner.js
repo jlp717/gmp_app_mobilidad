@@ -1252,44 +1252,59 @@ router.get('/rutero/day/:day', async (req, res) => {
             cachedQuery(queryWithParams, notesSql, `rutero:notes:v1:${clientsHash}`, TTL.SHORT, clientBatch).catch(e => { logger.warn(`Notes query failed: ${e.message}`); return []; })
         ]);
 
-        // Build maps from results
+        // Build maps from results - use safe accessor to handle both uppercase/lowercase columns
         const prevYearRows = prevYearRowsResult || [];
         const currentSalesMap = new Map();
-        currentSalesRows.forEach(r => {
-            currentSalesMap.set(r.CODE.trim(), {
-                sales: parseFloat(r.SALES) || 0,
-                cost: parseFloat(r.COST) || 0
-            });
+        (currentSalesRows || []).forEach(r => {
+            const code = (r.CODE ?? r.code ?? '').toString().trim();
+            if (code) {
+                currentSalesMap.set(code, {
+                    sales: parseFloat(r.SALES ?? r.sales) || 0,
+                    cost: parseFloat(r.COST ?? r.cost) || 0
+                });
+            }
         });
         const prevYearMap = new Map();
         prevYearRows.forEach(r => {
-            prevYearMap.set(r.CODE.trim(), {
-                sales: parseFloat(r.SALES) || 0,
-                cost: parseFloat(r.COST) || 0
-            });
+            const code = (r.CODE ?? r.code ?? '').toString().trim();
+            if (code) {
+                prevYearMap.set(code, {
+                    sales: parseFloat(r.SALES ?? r.sales) || 0,
+                    cost: parseFloat(r.COST ?? r.cost) || 0
+                });
+            }
         });
         const prevYearTotalMap = new Map();
         prevYearTotalRows.forEach(r => {
-            prevYearTotalMap.set(r.CODE.trim(), parseFloat(r.SALES) || 0);
+            const code = (r.CODE ?? r.code ?? '').toString().trim();
+            if (code) {
+                prevYearTotalMap.set(code, parseFloat(r.SALES ?? r.sales) || 0);
+            }
         });
         const gpsMap = new Map();
-        gpsResult.forEach(g => {
-            gpsMap.set(g.CODIGO?.trim() || '', {
-                lat: parseFloat(g.LATITUD) || null,
-                lon: parseFloat(g.LONGITUD) || null
-            });
+        (gpsResult || []).forEach(g => {
+            const gpsCode = (g.CODIGO ?? g.codigo ?? '').toString().trim();
+            if (gpsCode) {
+                gpsMap.set(gpsCode, {
+                    lat: parseFloat(g.LATITUD ?? g.latitud) || null,
+                    lon: parseFloat(g.LONGITUD ?? g.longitud) || null
+                });
+            }
         });
         const notesMap = new Map();
         (notesResult || []).forEach(n => {
-            notesMap.set(n.CLIENT_CODE?.trim(), {
-                text: n.OBSERVACIONES,
-                modifiedBy: n.MODIFIED_BY
-            });
+            const noteCode = (n.CLIENT_CODE ?? n.client_code ?? '').toString().trim();
+            if (noteCode) {
+                notesMap.set(noteCode, {
+                    text: n.OBSERVACIONES ?? n.observaciones,
+                    modifiedBy: n.MODIFIED_BY ?? n.modified_by
+                });
+            }
         });
 
         // Merge Data
         const currentYearRows = clientDetailsRows.map(r => {
-            const code = r.CODE.trim();
+            const code = (r.CODE ?? r.code ?? '').toString().trim();
             const salesData = currentSalesMap.get(code) || { sales: 0, cost: 0 };
             return {
                 ...r,
@@ -1312,9 +1327,10 @@ router.get('/rutero/day/:day', async (req, res) => {
             `, [primaryVendor, normalizedDay], false, false); // false = no debug log clutter
 
             configRows.forEach(r => {
-                // Only include POSITIVE overrides (order >= 0), skip blocking entries (-1)
-                if (r.ORDEN >= 0) {
-                    orderMap.set(r.CLIENTE.trim(), r.ORDEN);
+                const clienteCode = (r.CLIENTE ?? r.cliente ?? '').toString().trim();
+                const orden = parseInt(r.ORDEN ?? r.orden) || 0;
+                if (clienteCode && orden >= 0) {
+                    orderMap.set(clienteCode, orden);
                 }
             });
             logger.info(`[RUTERO SORT] Loaded ${configRows.length} overrides for ${primaryVendor}/${normalizedDay}`);
