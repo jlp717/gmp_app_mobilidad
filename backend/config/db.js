@@ -24,11 +24,14 @@ const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID_FINAL};PWD=${DB_PWD_FINAL};NAM=1;C
     COMMTIMEOUT=${parseInt(process.env.ODBC_COMM_TIMEOUT) || 90};
     DBQ=${DB_DSN};`;
 
+// Pool sizing — configurable via env for production tuning.
+// Defaults raised: /commissions/summary?vendor=ALL fans out to N parallel vendor
+// queries; with max=10 the pool exhausted and requests timed out at 10s.
 const POOL_CONFIG = {
-    min: 2,
-    max: 10,
-    idleTimeoutMs: 30000,
-    acquireTimeoutMs: 10000
+    min: parseInt(process.env.DB_POOL_MIN, 10) || 3,
+    max: parseInt(process.env.DB_POOL_MAX, 10) || 25,
+    idleTimeoutMs: parseInt(process.env.DB_POOL_IDLE_MS, 10) || 30000,
+    acquireTimeoutMs: parseInt(process.env.DB_POOL_ACQUIRE_MS, 10) || 30000
 };
 
 const pool = {

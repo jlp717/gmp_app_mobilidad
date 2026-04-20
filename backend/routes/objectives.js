@@ -652,7 +652,8 @@ router.get('/matrix', verifyToken, async (req, res) => {
         // Determine years to fetch (include previous year for YoY if needed)
         const allYearsToFetch = new Set(yearsArray);
         yearsArray.forEach(y => allYearsToFetch.add(y - 1));
-        const yearsFilter = Array.from(allYearsToFetch).join(',');
+        const uniqueYears = Array.from(allYearsToFetch);
+        const yearsFilter = uniqueYears.join(',');
 
         // --- NEW: Client Contact & Observations (parallelized) ---
         let contactInfo = { phone: '', phone2: '', email: '', phones: [] };

@@ -38,10 +38,38 @@ if (REFRESH_SECRET.length < 32) {
     logger.warn('[AUTH] WARNING: JWT_REFRESH_SECRET is too short. Use at least 32 characters.');
 }
 
-const ACCESS_TTL_MS = parseInt(process.env.JWT_ACCESS_EXPIRES || '3600000', 10);
-const REFRESH_TTL_MS = parseInt(process.env.JWT_REFRESH_EXPIRES || '604800000', 10);
+/**
+ * Parse a TTL value that may come as:
+ *   - plain milliseconds (e.g. "3600000")
+ *   - suffixed duration ("15m", "1h", "7d", "30s")
+ * Returns milliseconds. Defaults to `fallbackMs` if input is invalid/empty.
+ */
+function parseTtlMs(raw, fallbackMs, label) {
+    if (raw === undefined || raw === null || raw === '') return fallbackMs;
+    const value = String(raw).trim();
+    // Pure integer → already milliseconds
+    if (/^\d+$/.test(value)) {
+        const ms = parseInt(value, 10);
+        if (Number.isFinite(ms) && ms > 0) return ms;
+    }
+    // Suffixed duration (e.g. 15m, 1h, 7d)
+    const m = value.match(/^(\d+)\s*(ms|s|m|h|d)$/i);
+    if (m) {
+        const n = parseInt(m[1], 10);
+        const unit = m[2].toLowerCase();
+        const mult = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[unit];
+        if (Number.isFinite(n) && n > 0 && mult) return n * mult;
+    }
+    logger.warn(`[AUTH] Invalid ${label}='${raw}', falling back to ${fallbackMs}ms`);
+    return fallbackMs;
+}
+
+const ACCESS_TTL_MS = parseTtlMs(process.env.JWT_ACCESS_EXPIRES, 3_600_000, 'JWT_ACCESS_EXPIRES'); // 1h default
+const REFRESH_TTL_MS = parseTtlMs(process.env.JWT_REFRESH_EXPIRES, 604_800_000, 'JWT_REFRESH_EXPIRES'); // 7d default
 const MAX_SESSIONS_PER_USER = parseInt(process.env.MAX_SESSIONS_PER_USER || '5', 10);
 const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+
+logger.info(`[AUTH] Access TTL: ${ACCESS_TTL_MS}ms (${Math.round(ACCESS_TTL_MS / 60000)}min), Refresh TTL: ${REFRESH_TTL_MS}ms (${Math.round(REFRESH_TTL_MS / 86400000)}d)`);
 
 // =============================================================================
 // SESSION STORAGE
@@ -90,11 +118,9 @@ function shutdown() {
     logger.info('[AUTH] Auth subsystem shut down');
 }
 
-module.exports = {
-    shutdown,
-    stopSessionCleanup,
-    startSessionCleanup
-};
+exports.shutdown = shutdown;
+exports.stopSessionCleanup = stopSessionCleanup;
+exports.startSessionCleanup = startSessionCleanup;
 
 // =============================================================================
 // TOKEN SIGNING & VERIFICATION
@@ -423,5 +449,3 @@ exports.handleLogout = async (req, res) => {
 exports.ACCESS_TTL_MS = ACCESS_TTL_MS;
 exports.REFRESH_TTL_MS = REFRESH_TTL_MS;
 exports.activeSessions = activeSessions;
-
-module.exports = exports;
