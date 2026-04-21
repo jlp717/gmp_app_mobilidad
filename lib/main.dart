@@ -33,19 +33,26 @@ void main() async {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.warning_amber_rounded,
-                    size: 48, color: Colors.orange.shade300,),
+                Icon(
+                  Icons.warning_amber_rounded,
+                  size: 48,
+                  color: Colors.orange.shade300,
+                ),
                 const SizedBox(height: 16),
-                const Text('Se ha producido un error',
-                    style: TextStyle(color: Colors.white, fontSize: 16),),
+                const Text(
+                  'Se ha producido un error',
+                  style: TextStyle(color: Colors.white, fontSize: 16),
+                ),
                 const SizedBox(height: 8),
-                Text('Error: ${details.exceptionAsString()}',
-                    style:
-                        const TextStyle(color: Colors.white70, fontSize: 12),),
+                Text(
+                  'Error: ${details.exceptionAsString()}',
+                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                ),
                 const SizedBox(height: 8),
-                const Text('Vuelve atrás o reinicia la app',
-                    style:
-                        TextStyle(color: Colors.white70, fontSize: 13),),
+                const Text(
+                  'Vuelve atrás o reinicia la app',
+                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                ),
               ],
             ),
           ),
@@ -59,7 +66,8 @@ void main() async {
     debugPrint('[MAIN] ✅ Cache initialized');
     await ApiClient.initialize();
     debugPrint(
-        '[MAIN] ✅ API initialized: ${ApiClient.dio.options.baseUrl}',);
+      '[MAIN] ✅ API initialized: ${ApiClient.dio.options.baseUrl}',
+    );
   } catch (e, stack) {
     debugPrint('[MAIN] ❌ Initialization error: $e');
     debugPrint('[MAIN] Stack: $stack');
@@ -116,7 +124,7 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
-    
+
     if (state == AppLifecycleState.resumed) {
       // User returned to the app - verify session is still valid
       _validateSessionOnResume();
@@ -127,18 +135,20 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
   Future<void> _validateSessionOnResume() async {
     try {
       final authState = ref.read(authProvider);
-      
+
       // If user was authenticated, verify token still exists in storage
       if (authState.value?.isAuthenticated ?? false) {
         final token = await SecureStorage.readSecureData('user_token');
-        
+
         if (token == null || token.isEmpty) {
           // Token was cleared - session is invalid
-          debugPrint('[AppLifecycle] Token missing on resume - triggering logout');
+          debugPrint(
+              '[AppLifecycle] Token missing on resume - triggering logout');
           ref.read(authProvider.notifier).logout(sessionExpired: true);
         } else {
           // Token exists - ensure Dio header is set (might have been lost on reinitialize)
           ApiClient.setAuthToken(token);
+          await ApiClient.refreshAccessToken();
           debugPrint('[AppLifecycle] Session validated successfully on resume');
         }
       }

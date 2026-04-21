@@ -17,7 +17,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const logger = require('./middleware/logger');
-const { verifyToken } = require('./middleware/auth');
+const { verifyToken, handleRefreshToken, handleLogout } = require('./middleware/auth');
 const { initDb, query } = require('./config/db');
 const {
     globalLimiter,
@@ -42,8 +42,6 @@ const { cacheMiddleware, invalidationMiddleware, getCacheStats: getHttpCacheStat
 const { createOptimizedQuery } = require('./services/query-optimizer');
 const { auditMiddleware, getRecentAuditEntries, getActiveSessions } = require('./middleware/audit');
 const { createCompressionMiddleware } = require('./middleware/compression');
-const { AdvancedRateLimiter } = require('./src/core/infrastructure/security/advanced-rate-limiter');
-const { refreshTokenManager } = require('./src/core/infrastructure/security/refresh-token-manager');
 
 // =============================================================================
 // FEATURE TOGGLE: USE_TS_ROUTES
@@ -240,32 +238,12 @@ app.use('/api/', globalLimiter);
 
 // Refresh token endpoint
 app.post('/api/auth/refresh', async (req, res) => {
-  try {
-    const { refreshToken } = req.body;
-    if (!refreshToken) {
-      return res.status(400).json({ error: 'refreshToken required' });
-    }
-    const tokens = await refreshTokenManager.rotateToken(refreshToken);
-    res.json(tokens);
-  } catch (err) {
-    if (err.name === 'TokenError') {
-      return res.status(401).json({ error: err.message, code: err.code });
-    }
-    res.status(500).json({ error: 'Internal server error' });
-  }
+  await handleRefreshToken(req, res);
 });
 
 // Logout endpoint
 app.post('/api/auth/logout', verifyToken, async (req, res) => {
-  try {
-    const { refreshToken } = req.body;
-    if (refreshToken) {
-      refreshTokenManager.revokeToken(refreshToken);
-    }
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Internal server error' });
-  }
+  await handleLogout(req, res);
 });
 
 // Cache stats endpoint (admin only)

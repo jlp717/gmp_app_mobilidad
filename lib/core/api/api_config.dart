@@ -2,14 +2,14 @@ import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/services/network_service.dart';
 
 /// API Configuration and Constants
-/// 
+///
 /// ARQUITECTURA PROFESIONAL PARA PRODUCCIÓN:
 /// - La app se usa desde CUALQUIER LUGAR (rutas de reparto, oficinas, etc.)
 /// - SIEMPRE usa https://api.mari-pepa.com en producción
 /// - Solo en desarrollo se permite LAN/local
-enum ApiEnvironment { 
-  development,  // Solo para debugging en oficina
-  production,   // Para todos los comerciales (default)
+enum ApiEnvironment {
+  development, // Solo para debugging en oficina
+  production, // Para todos los comerciales (default)
 }
 
 class ApiConfig {
@@ -23,7 +23,8 @@ class ApiConfig {
   // PRODUCCION (Cloudflare Named Tunnel — dominio fijo permanente)
   // Accesible desde cualquier lugar con internet
   // -----------------------------------------------------------------------------
-  static String _productionUrl = 'https://api.mari-pepa.com/api'; // YA incluye /api
+  static String _productionUrl =
+      'https://api.mari-pepa.com/api'; // YA incluye /api
   static const int _serverPort = 3334;
 
   // -----------------------------------------------------------------------------
@@ -109,7 +110,7 @@ class ApiConfig {
   // =============================================================================
   // ENDPOINTS DE LA API
   // =============================================================================
-  
+
   // Auth Endpoints
   static const String login = '/auth/login';
   static const String validate = '/auth/validate';
@@ -143,7 +144,8 @@ class ApiConfig {
   static const String objectives = '/objectives';
   static const String objectivesByClient = '/objectives/by-client';
   static const String objectivesEvolution = '/objectives/evolution';
-  static const String clientMatrix = '/objectives/matrix'; // Backend usa /matrix, no /client-matrix
+  static const String clientMatrix =
+      '/objectives/matrix'; // Backend usa /matrix, no /client-matrix
   static const String objectivesPopulations = '/objectives/populations';
 
   // Analytics Endpoints
@@ -194,15 +196,16 @@ class ApiConfig {
   // =============================================================================
   // TIMEOUTS
   // =============================================================================
-  static const Duration connectTimeout = Duration(seconds: 30);
-  static const Duration receiveTimeout = Duration(seconds: 60); // Más largo para producción
+  static const Duration connectTimeout = Duration(seconds: 12);
+  static const Duration receiveTimeout = Duration(seconds: 25);
 
   // =============================================================================
   // DATE RANGE
   // =============================================================================
   static int get currentYear => DateTime.now().year;
   static int get minYear => currentYear - 2;
-  static List<int> get availableYears => [currentYear, currentYear - 1, currentYear - 2];
+  static List<int> get availableYears =>
+      [currentYear, currentYear - 1, currentYear - 2];
 
   // =============================================================================
   // PAGINATION

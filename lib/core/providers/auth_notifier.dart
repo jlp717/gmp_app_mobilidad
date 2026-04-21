@@ -165,18 +165,27 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   Future<AuthState> _tryAutoLogin() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final token = await SecureStorage.readSecureData('user_token');
+      var token = await SecureStorage.readSecureData('user_token');
       final userDataStr = await SecureStorage.readSecureData('user_data');
       final codes = prefs.getStringList('vendedor_codes');
 
       if (token != null && userDataStr != null) {
         // Check token expiry BEFORE restoring session to avoid a burst of 401s
         if (_isTokenExpired(token)) {
-          debugPrint('[AuthNotifier] Stored token expired — clearing session');
-          await SecureStorage.deleteSecureData('user_token');
-          await SecureStorage.deleteSecureData('user_data');
-          await prefs.remove('vendedor_codes');
-          return const AuthState(isInitialized: true);
+          ApiClient.setAuthToken(token);
+          final refreshed = await ApiClient.refreshAccessToken();
+          token = await SecureStorage.readSecureData('user_token');
+          if (refreshed && token != null && token.isNotEmpty) {
+            debugPrint('[AuthNotifier] Stored token refreshed');
+          } else {
+            debugPrint(
+                '[AuthNotifier] Stored token expired — clearing session');
+            await SecureStorage.deleteSecureData('user_token');
+            await SecureStorage.deleteSecureData('refresh_token');
+            await SecureStorage.deleteSecureData('user_data');
+            await prefs.remove('vendedor_codes');
+            return const AuthState(isInitialized: true);
+          }
         }
         // Validate token with server before restoring session.
         // The server uses ephemeral JWT secrets — a server restart invalidates
@@ -193,6 +202,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
             );
             ApiClient.clearAuthToken();
             await SecureStorage.deleteSecureData('user_token');
+            await SecureStorage.deleteSecureData('refresh_token');
             await SecureStorage.deleteSecureData('user_data');
             await prefs.remove('vendedor_codes');
             return const AuthState(isInitialized: true);
@@ -278,6 +288,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           response['user'] as Map<String, dynamic>,
         );
         final token = response['token'] as String?;
+        final refreshToken = response['refreshToken'] as String?;
 
         if (token == null || token.isEmpty) {
           state = const AsyncValue.data(
@@ -296,6 +307,9 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         // Store token
         ApiClient.setAuthToken(token);
         await SecureStorage.writeSecureData('user_token', token);
+        if (refreshToken != null && refreshToken.isNotEmpty) {
+          await ApiClient.storeRefreshToken(refreshToken);
+        }
         await SecureStorage.writeSecureData(
           'user_data',
           jsonEncode(response['user']),
@@ -372,6 +386,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
       final user = UserModel.fromJson(response['user'] as Map<String, dynamic>);
       final token = response['token'] as String?;
+      final refreshToken = response['refreshToken'] as String?;
       if (token == null) {
         state = const AsyncValue.data(
           AuthState(isInitialized: true, error: 'Token faltante'),
@@ -385,6 +400,9 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
       ApiClient.setAuthToken(token);
       await SecureStorage.writeSecureData('user_token', token);
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        await ApiClient.storeRefreshToken(refreshToken);
+      }
       await SecureStorage.writeSecureData(
           'user_data', jsonEncode(response['user']));
 
@@ -431,6 +449,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
     // Clear token
     ApiClient.clearAuthToken();
+    await ApiClient.clearRefreshToken();
     await SecureStorage.deleteSecureData('user_token');
     await SecureStorage.deleteSecureData('user_data');
 
@@ -476,8 +495,12 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       if (response != null && response['success'] == true) {
         if (response['token'] != null) {
           final token = response['token'] as String;
+          final refreshToken = response['refreshToken'] as String?;
           ApiClient.setAuthToken(token);
           await SecureStorage.writeSecureData('user_token', token);
+          if (refreshToken != null && refreshToken.isNotEmpty) {
+            await ApiClient.storeRefreshToken(refreshToken);
+          }
 
           final updatedUser = currentState.user!.copyWith(role: newRole);
           state = AsyncValue.data(

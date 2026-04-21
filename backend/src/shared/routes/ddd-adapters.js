@@ -138,13 +138,19 @@ function createAuthRoutes() {
         return res.status(401).json({ error: 'Credenciales inválidas', code: 'INVALID_CREDENTIALS' });
       }
 
-      const { signAccessToken, signRefreshToken } = require('../../../middleware/auth');
+      const { signAccessToken, signRefreshToken, registerSession } = require('../../../middleware/auth');
       const accessToken = signAccessToken({
         id: user.id, user: user.code, role: user.role, isJefeVentas: user.isJefeVentas
       });
       const refreshToken = signRefreshToken({
         id: user.id, user: user.code, role: user.role, isJefeVentas: user.isJefeVentas
       });
+      registerSession(
+        user.id,
+        refreshToken,
+        req.get('user-agent') || 'unknown',
+        req.ip || 'unknown'
+      );
 
       await repo.logLoginAttempt(user.id, true, req.ip);
 

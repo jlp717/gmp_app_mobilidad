@@ -75,6 +75,7 @@ const WARM_QUERIES = [
 class CacheStampedeLock {
     constructor() {
         this.locks = new Map();
+        this.promises = new Map();
         this.staleData = new Map();
         this.STALE_TTL_MS = 30000; // Serve stale for 30s while refreshing
     }
@@ -102,6 +103,15 @@ class CacheStampedeLock {
             });
         }
         this.locks.delete(key);
+        this.promises.delete(key);
+    }
+
+    setPromise(key, promise) {
+        this.promises.set(key, promise);
+    }
+
+    getPromise(key) {
+        return this.promises.get(key) || null;
     }
 
     /**
@@ -631,6 +641,13 @@ async function cachedQuery(queryFn, sql, options = {}, ...args) {
         return normalizeCachedRowCasing(cached);
     }
 
+    const inFlightPromise = stampedeLock.getPromise(fullCacheKey);
+    if (inFlightPromise) {
+        cacheMetrics.recordStampedePrevention();
+        logger.debug(`[QueryOptimizer] Awaiting in-flight query: ${fullCacheKey}`);
+        return normalizeCachedRowCasing(await inFlightPromise);
+    }
+
     // Check if another process is building this cache (stampede prevention)
     if (stampedeLock.isBuilding(fullCacheKey)) {
         const staleData = stampedeLock.getStale(fullCacheKey);
@@ -668,7 +685,9 @@ async function cachedQuery(queryFn, sql, options = {}, ...args) {
     try {
         // Execute query
         const start = Date.now();
-        const result = await queryFn(sql, ...normalized.queryArgs);
+        const queryPromise = queryFn(sql, ...normalized.queryArgs);
+        stampedeLock.setPromise(fullCacheKey, queryPromise);
+        const result = await queryPromise;
         const duration = Date.now() - start;
 
         // Record stats

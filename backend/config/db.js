@@ -121,12 +121,22 @@ const pool = {
         return c.conn;
     },
 
-    async release(conn) {
-        const entry = this.connections.find(c => c.conn === conn);
-        if (entry) {
+    async release(conn, { destroy = false } = {}) {
+        const idx = this.connections.findIndex(c => c.conn === conn);
+        const entry = idx >= 0 ? this.connections[idx] : null;
+
+        if (destroy) {
+            if (entry) this.connections.splice(idx, 1);
+            try {
+                if (conn) await conn.close();
+            } catch (_) {
+                // Stale/broken connections can fail while closing; they are no longer pooled.
+            }
+        } else if (entry) {
             entry.inUse = false;
             entry.lastUsed = Date.now();
         }
+
         if (this.active > 0) this.active--;
         this._ensureMinConnections().catch(() => {});
         this._closeIdleConnections().catch(() => {});
@@ -312,6 +322,7 @@ async function query(sql, logQuery = true, logError = true) {
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         let conn = null;
+        let destroyConn = false;
         try {
             conn = await pool.acquire();
 
@@ -331,6 +342,7 @@ async function query(sql, logQuery = true, logError = true) {
         } catch (error) {
             lastError = error;
             const connError = isConnectionError(error);
+            destroyConn = connError;
 
             if (connError) {
                 connectionErrorCount++;
@@ -364,8 +376,7 @@ async function query(sql, logQuery = true, logError = true) {
         } finally {
             if (conn) {
                 try {
-                    await pool.release(conn);
-                    await conn.close();
+                    await pool.release(conn, { destroy: destroyConn });
                 } catch (closeError) {
                     // Ignore close errors on stale connections
                 }
@@ -391,6 +402,7 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
 
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
         let conn = null;
+        let destroyConn = false;
         try {
             conn = await pool.acquire();
 
@@ -410,6 +422,7 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
         } catch (error) {
             lastError = error;
             const connError = isConnectionError(error);
+            destroyConn = connError;
 
             if (connError) {
                 connectionErrorCount++;
@@ -443,8 +456,7 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
         } finally {
             if (conn) {
                 try {
-                    await pool.release(conn);
-                    await conn.close();
+                    await pool.release(conn, { destroy: destroyConn });
                 } catch (e) { /* ignore */ }
             }
         }

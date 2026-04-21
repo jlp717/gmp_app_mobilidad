@@ -5,6 +5,7 @@
  */
 
 const logger = require('./logger');
+const crypto = require('crypto');
 
 /**
  * Feature flags for gradual rollout (OPTIMIZED v3)
@@ -184,7 +185,12 @@ function responseCoalescing(req, res, next) {
     }
 
     // Create request signature
-    const signature = `${req.path}?${JSON.stringify(req.query)}`;
+    const authFingerprint = crypto
+        .createHash('sha256')
+        .update(req.get('authorization') || '')
+        .digest('hex')
+        .slice(0, 16);
+    const signature = `${authFingerprint}:${req.path}?${JSON.stringify(req.query)}`;
 
     // Check if identical request is pending
     if (pendingRequests.has(signature)) {

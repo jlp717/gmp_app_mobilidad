@@ -43,7 +43,7 @@ class CacheService {
   static String _sanitizeKey(String key) {
     if (key.length <= _maxKeyLength) return key;
     // Create a deterministic short key for long strings
-    final hash = key.hashCode;
+    final hash = sha256.convert(utf8.encode(key)).toString();
     final prefix = key.substring(0, 50);
     return 'hashed_${prefix}_$hash';
   }
@@ -57,12 +57,17 @@ class CacheService {
     final key = _generateEncryptionKey();
     final encryptionCipher = HiveAesCipher(key);
 
-    _cacheBox = await Hive.openBox<dynamic>(_cacheBoxName,
-        encryptionCipher: encryptionCipher,);
-    _metadataBox = await Hive.openBox<dynamic>(_metadataBoxName,
-        encryptionCipher: encryptionCipher,);
+    _cacheBox = await Hive.openBox<dynamic>(
+      _cacheBoxName,
+      encryptionCipher: encryptionCipher,
+    );
+    _metadataBox = await Hive.openBox<dynamic>(
+      _metadataBoxName,
+      encryptionCipher: encryptionCipher,
+    );
     debugPrint(
-        '[CacheService] Initialized with ${_cacheBox?.length ?? 0} cached items (encrypted)',);
+      '[CacheService] Initialized with ${_cacheBox?.length ?? 0} cached items (encrypted)',
+    );
   }
 
   static List<int> _generateEncryptionKey() {
@@ -83,9 +88,6 @@ class CacheService {
     if (expiryTimestamp != null) {
       final expiryDate = DateTime.fromMillisecondsSinceEpoch(expiryTimestamp);
       if (DateTime.now().isAfter(expiryDate)) {
-        // Cache expired, clean up
-        _cacheBox?.delete(safeKey);
-        _metadataBox?.delete(expiryKey);
         debugPrint('[CacheService] Cache expired for key: $key');
         return null;
       }
@@ -94,6 +96,32 @@ class CacheService {
     final value = _cacheBox?.get(safeKey);
     if (value != null) {
       debugPrint('[CacheService] Cache HIT for key: $key');
+    }
+    return value as T?;
+  }
+
+  /// Get an expired entry for stale-if-error fallback.
+  /// This keeps the app usable on bad mobile networks while the UI can retry
+  /// fresh data in the background.
+  static T? getStale<T>(
+    String key, {
+    Duration maxStale = const Duration(hours: 24),
+  }) {
+    if (_cacheBox == null) return null;
+
+    final safeKey = _sanitizeKey(key);
+    final expiryTimestamp = _metadataBox?.get('${safeKey}_expiry') as int?;
+    if (expiryTimestamp == null) return null;
+
+    final staleUntil =
+        DateTime.fromMillisecondsSinceEpoch(expiryTimestamp).add(maxStale);
+    if (DateTime.now().isAfter(staleUntil)) {
+      return null;
+    }
+
+    final value = _cacheBox?.get(safeKey);
+    if (value != null) {
+      debugPrint('[CacheService] Cache STALE HIT for key: $key');
     }
     return value as T?;
   }
@@ -115,7 +143,8 @@ class CacheService {
       await _cacheBox?.put(safeKey, value);
       await _metadataBox?.put('${safeKey}_expiry', expiryTimestamp);
       debugPrint(
-          '[CacheService] Cache SET for key: $key (TTL: ${effectiveTTL.inMinutes}min)',);
+        '[CacheService] Cache SET for key: $key (TTL: ${effectiveTTL.inMinutes}min)',
+      );
     } catch (e) {
       debugPrint('[CacheService] Error setting cache: $e');
     }
@@ -139,9 +168,11 @@ class CacheService {
     // For now, this best-effort implementation scans all keys.
 
     final keysToDelete = _cacheBox!.keys
-        .where((k) =>
-            k.toString().startsWith(prefix) ||
-            k.toString().startsWith('hashed_$prefix'),)
+        .where(
+          (k) =>
+              k.toString().startsWith(prefix) ||
+              k.toString().startsWith('hashed_$prefix'),
+        )
         .toList();
 
     for (final key in keysToDelete) {
@@ -150,7 +181,8 @@ class CacheService {
     }
 
     debugPrint(
-        '[CacheService] Invalidated ${keysToDelete.length} entries with prefix: $prefix',);
+      '[CacheService] Invalidated ${keysToDelete.length} entries with prefix: $prefix',
+    );
   }
 
   /// Clear all cached data

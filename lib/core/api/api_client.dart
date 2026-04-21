@@ -7,6 +7,7 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/api/isolate_transformer.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/services/device_fingerprint.dart';
+import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
 
 /// API Client for all backend communications
 /// Enhanced with automatic server detection and fallback
@@ -16,6 +17,7 @@ class ApiClient {
   static const Duration _retryDelay = Duration(seconds: 1);
   static bool _isInitialized = false;
   static String? _savedAuthToken;
+  static Future<bool>? _refreshInFlight;
 
   /// Pending requests map for request deduplication
   /// Prevents duplicate API calls when multiple widgets request the same data
@@ -75,7 +77,7 @@ class ApiClient {
         baseUrl: ApiConfig.baseUrl,
         connectTimeout: ApiConfig.connectTimeout,
         receiveTimeout: ApiConfig.receiveTimeout,
-        sendTimeout: const Duration(seconds: 30),
+        sendTimeout: const Duration(seconds: 15),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
@@ -226,6 +228,43 @@ class ApiClient {
       ),
     );
 
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onError: (error, handler) async {
+          final statusCode = error.response?.statusCode;
+          final path = error.requestOptions.path;
+          final isAuthEndpoint =
+              path.contains('/auth/login') || path.contains('/auth/refresh');
+          final alreadyRetried =
+              error.requestOptions.extra['authRetried'] == true;
+
+          if (statusCode == 401 && !isAuthEndpoint && !alreadyRetried) {
+            final requestAuth =
+                error.requestOptions.headers['Authorization']?.toString();
+            final currentAuth =
+                _savedAuthToken != null ? 'Bearer $_savedAuthToken' : null;
+            final isStaleRequest =
+                requestAuth != null && requestAuth != currentAuth;
+
+            if (!isStaleRequest && await refreshAccessToken()) {
+              try {
+                error.requestOptions.extra['authRetried'] = true;
+                error.requestOptions.headers['Authorization'] =
+                    'Bearer $_savedAuthToken';
+                final response = await dio.fetch<dynamic>(error.requestOptions);
+                handler.resolve(response);
+                return;
+              } catch (_) {
+                // Fall through to normal 401 handling below.
+              }
+            }
+          }
+
+          handler.next(error);
+        },
+      ),
+    );
+
     // Add retry interceptor
     dio.interceptors.add(_RetryInterceptor(dio, _maxRetries, _retryDelay));
 
@@ -266,11 +305,7 @@ class ApiClient {
 
   /// Get current auth token (for Image.network headers etc.)
   static String? get authToken {
-    final header = dio.options.headers['Authorization']?.toString();
-    if (header != null && header.startsWith('Bearer ')) {
-      return header.substring(7);
-    }
-    return null;
+    return _savedAuthToken;
   }
 
   /// Auth headers map for Image.network, url_launcher, etc.
@@ -290,6 +325,61 @@ class ApiClient {
   static void clearAuthToken() {
     _savedAuthToken = null;
     dio.options.headers.remove('Authorization');
+  }
+
+  static Future<void> storeRefreshToken(String token) async {
+    await SecureStorage.writeSecureData('refresh_token', token);
+  }
+
+  static Future<void> clearRefreshToken() async {
+    await SecureStorage.deleteSecureData('refresh_token');
+  }
+
+  static Future<bool> refreshAccessToken() async {
+    final pending = _refreshInFlight;
+    if (pending != null) return pending;
+
+    _refreshInFlight = _refreshAccessTokenInternal();
+    try {
+      return await _refreshInFlight!;
+    } finally {
+      _refreshInFlight = null;
+    }
+  }
+
+  static Future<bool> _refreshAccessTokenInternal() async {
+    final refreshToken = await SecureStorage.readSecureData('refresh_token');
+    if (refreshToken == null || refreshToken.isEmpty) {
+      return false;
+    }
+
+    try {
+      _isLoggingIn = true;
+      final response = await dio.post<Map<String, dynamic>>(
+        ApiConfig.refresh,
+        data: {'refreshToken': refreshToken},
+        options: Options(extra: {'skipRetry': true}),
+      );
+      final body = response.data ?? const <String, dynamic>{};
+      final accessToken = (body['token'] ?? body['accessToken'])?.toString();
+      final nextRefreshToken =
+          (body['refreshToken'] ?? refreshToken).toString();
+
+      if (accessToken == null || accessToken.isEmpty) {
+        return false;
+      }
+
+      setAuthToken(accessToken);
+      await SecureStorage.writeSecureData('user_token', accessToken);
+      await SecureStorage.writeSecureData('refresh_token', nextRefreshToken);
+      debugPrint('[ApiClient] Access token refreshed');
+      return true;
+    } catch (e) {
+      debugPrint('[ApiClient] Token refresh failed: $e');
+      return false;
+    } finally {
+      _isLoggingIn = false;
+    }
   }
 
   static String _buildRequestKey(
@@ -374,7 +464,7 @@ class ApiClient {
       } on DioException catch (e) {
         if (cacheKey != null && _isNetworkError(e)) {
           try {
-            final cached = CacheService.get(cacheKey);
+            final cached = CacheService.getStale(cacheKey);
             if (cached != null && cached is Map) {
               return Map<String, dynamic>.from(cached);
             }
@@ -453,7 +543,7 @@ class ApiClient {
         return result;
       } on DioException catch (e) {
         if (cacheKey != null && _isNetworkError(e)) {
-          final cached = CacheService.get<List<dynamic>>(cacheKey);
+          final cached = CacheService.getStale<List<dynamic>>(cacheKey);
           if (cached != null) {
             return cached;
           }
@@ -545,6 +635,7 @@ class ApiClient {
   static bool _isNetworkError(DioException e) {
     return e.type == DioExceptionType.connectionError ||
         e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.receiveTimeout ||
         e.type == DioExceptionType.unknown;
   }
 
@@ -741,8 +832,21 @@ class _RetryInterceptor extends Interceptor {
   }
 
   bool _shouldRetry(DioException err) {
+    if (err.requestOptions.extra['skipRetry'] == true) {
+      return false;
+    }
+
     // NEVER retry login requests to avoid triggering rate limiting
     if (err.requestOptions.path.contains('/auth/login')) {
+      return false;
+    }
+
+    final method = err.requestOptions.method.toUpperCase();
+    final idempotent = method == 'GET' ||
+        method == 'HEAD' ||
+        method == 'OPTIONS' ||
+        err.requestOptions.extra['idempotent'] == true;
+    if (!idempotent) {
       return false;
     }
 

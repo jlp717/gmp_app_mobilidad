@@ -14,7 +14,8 @@ const {
     hashPassword, 
     verifyPassword,
     handleRefreshToken,
-    handleLogout
+    handleLogout,
+    registerSession
 } = require('../middleware/auth');
 const { loginLimiter, validateBody, sanitizeInput, detectSqlInjection } = require('../middleware/security');
 const { auditLogin, getClientIP } = require('../middleware/audit');
@@ -302,6 +303,12 @@ router.post('/login',
                 role: finalRole,
                 isJefeVentas
             });
+            registerSession(
+                `V${vendedorCode}`,
+                refreshToken,
+                req.get('user-agent') || 'unknown',
+                getClientIP(req) || req.ip || 'unknown'
+            );
 
             res.json({
                 user: {
@@ -366,6 +373,7 @@ router.post('/switch-role', verifyToken, async (req, res) => {
 
         const accessToken = signAccessToken({ id: userId, user: userId, role: newRole, timestamp: Date.now() });
         const refreshToken = signRefreshToken({ id: userId, user: userId, role: newRole });
+        registerSession(userId, refreshToken, req.get('user-agent') || 'unknown', getClientIP(req) || req.ip || 'unknown');
 
         res.json({ success: true, role: newRole, token: accessToken, refreshToken, tokenExpiresIn: 3600 });
     } catch (error) {

@@ -230,6 +230,8 @@ function registerSession(userId, refreshToken, userAgent, ip) {
     logger.info(`[AUTH] Registered new session for user ${userId} from ${ip}`);
 }
 
+exports.registerSession = registerSession;
+
 exports.invalidateAllSessions = (userId) => {
     activeSessions.delete(userId);
     logger.info(`[AUTH] Invalidated all sessions for user ${userId}`);
