@@ -39,7 +39,7 @@ class CommissionsService {
       const cacheKey = 'vendedores_list';
 
       final response = await ApiClient.get(
-        '/vendedores',
+        '/rutero/vendedores',
         cacheKey: cacheKey,
         cacheTTL: CacheService.longTTL, // 24 hours - vendor list rarely changes
       );
@@ -60,7 +60,9 @@ class CommissionsService {
   static Future<Map<String, dynamic>> payCommission({
     required String vendedorCode,
     required int year,
-    required double amount, required String adminCode, int? month,
+    required double amount,
+    required String adminCode,
+    int? month,
     int? quarter,
     double? generatedAmount,
     String? concept,

@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
@@ -113,6 +114,7 @@ class _VehiclesPageState extends State<VehiclesPage> {
               child: v.imageUrl != null && v.imageUrl!.isNotEmpty
                   ? Image.network(
                       v.imageUrl!,
+                      headers: ApiClient.authHeaders,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => const Icon(
                           Icons.local_shipping_rounded,

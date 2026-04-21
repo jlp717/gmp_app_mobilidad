@@ -56,6 +56,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
   int? _touchedIndex; // For manual tooltip control
   String?
       _selectedStatusFilter; // null=all, 'achieved', 'ontrack', 'atrisk', 'critical'
+  ProviderSubscription<String?>? _vendorSubscription;
+  int _loadGeneration = 0;
 
   // Jefe de ventas - Ver objetivos como
   final List<Map<String, dynamic>> _vendedoresDisponibles = [];
@@ -115,8 +117,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
     _loadPopulations();
     _loadData();
 
-    ref.listen(selectedVendorProvider, (previous, next) {
+    _vendorSubscription =
+        ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
       if (previous != next) {
+        _selectedVendedor = next;
         _loadData();
       }
     });
@@ -137,7 +141,9 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
   String get _activeVendedorCode {
     if (!mounted) return widget.employeeCode;
     final filterCode = ref.read(filterProvider).selectedVendor;
-    return filterCode ?? _selectedVendedor ?? widget.employeeCode;
+    if (filterCode != null && filterCode.isNotEmpty) return filterCode;
+    if (widget.isJefeVentas) return 'ALL';
+    return _selectedVendedor ?? widget.employeeCode;
   }
 
   /// Cambia el vendedor seleccionado para "Ver objetivos como"
@@ -148,35 +154,42 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
 
   @override
   void dispose() {
+    _vendorSubscription?.close();
     _tabController.dispose();
     super.dispose();
   }
 
   Future<void> _loadData() async {
     if (!mounted) return;
+    final generation = ++_loadGeneration;
     setState(() {
       _isLoading = true;
       _error = null;
     });
 
     try {
-      // Load evolution data for selected years
-      final evolutionRes = await ObjectivesService.getEvolution(
-        vendedorCodes: _activeVendedorCode,
-        years: _selectedYears.toList(),
-      );
+      final activeVendedorCode = _activeVendedorCode;
 
-      // Load by-client objectives for selected periods
-      final clientsRes = await ObjectivesService.getByClient(
-        vendedorCodes: _activeVendedorCode,
-        years: _selectedYears.toList(),
-        months: _selectedMonths.toList(),
-        city: _selectedPopulation,
-        code: _clientCodeFilter.isNotEmpty ? _clientCodeFilter : null,
-        nif: _nifFilter.isNotEmpty ? _nifFilter : null,
-        name: _clientSearchQuery.isNotEmpty ? _clientSearchQuery : null,
-        limit: 100,
-      );
+      final results = await Future.wait<Map<String, dynamic>>([
+        ObjectivesService.getEvolution(
+          vendedorCodes: activeVendedorCode,
+          years: _selectedYears.toList(),
+        ),
+        ObjectivesService.getByClient(
+          vendedorCodes: activeVendedorCode,
+          years: _selectedYears.toList(),
+          months: _selectedMonths.toList(),
+          city: _selectedPopulation,
+          code: _clientCodeFilter.isNotEmpty ? _clientCodeFilter : null,
+          nif: _nifFilter.isNotEmpty ? _nifFilter : null,
+          name: _clientSearchQuery.isNotEmpty ? _clientSearchQuery : null,
+          limit: 100,
+        ),
+      ]);
+
+      if (!mounted || generation != _loadGeneration) return;
+      final evolutionRes = results[0];
+      final clientsRes = results[1];
 
       // Parse new backend format: yearlyData
       final rawYearlyData =
@@ -242,7 +255,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         }
       }
 
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _yearlyData = parsedYearlyData;
         _yearTotals = parsedYearTotals;
@@ -261,7 +274,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
       });
     } catch (e) {
       debugPrint('Error loading objectives: $e');
-      if (mounted)
+      if (mounted && generation == _loadGeneration)
         setState(() {
           _error = e.toString();
           _isLoading = false;
@@ -310,7 +323,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
             // If viewing all agents (no specific filter), calculate standard Mon-Sat working days
             // This avoids issues where aggregated data might have incorrect average days (e.g. 20 vs 24)
             final isAllAgentsView = widget.isJefeVentas &&
-                (_selectedVendedor == null || _selectedVendedor!.isEmpty);
+                ((ref.read(selectedVendorProvider) ?? '').isEmpty);
 
             if (isAllAgentsView) {
               // Calculate strict Mon-Sat days for this month
@@ -920,7 +933,6 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
   Widget _buildVendedorSelector() {
     return GlobalVendorSelector(
       isJefeVentas: widget.isJefeVentas,
-      onChanged: _loadData, // Reload data when filter changes
     );
   }
 

@@ -57,6 +57,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   final ScrollController _catalogScrollController = ScrollController();
   Timer? _stockRefreshTimer;
   Timer? _autoSaveTimer;
+  ProviderSubscription<String?>? _vendorSubscription;
 
   // Mejora 10 â€” Mis Pedidos search & date filter
   String _orderSearch = '';
@@ -73,16 +74,17 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     _tabController = TabController(length: 2, vsync: this);
     _tabController.addListener(_onTabChange);
 
+    if (widget.isJefeVentas) {
+      _vendorSubscription =
+          ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
+        if (previous != next) _onVendorFilterChanged();
+      });
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadInitialData();
       _initOffline();
       _initFavorites();
-      // Listen to "Ver como" vendor filter changes
-      if (widget.isJefeVentas) {
-        ref.listen<String?>(selectedVendorProvider, (previous, next) {
-          _onVendorFilterChanged();
-        });
-      }
       ref.read(pedidosProvider).addListener(_onProviderChange);
     });
 
@@ -115,6 +117,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
   @override
   void dispose() {
+    _vendorSubscription?.close();
     _stockRefreshTimer?.cancel();
     _autoSaveTimer?.cancel();
     _tabController.dispose();
@@ -552,7 +555,6 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           if (widget.isJefeVentas)
             GlobalVendorSelector(
               isJefeVentas: true,
-              onChanged: _onVendorFilterChanged,
             ),
           Expanded(
             child: TabBarView(

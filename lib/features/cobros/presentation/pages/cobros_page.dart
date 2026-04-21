@@ -30,6 +30,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounceTimer;
   bool _isInitialized = false;
+  ProviderSubscription<String?>? _vendorSubscription;
+  int _clientLoadGeneration = 0;
 
   // Single source of truth: Riverpod provider
   CobrosProvider get _provider =>
@@ -44,7 +46,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       _loadPendingSummary();
     });
 
-    ref.listen(selectedVendorProvider, (previous, next) {
+    _vendorSubscription =
+        ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
       if (_isInitialized && previous != next) {
         _loadClients();
         _loadPendingSummary();
@@ -54,6 +57,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
 
   Future<void> _loadClients([String query = '']) async {
     if (!mounted) return;
+    final generation = ++_clientLoadGeneration;
     setState(() => _isSearchingClients = true);
     try {
       final currentFilterVendor = ref.read(selectedVendorProvider);
@@ -62,14 +66,18 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         vendedorCodes: queryCode,
         search: query.isEmpty ? null : query,
       );
-      if (mounted) setState(() => _foundClients = results);
+      if (mounted && generation == _clientLoadGeneration) {
+        setState(() => _foundClients = results);
+      }
     } catch (_) {}
-    if (mounted) setState(() => _isSearchingClients = false);
+    if (mounted && generation == _clientLoadGeneration) {
+      setState(() => _isSearchingClients = false);
+    }
   }
 
   void _loadPendingSummary() {
     final selectedVendor = ref.read(selectedVendorProvider);
-    final authState = ref.watch(authProvider).value;
+    final authState = ref.read(authProvider).value;
     final allVendorCodes = authState?.vendedorCodes ?? [];
 
     if (selectedVendor != null && selectedVendor.isNotEmpty) {
@@ -94,6 +102,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
 
   @override
   void dispose() {
+    _vendorSubscription?.close();
     _searchController.dispose();
     _debounceTimer?.cancel();
     super.dispose();

@@ -380,7 +380,7 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
             ORDER BY CPC.EJERCICIOALBARAN DESC, CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC, CPC.NUMEROALBARAN DESC
         `;
 
-        const allParams = [clientCode, ...repartidorParams, ...yearFilterParams, ...dateParams];
+        const allParams = [...repartidorParams, clientCode, ...yearFilterParams, ...dateParams];
         const rows = await queryWithParams(sql, allParams);
 
         // --- DEDUPLICATION PASS 1: Eliminate duplicate CPC rows per albaran ---

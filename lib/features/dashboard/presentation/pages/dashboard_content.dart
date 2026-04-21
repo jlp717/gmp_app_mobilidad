@@ -81,6 +81,8 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
   List<MatrixNode> _selectionPath =
       []; // Path of selected nodes (e.g. [VendorNode, ClientNode])
   bool _isInitialized = false;
+  ProviderSubscription<String?>? _vendorSubscription;
+  int _loadGeneration = 0;
 
   static const List<String> _monthNamesShort = [
     'Ene',
@@ -107,7 +109,8 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     _loadVendedores();
     _fetchAllData();
 
-    ref.listen(selectedVendorProvider, (previous, next) {
+    _vendorSubscription =
+        ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
       if (_isInitialized && previous != next) {
         setState(() {
           _selectedVendedor = next;
@@ -119,6 +122,12 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
         _fetchAllData();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _vendorSubscription?.close();
+    super.dispose();
   }
 
   /// REMOVED: _loadFamilies - FI options are loaded by FiFiltersWidget
@@ -282,6 +291,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
 
   Future<void> _fetchAllData() async {
     if (!mounted) return;
+    final generation = ++_loadGeneration;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -300,9 +310,13 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       if (_selectedVendedor != null && _selectedVendedor!.isNotEmpty) {
         params['vendedorCodes'] = _selectedVendedor!;
       } else if (authState != null) {
-        final codes = authState?.vendedorCodes ?? [];
+        final user = authState.user;
+        final codes = authState.vendedorCodes;
         if (codes.isNotEmpty) {
-          params['vendedorCodes'] = codes.join(',');
+          final isManager = user?.isJefeVentas == true ||
+              user?.isDirector == true ||
+              codes.length > 1;
+          params['vendedorCodes'] = isManager ? 'ALL' : codes.join(',');
         }
       }
 
@@ -347,7 +361,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
         ),
       ]);
 
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
 
       // Safe type conversion for API response
       final matrixData = Map<String, dynamic>.from(results[0] as Map);
@@ -391,7 +405,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       final treeData = await compute(buildTreeIsolate,
           TreeBuildParams(rows: filteredRows, hierarchy: _hierarchy));
 
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
 
       setState(() {
         _matrixData = treeData;
@@ -404,7 +418,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       });
     } catch (e) {
       debugPrint('Error fetching dashboard: $e');
-      if (mounted) {
+      if (mounted && generation == _loadGeneration) {
         setState(() {
           _error = e.toString();
           _isLoading = false;
@@ -622,6 +636,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
           SizedBox(
             width: filterWidth,
             child: DropdownButtonFormField<String>(
+              key: ValueKey<String>(_selectedVendedor ?? 'ALL'),
               initialValue: _vendedoresDisponibles
                       .any((v) => v['code'].toString() == _selectedVendedor)
                   ? _selectedVendedor

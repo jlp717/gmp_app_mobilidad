@@ -8,7 +8,7 @@ const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const logger = require('../middleware/logger');
 const { verifyToken } = require('../middleware/auth');
-const { sanitizeCodeList, sanitizeForSQL } = require('../utils/common');
+const { sanitizeCodeListForParams, sanitizeForSQL } = require('../utils/common');
 const { isDeliveryStatusAvailable } = require('../utils/delivery-status-check');
 
 /**
@@ -169,7 +169,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         logger.info(`[ENTREGAS] Getting pending deliveries for repartidor ${repartidorId} (${dia}/${mes}/${ano})`);
 
         // Handle multiple IDs (comma separated) case
-        const idList = sanitizeCodeList(repartidorId);
+        const idList = sanitizeCodeListForParams(repartidorId);
         if (!idList || idList.length === 0) {
             return res.status(400).json({ error: 'Invalid repartidor ID format' });
         }

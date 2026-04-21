@@ -62,6 +62,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   bool _isInitialized = false;
   bool _isLoadingInProgress = false;
   Timer? _retryTimer; // Cancelable retry timer
+  ProviderSubscription<String?>? _vendorSubscription;
+  int _loadGeneration = 0;
 
   String _selectedAlertType = 'ALL';
   bool _onlyWithAlerts = false;
@@ -147,8 +149,11 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
     // Listen for vendor changes from OTHER pages (cross-page sync)
     // Do NOT use onChanged in GlobalVendorSelector - that would cause double refresh
-    ref.listen(selectedVendorProvider, (previous, next) {
+    _vendorSubscription =
+        ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
       if (_isInitialized && previous != next) {
+        _retryTimer?.cancel();
+        _cacheRetryCount = 0;
         _loadWeekData();
       }
     });
@@ -172,6 +177,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
   @override
   void dispose() {
+    _vendorSubscription?.close();
     _retryTimer?.cancel();
     _tabController.dispose();
     _searchController.dispose();
@@ -286,6 +292,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   }
 
   Future<void> _loadWeekData({bool useDirectEndpoint = false}) async {
+    final generation = ++_loadGeneration;
     setState(() {
       _isLoadingWeek = true;
       _error = null;
@@ -303,6 +310,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         },
       );
 
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _weekData = Map<String, int>.from(
           (response['week'] as Map)
@@ -322,18 +330,25 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         _cacheRetryCount++;
         _retryTimer?.cancel();
         _retryTimer = Timer(const Duration(seconds: 6), () {
-          if (mounted) _loadWeekData(useDirectEndpoint: useDirectEndpoint);
+          if (mounted && generation == _loadGeneration) {
+            _loadWeekData(useDirectEndpoint: useDirectEndpoint);
+          }
         });
         return;
       } else {
+        if (!mounted || generation != _loadGeneration) return;
         setState(() {
           _isCacheLoading = false;
           _cacheRetryCount = 0;
         });
       }
 
-      await _loadDayClients(useDirectEndpoint: useDirectEndpoint);
+      await _loadDayClients(
+        useDirectEndpoint: useDirectEndpoint,
+        generation: generation,
+      );
     } catch (e) {
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = e.toString();
         _isLoadingWeek = false;
@@ -341,7 +356,12 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     }
   }
 
-  Future<void> _loadDayClients({bool useDirectEndpoint = false}) async {
+  Future<void> _loadDayClients({
+    bool useDirectEndpoint = false,
+    int? generation,
+  }) async {
+    if (!mounted) return;
+    final currentGeneration = generation ?? ++_loadGeneration;
     setState(() {
       _isLoadingClients = true;
     });
@@ -375,6 +395,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         },
       );
 
+      if (!mounted || currentGeneration != _loadGeneration) return;
       setState(() {
         final rawList = response['clients'] ?? <dynamic>[];
         _dayClients = (rawList as List)
@@ -404,9 +425,15 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         _cacheRetryCount++;
         _retryTimer?.cancel();
         _retryTimer = Timer(const Duration(seconds: 6), () {
-          if (mounted) _loadDayClients(useDirectEndpoint: useDirectEndpoint);
+          if (mounted && currentGeneration == _loadGeneration) {
+            _loadDayClients(
+              useDirectEndpoint: useDirectEndpoint,
+              generation: currentGeneration,
+            );
+          }
         });
       } else {
+        if (!mounted || currentGeneration != _loadGeneration) return;
         setState(() {
           _isCacheLoading = false;
           _cacheRetryCount = 0;
@@ -420,10 +447,11 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             mounted) {
           debugPrint(
               '[Rutero] Day-direct returned clients without sales. Fetching sales data from normal endpoint...');
-          await _enrichWithSalesData();
+          await _enrichWithSalesData(generation: currentGeneration);
         }
       }
     } catch (e) {
+      if (!mounted || currentGeneration != _loadGeneration) return;
       setState(() {
         _dayClients = [];
         _isLoadingClients = false;
@@ -432,7 +460,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   }
 
   /// Fetch sales data from normal endpoint and merge into existing clients
-  Future<void> _enrichWithSalesData() async {
+  Future<void> _enrichWithSalesData({required int generation}) async {
     try {
       final normalResponse = await ApiClient.get(
         '${ApiConfig.ruteroDay}/$_selectedDay',
@@ -446,7 +474,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         },
       );
 
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
 
       final enrichedClients =
           (normalResponse['clients'] ?? <dynamic>[]) as List;

@@ -1734,32 +1734,110 @@ router.get('/by-client', async (req, res) => {
                 totalClientsCount = cachedClientCodes.length;
             }
 
-            // Query 1: Get client info + sales data (optimized with IN clause)
-            currentRows = await queryWithParams(`
-                SELECT 
-                    C.CODIGOCLIENTE as CODE,
-                    COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), C.NOMBRECLIENTE) as NAME,
-                    C.DIRECCION as ADDRESS,
-                    C.CODIGOPOSTAL as POSTALCODE,
-                    C.POBLACION as CITY,
-                    COALESCE(S.SALES, 0) as SALES,
-                    COALESCE(S.COST, 0) as COST
-                FROM DSEDAC.CLI C
-                LEFT JOIN (
-                    SELECT LCCDCL, SUM(LCIMVT) as SALES, SUM(LCIMCT) as COST
-                    FROM DSED.LACLAE
-                    WHERE LCAADC IN (${yearsArray.map(() => '?').join(',')})
-                      AND LCMMDC IN (${monthsArray.map(() => '?').join(',')})
-                      AND ${LACLAE_SALES_FILTER.replace(/L\./g, '')}
-                      AND LCCDCL IN (${safeClientCodes.map(() => '?').join(',')})
-                    GROUP BY LCCDCL
-                ) S ON C.CODIGOCLIENTE = S.LCCDCL
-                WHERE C.CODIGOCLIENTE IN (${safeClientCodes.map(() => '?').join(',')})
-                  AND C.ANOBAJA = 0
-                  ${extraFilters}
-                ORDER BY COALESCE(S.SALES, 0) DESC
-                FETCH FIRST ? ROWS ONLY
-            `, [...yearsArray, ...monthsArray, ...safeClientCodes, ...safeClientCodes, ...extraFilterParams, rowsLimit]);
+            if (!extraFilters) {
+                // Fast path for manager/default views: rank in LACLAE first, then
+                // fetch CLI details only for the returned top clients.
+                const salesRows = await queryWithParams(`
+                    SELECT L.LCCDCL as CODE, SUM(L.LCIMVT) as SALES, SUM(L.LCIMCT) as COST
+                    FROM DSED.LACLAE L
+                    WHERE L.LCAADC IN (${yearsArray.map(() => '?').join(',')})
+                      AND L.LCMMDC IN (${monthsArray.map(() => '?').join(',')})
+                      AND ${LACLAE_SALES_FILTER}
+                      AND L.LCCDCL IN (${safeClientCodes.map(() => '?').join(',')})
+                    GROUP BY L.LCCDCL
+                    ORDER BY SALES DESC
+                    FETCH FIRST ? ROWS ONLY
+                `, [...yearsArray, ...monthsArray, ...safeClientCodes, rowsLimit], false);
+
+                const topCodes = salesRows
+                    .map(r => (r.CODE || '').toString().trim())
+                    .filter(Boolean);
+
+                if (topCodes.length > 0) {
+                    const detailsRows = await queryWithParams(`
+                        SELECT
+                            C.CODIGOCLIENTE as CODE,
+                            COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), C.NOMBRECLIENTE) as NAME,
+                            C.DIRECCION as ADDRESS,
+                            C.CODIGOPOSTAL as POSTALCODE,
+                            C.POBLACION as CITY
+                        FROM DSEDAC.CLI C
+                        WHERE C.CODIGOCLIENTE IN (${topCodes.map(() => '?').join(',')})
+                          AND C.ANOBAJA = 0
+                    `, topCodes, false);
+
+                    const detailsMap = new Map();
+                    detailsRows.forEach(r => {
+                        const code = (r.CODE || '').toString().trim();
+                        if (code) detailsMap.set(code, r);
+                    });
+
+                    currentRows = salesRows.map(r => {
+                        const code = (r.CODE || '').toString().trim();
+                        const details = detailsMap.get(code) || {};
+                        return {
+                            CODE: code,
+                            NAME: details.NAME,
+                            ADDRESS: details.ADDRESS,
+                            POSTALCODE: details.POSTALCODE,
+                            CITY: details.CITY,
+                            SALES: r.SALES,
+                            COST: r.COST
+                        };
+                    }).filter(r => r.NAME);
+                } else {
+                    const fallbackCodes = safeClientCodes.slice(0, rowsLimit);
+                    const detailsRows = await queryWithParams(`
+                        SELECT
+                            C.CODIGOCLIENTE as CODE,
+                            COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), C.NOMBRECLIENTE) as NAME,
+                            C.DIRECCION as ADDRESS,
+                            C.CODIGOPOSTAL as POSTALCODE,
+                            C.POBLACION as CITY
+                        FROM DSEDAC.CLI C
+                        WHERE C.CODIGOCLIENTE IN (${fallbackCodes.map(() => '?').join(',')})
+                          AND C.ANOBAJA = 0
+                        FETCH FIRST ? ROWS ONLY
+                    `, [...fallbackCodes, rowsLimit], false);
+
+                    currentRows = detailsRows.map(r => ({
+                        CODE: (r.CODE || '').toString().trim(),
+                        NAME: r.NAME,
+                        ADDRESS: r.ADDRESS,
+                        POSTALCODE: r.POSTALCODE,
+                        CITY: r.CITY,
+                        SALES: 0,
+                        COST: 0
+                    }));
+                }
+            } else {
+                // Filtered path keeps the CLI predicates in SQL.
+                currentRows = await queryWithParams(`
+                    SELECT 
+                        C.CODIGOCLIENTE as CODE,
+                        COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), C.NOMBRECLIENTE) as NAME,
+                        C.DIRECCION as ADDRESS,
+                        C.CODIGOPOSTAL as POSTALCODE,
+                        C.POBLACION as CITY,
+                        COALESCE(S.SALES, 0) as SALES,
+                        COALESCE(S.COST, 0) as COST
+                    FROM DSEDAC.CLI C
+                    LEFT JOIN (
+                        SELECT LCCDCL, SUM(LCIMVT) as SALES, SUM(LCIMCT) as COST
+                        FROM DSED.LACLAE
+                        WHERE LCAADC IN (${yearsArray.map(() => '?').join(',')})
+                          AND LCMMDC IN (${monthsArray.map(() => '?').join(',')})
+                          AND ${LACLAE_SALES_FILTER.replace(/L\./g, '')}
+                          AND LCCDCL IN (${safeClientCodes.map(() => '?').join(',')})
+                        GROUP BY LCCDCL
+                    ) S ON C.CODIGOCLIENTE = S.LCCDCL
+                    WHERE C.CODIGOCLIENTE IN (${safeClientCodes.map(() => '?').join(',')})
+                      AND C.ANOBAJA = 0
+                      ${extraFilters}
+                    ORDER BY COALESCE(S.SALES, 0) DESC
+                    FETCH FIRST ? ROWS ONLY
+                `, [...yearsArray, ...monthsArray, ...safeClientCodes, ...safeClientCodes, ...extraFilterParams, rowsLimit]);
+            }
         } else {
             // Fallback: Use original query with vendedor filter if cache not available
             const vendedorFilterSales = buildVendedorFilterLACLAE(vendedorCodes, 'L');
@@ -1800,6 +1878,7 @@ router.get('/by-client', async (req, res) => {
         const vendorCodesArray = vendedorCodes
             ? vendedorCodes.split(',').map(v => v.replace(/[^a-zA-Z0-9]/g, '').trim()).filter(Boolean)
             : [];
+        const shouldLoadFixedTargets = vendorCodesArray.length === 1;
 
         if (retrievedCodes.length > 0) {
             // Parallelize 3 independent queries: prevSales + OBJ_CONFIG + COMMERCIAL_TARGETS
@@ -1825,7 +1904,7 @@ router.get('/by-client', async (req, res) => {
                     WHERE CODIGOCLIENTE IN (${retrievedCodesParams.map(() => '?').join(',')}, '*') 
                        OR CODIGOCLIENTE = '*'
                 `, [...retrievedCodesParams]).catch(err => { logger.warn(`Could not load objective config: ${err.message}`); return []; }),
-                vendorCodesArray.length > 0
+                shouldLoadFixedTargets
                     ? queryWithParams(`
                         SELECT CODIGOVENDEDOR, IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION, PORCENTAJE_MEJORA
                         FROM JAVIER.COMMERCIAL_TARGETS

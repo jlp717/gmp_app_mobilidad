@@ -71,22 +71,23 @@ router.get('/vendedores', async (req, res) => {
 
         // Cache for list of active vendors (changes rarely)
         const cacheKey = `master:vendedores:${currentYear}:${prevYear}`;
-        
-        const vendedores = await cachedQuery(query, `
-            WITH ActiveVendors AS (
-                SELECT DISTINCT TRIM(R1_T8CDVD) as CODE
-                FROM DSED.LACLAE
-                WHERE LCAADC IN (${currentYear}, ${prevYear})
-                  AND R1_T8CDVD IS NOT NULL 
-                  AND TRIM(R1_T8CDVD) <> ''
-            )
+
+        // Keep this endpoint aligned with /rutero/vendedores. The old LACLAE
+        // DISTINCT scan was 7-10s on cold cache and only produced a dropdown.
+        const activeComerciales = ['01', '02', '03', '05', '10', '13', '15', '16', '33', '35', '72', '73', '80', '81', '83', '92', '93', '95', '97', '98'];
+        const placeholders = activeComerciales.map(() => '?').join(',');
+        const vendedores = await cachedQuery(queryWithParams, `
             SELECT
-                AV.CODE as code,
-                D.NOMBREVENDEDOR as name
-            FROM ActiveVendors AV
-            LEFT JOIN DSEDAC.VDD D ON AV.CODE = TRIM(D.CODIGOVENDEDOR)
-            ORDER BY AV.CODE
-        `);
+                TRIM(D.CODIGOVENDEDOR) as code,
+                TRIM(D.NOMBREVENDEDOR) as name
+            FROM DSEDAC.VDD D
+            WHERE TRIM(D.CODIGOVENDEDOR) IN (${placeholders})
+            ORDER BY D.CODIGOVENDEDOR
+        `, {
+            cacheKey,
+            ttl: TTL.LONG,
+            params: activeComerciales
+        }, activeComerciales);
 
         res.json({
             vendedores: vendedores

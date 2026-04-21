@@ -58,6 +58,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   // Animation
   late AnimationController _fadeController;
   bool _isInitialized = false;
+  ProviderSubscription<String?>? _vendorSubscription;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
@@ -72,7 +74,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       _loadInitialData();
     });
 
-    ref.listen(selectedVendorProvider, (previous, next) {
+    _vendorSubscription =
+        ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
       if (_isInitialized && previous != next) {
         _loadInitialData();
       }
@@ -81,6 +84,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
   @override
   void dispose() {
+    _vendorSubscription?.close();
     _clientSearchController.dispose();
     _facturaSearchController.dispose();
     _debounceTimer?.cancel();
@@ -99,6 +103,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   }
 
   Future<void> _loadInitialData([bool showLoading = true]) async {
+    final generation = ++_loadGeneration;
     try {
       if (showLoading) {
         setState(() => _isLoading = true);
@@ -160,7 +165,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         ),
       ]);
 
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
 
       setState(() {
         _years = (results[0]! as List<int>)!;
@@ -171,7 +176,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
       _fadeController.forward();
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = 'Error cargando facturas: $e';
         _isLoading = false;

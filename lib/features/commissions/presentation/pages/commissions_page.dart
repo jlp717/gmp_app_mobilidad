@@ -27,6 +27,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
   Map<String, dynamic>? _data;
   DateTime? _lastFetchTime;
   bool _isInitialized = false;
+  ProviderSubscription<String?>? _vendorSubscription;
+  int _loadGeneration = 0;
 
   // Jefe View
 
@@ -37,14 +39,22 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     _isInitialized = true;
     _loadData();
 
-    ref.listen(selectedVendorProvider, (previous, next) {
+    _vendorSubscription =
+        ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
       if (_isInitialized && previous != next) {
         _loadData();
       }
     });
   }
 
+  @override
+  void dispose() {
+    _vendorSubscription?.close();
+    super.dispose();
+  }
+
   Future<void> _loadData({bool forceRefresh = false}) async {
+    final generation = ++_loadGeneration;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -71,13 +81,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
         vendedorCode: code,
         forceRefresh: forceRefresh,
       );
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _data = res;
         _isLoading = false;
         _lastFetchTime = DateTime.now();
       });
     } catch (e) {
-      if (mounted) {
+      if (mounted && generation == _loadGeneration) {
         setState(() {
           _error = e.toString();
           _isLoading = false;

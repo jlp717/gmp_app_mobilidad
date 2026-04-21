@@ -28,27 +28,27 @@ class CachePreWarmer {
       final codes = vendedorCodes.join(',');
       final currentYear = DateTime.now().year;
       final currentMonth = DateTime.now().month;
-      final commissionsTarget = isJefeVentas ? 'ALL' : codes;
-
       await Future.wait([
         _preWarmFacturas(codes, currentYear, currentMonth),
         if (isJefeVentas) _preWarmVendedores(),
         _preWarmRuteroWeek(codes, currentYear, currentMonth),
       ]);
 
-      // Warm commissions slightly later for manager sessions. This avoids
-      // competing with the first render and uses the backend's aggregate path.
-      unawaited(
-        Future<void>.delayed(const Duration(seconds: 2), () async {
-          try {
-            await _preWarmCommissions(commissionsTarget, currentYear);
-          } catch (e) {
-            debugPrint(
-              '[CachePreWarmer] Delayed commissions pre-warm failed: $e',
-            );
-          }
-        }),
-      );
+      // Manager ALL commissions are intentionally not pre-warmed: the cold query
+      // competes with objectives/rutero and can exhaust the DB pool.
+      if (!isJefeVentas) {
+        unawaited(
+          Future<void>.delayed(const Duration(seconds: 2), () async {
+            try {
+              await _preWarmCommissions(codes, currentYear);
+            } catch (e) {
+              debugPrint(
+                '[CachePreWarmer] Delayed commissions pre-warm failed: $e',
+              );
+            }
+          }),
+        );
+      }
 
       _hasPreWarmed = true;
       debugPrint('[CachePreWarmer] Pre-warming completed');
@@ -102,7 +102,7 @@ class CachePreWarmer {
   static Future<void> _preWarmVendedores() async {
     try {
       await ApiClient.get(
-        '/vendedores',
+        '/rutero/vendedores',
         cacheKey: 'vendedores_list',
         cacheTTL: CacheService.longTTL,
       );

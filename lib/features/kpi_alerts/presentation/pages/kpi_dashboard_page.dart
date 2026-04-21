@@ -29,18 +29,27 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
   Map<String, dynamic>? _data;
   bool _loading = true;
   String? _error;
+  ProviderSubscription<String?>? _vendorSubscription;
+  int _loadGeneration = 0;
 
   @override
   void initState() {
     super.initState();
     _loadDashboard();
     if (widget.isJefeVentas) {
-      ref.listen<String?>(selectedVendorProvider, (previous, next) {
+      _vendorSubscription =
+          ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
         if (previous != next) {
           _loadDashboard();
         }
       });
     }
+  }
+
+  @override
+  void dispose() {
+    _vendorSubscription?.close();
+    super.dispose();
   }
 
   /// Resolves the vendorCode to use for the API call:
@@ -61,6 +70,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
 
   Future<void> _loadDashboard() async {
     if (!mounted) return;
+    final generation = ++_loadGeneration;
     setState(() {
       _loading = true;
       _error = null;
@@ -75,7 +85,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
       }
 
       final data = await ApiClient.get(url);
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       if (data != null && data['success'] == true) {
         setState(() {
           _data = data;
@@ -88,7 +98,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
         });
       }
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = 'Error de conexion. Comprueba tu red e intentalo de nuevo.';
         _loading = false;

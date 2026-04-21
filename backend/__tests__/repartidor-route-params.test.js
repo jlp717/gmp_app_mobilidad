@@ -65,11 +65,19 @@ jest.mock('../services/facturas.service', () => ({}));
 jest.mock('../services/pdf.service', () => ({}));
 
 const repartidorRoutes = require('../routes/repartidor');
+const entregasRoutes = require('../routes/entregas');
 
 function makeApp() {
   const app = express();
   app.use(express.json());
   app.use('/', repartidorRoutes);
+  return app;
+}
+
+function makeEntregasApp() {
+  const app = express();
+  app.use(express.json());
+  app.use('/', entregasRoutes);
   return app;
 }
 
@@ -114,6 +122,18 @@ describe('Repartidor route parameter binding', () => {
     expect(params).not.toContain("'08'");
   });
 
+  test('GET /history/documents binds repartidor codes before client code', async () => {
+    const res = await request(app)
+      .get('/history/documents/4300030041')
+      .query({ repartidorId: '05,08', year: 2026 });
+
+    expect(res.status).toBe(200);
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
+
+    const [, params] = mockQueryWithParams.mock.calls[0];
+    expect(params).toEqual(['05', '08', '4300030041', 2026]);
+  });
+
   test('GET /history/delivery-summary rejects invalid repartidor ids before querying', async () => {
     const res = await request(app)
       .get('/history/delivery-summary/%27bad%27')
@@ -121,5 +141,19 @@ describe('Repartidor route parameter binding', () => {
 
     expect(res.status).toBe(400);
     expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+
+  test('GET /pendientes binds a single repartidor id as parameter array', async () => {
+    const entregasApp = makeEntregasApp();
+
+    const res = await request(entregasApp)
+      .get('/pendientes/02')
+      .query({ date: '2026-04-21' });
+
+    expect(res.status).toBe(200);
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
+
+    const [, params] = mockQueryWithParams.mock.calls[0];
+    expect(params).toEqual(['02', 21, 4, 2026]);
   });
 });

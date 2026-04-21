@@ -41,6 +41,8 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
   String _selectedAlertType = 'ALL';
   bool _onlyWithAlerts = false;
   List<String>? _clientsWithAlertsCodes;
+  ProviderSubscription<String?>? _vendorSubscription;
+  int _loadGeneration = 0;
 
   final List<Map<String, dynamic>> _availableVendors = [];
   final String _selectedVendorCode =
@@ -51,7 +53,8 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
     super.initState();
     _loadClients();
     if (widget.isJefeVentas) {
-      ref.listen<String?>(selectedVendorProvider, (previous, next) {
+      _vendorSubscription =
+          ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
         if (previous != next) {
           _loadClients(
             query: _searchController.text.trim().isEmpty
@@ -67,6 +70,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
 
   @override
   void dispose() {
+    _vendorSubscription?.close();
     _debounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
@@ -83,6 +87,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
   }
 
   Future<void> _loadClients({String? query}) async {
+    final generation = ++_loadGeneration;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -121,12 +126,14 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
         }).toList();
       }
 
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _clients = filteredResults;
         _isLoading = false;
         _lastFetchTime = DateTime.now();
       });
     } catch (e) {
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
