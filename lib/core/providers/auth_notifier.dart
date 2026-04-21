@@ -1,5 +1,5 @@
 /// Auth Notifier - Riverpod AsyncNotifier v4.0.0
-/// 
+///
 /// Replaces AuthProvider (ChangeNotifier) with compile-safe AsyncNotifier.
 /// Features:
 /// - Auto-login on app start
@@ -7,7 +7,7 @@
 /// - Role switching
 /// - 401 global logout callback
 /// - Mandatory update check
-/// 
+///
 /// @agent Flutter Riverpod - AsyncNotifier + code generation ready
 /// @agent Security - Secure token storage, no plaintext credentials
 library;
@@ -31,7 +31,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 // ============================================================
 
 class AuthState {
-
   const AuthState({
     this.user,
     this.vendedorCodes = const [],
@@ -137,17 +136,25 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       var dataB64 = token.substring(0, dotIndex);
       // Add standard base64 padding if needed
       switch (dataB64.length % 4) {
-        case 2: dataB64 += '=='; break;
-        case 3: dataB64 += '='; break;
-        default: break;
+        case 2:
+          dataB64 += '==';
+          break;
+        case 3:
+          dataB64 += '=';
+          break;
+        default:
+          break;
       }
       final decoded = utf8.decode(base64.decode(dataB64));
       final data = jsonDecode(decoded) as Map<String, dynamic>;
       // Token payload uses 'timestamp' (ms since epoch), TTL = 1 hour server-side
       final timestamp = data['timestamp'];
       if (timestamp == null) return true;
-      final ts = timestamp is int ? timestamp : int.tryParse(timestamp.toString()) ?? 0;
-      const ttlMs = 3600000; // 1 hour — matches server JWT_ACCESS_EXPIRES default
+      final ts = timestamp is int
+          ? timestamp
+          : int.tryParse(timestamp.toString()) ?? 0;
+      const ttlMs =
+          3600000; // 1 hour — matches server JWT_ACCESS_EXPIRES default
       return DateTime.now().millisecondsSinceEpoch - ts > ttlMs;
     } catch (_) {
       return true; // can't decode → treat as expired
@@ -192,7 +199,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           }
         } catch (_) {
           // Network error — proceed with stored session (offline-tolerant)
-          debugPrint('[AuthNotifier] Could not reach server, proceeding offline');
+          debugPrint(
+              '[AuthNotifier] Could not reach server, proceeding offline');
         } finally {
           ApiClient.endLogin();
         }
@@ -202,7 +210,12 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         final vendedorCodes = codes ?? [];
 
         // Pre-warm cache in background
-        unawaited(CachePreWarmer.preWarmCacheForCodes(vendedorCodes));
+        unawaited(
+          CachePreWarmer.preWarmCache(
+            vendedorCodes: vendedorCodes,
+            isJefeVentas: user.isJefeVentas,
+          ),
+        );
 
         // Check for updates in background
         unawaited(_checkForUpdates());
@@ -228,7 +241,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
     try {
       if (username.isEmpty || password.isEmpty) {
         state = const AsyncValue.data(
-          AuthState(isInitialized: true, error: 'Usuario y contraseña requeridos'),
+          AuthState(
+              isInitialized: true, error: 'Usuario y contraseña requeridos'),
         );
         return false;
       }
@@ -264,7 +278,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           response['user'] as Map<String, dynamic>,
         );
         final token = response['token'] as String?;
-        
+
         if (token == null || token.isEmpty) {
           state = const AsyncValue.data(
             AuthState(
@@ -304,7 +318,12 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         );
 
         // Pre-warm cache in background
-        unawaited(CachePreWarmer.preWarmCacheForCodes(vendedorCodes));
+        unawaited(
+          CachePreWarmer.preWarmCache(
+            vendedorCodes: vendedorCodes,
+            isJefeVentas: user.isJefeVentas,
+          ),
+        );
 
         debugPrint('[AuthNotifier] Login successful: ${user.name}');
         return true;
@@ -333,7 +352,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
   }
 
   /// Login for multi-role users
-  Future<bool> loginWithRole(String username, String password, String role) async {
+  Future<bool> loginWithRole(
+      String username, String password, String role) async {
     ApiClient.startLogin(); // Block concurrent 401s from triggering logout
     state = const AsyncValue.loading();
 
@@ -365,7 +385,8 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
 
       ApiClient.setAuthToken(token);
       await SecureStorage.writeSecureData('user_token', token);
-      await SecureStorage.writeSecureData('user_data', jsonEncode(response['user']));
+      await SecureStorage.writeSecureData(
+          'user_data', jsonEncode(response['user']));
 
       final prefs = await SharedPreferences.getInstance();
       await prefs.setStringList('vendedor_codes', vendedorCodes);
@@ -375,10 +396,16 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       ApiClient.setAuthToken(token);
 
       state = AsyncValue.data(
-        AuthState(user: user, vendedorCodes: vendedorCodes, isInitialized: true),
+        AuthState(
+            user: user, vendedorCodes: vendedorCodes, isInitialized: true),
       );
 
-      unawaited(CachePreWarmer.preWarmCacheForCodes(vendedorCodes));
+      unawaited(
+        CachePreWarmer.preWarmCache(
+          vendedorCodes: vendedorCodes,
+          isJefeVentas: user.isJefeVentas,
+        ),
+      );
       return true;
     } catch (e) {
       state = AsyncValue.data(
@@ -453,15 +480,18 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
           await SecureStorage.writeSecureData('user_token', token);
 
           final updatedUser = currentState.user!.copyWith(role: newRole);
-          state = AsyncValue.data(currentState.copyWith(user: updatedUser, isLoading: false));
+          state = AsyncValue.data(
+              currentState.copyWith(user: updatedUser, isLoading: false));
         }
         return true;
       }
 
-      state = AsyncValue.data(currentState.copyWith(isLoading: false, error: 'Failed to switch role'));
+      state = AsyncValue.data(currentState.copyWith(
+          isLoading: false, error: 'Failed to switch role'));
       return false;
     } catch (e) {
-      state = AsyncValue.data(currentState.copyWith(isLoading: false, error: e.toString()));
+      state = AsyncValue.data(
+          currentState.copyWith(isLoading: false, error: e.toString()));
       return false;
     }
   }
@@ -533,7 +563,8 @@ final authErrorProvider = Provider<String?>((ref) {
   return ref.watch(authProvider).value?.error;
 });
 
-final updateCheckProvider = Provider<({bool available, bool mandatory, String message})>((ref) {
+final updateCheckProvider =
+    Provider<({bool available, bool mandatory, String message})>((ref) {
   final state = ref.watch(authProvider).value;
   return (
     available: state?.updateAvailable ?? false,

@@ -4,8 +4,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/models/user_model.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
-import 'package:gmp_app_mobilidad/core/providers/dashboard_notifier.dart';
-import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/services/navigation_config_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -87,31 +85,6 @@ class _MainShellState extends ConsumerState<MainShell> {
   bool get _isAlmacenEffective {
     if (_forceAlmacenMode) return true;
     return false;
-  }
-
-  void _onFilterChanged() {
-    // FIX: Only propagate vendor filter to dashboard when user is on Panel tab
-    // Previously, filtering by vendor in Clientes/Objetivos would contaminate
-    // the dashboard's own filter state
-    if (_currentIndex != 0) return; // Panel is always index 0 for Jefe
-
-    final filterState = ref.read(filterProvider);
-    final authState = ref.read(authProvider).value;
-    final selectedVendor = filterState.selectedVendor;
-
-    if (selectedVendor != null && selectedVendor.isNotEmpty) {
-      // Use Riverpod dashboardProvider to update vendor codes
-      final container = ProviderScope.containerOf(context);
-      container
-          .read(dashboardProvider.notifier)
-          .updateVendorCodes(selectedVendor.split(','));
-    } else {
-      // No filter = show all vendor codes
-      final container = ProviderScope.containerOf(context);
-      container
-          .read(dashboardProvider.notifier)
-          .updateVendorCodes(authState?.vendedorCodes ?? []);
-    }
   }
 
   @override
@@ -213,12 +186,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     final authState = ref.read(authProvider).value;
     final user = authState?.user;
     if (user != null) {
-      final now = DateTime.now();
-
       if (user.isJefeVentas) {
-        ref
-            .read(dashboardProvider.notifier)
-            .fetchAll(year: now.year, month: now.month);
         // Fetch repartidores
         _fetchRepartidores();
       } else {
@@ -339,11 +307,6 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    // Listen to filter changes and propagate to dashboard
-    ref.listen(filterProvider, (previous, next) {
-      _onFilterChanged();
-    });
-
     // PERFORMANCE: Use select() to only rebuild when user changes
     final user = ref.watch(authProvider.select((state) => state.value?.user));
 

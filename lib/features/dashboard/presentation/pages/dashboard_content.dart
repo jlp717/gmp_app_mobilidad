@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
-import 'package:gmp_app_mobilidad/core/providers/dashboard_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
@@ -103,12 +102,20 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     super.initState();
     _pendingYears = Set.from(_selectedYears);
     _pendingMonths = Set.from(_selectedMonths);
+    _selectedVendedor = ref.read(selectedVendorProvider);
     _isInitialized = true;
     _loadVendedores();
     _fetchAllData();
 
     ref.listen(selectedVendorProvider, (previous, next) {
       if (_isInitialized && previous != next) {
+        setState(() {
+          _selectedVendedor = next;
+          _selectedClientCodes.clear();
+          _clientsDisponibles.clear();
+          _selectionPath = [];
+        });
+        _loadClients(initial: true);
         _fetchAllData();
       }
     });
@@ -284,19 +291,15 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       // Users can now manually add/remove 'product' or 'family' via the selector.
     });
 
-    final dashboardState =
-        ProviderScope.containerOf(context).read(dashboardProvider).value;
-
     try {
       final params = <String, String>{};
+      final authState =
+          ProviderScope.containerOf(context).read(authProvider).value;
 
       // Vendor codes
       if (_selectedVendedor != null && _selectedVendedor!.isNotEmpty) {
         params['vendedorCodes'] = _selectedVendedor!;
-      } else if (dashboardState != null) {
-        // Get vendor codes from auth state
-        final authState =
-            ProviderScope.containerOf(context).read(authProvider).value;
+      } else if (authState != null) {
         final codes = authState?.vendedorCodes ?? [];
         if (codes.isNotEmpty) {
           params['vendedorCodes'] = codes.join(',');
@@ -456,6 +459,8 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
   }
 
   void _resetFilters() {
+    final hadGlobalVendorFilter = ref.read(selectedVendorProvider) != null;
+
     setState(() {
       _selectedVendedor = null;
       _selectedClientCodes.clear();
@@ -465,6 +470,12 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       _selectedMonths = {for (var i = 1; i <= DateTime.now().month; i++) i};
       _selectionPath = [];
     });
+
+    if (hadGlobalVendorFilter) {
+      ref.read(filterProvider.notifier).clear();
+      return;
+    }
+
     _loadClients(initial: true);
     _fetchAllData();
   }
@@ -648,14 +659,10 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                   );
                 }),
               ],
-              onChanged: (val) async {
-                setState(() {
-                  _selectedVendedor = val?.isEmpty ?? false ? null : val;
-                  _selectedClientCodes.clear();
-                  _clientsDisponibles.clear();
-                });
-                await _loadClients();
-                await _fetchAllData();
+              onChanged: (val) {
+                final normalizedValue = val?.isEmpty ?? false ? null : val;
+                if (normalizedValue == _selectedVendedor) return;
+                ref.read(filterProvider.notifier).setVendor(normalizedValue);
               },
             ),
           ),

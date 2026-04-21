@@ -18,13 +18,14 @@ import 'package:url_launcher/url_launcher.dart';
 
 /// Simple Clients List Page with debounced search
 class SimpleClientListPage extends ConsumerStatefulWidget {
-
-  const SimpleClientListPage({required this.employeeCode, super.key, this.isJefeVentas = false});
+  const SimpleClientListPage(
+      {required this.employeeCode, super.key, this.isJefeVentas = false});
   final String employeeCode;
   final bool isJefeVentas;
 
   @override
-  ConsumerState<SimpleClientListPage> createState() => _SimpleClientListPageState();
+  ConsumerState<SimpleClientListPage> createState() =>
+      _SimpleClientListPageState();
 }
 
 class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
@@ -42,12 +43,24 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
   List<String>? _clientsWithAlertsCodes;
 
   final List<Map<String, dynamic>> _availableVendors = [];
-  final String _selectedVendorCode = ''; // Default to empty string (All) for Manager view, so it matches dropdown item
+  final String _selectedVendorCode =
+      ''; // Default to empty string (All) for Manager view, so it matches dropdown item
 
   @override
   void initState() {
     super.initState();
     _loadClients();
+    if (widget.isJefeVentas) {
+      ref.listen<String?>(selectedVendorProvider, (previous, next) {
+        if (previous != next) {
+          _loadClients(
+            query: _searchController.text.trim().isEmpty
+                ? null
+                : _searchController.text.trim(),
+          );
+        }
+      });
+    }
   }
 
   // ... (dispose and _onSearchChanged remain same)
@@ -79,13 +92,13 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
       // Logic: If Manager + Selected Vendor -> Filter by that.
       // If Manager + No selection -> Show All (pass no code).
       // If Rep -> Show only theirs (pass employeeCode).
-      
+
       String? codesToPass;
       if (widget.isJefeVentas) {
-         // Use FilterProvider
-         codesToPass = ref.read(selectedVendorProvider);
+        // Use FilterProvider
+        codesToPass = ref.read(selectedVendorProvider);
       } else {
-         codesToPass = widget.employeeCode;
+        codesToPass = widget.employeeCode;
       }
 
       final results = await ClientsService.getClientsList(
@@ -100,7 +113,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
           vendedorCodes: codesToPass,
           type: _selectedAlertType,
         );
-        
+
         final codesSet = alertCodes.toSet();
         filteredResults = results.where((c) {
           final code = c['code']?.toString() ?? '';
@@ -123,11 +136,13 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
 
   // ... (_navigateToClientMatrix)
 
-
   void _openWhatsApp(Map<String, dynamic> client) {
     // Backend now returns phones array with simple objects
-    final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
-    
+    final phones = (client['phones'] as List?)
+            ?.map((p) => Map<String, dynamic>.from(p as Map))
+            .toList() ??
+        [];
+
     // Fallback if phones array is empty but phone fields exist (legacy compat)
     if (phones.isEmpty) {
       if (client['phone'] != null && (client['phone'] as String).isNotEmpty) {
@@ -151,24 +166,30 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Enviar WhatsApp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const Text('Enviar WhatsApp',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 8),
-            const Text('Selecciona el número:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const Text('Selecciona el número:',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
             const SizedBox(height: 12),
             if (phones.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('No hay teléfonos guardados', style: TextStyle(color: AppTheme.textSecondary)),
+                child: Text('No hay teléfonos guardados',
+                    style: TextStyle(color: AppTheme.textSecondary)),
               ),
-            ...phones.map((p) => ListTile(
-              leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
-              title: Text((p['number'] as String?) ?? ''),
-              subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _launchWhatsApp((p['number'] as String?) ?? '');
-              },
-            ),),
+            ...phones.map(
+              (p) => ListTile(
+                leading:
+                    const Icon(Icons.phone_android, color: Color(0xFF25D366)),
+                title: Text((p['number'] as String?) ?? ''),
+                subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _launchWhatsApp((p['number'] as String?) ?? '');
+                },
+              ),
+            ),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.dialpad, color: AppTheme.neonPink),
@@ -212,14 +233,15 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
             style: ElevatedButton.styleFrom(
-              backgroundColor: isWhatsApp ? const Color(0xFF25D366) : AppTheme.neonBlue,
+              backgroundColor:
+                  isWhatsApp ? const Color(0xFF25D366) : AppTheme.neonBlue,
             ),
             child: Text(isWhatsApp ? 'Enviar WhatsApp' : 'Llamar'),
           ),
         ],
       ),
     );
-    
+
     if (result != null && result.trim().isNotEmpty) {
       _launchWhatsApp(result.trim());
     }
@@ -237,25 +259,23 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
     }
 
     // Personal identification
-    final authState = ProviderScope.containerOf(context)
-        .read(authProvider)
-        .value;
+    final authState =
+        ProviderScope.containerOf(context).read(authProvider).value;
     final nombreComercial = authState?.user?.name ?? 'tu comercial';
     final manana = DateTime.now().add(const Duration(days: 1));
     final fecha = '${manana.day}/${manana.month}/${manana.year}';
 
     // Professional message
-    final message = Uri.encodeComponent(
-      'Hola, soy $nombreComercial de Mari Pepa. '
-      'Mañana día $fecha tenemos visita. '
-      '¿Necesitas cualquier cosilla?'
-    );
+    final message =
+        Uri.encodeComponent('Hola, soy $nombreComercial de Mari Pepa. '
+            'Mañana día $fecha tenemos visita. '
+            '¿Necesitas cualquier cosilla?');
 
     final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
-       ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo abrir WhatsApp')),
       );
     }
@@ -277,7 +297,6 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -294,30 +313,34 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
 
         // Header & Filters
         Container(
-          padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
+          padding:
+              EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
           child: Column(
             children: [
               if (!Responsive.isLandscapeCompact(context))
                 Row(
                   children: [
-                    Icon(Icons.people, color: AppTheme.neonGreen, size: Responsive.iconSize(context, phone: 22, desktop: 28)),
+                    Icon(Icons.people,
+                        color: AppTheme.neonGreen,
+                        size: Responsive.iconSize(context,
+                            phone: 22, desktop: 28)),
                     const SizedBox(width: 12),
-                    Text('Clientes', style: Theme.of(context).textTheme.headlineMedium),
+                    Text('Clientes',
+                        style: Theme.of(context).textTheme.headlineMedium),
                     const Spacer(),
                     Text(
                       '${_clients.length} clientes',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppTheme.textSecondary,
-                      ),
+                            color: AppTheme.textSecondary,
+                          ),
                     ),
                   ],
                 ),
               if (widget.isJefeVentas) ...[
-                 const SizedBox(height: 12),
-                 GlobalVendorSelector(
-                   isJefeVentas: true,
-                   onChanged: _loadClients,
-                 ),
+                const SizedBox(height: 12),
+                GlobalVendorSelector(
+                  isJefeVentas: true,
+                ),
               ],
             ],
           ),
@@ -328,7 +351,8 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
 
         // Search Bar
         Padding(
-          padding: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 16)),
+          padding: EdgeInsets.symmetric(
+              horizontal: Responsive.padding(context, small: 12, large: 16)),
           child: TextField(
             decoration: InputDecoration(
               hintText: 'Buscar cliente, NIF, Ciudad, Código...',
@@ -358,7 +382,8 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
   Widget _buildContent() {
     if (_isLoading) {
       return Padding(
-        padding: EdgeInsets.all(Responsive.padding(context, small: 24, large: 40)),
+        padding:
+            EdgeInsets.all(Responsive.padding(context, small: 24, large: 40)),
         child: const ModernLoading(message: 'Cargando cartera de clientes...'),
       );
     }
@@ -386,7 +411,8 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.people_outline, size: 64, color: AppTheme.textSecondary),
+            const Icon(Icons.people_outline,
+                size: 64, color: AppTheme.textSecondary),
             const SizedBox(height: 16),
             const Text('No se encontraron clientes'),
             const SizedBox(height: 8),
@@ -402,7 +428,8 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
     return RefreshIndicator(
       onRefresh: () => _loadClients(query: _searchQuery),
       child: ListView.builder(
-        padding: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 16)),
+        padding: EdgeInsets.symmetric(
+            horizontal: Responsive.padding(context, small: 12, large: 16)),
         itemCount: _clients.length,
         itemBuilder: (context, index) {
           final client = _clients[index];
@@ -444,7 +471,9 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
                     color: AppTheme.surfaceColor,
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: _selectedAlertType != 'ALL' ? AppTheme.neonPink : AppTheme.borderColor,
+                      color: _selectedAlertType != 'ALL'
+                          ? AppTheme.neonPink
+                          : AppTheme.borderColor,
                     ),
                   ),
                   child: DropdownButtonHideUnderline(
@@ -455,13 +484,21 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
                       icon: const Icon(Icons.filter_list, size: 20),
                       style: TextStyle(
                         fontSize: 13,
-                        color: _selectedAlertType != 'ALL' ? AppTheme.neonPink : AppTheme.textPrimary,
-                        fontWeight: _selectedAlertType != 'ALL' ? FontWeight.bold : FontWeight.normal,
+                        color: _selectedAlertType != 'ALL'
+                            ? AppTheme.neonPink
+                            : AppTheme.textPrimary,
+                        fontWeight: _selectedAlertType != 'ALL'
+                            ? FontWeight.bold
+                            : FontWeight.normal,
                       ),
-                      items: alertTypes.entries.map((e) => DropdownMenuItem(
-                        value: e.key,
-                        child: Text(e.value),
-                      ),).toList(),
+                      items: alertTypes.entries
+                          .map(
+                            (e) => DropdownMenuItem(
+                              value: e.key,
+                              child: Text(e.value),
+                            ),
+                          )
+                          .toList(),
                       onChanged: (value) {
                         if (value != null) {
                           setState(() => _selectedAlertType = value);
@@ -480,13 +517,18 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
                 checkmarkColor: AppTheme.neonPink,
                 labelStyle: TextStyle(
                   fontSize: 12,
-                  color: _onlyWithAlerts ? AppTheme.neonPink : AppTheme.textSecondary,
-                  fontWeight: _onlyWithAlerts ? FontWeight.bold : FontWeight.normal,
+                  color: _onlyWithAlerts
+                      ? AppTheme.neonPink
+                      : AppTheme.textSecondary,
+                  fontWeight:
+                      _onlyWithAlerts ? FontWeight.bold : FontWeight.normal,
                 ),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                   side: BorderSide(
-                    color: _onlyWithAlerts ? AppTheme.neonPink : AppTheme.borderColor,
+                    color: _onlyWithAlerts
+                        ? AppTheme.neonPink
+                        : AppTheme.borderColor,
                   ),
                 ),
                 onSelected: (val) {
@@ -524,8 +566,11 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
 }
 
 class _ClientCard extends StatelessWidget {
-
-  const _ClientCard({required this.client, this.isJefeVentas = false, this.onTap, this.onWhatsAppTap});
+  const _ClientCard(
+      {required this.client,
+      this.isJefeVentas = false,
+      this.onTap,
+      this.onWhatsAppTap});
   final Map<String, dynamic> client;
   final bool isJefeVentas;
   final VoidCallback? onTap;
@@ -582,23 +627,28 @@ class _ClientCard extends StatelessWidget {
                       children: [
                         Text(
                           name,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(Icons.location_on, size: 14, color: AppTheme.textSecondary),
+                            const Icon(Icons.location_on,
+                                size: 14, color: AppTheme.textSecondary),
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
                                 city.isNotEmpty ? city : 'Sin ciudad',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: AppTheme.textSecondary,
+                                    ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -608,14 +658,18 @@ class _ClientCard extends StatelessWidget {
                         if (phone.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Row(
-                          children: [
-                              const Icon(Icons.phone, size: 14, color: AppTheme.textSecondary),
+                            children: [
+                              const Icon(Icons.phone,
+                                  size: 14, color: AppTheme.textSecondary),
                               const SizedBox(width: 4),
                               Text(
                                 phone,
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: AppTheme.textSecondary,
+                                    ),
                               ),
                             ],
                           ),
@@ -624,15 +678,19 @@ class _ClientCard extends StatelessWidget {
                           const SizedBox(height: 4),
                           Row(
                             children: [
-                              const Icon(Icons.person_outline, size: 14, color: AppTheme.neonPurple),
+                              const Icon(Icons.person_outline,
+                                  size: 14, color: AppTheme.neonPurple),
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
                                   'Rep: ${client['vendorName']}',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppTheme.neonPurple,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: AppTheme.neonPurple,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -650,25 +708,27 @@ class _ClientCard extends StatelessWidget {
                     children: [
                       Text(
                         CurrencyFormatter.formatWhole(totalPurchases),
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.success,
-                        ),
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.success,
+                                ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         '$numOrders pedidos',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppTheme.textSecondary,
-                        ),
+                              color: AppTheme.textSecondary,
+                            ),
                       ),
                       if (lastPurchase.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Text(
                           'Última: $lastPurchase',
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: AppTheme.textTertiary,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                                    color: AppTheme.textTertiary,
+                                  ),
                         ),
                       ],
                     ],
@@ -679,15 +739,17 @@ class _ClientCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     IconButton(
                       onPressed: onWhatsAppTap,
-                      icon: const Icon(Icons.chat, color: Color(0xFF25D366), size: 24),
+                      icon: const Icon(Icons.chat,
+                          color: Color(0xFF25D366), size: 24),
                       tooltip: 'WhatsApp',
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                      constraints:
+                          const BoxConstraints(minWidth: 40, minHeight: 40),
                     ),
                   ],
                 ],
               ),
-              
+
               // KPI Glacius badges
               if (code.isNotEmpty)
                 ClientAlertsWidget(clientId: code, compact: true),
@@ -699,87 +761,98 @@ class _ClientCard extends StatelessWidget {
         ),
       ),
     );
-}
+  }
 
-Widget _buildRouteDaysRow() {
-final route = client['route'] as String? ?? '';
-final visitDays = client['visitDaysShort'] as String? ?? '';
-final deliveryDays = client['deliveryDaysShort'] as String? ?? '';
+  Widget _buildRouteDaysRow() {
+    final route = client['route'] as String? ?? '';
+    final visitDays = client['visitDaysShort'] as String? ?? '';
+    final deliveryDays = client['deliveryDaysShort'] as String? ?? '';
 
-if (route.isEmpty && visitDays.isEmpty && deliveryDays.isEmpty) {
-  return const SizedBox.shrink();
-}
+    if (route.isEmpty && visitDays.isEmpty && deliveryDays.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
-return Padding(
-  padding: const EdgeInsets.only(top: 8),
-  child: Wrap(
-    spacing: 8,
-    runSpacing: 4,
-    children: [
-      // Route Badge
-      if (route.isNotEmpty)
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: AppTheme.neonPurple.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.route, size: 12, color: AppTheme.neonPurple),
-              const SizedBox(width: 4),
-              Text(
-                'Ruta $route', 
-                style: const TextStyle(fontSize: 11, color: AppTheme.neonPurple, fontWeight: FontWeight.w500),
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          // Route Badge
+          if (route.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.neonPurple.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(6),
               ),
-            ],
-          ),
-        ),
-      
-      // Visit Days Badge
-      if (visitDays.isNotEmpty)
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: AppTheme.neonBlue.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.calendar_today, size: 12, color: AppTheme.neonBlue),
-              const SizedBox(width: 4),
-              Text(
-                'Visita: $visitDays',
-                style: const TextStyle(fontSize: 11, color: AppTheme.neonBlue, fontWeight: FontWeight.w500),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.route, size: 12, color: AppTheme.neonPurple),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Ruta $route',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.neonPurple,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
-      
-      // Delivery Days Badge
-      if (deliveryDays.isNotEmpty)
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: AppTheme.neonGreen.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.local_shipping, size: 12, color: AppTheme.neonGreen),
-              const SizedBox(width: 4),
-              Text(
-                'Reparto: $deliveryDays',
-                style: const TextStyle(fontSize: 11, color: AppTheme.neonGreen, fontWeight: FontWeight.w500),
+            ),
+
+          // Visit Days Badge
+          if (visitDays.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.neonBlue.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(6),
               ),
-            ],
-          ),
-        ),
-    ],
-  ),
-);
-}
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.calendar_today,
+                      size: 12, color: AppTheme.neonBlue),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Visita: $visitDays',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.neonBlue,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+
+          // Delivery Days Badge
+          if (deliveryDays.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.neonGreen.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.local_shipping,
+                      size: 12, color: AppTheme.neonGreen),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Reparto: $deliveryDays',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.neonGreen,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

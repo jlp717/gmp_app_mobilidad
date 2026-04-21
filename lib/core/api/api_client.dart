@@ -292,6 +292,24 @@ class ApiClient {
     dio.options.headers.remove('Authorization');
   }
 
+  static String _buildRequestKey(
+    String method,
+    String endpoint,
+    Map<String, dynamic>? queryParameters,
+  ) {
+    if (queryParameters == null || queryParameters.isEmpty) {
+      return '$method:$endpoint';
+    }
+
+    final normalized = queryParameters.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    final queryString =
+        normalized.map((entry) => '${entry.key}=${entry.value}').join('&');
+
+    return '$method:$endpoint?$queryString';
+  }
+
   /// GET request with optional caching
   ///
   /// [cacheKey] - If provided, response will be cached and returned from cache if valid
@@ -305,53 +323,77 @@ class ApiClient {
     bool forceRefresh = false,
     Duration? receiveTimeout,
   }) async {
-    // Try cache first if cacheKey provided and not forcing refresh
-    if (cacheKey != null && !forceRefresh) {
-      try {
-        final cached = CacheService.get(cacheKey);
-        if (cached != null && cached is Map) {
-          return Map<String, dynamic>.from(cached);
-        }
-      } catch (e) {
-        // Continue to network request
+    final requestKey = _buildRequestKey('GET_MAP', endpoint, queryParameters);
+
+    if (!forceRefresh) {
+      final pending = _pendingRequests[requestKey];
+      if (pending != null) {
+        debugPrint('[ApiClient] Deduping request: $endpoint');
+        return await pending as Map<String, dynamic>;
       }
     }
 
-    try {
-      final response = await dio.get(
-        endpoint,
-        queryParameters: queryParameters,
-        options: receiveTimeout != null
-            ? Options(receiveTimeout: receiveTimeout)
-            : null,
-      );
-      final rawData = response.data;
-      if (rawData is! Map) {
-        if (rawData is List) {
-          throw ApiException('Response is a List, use getList() instead');
-        }
-        throw ApiException(
-          'Expected Map response but got ${rawData.runtimeType}',
-        );
-      }
-      final data = Map<String, dynamic>.from(rawData);
-
-      // Cache the response if cacheKey provided
-      if (cacheKey != null) {
-        await CacheService.set(cacheKey, data, ttl: cacheTTL);
-      }
-
-      return data;
-    } on DioException catch (e) {
-      if (cacheKey != null && _isNetworkError(e)) {
+    final future = () async {
+      // Try cache first if cacheKey provided and not forcing refresh
+      if (cacheKey != null && !forceRefresh) {
         try {
           final cached = CacheService.get(cacheKey);
           if (cached != null && cached is Map) {
             return Map<String, dynamic>.from(cached);
           }
-        } catch (_) {}
+        } catch (e) {
+          // Continue to network request
+        }
       }
-      throw _handleError(e);
+
+      try {
+        final response = await dio.get(
+          endpoint,
+          queryParameters: queryParameters,
+          options: receiveTimeout != null
+              ? Options(receiveTimeout: receiveTimeout)
+              : null,
+        );
+        final rawData = response.data;
+        if (rawData is! Map) {
+          if (rawData is List) {
+            throw ApiException('Response is a List, use getList() instead');
+          }
+          throw ApiException(
+            'Expected Map response but got ${rawData.runtimeType}',
+          );
+        }
+        final data = Map<String, dynamic>.from(rawData);
+
+        // Cache the response if cacheKey provided
+        if (cacheKey != null) {
+          await CacheService.set(cacheKey, data, ttl: cacheTTL);
+        }
+
+        return data;
+      } on DioException catch (e) {
+        if (cacheKey != null && _isNetworkError(e)) {
+          try {
+            final cached = CacheService.get(cacheKey);
+            if (cached != null && cached is Map) {
+              return Map<String, dynamic>.from(cached);
+            }
+          } catch (_) {}
+        }
+        throw _handleError(e);
+      }
+    }();
+
+    if (!forceRefresh) {
+      _pendingRequests[requestKey] = future;
+    }
+
+    try {
+      return await future;
+    } finally {
+      if (!forceRefresh) {
+        _pendingRequests.remove(requestKey);
+      }
     }
   }
 
@@ -363,49 +405,73 @@ class ApiClient {
     Duration? cacheTTL,
     bool forceRefresh = false,
   }) async {
-    // Try cache first if cacheKey provided and not forcing refresh
-    if (cacheKey != null && !forceRefresh) {
-      try {
-        final cached = CacheService.get(cacheKey);
-        if (cached != null && cached is List) {
-          return cached;
-        }
-      } catch (e) {
-        // Continue to network
+    final requestKey = _buildRequestKey('GET_LIST', endpoint, queryParameters);
+
+    if (!forceRefresh) {
+      final pending = _pendingRequests[requestKey];
+      if (pending != null) {
+        debugPrint('[ApiClient] Deduping list request: $endpoint');
+        return await pending as List<dynamic>;
       }
     }
 
-    try {
-      final response = await dio.get(
-        endpoint,
-        queryParameters: queryParameters,
-      );
-
-      final data = response.data;
-      List<dynamic> result;
-
-      if (data is List) {
-        result = data;
-      } else if (data is Map && data.containsKey('data')) {
-        result = data['data'] as List<dynamic>;
-      } else {
-        result = [data];
-      }
-
-      // Cache the response if cacheKey provided
-      if (cacheKey != null) {
-        await CacheService.set(cacheKey, result, ttl: cacheTTL);
-      }
-
-      return result;
-    } on DioException catch (e) {
-      if (cacheKey != null && _isNetworkError(e)) {
-        final cached = CacheService.get<List<dynamic>>(cacheKey);
-        if (cached != null) {
-          return cached;
+    final future = () async {
+      // Try cache first if cacheKey provided and not forcing refresh
+      if (cacheKey != null && !forceRefresh) {
+        try {
+          final cached = CacheService.get(cacheKey);
+          if (cached != null && cached is List) {
+            return cached;
+          }
+        } catch (e) {
+          // Continue to network
         }
       }
-      throw _handleError(e);
+
+      try {
+        final response = await dio.get(
+          endpoint,
+          queryParameters: queryParameters,
+        );
+
+        final data = response.data;
+        List<dynamic> result;
+
+        if (data is List) {
+          result = data;
+        } else if (data is Map && data.containsKey('data')) {
+          result = data['data'] as List<dynamic>;
+        } else {
+          result = [data];
+        }
+
+        // Cache the response if cacheKey provided
+        if (cacheKey != null) {
+          await CacheService.set(cacheKey, result, ttl: cacheTTL);
+        }
+
+        return result;
+      } on DioException catch (e) {
+        if (cacheKey != null && _isNetworkError(e)) {
+          final cached = CacheService.get<List<dynamic>>(cacheKey);
+          if (cached != null) {
+            return cached;
+          }
+        }
+        throw _handleError(e);
+      }
+    }();
+
+    if (!forceRefresh) {
+      _pendingRequests[requestKey] = future;
+    }
+
+    try {
+      return await future;
+    } finally {
+      if (!forceRefresh) {
+        _pendingRequests.remove(requestKey);
+      }
     }
   }
 
@@ -540,7 +606,9 @@ class ApiClient {
             _savedAuthToken != null ? 'Bearer $_savedAuthToken' : null;
         final isStaleRequest =
             requestAuth != null && requestAuth != currentAuth;
-        if (!isLoginRequest && !_isLoggingOut && !_isLoggingIn &&
+        if (!isLoginRequest &&
+            !_isLoggingOut &&
+            !_isLoggingIn &&
             !isStaleRequest) {
           _isLoggingOut = true;
           debugPrint('[ApiClient] 401 detected - triggering logout');
@@ -611,29 +679,13 @@ class ApiClient {
     Duration? cacheTTL,
     bool forceRefresh = false,
   }) async {
-    final requestKey = '$endpoint${queryParameters?.toString() ?? ''}';
-
-    // Return existing pending request if one is in progress
-    if (_pendingRequests.containsKey(requestKey) && !forceRefresh) {
-      debugPrint('[ApiClient] Deduping request: $endpoint');
-      return await _pendingRequests[requestKey] as Map<String, dynamic>;
-    }
-
-    // Create new request
-    final future = get(
+    return get(
       endpoint,
       queryParameters: queryParameters,
       cacheKey: cacheKey,
       cacheTTL: cacheTTL,
       forceRefresh: forceRefresh,
     );
-    _pendingRequests[requestKey] = future;
-
-    try {
-      return await future;
-    } finally {
-      _pendingRequests.remove(requestKey);
-    }
   }
 
   /// Get count of pending requests (for debugging)

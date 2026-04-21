@@ -4,6 +4,8 @@
 /// Ensures instant display on first navigation to any screen
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
@@ -21,43 +23,59 @@ class CachePreWarmer {
     if (_hasPreWarmed) return;
     if (vendedorCodes.isEmpty) return;
 
-    debugPrint('[CachePreWarmer] 🔥 Starting cache pre-warming...');
+    debugPrint('[CachePreWarmer] Starting cache pre-warming...');
     try {
       final codes = vendedorCodes.join(',');
       final currentYear = DateTime.now().year;
       final currentMonth = DateTime.now().month;
+      final commissionsTarget = isJefeVentas ? 'ALL' : codes;
 
       await Future.wait([
         _preWarmFacturas(codes, currentYear, currentMonth),
         if (isJefeVentas) _preWarmVendedores(),
-        _preWarmCommissions(codes, currentYear),
         _preWarmRuteroWeek(codes, currentYear, currentMonth),
-      ],);
+      ]);
+
+      // Warm commissions slightly later for manager sessions. This avoids
+      // competing with the first render and uses the backend's aggregate path.
+      unawaited(
+        Future<void>.delayed(const Duration(seconds: 2), () async {
+          try {
+            await _preWarmCommissions(commissionsTarget, currentYear);
+          } catch (e) {
+            debugPrint(
+              '[CachePreWarmer] Delayed commissions pre-warm failed: $e',
+            );
+          }
+        }),
+      );
 
       _hasPreWarmed = true;
-      debugPrint('[CachePreWarmer] ✅ Pre-warming completed');
+      debugPrint('[CachePreWarmer] Pre-warming completed');
     } catch (e) {
-      debugPrint('[CachePreWarmer] ⚠️ Pre-warming failed (non-critical): $e');
+      debugPrint('[CachePreWarmer] Pre-warming failed (non-critical): $e');
     }
   }
 
-  static Future<void> _preWarmFacturas(String vendorCodes, int year, int month) async {
+  static Future<void> _preWarmFacturas(
+    String vendorCodes,
+    int year,
+    int month,
+  ) async {
     try {
-      // Pre-fetch facturas list for current month
-      // FIX: Match exact cache key pattern with facturas_service to avoid wasted requests
+      // Match the exact cache key pattern used by facturas service.
       await ApiClient.get(
         '/facturas?vendedorCodes=$vendorCodes&year=$year&month=$month',
         cacheKey: 'facturas_${vendorCodes}_${year}_${month}_all___',
         cacheTTL: CacheService.shortTTL,
       );
 
-      // Pre-fetch available years
       await ApiClient.get(
         '/facturas/years?vendedorCodes=$vendorCodes',
         cacheKey: 'facturas_years_$vendorCodes',
         cacheTTL: CacheService.longTTL,
       );
-      
+
       debugPrint('[CachePreWarmer] Facturas pre-warmed');
     } catch (e) {
       debugPrint('[CachePreWarmer] Facturas pre-warm failed: $e');
@@ -68,7 +86,10 @@ class CachePreWarmer {
     try {
       await ApiClient.get(
         '/commissions/summary',
-        queryParameters: {'vendedorCode': vendorCodes, 'year': year.toString()},
+        queryParameters: {
+          'vendedorCode': vendorCodes,
+          'year': year.toString(),
+        },
         cacheKey: 'commissions_v2_${vendorCodes}_$year',
         cacheTTL: const Duration(minutes: 15),
       );
@@ -91,9 +112,12 @@ class CachePreWarmer {
     }
   }
 
-  static Future<void> _preWarmRuteroWeek(String vendorCodes, int year, int month) async {
+  static Future<void> _preWarmRuteroWeek(
+    String vendorCodes,
+    int year,
+    int month,
+  ) async {
     try {
-      // Pre-fetch rutero week data
       await ApiClient.get(
         '/rutero/week',
         queryParameters: {
@@ -118,27 +142,8 @@ class CachePreWarmer {
     debugPrint('[CachePreWarmer] Reset');
   }
 
-  /// Pre-warm cache using vendor codes directly (for Riverpod AuthNotifier)
+  /// Backward-compatible wrapper for older call sites.
   static Future<void> preWarmCacheForCodes(List<String> vendedorCodes) async {
-    if (_hasPreWarmed) return;
-    if (vendedorCodes.isEmpty) return;
-
-    debugPrint('[CachePreWarmer] 🔥 Starting cache pre-warming (codes)...');
-    try {
-      final codes = vendedorCodes.join(',');
-      final currentYear = DateTime.now().year;
-      final currentMonth = DateTime.now().month;
-
-      await Future.wait([
-        _preWarmFacturas(codes, currentYear, currentMonth),
-        _preWarmCommissions(codes, currentYear),
-        _preWarmRuteroWeek(codes, currentYear, currentMonth),
-      ],);
-
-      _hasPreWarmed = true;
-      debugPrint('[CachePreWarmer] ✅ Pre-warming completed (codes)');
-    } catch (e) {
-      debugPrint('[CachePreWarmer] ⚠️ Pre-warming failed (non-critical): $e');
-    }
+    await preWarmCache(vendedorCodes: vendedorCodes, isJefeVentas: false);
   }
 }

@@ -26,7 +26,6 @@ import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 // ============================================================
 
 class DashboardState {
-
   const DashboardState({
     this.metrics,
     this.recentSales = const [],
@@ -139,12 +138,21 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
       };
 
       // Parallel fetch — server Redis cache makes this fast
-      final metrics = await _fetchMetrics(queryParams);
-      final recentSales = await _fetchRecentSales(queryParams);
-      final salesEvolution = await _fetchSalesEvolution(queryParams);
-      final yoyComparison = await _fetchYoYComparison(queryParams);
-      final topProducts = await _fetchTopProducts(queryParams);
-      final topClients = await _fetchTopClients(queryParams);
+      final results = await Future.wait<dynamic>([
+        _fetchMetrics(queryParams),
+        _fetchRecentSales(queryParams),
+        _fetchSalesEvolution(queryParams),
+        _fetchYoYComparison(queryParams),
+        _fetchTopProducts(queryParams),
+        _fetchTopClients(queryParams),
+      ]);
+
+      final metrics = results[0] as DashboardMetrics?;
+      final recentSales = results[1] as List<RecentSale>;
+      final salesEvolution = results[2] as List<SalesEvolutionPoint>;
+      final yoyComparison = results[3] as YoYComparison?;
+      final topProducts = results[4] as List<TopProduct>;
+      final topClients = results[5] as List<TopClient>;
 
       state = AsyncValue.data(
         DashboardState(
@@ -185,7 +193,8 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
 
   Future<DashboardMetrics?> _fetchMetrics(Map<String, String> params) async {
     try {
-      final response = await ApiClient.get(ApiConfig.dashboardMetrics, queryParameters: params);
+      final response = await ApiClient.get(ApiConfig.dashboardMetrics,
+          queryParameters: params);
       if (response == null) return null;
       return DashboardMetrics.fromJson(response as Map<String, dynamic>);
     } catch (e) {
@@ -197,23 +206,32 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
   Future<List<RecentSale>> _fetchRecentSales(Map<String, String> params) async {
     try {
       final p = Map<String, String>.from(params)..['limit'] = '15';
-      final response = await ApiClient.get(ApiConfig.recentSales, queryParameters: p);
+      final response =
+          await ApiClient.get(ApiConfig.recentSales, queryParameters: p);
       if (response == null) return [];
-      final list = response['sales'] as List? ?? response['data'] as List? ?? [];
-      return list.map((j) => RecentSale.fromJson(j as Map<String, dynamic>)).toList();
+      final list =
+          response['sales'] as List? ?? response['data'] as List? ?? [];
+      return list
+          .map((j) => RecentSale.fromJson(j as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       debugPrint('[DashboardNotifier] recentSales error: $e');
       return [];
     }
   }
 
-  Future<List<SalesEvolutionPoint>> _fetchSalesEvolution(Map<String, String> params) async {
+  Future<List<SalesEvolutionPoint>> _fetchSalesEvolution(
+      Map<String, String> params) async {
     try {
       final p = Map<String, String>.from(params)..['months'] = '12';
-      final response = await ApiClient.get(ApiConfig.salesEvolution, queryParameters: p);
+      final response =
+          await ApiClient.get(ApiConfig.salesEvolution, queryParameters: p);
       if (response == null) return [];
-      final dataList = response['evolution'] as List? ?? response['data'] as List? ?? [];
-      return dataList.map((j) => SalesEvolutionPoint.fromJson(j as Map<String, dynamic>)).toList();
+      final dataList =
+          response['evolution'] as List? ?? response['data'] as List? ?? [];
+      return dataList
+          .map((j) => SalesEvolutionPoint.fromJson(j as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       debugPrint('[DashboardNotifier] salesEvolution error: $e');
       return [];
@@ -222,7 +240,8 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
 
   Future<YoYComparison?> _fetchYoYComparison(Map<String, String> params) async {
     try {
-      final response = await ApiClient.get(ApiConfig.yoyComparison, queryParameters: params);
+      final response =
+          await ApiClient.get(ApiConfig.yoyComparison, queryParameters: params);
       if (response == null) return null;
       return YoYComparison.fromJson(response as Map<String, dynamic>);
     } catch (e) {
@@ -234,10 +253,14 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
   Future<List<TopProduct>> _fetchTopProducts(Map<String, String> params) async {
     try {
       final p = Map<String, String>.from(params)..['limit'] = '10';
-      final response = await ApiClient.get(ApiConfig.topProducts, queryParameters: p);
+      final response =
+          await ApiClient.get(ApiConfig.topProducts, queryParameters: p);
       if (response == null) return [];
-      final list = response['products'] as List? ?? response['data'] as List? ?? [];
-      return list.map((j) => TopProduct.fromJson(j as Map<String, dynamic>)).toList();
+      final list =
+          response['products'] as List? ?? response['data'] as List? ?? [];
+      return list
+          .map((j) => TopProduct.fromJson(j as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       debugPrint('[DashboardNotifier] topProducts error: $e');
       return [];
@@ -247,10 +270,14 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
   Future<List<TopClient>> _fetchTopClients(Map<String, String> params) async {
     try {
       final p = Map<String, String>.from(params)..['limit'] = '10';
-      final response = await ApiClient.get(ApiConfig.topClients, queryParameters: p);
+      final response =
+          await ApiClient.get(ApiConfig.topClients, queryParameters: p);
       if (response == null) return [];
-      final list = response['clients'] as List? ?? response['data'] as List? ?? [];
-      return list.map((j) => TopClient.fromJson(j as Map<String, dynamic>)).toList();
+      final list =
+          response['clients'] as List? ?? response['data'] as List? ?? [];
+      return list
+          .map((j) => TopClient.fromJson(j as Map<String, dynamic>))
+          .toList();
     } catch (e) {
       debugPrint('[DashboardNotifier] topClients error: $e');
       return [];
@@ -270,7 +297,8 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
 // PROVIDER
 // ============================================================
 
-final dashboardProvider = AsyncNotifierProvider.autoDispose<DashboardNotifier, DashboardState>(
+final dashboardProvider =
+    AsyncNotifierProvider.autoDispose<DashboardNotifier, DashboardState>(
   DashboardNotifier.new,
 );
 
@@ -286,7 +314,8 @@ final dashboardRecentSalesProvider = Provider<List<RecentSale>>((ref) {
   return ref.watch(dashboardProvider).value?.recentSales ?? [];
 });
 
-final dashboardSalesEvolutionProvider = Provider<List<SalesEvolutionPoint>>((ref) {
+final dashboardSalesEvolutionProvider =
+    Provider<List<SalesEvolutionPoint>>((ref) {
   return ref.watch(dashboardProvider).value?.salesEvolution ?? [];
 });
 

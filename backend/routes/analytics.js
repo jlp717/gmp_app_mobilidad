@@ -97,16 +97,31 @@ router.get('/top-clients', verifyToken, async (req, res) => {
         if (year) dateFilter += ` AND L.LCAADC = ${parseInt(year) || 0}`;
         if (month) dateFilter += ` AND L.LCMMDC = ${parseInt(month) || 0}`;
 
+        const safeLimit = parseInt(limit) || 10;
         const sql = `
       SELECT
-        L.LCCDCL as code,
-        SUM(L.LCIMVT) as totalSales,
-        COUNT(*) as transactions
-      FROM DSED.LACLAE L
-      WHERE ${LACLAE_SALES_FILTER} ${dateFilter} ${vendedorFilter}
-      GROUP BY L.LCCDCL
-      ORDER BY totalSales DESC
-      FETCH FIRST ${parseInt(limit) || 10} ROWS ONLY
+        T.code,
+        T.totalSales,
+        T.transactions,
+        COALESCE(
+          NULLIF(TRIM(C.NOMBREALTERNATIVO), ''),
+          TRIM(C.NOMBRECLIENTE),
+          'Cliente ' || TRIM(T.code)
+        ) as name,
+        TRIM(C.POBLACION) as city
+      FROM (
+        SELECT
+          L.LCCDCL as code,
+          SUM(L.LCIMVT) as totalSales,
+          COUNT(*) as transactions
+        FROM DSED.LACLAE L
+        WHERE ${LACLAE_SALES_FILTER} ${dateFilter} ${vendedorFilter}
+        GROUP BY L.LCCDCL
+        ORDER BY totalSales DESC
+        FETCH FIRST ${safeLimit} ROWS ONLY
+      ) T
+      LEFT JOIN DSEDAC.CLI C ON C.CODIGOCLIENTE = T.code
+      ORDER BY T.totalSales DESC
     `;
 
         const cacheKey = `analytics:top_clients:${year || 'current'}:${month || 'all'}:${vendedorCodes || 'ALL'}:${limit}`;
@@ -116,38 +131,20 @@ router.get('/top-clients', verifyToken, async (req, res) => {
             return res.json({ clients: [] });
         }
 
-        // Normalize: DB2/ODBC may return columns as CODE or code depending on driver config
-        const normalized = topClients
-            .map(c => ({
-                code: (c.CODE ?? c.code ?? '').toString().trim(),
-                totalSales: c.TOTALSALES ?? c.totalSales ?? c.TOTALSALES ?? 0
-            }))
-            .filter(c => c.code.length > 0);
+        const enhancedClients = topClients
+            .map(c => {
+                const code = (c.CODE ?? c.code ?? '').toString().trim();
+                if (!code) return null;
 
-        if (normalized.length === 0) return res.json({ clients: [] });
-
-        const clientCodes = normalized.map(c => `'${sanitizeForSQL(c.code)}'`).join(',');
-        const namesSql = `
-            SELECT CODIGOCLIENTE as C, NOMBRECLIENTE as N, POBLACION as P
-            FROM DSEDAC.CLI WHERE CODIGOCLIENTE IN (${clientCodes})
-        `;
-        const clientDetails = await cachedQuery(query, namesSql, `clients:details:${normalized.length}:${normalized[0].code}`, TTL.LONG);
-        const detailsMap = {};
-        (clientDetails || []).forEach(d => {
-            const key = (d.C ?? d.c ?? '').toString().trim();
-            if (key) detailsMap[key] = { name: d.N ?? d.n, city: d.P ?? d.p };
-        });
-
-        const enhancedClients = normalized.map(c => {
-            const info = detailsMap[c.code] || {};
-            return {
-                code: c.code,
-                name: (info.name || '').toString().trim() || `Cliente ${c.code}`,
-                city: (info.city || '').toString().trim(),
-                totalSales: formatCurrency(c.totalSales),
-                year: year || new Date().getFullYear()
-            };
-        });
+                return {
+                    code,
+                    name: (c.NAME ?? c.name ?? '').toString().trim() || `Cliente ${code}`,
+                    city: (c.CITY ?? c.city ?? '').toString().trim(),
+                    totalSales: formatCurrency(c.TOTALSALES ?? c.totalSales ?? 0),
+                    year: year || new Date().getFullYear()
+                };
+            })
+            .filter(Boolean);
 
         res.json({ clients: enhancedClients });
 

@@ -718,6 +718,116 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
     };
 }
 
+function buildAggregatedYearResult(results, config) {
+    const sortedResults = [...(results || [])].sort((a, b) => {
+        const valA = a.grandTotalCommission || 0;
+        const valB = b.grandTotalCommission || 0;
+        return valB - valA;
+    });
+
+    const globalTotal = sortedResults.reduce((sum, item) => {
+        return sum + (item.grandTotalCommission || 0);
+    }, 0);
+    const totalPaid = sortedResults.reduce((sum, item) => {
+        return sum + (item.payments?.total || 0);
+    }, 0);
+
+    const aggMonths = [];
+    for (let month = 1; month <= 12; month++) {
+        let target = 0;
+        let actual = 0;
+        let commission = 0;
+
+        sortedResults.forEach(result => {
+            const monthData = result.months.find(x => x.month === month);
+            if (monthData) {
+                target += monthData.target;
+                actual += monthData.actual;
+                commission += (monthData.complianceCtx?.commission || 0);
+            }
+        });
+
+        aggMonths.push({
+            month,
+            target,
+            actual,
+            complianceCtx: { commission }
+        });
+    }
+
+    const aggQuarters = [1, 2, 3].map(quarterId => {
+        let target = 0;
+        let actual = 0;
+        let commission = 0;
+
+        sortedResults.forEach(result => {
+            const quarterData = result.quarters.find(x => x.id === quarterId);
+            if (quarterData) {
+                target += quarterData.target;
+                actual += quarterData.actual;
+                commission += ((quarterData.commission || 0) + (quarterData.additionalPayment || 0));
+            }
+        });
+
+        return { id: quarterId, target, actual, commission };
+    });
+
+    return {
+        config,
+        grandTotalCommission: globalTotal,
+        totals: { commission: globalTotal },
+        breakdown: sortedResults,
+        months: aggMonths,
+        quarters: aggQuarters,
+        payments: { total: totalPaid, monthly: {}, quarterly: {} }
+    };
+}
+
+async function discoverVendorCodesForYear(year) {
+    const safeYr = parseInt(year);
+    const col = getVendorColumn(safeYr);
+    const vendorRows = await queryWithParams(`
+        SELECT DISTINCT RTRIM(L.${col}) as VENDOR_CODE
+        FROM DSED.LACLAE L
+        WHERE L.LCAADC IN (?, ?)
+          AND L.${col} IS NOT NULL
+          AND L.${col} <> ''
+    `, [safeYr, safeYr - 1], false);
+
+    return vendorRows
+        .map(r => r.VENDOR_CODE)
+        .filter(code => code && code !== '0');
+}
+
+async function calculateGroupedVendorSummary(vendorCodes, year, config) {
+    const safeCodes = [...new Set((vendorCodes || [])
+        .map(code => String(code || '').trim())
+        .filter(code => /^[a-zA-Z0-9]+$/.test(code))
+        .filter(code => code !== '0'))];
+
+    if (safeCodes.length === 0) {
+        return buildAggregatedYearResult([], config);
+    }
+
+    const settled = await Promise.allSettled(
+        safeCodes.map(code => calculateVendorData(code, year, config))
+    );
+
+    const results = settled
+        .filter(result => result.status === 'fulfilled')
+        .map(result => result.value);
+
+    const failed = settled.filter(result => result.status === 'rejected');
+    if (failed.length > 0) {
+        logger.warn(
+            `[COMMISSIONS] ${failed.length} vendor(s) failed in grouped mode: ` +
+            failed.map(f => f.reason?.message || f.reason).join('; ')
+        );
+    }
+
+    return buildAggregatedYearResult(results, config);
+}
+
 
 // =============================================================================
 // ROUTES
@@ -759,6 +869,31 @@ router.get('/summary', verifyToken, async (req, res) => {
         if (years.length === 0) years.push(currentYear);
 
         const selectedYear = years[0]; // Primary year for reference (Config loading)
+        const requestedVendorCodes = safeVendorCode === 'ALL'
+            ? []
+            : [...new Set(
+                safeVendorCode
+                    .split(',')
+                    .map(code => code.trim())
+                    .filter(code => /^[a-zA-Z0-9]+$/.test(code))
+            )];
+        const isGroupedRequest = safeVendorCode === 'ALL' || requestedVendorCodes.length > 1;
+        const groupHash = requestedVendorCodes.length > 0
+            ? crypto.createHash('md5').update(requestedVendorCodes.slice().sort().join(',')).digest('hex').substring(0, 12)
+            : 'all';
+        const aggregatedCacheKey = isGroupedRequest
+            ? (safeVendorCode === 'ALL'
+                ? `comm:summary:ALL:${years.join(',')}`
+                : `comm:summary:GROUP:${groupHash}:${years.join(',')}`)
+            : null;
+
+        if (aggregatedCacheKey && !shouldForceRefresh) {
+            const cachedResult = await redisCache.get('route', aggregatedCacheKey);
+            if (cachedResult) {
+                logger.info(`[COMMISSIONS] ⚡ Cache HIT for grouped summary (${aggregatedCacheKey})`);
+                return res.json({ success: true, ...cachedResult });
+            }
+        }
 
         // A. Load Config
         let config = DEFAULT_CONFIG_2026;
@@ -908,29 +1043,21 @@ router.get('/summary', verifyToken, async (req, res) => {
             // Process Year
             let yearResult;
 
-            if (safeVendorCode === 'ALL') {
+            if (isGroupedRequest) {
                 // PERF: Check route-level cache first for ALL mode (most expensive)
-                const allSummaryCacheKey = `comm:summary:ALL:${years.join(',')}`;
-                const cachedResult = shouldForceRefresh ? null : await redisCache.get('route', allSummaryCacheKey);
+                const allSummaryCacheKey = aggregatedCacheKey;
+                const cachedResult = null;
                 if (cachedResult) {
                     logger.info(`[COMMISSIONS] ⚡ Cache HIT for ALL summary (${allSummaryCacheKey})`);
                     return res.json({ success: true, ...cachedResult });
                 }
                 if (shouldForceRefresh) {
-                    logger.info(`[COMMISSIONS] 🔄 Force refresh bypassing cache for ALL summary`);
+                    logger.info(`[COMMISSIONS] 🔄 Force refresh bypassing grouped cache (${aggregatedCacheKey})`);
                 }
 
-                // Uses getVendorColumn for date-aware vendor discovery
-                const safeYr = parseInt(yr);
-                const col = getVendorColumn(safeYr);
-                const vendorRows = await queryWithParams(`
-                    SELECT DISTINCT RTRIM(L.${col}) as VENDOR_CODE
-                    FROM DSED.LACLAE L
-                    WHERE L.LCAADC IN (?, ?)
-                      AND L.${col} IS NOT NULL
-                      AND L.${col} <> ''
-                `, [safeYr, safeYr - 1], false);
-                const vendorCodes = vendorRows.map(r => r.VENDOR_CODE).filter(c => c && c !== '0');
+                const vendorCodes = safeVendorCode === 'ALL'
+                    ? await discoverVendorCodesForYear(yr)
+                    : requestedVendorCodes;
                 const promises = vendorCodes.map(code => calculateVendorData(code, yr, config));
                 const settled = await Promise.allSettled(promises);
                 const results = settled
@@ -940,7 +1067,7 @@ router.get('/summary', verifyToken, async (req, res) => {
                 // Log failed vendors for debugging (does not break the page)
                 const failed = settled.filter(r => r.status === 'rejected');
                 if (failed.length > 0) {
-                    logger.warn(`[COMMISSIONS] ${failed.length} vendor(s) failed in ALL mode: ${failed.map(f => f.reason?.message || f.reason).join('; ')}`);
+                    logger.warn(`[COMMISSIONS] ${failed.length} vendor(s) failed in grouped mode: ${failed.map(f => f.reason?.message || f.reason).join('; ')}`);
                 }
 
                 results.sort((a, b) => {
@@ -986,8 +1113,7 @@ router.get('/summary', verifyToken, async (req, res) => {
                 };
 
                 // PERF: Cache the ALL result for 15 minutes (expensive computation)
-                await redisCache.set('route', allSummaryCacheKey, yearResult, 900);
-                logger.info(`[COMMISSIONS] 💾 Cached ALL summary for 15min (${allSummaryCacheKey})`);
+                logger.debug(`[COMMISSIONS] Year result prepared for grouped cache (${allSummaryCacheKey})`);
 
             } else {
                 // Single Vendor
@@ -1010,6 +1136,11 @@ router.get('/summary', verifyToken, async (req, res) => {
             } else {
                 aggregatedResult = sumResults(aggregatedResult, yearResult);
             }
+        }
+
+        if (aggregatedCacheKey && aggregatedResult) {
+            await redisCache.set('route', aggregatedCacheKey, aggregatedResult, 900);
+            logger.info(`[COMMISSIONS] Cached grouped summary for 15min (${aggregatedCacheKey})`);
         }
 
         // AUDIT: Log what data the server actually returned (proof of response)
@@ -1133,7 +1264,8 @@ router.post('/pay', verifyToken, async (req, res) => {
         // INVALIDATE CACHE: Clear summary cache for this vendor/year so next request fetches fresh data
         try {
             await invalidateCachePattern(`comm:summary:${vendedorCode.trim()}:${year}`);
-            await invalidateCachePattern(`comm:summary:ALL:${year}`); // Also invalidate ALL view
+            await invalidateCachePattern('comm:summary:ALL:*');
+            await invalidateCachePattern('comm:summary:GROUP:*');
             logger.info(`[COMMISSIONS] Cache invalidated for ${vendedorCode}:${year}`);
         } catch (cacheErr) {
             logger.warn(`[COMMISSIONS] Cache invalidation failed: ${cacheErr.message}`);
