@@ -205,7 +205,7 @@ router.get('/metrics', verifyToken, async (req, res) => {
 router.get('/matrix-data', verifyToken, async (req, res) => {
     try {
         const { vendedorCodes, groupBy = 'vendor', year, years, clientCodes, productCodes, familyCodes } = req.query;
-        const cacheKey = `dashboard:matrix:${JSON.stringify(req.query)}`;
+        const cacheKey = `dashboard:matrix:v2:${JSON.stringify(req.query)}`;
 
         const { redisCache } = require('../services/redis-cache');
         const cachedResult = await redisCache.get('matrix', cacheKey);

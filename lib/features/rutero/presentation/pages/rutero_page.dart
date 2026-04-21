@@ -539,31 +539,30 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               monthNames: _monthNames,
             ),
             Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    RuteroFilterBar(
-                      searchQuery: _searchQuery,
-                      searchController: _searchController,
-                      sortMode: _sortMode,
-                      selectedAlertType: _selectedAlertType,
-                      onlyWithAlerts: _onlyWithAlerts,
-                      onSearchChanged: (v) =>
-                          setState(() => _searchQuery = v.toLowerCase()),
-                      onSortChanged: _onSortChanged,
-                      onAlertTypeChanged: (v) => setState(() {
-                        _selectedAlertType = v;
-                        _loadDayClients();
-                      }),
-                      onOnlyWithAlertsChanged: (v) => setState(() {
-                        _onlyWithAlerts = v;
-                        _loadDayClients();
-                      }),
-                    ),
-                    _buildClientList(),
-                  ],
-                ),
+              child: Column(
+                children: [
+                  RuteroFilterBar(
+                    searchQuery: _searchQuery,
+                    searchController: _searchController,
+                    sortMode: _sortMode,
+                    selectedAlertType: _selectedAlertType,
+                    onlyWithAlerts: _onlyWithAlerts,
+                    onSearchChanged: (v) =>
+                        setState(() => _searchQuery = v.toLowerCase()),
+                    onSortChanged: _onSortChanged,
+                    onAlertTypeChanged: (v) => setState(() {
+                      _selectedAlertType = v;
+                      _loadDayClients();
+                    }),
+                    onOnlyWithAlertsChanged: (v) => setState(() {
+                      _onlyWithAlerts = v;
+                      _loadDayClients();
+                    }),
+                  ),
+                  Expanded(
+                    child: _buildClientList(),
+                  ),
+                ],
               ),
             ),
           ],

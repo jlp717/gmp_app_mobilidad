@@ -559,7 +559,39 @@ const queryOptimizer = new QueryOptimizer();
  * @param {string} options.queryType - Query type for metrics
  * @param  {...any} args - Additional arguments passed to queryFn
  */
+function normalizeCachedQueryCall(options, args) {
+    if (typeof options === 'string') {
+        const [maybeTtl, ...restArgs] = args;
+        const ttl = typeof maybeTtl === 'number' ? maybeTtl : CACHE_TTL.MEDIUM;
+        const queryArgs = typeof maybeTtl === 'number' ? restArgs : args;
+        return {
+            options: {
+                cacheKey: options,
+                ttl,
+                params: queryArgs.length > 0 ? { args: queryArgs } : {},
+            },
+            queryArgs,
+        };
+    }
+
+    if (!options || typeof options !== 'object' || Array.isArray(options)) {
+        const queryArgs = options === undefined ? args : [options, ...args];
+        return {
+            options: {
+                params: queryArgs.length > 0 ? { args: queryArgs } : {},
+            },
+            queryArgs,
+        };
+    }
+
+    return {
+        options,
+        queryArgs: args,
+    };
+}
+
 async function cachedQuery(queryFn, sql, options = {}, ...args) {
+    const normalized = normalizeCachedQueryCall(options, args);
     const {
         cacheKey = 'default',
         prefix = 'query',
@@ -571,11 +603,11 @@ async function cachedQuery(queryFn, sql, options = {}, ...args) {
         dateTo = null,
         queryType = 'general',
         skipCache = false,
-    } = options;
+    } = normalized.options;
 
     if (skipCache) {
         const start = Date.now();
-        const result = await queryFn(sql, ...args);
+        const result = await queryFn(sql, ...normalized.queryArgs);
         const duration = Date.now() - start;
         queryOptimizer.recordQuery(sql, duration, result.length || 0);
         return result;
@@ -636,7 +668,7 @@ async function cachedQuery(queryFn, sql, options = {}, ...args) {
     try {
         // Execute query
         const start = Date.now();
-        const result = await queryFn(sql, ...args);
+        const result = await queryFn(sql, ...normalized.queryArgs);
         const duration = Date.now() - start;
 
         // Record stats
