@@ -1187,7 +1187,7 @@ router.get('/rutero/day/:day', async (req, res) => {
                 COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), NOMBRECLIENTE) as NAME,
                 DIRECCION as ADDRESS,
                 POBLACION as CITY,
-                TELEFON1 as PHONE,
+                TELEFONO1 as PHONE,
                 TELEFONO2 as PHONE2
             FROM DSEDAC.CLI
             WHERE CODIGOCLIENTE IN (${clientPlaceholders})

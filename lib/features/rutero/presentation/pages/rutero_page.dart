@@ -143,13 +143,13 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     _tabController = TabController(length: 2, vsync: this);
     _initToday();
     _isInitialized = true;
-    _refreshData();
+    _loadWeekData();
 
     // Listen for vendor changes from OTHER pages (cross-page sync)
     // Do NOT use onChanged in GlobalVendorSelector - that would cause double refresh
     ref.listen(selectedVendorProvider, (previous, next) {
       if (_isInitialized && previous != next) {
-        _refreshData();
+        _loadWeekData();
       }
     });
   }
@@ -397,9 +397,9 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         return ytdSales > 0.01;
       });
 
-      // Always retry if data is empty or has no sales, up to max retries
-      final needsRetry = _dayClients.isEmpty || !hasAnySales;
-      if (needsRetry && _cacheRetryCount < _maxCacheRetries) {
+      // Only retry while the backend cache is still warming up.
+      final isBackendCacheLoading = dayCacheStatus == 'loading';
+      if (isBackendCacheLoading && _cacheRetryCount < _maxCacheRetries) {
         setState(() => _isCacheLoading = true);
         _cacheRetryCount++;
         _retryTimer?.cancel();
@@ -412,8 +412,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           _cacheRetryCount = 0;
         });
 
-        // If day-direct returned clients but NO sales data,
-        // fetch the normal endpoint to get sales data and merge it
+        // day-direct is intentionally fast and can omit sales KPIs.
+        // Enrich once from the cached endpoint, but do not enter a retry loop.
         if (useDirectEndpoint &&
             _dayClients.isNotEmpty &&
             !hasAnySales &&
