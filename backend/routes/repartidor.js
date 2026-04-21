@@ -14,7 +14,7 @@ const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const logger = require('../middleware/logger');
-const { sanitizeCodeList, sanitizeForSQL } = require('../utils/common');
+const { sanitizeCodeListForParams, sanitizeForSQL } = require('../utils/common');
 const { generateInvoicePDF } = require('../app/services/pdfService');
 const { isDeliveryStatusAvailable } = require('../utils/delivery-status-check');
 const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
@@ -64,17 +64,16 @@ router.get('/collections/summary/:repartidorId', verifyToken, async (req, res) =
 
         const selectedYear = parseInt(year) || new Date().getFullYear();
         const selectedMonth = parseInt(month) || new Date().getMonth() + 1;
-        const cleanIds = sanitizeCodeList(repartidorId);
+        const repartidorParams = sanitizeCodeListForParams(repartidorId);
 
-        if (!cleanIds) {
+        if (repartidorParams.length === 0) {
             return res.status(400).json({ error: 'Invalid repartidor ID format' });
         }
 
-        logger.info(`[REPARTIDOR] Getting collections summary for ${cleanIds} (${selectedMonth}/${selectedYear})`);
+        const repartidorKey = repartidorParams.join(',');
+        logger.info(`[REPARTIDOR] Getting collections summary for ${repartidorKey} (${selectedMonth}/${selectedYear})`);
 
-        const cacheKey = `repartidor:collections:summary:${cleanIds}:${selectedYear}:${selectedMonth}`;
-
-        const repartidorParams = cleanIds.split(',').map(id => id.trim());
+        const cacheKey = `repartidor:collections:summary:${repartidorKey}:${selectedYear}:${selectedMonth}`;
 
         // CORRECTO: Usar OPP → CPC → CAC para repartidores
         // OPP tiene CODIGOREPARTIDOR, CPC vincula con documentos de CAC
@@ -281,15 +280,16 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
         let repartidorJoin = '';
         const repartidorParams = [];
         if (repartidorId) {
-            const cleanIds = sanitizeCodeList(repartidorId);
-            if (cleanIds) {
-                const ids = cleanIds.split(',').map(id => id.trim());
-                repartidorParams.push(...ids);
-                repartidorJoin = `
-                    INNER JOIN DSEDAC.OPP OPP
-                        ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-                        AND TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(() => '?').join(',')})`;
+            const ids = sanitizeCodeListForParams(repartidorId);
+            if (ids.length === 0) {
+                return res.status(400).json({ error: 'Invalid repartidor ID format' });
             }
+
+            repartidorParams.push(...ids);
+            repartidorJoin = `
+                INNER JOIN DSEDAC.OPP OPP
+                    ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+                    AND TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(() => '?').join(',')})`;
         }
 
         // Date range filter (YYYY-MM-DD format)
@@ -573,7 +573,10 @@ router.get('/history/objectives/:repartidorId', verifyToken, async (req, res) =>
         logger.info(`[REPARTIDOR] Getting objectives for ${repartidorId}${clientId ? ` client ${clientId}` : ''}`);
 
         // Handle comma-separated repartidor IDs
-        const cleanRepartidorIds = repartidorId.split(',').map(id => id.trim());
+        const cleanRepartidorIds = sanitizeCodeListForParams(repartidorId);
+        if (cleanRepartidorIds.length === 0) {
+            return res.status(400).json({ error: 'Invalid repartidor ID format' });
+        }
         let clientFilter = '';
         const queryParams = [...cleanRepartidorIds];
         if (clientId) {
@@ -650,11 +653,13 @@ router.get('/history/objectives-detail/:repartidorId', verifyToken, async (req, 
         const { year, clientId } = req.query;
 
         const selectedYear = parseInt(year) || new Date().getFullYear();
-        const cleanIds = sanitizeCodeList(repartidorId);
+        const repartidorIdList = sanitizeCodeListForParams(repartidorId);
 
-        if (!cleanIds) {
+        if (repartidorIdList.length === 0) {
             return res.status(400).json({ error: 'Invalid repartidor ID format' });
         }
+
+        const repartidorKey = repartidorIdList.join(',');
 
         logger.info(`[REPARTIDOR] Objectives detail for ${repartidorId}, year ${selectedYear}${clientId ? `, client ${clientId}` : ''}`);
 
@@ -666,7 +671,6 @@ router.get('/history/objectives-detail/:repartidorId', verifyToken, async (req, 
             clientFilterParams.push(clientId.trim());
         }
 
-        const repartidorIdList = cleanIds.split(',').map(id => id.trim());
         const clientsSql = `
             SELECT DISTINCT TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENT_CODE,
                 TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as CLIENT_NAME
@@ -680,7 +684,7 @@ router.get('/history/objectives-detail/:repartidorId', verifyToken, async (req, 
         `;
 
         const clientSqlParams = [...repartidorIdList, selectedYear, ...clientFilterParams];
-        const clientRows = await cachedQuery(queryWithParams, clientsSql, `repartidor:objDetail:${cleanIds}:${selectedYear}:${clientId || 'all'}`, TTL.REALTIME, clientSqlParams);
+        const clientRows = await cachedQuery(queryWithParams, clientsSql, `repartidor:objDetail:${repartidorKey}:${selectedYear}:${clientId || 'all'}`, TTL.REALTIME, clientSqlParams);
         if (clientRows.length === 0) {
             return res.json({ success: true, clients: [], year: selectedYear });
         }
@@ -1151,9 +1155,9 @@ router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, r
 
         const selectedYear = parseInt(year) || new Date().getFullYear();
         const selectedMonth = parseInt(month) || new Date().getMonth() + 1;
-        const cleanIds = sanitizeCodeList(repartidorId);
+        const repartidorIdList = sanitizeCodeListForParams(repartidorId);
 
-        if (!cleanIds) {
+        if (repartidorIdList.length === 0) {
             return res.status(400).json({ error: 'Invalid repartidor ID format' });
         }
 
@@ -1174,7 +1178,6 @@ router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, r
                 ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))`
             : '';
 
-        const repartidorIdList = cleanIds.split(',').map(id => id.trim());
         const sql = `
             SELECT DIA,
                 COUNT(*) as TOTAL_ALBARANES,
@@ -1792,7 +1795,12 @@ router.get('/rutero/week/:repartidorId', verifyToken, async (req, res) => {
             d.setDate(d.getDate() + 1);
         }
 
-        const cleanRepartidorId = repartidorId.toString().trim();
+        const repartidorIdList = sanitizeCodeListForParams(repartidorId);
+        if (repartidorIdList.length === 0) {
+            return res.status(400).json({ error: 'Invalid repartidor ID format' });
+        }
+
+        const cleanRepartidorId = repartidorIdList.join(',');
         const startDateStr = weekDays[0].formatted;
         const endDateStr = weekDays[6].formatted;
 
@@ -1807,7 +1815,6 @@ router.get('/rutero/week/:repartidorId', verifyToken, async (req, res) => {
         // Query to get daily aggregates
         // ENTREGADOS: ERP-confirmed (CONFORMADOSN) + app-confirmed (DELIVERY_STATUS) + past dates
         const dsWeekAvail = isDeliveryStatusAvailable();
-        const repartidorIdList = cleanRepartidorId.split(',').map(id => id.trim());
         const sql = `
             SELECT
                 OPP.DIAREPARTO as DIA,
@@ -1893,7 +1900,10 @@ router.get('/history/:repartidorId', verifyToken, async (req, res) => {
         // Convert dates to integers YYYYMMDD
         const startInt = parseInt(startDate.replace(/-/g, ''));
         const endInt = parseInt(endDate.replace(/-/g, ''));
-        const repartidorIdList = repartidorId.split(',').map(id => id.trim());
+        const repartidorIdList = sanitizeCodeListForParams(repartidorId);
+        if (repartidorIdList.length === 0) {
+            return res.status(400).json({ success: false, error: 'Invalid repartidor ID format' });
+        }
 
         logger.info(`[REPARTIDOR] History for ${repartidorId} from ${startInt} to ${endInt}`);
 
@@ -2184,7 +2194,10 @@ router.get('/history/clients/:repartidorId', verifyToken, async (req, res) => {
         const { repartidorId } = req.params;
         const { search } = req.query;
 
-        const repartidorIdList = repartidorId.split(',').map(id => id.trim());
+        const repartidorIdList = sanitizeCodeListForParams(repartidorId);
+        if (repartidorIdList.length === 0) {
+            return res.status(400).json({ error: 'Invalid repartidor ID format' });
+        }
 
         // FIX: Use DISTINCT subquery to deduplicate OPP-CPC joins (one albaran can have multiple OPP records)
         // FIX: Remove 6-month cutoff so client list counts match what the documents endpoint returns

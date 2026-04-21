@@ -300,7 +300,11 @@ router.get('/rutero/vendedores', async (req, res) => {
         // Cache 1 hour
         const cacheKey = `vendedores:active:${currentYear}:${role || 'comercial'}`;
         const params = role === 'repartidor' ? [] : ACTIVE_COMERCIALES;
-        const vendedores = await cachedQuery(queryWithParams, sql, cacheKey, TTL.LONG, params);
+        const vendedores = await cachedQuery(queryWithParams, sql, {
+            cacheKey,
+            ttl: TTL.LONG,
+            params
+        }, params);
 
         // Defensive mapping: DB2 column name case varies by driver config
         const mapped = vendedores.map(v => {
@@ -1337,7 +1341,7 @@ router.get('/rutero/day/:day', async (req, res) => {
         }
 
         const clients = currentYearRows.map(r => {
-            const code = r.CODE?.trim() || '';
+            const code = (r.CODE ?? r.code ?? '').toString().trim();
             const prevSales = prevYearMap.get(code) || { sales: 0, cost: 0 };
             const prevYearTotalSales = prevYearTotalMap.get(code) || 0; // Total sales in entire previous year
             const gps = gpsMap.get(code) || { lat: null, lon: null };
@@ -1382,11 +1386,11 @@ router.get('/rutero/day/:day', async (req, res) => {
 
             return {
                 code,
-                name: r.NAME?.trim(),
-                address: r.ADDRESS?.trim(),
-                city: r.CITY?.trim(),
-                phone: r.PHONE?.trim(),
-                phone2: r.PHONE2?.trim(),
+                name: (r.NAME ?? r.name)?.trim() || null,
+                address: (r.ADDRESS ?? r.address)?.trim() || null,
+                city: (r.CITY ?? r.city)?.trim() || null,
+                phone: (r.PHONE ?? r.phone)?.trim() || null,
+                phone2: (r.PHONE2 ?? r.phone2)?.trim() || null,
                 phones,
                 // Frontend expects 'status' object with raw numbers
                 status: {

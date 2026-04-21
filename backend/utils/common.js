@@ -146,6 +146,20 @@ function sanitizeCodeList(codeString) {
         .join(',');
 }
 
+/**
+ * Sanitize a comma-separated list of codes for parameterized queries.
+ * Returns ["code1", "code2"] format, with each code sanitized.
+ * @param {string} codeString - Comma-separated codes
+ * @returns {string[]} Sanitized code list safe for bind params
+ */
+function sanitizeCodeListForParams(codeString) {
+    if (!codeString) return [];
+    return codeString
+        .split(',')
+        .map(c => c.trim())
+        .filter(c => /^[a-zA-Z0-9]+$/.test(c));
+}
+
 function formatCurrency(value) {
     // Returns raw number - formatting done in Flutter frontend with Spanish locale
     return parseFloat(value) || 0;
@@ -366,6 +380,7 @@ module.exports = {
     getBSales,
     sanitizeForSQL,
     sanitizeCodeList,
+    sanitizeCodeListForParams,
 
     // Helper to calculate working days (Mon-Fri + Sat/Sun if active)
     calculateWorkingDays: (year, month, activeWeekDays = []) => {

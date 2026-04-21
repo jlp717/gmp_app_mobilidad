@@ -373,7 +373,9 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
           month = monthVal.toInt();
         else if (monthVal is String) month = int.tryParse(monthVal);
 
-        if (year == null || !_selectedYears.contains(year)) return false;
+        if (year == null ||
+            (_selectedYears.isNotEmpty && !_selectedYears.contains(year)))
+          return false;
 
         if (_selectedMonths.isNotEmpty && month != null) {
           if (!_selectedMonths.contains(month)) return false;

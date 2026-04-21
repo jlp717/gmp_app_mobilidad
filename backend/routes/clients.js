@@ -120,7 +120,7 @@ const getClientsHandler = async (req, res) => {
       ) LV ON 1=1
       LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
       WHERE C.ANOBAJA = 0
-        ${clientCodesFilter || `AND LV.LAST_VENDOR IS NOT NULL`}
+        ${clientCodesFilter || (!vendedorCodes || vendedorCodes === 'ALL' || vendedorCodes.trim() === '' ? '' : `AND LV.LAST_VENDOR IS NOT NULL`)}
         ${searchFilter}
       ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
       OFFSET ${parseInt(offset)} ROWS
