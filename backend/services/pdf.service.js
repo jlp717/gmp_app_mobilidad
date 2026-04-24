@@ -298,7 +298,31 @@ async function generateInvoicePDF(facturaData) {
             doc.fontSize(7).font('Helvetica').fillColor(COLORS.darkGray);
             let alternateRow = true;
 
-            lines.forEach((line) => {
+            // Group lines by albaran if albaran data is available
+            let albaranGroups = null;
+            if (lines.length > 0 && lines[0].albaranNum) {
+                const groups = {};
+                lines.forEach(line => {
+                    const key = `${line.albaranSerie || ''}-${line.albaranTerminal || ''}-${line.albaranNum}-${line.albaranEjercicio || ''}`;
+                    if (!groups[key]) {
+                        groups[key] = {
+                            albaranNum: line.albaranNum,
+                            albaranSerie: line.albaranSerie,
+                            albaranTerminal: line.albaranTerminal,
+                            albaranEjercicio: line.albaranEjercicio,
+                            albaranFecha: line.albaranFecha || '',
+                            lines: [],
+                            subtotal: 0
+                        };
+                    }
+                    groups[key].lines.push(line);
+                    groups[key].subtotal += parseFloat(line.importeNeto || line.importe || 0);
+                });
+                albaranGroups = Object.values(groups);
+                logger.info(`[PDF] Factura grouped into ${albaranGroups.length} albaranes`);
+            }
+
+            const renderLine = (line) => {
                 const descripcion = (line.descripcion || '').substring(0, 50);
                 const descHeight = doc.heightOfString(descripcion, { width: 170 });
                 const rowHeight = Math.max(20, descHeight + 12);
@@ -346,7 +370,47 @@ async function generateInvoicePDF(facturaData) {
 
                 y += rowHeight;
                 alternateRow = !alternateRow;
-            });
+            };
+
+            // Render lines - either grouped by albaran or flat
+            if (albaranGroups && albaranGroups.length > 0) {
+                albaranGroups.forEach((group) => {
+                    // Draw albaran header with subtotal
+                    if (y + 25 > 700) {
+                        doc.addPage();
+                        y = drawHeader(doc, 10) + 10;
+                    }
+
+                    doc.rect(40, y, 515, 20)
+                        .fillAndStroke('#E8F5E9', '#4CAF50');
+
+                    doc.fontSize(8)
+                        .font('Helvetica-Bold')
+                        .fillColor('#2E7D32');
+
+                    const albaranLabel = `Albarán: ${group.albaranSerie || ''}-${group.albaranTerminal || ''}-${group.albaranNum}`;
+                    const fechaLabel = group.albaranFecha ? `Fecha: ${group.albaranFecha}` : '';
+                    doc.text(albaranLabel, 45, y + 5, { width: 250 });
+
+                    if (fechaLabel) {
+                        doc.text(fechaLabel, 250, y + 5, { width: 150 });
+                    }
+
+                    const subtotalLabel = `SUBTOTAL ALBARÁN ${formatNumber(group.subtotal, 2)} €`;
+                    doc.text(subtotalLabel, 400, y + 5, { width: 150, align: 'right' });
+
+                    y += 24;
+                    alternateRow = true;
+
+                    group.lines.forEach((line) => {
+                        renderLine(line);
+                    });
+                });
+            } else {
+                lines.forEach((line) => {
+                    renderLine(line);
+                });
+            }
 
             doc.moveTo(40, y).lineTo(555, y).strokeColor(COLORS.lightGray).lineWidth(1).stroke();
             y += 12;

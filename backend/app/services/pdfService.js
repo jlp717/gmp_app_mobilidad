@@ -410,7 +410,7 @@ async function generateInvoicePDF(facturaData) {
             y += 18;
 
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // LÍNEAS DE PRODUCTOS
+            // LÍNEAS DE PRODUCTOS - Agrupar por albarán si es factura
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             doc.fontSize(7)
                 .font('Helvetica')
@@ -418,7 +418,33 @@ async function generateInvoicePDF(facturaData) {
 
             let alternateRow = true;
 
-            lines.forEach((line, index) => {
+            // Group lines by albaran if this is a factura with albaran data
+            let linesToRender = lines;
+            let albaranGroups = null;
+
+            if (!isAlbaran && lines.length > 0 && lines[0].albaranNum) {
+                const groups = {};
+                lines.forEach(line => {
+                    const key = `${line.albaranSerie || ''}-${line.albaranTerminal || ''}-${line.albaranNum}-${line.albaranEjercicio || ''}`;
+                    if (!groups[key]) {
+                        groups[key] = {
+                            albaranNum: line.albaranNum,
+                            albaranSerie: line.albaranSerie,
+                            albaranTerminal: line.albaranTerminal,
+                            albaranEjercicio: line.albaranEjercicio,
+                            albaranFecha: line.albaranFecha || '',
+                            lines: [],
+                            subtotal: 0
+                        };
+                    }
+                    groups[key].lines.push(line);
+                    groups[key].subtotal += parseFloat(line.importeNeto || line.importe || 0);
+                });
+                albaranGroups = Object.values(groups);
+                logger.info(`[PDF] Factura grouped into ${albaranGroups.length} albaranes`);
+            }
+
+            const renderLine = (line, index, isGroupHeader = false, groupSubtotal = null) => {
                 const descripcion = isAlbaran
                     ? (line.DESCRIPCIONARTICULO || '').trim()
                     : (line.DESCRIPCIONARTICULO || '').substring(0, 50);
@@ -486,42 +512,86 @@ async function generateInvoicePDF(facturaData) {
                     doc.text(formatNumber(importe, 2) + ' €', 500, y + 8, { width: 55, align: 'right' });
                     doc.font('Helvetica');
                 } else {
-                    const codigo = (line.CODIGOARTICULO || '').substring(0, 12);
+                    const codigo = (line.codigo || line.CODIGOARTICULO || '').substring(0, 12);
                     doc.text(codigo, 42, y + 3, { width: 50 });
 
                     doc.text(descripcion, 95, y + 3, { width: 170 });
 
                     // COLUMNA LOTE
-                    const lote = (line.LOTEARTICULO || line.LOTE || '').substring(0, 10);
+                    const lote = (line.lote || line.LOTEARTICULO || line.LOTE || '').substring(0, 10);
                     doc.text(lote || '-', 270, y + 3, { width: 45 });
 
                     // COLUMNA CAJAS
-                    const cajas = line.CAJASARTICULO ?? line.NUMEROCAJAS ?? 0;
+                    const cajas = line.cajas ?? line.CAJASARTICULO ?? line.NUMEROCAJAS ?? 0;
                     const cajasDisplay = Number(cajas) === 0 ? '-' : formatNumber(cajas, 0);
                     doc.text(cajasDisplay, 320, y + 3, { width: 35, align: 'right' });
 
-                    const cantidad = line.CANTIDADARTICULO || 0;
+                    const cantidad = (line.cantidad ?? line.CANTIDADARTICULO) || 0;
                     doc.text(formatNumber(cantidad, 3), 360, y + 3, { width: 38, align: 'right' });
 
-                    const precio = line.PRECIOARTICULO || 0;
+                    const precio = (line.precio ?? line.PRECIOARTICULO) || 0;
                     doc.text(formatNumber(precio, 3) + ' €', 403, y + 3, { width: 42, align: 'right' });
 
-                    const dto = line.PORCENTAJEDESCUENTOARTICULO || 0;
+                    const dto = (line.descuento ?? line.PORCENTAJEDESCUENTOARTICULO) || 0;
                     doc.text(dto > 0 ? formatNumber(dto, 2) : '-', 450, y + 3, { width: 30, align: 'center' });
 
-                    const iva = line.CODIGOIVA ? (IVA_MAP[line.CODIGOIVA.trim()] || 0) : (parseFloat(line.PORCENTAJEIVAARTICULO) || 0);
+                    const iva = (line.codigoIva || line.CODIGOIVA) ? (IVA_MAP[(line.codigoIva || line.CODIGOIVA || '').trim()] || 0) : (parseFloat(line.PORCENTAJEIVAARTICULO) || 0);
                     doc.text(formatNumber(iva, 2), 485, y + 3, { width: 25, align: 'center' });
 
-                    const importe = line.IMPORTENETOARTICULO || 0;
+                    const importe = line.importeNeto || line.IMPORTENETOARTICULO || 0;
                     doc.font('Helvetica-Bold');
-                    doc.text(formatNumber(importe, 2) + ' €', 515, y + 3, { width: 40, align: 'right' });
+                    doc.text(formatNumber(parseFloat(importe), 2) + ' €', 515, y + 3, { width: 40, align: 'right' });
                     doc.font('Helvetica');
                 }
 
                 // Incrementar Y dinámicamente
                 y += rowHeight;
                 alternateRow = !alternateRow;
-            });
+            };
+
+            // Render lines - either grouped by albaran or flat
+            if (albaranGroups && albaranGroups.length > 0) {
+                // Render each albaran group with header
+                albaranGroups.forEach((group, groupIdx) => {
+                    // Draw albaran header with subtotal
+                    if (y + 25 > 700) {
+                        doc.addPage();
+                        y = drawHeader(doc, 10) + 10;
+                    }
+
+                    // Albaran header box
+                    doc.rect(40, y, 515, 20)
+                        .fillAndStroke('#E8F5E9', '#4CAF50');
+
+                    doc.fontSize(8)
+                        .font('Helvetica-Bold')
+                        .fillColor('#2E7D32');
+
+                    const albaranLabel = `Albarán: ${group.albaranSerie || ''}-${group.albaranTerminal || ''}-${group.albaranNum}`;
+                    const fechaLabel = group.albaranFecha ? `Fecha: ${group.albaranFecha}` : '';
+                    doc.text(albaranLabel, 45, y + 5, { width: 250 });
+
+                    if (fechaLabel) {
+                        doc.text(fechaLabel, 250, y + 5, { width: 150 });
+                    }
+
+                    const subtotalLabel = `SUBTOTAL ALBARÁN ${formatNumber(group.subtotal, 2)} €`;
+                    doc.text(subtotalLabel, 400, y + 5, { width: 150, align: 'right' });
+
+                    y += 24;
+                    alternateRow = true;
+
+                    // Render lines for this albaran
+                    group.lines.forEach((line, idx) => {
+                        renderLine(line, idx);
+                    });
+                });
+            } else {
+                // Regular flat rendering for albaran or invoices without albaran grouping
+                lines.forEach((line, index) => {
+                    renderLine(line, index);
+                });
+            }
 
             // Línea final de productos
             doc.moveTo(40, y)

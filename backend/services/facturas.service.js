@@ -402,7 +402,18 @@ class FacturasService {
           LAC.CANTIDADUNIDADES as CANTIDAD,
           LAC.PRECIOVENTA as PRECIO,
           LAC.IMPORTEVENTA as IMPORTE,
-          LAC.PORCENTAJEDESCUENTO as DESCUENTO
+          LAC.PORCENTAJEDESCUENTO as DESCUENTO,
+          LAC.NUMEROALBARAN,
+          LAC.SERIEALBARAN,
+          LAC.TERMINALALBARAN,
+          LAC.EJERCICIOALBARAN,
+          LAC.DIAALBARAN,
+          LAC.MESALBARAN,
+          LAC.ANOALBARAN,
+          LAC.CODIGOIVA,
+          LAC.NUMEROCAJAS,
+          LAC.IMPORTENETO as IMPORTENETOARTICULO,
+          LAC.LOTE as LOTEARTICULO
         FROM DSEDAC.LAC LAC
         INNER JOIN DSEDAC.CAC CAC 
           ON LAC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
@@ -412,7 +423,7 @@ class FacturasService {
         WHERE TRIM(CAC.SERIEFACTURA) = ?
           AND CAC.NUMEROFACTURA = ?
           AND CAC.EJERCICIOFACTURA = ?
-        ORDER BY LAC.SECUENCIA
+        ORDER BY LAC.NUMEROALBARAN, LAC.SECUENCIA
       `;
 
             const lines = await queryWithParams(linesSql, [serie, numero, ejercicio]);
@@ -443,7 +454,18 @@ class FacturasService {
                     cantidad: parseFloat(l.CANTIDAD) || 0,
                     precio: parseFloat(l.PRECIO) || 0,
                     importe: parseFloat(l.IMPORTE) || 0,
-                    descuento: parseFloat(l.DESCUENTO) || 0
+                    descuento: parseFloat(l.DESCUENTO) || 0,
+                    albaranNum: l.NUMEROALBARAN,
+                    albaranSerie: l.SERIEALBARAN ? l.SERIEALBARAN.trim() : '',
+                    albaranTerminal: l.TERMINALALBARAN,
+                    albaranEjercicio: l.EJERCICIOALBARAN,
+                    albaranFecha: l.DIAALBARAN && l.MESALBARAN && l.ANOALBARAN
+                        ? `${String(l.DIAALBARAN).padStart(2, '0')}.${String(l.MESALBARAN).padStart(2, '0')}.${l.ANOALBARAN}`
+                        : '',
+                    codigoIva: l.CODIGOIVA ? l.CODIGOIVA.trim() : '',
+                    cajas: l.NUMEROCAJAS || 0,
+                    importeNeto: parseFloat(l.IMPORTENETOARTICULO) || 0,
+                    lote: l.LOTEARTICULO || ''
                 }))
             };
         } catch (error) {
