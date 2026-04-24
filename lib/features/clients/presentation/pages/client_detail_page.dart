@@ -31,7 +31,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
   bool _isLoading = true;
   String? _error;
   late TabController _tabController;
-  bool _groupByFamilyEnabled = true;
+  bool _groupByFamilyEnabled = false;
   int _groupByFamilyLevel = 1;
 
   @override
