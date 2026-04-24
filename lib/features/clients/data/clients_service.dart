@@ -62,22 +62,34 @@ class ClientsService {
   }
 
   /// Fetch client sales history
+  /// [groupByFamily] - 0 = no grouping (products), 1 = family1, 2 = family1+2, 3 = family1+2+3, 13 = family1+3
   static Future<List<Map<String, dynamic>>> getClientSalesHistory({
     required String clientCode,
     required String vendedorCodes,
     int limit = 50,
+    int groupByFamily = 0,
   }) async {
     final response = await ApiClient.get(
       '${ApiConfig.clientDetail}/$clientCode/sales-history',
       queryParameters: {
         'vendedorCodes': vendedorCodes,
         'limit': limit.toString(),
+        'groupByFamily': groupByFamily.toString(),
       },
     );
     final rawList = response['history'] ?? [];
-    return (rawList as List)
+    final isGrouped = response['grouped'] ?? false;
+    final result = (rawList as List)
         .map((item) => Map<String, dynamic>.from(item as Map))
         .toList();
+    if (isGrouped) {
+      return result.map((item) => {
+        ...item,
+        'productName': item['family1'] ?? 'Sin familia',
+        'productCode': '',
+      }).toList();
+    }
+    return result;
   }
 
   /// Fetch sales summary for a client

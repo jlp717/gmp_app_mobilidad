@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -29,11 +30,12 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
   bool _isLoading = true;
   String? _error;
   late TabController _tabController;
+  bool _groupByFamilyEnabled = false;
+  int _groupByFamilyLevel = 1;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
     _tabController = TabController(length: 3, vsync: this);
     _loadClientDetail();
     _loadSalesSummary();
@@ -706,18 +708,73 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
         if (_salesSummary != null)
            SalesSummaryHeader(summary: _salesSummary!, showMargin: false, isJefeVentas: false),
         Padding(
-          padding: const EdgeInsets.all(16),
-          child: ElevatedButton.icon(
-            icon: const Icon(Icons.manage_search),
-            label: const Text('Explorador Histórico Avanzado (Trazabilidad)'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonBlue.withOpacity(0.2),
-              foregroundColor: AppTheme.neonBlue,
-              minimumSize: const Size(double.infinity, 45),
-            ),
-            onPressed: () {
-              context.push('/sales-history', extra: widget.clientCode);
-            },
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.manage_search),
+                  label: const Text('Explorador Avanzado'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.neonBlue.withOpacity(0.2),
+                    foregroundColor: AppTheme.neonBlue,
+                    minimumSize: const Size(double.infinity, 45),
+                  ),
+                  onPressed: () {
+                    context.push('/sales-history', extra: widget.clientCode);
+                  },
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: _groupByFamilyEnabled ? AppTheme.neonGreen.withValues(alpha: 0.2) : AppColors.surfaceColor,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: _groupByFamilyEnabled ? AppTheme.neonGreen : AppColors.borderColor,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Transform.scale(
+                      scale: 0.8,
+                      child: Switch(
+                        value: _groupByFamilyEnabled,
+                        onChanged: (value) {
+                          setState(() {
+                            _groupByFamilyEnabled = value;
+                          });
+                        },
+                        activeColor: AppTheme.neonGreen,
+                      ),
+                    ),
+                    if (_groupByFamilyEnabled)
+                      Container(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: DropdownButton<int>(
+                          value: _groupByFamilyLevel,
+                          underline: const SizedBox(),
+                          isDense: true,
+                          items: const [
+                            DropdownMenuItem(value: 1, child: Text('Fam 1')),
+                            DropdownMenuItem(value: 2, child: Text('Fam 1+2')),
+                            DropdownMenuItem(value: 3, child: Text('Fam 1+2+3')),
+                            DropdownMenuItem(value: 13, child: Text('Fam 1+3')),
+                          ],
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() {
+                                _groupByFamilyLevel = value;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
         Expanded(
@@ -736,27 +793,49 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                 return const Center(child: Text('No hay historial reciente'));
               }
 
+              final isGrouped = _groupByFamilyEnabled;
+
               return ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: history.length,
                 itemBuilder: (context, index) {
                   final sale = history[index];
-                  final date = (sale['date'] as String?) ?? '';
+                  final date = isGrouped ? '' : (sale['date'] as String?) ?? '';
                   final productName = (sale['productName'] as String?) ?? 'Producto';
                   final amount = (sale['amount'] as num?)?.toDouble() ?? 0;
                   final boxes = sale['boxes'] ?? 0;
+                  final productCount = sale['productCount'] ?? 0;
 
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
-                    color: AppTheme.surfaceColor,
+                    color: isGrouped ? AppTheme.neonBlue.withValues(alpha: 0.1) : AppTheme.surfaceColor,
                     child: ListTile(
                       dense: true,
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                      leading: Text(
-                        date.length >= 10 ? date.substring(5) : date,
-                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                      leading: isGrouped
+                          ? Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.neonGreen.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                '$productCount prod',
+                                style: const TextStyle(color: AppTheme.neonGreen, fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                            )
+                          : Text(
+                              date.length >= 10 ? date.substring(5) : date,
+                              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                            ),
+                      title: Text(
+                        isGrouped
+                            ? '${sale['family1'] ?? ''}${sale['family2'] != null ? ' > ${sale['family2']}' : ''}${sale['family3'] != null ? ' > ${sale['family3']}' : ''}'
+                            : productName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 13, fontWeight: isGrouped ? FontWeight.bold : FontWeight.normal),
                       ),
-                      title: Text(productName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -781,6 +860,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
       return await ClientsService.getClientSalesHistory(
         clientCode: widget.clientCode,
         vendedorCodes: widget.vendedorCodes,
+        groupByFamily: _groupByFamilyEnabled ? _groupByFamilyLevel : 0,
       );
     } catch (e) {
       debugPrint('Error loading history: $e');

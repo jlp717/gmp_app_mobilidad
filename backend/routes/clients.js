@@ -579,46 +579,116 @@ router.put('/:code/notes', verifyToken, async (req, res) => {
 router.get('/:code/sales-history', verifyToken, async (req, res) => {
   try {
     const { code } = req.params;
-    const { vendedorCodes, limit = 50, offset = 0 } = req.query;
+    const { vendedorCodes, limit = 50, offset = 0, groupByFamily = '0' } = req.query;
     const vendedorFilter = buildVendedorFilter(vendedorCodes);
     const clientCode = code.trim();
     const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
+    const familyLevel = parseInt(groupByFamily) || 0;
 
-    // Safe query for sales history
-    const sales = await query(`
-      SELECT ANODOCUMENTO as year, MESDOCUMENTO as month, DIADOCUMENTO as day,
-  CODIGOARTICULO as productCode,
-  COALESCE(DESCRIPCION, 'Sin descripción') as productName,
-  CANTIDADENVASES as boxes, CANTIDADUNIDADES as units,
-  IMPORTEVENTA as amount, IMPORTEMARGENREAL as margin,
-  CODIGOVENDEDOR as vendedor
-      FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' AND ANODOCUMENTO >= ${MIN_YEAR} 
-        AND TIPOVENTA IN ('CC', 'VC')
-        AND TIPOLINEA IN ('AB', 'VT')
-        AND SERIEALBARAN NOT IN ('N', 'Z')
-        ${vendedorFilter}
-      ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
-      OFFSET ${parseInt(offset)} ROWS
-      FETCH FIRST ${parseInt(limit)} ROWS ONLY
-    `);
+    let sales;
+    let hasMore = false;
 
-    res.json({
-      history: sales.map(s => ({
-        date: `${s.YEAR} -${String(s.MONTH).padStart(2, '0')} -${String(s.DAY).padStart(2, '0')} `,
-        productCode: s.PRODUCTCODE?.trim(),
-        productName: s.PRODUCTNAME?.trim(),
-        boxes: parseInt(s.BOXES) || 0,
-        units: parseInt(s.UNITS) || 0,
-        amount: formatCurrency(s.AMOUNT),
-        margin: formatCurrency(s.MARGIN),
-        vendedor: s.VENDEDOR?.trim()
-      })),
-      hasMore: sales.length === parseInt(limit)
-    });
+    if (familyLevel === 0) {
+      // No grouping - return individual products
+      sales = await query(`
+        SELECT ANODOCUMENTO as year, MESDOCUMENTO as month, DIADOCUMENTO as day,
+    CODIGOARTICULO as productCode,
+    COALESCE(DESCRIPCION, 'Sin descripción') as productName,
+    CANTIDADENVASES as boxes, CANTIDADUNIDADES as units,
+    IMPORTEVENTA as amount, IMPORTEMARGENREAL as margin,
+    CODIGOVENDEDOR as vendedor
+        FROM DSEDAC.LINDTO
+        WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' AND ANODOCUMENTO >= ${MIN_YEAR}
+          AND TIPOVENTA IN ('CC', 'VC')
+          AND TIPOLINEA IN ('AB', 'VT')
+          AND SERIEALBARAN NOT IN ('N', 'Z')
+          ${vendedorFilter}
+        ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
+        OFFSET ${parseInt(offset)} ROWS
+        FETCH FIRST ${parseInt(limit)} ROWS ONLY
+      `);
+      hasMore = sales.length === parseInt(limit);
+
+      res.json({
+        history: sales.map(s => ({
+          date: `${s.YEAR}-${String(s.MONTH).padStart(2, '0')}-${String(s.DAY).padStart(2, '0')}`,
+          productCode: s.PRODUCTCODE?.trim(),
+          productName: s.PRODUCTNAME?.trim(),
+          boxes: parseInt(s.BOXES) || 0,
+          units: parseInt(s.UNITS) || 0,
+          amount: formatCurrency(s.AMOUNT),
+          margin: formatCurrency(s.MARGIN),
+          vendedor: s.VENDEDOR?.trim()
+        })),
+        hasMore,
+        grouped: false
+      });
+    } else {
+      // Group by family level(s)
+      const familySelects = [];
+      const familyGroupBy = [];
+
+      if (familyLevel === 1 || familyLevel === 13) {
+        familySelects.push('TRIM(A.CODIGOFAMILIA) as family1');
+        familyGroupBy.push('A.CODIGOFAMILIA');
+      }
+      if (familyLevel >= 2 && (familyLevel !== 13)) {
+        familySelects.push('COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ""), "General") as family2');
+        familyGroupBy.push('A.CODIGOSUBFAMILIA');
+      }
+      if (familyLevel >= 3 && (familyLevel !== 13)) {
+        familySelects.push('COALESCE(NULLIF(TRIM(A.CODIGOPREFAMILIA), ""), "General") as family3');
+        familyGroupBy.push('A.CODIGOPREFAMILIA');
+      }
+      if (familyLevel === 13) {
+        familySelects.push('COALESCE(NULLIF(TRIM(A.CODIGOPREFAMILIA), ""), "General") as family3');
+        familyGroupBy.push('A.CODIGOPREFAMILIA');
+      }
+
+      const groupByClause = familyGroupBy.join(', ');
+
+      sales = await query(`
+        SELECT ${familySelects.join(', ')},
+          SUM(CANTIDADENVASES) as boxes,
+          SUM(CANTIDADUNIDADES) as units,
+          SUM(IMPORTEVENTA) as amount,
+          SUM(IMPORTEMARGENREAL) as margin,
+          COUNT(DISTINCT CODIGOARTICULO) as productCount
+        FROM DSEDAC.LINDTO L
+        LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+        WHERE L.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND L.ANODOCUMENTO >= ${MIN_YEAR}
+          AND L.TIPOVENTA IN ('CC', 'VC')
+          AND L.TIPOLINEA IN ('AB', 'VT')
+          AND L.SERIEALBARAN NOT IN ('N', 'Z')
+          ${vendedorFilter}
+        GROUP BY ${groupByClause}
+        ORDER BY amount DESC
+        FETCH FIRST ${parseInt(limit)} ROWS ONLY
+      `);
+
+      res.json({
+        history: sales.map(s => {
+          const item = {
+            family1: s.FAMILY1?.trim() || 'Sin familia',
+            boxes: parseInt(s.BOXES) || 0,
+            units: parseInt(s.UNITS) || 0,
+            amount: formatCurrency(s.AMOUNT),
+            margin: formatCurrency(s.MARGIN),
+            productCount: parseInt(s.PRODUCTCOUNT) || 0
+          };
+          if (familyLevel >= 2 && familyLevel !== 13) item.family2 = s.FAMILY2 || 'General';
+          if (familyLevel >= 3 && familyLevel !== 13) item.family3 = s.FAMILY3 || 'General';
+          if (familyLevel === 13) item.family3 = s.FAMILY3 || 'General';
+          return item;
+        }),
+        hasMore: false,
+        grouped: true,
+        groupLevel: familyLevel
+      });
+    }
 
   } catch (error) {
-    logger.error(`Client history error: ${error.message} `);
+    logger.error(`Client history error: ${error.message}`);
     handleRouteError(error, res, 'Error obteniendo historial', 500);
   }
 });

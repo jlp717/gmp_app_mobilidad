@@ -565,7 +565,7 @@ async function generateInvoicePDF(facturaData) {
 
                     doc.fontSize(8)
                         .font('Helvetica-Bold')
-                        .fillColor('#2E7D32');
+                        .fillColor('#003d7a');
 
                     const albaranLabel = `Albarán: ${group.albaranSerie || ''}-${group.albaranTerminal || ''}-${group.albaranNum}`;
                     const fechaLabel = group.albaranFecha ? `Fecha: ${group.albaranFecha}` : '';
