@@ -407,13 +407,13 @@ class FacturasService {
           LAC.SERIEALBARAN,
           LAC.TERMINALALBARAN,
           LAC.EJERCICIOALBARAN,
-          LAC.DIAALBARAN,
-          LAC.MESALBARAN,
-          LAC.ANOALBARAN,
           LAC.CODIGOIVA,
-          LAC.NUMEROCAJAS,
-          LAC.IMPORTENETO as IMPORTENETOARTICULO,
-          LAC.LOTE as LOTEARTICULO
+          LAC.CANTIDADENVASES as CAJAS,
+          LAC.IMPORTEVENTA as IMPORTENETO,
+          LAC.DIADOCUMENTO,
+          LAC.MESDOCUMENTO,
+          LAC.ANODOCUMENTO,
+          LAC.CODIGOLOTE
         FROM DSEDAC.LAC LAC
         INNER JOIN DSEDAC.CAC CAC 
           ON LAC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
@@ -459,13 +459,13 @@ class FacturasService {
                     albaranSerie: l.SERIEALBARAN ? l.SERIEALBARAN.trim() : '',
                     albaranTerminal: l.TERMINALALBARAN,
                     albaranEjercicio: l.EJERCICIOALBARAN,
-                    albaranFecha: l.DIAALBARAN && l.MESALBARAN && l.ANOALBARAN
-                        ? `${String(l.DIAALBARAN).padStart(2, '0')}.${String(l.MESALBARAN).padStart(2, '0')}.${l.ANOALBARAN}`
+                    albaranFecha: l.DIADOCUMENTO && l.MESDOCUMENTO && l.ANODOCUMENTO
+                        ? `${String(l.DIADOCUMENTO).padStart(2, '0')}.${String(l.MESDOCUMENTO).padStart(2, '0')}.${l.ANODOCUMENTO}`
                         : '',
                     codigoIva: l.CODIGOIVA ? l.CODIGOIVA.trim() : '',
-                    cajas: l.NUMEROCAJAS || 0,
-                    importeNeto: parseFloat(l.IMPORTENETOARTICULO) || 0,
-                    lote: l.LOTEARTICULO || ''
+                    cajas: l.CAJAS || 0,
+                    importeNeto: parseFloat(l.IMPORTENETO) || 0,
+                    lote: l.CODIGOLOTE ? l.CODIGOLOTE.trim() : ''
                 }))
             };
         } catch (error) {
