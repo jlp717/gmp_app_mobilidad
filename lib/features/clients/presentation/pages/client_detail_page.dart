@@ -6,6 +6,7 @@ import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
+import 'package:gmp_app_mobilidad/features/clients/presentation/pages/family_products_page.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 import 'package:gmp_app_mobilidad/features/sales_history/presentation/widgets/sales_summary_header.dart';
 import 'package:go_router/go_router.dart';
@@ -30,7 +31,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
   bool _isLoading = true;
   String? _error;
   late TabController _tabController;
-  bool _groupByFamilyEnabled = false;
+  bool _groupByFamilyEnabled = true;
   int _groupByFamilyLevel = 1;
 
   @override
@@ -809,40 +810,59 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                   return Card(
                     margin: const EdgeInsets.only(bottom: 8),
                     color: isGrouped ? AppTheme.neonBlue.withValues(alpha: 0.1) : AppTheme.surfaceColor,
-                    child: ListTile(
-                      dense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                      leading: isGrouped
-                          ? Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppTheme.neonGreen.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(4),
+                    child: InkWell(
+                      onTap: isGrouped
+                          ? () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => FamilyProductsPage(
+                                    clientCode: widget.clientCode,
+                                    vendedorCodes: widget.vendedorCodes,
+                                    family1: sale['family1'] ?? '',
+                                    family2: sale['family2'],
+                                    family3: sale['family3'],
+                                    groupLevel: _groupByFamilyLevel,
+                                  ),
+                                ),
+                              );
+                            }
+                          : null,
+                      borderRadius: BorderRadius.circular(12),
+                      child: ListTile(
+                        dense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                        leading: isGrouped
+                            ? Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.neonGreen.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  '$productCount prod',
+                                  style: const TextStyle(color: AppTheme.neonGreen, fontSize: 10, fontWeight: FontWeight.bold),
+                                ),
+                              )
+                            : Text(
+                                date.length >= 10 ? date.substring(5) : date,
+                                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
                               ),
-                              child: Text(
-                                '$productCount prod',
-                                style: const TextStyle(color: AppTheme.neonGreen, fontSize: 10, fontWeight: FontWeight.bold),
-                              ),
-                            )
-                          : Text(
-                              date.length >= 10 ? date.substring(5) : date,
-                              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                            ),
-                      title: Text(
-                        isGrouped
-                            ? '${sale['family1'] ?? ''}${sale['family2'] != null ? ' > ${sale['family2']}' : ''}${sale['family3'] != null ? ' > ${sale['family3']}' : ''}'
-                            : productName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 13, fontWeight: isGrouped ? FontWeight.bold : FontWeight.normal),
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text('$boxes cj', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
-                          const SizedBox(width: 8),
-                          Text(CurrencyFormatter.formatWhole(amount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        ],
+                        title: Text(
+                          isGrouped
+                              ? '${sale['family1'] ?? ''}${sale['family2'] != null ? ' > ${sale['family2']}' : ''}${sale['family3'] != null ? ' > ${sale['family3']}' : ''}'
+                              : productName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 13, fontWeight: isGrouped ? FontWeight.bold : FontWeight.normal),
+                        ),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('$boxes cj', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                            const SizedBox(width: 8),
+                            Text(CurrencyFormatter.formatWhole(amount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          ],
+                        ),
                       ),
                     ),
                   );

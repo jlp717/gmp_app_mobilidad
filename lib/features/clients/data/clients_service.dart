@@ -92,6 +92,34 @@ class ClientsService {
     return result;
   }
 
+  /// Fetch products within a specific family
+  static Future<List<Map<String, dynamic>>> getProductsByFamily({
+    required String clientCode,
+    required String vendedorCodes,
+    required String family1,
+    String? family2,
+    String? family3,
+    required int groupLevel,
+    int limit = 100,
+  }) async {
+    final params = <String, dynamic>{
+      'vendedorCodes': vendedorCodes,
+      'limit': limit.toString(),
+      'family1': family1,
+      'groupLevel': groupLevel.toString(),
+    };
+    if (family2 != null && family2.isNotEmpty) params['family2'] = family2;
+    if (family3 != null && family3.isNotEmpty) params['family3'] = family3;
+
+    final response = await ApiClient.get(
+      '${ApiConfig.clientDetail}/$clientCode/sales-history/family',
+      queryParameters: params,
+    );
+    return ((response['products'] as List?) ?? [])
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+  }
+
   /// Fetch sales summary for a client
   static Future<Map<String, dynamic>> getSalesSummary({
     required String clientCode,

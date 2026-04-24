@@ -574,6 +574,71 @@ router.put('/:code/notes', verifyToken, async (req, res) => {
 });
 
 // =============================================================================
+// CLIENT SALES HISTORY - PRODUCTS BY FAMILY
+// =============================================================================
+router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const { vendedorCodes, limit = 100, family1, family2, family3, groupLevel } = req.query;
+    const vendedorFilter = buildVendedorFilter(vendedorCodes);
+    const clientCode = code.trim();
+    const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
+    const safeFamily1 = family1?.replace(/[^a-zA-Z0-9]/g, '') || '';
+    const safeFamily2 = family2 ? family2.replace(/[^a-zA-Z0-9]/g, '') : null;
+    const safeFamily3 = family3 ? family3.replace(/[^a-zA-Z0-9]/g, '') : null;
+    const level = parseInt(groupLevel) || 1;
+
+    let whereClause = `L.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND L.ANODOCUMENTO >= ${MIN_YEAR}
+      AND L.TIPOVENTA IN ('CC', 'VC')
+      AND L.TIPOLINEA IN ('AB', 'VT')
+      AND L.SERIEALBARAN NOT IN ('N', 'Z')
+      ${vendedorFilter}`;
+
+    if (level === 1 || level === 13) {
+      whereClause += ` AND TRIM(A.CODIGOFAMILIA) = '${safeFamily1}'`;
+    }
+    if ((level >= 2 || level === 13) && safeFamily2) {
+      whereClause += ` AND COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') = '${safeFamily2}'`;
+    }
+    if ((level >= 3 || level === 13) && safeFamily3) {
+      whereClause += ` AND COALESCE(NULLIF(TRIM(A.CODIGOPREFAMILIA), ''), 'General') = '${safeFamily3}'`;
+    }
+
+    const products = await query(`
+      SELECT L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
+        L.CODIGOARTICULO as productCode,
+        COALESCE(A.DESCRIPCION, 'Sin descripción') as productName,
+        SUM(L.CANTIDADENVASES) as boxes, SUM(L.CANTIDADUNIDADES) as units,
+        SUM(L.IMPORTEVENTA) as amount, SUM(L.IMPORTEMARGENREAL) as margin,
+        L.CODIGOVENDEDOR as vendedor
+      FROM DSEDAC.LINDTO L
+      LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+      WHERE ${whereClause}
+      GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO, L.DIADOCUMENTO, L.CODIGOARTICULO, A.DESCRIPCION, L.CODIGOVENDEDOR
+      ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
+      FETCH FIRST ${parseInt(limit)} ROWS ONLY
+    `);
+
+    res.json({
+      products: products.map(p => ({
+        date: `${p.YEAR}-${String(p.MONTH).padStart(2, '0')}-${String(p.DAY).padStart(2, '0')}`,
+        productCode: p.PRODUCTCODE?.trim(),
+        productName: p.PRODUCTNAME?.trim(),
+        boxes: parseInt(p.BOXES) || 0,
+        units: parseInt(p.UNITS) || 0,
+        amount: formatCurrency(p.AMOUNT),
+        margin: formatCurrency(p.MARGIN),
+        vendedor: p.VENDEDOR?.trim()
+      }))
+    });
+
+  } catch (error) {
+    logger.error(`Products by family error: ${error.message}`);
+    handleRouteError(error, res, 'Error obteniendo productos por familia', 500);
+  }
+});
+
+// =============================================================================
 // CLIENT SALES HISTORY
 // =============================================================================
 router.get('/:code/sales-history', verifyToken, async (req, res) => {
