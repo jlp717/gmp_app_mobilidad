@@ -1,0 +1,44 @@
+{
+  "tasks": {
+    "task-1777026027045-wr5tj7": {
+      "taskId": "task-1777026027045-wr5tj7",
+      "type": "research",
+      "description": "Fase 1 only, read-only: explore DB2 schema access scripts and DSEDAC/JAVIER field mappings for repartidor financial suite; do not edit files.",
+      "priority": "normal",
+      "status": "pending",
+      "progress": 0,
+      "assignedTo": [],
+      "tags": [],
+      "createdAt": "2026-04-24T10:20:27.045Z",
+      "startedAt": null,
+      "completedAt": null
+    },
+    "task-1777026027493-ghi2is": {
+      "taskId": "task-1777026027493-ghi2is",
+      "type": "research",
+      "description": "Fase 1 only, read-only: explore backend routes/services for cobros, repartidor rutero, commissions, audit, redis cache, emailPdfService; map patterns and dependencies; do not edit files.",
+      "priority": "normal",
+      "status": "pending",
+      "progress": 0,
+      "assignedTo": [],
+      "tags": [],
+      "createdAt": "2026-04-24T10:20:27.493Z",
+      "startedAt": null,
+      "completedAt": null
+    },
+    "task-1777026028056-elmvei": {
+      "taskId": "task-1777026028056-elmvei",
+      "type": "research",
+      "description": "Fase 1 only, read-only: explore Flutter navigation/main_shell, provider pattern, commissions feature, repartidor rutero modal/data services; do not edit files.",
+      "priority": "normal",
+      "status": "pending",
+      "progress": 0,
+      "assignedTo": [],
+      "tags": [],
+      "createdAt": "2026-04-24T10:20:28.056Z",
+      "startedAt": null,
+      "completedAt": null
+    }
+  },
+  "version": "3.0.0"
+}

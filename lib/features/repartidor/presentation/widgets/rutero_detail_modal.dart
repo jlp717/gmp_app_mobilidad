@@ -1029,6 +1029,125 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     return code;
   }
 
+  String _sanitizeTokenPart(Object? value) {
+    final raw = value?.toString().trim() ?? '';
+    if (raw.isEmpty) return 'NA';
+    return raw.replaceAll(RegExp('[^A-Za-z0-9_.:-]'), '_');
+  }
+
+  String _ruteroCobroIdempotencyToken() {
+    final serie = widget.albaran.serie.trim().isEmpty
+        ? 'SIN_SERIE'
+        : widget.albaran.serie.trim();
+    final parts = [
+      'RUTERO',
+      'COBRO',
+      'GMP',
+      widget.albaran.ejercicio,
+      'B',
+      serie,
+      widget.albaran.terminal,
+      widget.albaran.numeroAlbaran,
+      1,
+      widget.albaran.codigoCliente,
+    ];
+    return parts.map(_sanitizeTokenPart).join(':');
+  }
+
+  String _codigoRepartidorCobro() {
+    final fromAlbaran = widget.albaran.codigoRepartidor.trim();
+    if (fromAlbaran.isNotEmpty) return fromAlbaran;
+
+    final repartidorState =
+        widget.ref.read(entregasProvider).repartidorId.trim();
+    if (repartidorState.contains(',')) {
+      return repartidorState.split(',').first.trim();
+    }
+    return repartidorState;
+  }
+
+  Map<String, dynamic> _cobroRuteroPayload() {
+    final codigoCliente = widget.albaran.codigoCliente.trim();
+    final codigoRepartidor = _codigoRepartidorCobro();
+    if (codigoCliente.isEmpty) {
+      throw Exception('Falta el codigo de cliente para registrar el cobro');
+    }
+    if (codigoRepartidor.isEmpty) {
+      throw Exception('Falta el codigo de repartidor para registrar el cobro');
+    }
+
+    final importeCobrado =
+        double.parse(widget.albaran.importeTotal.toStringAsFixed(2));
+    return {
+      'entregaId': widget.albaran.id,
+      'codigoCliente': codigoCliente,
+      'nombreCliente': widget.albaran.nombreCliente,
+      'codigoRepartidor': codigoRepartidor,
+      'tipoDocumento': 'ALBARAN',
+      'origenDocumento': 'B',
+      // TODO(repartidor): usar subempresa del albaran cuando el modelo
+      // la exponga.
+      'subempresaDocumento': 'GMP',
+      'ejercicioDocumento': widget.albaran.ejercicio,
+      'serieDocumento': widget.albaran.serie,
+      'terminalDocumento': widget.albaran.terminal,
+      'numeroDocumento': widget.albaran.numeroAlbaran,
+      'xdeDocumento': 1,
+      'importeCobrado': importeCobrado,
+      'importePendiente': 0,
+      'formaPago': _selectedPaymentMethod,
+      'pantallaOrigen': 'RUTERO',
+      'idempotencyToken': _ruteroCobroIdempotencyToken(),
+      'notas': 'Cobro registrado desde Rutero al confirmar entrega',
+    };
+  }
+
+  Future<bool> _confirmarEntregaConCobroRutero({
+    required String firmaBase64,
+    required String observaciones,
+  }) async {
+    String? firmaPath;
+    final signatureResponse =
+        await ApiClient.post('/entregas/uploads/signature', {
+      'entregaId': widget.albaran.id,
+      'firma': firmaBase64,
+      'clientCode': widget.albaran.codigoCliente,
+      'dni': _dniController.text.trim(),
+      'nombre': _nombreController.text.trim(),
+    });
+
+    if (signatureResponse['success'] == true) {
+      firmaPath = signatureResponse['path'] as String?;
+    }
+
+    final response = await ApiClient.post(
+      '/repartidor-finanzas/rutero/confirm-delivery-cobro',
+      {
+        'delivery': {
+          'itemId': widget.albaran.id,
+          'status': 'ENTREGADO',
+          'repartidorId': _codigoRepartidorCobro(),
+          'observaciones': observaciones,
+          'firma': firmaPath,
+        },
+        'cobro': _cobroRuteroPayload(),
+      },
+    );
+
+    if (response['success'] != true) {
+      throw Exception(
+        response['error']?.toString() ?? 'No se pudo registrar entrega y cobro',
+      );
+    }
+
+    widget.albaran.firma = firmaPath;
+    widget.albaran.estado = EstadoEntrega.entregado;
+    await widget.ref
+        .read(entregasProvider.notifier)
+        .cargarAlbaranesPendientes();
+    return true;
+  }
+
   void _clearValidationErrors() {
     setState(() {
       _nombreError = null;
@@ -1239,18 +1358,23 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         finalObs +=
             '\nReceptor: ${_nombreController.text} (${_dniController.text})';
       }
+      final bool success;
       if (_isPaid) {
         finalObs += '\nCobrado: $_selectedPaymentMethod';
+        success = await _confirmarEntregaConCobroRutero(
+          firmaBase64: base64Sig,
+          observaciones: finalObs,
+        );
+      } else {
+        success = await notifier.marcarEntregado(
+          albaranId: widget.albaran.id,
+          firma: base64Sig,
+          observaciones: finalObs,
+          clientCode: widget.albaran.codigoCliente,
+          dni: _dniController.text.trim(),
+          nombre: _nombreController.text.trim(),
+        );
       }
-
-      final success = await notifier.marcarEntregado(
-        albaranId: widget.albaran.id,
-        firma: base64Sig,
-        observaciones: finalObs,
-        clientCode: widget.albaran.codigoCliente,
-        dni: _dniController.text.trim(),
-        nombre: _nombreController.text.trim(),
-      );
 
       if (!mounted) return;
 

@@ -318,8 +318,35 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         });
         const uniqueRows = Array.from(aggregatedMap.values());
 
+        const clientCodes = Array.from(new Set(
+            uniqueRows
+                .map(row => (row.CLIENTE || '').trim())
+                .filter(Boolean)
+        ));
+        const cobroRigurosoClientes = new Set();
+        if (clientCodes.length > 0) {
+            try {
+                const clxPlaceholders = clientCodes.map(() => '?').join(',');
+                const clxRows = await queryWithParams(`
+                    SELECT TRIM(CODIGOCLIENTE) as CLIENTE
+                    FROM DSEDAC.CLX
+                    WHERE TRIM(CODIGOCLIENTE) IN (${clxPlaceholders})
+                      AND TRIM(COALESCE(COBRORIGUROSOSN, '')) = 'S'
+                `, clientCodes, false, false) || [];
+                clxRows.forEach(row => {
+                    const cliente = (row.CLIENTE || '').trim();
+                    if (cliente) cobroRigurosoClientes.add(cliente);
+                });
+            } catch (clxError) {
+                logger.warn(`[ENTREGAS] Could not load CLX.COBRORIGUROSOSN: ${clxError.message}`);
+            }
+        }
+
         // Process rows
         const albaranes = uniqueRows.map(row => {
+            const serie = (row.SERIEALBARAN || '').trim();
+            const cliente = (row.CLIENTE || '').trim();
+            const cobroRiguroso = cobroRigurosoClientes.has(cliente);
             const fp = (row.FORMA_PAGO || '').toUpperCase().trim();
 
             // Try robust matching
@@ -327,13 +354,13 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             if (!paymentInfo) paymentInfo = DEFAULT_PAYMENT;
 
             // Determine if repartidor MUST collect money
-            // Fallback: If DB config is default/false, check string patterns (Legacy Logic)
-            let esCTR = paymentInfo.mustCollect;
-            let puedeCobrarse = paymentInfo.canCollect;
+            // CLX.COBRORIGUROSOSN complements PAYMENT_CONDITIONS without replacing it.
+            let esCTR = paymentInfo.mustCollect || cobroRiguroso;
+            let puedeCobrarse = paymentInfo.canCollect || cobroRiguroso;
 
             // Debug specific rows to see why logic fails
             if (rows.length < 5 || Math.random() < 0.05) {
-                logger.debug(`[ENTREGAS_DEBUG] Albaran: ${row.NUMEROALBARAN}, FP: '${fp}', Info: ${JSON.stringify(paymentInfo)}, esCTR: ${esCTR}`);
+                logger.debug(`[ENTREGAS_DEBUG] Albaran: ${row.NUMEROALBARAN}, Cliente: '${cliente}', FP: '${fp}', Info: ${JSON.stringify(paymentInfo)}, cobroRiguroso: ${cobroRiguroso}, esCTR: ${esCTR}`);
             }
 
             if (!paymentInfo.mustCollect && !paymentInfo.canCollect && paymentInfo === DEFAULT_PAYMENT) {
@@ -448,9 +475,6 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             if (base1 > 0) ivaBreakdown.push({ base: base1, pct: pctIva1, iva: iva1 });
             if (base2 > 0) ivaBreakdown.push({ base: base2, pct: pctIva2, iva: iva2 });
             if (base3 > 0) ivaBreakdown.push({ base: base3, pct: pctIva3, iva: iva3 });
-
-            const serie = (row.SERIEALBARAN || '').trim();
-            const cliente = (row.CLIENTE || '').trim();
 
             return {
                 id: `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}-${cliente}`,

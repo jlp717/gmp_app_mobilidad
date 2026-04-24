@@ -8,6 +8,7 @@ import 'package:gmp_app_mobilidad/core/api/isolate_transformer.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/services/device_fingerprint.dart';
 import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
+import 'package:sentry_dio/sentry_dio.dart';
 
 /// API Client for all backend communications
 /// Enhanced with automatic server detection and fallback
@@ -276,6 +277,8 @@ class ApiClient {
         ),
       );
     }
+
+    dio.addSentry(captureFailedRequests: true);
 
     return dio;
   }

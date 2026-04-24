@@ -14,12 +14,14 @@ import 'package:gmp_app_mobilidad/features/auth/presentation/pages/login_page.da
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/main_shell.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
+    Sentry.captureException(details.exception, stackTrace: details.stack);
     debugPrint('[FLUTTER_ERROR] ${details.exceptionAsString()}');
   };
 
@@ -82,11 +84,28 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
+  const sentryDsn = String.fromEnvironment('SENTRY_DSN');
+  if (sentryDsn.isNotEmpty) {
+    await SentryFlutter.init(
+      (options) {
+        options.dsn = sentryDsn;
+        options.environment = const String.fromEnvironment(
+          'SENTRY_ENVIRONMENT',
+          defaultValue: 'production',
+        );
+        options.tracesSampleRate = 0.2;
+        options.debug = kDebugMode;
+      },
+    );
+  }
+
   runZonedGuarded(
-    () => runApp(
-      const ProviderScope(child: GMPSalesAnalyticsApp()),
-    ),
-    (error, stackTrace) {
+    () {
+      const app = ProviderScope(child: GMPSalesAnalyticsApp());
+      runApp(sentryDsn.isEmpty ? app : SentryWidget(child: app));
+    },
+    (error, stackTrace) async {
+      await Sentry.captureException(error, stackTrace: stackTrace);
       debugPrint('[ZONE_ERROR] $error\n$stackTrace');
     },
   );

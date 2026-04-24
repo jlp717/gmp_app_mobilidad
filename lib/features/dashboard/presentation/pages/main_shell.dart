@@ -22,6 +22,10 @@ import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/reparti
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_historico_page.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_panel_page.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_rutero_page.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/comisiones_page.dart'
+    as repartidor_finanzas;
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/liquidacion_diaria_page.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/vencimientos_page.dart';
 import 'package:gmp_app_mobilidad/features/rutero/presentation/pages/rutero_page.dart';
 import 'package:gmp_app_mobilidad/features/settings/presentation/pages/network_settings_page.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/articles_page.dart';
@@ -1220,13 +1224,19 @@ class _MainShellState extends ConsumerState<MainShell> {
             repartidorNames: repNamesMap,
           );
         }
+        if (label == 'Liquidacion Diaria') {
+          return RepartidorLiquidacionDiariaPage(
+            repartidorId: effectiveRepartidorId,
+          );
+        }
+        if (label == 'Vencimientos') {
+          return RepartidorVencimientosPage(
+            repartidorId: effectiveRepartidorId,
+          );
+        }
         if (label == 'Comisiones') {
-          return const ComingSoonPlaceholder(
-            title: 'Comisiones de Reparto',
-            subtitle:
-                'Aquí podrás consultar tus comisiones\nbasadas en los cobros realizados.',
-            icon: Icons.euro,
-            accentColor: AppTheme.neonGreen,
+          return repartidor_finanzas.RepartidorComisionesFinanzasPage(
+            repartidorId: effectiveRepartidorId,
           );
         }
         if (label == 'Histórico') {

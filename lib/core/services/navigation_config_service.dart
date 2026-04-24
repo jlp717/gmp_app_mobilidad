@@ -19,33 +19,29 @@ class NavigationConfigService {
     // REPARTIDOR MODE
     if (isRepartidor) {
       if (isJefeVentas) {
-        items.add(const NavItem(
-          icon: Icons.dashboard_outlined,
-          selectedIcon: Icons.dashboard,
-          label: 'Panel',
-          color: Colors.orange,
-        ),);
+        items.add(
+          const NavItem(
+            icon: Icons.dashboard_outlined,
+            selectedIcon: Icons.dashboard,
+            label: 'Panel',
+            color: Colors.orange,
+          ),
+        );
       }
       items.addAll(_repartidorItems);
-      if (!isJefeVentas && showCommissions) {
-        items.add(const NavItem(
-          icon: Icons.euro_outlined,
-          selectedIcon: Icons.euro,
-          label: 'Comisiones',
-          color: Color(0xFF00FF88),
-        ),);
-      }
       return items;
     }
 
     // SALES MODE (Jefe / Comercial)
     if (isJefeVentas) {
-      items.add(const NavItem(
-        icon: Icons.dashboard_outlined,
-        selectedIcon: Icons.dashboard,
-        label: 'Panel',
-        color: Color(0xFF00D4FF),
-      ),);
+      items.add(
+        const NavItem(
+          icon: Icons.dashboard_outlined,
+          selectedIcon: Icons.dashboard,
+          label: 'Panel',
+          color: Color(0xFF00D4FF),
+        ),
+      );
     }
     items.addAll(_ventasItems);
 
@@ -59,106 +55,141 @@ class NavigationConfigService {
 
   static const _almacenItems = [
     NavItem(
-        icon: Icons.warehouse_outlined,
-        selectedIcon: Icons.warehouse_rounded,
-        label: 'Expediciones',
-        color: Color(0xFF00D4FF),),
+      icon: Icons.warehouse_outlined,
+      selectedIcon: Icons.warehouse_rounded,
+      label: 'Expediciones',
+      color: Color(0xFF00D4FF),
+    ),
     NavItem(
-        icon: Icons.local_shipping_outlined,
-        selectedIcon: Icons.local_shipping_rounded,
-        label: 'Vehiculos',
-        color: Color(0xFF9C27B0),),
+      icon: Icons.local_shipping_outlined,
+      selectedIcon: Icons.local_shipping_rounded,
+      label: 'Vehiculos',
+      color: Color(0xFF9C27B0),
+    ),
     NavItem(
-        icon: Icons.inventory_2_outlined,
-        selectedIcon: Icons.inventory_2_rounded,
-        label: 'Articulos',
-        color: Color(0xFF00FF88),),
+      icon: Icons.inventory_2_outlined,
+      selectedIcon: Icons.inventory_2_rounded,
+      label: 'Articulos',
+      color: Color(0xFF00FF88),
+    ),
     NavItem(
-        icon: Icons.history_outlined,
-        selectedIcon: Icons.history_rounded,
-        label: 'Historial',
-        color: Color(0xFFFFC107),),
+      icon: Icons.history_outlined,
+      selectedIcon: Icons.history_rounded,
+      label: 'Historial',
+      color: Color(0xFFFFC107),
+    ),
     NavItem(
-        icon: Icons.groups_outlined,
-        selectedIcon: Icons.groups_rounded,
-        label: 'Personal',
-        color: Color(0xFF9C27B0),),
+      icon: Icons.groups_outlined,
+      selectedIcon: Icons.groups_rounded,
+      label: 'Personal',
+      color: Color(0xFF9C27B0),
+    ),
   ];
 
   static const _repartidorItems = [
     NavItem(
-        icon: Icons.people_outline,
-        selectedIcon: Icons.people,
-        label: 'Clientes',
-        color: Color(0xFF00FF88),),
+      icon: Icons.people_outline,
+      selectedIcon: Icons.people,
+      label: 'Clientes',
+      color: Color(0xFF00FF88),
+    ),
     NavItem(
-        icon: Icons.route_outlined,
-        selectedIcon: Icons.route,
-        label: 'Rutero',
-        color: Color(0xFF00D4FF),),
+      icon: Icons.route_outlined,
+      selectedIcon: Icons.route,
+      label: 'Rutero',
+      color: Color(0xFF00D4FF),
+    ),
     NavItem(
-        icon: Icons.history_outlined,
-        selectedIcon: Icons.history,
-        label: 'Histórico',
-        color: Color(0xFF9C27B0),),
+      icon: Icons.account_balance_wallet_outlined,
+      selectedIcon: Icons.account_balance_wallet,
+      label: 'Liquidacion Diaria',
+      color: Color(0xFF00FF88),
+    ),
     NavItem(
-        icon: Icons.smart_toy_outlined,
-        selectedIcon: Icons.smart_toy,
-        label: 'Chat IA',
-        color: Color(0xFFFF4081),),
+      icon: Icons.event_available_outlined,
+      selectedIcon: Icons.event_available,
+      label: 'Vencimientos',
+      color: Color(0xFFFFC107),
+    ),
+    NavItem(
+      icon: Icons.euro_outlined,
+      selectedIcon: Icons.euro,
+      label: 'Comisiones',
+      color: Color(0xFF00FF88),
+    ),
+    NavItem(
+      icon: Icons.history_outlined,
+      selectedIcon: Icons.history,
+      label: 'Histórico',
+      color: Color(0xFF9C27B0),
+    ),
+    NavItem(
+      icon: Icons.smart_toy_outlined,
+      selectedIcon: Icons.smart_toy,
+      label: 'Chat IA',
+      color: Color(0xFFFF4081),
+    ),
   ];
 
   static const _ventasItems = [
     NavItem(
-        icon: Icons.people_outline,
-        selectedIcon: Icons.people,
-        label: 'Clientes',
-        color: Color(0xFF00FF88),),
+      icon: Icons.people_outline,
+      selectedIcon: Icons.people,
+      label: 'Clientes',
+      color: Color(0xFF00FF88),
+    ),
     NavItem(
-        icon: Icons.route_outlined,
-        selectedIcon: Icons.route,
-        label: 'Ruta',
-        color: Color(0xFF9C27B0),),
+      icon: Icons.route_outlined,
+      selectedIcon: Icons.route,
+      label: 'Ruta',
+      color: Color(0xFF9C27B0),
+    ),
     NavItem(
-        icon: Icons.track_changes_outlined,
-        selectedIcon: Icons.track_changes,
-        label: 'Objetivos',
-        color: Color(0xFFFF9800),),
+      icon: Icons.track_changes_outlined,
+      selectedIcon: Icons.track_changes,
+      label: 'Objetivos',
+      color: Color(0xFFFF9800),
+    ),
     NavItem(
-        icon: Icons.euro_outlined,
-        selectedIcon: Icons.euro,
-        label: 'Comisiones',
-        color: Color(0xFF00FF88),),
+      icon: Icons.euro_outlined,
+      selectedIcon: Icons.euro,
+      label: 'Comisiones',
+      color: Color(0xFF00FF88),
+    ),
     NavItem(
-        icon: Icons.receipt_long_outlined,
-        selectedIcon: Icons.receipt_long,
-        label: 'Facturas',
-        color: Color(0xFF009688),),
+      icon: Icons.receipt_long_outlined,
+      selectedIcon: Icons.receipt_long,
+      label: 'Facturas',
+      color: Color(0xFF009688),
+    ),
     NavItem(
-        icon: Icons.shopping_cart_outlined,
-        selectedIcon: Icons.shopping_cart,
-        label: 'Pedidos',
-        color: Color(0xFFFF5722),),
+      icon: Icons.shopping_cart_outlined,
+      selectedIcon: Icons.shopping_cart,
+      label: 'Pedidos',
+      color: Color(0xFFFF5722),
+    ),
     NavItem(
-        icon: Icons.ac_unit_outlined,
-        selectedIcon: Icons.ac_unit,
-        label: 'Glacius',
-        color: Color(0xFF84FFFF),),
+      icon: Icons.ac_unit_outlined,
+      selectedIcon: Icons.ac_unit,
+      label: 'Glacius',
+      color: Color(0xFF84FFFF),
+    ),
     NavItem(
-        icon: Icons.payments_outlined,
-        selectedIcon: Icons.payments,
-        label: 'Cobros',
-        color: Color(0xFF2196F3),),
+      icon: Icons.payments_outlined,
+      selectedIcon: Icons.payments,
+      label: 'Cobros',
+      color: Color(0xFF2196F3),
+    ),
     NavItem(
-        icon: Icons.smart_toy_outlined,
-        selectedIcon: Icons.smart_toy,
-        label: 'Chat IA',
-        color: Color(0xFFFF4081),),
+      icon: Icons.smart_toy_outlined,
+      selectedIcon: Icons.smart_toy,
+      label: 'Chat IA',
+      color: Color(0xFFFF4081),
+    ),
   ];
 }
 
 class NavItem {
-
   const NavItem({
     required this.icon,
     required this.selectedIcon,

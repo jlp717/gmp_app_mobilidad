@@ -3290,16 +3290,45 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 5,
-                child: SmartProductImage(
-                  imageUrl: imageUrl,
-                  productCode: '',
-                  productName: productName,
+                child: Image.network(
+                  imageUrl,
                   fit: BoxFit.contain,
                   headers: {
                     'Accept': 'image/*',
                     if (ApiClient.dio.options.headers['Authorization'] != null)
                       'Authorization': ApiClient
                           .dio.options.headers['Authorization'] as String,
+                  },
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return SizedBox(
+                      width: MediaQuery.of(context).size.width * 0.8,
+                      height: MediaQuery.of(context).size.height * 0.6,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          value: loadingProgress.expectedTotalBytes != null
+                              ? loadingProgress.cumulativeBytesLoaded /
+                                  loadingProgress.expectedTotalBytes!
+                              : null,
+                        ),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) {
+                    return SizedBox(
+                      width: MediaQuery.of(context).size.width * 0.8,
+                      height: MediaQuery.of(context).size.height * 0.6,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.broken_image,
+                              size: 64, color: Colors.grey),
+                          const SizedBox(height: 16),
+                          Text('Error cargando imagen: $error',
+                              style: const TextStyle(color: Colors.white70)),
+                        ],
+                      ),
+                    );
                   },
                 ),
               ),

@@ -1675,33 +1675,55 @@ router.post('/cobros', verifyToken, async (req, res) => {
             tipoDocumento,
             numeroDocumento,
             ejercicioDocumento,
+            origenDocumento = 'B',
+            subempresaDocumento = 'GMP',
+            serieDocumento = '',
+            terminalDocumento = 0,
+            xdeDocumento = 1,
             importeCobrado,
             importePendiente = 0,
             formaPago,
-            notas
+            notas,
+            idempotencyToken
         } = req.body;
 
         logger.info(`[REPARTIDOR] Recording cobro for ${tipoDocumento} ${numeroDocumento}`);
 
         const insertSql = `
             INSERT INTO JAVIER.REPARTIDOR_COBROS (
-                ENTREGA_ID, CODIGO_CLIENTE, NOMBRE_CLIENTE,
-                CODIGO_REPARTIDOR, TIPO_DOCUMENTO, NUMERO_DOCUMENTO, EJERCICIO_DOCUMENTO,
-                IMPORTE_COBRADO, IMPORTE_PENDIENTE, FORMA_PAGO, NOTAS
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ENTREGA_ID, ENTREGA_APP_ID, CODIGO_CLIENTE, NOMBRE_CLIENTE,
+                CODIGO_REPARTIDOR, TIPO_DOCUMENTO, ORIGEN_DOCUMENTO,
+                SUBEMPRESA_DOCUMENTO, SERIE_DOCUMENTO, TERMINAL_DOCUMENTO,
+                NUMERO_DOCUMENTO, EJERCICIO_DOCUMENTO, XDE_DOCUMENTO,
+                IMPORTE_COBRADO, IMPORTE_PENDIENTE, FORMA_PAGO,
+                IDEMPOTENCY_TOKEN, PANTALLA_ORIGEN, OPERADOR, NOTAS
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
+        const numericEntregaId = Number.isInteger(Number(entregaId)) ? Number(entregaId) : null;
+        const generatedToken = idempotencyToken ||
+            `legacy:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+        const operador = (req.user && (req.user.code || req.user.id)) || 'unknown';
 
         await queryWithParams(insertSql, [
-            entregaId || null,
+            numericEntregaId,
+            entregaId ? entregaId.toString() : null,
             codigoCliente,
             nombreCliente || null,
             codigoRepartidor,
             tipoDocumento,
+            origenDocumento,
+            subempresaDocumento,
+            serieDocumento,
+            terminalDocumento,
             numeroDocumento,
             ejercicioDocumento,
+            xdeDocumento,
             importeCobrado,
             importePendiente,
             formaPago || null,
+            generatedToken,
+            'RUTERO',
+            operador,
             notas || null
         ]);
 

@@ -12,6 +12,7 @@ require('dotenv').config({
   path: path.resolve(__dirname, '.env')
 });
 
+const Sentry = require('./instrument');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -61,7 +62,8 @@ const USE_DDD_ROUTES = process.env.USE_DDD_ROUTES !== 'false';
 let authRoutes, dashboardRoutes, analyticsRoutes, masterRoutes, clientsRoutes,
   plannerRoutes, objectivesRoutes, exportRoutes, chatbotRoutes,
   commissionsRoutes, filtersRoutes, entregasRoutes, repartidorRoutes,
-  userActionsRoutes, facturasRoutes, warehouseRoutes, productsRoutes, 
+  repartidorFinanzasRoutes, userActionsRoutes, facturasRoutes, warehouseRoutes,
+  productsRoutes,
   pedidosRoutes, cobrosRoutes, kpiModule;
 
 if (USE_TS_ROUTES) {
@@ -117,6 +119,7 @@ if (process.env.USE_TS_ROUTES !== 'true') {
   filtersRoutes = require('./routes/filters');
   entregasRoutes = require('./routes/entregas');
   repartidorRoutes = require('./routes/repartidor');
+  repartidorFinanzasRoutes = require('./routes/repartidor-finanzas');
   userActionsRoutes = require('./routes/user-actions');
   facturasRoutes = require('./routes/facturas');
   warehouseRoutes = require('./routes/warehouse');
@@ -414,6 +417,7 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   app.use('/api/commissions', commissionsRoutes);
   app.use('/api/filters', filtersRoutes);
   app.use('/api/repartidor', repartidorRoutes);
+  app.use('/api/repartidor-finanzas', repartidorFinanzasRoutes);
   app.use('/api/logs', userActionsRoutes);
   app.use('/api/facturas', facturasRoutes);
   app.use('/api/warehouse', warehouseRoutes);
@@ -666,6 +670,10 @@ app.get('/api/optimization/active-sessions', verifyToken, (req, res) => {
 });
 
 // ==================== GLOBAL ERROR HANDLERS ====================
+if (Sentry && typeof Sentry.setupExpressErrorHandler === 'function') {
+  Sentry.setupExpressErrorHandler(app);
+}
+
 // Enhanced error handler with proper error classification
 app.use((err, req, res, next) => {
   // Log full error with stack in development

@@ -82,6 +82,8 @@ dependencies:
   # WebView (Three.js 3D visualization)
   webview_flutter: ^4.10.0
   screenshot: ^3.0.0             # Canvas screenshot capture
+  sentry_flutter: ^8.14.2
+  sentry_dio: ^8.14.2
 
 dev_dependencies:
   flutter_test:
