@@ -9,6 +9,7 @@ import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fi_filters_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
+import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 import 'package:gmp_app_mobilidad/features/sales_history/presentation/widgets/sales_summary_header.dart';
 import 'package:path_provider/path_provider.dart';
@@ -34,6 +35,12 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   bool _isLoading = true;
   String? _error;
   bool _showFilters = false;
+
+  // NEW: Family grouping toggle
+  bool _groupByFamilyEnabled = true;
+  int _groupByFamilyLevel = 1;
+  List<Map<String, dynamic>> _productList = [];
+  bool _isLoadingProducts = false;
 
   // Legacy familia/subfamilia hierarchy
   List<Map<String, dynamic>> _families = [];
@@ -182,6 +189,88 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         _isLoading = false;
       });
     }
+  }
+
+  /// Load products view (when family grouping is disabled)
+  Future<void> _loadProductsView() async {
+    setState(() {
+      _isLoadingProducts = true;
+    });
+
+    try {
+      final products = await ClientsService.getClientSalesHistory(
+        clientCode: widget.clientCode,
+        vendedorCodes: '',
+        groupByFamily: 0,
+        limit: 200,
+      );
+      setState(() {
+        _productList = products;
+        _isLoadingProducts = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading products: $e');
+      setState(() {
+        _isLoadingProducts = false;
+        _productList = [];
+      });
+    }
+  }
+
+  Widget _buildProductsList() {
+    if (_isLoadingProducts) {
+      return const Center(child: ModernLoading(message: 'Cargando productos...'));
+    }
+
+    if (_productList.isEmpty) {
+      return const Center(child: Text('No hay productos', style: TextStyle(color: Colors.grey)));
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.all(4),
+      itemCount: _productList.length,
+      itemBuilder: (context, index) {
+        final product = _productList[index];
+        final date = (product['date'] as String?) ?? '';
+        final productName = (product['productName'] as String?) ?? 'Producto';
+        final productCode = (product['productCode'] as String?) ?? '';
+        final boxes = product['boxes'] ?? 0;
+        final amount = (product['amount'] as num?)?.toDouble() ?? 0;
+
+        return Card(
+          color: AppTheme.surfaceColor,
+          margin: const EdgeInsets.only(bottom: 4),
+          child: ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+            leading: Text(
+              date.length >= 10 ? date.substring(5) : date,
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+            ),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  productName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 12),
+                ),
+                if (productCode.isNotEmpty)
+                  Text(
+                    productCode,
+                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9),
+                  ),
+              ],
+            ),
+            trailing: Text(
+              CurrencyFormatter.formatWhole(amount),
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   /// Parse FI options from API response
@@ -379,14 +468,16 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       _buildMonthlyRow(),
                       // Solo jerarquía FI de 5 niveles
                       Expanded(
-                        child: _fiHierarchy.isEmpty
-                            ? const Center(
-                                child: Text(
-                                  'Sin datos',
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                              )
-                            : _buildFiHierarchyList(),
+                        child: !_groupByFamilyEnabled
+                            ? _buildProductsList()
+                            : (_fiHierarchy.isEmpty
+                                ? const Center(
+                                    child: Text(
+                                      'Sin datos',
+                                      style: TextStyle(color: Colors.grey),
+                                    ),
+                                  )
+                                : _buildFiHierarchyList()),
                       ),
                     ],
                   ),
@@ -614,6 +705,67 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       ),
                     ],
                     onChanged: (v) => setState(() => _maxDepthLevel = v ?? 5),
+                  ),
+                ),
+                const Spacer(),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // NEW: Family grouping toggle
+            Row(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    color: _groupByFamilyEnabled ? AppTheme.neonGreen.withValues(alpha: 0.2) : AppTheme.surfaceColor,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _groupByFamilyEnabled ? AppTheme.neonGreen : Colors.grey.shade700,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Transform.scale(
+                        scale: 0.8,
+                        child: Switch(
+                          value: _groupByFamilyEnabled,
+                          onChanged: (value) {
+                            setState(() {
+                              _groupByFamilyEnabled = value;
+                            });
+                            if (!value) {
+                              _loadProductsView();
+                            }
+                          },
+                          activeColor: AppTheme.neonGreen,
+                        ),
+                      ),
+                      if (_groupByFamilyEnabled)
+                        Container(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: DropdownButton<int>(
+                            value: _groupByFamilyLevel,
+                            underline: const SizedBox(),
+                            isDense: true,
+                            style: const TextStyle(fontSize: 10, color: Colors.white),
+                            dropdownColor: AppTheme.surfaceColor,
+                            items: const [
+                              DropdownMenuItem(value: 1, child: Text('Fam 1')),
+                              DropdownMenuItem(value: 2, child: Text('Fam 1+2')),
+                              DropdownMenuItem(value: 3, child: Text('Fam 1+2+3')),
+                              DropdownMenuItem(value: 13, child: Text('Fam 1+3')),
+                            ],
+                            onChanged: (value) {
+                              if (value != null) {
+                                setState(() {
+                                  _groupByFamilyLevel = value;
+                                });
+                                _loadData();
+                              }
+                            },
+                          ),
+                        ),
+                    ],
                   ),
                 ),
                 const Spacer(),

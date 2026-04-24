@@ -637,8 +637,11 @@ router.get('/matrix', verifyToken, async (req, res) => {
             clientCode, years, startMonth = '1', endMonth = '12',
             productCode, productName, familyCode, subfamilyCode,
             // NEW: FI filters
-            fi1, fi2, fi3, fi4, fi5
+            fi1, fi2, fi3, fi4, fi5,
+            // NEW: Family grouping
+            groupByFamily = '0'
         } = req.query;
+        const familyLevel = parseInt(groupByFamily) || 0;
 
         if (!clientCode) {
             return res.status(400).json({ error: 'clientCode is required' });
