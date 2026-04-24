@@ -561,7 +561,7 @@ async function generateInvoicePDF(facturaData) {
 
                     // Albaran header box
                     doc.rect(40, y, 515, 20)
-                        .fillAndStroke('#E8F5E9', '#4CAF50');
+                        .fillAndStroke('#E3F2FD', '#1a5490');
 
                     doc.fontSize(8)
                         .font('Helvetica-Bold')

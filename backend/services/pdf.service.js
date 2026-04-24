@@ -382,11 +382,11 @@ async function generateInvoicePDF(facturaData) {
                     }
 
                     doc.rect(40, y, 515, 20)
-                        .fillAndStroke('#E8F5E9', '#4CAF50');
+                        .fillAndStroke('#E3F2FD', '#1a5490');
 
                     doc.fontSize(8)
                         .font('Helvetica-Bold')
-                        .fillColor('#2E7D32');
+                        .fillColor('#003d7a');
 
                     const albaranLabel = `Albarán: ${group.albaranSerie || ''}-${group.albaranTerminal || ''}-${group.albaranNum}`;
                     const fechaLabel = group.albaranFecha ? `Fecha: ${group.albaranFecha}` : '';
