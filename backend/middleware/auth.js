@@ -64,7 +64,7 @@ function parseTtlMs(raw, fallbackMs, label) {
     return fallbackMs;
 }
 
-const ACCESS_TTL_MS = parseTtlMs(process.env.JWT_ACCESS_EXPIRES, 3_600_000, 'JWT_ACCESS_EXPIRES'); // 1h default
+const ACCESS_TTL_MS = parseTtlMs(process.env.JWT_ACCESS_EXPIRES, 86_400_000, 'JWT_ACCESS_EXPIRES'); // 24h default
 const REFRESH_TTL_MS = parseTtlMs(process.env.JWT_REFRESH_EXPIRES, 604_800_000, 'JWT_REFRESH_EXPIRES'); // 7d default
 const MAX_SESSIONS_PER_USER = parseInt(process.env.MAX_SESSIONS_PER_USER || '5', 10);
 const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;

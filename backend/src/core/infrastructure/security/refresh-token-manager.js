@@ -5,7 +5,7 @@
 const crypto = require('crypto');
 
 const MAX_SESSIONS_PER_USER = 5;
-const ACCESS_TOKEN_TTL = 3600;    // 1 hour
+const ACCESS_TOKEN_TTL = 86400;   // 24 hours
 const REFRESH_TOKEN_TTL = 604800; // 7 days
 const REDIS_KEY_PREFIX = 'gmp:session:';
 const REDIS_BLACKLIST_PREFIX = 'gmp:blacklist:';

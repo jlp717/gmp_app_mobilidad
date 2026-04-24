@@ -55,7 +55,7 @@ class LoginUseCase extends UseCase {
       },
       accessToken,
       refreshToken,
-      expiresIn: 3600
+      expiresIn: 86400
     };
   }
 }
