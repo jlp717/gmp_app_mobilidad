@@ -208,6 +208,7 @@ V3_*.md
 
 # Backend temp directories
 backend/reports/
+backend/tmp/
 backend/audit/
 backend/coverage/
 backend/test-results/

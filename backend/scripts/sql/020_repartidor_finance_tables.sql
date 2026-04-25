@@ -31,7 +31,28 @@ CREATE INDEX JAVIER.IDX_DELIVERY_STATUS_REP
   ON JAVIER.DELIVERY_STATUS (REPARTIDOR_ID, UPDATED_AT);
 
 -- ---------------------------------------------------------------------------
--- 2. Extend existing JAVIER.REPARTIDOR_COBROS for app finance flows
+-- 2. LQD shadow table for test mode.
+--    Same physical structure as DSEDAC.LQD, but isolated in JAVIER.
+--    Backend default: REPARTIDOR_FINANCE_ERP_SCHEMA=JAVIER.
+--    Production cutover: set REPARTIDOR_FINANCE_ERP_SCHEMA=DSEDAC.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE JAVIER.LQD LIKE DSEDAC.LQD;
+
+CREATE INDEX JAVIER.IDX_LQD_REP_TEST_NUMERO
+  ON JAVIER.LQD (
+    SUBEMPRESALIQUIDACION,
+    EJERCICIOLIQUIDACION,
+    SERIELIQUIDACION,
+    TERMINALLIQUIDACION,
+    NUMEROLIQUIDACION
+  );
+
+CREATE INDEX JAVIER.IDX_LQD_REP_TEST_IDMARCA
+  ON JAVIER.LQD (IDMARCALIQUIDACION);
+
+-- ---------------------------------------------------------------------------
+-- 3. Extend existing JAVIER.REPARTIDOR_COBROS for app finance flows
 -- ---------------------------------------------------------------------------
 
 ALTER TABLE JAVIER.REPARTIDOR_COBROS
@@ -109,7 +130,7 @@ CREATE INDEX JAVIER.IDX_REP_COBROS_LIQ_TOKEN
   ON JAVIER.REPARTIDOR_COBROS (LIQUIDACION_TOKEN);
 
 -- ---------------------------------------------------------------------------
--- 3. Pending balance carried to the next daily liquidation
+-- 4. Pending balance carried to the next daily liquidation
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE JAVIER.REPARTIDOR_FINANCIAL_BALANCES (
@@ -120,7 +141,7 @@ CREATE TABLE JAVIER.REPARTIDOR_FINANCIAL_BALANCES (
 );
 
 -- ---------------------------------------------------------------------------
--- 4. Local operation ledger for DSEDAC.LQD writes and idempotency
+-- 5. Local operation ledger for ERP LQD writes and idempotency
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE JAVIER.REPARTIDOR_LIQUIDACION_OPS (
@@ -163,7 +184,7 @@ CREATE INDEX JAVIER.IDX_REP_LIQ_REP_FECHA
   ON JAVIER.REPARTIDOR_LIQUIDACION_OPS (CODIGO_REPARTIDOR, CREATED_AT);
 
 -- ---------------------------------------------------------------------------
--- 5. Email delivery log. Email failure never rolls back financial closing.
+-- 6. Email delivery log. Email failure never rolls back financial closing.
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE JAVIER.REPARTIDOR_LIQUIDACION_EMAILS (
@@ -183,7 +204,7 @@ CREATE INDEX JAVIER.IDX_REP_LIQ_EMAIL_OP
   ON JAVIER.REPARTIDOR_LIQUIDACION_EMAILS (LIQUIDACION_OP_ID, STATUS);
 
 -- ---------------------------------------------------------------------------
--- 6. Editable commission tiers for repartidores
+-- 7. Editable commission tiers for repartidores
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE JAVIER.REPARTIDOR_COMMISSION_TIERS (

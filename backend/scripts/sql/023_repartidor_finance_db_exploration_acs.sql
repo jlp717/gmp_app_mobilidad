@@ -1,0 +1,205 @@
+-- Exploracion ACS read-only para Repartidor Finanzas.
+-- Objetivo: identificar estructura real de tablas ERP DSEDAC y shadow JAVIER.
+-- No contiene INSERT/UPDATE/DELETE.
+--
+-- Recomendacion:
+-- 1. Ejecutar por bloques en IBM i ACS "Run SQL Scripts".
+-- 2. Guardar resultados como XLSX/CSV si necesitas adjuntarlos a una decision.
+-- 3. No subir exportaciones con datos reales a GitHub.
+
+-- ---------------------------------------------------------------------------
+-- A. Existencia de tablas candidatas
+-- ---------------------------------------------------------------------------
+
+WITH TARGETS (TABLE_SCHEMA, TABLE_NAME, AREA) AS (
+  VALUES
+    ('DSEDAC', 'LQD', 'ERP liquidaciones reales'),
+    ('JAVIER', 'LQD', 'Shadow test LQD'),
+    ('DSEDAC', 'CVC', 'Deuda/vencimientos'),
+    ('DSEDAC', 'CPC', 'Cabeceras albaranes'),
+    ('DSEDAC', 'CAC', 'Cabeceras facturas'),
+    ('DSEDAC', 'LAC', 'Lineas documentos'),
+    ('DSEDAC', 'OPP', 'Ordenes preparacion/repartidor'),
+    ('DSEDAC', 'CLI', 'Maestro cliente'),
+    ('DSEDAC', 'CLCL1', 'Credito cliente confirmado'),
+    ('DSEDAC', 'CVCL1', 'Credito cliente candidato a descartar/confirmar'),
+    ('DSEDAC', 'CLX', 'Flags cliente/cobro riguroso'),
+    ('DSEDAC', 'CLP', 'Contactos cliente'),
+    ('DSEDAC', 'VDD', 'Nombres vendedores/repartidores'),
+    ('DSEDAC', 'VDC', 'Usuarios vendedores'),
+    ('DSEDAC', 'VEH', 'Vehiculos/repartidores'),
+    ('DSEDAC', 'CDVI', 'Planificacion visitas'),
+    ('DSEDAC', 'CACFIRMAS', 'Firmas ERP'),
+    ('DSED', 'LACLAE', 'Historico ventas/visitas'),
+    ('JAVIER', 'DELIVERY_STATUS', 'Estado entrega app'),
+    ('JAVIER', 'REPARTIDOR_COBROS', 'Cobros app'),
+    ('JAVIER', 'REPARTIDOR_FINANCIAL_BALANCES', 'Saldo acumulado app'),
+    ('JAVIER', 'REPARTIDOR_LIQUIDACION_OPS', 'Ledger idempotente'),
+    ('JAVIER', 'REPARTIDOR_LIQUIDACION_EMAILS', 'Log emails'),
+    ('JAVIER', 'REPARTIDOR_COMMISSION_TIERS', 'Tramos comisiones'),
+    ('JAVIER', 'REPARTIDOR_ENTREGAS', 'Entregas app legacy'),
+    ('JAVIER', 'REPARTIDOR_FIRMAS', 'Firmas app legacy'),
+    ('JAVIER', 'REPARTIDOR_ENTREGA_LINEAS', 'Lineas entrega app legacy'),
+    ('JAVIER', 'CLIENT_SIGNERS', 'Firmantes frecuentes'),
+    ('JAVIER', 'RUTERO_CONFIG', 'Overrides ruta')
+)
+SELECT
+  T.TABLE_SCHEMA,
+  T.TABLE_NAME,
+  T.AREA,
+  CASE WHEN S.TABLE_NAME IS NULL THEN 'NO' ELSE 'SI' END AS EXISTE,
+  ST.NUMBER_ROWS AS FILAS_ESTIMADAS
+FROM TARGETS T
+LEFT JOIN QSYS2.SYSTABLES S
+  ON S.TABLE_SCHEMA = T.TABLE_SCHEMA
+ AND S.TABLE_NAME = T.TABLE_NAME
+LEFT JOIN QSYS2.SYSTABLESTAT ST
+  ON ST.TABLE_SCHEMA = T.TABLE_SCHEMA
+ AND ST.TABLE_NAME = T.TABLE_NAME
+ORDER BY T.TABLE_SCHEMA, T.TABLE_NAME;
+
+-- ---------------------------------------------------------------------------
+-- B. Diccionario de columnas por tabla
+-- ---------------------------------------------------------------------------
+
+WITH TARGETS (TABLE_SCHEMA, TABLE_NAME) AS (
+  VALUES
+    ('DSEDAC', 'LQD'), ('JAVIER', 'LQD'), ('DSEDAC', 'CVC'),
+    ('DSEDAC', 'CPC'), ('DSEDAC', 'CAC'), ('DSEDAC', 'LAC'),
+    ('DSEDAC', 'OPP'), ('DSEDAC', 'CLI'), ('DSEDAC', 'CLCL1'),
+    ('DSEDAC', 'CVCL1'), ('DSEDAC', 'CLX'), ('DSEDAC', 'CLP'),
+    ('DSEDAC', 'VDD'), ('DSEDAC', 'VDC'), ('DSEDAC', 'VEH'),
+    ('DSEDAC', 'CDVI'), ('DSEDAC', 'CACFIRMAS'), ('DSED', 'LACLAE'),
+    ('JAVIER', 'DELIVERY_STATUS'), ('JAVIER', 'REPARTIDOR_COBROS'),
+    ('JAVIER', 'REPARTIDOR_FINANCIAL_BALANCES'),
+    ('JAVIER', 'REPARTIDOR_LIQUIDACION_OPS'),
+    ('JAVIER', 'REPARTIDOR_LIQUIDACION_EMAILS'),
+    ('JAVIER', 'REPARTIDOR_COMMISSION_TIERS'),
+    ('JAVIER', 'REPARTIDOR_ENTREGAS'), ('JAVIER', 'REPARTIDOR_FIRMAS'),
+    ('JAVIER', 'REPARTIDOR_ENTREGA_LINEAS'), ('JAVIER', 'CLIENT_SIGNERS'),
+    ('JAVIER', 'RUTERO_CONFIG')
+)
+SELECT
+  C.TABLE_SCHEMA,
+  C.TABLE_NAME,
+  C.ORDINAL_POSITION,
+  C.COLUMN_NAME,
+  C.DATA_TYPE,
+  C.LENGTH,
+  C.NUMERIC_SCALE,
+  C.IS_NULLABLE,
+  C.COLUMN_DEFAULT
+FROM QSYS2.SYSCOLUMNS C
+INNER JOIN TARGETS T
+  ON T.TABLE_SCHEMA = C.TABLE_SCHEMA
+ AND T.TABLE_NAME = C.TABLE_NAME
+ORDER BY C.TABLE_SCHEMA, C.TABLE_NAME, C.ORDINAL_POSITION;
+
+-- ---------------------------------------------------------------------------
+-- C. Indices por tabla
+-- ---------------------------------------------------------------------------
+
+WITH TARGETS (TABLE_SCHEMA, TABLE_NAME) AS (
+  VALUES
+    ('DSEDAC', 'LQD'), ('JAVIER', 'LQD'), ('DSEDAC', 'CVC'),
+    ('DSEDAC', 'CPC'), ('DSEDAC', 'OPP'), ('DSEDAC', 'CLI'),
+    ('DSEDAC', 'CLCL1'), ('DSEDAC', 'CLX'),
+    ('JAVIER', 'REPARTIDOR_COBROS'),
+    ('JAVIER', 'REPARTIDOR_LIQUIDACION_OPS'),
+    ('JAVIER', 'REPARTIDOR_COMMISSION_TIERS')
+)
+SELECT
+  I.TABLE_SCHEMA,
+  I.TABLE_NAME,
+  I.INDEX_SCHEMA,
+  I.INDEX_NAME,
+  I.IS_UNIQUE,
+  I.COLUMN_NAMES
+FROM QSYS2.SYSINDEXES I
+INNER JOIN TARGETS T
+  ON T.TABLE_SCHEMA = I.TABLE_SCHEMA
+ AND T.TABLE_NAME = I.TABLE_NAME
+ORDER BY I.TABLE_SCHEMA, I.TABLE_NAME, I.INDEX_NAME;
+
+-- ---------------------------------------------------------------------------
+-- D. Select * controlado por tabla clave
+-- ---------------------------------------------------------------------------
+
+SELECT * FROM DSEDAC.LQD FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM JAVIER.LQD FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM DSEDAC.CVC FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM DSEDAC.CPC FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM DSEDAC.CAC FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM DSEDAC.LAC FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM DSEDAC.OPP FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM DSEDAC.CLI FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM DSEDAC.CLCL1 FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM DSEDAC.CLX FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM DSEDAC.CLP FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM DSEDAC.VDD FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM DSEDAC.VDC FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM DSEDAC.VEH FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM DSEDAC.CDVI FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM DSED.LACLAE FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM JAVIER.REPARTIDOR_COBROS FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS FETCH FIRST 5 ROWS ONLY;
+SELECT * FROM JAVIER.REPARTIDOR_FINANCIAL_BALANCES FETCH FIRST 5 ROWS ONLY;
+
+-- ---------------------------------------------------------------------------
+-- E. Diagnosticos de negocio
+-- ---------------------------------------------------------------------------
+
+SELECT
+  TIPODOCUMENTO,
+  COUNT(*) AS DOCUMENTOS,
+  SUM(IMPORTEPENDIENTE) AS IMPORTE_PENDIENTE
+FROM DSEDAC.CVC
+WHERE COALESCE(ANULADOSN, '') <> 'S'
+  AND IMPORTEPENDIENTE <> 0
+GROUP BY TIPODOCUMENTO
+ORDER BY DOCUMENTOS DESC
+FETCH FIRST 50 ROWS ONLY;
+
+SELECT
+  COLUMN_NAME,
+  DATA_TYPE,
+  LENGTH,
+  NUMERIC_SCALE,
+  IS_NULLABLE
+FROM QSYS2.SYSCOLUMNS
+WHERE TABLE_SCHEMA = 'DSEDAC'
+  AND TABLE_NAME IN ('CLCL1', 'CVCL1', 'CLX', 'CLP')
+  AND (
+    UPPER(COLUMN_NAME) LIKE '%COBRO%'
+    OR UPPER(COLUMN_NAME) LIKE '%RIGU%'
+    OR UPPER(COLUMN_NAME) LIKE '%CREDITO%'
+    OR UPPER(COLUMN_NAME) LIKE '%PAGO%'
+    OR UPPER(COLUMN_NAME) LIKE '%EMAIL%'
+    OR UPPER(COLUMN_NAME) LIKE '%MAIL%'
+  )
+ORDER BY TABLE_NAME, ORDINAL_POSITION;
+
+SELECT
+  TRIM(OPP.CODIGOREPARTIDOR) AS CODIGO_REPARTIDOR,
+  COUNT(*) AS ENTREGAS,
+  MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) AS ULTIMA_FECHA
+FROM DSEDAC.OPP OPP
+WHERE OPP.ANOREPARTO >= YEAR(CURRENT DATE) - 1
+GROUP BY TRIM(OPP.CODIGOREPARTIDOR)
+ORDER BY ULTIMA_FECHA DESC, ENTREGAS DESC
+FETCH FIRST 50 ROWS ONLY;
+
+SELECT
+  SUBEMPRESALIQUIDACION,
+  EJERCICIOLIQUIDACION,
+  SERIELIQUIDACION,
+  TERMINALLIQUIDACION,
+  MAX(NUMEROLIQUIDACION) AS ULTIMO_NUMERO
+FROM DSEDAC.LQD
+GROUP BY
+  SUBEMPRESALIQUIDACION,
+  EJERCICIOLIQUIDACION,
+  SERIELIQUIDACION,
+  TERMINALLIQUIDACION
+ORDER BY EJERCICIOLIQUIDACION DESC, ULTIMO_NUMERO DESC
+FETCH FIRST 50 ROWS ONLY;

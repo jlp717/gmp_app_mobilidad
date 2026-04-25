@@ -5,6 +5,20 @@ require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 
 const { initDb, closePool, queryWithParams } = require('../config/db');
 
+function erpSchemaName(raw) {
+  const schema = String(raw || 'JAVIER').trim().toUpperCase();
+  if (!['JAVIER', 'DSEDAC'].includes(schema)) {
+    throw new Error(
+      `REPARTIDOR_FINANCE_ERP_SCHEMA invalido: ${schema}. Use JAVIER o DSEDAC.`,
+    );
+  }
+  return schema;
+}
+
+const erpSchema = erpSchemaName(
+  process.env.REPARTIDOR_FINANCE_ERP_SCHEMA || process.env.FINANCE_ERP_SCHEMA,
+);
+
 const tableChecks = [
   ['JAVIER', 'REPARTIDOR_COBROS'],
   ['JAVIER', 'DELIVERY_STATUS'],
@@ -16,6 +30,7 @@ const tableChecks = [
   ['DSEDAC', 'CLX'],
   ['DSEDAC', 'CVC'],
   ['DSEDAC', 'LQD'],
+  [erpSchema, 'LQD'],
 ];
 
 const columnChecks = [
@@ -40,6 +55,7 @@ const columnChecks = [
   ['DSEDAC', 'CLCL1', 'DIASLIMITECREDITOCONFECHAALB'],
   ['DSEDAC', 'CLX', 'COBRORIGUROSOSN'],
   ['DSEDAC', 'LQD', 'IDMARCALIQUIDACION'],
+  [erpSchema, 'LQD', 'IDMARCALIQUIDACION'],
 ];
 
 const indexChecks = [

@@ -11,6 +11,21 @@ const INTERNAL_LIQUIDATION_RECIPIENTS = [
   'diegocorbalan@mari-pepa.com',
 ];
 
+function erpSchemaName(raw) {
+  const schema = String(raw || 'JAVIER').trim().toUpperCase();
+  if (!['JAVIER', 'DSEDAC'].includes(schema)) {
+    throw new Error(
+      `REPARTIDOR_FINANCE_ERP_SCHEMA invalido: ${schema}. Use JAVIER o DSEDAC.`,
+    );
+  }
+  return schema;
+}
+
+const ERP_FINANCE_SCHEMA = erpSchemaName(
+  process.env.REPARTIDOR_FINANCE_ERP_SCHEMA || process.env.FINANCE_ERP_SCHEMA,
+);
+const LQD_TABLE = `${ERP_FINANCE_SCHEMA}.LQD`;
+
 function value(row, key, fallback = undefined) {
   if (!row) return fallback;
   if (Object.prototype.hasOwnProperty.call(row, key)) return row[key];
@@ -382,7 +397,7 @@ async function findLiquidacionRowByToken(idempotencyToken) {
       LQD.MESLIQUIDACION,
       LQD.ANOLIQUIDACION
     FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS OPS
-    LEFT JOIN DSEDAC.LQD LQD
+    LEFT JOIN ${LQD_TABLE} LQD
       ON LQD.IDMARCALIQUIDACION = OPS.IDEMPOTENCY_TOKEN
     WHERE OPS.IDEMPOTENCY_TOKEN = ?
     FETCH FIRST 1 ROW ONLY
@@ -932,7 +947,7 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
 async function nextLiquidacionNumber({ conn, subempresa, ejercicio, serie, terminal }) {
   const sql = `
     SELECT COALESCE(MAX(NUMEROLIQUIDACION), 0) + 1 AS NEXT_NUMERO
-    FROM DSEDAC.LQD
+    FROM ${LQD_TABLE}
     WHERE SUBEMPRESALIQUIDACION = ?
       AND EJERCICIOLIQUIDACION = ?
       AND SERIELIQUIDACION = ?
@@ -997,7 +1012,7 @@ async function closeLiquidacion(input) {
         LQD.MESLIQUIDACION,
         LQD.ANOLIQUIDACION
       FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS OPS
-      LEFT JOIN DSEDAC.LQD LQD
+      LEFT JOIN ${LQD_TABLE} LQD
         ON LQD.IDMARCALIQUIDACION = OPS.IDEMPOTENCY_TOKEN
       WHERE OPS.IDEMPOTENCY_TOKEN = ?
       FETCH FIRST 1 ROW ONLY
@@ -1010,9 +1025,9 @@ async function closeLiquidacion(input) {
     }
 
     try {
-      await conn.query('LOCK TABLE DSEDAC.LQD IN EXCLUSIVE MODE');
+      await conn.query(`LOCK TABLE ${LQD_TABLE} IN EXCLUSIVE MODE`);
     } catch (lockError) {
-      logger.error(`[REPARTIDOR_FINANZAS] Could not lock DSEDAC.LQD before numbering: ${lockError.message}`);
+      logger.error(`[REPARTIDOR_FINANZAS] Could not lock ${LQD_TABLE} before numbering: ${lockError.message}`);
       throw lockError;
     }
 
@@ -1031,7 +1046,7 @@ async function closeLiquidacion(input) {
         LQD.MESLIQUIDACION,
         LQD.ANOLIQUIDACION
       FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS OPS
-      LEFT JOIN DSEDAC.LQD LQD
+      LEFT JOIN ${LQD_TABLE} LQD
         ON LQD.IDMARCALIQUIDACION = OPS.IDEMPOTENCY_TOKEN
       WHERE OPS.IDEMPOTENCY_TOKEN = ?
       FETCH FIRST 1 ROW ONLY
@@ -1045,7 +1060,7 @@ async function closeLiquidacion(input) {
 
     const orphanLqd = firstRow(await conn.query(`
       SELECT IDMARCALIQUIDACION
-      FROM DSEDAC.LQD
+      FROM ${LQD_TABLE}
       WHERE IDMARCALIQUIDACION = ?
       FETCH FIRST 1 ROW ONLY
     `, [input.idempotencyToken]));
@@ -1057,7 +1072,7 @@ async function closeLiquidacion(input) {
 
     const existingSameDay = firstRow(await conn.query(`
       SELECT IDMARCALIQUIDACION
-      FROM DSEDAC.LQD
+      FROM ${LQD_TABLE}
       WHERE SUBEMPRESALIQUIDACION = ?
         AND EJERCICIOLIQUIDACION = ?
         AND SERIELIQUIDACION = ?
@@ -1137,7 +1152,7 @@ async function closeLiquidacion(input) {
     );
 
     await conn.query(`
-      INSERT INTO DSEDAC.LQD (
+      INSERT INTO ${LQD_TABLE} (
         SUBEMPRESALIQUIDACION,
         EJERCICIOLIQUIDACION,
         SERIELIQUIDACION,
@@ -1443,7 +1458,7 @@ async function deleteTestData(idempotencyToken, options = {}) {
     DELETE FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS WHERE IDEMPOTENCY_TOKEN = ?
   `, [idempotencyToken], false, false);
   await queryWithParams(`
-    DELETE FROM DSEDAC.LQD WHERE IDMARCALIQUIDACION = ?
+    DELETE FROM ${LQD_TABLE} WHERE IDMARCALIQUIDACION = ?
   `, [idempotencyToken], false, false);
   await queryWithParams(`
     UPDATE JAVIER.REPARTIDOR_COBROS

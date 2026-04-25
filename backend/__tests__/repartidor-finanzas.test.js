@@ -173,7 +173,7 @@ describe('Repartidor finanzas routes', () => {
     expect(params).toEqual(['94', 20251202, 20260828, 1000]);
   });
 
-  test('POST /liquidaciones closes in DSEDAC.LQD once and replays by idempotency token', async () => {
+  test('POST /liquidaciones closes in configured LQD once and replays by idempotency token', async () => {
     const existingRow = {
       ID: '501',
       IDEMPOTENCY_TOKEN: 'liq-20260423-94',
@@ -230,15 +230,15 @@ describe('Repartidor finanzas routes', () => {
     expect(replay.status).toBe(200);
     expect(replay.body.created).toBe(false);
 
-    const dsedacInsert = mockConnQuery.mock.calls.find(([sql]) =>
-      /INSERT INTO DSEDAC\.LQD/i.test(sql)
+    const lqdInsert = mockConnQuery.mock.calls.find(([sql]) =>
+      /INSERT INTO JAVIER\.LQD/i.test(sql)
     );
-    expect(dsedacInsert).toBeDefined();
-    expect(dsedacInsert[0]).toContain('IDMARCALIQUIDACION');
-    expect(dsedacInsert[1]).toContain('liq-20260423-94');
+    expect(lqdInsert).toBeDefined();
+    expect(lqdInsert[0]).toContain('IDMARCALIQUIDACION');
+    expect(lqdInsert[1]).toContain('liq-20260423-94');
 
     const lqdInserts = mockConnQuery.mock.calls.filter(([sql]) =>
-      /INSERT INTO DSEDAC\.LQD/i.test(sql)
+      /INSERT INTO JAVIER\.LQD/i.test(sql)
     );
     expect(lqdInserts).toHaveLength(1);
 

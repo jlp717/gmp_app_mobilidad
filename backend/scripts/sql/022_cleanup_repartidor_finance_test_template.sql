@@ -3,6 +3,9 @@
 --
 -- 1. Sustituir <IDEMPOTENCY_TOKEN> por el token exacto de la prueba.
 -- 2. Para una liquidacion, usar el token liq_...
+-- 2b. Esta plantilla asume modo test: REPARTIDOR_FINANCE_ERP_SCHEMA=JAVIER,
+--     por tanto borra de JAVIER.LQD. Si en produccion se usa DSEDAC,
+--     cambia manualmente JAVIER.LQD por DSEDAC.LQD antes de ejecutar.
 -- 3. Para un cobro Rutero, usar el token rutero_... y opcionalmente
 --    sustituir <ENTREGA_APP_ID> si tambien hay que liberar DELIVERY_STATUS.
 -- 4. Ejecutar primero los SELECT. Ejecutar DELETE/UPDATE solo si las filas
@@ -14,7 +17,7 @@ FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS
 WHERE IDEMPOTENCY_TOKEN = '<IDEMPOTENCY_TOKEN>';
 
 SELECT *
-FROM DSEDAC.LQD
+FROM JAVIER.LQD
 WHERE IDMARCALIQUIDACION = '<IDEMPOTENCY_TOKEN>';
 
 SELECT *
@@ -96,7 +99,7 @@ WHEN NOT MATCHED THEN
   INSERT (CODIGO_REPARTIDOR, SALDO_PENDIENTE, UPDATED_BY)
   VALUES (O.CODIGO_REPARTIDOR, O.SALDO_ANTERIOR, 'cleanup');
 
-DELETE FROM DSEDAC.LQD
+DELETE FROM JAVIER.LQD
 WHERE IDMARCALIQUIDACION = '<IDEMPOTENCY_TOKEN>'
   AND EXISTS (
     SELECT 1
