@@ -11,6 +11,8 @@ class RuteroDetailPayment extends StatelessWidget {
     required this.selectedPaymentMethod,
     required this.isPaid,
     required this.pagoError,
+    required this.importeCobradoController,
+    required this.importeCobradoError,
     required this.onPaymentMethodChanged,
     required this.onPaidChanged,
     required this.onContinueToFinalize,
@@ -22,6 +24,8 @@ class RuteroDetailPayment extends StatelessWidget {
   final String selectedPaymentMethod;
   final bool isPaid;
   final String? pagoError;
+  final TextEditingController importeCobradoController;
+  final String? importeCobradoError;
   final void Function(String method) onPaymentMethodChanged;
   final VoidCallback onPaidChanged;
   final VoidCallback onContinueToFinalize;
@@ -41,6 +45,10 @@ class RuteroDetailPayment extends StatelessWidget {
           _buildPaymentMethodSelector(),
           const SizedBox(height: 24),
           _buildMarkAsPaid(),
+          if (isPaid) ...[
+            const SizedBox(height: 16),
+            _buildCollectedAmountField(),
+          ],
           if (pagoError != null) ...[
             const SizedBox(height: 8),
             _buildPaymentError(),
@@ -316,6 +324,39 @@ class RuteroDetailPayment extends StatelessWidget {
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCollectedAmountField() {
+    return TextField(
+      controller: importeCobradoController,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+      inputFormatters: [
+        FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
+      ],
+      style: const TextStyle(
+        color: AppTheme.textPrimary,
+        fontWeight: FontWeight.bold,
+      ),
+      decoration: InputDecoration(
+        labelText: 'Importe cobrado',
+        suffixText: 'EUR',
+        errorText: importeCobradoError,
+        filled: true,
+        fillColor: AppTheme.darkCard,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppTheme.borderColor),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppTheme.borderColor),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppTheme.neonBlue),
         ),
       ),
     );

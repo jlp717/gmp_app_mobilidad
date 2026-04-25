@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
 import 'package:intl/intl.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
@@ -24,10 +25,13 @@ class RepartidorLiquidacionDiariaPage extends ConsumerStatefulWidget {
 
 class _RepartidorLiquidacionDiariaPageState
     extends ConsumerState<RepartidorLiquidacionDiariaPage> {
+  final _formKey = GlobalKey<FormState>();
   final _ingresoBancoController = TextEditingController();
   final _entregadoController = TextEditingController();
+  late DateTime _sessionDate;
   late String _idempotencyToken;
   bool _saving = false;
+  final _draftsByRepartidor = <String, _LiquidacionDraft>{};
 
   static const _topBar = Color(0xFF202020);
   static const _background = Color(0xFFDCDCDC);
@@ -37,16 +41,16 @@ class _RepartidorLiquidacionDiariaPageState
   @override
   void initState() {
     super.initState();
-    _idempotencyToken = _newToken(widget.repartidorId, DateTime.now());
+    _sessionDate = _today();
+    _idempotencyToken = _newToken(widget.repartidorId, _sessionDate);
   }
 
   @override
   void didUpdateWidget(covariant RepartidorLiquidacionDiariaPage oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.repartidorId != widget.repartidorId) {
-      _ingresoBancoController.clear();
-      _entregadoController.clear();
-      _idempotencyToken = _newToken(widget.repartidorId, DateTime.now());
+      _storeDraft(oldWidget.repartidorId);
+      _restoreDraft(widget.repartidorId);
     }
   }
 
@@ -59,14 +63,15 @@ class _RepartidorLiquidacionDiariaPageState
 
   @override
   Widget build(BuildContext context) {
+    _refreshSessionDateIfSafe();
+
     if (widget.repartidorId.isEmpty || widget.repartidorId.contains(',')) {
       return const _SelectSingleRepartidor();
     }
 
-    final today = DateTime.now();
     final args = (
       repartidorId: widget.repartidorId,
-      date: DateTime(today.year, today.month, today.day),
+      date: _sessionDate,
       forceRefresh: false,
     );
     final asyncSummary = ref.watch(repartidorDailySummaryProvider(args));
@@ -74,12 +79,15 @@ class _RepartidorLiquidacionDiariaPageState
     return Scaffold(
       backgroundColor: _background,
       body: asyncSummary.when(
-        data: (summary) => _buildForm(summary),
+        data: _buildForm,
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, stackTrace) {
           Sentry.captureException(error, stackTrace: stackTrace);
           return _ErrorState(
-            message: 'No se pudo cargar la liquidacion',
+            message: financeErrorMessage(
+              error,
+              'No se pudo cargar la liquidacion',
+            ),
             onRetry: () => ref.invalidate(repartidorDailySummaryProvider(args)),
           );
         },
@@ -92,47 +100,61 @@ class _RepartidorLiquidacionDiariaPageState
       children: [
         const _TitleBar(title: 'Liquidacion Diaria'),
         Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(10, 12, 10, 120),
-            child: Column(
-              children: [
-                _AmountLine(
-                    label: 'Total efectivo', value: summary.totalEfectivo),
-                _AmountLine(
-                    label: 'Total cheques', value: summary.totalCheques),
-                _AmountLine(
-                    label: 'Total tarjeta', value: summary.totalTarjeta),
-                _AmountLine(
-                  label: 'Total postdatados',
-                  value: summary.totalPostdatados,
-                ),
-                const SizedBox(height: 16),
-                _AmountLine(label: 'Saldo actual', value: summary.saldoActual),
-                _AmountLine(
-                  label: 'Total a ingresar',
-                  value: summary.totalAIngresar,
-                  valueColor: _redText,
-                ),
-                const SizedBox(height: 18),
-                _MoneyInputLine(
-                  label: 'Ingreso en banco',
-                  controller: _ingresoBancoController,
-                  autofocus: true,
-                ),
-                const SizedBox(height: 22),
-                Container(height: 3, color: const Color(0xFF666666)),
-                const SizedBox(height: 22),
-                _AmountLine(
-                    label: 'Total efectivo', value: summary.totalEfectivo),
-                const SizedBox(height: 18),
-                _MoneyInputLine(
-                  label: 'Entregado',
-                  controller: _entregadoController,
-                ),
-                const SizedBox(height: 22),
-                if (summary.cobros.isNotEmpty)
-                  _CobrosPreview(cobros: summary.cobros),
-              ],
+          child: Form(
+            key: _formKey,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(10, 12, 10, 120),
+              child: Column(
+                children: [
+                  _AmountLine(
+                    label: 'Total efectivo',
+                    value: summary.totalEfectivo,
+                  ),
+                  _AmountLine(
+                    label: 'Total cheques',
+                    value: summary.totalCheques,
+                  ),
+                  _AmountLine(
+                    label: 'Total tarjeta',
+                    value: summary.totalTarjeta,
+                  ),
+                  _AmountLine(
+                    label: 'Total postdatados',
+                    value: summary.totalPostdatados,
+                  ),
+                  const SizedBox(height: 16),
+                  _AmountLine(
+                    label: 'Saldo actual',
+                    value: summary.saldoActual,
+                  ),
+                  _AmountLine(
+                    label: 'Total a ingresar',
+                    value: summary.totalAIngresar,
+                    valueColor: _redText,
+                  ),
+                  const SizedBox(height: 18),
+                  _MoneyInputLine(
+                    label: 'Ingreso en banco',
+                    controller: _ingresoBancoController,
+                    autofocus: true,
+                  ),
+                  const SizedBox(height: 22),
+                  Container(height: 3, color: const Color(0xFF666666)),
+                  const SizedBox(height: 22),
+                  _AmountLine(
+                    label: 'Total efectivo',
+                    value: summary.totalEfectivo,
+                  ),
+                  const SizedBox(height: 18),
+                  _MoneyInputLine(
+                    label: 'Entregado',
+                    controller: _entregadoController,
+                  ),
+                  const SizedBox(height: 22),
+                  if (summary.cobros.isNotEmpty)
+                    _CobrosPreview(cobros: summary.cobros),
+                ],
+              ),
             ),
           ),
         ),
@@ -146,6 +168,18 @@ class _RepartidorLiquidacionDiariaPageState
 
   Future<void> _save(RepartidorDailySummary summary) async {
     if (_saving) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (_sessionDate != _today()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'La fecha de liquidacion ha cambiado. '
+            'Reabre la pantalla antes de grabar.',
+          ),
+        ),
+      );
+      return;
+    }
     setState(() => _saving = true);
 
     final modal = AsyncOperationModal.show(
@@ -158,7 +192,7 @@ class _RepartidorLiquidacionDiariaPageState
       final entregado = _parseAmount(_entregadoController.text);
       await ref.read(repartidorLiquidacionActionsProvider).close(
             repartidorId: widget.repartidorId,
-            date: DateTime.now(),
+            date: _sessionDate,
             idempotencyToken: _idempotencyToken,
             summary: summary,
             ingresoBanco: ingresoBanco,
@@ -167,14 +201,19 @@ class _RepartidorLiquidacionDiariaPageState
 
       if (!mounted) return;
       modal.success('Liquidacion grabada');
-      _idempotencyToken = _newToken(widget.repartidorId, DateTime.now());
+      _draftsByRepartidor.remove(widget.repartidorId);
+      _sessionDate = _today();
+      _idempotencyToken = _newToken(widget.repartidorId, _sessionDate);
       _ingresoBancoController.clear();
       _entregadoController.clear();
     } catch (error, stackTrace) {
       await Sentry.captureException(error, stackTrace: stackTrace);
       if (!mounted) return;
       modal.error(
-        'No se pudo grabar. El formulario se mantiene para reintentar.',
+        financeErrorMessage(
+          error,
+          'No se pudo grabar. El formulario se mantiene para reintentar.',
+        ),
         onRetry: () => _save(summary),
       );
     } finally {
@@ -182,14 +221,90 @@ class _RepartidorLiquidacionDiariaPageState
     }
   }
 
-  static String _newToken(String repartidorId, DateTime now) {
-    final ymd = DateFormat('yyyyMMdd').format(now);
-    return 'liq_${repartidorId}_${ymd}_${now.microsecondsSinceEpoch}';
+  static String _newToken(String repartidorId, DateTime businessDate) {
+    final ymd = DateFormat('yyyyMMdd').format(businessDate);
+    final timestamp = DateTime.now().microsecondsSinceEpoch;
+    return 'liq_${repartidorId}_${ymd}_$timestamp';
+  }
+
+  static DateTime _today() {
+    final now = DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  void _refreshSessionDateIfSafe() {
+    final today = _today();
+    final hasDraft = _ingresoBancoController.text.trim().isNotEmpty ||
+        _entregadoController.text.trim().isNotEmpty;
+    if (_saving || hasDraft || _sessionDate == today) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _saving) return;
+      setState(() {
+        _sessionDate = today;
+        _idempotencyToken = _newToken(widget.repartidorId, _sessionDate);
+      });
+    });
+  }
+
+  void _storeDraft(String repartidorId) {
+    if (repartidorId.isEmpty) return;
+    final hasDraft = _ingresoBancoController.text.trim().isNotEmpty ||
+        _entregadoController.text.trim().isNotEmpty;
+    if (!hasDraft) {
+      _draftsByRepartidor.remove(repartidorId);
+      return;
+    }
+    _draftsByRepartidor[repartidorId] = _LiquidacionDraft(
+      ingresoBanco: _ingresoBancoController.text,
+      entregado: _entregadoController.text,
+      sessionDate: _sessionDate,
+      idempotencyToken: _idempotencyToken,
+    );
+  }
+
+  void _restoreDraft(String repartidorId) {
+    final draft = _draftsByRepartidor[repartidorId];
+    if (draft == null) {
+      _ingresoBancoController.clear();
+      _entregadoController.clear();
+      _sessionDate = _today();
+      _idempotencyToken = _newToken(repartidorId, _sessionDate);
+      return;
+    }
+    _ingresoBancoController.text = draft.ingresoBanco;
+    _entregadoController.text = draft.entregado;
+    _sessionDate = draft.sessionDate;
+    _idempotencyToken = draft.idempotencyToken;
   }
 
   static double _parseAmount(String value) {
     return double.tryParse(value.trim().replaceAll(',', '.')) ?? 0;
   }
+
+  static String? _validateAmount(String? value) {
+    final normalized = (value ?? '').trim().replaceAll(',', '.');
+    if (normalized.isEmpty) return 'Obligatorio';
+    final amount = double.tryParse(normalized);
+    if (amount == null) return 'Importe invalido';
+    if (amount < 0) return 'No puede ser negativo';
+    final decimals = normalized.contains('.') ? normalized.split('.').last : '';
+    if (decimals.length > 2) return 'Maximo 2 decimales';
+    return null;
+  }
+}
+
+class _LiquidacionDraft {
+  const _LiquidacionDraft({
+    required this.ingresoBanco,
+    required this.entregado,
+    required this.sessionDate,
+    required this.idempotencyToken,
+  });
+
+  final String ingresoBanco;
+  final String entregado;
+  final DateTime sessionDate;
+  final String idempotencyToken;
 }
 
 class LiquidacionDiariaPage extends RepartidorLiquidacionDiariaPage {
@@ -310,14 +425,15 @@ class _MoneyInputLine extends StatelessWidget {
             ),
           ),
           Expanded(
-            child: TextField(
+            child: TextFormField(
               controller: controller,
               autofocus: autofocus,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
               inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
+                FilteringTextInputFormatter.allow(RegExp('[0-9,.]')),
               ],
+              validator: _RepartidorLiquidacionDiariaPageState._validateAmount,
               textAlign: TextAlign.right,
               decoration: const InputDecoration(
                 isDense: true,

@@ -574,9 +574,10 @@ class RepartidorLiquidacionActions {
               entregado2: entregado,
             );
 
-    _ref.invalidate(repartidorDailySummaryProvider);
-    _ref.invalidate(repartidorVencimientosProvider);
-    _ref.invalidate(repartidorCommissionSummaryProvider);
+    _ref
+      ..invalidate(repartidorDailySummaryProvider)
+      ..invalidate(repartidorVencimientosProvider)
+      ..invalidate(repartidorCommissionSummaryProvider);
     return result;
   }
 
@@ -586,8 +587,9 @@ class RepartidorLiquidacionActions {
     final result = await _ref
         .read(repartidorFinanzasServiceProvider)
         .saveCommissionTiers(tiers);
-    _ref.invalidate(repartidorCommissionTiersProvider);
-    _ref.invalidate(repartidorCommissionSummaryProvider);
+    _ref
+      ..invalidate(repartidorCommissionTiersProvider)
+      ..invalidate(repartidorCommissionSummaryProvider);
     return result;
   }
 }

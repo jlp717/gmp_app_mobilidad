@@ -55,6 +55,46 @@ void main() {
     expect(find.text('Entregado'), findsOneWidget);
   });
 
+  testWidgets('liquidacion diaria validates required money fields',
+      (tester) async {
+    final now = DateTime.now();
+    final date = DateTime(now.year, now.month, now.day);
+    final args = (
+      repartidorId: '94',
+      date: date,
+      forceRefresh: false,
+    );
+
+    await tester.pumpWidget(
+      wrap(
+        const RepartidorLiquidacionDiariaPage(repartidorId: '94'),
+        overrides: [
+          repartidorDailySummaryProvider(args).overrideWith(
+            (ref) async => RepartidorDailySummary(
+              repartidorId: '94',
+              date: '2026-04-24',
+              totalEfectivo: 0,
+              totalCheques: 0,
+              totalTarjeta: 0,
+              totalPostdatados: 0,
+              saldoActual: 0,
+              totalCobrosDia: 0,
+              gastos: 0,
+              totalAIngresar: 0,
+              cobrosCount: 0,
+            ),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Grabar'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Obligatorio'), findsNWidgets(2));
+  });
+
   testWidgets('vencimientos can be filtered by group', (tester) async {
     await tester.pumpWidget(
       wrap(

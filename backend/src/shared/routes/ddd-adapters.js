@@ -1101,6 +1101,22 @@ function createEntregasRoutes() {
   const repo = new Db2EntregasRepository(getDbPool());
   const cache = getCache();
 
+  const isPrivileged = (req) =>
+    req.user?.isJefeVentas ||
+    req.user?.role === 'JEFE_VENTAS' ||
+    req.user?.role === 'ADMIN';
+
+  async function canAccessAlbaran(req, albaranId) {
+    if (isPrivileged(req)) return true;
+    const repartidorId = req.user?.code || req.user?.id;
+    if (!repartidorId) return false;
+    const albaranes = await repo.getAlbaranes({ repartidorId });
+    return albaranes.some((albaran) =>
+      String(albaran.id || albaran.number || '').trim() ===
+      String(albaranId || '').trim()
+    );
+  }
+
   router.get('/albaranes', async (req, res) => {
     try {
       const repartidorId = req.user?.code || req.query.repartidorId;
@@ -1121,6 +1137,12 @@ function createEntregasRoutes() {
   router.get('/albaranes/:id', async (req, res) => {
     try {
       const { id } = req.params;
+      if (!await canAccessAlbaran(req, id)) {
+        return res.status(403).json({
+          success: false,
+          error: 'No tienes permisos para consultar esta entrega',
+        });
+      }
       const cacheKey = `ddd:albaran:${id}`;
       await withCache(cache, cacheKey, TTL_MS.ALBARAN_DETAIL, async () => {
         const albaran = await repo.getAlbaranDetail(id);
@@ -1138,6 +1160,12 @@ function createEntregasRoutes() {
       const { id } = req.params;
       const repartidorId = req.user?.code || req.user?.id;
       if (!repartidorId) return res.status(401).json({ success: false, error: 'Authentication required' });
+      if (!await canAccessAlbaran(req, id)) {
+        return res.status(403).json({
+          success: false,
+          error: 'No tienes permisos para entregar este albaran',
+        });
+      }
 
       const { observations, signaturePath, latitude, longitude } = req.body;
       const result = await repo.markDelivered({ albaranId: id, observations, signaturePath, latitude, longitude, repartidorId });

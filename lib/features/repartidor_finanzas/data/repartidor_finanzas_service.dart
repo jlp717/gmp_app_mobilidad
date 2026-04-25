@@ -249,6 +249,7 @@ class RepartidorFinanzasService {
       },
     );
     await CacheService.invalidate(commissionTiersCacheKey);
+    await CacheService.invalidateByPrefix('${_prefix}_commission_summary_');
     return _mapList(response['tiers'], RepartidorCommissionTier.fromJson);
   }
 
@@ -611,6 +612,15 @@ class RepartidorFinanzasService {
       '${_prefix}_objectives_detail_$repartidorId',
     );
     await CacheService.invalidateByPrefix('${_prefix}_delivery_$repartidorId');
+    await CacheService.invalidateByPrefix(
+      '${_prefix}_liquidacion_$repartidorId',
+    );
+    await CacheService.invalidateByPrefix(
+      '${_prefix}_vencimientos_$repartidorId',
+    );
+    await CacheService.invalidateByPrefix(
+      '${_prefix}_commission_summary_$repartidorId',
+    );
   }
 }
 

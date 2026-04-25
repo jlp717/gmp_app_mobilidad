@@ -1699,7 +1699,13 @@ router.post('/cobros', verifyToken, async (req, res) => {
                 IDEMPOTENCY_TOKEN, PANTALLA_ORIGEN, OPERADOR, NOTAS
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
-        const numericEntregaId = Number.isInteger(Number(entregaId)) ? Number(entregaId) : null;
+        const numericEntregaId =
+            entregaId !== undefined &&
+            entregaId !== null &&
+            String(entregaId).trim() !== '' &&
+            Number.isInteger(Number(entregaId))
+                ? Number(entregaId)
+                : null;
         const generatedToken = idempotencyToken ||
             `legacy:${Date.now()}:${Math.random().toString(36).slice(2)}`;
         const operador = (req.user && (req.user.code || req.user.id)) || 'unknown';

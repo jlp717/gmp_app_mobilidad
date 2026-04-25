@@ -3,9 +3,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
 import 'package:intl/intl.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
@@ -24,6 +26,7 @@ class RepartidorComisionesFinanzasPage extends ConsumerStatefulWidget {
 
 class _RepartidorComisionesFinanzasPageState
     extends ConsumerState<RepartidorComisionesFinanzasPage> {
+  final _tiersFormKey = GlobalKey<FormState>();
   List<RepartidorCommissionTier> _draftTiers = const [];
   bool _dirty = false;
   bool _saving = false;
@@ -54,6 +57,10 @@ class _RepartidorComisionesFinanzasPageState
     final summaryAsync =
         ref.watch(repartidorCommissionSummaryProvider(summaryArgs));
     final tiersAsync = ref.watch(repartidorCommissionTiersProvider);
+    final authUser = ref.watch(authProvider).value?.user;
+    final canEditTiers = (authUser?.isJefeVentas ?? false) ||
+        authUser?.role == 'JEFE_VENTAS' ||
+        authUser?.role == 'ADMIN';
 
     return Scaffold(
       backgroundColor: AppTheme.darkBase,
@@ -63,13 +70,16 @@ class _RepartidorComisionesFinanzasPageState
             if (!_dirty && _draftTiers.isEmpty) {
               _draftTiers = tiers;
             }
-            return _buildContent(summary, tiers);
+            return _buildContent(summary, tiers, canEditTiers: canEditTiers);
           },
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (error, stackTrace) {
             Sentry.captureException(error, stackTrace: stackTrace);
             return _ErrorState(
-              message: 'No se pudieron cargar los tramos',
+              message: financeErrorMessage(
+                error,
+                'No se pudieron cargar los tramos',
+              ),
               onRetry: () => ref.invalidate(repartidorCommissionTiersProvider),
             );
           },
@@ -78,7 +88,7 @@ class _RepartidorComisionesFinanzasPageState
         error: (error, stackTrace) {
           Sentry.captureException(error, stackTrace: stackTrace);
           return _ErrorState(
-            message: 'No se pudo cargar el resumen',
+            message: financeErrorMessage(error, 'No se pudo cargar el resumen'),
             onRetry: () => ref.invalidate(
               repartidorCommissionSummaryProvider(summaryArgs),
             ),
@@ -90,8 +100,9 @@ class _RepartidorComisionesFinanzasPageState
 
   Widget _buildContent(
     RepartidorCommissionSummary summary,
-    List<RepartidorCommissionTier> loadedTiers,
-  ) {
+    List<RepartidorCommissionTier> loadedTiers, {
+    required bool canEditTiers,
+  }) {
     final tiers = _draftTiers.isEmpty ? loadedTiers : _draftTiers;
     final now = DateTime.now();
 
@@ -110,7 +121,9 @@ class _RepartidorComisionesFinanzasPageState
               _ReachedPanel(summary: summary),
               const SizedBox(height: 12),
               _TiersEditor(
+                formKey: _tiersFormKey,
                 tiers: tiers,
+                canEdit: canEditTiers,
                 saving: _saving,
                 onChanged: _updateTier,
                 onSave: () => _saveTiers(tiers),
@@ -139,6 +152,7 @@ class _RepartidorComisionesFinanzasPageState
 
   Future<void> _saveTiers(List<RepartidorCommissionTier> tiers) async {
     if (_saving) return;
+    if (!(_tiersFormKey.currentState?.validate() ?? false)) return;
     setState(() => _saving = true);
     try {
       await ref
@@ -156,8 +170,10 @@ class _RepartidorComisionesFinanzasPageState
       await Sentry.captureException(error, stackTrace: stackTrace);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se pudieron guardar los tramos'),
+        SnackBar(
+          content: Text(
+            financeErrorMessage(error, 'No se pudieron guardar los tramos'),
+          ),
         ),
       );
     } finally {
@@ -340,7 +356,9 @@ class _ReachedPanel extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '${_money(reached.excess)} x ${_percent(reached.commissionPct)} = ${_money(reached.commission)}',
+                    '${_money(reached.excess)} x '
+                    '${_percent(reached.commissionPct)} = '
+                    '${_money(reached.commission)}',
                     style: const TextStyle(
                       color: AppTheme.neonGreen,
                       fontWeight: FontWeight.w800,
@@ -358,13 +376,17 @@ class _ReachedPanel extends StatelessWidget {
 
 class _TiersEditor extends StatelessWidget {
   const _TiersEditor({
+    required this.formKey,
     required this.tiers,
+    required this.canEdit,
     required this.saving,
     required this.onChanged,
     required this.onSave,
   });
 
+  final GlobalKey<FormState> formKey;
   final List<RepartidorCommissionTier> tiers;
+  final bool canEdit;
   final bool saving;
   final void Function(int index, double thresholdPct, double commissionPct)
       onChanged;
@@ -373,47 +395,56 @@ class _TiersEditor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return _Panel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'Configuracion de tramos',
-                  style: TextStyle(
-                    color: AppTheme.textPrimary,
-                    fontWeight: FontWeight.w800,
+      child: Form(
+        key: formKey,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'Configuracion de tramos',
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ),
-              ),
-              ElevatedButton.icon(
-                onPressed: saving ? null : onSave,
-                icon: saving
-                    ? const SizedBox(
-                        width: 14,
-                        height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.save, size: 16),
-                label: const Text('Guardar'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          for (var i = 0; i < tiers.length; i++) ...[
-            _TierRow(
-              key: ValueKey(
-                  'tier-$i-${tiers[i].thresholdPct}-${tiers[i].commissionPct}'),
-              index: i,
-              tier: tiers[i],
-              onChanged: onChanged,
+                ElevatedButton.icon(
+                  onPressed: saving || !canEdit ? null : onSave,
+                  icon: saving
+                      ? const SizedBox(
+                          width: 14,
+                          height: 14,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.save, size: 16),
+                  label: const Text('Guardar'),
+                ),
+              ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
+            for (var i = 0; i < tiers.length; i++) ...[
+              _TierRow(
+                key: ValueKey(_stableTierKey(i, tiers[i])),
+                index: i,
+                tier: tiers[i],
+                enabled: canEdit,
+                onChanged: onChanged,
+              ),
+              const SizedBox(height: 8),
+            ],
           ],
-        ],
+        ),
       ),
     );
+  }
+
+  String _stableTierKey(int index, RepartidorCommissionTier tier) {
+    final id = tier.id;
+    if (id != null && id.isNotEmpty) return 'tier-id-$id';
+    return 'tier-new-$index-${tier.sortOrder}';
   }
 }
 
@@ -422,11 +453,13 @@ class _TierRow extends StatefulWidget {
     required super.key,
     required this.index,
     required this.tier,
+    required this.enabled,
     required this.onChanged,
   });
 
   final int index;
   final RepartidorCommissionTier tier;
+  final bool enabled;
   final void Function(int index, double thresholdPct, double commissionPct)
       onChanged;
 
@@ -465,6 +498,7 @@ class _TierRowState extends State<_TierRow> {
             label: 'Umbral',
             suffix: '%',
             controller: _thresholdController,
+            enabled: widget.enabled,
             onChanged: _emit,
           ),
         ),
@@ -474,6 +508,7 @@ class _TierRowState extends State<_TierRow> {
             label: 'Comision',
             suffix: '%',
             controller: _commissionController,
+            enabled: widget.enabled,
             onChanged: _emit,
           ),
         ),
@@ -495,23 +530,27 @@ class _NumberField extends StatelessWidget {
     required this.label,
     required this.suffix,
     required this.controller,
+    required this.enabled,
     required this.onChanged,
   });
 
   final String label;
   final String suffix;
   final TextEditingController controller;
+  final bool enabled;
   final VoidCallback onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    return TextFormField(
       controller: controller,
+      enabled: enabled,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
       inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'[0-9,.]')),
+        FilteringTextInputFormatter.allow(RegExp('[0-9,.]')),
       ],
       onChanged: (_) => onChanged(),
+      validator: _validatePercent,
       style: const TextStyle(color: AppTheme.textPrimary),
       decoration: InputDecoration(
         labelText: label,
@@ -569,6 +608,17 @@ class _ErrorState extends StatelessWidget {
 
 String _numberInput(double value) {
   return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 2);
+}
+
+String? _validatePercent(String? value) {
+  final normalized = (value ?? '').trim().replaceAll(',', '.');
+  if (normalized.isEmpty) return 'Obligatorio';
+  final parsed = double.tryParse(normalized);
+  if (parsed == null) return 'Valor invalido';
+  if (parsed < 0 || parsed > 100) return 'Entre 0 y 100';
+  final decimals = normalized.contains('.') ? normalized.split('.').last : '';
+  if (decimals.length > 3) return 'Maximo 3 decimales';
+  return null;
 }
 
 double _parseNumber(String value) {

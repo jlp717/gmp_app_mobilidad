@@ -19,6 +19,78 @@ function stripVendorCode(name) {
     return name.replace(/^\d+\s+/, '').trim();
 }
 
+function normalizeCode(value) {
+    return String(value || '').trim();
+}
+
+function normalizeNumericCode(value) {
+    const raw = normalizeCode(value);
+    if (!/^\d+$/.test(raw)) return null;
+    const digits = raw.replace(/\D/g, '');
+    if (!digits) return null;
+    return digits.replace(/^0+/, '') || '0';
+}
+
+function codesMatch(left, right) {
+    const leftCode = normalizeCode(left);
+    const rightCode = normalizeCode(right);
+    if (leftCode === rightCode) return true;
+    const leftNumeric = normalizeNumericCode(leftCode);
+    const rightNumeric = normalizeNumericCode(rightCode);
+    return leftNumeric !== null && rightNumeric !== null && leftNumeric === rightNumeric;
+}
+
+function isPrivilegedUser(req) {
+    const user = req.user || {};
+    return user.isJefeVentas === true || user.role === 'JEFE_VENTAS' || user.role === 'ADMIN';
+}
+
+function canAccessRepartidor(req, repartidorId) {
+    if (isPrivilegedUser(req)) return true;
+    if (req.user?.role !== 'REPARTIDOR') return false;
+    const userCode = normalizeCode(req.user.code || req.user.id || req.user.user);
+    const targetCode = normalizeCode(repartidorId);
+    const userNumeric = normalizeNumericCode(userCode);
+    const targetNumeric = normalizeNumericCode(targetCode);
+    return userCode === targetCode ||
+        (userNumeric !== null && targetNumeric !== null && userNumeric === targetNumeric);
+}
+
+function ensureRepartidorAccess(req, res, repartidorId) {
+    if (canAccessRepartidor(req, repartidorId)) return true;
+    logger.warn(`[ENTREGAS] Forbidden ${req.user?.code || 'unknown'} -> repartidor ${repartidorId}`);
+    res.status(403).json({ success: false, error: 'No tienes permisos para operar sobre este repartidor' });
+    return false;
+}
+
+function parseDeliveryItemId(itemId) {
+    const parts = String(itemId || '').split('-');
+    if (parts.length < 4) return null;
+    const ejercicio = parseInt(parts[0], 10);
+    const serie = parts[1] || '';
+    const terminal = parseInt(parts[2], 10);
+    const numero = parseInt(parts[3], 10);
+    if (!ejercicio || !Number.isFinite(terminal) || !numero) return null;
+    return { ejercicio, serie, terminal, numero };
+}
+
+async function getDeliveryOwner(itemId) {
+    const parsed = parseDeliveryItemId(itemId);
+    if (!parsed) return null;
+    const rows = await queryWithParams(`
+        SELECT TRIM(OPP.CODIGOREPARTIDOR) AS CODIGO_REPARTIDOR
+        FROM DSEDAC.CPC CPC
+        INNER JOIN DSEDAC.OPP OPP
+          ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+        WHERE CPC.EJERCICIOALBARAN = ?
+          AND TRIM(CPC.SERIEALBARAN) = ?
+          AND CPC.TERMINALALBARAN = ?
+          AND CPC.NUMEROALBARAN = ?
+        FETCH FIRST 1 ROW ONLY
+    `, [parsed.ejercicio, parsed.serie, parsed.terminal, parsed.numero], false, false);
+    return rows[0]?.CODIGO_REPARTIDOR?.trim() || null;
+}
+
 /**
  * Validate Spanish DNI/NIE format with check letter (mod 23).
  * @param {string} value - DNI/NIE string
@@ -173,6 +245,13 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         if (!idList || idList.length === 0) {
             return res.status(400).json({ error: 'Invalid repartidor ID format' });
         }
+        const unauthorized = idList.find(id => !canAccessRepartidor(req, id));
+        if (unauthorized) {
+            return res.status(403).json({
+                success: false,
+                error: 'No tienes permisos para consultar este repartidor'
+            });
+        }
         const placeholders = idList.map(() => '?').join(',');
 
         // Load payment conditions from JAVIER.PAYMENT_CONDITIONS table
@@ -323,7 +402,25 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 .map(row => (row.CLIENTE || '').trim())
                 .filter(Boolean)
         ));
+        const parseMoney = (val) => {
+            if (val === null || val === undefined) return 0;
+            if (typeof val === 'number') return val;
+
+            const str = val.toString();
+            if (str.includes(',') && str.includes('.')) {
+                if (str.indexOf('.') < str.indexOf(',')) {
+                    return parseFloat(str.replace(/\./g, '').replace(',', '.')) || 0;
+                }
+            }
+            if (str.includes(',') && !str.includes('.')) {
+                return parseFloat(str.replace(',', '.')) || 0;
+            }
+            return parseFloat(str) || 0;
+        };
+
         const cobroRigurosoClientes = new Set();
+        const creditLimitByClient = new Map();
+        const pendingDebtByClient = new Map();
         if (clientCodes.length > 0) {
             try {
                 const clxPlaceholders = clientCodes.map(() => '?').join(',');
@@ -340,13 +437,59 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             } catch (clxError) {
                 logger.warn(`[ENTREGAS] Could not load CLX.COBRORIGUROSOSN: ${clxError.message}`);
             }
+
+            try {
+                const clpPlaceholders = clientCodes.map(() => '?').join(',');
+                const clpRows = await queryWithParams(`
+                    SELECT
+                      TRIM(CODIGOCLIENTE) as CLIENTE,
+                      IMPORTELIMITERIESGO,
+                      IMPORTELIMITERIESGOEMPRESA
+                    FROM DSEDAC.CLP
+                    WHERE TRIM(CODIGOCLIENTE) IN (${clpPlaceholders})
+                `, clientCodes, false, false) || [];
+                clpRows.forEach(row => {
+                    const cliente = (row.CLIENTE || '').trim();
+                    const limit = parseMoney(row.IMPORTELIMITERIESGO) ||
+                        parseMoney(row.IMPORTELIMITERIESGOEMPRESA);
+                    if (cliente && limit > 0) creditLimitByClient.set(cliente, limit);
+                });
+            } catch (clpError) {
+                logger.warn(`[ENTREGAS] Could not load CLP credit limits: ${clpError.message}`);
+            }
+
+            try {
+                const cvcPlaceholders = clientCodes.map(() => '?').join(',');
+                const cvcRows = await queryWithParams(`
+                    SELECT
+                      TRIM(CODIGOCLIENTEALBARAN) as CLIENTE,
+                      COALESCE(SUM(IMPORTEPENDIENTE), 0) as PENDIENTE
+                    FROM DSEDAC.CVC
+                    WHERE TRIM(CODIGOCLIENTEALBARAN) IN (${cvcPlaceholders})
+                      AND COALESCE(ANULADOSN, '') <> 'S'
+                      AND IMPORTEPENDIENTE <> 0
+                    GROUP BY TRIM(CODIGOCLIENTEALBARAN)
+                `, clientCodes, false, false) || [];
+                cvcRows.forEach(row => {
+                    const cliente = (row.CLIENTE || '').trim();
+                    if (cliente) pendingDebtByClient.set(cliente, parseMoney(row.PENDIENTE));
+                });
+            } catch (cvcError) {
+                logger.warn(`[ENTREGAS] Could not load CVC pending debt for credit-limit check: ${cvcError.message}`);
+            }
         }
 
         // Process rows
         const albaranes = uniqueRows.map(row => {
             const serie = (row.SERIEALBARAN || '').trim();
             const cliente = (row.CLIENTE || '').trim();
-            const cobroRiguroso = cobroRigurosoClientes.has(cliente);
+            const importeAlbaran = parseMoney(row.IMPORTETOTAL);
+            const limiteCredito = creditLimitByClient.get(cliente) || 0;
+            const riesgoActual = pendingDebtByClient.get(cliente) || 0;
+            const creditoSuperaLimite =
+                limiteCredito > 0 && (riesgoActual + importeAlbaran) > limiteCredito;
+            const cobroRiguroso =
+                cobroRigurosoClientes.has(cliente) || creditoSuperaLimite;
             const fp = (row.FORMA_PAGO || '').toUpperCase().trim();
 
             // Try robust matching
@@ -423,33 +566,8 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 }
             }
 
-            // Robust Money Parser
-            const parseMoney = (val) => {
-                if (val === null || val === undefined) return 0;
-                if (typeof val === 'number') return val;
-
-                // Convert to string
-                const str = val.toString();
-
-                // If it looks like '1.200,50' (European): remove dots, replace comma with dot
-                if (str.includes(',') && str.includes('.')) {
-                    // Assume dot is thousand separator if it appears before comma
-                    if (str.indexOf('.') < str.indexOf(',')) {
-                        return parseFloat(str.replace(/\./g, '').replace(',', '.')) || 0;
-                    }
-                }
-
-                // If it has only comma '120,50', replace with dot
-                if (str.includes(',') && !str.includes('.')) {
-                    return parseFloat(str.replace(',', '.')) || 0;
-                }
-
-                // If it has only dot '120.50' or '1200', just parse
-                return parseFloat(str) || 0;
-            };
-
             // Use IMPORTETOTAL (correct final amount incl. IVA) instead of IMPORTEBRUTO (gross pre-discount)
-            let importeTotal = parseMoney(row.IMPORTETOTAL);
+            let importeTotal = importeAlbaran;
             // AUDIT FIX: Sanitize sentinel amounts
             if (Math.abs(importeTotal) >= 900000 || Object.is(importeTotal, -0)) {
                 importeTotal = 0;
@@ -504,6 +622,10 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                 diasPago: paymentInfo.diasPago,
                 esCTR: esCTR,
                 puedeCobrarse: puedeCobrarse,
+                cobroRiguroso: cobroRiguroso,
+                creditoSuperaLimite: creditoSuperaLimite,
+                limiteCredito: limiteCredito,
+                riesgoCreditoActual: riesgoActual,
                 colorEstado: colorEstado,
                 fecha: `${row.DIADOCUMENTO}/${row.MESDOCUMENTO}/${row.ANODOCUMENTO}`,
                 ruta: row.RUTA?.trim(),
@@ -670,8 +792,12 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
                 TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as CLIENTE_NOM,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as DIR,
                 TRIM(COALESCE(CLI.POBLACION, '')) as POB,
-                CAC.NUMEROFACTURA, CAC.SERIEFACTURA
+                CAC.NUMEROFACTURA,
+                CAC.SERIEFACTURA,
+                TRIM(OPP.CODIGOREPARTIDOR) AS CODIGO_REPARTIDOR
             FROM DSEDAC.CPC CPC
+            INNER JOIN DSEDAC.OPP OPP
+                ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
             LEFT JOIN DSEDAC.CAC CAC ON CAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
                 AND CAC.SERIEALBARAN = CPC.SERIEALBARAN
@@ -687,6 +813,7 @@ router.get('/albaran/:numero/:ejercicio', verifyToken, async (req, res) => {
         // AGGREGATE: If multiple CPC rows exist for the same Albaran detail request
         // Sum the financial fields across all matching rows
         const header = { ...headers[0] };
+        if (!ensureRepartidorAccess(req, res, header.CODIGO_REPARTIDOR)) return;
         if (headers.length > 1) {
             header.IMPORTE = 0;
             header.IMPORTE_BRUTO = 0;
@@ -796,6 +923,19 @@ router.post('/update', verifyToken, async (req, res) => {
         if (!itemId || !status || !repartidorId) {
             return res.status(400).json({ success: false, error: 'Faltan datos obligatorios: itemId, status, repartidorId' });
         }
+        if (!['ENTREGADO', 'EN_RUTA', 'PENDIENTE', 'NO_ENTREGADO', 'PARCIAL'].includes(status)) {
+            return res.status(400).json({ success: false, error: 'Estado no valido' });
+        }
+        if (!ensureRepartidorAccess(req, res, repartidorId)) return;
+
+        const owner = await getDeliveryOwner(itemId);
+        if (owner && !codesMatch(owner, repartidorId)) {
+            logger.warn(`[ENTREGAS] Delivery owner mismatch item=${itemId} owner=${owner} bodyRep=${repartidorId}`);
+            return res.status(403).json({
+                success: false,
+                error: 'La entrega no pertenece al repartidor indicado'
+            });
+        }
 
         logger.info(`[ENTREGAS] Updating ${itemId} to ${status} (Rep: ${repartidorId}, Force: ${forceUpdate || false})`);
 
@@ -903,6 +1043,22 @@ router.post('/uploads/signature', verifyToken, async (req, res) => {
     try {
         const { entregaId, firma, clientCode, dni, nombre } = req.body; // firma is base64
         if (!firma) return res.status(400).json({ success: false, error: 'No signature' });
+        if (!entregaId) {
+            return res.status(400).json({ success: false, error: 'entregaId obligatorio' });
+        }
+        const owner = await getDeliveryOwner(entregaId);
+        if (!owner) {
+            return res.status(404).json({
+                success: false,
+                error: 'Entrega no encontrada para firma'
+            });
+        }
+        if (!canAccessRepartidor(req, owner)) {
+            return res.status(403).json({
+                success: false,
+                error: 'No tienes permisos para firmar esta entrega'
+            });
+        }
 
         // Validate DNI format if provided
         if (dni && !isValidDniNie(dni)) {
@@ -955,15 +1111,14 @@ router.post('/uploads/signature', verifyToken, async (req, res) => {
                     VALUES (?, ?, ?, CURRENT DATE, 1)
                 `, [safeClientCode, safeDni, safeNombre]);
 
-                logger.info(`[SIGN] Saved signer info for client ${clientCode}: ${dni} - ${nombre}`);
+                logger.info(`[SIGN] Saved signer info for client ${clientCode}`);
             } catch (dbError) {
                 logger.warn(`[SIGN] Failed to save signer info: ${dbError.message}`);
                 // Don't fail the request just for this
             }
         }
 
-        // Return relative path (more portable) and full path
-        res.json({ success: true, path: relativePath, fullPath: filePath });
+        res.json({ success: true, path: relativePath });
     } catch (error) {
         logger.error(`[SIGN] Error saving signature: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
@@ -976,6 +1131,17 @@ router.post('/uploads/signature', verifyToken, async (req, res) => {
 router.get('/signers/:clientCode', verifyToken, async (req, res) => {
     try {
         const { clientCode } = req.params;
+        const { entregaId } = req.query;
+        if (!isPrivilegedUser(req)) {
+            if (!entregaId) return res.json({ success: true, signers: [] });
+            const owner = await getDeliveryOwner(entregaId);
+            if (!owner || !canAccessRepartidor(req, owner)) {
+                return res.status(403).json({
+                    success: false,
+                    error: 'No tienes permisos para consultar firmantes de este cliente'
+                });
+            }
+        }
         const rows = await queryWithParams(`
             SELECT DNI, NOMBRE
             FROM JAVIER.CLIENT_SIGNERS

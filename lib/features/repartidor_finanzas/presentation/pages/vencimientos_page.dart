@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
 import 'package:intl/intl.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
@@ -12,7 +13,6 @@ enum VencimientoEstado {
   vencido,
   hoy,
   proximo,
-  cobrado,
 }
 
 class VencimientoItem {
@@ -42,7 +42,6 @@ enum VencimientosFiltro {
   vencidos,
   hoy,
   proximos,
-  cobrados,
 }
 
 class VencimientosPage extends StatefulWidget {
@@ -128,7 +127,6 @@ class _VencimientosPageState extends State<VencimientosPage> {
         VencimientosFiltro.vencidos => item.estado == VencimientoEstado.vencido,
         VencimientosFiltro.hoy => item.estado == VencimientoEstado.hoy,
         VencimientosFiltro.proximos => item.estado == VencimientoEstado.proximo,
-        VencimientosFiltro.cobrados => item.estado == VencimientoEstado.cobrado,
       };
     }).toList()
       ..sort((a, b) => a.fecha.compareTo(b.fecha));
@@ -141,7 +139,6 @@ class _VencimientosPageState extends State<VencimientosPage> {
         VencimientoEstado.vencido => 'Vencidos',
         VencimientoEstado.hoy => 'Vencen hoy',
         VencimientoEstado.proximo => 'Proximos',
-        VencimientoEstado.cobrado => 'Cobrados',
       };
       grouped.putIfAbsent(key, () => []).add(item);
     }
@@ -205,9 +202,12 @@ class RepartidorVencimientosPage extends ConsumerWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'No se pudieron cargar los vencimientos',
-                  style: TextStyle(color: AppTheme.textSecondary),
+                Text(
+                  financeErrorMessage(
+                    error,
+                    'No se pudieron cargar los vencimientos',
+                  ),
+                  style: const TextStyle(color: AppTheme.textSecondary),
                 ),
                 const SizedBox(height: 12),
                 ElevatedButton(
@@ -225,7 +225,8 @@ class RepartidorVencimientosPage extends ConsumerWidget {
   }
 
   static VencimientoItem _mapVencimiento(RepartidorVencimiento item) {
-    final fecha = DateTime.tryParse(item.fechaVencimiento) ?? DateTime.now();
+    final parsedFecha = DateTime.tryParse(item.fechaVencimiento);
+    final fecha = parsedFecha ?? DateTime(9999, 12, 31);
     final today = DateTime.now();
     final todayDate = DateTime(today.year, today.month, today.day);
     final dueDate = DateTime(fecha.year, fecha.month, fecha.day);
@@ -243,6 +244,7 @@ class RepartidorVencimientosPage extends ConsumerWidget {
       importe: item.importePendiente,
       estado: estado,
       notas: [
+        if (parsedFecha == null) 'Fecha de vencimiento no calculada',
         if (item.tipoDocumento.isNotEmpty) item.tipoDocumento,
         if (item.nombreAlternativo.isNotEmpty) item.nombreAlternativo,
         if (item.poblacion.isNotEmpty) item.poblacion,
@@ -393,7 +395,6 @@ class _FilterStrip extends StatelessWidget {
             _chip(VencimientosFiltro.vencidos, 'Vencidos'),
             _chip(VencimientosFiltro.hoy, 'Hoy'),
             _chip(VencimientosFiltro.proximos, 'Proximos'),
-            _chip(VencimientosFiltro.cobrados, 'Cobrados'),
           ],
         ),
       ),
@@ -606,7 +607,6 @@ Color _statusColor(VencimientoEstado estado) {
     VencimientoEstado.vencido => AppTheme.error,
     VencimientoEstado.hoy => AppTheme.warning,
     VencimientoEstado.proximo => AppTheme.neonBlue,
-    VencimientoEstado.cobrado => AppTheme.success,
   };
 }
 
@@ -615,7 +615,6 @@ String _statusLabel(VencimientoEstado estado) {
     VencimientoEstado.vencido => 'Vencido',
     VencimientoEstado.hoy => 'Hoy',
     VencimientoEstado.proximo => 'Proximo',
-    VencimientoEstado.cobrado => 'Cobrado',
   };
 }
 

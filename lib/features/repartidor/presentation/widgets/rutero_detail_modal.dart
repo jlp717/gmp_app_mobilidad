@@ -16,6 +16,7 @@ import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -65,6 +66,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       TextEditingController();
   final TextEditingController _dniController = TextEditingController();
   final TextEditingController _nombreController = TextEditingController();
+  final TextEditingController _importeCobradoController =
+      TextEditingController();
+  final FocusNode _nombreFocusNode = FocusNode();
+  final FocusNode _dniFocusNode = FocusNode();
 
   final SignatureController _signatureController = SignatureController(
     exportBackgroundColor: Colors.white,
@@ -94,6 +99,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   String? _dniError;
   String? _firmaError;
   String? _pagoError;
+  String? _importeCobradoError;
   String? _observacionesError;
 
   String? _cachedPdfBase64;
@@ -108,6 +114,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     )..forward();
 
     _observacionesController.text = widget.albaran.observaciones ?? '';
+    _importeCobradoController.text =
+        widget.albaran.importeTotal.toStringAsFixed(2).replaceAll('.', ',');
 
     if (widget.albaran.esCTR) {
       _selectedPaymentMethod = 'EFECTIVO';
@@ -248,7 +256,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final codigoCliente = widget.albaran.codigoCliente;
       if (codigoCliente == null) return;
 
-      final response = await ApiClient.get('/entregas/signers/$codigoCliente');
+      final response = await ApiClient.get(
+        '/entregas/signers/$codigoCliente',
+        queryParameters: {'entregaId': widget.albaran.id},
+      );
       if (response['success'] == true && mounted) {
         final signers = response['signers'] as List;
         setState(() {
@@ -276,6 +287,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     _observacionesController.dispose();
     _dniController.dispose();
     _nombreController.dispose();
+    _importeCobradoController.dispose();
+    _nombreFocusNode.dispose();
+    _dniFocusNode.dispose();
     _signatureController.dispose();
     super.dispose();
   }
@@ -417,11 +431,24 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       selectedPaymentMethod: _selectedPaymentMethod,
       isPaid: _isPaid,
       pagoError: _pagoError,
+      importeCobradoController: _importeCobradoController,
+      importeCobradoError: _importeCobradoError,
       onPaymentMethodChanged: (method) {
         setState(() => _selectedPaymentMethod = method);
       },
       onPaidChanged: () {
-        setState(() => _isPaid = !_isPaid);
+        setState(() {
+          _isPaid = !_isPaid;
+          if (_isPaid) {
+            _pagoError = null;
+            _importeCobradoError = null;
+            if (_importeCobradoController.text.trim().isEmpty) {
+              _importeCobradoController.text = widget.albaran.importeTotal
+                  .toStringAsFixed(2)
+                  .replaceAll('.', ',');
+            }
+          }
+        });
       },
       onContinueToFinalize: () {
         HapticFeedback.mediumImpact();
@@ -505,7 +532,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           const SizedBox(height: 16),
           RawAutocomplete<String>(
             textEditingController: _nombreController,
-            focusNode: FocusNode(),
+            focusNode: _nombreFocusNode,
             optionsBuilder: (TextEditingValue textEditingValue) {
               if (textEditingValue.text.isEmpty) {
                 return const Iterable<String>.empty();
@@ -575,7 +602,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           const SizedBox(height: 12),
           RawAutocomplete<String>(
             textEditingController: _dniController,
-            focusNode: FocusNode(),
+            focusNode: _dniFocusNode,
             optionsBuilder: (TextEditingValue textEditingValue) {
               if (textEditingValue.text.isEmpty) {
                 return const Iterable<String>.empty();
@@ -939,6 +966,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(linea.codigoArticulo.trim())}/ficha';
     final filePath =
         '${(await getTemporaryDirectory()).path}/${linea.codigoArticulo.trim()}_ficha.pdf';
+    if (!mounted) return;
 
     showDialog<void>(
       context: context,
@@ -968,12 +996,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     try {
       await ApiClient.dio.download(url, filePath);
 
-      if (!navigator.canPop()) {
-        Navigator.of(context).pop();
-      }
+      if (navigator.canPop()) navigator.pop();
 
       if (!File(filePath).existsSync()) {
-        if (navigator.canPop()) navigator.pop();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('No se encontró la ficha técnica'),
@@ -1061,9 +1086,48 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final repartidorState =
         widget.ref.read(entregasProvider).repartidorId.trim();
     if (repartidorState.contains(',')) {
-      return repartidorState.split(',').first.trim();
+      throw Exception(
+        'No se puede registrar el cobro sin un repartidor concreto. '
+        'Selecciona el reparto desde un repartidor individual.',
+      );
     }
     return repartidorState;
+  }
+
+  List<String> _repartidorIdsParaInvalidar() {
+    final fromAlbaran = widget.albaran.codigoRepartidor.trim();
+    if (fromAlbaran.isNotEmpty) return [fromAlbaran];
+
+    return widget.ref
+        .read(entregasProvider)
+        .repartidorId
+        .split(',')
+        .map((id) => id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+  }
+
+  Future<void> _invalidateFinanceForDelivery() async {
+    final service = widget.ref.read(repartidorFinanzasServiceProvider);
+    for (final codigoRepartidor in _repartidorIdsParaInvalidar()) {
+      await service.invalidateAllForRepartidor(codigoRepartidor);
+    }
+    widget.ref
+      ..invalidate(repartidorDailySummaryProvider)
+      ..invalidate(repartidorVencimientosProvider)
+      ..invalidate(repartidorCommissionSummaryProvider);
+  }
+
+  double? _parseMoney(String value) {
+    final trimmed = value.trim();
+    final normalized = trimmed.contains(',')
+        ? trimmed.replaceAll('.', '').replaceAll(',', '.')
+        : trimmed;
+    if (normalized.isEmpty) return null;
+    final parsed = double.tryParse(normalized);
+    if (parsed == null || parsed.isNaN || parsed.isInfinite) return null;
+    return double.parse(parsed.toStringAsFixed(2));
   }
 
   Map<String, dynamic> _cobroRuteroPayload() {
@@ -1076,14 +1140,19 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       throw Exception('Falta el codigo de repartidor para registrar el cobro');
     }
 
-    final importeCobrado =
-        double.parse(widget.albaran.importeTotal.toStringAsFixed(2));
+    final importeCobrado = _parseMoney(_importeCobradoController.text);
+    if (importeCobrado == null) {
+      throw Exception('Importe cobrado no valido');
+    }
+    final importePendiente = (widget.albaran.importeTotal - importeCobrado)
+        .clamp(0, double.infinity)
+        .toDouble();
     return {
       'entregaId': widget.albaran.id,
       'codigoCliente': codigoCliente,
       'nombreCliente': widget.albaran.nombreCliente,
       'codigoRepartidor': codigoRepartidor,
-      'tipoDocumento': 'ALBARAN',
+      'tipoDocumento': 'CAC',
       'origenDocumento': 'B',
       // TODO(repartidor): usar subempresa del albaran cuando el modelo
       // la exponga.
@@ -1094,7 +1163,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       'numeroDocumento': widget.albaran.numeroAlbaran,
       'xdeDocumento': 1,
       'importeCobrado': importeCobrado,
-      'importePendiente': 0,
+      'importePendiente': double.parse(importePendiente.toStringAsFixed(2)),
       'formaPago': _selectedPaymentMethod,
       'pantallaOrigen': 'RUTERO',
       'idempotencyToken': _ruteroCobroIdempotencyToken(),
@@ -1145,6 +1214,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     await widget.ref
         .read(entregasProvider.notifier)
         .cargarAlbaranesPendientes();
+    await _invalidateFinanceForDelivery();
     return true;
   }
 
@@ -1154,6 +1224,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       _dniError = null;
       _firmaError = null;
       _pagoError = null;
+      _importeCobradoError = null;
       _observacionesError = null;
     });
   }
@@ -1203,6 +1274,19 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       _pagoError = '⚠️ COBRO OBLIGATORIO';
       _tabController.animateTo(1);
       isValid = false;
+    }
+
+    if (_isPaid) {
+      final importeCobrado = _parseMoney(_importeCobradoController.text);
+      if (importeCobrado == null || importeCobrado <= 0) {
+        _importeCobradoError = 'Importe obligatorio';
+        _tabController.animateTo(1);
+        isValid = false;
+      } else if (importeCobrado - widget.albaran.importeTotal > 0.01) {
+        _importeCobradoError = 'No puede superar el total del documento';
+        _tabController.animateTo(1);
+        isValid = false;
+      }
     }
 
     setState(() {});
@@ -1324,14 +1408,20 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   Future<void> _submitDelivery() async {
+    if (_isSubmitting) {
+      return;
+    }
     if (!_validateFields()) {
       return;
     }
 
-    final confirmed = await _showConfirmationDialog();
-    if (!confirmed) return;
-
     setState(() => _isSubmitting = true);
+
+    final confirmed = await _showConfirmationDialog();
+    if (!confirmed) {
+      if (mounted) setState(() => _isSubmitting = false);
+      return;
+    }
 
     try {
       final notifier = widget.ref.read(entregasProvider.notifier);
@@ -1381,6 +1471,10 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       setState(() => _isSubmitting = false);
 
       if (success) {
+        if (!_isPaid) {
+          await _invalidateFinanceForDelivery();
+          if (!mounted) return;
+        }
         HapticFeedback.heavyImpact();
         final state = widget.ref.read(entregasProvider);
         final updated = state.albaranes.firstWhere(
@@ -1419,7 +1513,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     } catch (e) {
       if (mounted) {
         setState(() => _isSubmitting = false);
-        _showError('Error: $e');
+        final errorText = e.toString();
+        if (errorText.contains('ya fue confirmada') ||
+            errorText.contains('alreadyDelivered')) {
+          _showAlreadyDeliveredDialog();
+        } else {
+          _showError('Error: $e');
+        }
       }
     }
   }

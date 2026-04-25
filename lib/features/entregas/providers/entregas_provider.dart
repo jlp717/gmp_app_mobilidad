@@ -552,8 +552,13 @@ class EntregasNotifier extends Notifier<EntregasState> {
         if (res['success'] == true) {
           firmaPath = res['path'] as String?;
         }
+        if (firmaPath == null || firmaPath.isEmpty) {
+          throw Exception('La firma no se ha guardado en el servidor');
+        }
       } catch (e) {
         debugPrint('Error uploading signature: $e');
+        state = state.copyWith(error: 'Error subiendo firma: $e');
+        return false;
       }
     }
 

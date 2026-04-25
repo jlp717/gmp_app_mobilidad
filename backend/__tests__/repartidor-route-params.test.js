@@ -44,7 +44,7 @@ jest.mock('../services/emailPdfService', () => ({
 
 jest.mock('../middleware/auth', () => ({
   verifyToken: (req, _res, next) => {
-    req.user = { id: '98', code: '98', role: 'COMERCIAL' };
+    req.user = { id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true };
     next();
   },
 }));

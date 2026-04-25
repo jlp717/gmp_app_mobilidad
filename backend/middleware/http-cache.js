@@ -38,8 +38,24 @@ function generateETag(data) {
     return `"${crypto.createHash('md5').update(JSON.stringify(data)).digest('hex').substring(0, 16)}"`;
 }
 
+function getAuthScope(req) {
+    const userScope = req.user?.codigo || req.user?.code || req.user?.id;
+    if (userScope) return String(userScope);
+
+    const authorization = req.headers.authorization || '';
+    if (!authorization.startsWith('Bearer ')) return null;
+
+    return crypto
+        .createHash('sha256')
+        .update(authorization)
+        .digest('hex')
+        .substring(0, 16);
+}
+
 function getCacheKey(prefix, req) {
-    return `${prefix}:${req.user?.codigo || 'anonymous'}:${JSON.stringify(req.query)}`;
+    const authScope = getAuthScope(req);
+    if (!authScope) return null;
+    return `${prefix}:${authScope}:${req.path}:${JSON.stringify(req.query)}`;
 }
 
 function serialize(value) {
@@ -124,6 +140,9 @@ function cached(cachePrefix, ttlSeconds) {
         }
 
         const cacheKey = getCacheKey(cachePrefix, req);
+        if (!cacheKey) {
+            return next();
+        }
         const cachedData = get(cacheKey);
 
         const etag = cachedData ? generateETag(cachedData) : null;
@@ -145,7 +164,13 @@ function cached(cachePrefix, ttlSeconds) {
 
         const originalJson = res.json.bind(res);
         res.json = function (data) {
-            if (data && typeof data === 'object' && !data.error) {
+            if (
+                res.statusCode >= 200 &&
+                res.statusCode < 300 &&
+                data &&
+                typeof data === 'object' &&
+                !data.error
+            ) {
                 set(cacheKey, data, ttlSeconds);
             }
             res.setHeader('ETag', generateETag(data));

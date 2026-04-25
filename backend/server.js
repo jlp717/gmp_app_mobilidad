@@ -59,6 +59,17 @@ const USE_TS_ROUTES = process.env.USE_TS_ROUTES === 'true';
 // =============================================================================
 const USE_DDD_ROUTES = process.env.USE_DDD_ROUTES !== 'false';
 
+function requireOperationalAdmin(req, res, next) {
+  const user = req.user || {};
+  if (user.role === 'ADMIN' || user.role === 'JEFE_VENTAS' || user.isJefeVentas) {
+    return next();
+  }
+  return res.status(403).json({
+    success: false,
+    error: 'Admin privileges required',
+  });
+}
+
 let authRoutes, dashboardRoutes, analyticsRoutes, masterRoutes, clientsRoutes,
   plannerRoutes, objectivesRoutes, exportRoutes, chatbotRoutes,
   commissionsRoutes, filtersRoutes, entregasRoutes, repartidorRoutes,
@@ -250,7 +261,7 @@ app.post('/api/auth/logout', verifyToken, async (req, res) => {
 });
 
 // Cache stats endpoint (admin only)
-app.get('/api/admin/cache-stats', verifyToken, (req, res) => {
+app.get('/api/admin/cache-stats', verifyToken, requireOperationalAdmin, (req, res) => {
   const { performanceCache } = require('./src/core/infrastructure/cache/performance-cache');
   res.json({
     performance: performanceCache.getStats(),
@@ -604,7 +615,7 @@ async function startServer() {
 
 // ==================== OPTIMIZATION MONITORING ENDPOINTS ====================
 // Cache statistics endpoint (protected)
-app.get('/api/optimization/cache-stats', verifyToken, (req, res) => {
+app.get('/api/optimization/cache-stats', verifyToken, requireOperationalAdmin, (req, res) => {
   try {
     const stats = getCacheStats();
     res.json({
@@ -618,7 +629,7 @@ app.get('/api/optimization/cache-stats', verifyToken, (req, res) => {
 });
 
 // Query optimization stats (protected)
-app.get('/api/optimization/query-stats', verifyToken, (req, res) => {
+app.get('/api/optimization/query-stats', verifyToken, requireOperationalAdmin, (req, res) => {
   try {
     const { createOptimizedQuery } = require('./services/query-optimizer');
     const optimizedQuery = createOptimizedQuery(query);
@@ -636,7 +647,7 @@ app.get('/api/optimization/query-stats', verifyToken, (req, res) => {
 
 // ==================== AUDIT ENDPOINTS (protected, admin only) ====================
 // Recent audit log entries (last 500)
-app.get('/api/optimization/audit-log', verifyToken, (req, res) => {
+app.get('/api/optimization/audit-log', verifyToken, requireOperationalAdmin, (req, res) => {
   try {
     const entries = getRecentAuditEntries();
     const { limit = 100, user, status } = req.query;
@@ -655,7 +666,7 @@ app.get('/api/optimization/audit-log', verifyToken, (req, res) => {
 });
 
 // Active sessions overview (who's connected, from where)
-app.get('/api/optimization/active-sessions', verifyToken, (req, res) => {
+app.get('/api/optimization/active-sessions', verifyToken, requireOperationalAdmin, (req, res) => {
   try {
     const sessions = getActiveSessions();
     res.json({

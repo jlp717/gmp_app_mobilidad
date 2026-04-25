@@ -21,7 +21,7 @@ void main() {
       expect(items[4].label, 'Personal');
     });
 
-    test('Repartidor regular has exactly 4 items', () {
+    test('Repartidor regular has financial items isolated from sales', () {
       final items = NavigationConfigService.getNavItems(
         isAlmacen: false,
         isRepartidor: true,
@@ -29,9 +29,13 @@ void main() {
         showCommissions: false,
       );
 
-      expect(items.length, 4);
+      expect(items.length, 7);
       expect(items.any((i) => i.label == 'Panel'), false);
       expect(items[0].label, 'Clientes');
+      expect(items.any((i) => i.label == 'Liquidacion Diaria'), true);
+      expect(items.any((i) => i.label == 'Vencimientos'), true);
+      expect(items.any((i) => i.label == 'Comisiones'), true);
+      expect(items.any((i) => i.label == 'Cobros'), false);
     });
 
     test('Repartidor (jefe) has Panel as first item', () {
@@ -42,7 +46,7 @@ void main() {
         showCommissions: false,
       );
 
-      expect(items.length, 5);
+      expect(items.length, 8);
       expect(items[0].label, 'Panel');
     });
 

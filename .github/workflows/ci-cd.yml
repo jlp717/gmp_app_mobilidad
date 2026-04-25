@@ -105,11 +105,9 @@ jobs:
 
       - name: Backend tests
         run: cd backend && npx jest --passWithNoTests --coverage --silent
-        continue-on-error: true
 
       - name: Flutter tests
         run: flutter test --no-pub --coverage
-        continue-on-error: true
 
       - name: Upload coverage
         uses: codecov/codecov-action@v4

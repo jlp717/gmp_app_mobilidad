@@ -84,6 +84,15 @@ function Check-BackendLint {
     return $passed
 }
 
+function Check-RepartidorFinanceSchema {
+    Write-Host 'Verifying repartidor finance DB schema...' -ForegroundColor Yellow
+    Set-Location "$RootDir\backend"
+    $output = npm run finance:verify-schema 2>&1
+    $passed = $LASTEXITCODE -eq 0
+    Write-Result 'repartidor_finance_schema' $passed
+    return $passed
+}
+
 function Check-Security {
     Write-Host 'Running security checks...' -ForegroundColor Yellow
     $issues = 0
@@ -157,8 +166,10 @@ Write-Host "Timestamp: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')`n" -ForegroundC
 # Run all checks
 $checks = @(
     { Check-FlutterAnalyze },
+    { Check-FlutterTest },
     { Check-BackendTest },
     { Check-BackendLint },
+    { Check-RepartidorFinanceSchema },
     { Check-Security },
     { Check-FileStructure }
 )

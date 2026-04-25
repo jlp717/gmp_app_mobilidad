@@ -3,7 +3,7 @@
 const express = require('express');
 const { z } = require('zod');
 const logger = require('../middleware/logger');
-const { verifyToken } = require('../middleware/auth');
+const { verifyToken, requireRoles } = require('../middleware/auth');
 const financeService = require('../services/repartidor-finance-service');
 const { deleteCachePattern, invalidateCache } = require('../services/redis-cache');
 
@@ -17,12 +17,20 @@ try {
 const router = express.Router();
 
 const singleCodeSchema = z.string().trim().min(1).max(20).regex(/^[A-Za-z0-9_-]+$/);
-const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const numericCodeSchema = z.string().trim().min(1).max(20).regex(/^\d+$/);
+const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((raw) => {
+  const date = new Date(`${raw}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === raw;
+}, 'Fecha invalida');
 const idempotencyTokenSchema = z.string().trim().min(8).max(128).regex(/^[A-Za-z0-9_.:-]+$/);
 const moneySchema = z.coerce.number().min(0).max(99999999);
 
 const paramsSchema = z.object({
   repartidorId: singleCodeSchema,
+});
+
+const numericParamsSchema = z.object({
+  repartidorId: numericCodeSchema,
 });
 
 const dailySummaryQuerySchema = z.object({
@@ -55,6 +63,7 @@ const cobroSchema = z.object({
   terminalDocumento: z.coerce.number().int().min(0).max(999),
   numeroDocumento: z.coerce.number().int().min(1),
   xdeDocumento: z.coerce.number().int().min(0).max(99).optional().default(1),
+  dexDocumento: z.coerce.number().int().min(0).max(99).optional().default(1),
   importeCobrado: moneySchema,
   importePendiente: moneySchema.default(0),
   formaPago: z.string().trim().min(1).max(20),
@@ -78,6 +87,24 @@ const deliverySchema = z.object({
 const ruteroConfirmSchema = z.object({
   delivery: deliverySchema,
   cobro: cobroSchema,
+}).superRefine((value, ctx) => {
+  if (!codesMatch(value.delivery.repartidorId, value.cobro.codigoRepartidor)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['delivery', 'repartidorId'],
+      message: 'delivery.repartidorId y cobro.codigoRepartidor deben coincidir',
+    });
+  }
+  if (
+    value.cobro.entregaId &&
+    String(value.cobro.entregaId).trim() !== value.delivery.itemId
+  ) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['cobro', 'entregaId'],
+      message: 'cobro.entregaId debe coincidir con delivery.itemId',
+    });
+  }
 });
 
 const liquidacionSchema = z.object({
@@ -116,8 +143,54 @@ const rangeQuerySchema = z.object({
 
 function captureException(error, context) {
   if (Sentry && typeof Sentry.captureException === 'function') {
-    Sentry.captureException(error, { extra: context });
+    Sentry.captureException(error, { extra: sanitizeContext(context) });
   }
+}
+
+function redactValue(key, value) {
+  const sensitiveKeys = new Set([
+    'codigoCliente',
+    'clientCode',
+    'codigoRepartidor',
+    'repartidorId',
+    'nombreCliente',
+    'notas',
+    'firma',
+    'observaciones',
+    'repartidorEmail',
+    'email',
+    'idempotencyToken',
+  ]);
+  if (sensitiveKeys.has(key)) return '[REDACTED]';
+  if (typeof value === 'string' && value.length > 80) return `${value.slice(0, 80)}...`;
+  return value;
+}
+
+function sanitizeContext(context) {
+  if (!context || typeof context !== 'object') return context;
+  const safe = {};
+  for (const [key, value] of Object.entries(context)) {
+    if (value && typeof value === 'object') {
+      safe[key] = sanitizeBody(value);
+    } else {
+      safe[key] = redactValue(key, value);
+    }
+  }
+  return safe;
+}
+
+function sanitizeBody(body) {
+  if (!body || typeof body !== 'object') return body;
+  if (Array.isArray(body)) return body.map(sanitizeBody);
+  const safe = {};
+  for (const [key, value] of Object.entries(body)) {
+    if (value && typeof value === 'object') {
+      safe[key] = sanitizeBody(value);
+    } else {
+      safe[key] = redactValue(key, value);
+    }
+  }
+  return safe;
 }
 
 function sendError(res, error, context) {
@@ -140,6 +213,57 @@ function sendError(res, error, context) {
   });
 }
 
+function normalizeCode(value) {
+  return String(value || '').trim();
+}
+
+function normalizeNumericCode(value) {
+  const raw = normalizeCode(value);
+  if (!/^\d+$/.test(raw)) return null;
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return null;
+  return digits.replace(/^0+/, '') || '0';
+}
+
+function codesMatch(left, right) {
+  const leftCode = normalizeCode(left);
+  const rightCode = normalizeCode(right);
+  if (leftCode === rightCode) return true;
+  const leftNumeric = normalizeNumericCode(leftCode);
+  const rightNumeric = normalizeNumericCode(rightCode);
+  return leftNumeric !== null &&
+    rightNumeric !== null &&
+    leftNumeric === rightNumeric;
+}
+
+function canAccessRepartidor(req, repartidorId) {
+  const user = req.user || {};
+  if (user.isJefeVentas || user.role === 'JEFE_VENTAS' || user.role === 'ADMIN') {
+    return true;
+  }
+  if (user.role !== 'REPARTIDOR') return false;
+  const userCode = normalizeCode(user.code || user.id || user.user);
+  const targetCode = normalizeCode(repartidorId);
+  const userNumericCode = normalizeNumericCode(userCode);
+  const targetNumericCode = normalizeNumericCode(targetCode);
+  return userCode === targetCode ||
+    (userNumericCode !== null &&
+      targetNumericCode !== null &&
+      userNumericCode === targetNumericCode);
+}
+
+function requireRepartidorAccess(resolveRepartidorId) {
+  return (req, res, next) => {
+    const repartidorId = resolveRepartidorId(req);
+    if (canAccessRepartidor(req, repartidorId)) return next();
+    logger.warn(`[REPARTIDOR_FINANZAS] Forbidden ${req.user?.code || 'unknown'} -> ${repartidorId}`);
+    return res.status(403).json({
+      success: false,
+      error: 'No tienes permisos para operar sobre este repartidor',
+    });
+  };
+}
+
 async function invalidateFinanceCaches(repartidorId) {
   const patterns = [
     `query:repartidor:finance:${repartidorId}:*`,
@@ -159,7 +283,7 @@ async function invalidateFinanceCaches(repartidorId) {
   }
 }
 
-router.get('/daily-summary/:repartidorId', verifyToken, async (req, res) => {
+router.get('/daily-summary/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
   try {
     const params = paramsSchema.parse(req.params);
     const query = dailySummaryQuerySchema.parse(req.query);
@@ -173,7 +297,7 @@ router.get('/daily-summary/:repartidorId', verifyToken, async (req, res) => {
   }
 });
 
-router.get('/summary/:repartidorId', verifyToken, async (req, res) => {
+router.get('/summary/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
   try {
     const params = paramsSchema.parse(req.params);
     const query = summaryQuerySchema.parse(req.query);
@@ -188,7 +312,7 @@ router.get('/summary/:repartidorId', verifyToken, async (req, res) => {
   }
 });
 
-router.get('/vencimientos/:repartidorId', verifyToken, async (req, res) => {
+router.get('/vencimientos/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
   try {
     const params = paramsSchema.parse(req.params);
     const query = vencimientosQuerySchema.parse(req.query);
@@ -211,7 +335,7 @@ router.get('/vencimientos/:repartidorId', verifyToken, async (req, res) => {
   }
 });
 
-router.post('/cobros', verifyToken, async (req, res) => {
+router.post('/cobros', verifyToken, requireRepartidorAccess((req) => req.body.codigoRepartidor), async (req, res) => {
   try {
     const body = cobroSchema.parse(req.body);
     const operador = (req.user && (req.user.code || req.user.id)) || 'unknown';
@@ -225,11 +349,25 @@ router.post('/cobros', verifyToken, async (req, res) => {
       ...result,
     });
   } catch (error) {
+    if (error && error.code === 'DOCUMENT_NOT_ASSIGNED') {
+      return res.status(403).json({
+        success: false,
+        error: error.message,
+        code: error.code,
+      });
+    }
+    if (error && error.code === 'IDEMPOTENCY_CONFLICT') {
+      return res.status(409).json({
+        success: false,
+        error: error.message,
+        code: error.code,
+      });
+    }
     return sendError(res, error, { action: 'POST /cobros', body: req.body });
   }
 });
 
-router.post('/rutero/confirm-delivery-cobro', verifyToken, async (req, res) => {
+router.post('/rutero/confirm-delivery-cobro', verifyToken, requireRepartidorAccess((req) => req.body?.cobro?.codigoRepartidor || req.body?.delivery?.repartidorId), async (req, res) => {
   try {
     const body = ruteroConfirmSchema.parse(req.body);
     const operador = (req.user && (req.user.code || req.user.id)) || 'unknown';
@@ -255,6 +393,17 @@ router.post('/rutero/confirm-delivery-cobro', verifyToken, async (req, res) => {
         previousDate: error.previousDate,
       });
     }
+    if (error && (
+      error.code === 'IDEMPOTENCY_CONFLICT' ||
+      error.code === 'INCONSISTENT_IDEMPOTENCY' ||
+      error.code === 'DOCUMENT_NOT_ASSIGNED'
+    )) {
+      return res.status(error.code === 'DOCUMENT_NOT_ASSIGNED' ? 403 : 409).json({
+        success: false,
+        error: error.message,
+        code: error.code,
+      });
+    }
     return sendError(res, error, {
       action: 'POST /rutero/confirm-delivery-cobro',
       body: req.body,
@@ -262,9 +411,11 @@ router.post('/rutero/confirm-delivery-cobro', verifyToken, async (req, res) => {
   }
 });
 
-router.post('/liquidaciones', verifyToken, async (req, res) => {
+router.post('/liquidaciones', verifyToken, requireRepartidorAccess((req) => req.body.repartidorId), async (req, res) => {
   try {
-    const body = liquidacionSchema.parse(req.body);
+    const body = liquidacionSchema.extend({
+      repartidorId: numericCodeSchema,
+    }).parse(req.body);
     const createdBy = (req.user && (req.user.code || req.user.id)) || 'unknown';
     const result = await financeService.closeLiquidacion({
       ...body,
@@ -291,6 +442,16 @@ router.post('/liquidaciones', verifyToken, async (req, res) => {
       liquidacion: result.liquidacion,
     });
   } catch (error) {
+    if (error && (
+      error.code === 'DUPLICATE_DAILY_LIQUIDACION' ||
+      error.code === 'IDEMPOTENCY_CONFLICT'
+    )) {
+      return res.status(409).json({
+        success: false,
+        error: error.message,
+        code: error.code,
+      });
+    }
     return sendError(res, error, { action: 'POST /liquidaciones', body: req.body });
   }
 });
@@ -303,6 +464,12 @@ router.post('/liquidaciones/:idempotencyToken/resend-emails', verifyToken, async
       return res.status(404).json({
         success: false,
         error: 'Liquidacion no encontrada',
+      });
+    }
+    if (!canAccessRepartidor(req, liquidacion.repartidorId)) {
+      return res.status(403).json({
+        success: false,
+        error: 'No tienes permisos para reenviar esta liquidacion',
       });
     }
 
@@ -327,7 +494,7 @@ router.get('/commissions/tiers', verifyToken, async (_req, res) => {
   }
 });
 
-router.put('/commissions/tiers', verifyToken, async (req, res) => {
+router.put('/commissions/tiers', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
   try {
     const body = tiersSchema.parse(req.body);
     const updatedBy = req.user?.code || req.user?.id || 'unknown';
@@ -341,7 +508,7 @@ router.put('/commissions/tiers', verifyToken, async (req, res) => {
   }
 });
 
-router.get('/commissions/summary/:repartidorId', verifyToken, async (req, res) => {
+router.get('/commissions/summary/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
   try {
     const params = paramsSchema.parse(req.params);
     const query = rangeQuerySchema.parse(req.query);
@@ -356,7 +523,7 @@ router.get('/commissions/summary/:repartidorId', verifyToken, async (req, res) =
   }
 });
 
-router.delete('/test-cleanup/:idempotencyToken', verifyToken, async (req, res) => {
+router.delete('/test-cleanup/:idempotencyToken', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
   try {
     if (
       process.env.NODE_ENV !== 'test' ||
@@ -369,7 +536,10 @@ router.delete('/test-cleanup/:idempotencyToken', verifyToken, async (req, res) =
     }
 
     const idempotencyToken = idempotencyTokenSchema.parse(req.params.idempotencyToken);
-    await financeService.deleteTestData(idempotencyToken);
+    await financeService.deleteTestData(idempotencyToken, {
+      deleteDeliveryStatus: req.query.deleteDeliveryStatus === 'true',
+      deliveryId: req.query.deliveryId,
+    });
     return res.json({ success: true, idempotencyToken });
   } catch (error) {
     return sendError(res, error, { action: 'DELETE /test-cleanup', params: req.params });

@@ -22,7 +22,7 @@ void main() {
         isJefeVentas: false,
         showCommissions: false,
       );
-      expect(repartidor.length, 4);
+      expect(repartidor.length, 7);
 
       // Repartidor jefe
       final repartidorJefe = NavigationConfigService.getNavItems(
@@ -31,7 +31,7 @@ void main() {
         isJefeVentas: true,
         showCommissions: false,
       );
-      expect(repartidorJefe.length, 5);
+      expect(repartidorJefe.length, 8);
 
       // Comercial
       final comercial = NavigationConfigService.getNavItems(

@@ -371,8 +371,17 @@ router.post('/switch-role', verifyToken, async (req, res) => {
             return res.status(403).json({ error: 'No tienes permiso para cambiar este rol', code: 'FORBIDDEN' });
         }
 
-        const accessToken = signAccessToken({ id: userId, user: userId, role: newRole, timestamp: Date.now() });
-        const refreshToken = signRefreshToken({ id: userId, user: userId, role: newRole });
+        if (newRole !== req.user.role && !req.user?.isJefeVentas) {
+            return res.status(403).json({ error: 'No tienes permiso para cambiar a este rol', code: 'INSUFFICIENT_ROLE' });
+        }
+
+        if (newRole === 'JEFE_VENTAS' && !req.user?.isJefeVentas) {
+            return res.status(403).json({ error: 'Acceso restringido a Jefes de Ventas', code: 'INSUFFICIENT_ROLE' });
+        }
+
+        const isJefeVentas = req.user?.isJefeVentas === true;
+        const accessToken = signAccessToken({ id: userId, user: userId, code: userId, role: newRole, isJefeVentas, timestamp: Date.now() });
+        const refreshToken = signRefreshToken({ id: userId, user: userId, code: userId, role: newRole, isJefeVentas });
         registerSession(userId, refreshToken, req.get('user-agent') || 'unknown', getClientIP(req) || req.ip || 'unknown');
 
         res.json({ success: true, role: newRole, token: accessToken, refreshToken, tokenExpiresIn: 3600 });
@@ -392,6 +401,14 @@ const REPARTIDORES_CACHE_TTL = 5 * 60 * 1000;
 
 router.get('/repartidores', verifyToken, async (req, res) => {
     try {
+        if (req.user?.role === 'REPARTIDOR' && !req.user?.isJefeVentas) {
+            const code = (req.user.code || req.user.id || '').toString().trim();
+            return res.json(code ? [{ code, name: req.user.name || code }] : []);
+        }
+        if (req.user?.role !== 'JEFE_VENTAS' && req.user?.role !== 'ADMIN' && !req.user?.isJefeVentas) {
+            return res.status(403).json({ error: 'Acceso restringido', code: 'INSUFFICIENT_ROLE' });
+        }
+
         const now = Date.now();
         if (_repartidoresCache && (now - _repartidoresCacheTime) < REPARTIDORES_CACHE_TTL) {
             return res.json(_repartidoresCache);

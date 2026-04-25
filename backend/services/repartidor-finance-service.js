@@ -53,6 +53,16 @@ function dateParts(dateString) {
   return { year, month, day };
 }
 
+function nextIsoDate(dateString) {
+  const { year, month, day } = dateParts(dateString);
+  const date = new Date(Date.UTC(year, month - 1, day + 1));
+  return date.toISOString().slice(0, 10);
+}
+
+function dayBounds(dateString) {
+  return [`${dateString} 00:00:00`, `${nextIsoDate(dateString)} 00:00:00`];
+}
+
 function currentHhmmss() {
   const now = new Date();
   return now.getHours() * 10000 + now.getMinutes() * 100 + now.getSeconds();
@@ -72,6 +82,36 @@ function formatCvcDueDate(row) {
   const day = toInt(value(row, 'DIAVENCIMIENTO'));
   if (!year || !month || !day) return null;
   return `${year}-${pad(month, 2)}-${pad(day, 2)}`;
+}
+
+function addDaysIso(year, month, day, days) {
+  if (!year || !month || !day) return null;
+  const date = new Date(Date.UTC(year, month - 1, day + toInt(days)));
+  return date.toISOString().slice(0, 10);
+}
+
+function formatCvclDueDate(row) {
+  const rawCreditDays = value(row, 'DIASLIMITECREDITO');
+  if (rawCreditDays === undefined || rawCreditDays === null || String(rawCreditDays).trim() === '') {
+    return null;
+  }
+  const creditDays = toInt(rawCreditDays);
+  const useAlbaranDate =
+    String(value(row, 'DIASLIMITECREDITOCONFECHAALB', '') || '')
+      .trim()
+      .toUpperCase() === 'S';
+  const prefix = useAlbaranDate ? 'ALBARAN_BASE' : 'FACTURA_BASE';
+  return addDaysIso(
+    toInt(value(row, `${prefix}_ANO`)),
+    toInt(value(row, `${prefix}_MES`)),
+    toInt(value(row, `${prefix}_DIA`)),
+    creditDays,
+  );
+}
+
+function isoDateToCompact(dateString) {
+  if (!dateString) return 0;
+  return compactDate(dateString);
 }
 
 function buildDocument(row) {
@@ -110,7 +150,7 @@ function mapVencimiento(row) {
     nombreCliente: String(value(row, 'NOMBRE_CLIENTE', '') || '').trim(),
     nombreAlternativo: String(value(row, 'NOMBREALTERNATIVO', '') || '').trim(),
     poblacion: String(value(row, 'POBLACION', '') || '').trim(),
-    fechaVencimiento: formatCvcDueDate(row),
+    fechaVencimiento: formatCvclDueDate(row) || formatCvcDueDate(row),
     documento: buildDocument(row),
     importe: roundMoney(value(row, 'IMPORTEVENCIMIENTO')),
     importePendiente: roundMoney(value(row, 'IMPORTEPENDIENTE')),
@@ -167,14 +207,191 @@ class AlreadyDeliveredError extends Error {
   }
 }
 
-async function findLiquidacionByToken(idempotencyToken) {
+class IdempotencyConflictError extends Error {
+  constructor(message = 'El token de idempotencia ya existe con datos distintos') {
+    super(message);
+    this.name = 'IdempotencyConflictError';
+    this.code = 'IDEMPOTENCY_CONFLICT';
+  }
+}
+
+class DuplicateLiquidacionError extends Error {
+  constructor(message = 'Ya existe una liquidacion para este repartidor y fecha') {
+    super(message);
+    this.name = 'DuplicateLiquidacionError';
+    this.code = 'DUPLICATE_DAILY_LIQUIDACION';
+  }
+}
+
+function sameNumeric(a, b) {
+  return toInt(a) === toInt(b);
+}
+
+function normalizeText(value) {
+  return String(value || '').trim();
+}
+
+function normalizeTipoDocumento(raw) {
+  const value = normalizeText(raw).toUpperCase();
+  if (['ALBARAN', 'ALBARANES', 'ALB', 'COB. ALB.', 'COB_ALB'].includes(value)) {
+    return 'CAC';
+  }
+  return value;
+}
+
+function isDuplicateKeyError(error) {
+  const text = `${error?.message || ''} ${JSON.stringify(error?.odbcErrors || [])}`.toLowerCase();
+  return text.includes('duplicate') ||
+    text.includes('unique') ||
+    text.includes('sql0803') ||
+    text.includes('-803') ||
+    text.includes('23505');
+}
+
+function expectedCobroPayload(delivery, cobro) {
+  return {
+    entregaId: cobro.entregaId || delivery?.itemId || null,
+    codigoRepartidor: cobro.codigoRepartidor || delivery?.repartidorId,
+    codigoCliente: cobro.codigoCliente,
+    tipoDocumento: normalizeTipoDocumento(cobro.tipoDocumento),
+    origenDocumento: cobro.origenDocumento || 'B',
+    subempresaDocumento: cobro.subempresaDocumento || 'GMP',
+    ejercicioDocumento: cobro.ejercicioDocumento,
+    serieDocumento: cobro.serieDocumento,
+    terminalDocumento: cobro.terminalDocumento,
+    numeroDocumento: cobro.numeroDocumento,
+    xdeDocumento: cobro.xdeDocumento || 1,
+    dexDocumento: cobro.dexDocumento || 1,
+    importeCobrado: cobro.importeCobrado,
+    importePendiente: cobro.importePendiente || 0,
+    formaPago: cobro.formaPago,
+    pantallaOrigen: cobro.pantallaOrigen || 'RUTERO',
+  };
+}
+
+function assertCobroPayloadMatchesInput(row, expected) {
+  if (!row || Object.keys(row).length === 0) {
+    throw new IdempotencyConflictError('No existe cobro para replay idempotente');
+  }
+  const mismatches = [];
+  const checks = [
+    ['ENTREGA_APP_ID', expected.entregaId, normalizeText],
+    ['CODIGO_REPARTIDOR', expected.codigoRepartidor, normalizeText],
+    ['CODIGO_CLIENTE', expected.codigoCliente, normalizeText],
+    ['TIPO_DOCUMENTO', expected.tipoDocumento, normalizeTipoDocumento],
+    ['ORIGEN_DOCUMENTO', expected.origenDocumento, normalizeText],
+    ['SUBEMPRESA_DOCUMENTO', expected.subempresaDocumento, normalizeText],
+    ['SERIE_DOCUMENTO', expected.serieDocumento, normalizeText],
+    ['FORMA_PAGO', expected.formaPago, normalizeText],
+    ['PANTALLA_ORIGEN', expected.pantallaOrigen, normalizeText],
+  ];
+  for (const [column, expected, normalizer] of checks) {
+    if (normalizer(value(row, column)) !== normalizer(expected)) {
+      mismatches.push(column);
+    }
+  }
+  const numericChecks = [
+    ['EJERCICIO_DOCUMENTO', expected.ejercicioDocumento],
+    ['TERMINAL_DOCUMENTO', expected.terminalDocumento],
+    ['NUMERO_DOCUMENTO', expected.numeroDocumento],
+    ['XDE_DOCUMENTO', expected.xdeDocumento || 1],
+    ['DEX_DOCUMENTO', expected.dexDocumento || 1],
+  ];
+  for (const [column, expected] of numericChecks) {
+    if (!sameNumeric(value(row, column, expected), expected)) {
+      mismatches.push(column);
+    }
+  }
+  if (roundMoney(value(row, 'IMPORTE_COBRADO')) !== roundMoney(expected.importeCobrado)) {
+    mismatches.push('IMPORTE_COBRADO');
+  }
+  if (
+    roundMoney(value(row, 'IMPORTE_PENDIENTE', expected.importePendiente || 0)) !==
+    roundMoney(expected.importePendiente || 0)
+  ) {
+    mismatches.push('IMPORTE_PENDIENTE');
+  }
+  if (mismatches.length > 0) {
+    throw new IdempotencyConflictError(`Token existente con payload distinto: ${mismatches.join(', ')}`);
+  }
+}
+
+function assertCobroMatchesInput(row, delivery, cobro) {
+  assertCobroPayloadMatchesInput(row, expectedCobroPayload(delivery, cobro));
+}
+
+function assertLiquidacionMatchesInput(row, input) {
+  if (!row || Object.keys(row).length === 0) {
+    throw new IdempotencyConflictError('No existe liquidacion para replay idempotente');
+  }
+  const { year, month, day } = dateParts(input.date);
+  const mismatches = [];
+  const textChecks = [
+    ['CODIGO_REPARTIDOR', input.repartidorId, normalizeText],
+    ['SUBEMPRESA_LIQ', 'GMP', normalizeText],
+    ['SERIE_LIQ', 'A', normalizeText],
+  ];
+  for (const [column, expected, normalizer] of textChecks) {
+    if (normalizer(value(row, column)) !== normalizer(expected)) {
+      mismatches.push(column);
+    }
+  }
+  const numericChecks = [
+    ['EJERCICIO_LIQ', year],
+    ['TERMINAL_LIQ', toInt(input.repartidorId)],
+    ['DIALIQUIDACION', day],
+    ['MESLIQUIDACION', month],
+    ['ANOLIQUIDACION', year],
+  ];
+  for (const [column, expected] of numericChecks) {
+    const raw = value(row, column);
+    if (raw !== undefined && raw !== null && !sameNumeric(raw, expected)) {
+      mismatches.push(column);
+    }
+  }
+  const moneyChecks = [
+    ['TOTAL_EFECTIVO', input.totals.totalEfectivo],
+    ['TOTAL_CHEQUES', input.totals.totalCheques],
+    ['TOTAL_TARJETA', input.totals.totalTarjeta],
+    ['TOTAL_POSTDATADOS', input.totals.totalPostdatados],
+    ['SALDO_ANTERIOR', input.totals.saldoActual],
+    ['TOTAL_COBROS_DIA', input.totals.totalCobrosDia],
+    ['TOTAL_A_INGRESAR', input.totals.totalAIngresar],
+    ['INGRESO_BANCO', input.totals.ingresoBanco],
+    ['GASTOS', input.totals.gastos],
+    ['EFECTIVO_2', input.totals.efectivo2],
+    ['ENTREGADO_2', input.totals.entregado2],
+  ];
+  for (const [column, expected] of moneyChecks) {
+    if (roundMoney(value(row, column, expected)) !== roundMoney(expected)) {
+      mismatches.push(column);
+    }
+  }
+  if (mismatches.length > 0) {
+    throw new IdempotencyConflictError(
+      `Token de liquidacion existente con payload distinto: ${mismatches.join(', ')}`,
+    );
+  }
+}
+
+async function findLiquidacionRowByToken(idempotencyToken) {
   const rows = await queryWithParams(`
-    SELECT *
-    FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS
-    WHERE IDEMPOTENCY_TOKEN = ?
+    SELECT
+      OPS.*,
+      LQD.DIALIQUIDACION,
+      LQD.MESLIQUIDACION,
+      LQD.ANOLIQUIDACION
+    FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS OPS
+    LEFT JOIN DSEDAC.LQD LQD
+      ON LQD.IDMARCALIQUIDACION = OPS.IDEMPOTENCY_TOKEN
+    WHERE OPS.IDEMPOTENCY_TOKEN = ?
     FETCH FIRST 1 ROW ONLY
   `, [idempotencyToken], false, false);
-  return mapLiquidacion(firstRow(rows));
+  return firstRow(rows);
+}
+
+async function findLiquidacionByToken(idempotencyToken) {
+  return mapLiquidacion(await findLiquidacionRowByToken(idempotencyToken));
 }
 
 async function getDailySummary({ repartidorId, date }) {
@@ -272,7 +489,7 @@ async function getSummary({ repartidorId, year, month }) {
       AND CVC.ANOEMISION = ?
       AND CVC.MESEMISION = ?
       AND COALESCE(CVC.ANULADOSN, '') <> 'S'
-      AND CVC.TIPODOCUMENTO IN ('CAC', 'COB', 'DEV')
+      AND CVC.TIPODOCUMENTO IN ('CAC', 'COC', 'DEV')
       AND CVC.IMPORTEPENDIENTE <> 0
   `, [todayYmd, repartidorId, year, month], false, false);
 
@@ -290,19 +507,18 @@ async function getSummary({ repartidorId, year, month }) {
 }
 
 async function getVencimientos({ repartidorId, from, to, limit, clientCode, estado }) {
-  const params = [repartidorId, compactDate(from), compactDate(to)];
+  const fromParts = dateParts(from);
+  const toParts = dateParts(to);
+  const broadFrom = compactDate(addDaysIso(fromParts.year, fromParts.month, fromParts.day, -120));
+  const broadTo = compactDate(addDaysIso(toParts.year, toParts.month, toParts.day, 120));
+  const params = [repartidorId, broadFrom, broadTo];
   let clientFilter = '';
   if (clientCode) {
     clientFilter = ' AND TRIM(CVC.CODIGOCLIENTEALBARAN) = ?';
     params.push(clientCode.trim());
   }
-  if (estado === 'vencido') {
-    const now = new Date();
-    const ymd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
-    clientFilter += ' AND (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO) < ?';
-    params.push(ymd);
-  }
-  params.push(limit);
+  const candidateLimit = Math.min(Math.max(limit * 25, 1000), 20000);
+  params.push(candidateLimit);
 
   const rows = await queryWithParams(`
     SELECT *
@@ -324,8 +540,20 @@ async function getVencimientos({ repartidorId, from, to, limit, clientCode, esta
         CVC.DIAVENCIMIENTO,
         CVC.MESVENCIMIENTO,
         CVC.ANOVENCIMIENTO,
+        CVC.DIAEMISION AS FACTURA_BASE_DIA,
+        CVC.MESEMISION AS FACTURA_BASE_MES,
+        CVC.ANOEMISION AS FACTURA_BASE_ANO,
+        CPC.DIADOCUMENTO AS ALBARAN_BASE_DIA,
+        CPC.MESDOCUMENTO AS ALBARAN_BASE_MES,
+        CPC.ANODOCUMENTO AS ALBARAN_BASE_ANO,
+        CLCL1.DIASLIMITECREDITO,
+        CLCL1.DIASLIMITECREDITOCONFECHAALB,
         CVC.IMPORTEVENCIMIENTO,
-        CVC.IMPORTEPENDIENTE,
+        DECIMAL(
+          CVC.IMPORTEPENDIENTE - COALESCE(APP_COBROS.IMPORTE_COBRADO_APP, 0),
+          15,
+          2
+        ) AS IMPORTEPENDIENTE,
         ROW_NUMBER() OVER (
           ORDER BY CVC.ANOVENCIMIENTO, CVC.MESVENCIMIENTO, CVC.DIAVENCIMIENTO, CVC.NUMERODOCUMENTO
         ) AS RN
@@ -340,10 +568,51 @@ async function getVencimientos({ repartidorId, from, to, limit, clientCode, esta
         ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
       LEFT JOIN DSEDAC.CLI CLI
         ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+      LEFT JOIN DSEDAC.CLCL1 CLCL1
+        ON TRIM(CLCL1.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+      LEFT JOIN (
+        SELECT
+          TRIM(CODIGO_REPARTIDOR) AS CODIGO_REPARTIDOR,
+          TRIM(CODIGO_CLIENTE) AS CODIGO_CLIENTE,
+          TRIM(TIPO_DOCUMENTO) AS TIPO_DOCUMENTO,
+          TRIM(ORIGEN_DOCUMENTO) AS ORIGEN_DOCUMENTO,
+          TRIM(SUBEMPRESA_DOCUMENTO) AS SUBEMPRESA_DOCUMENTO,
+          EJERCICIO_DOCUMENTO,
+          TRIM(SERIE_DOCUMENTO) AS SERIE_DOCUMENTO,
+          TERMINAL_DOCUMENTO,
+          NUMERO_DOCUMENTO,
+          XDE_DOCUMENTO,
+          DEX_DOCUMENTO,
+          SUM(COALESCE(IMPORTE_COBRADO, 0)) AS IMPORTE_COBRADO_APP
+        FROM JAVIER.REPARTIDOR_COBROS
+        GROUP BY
+          TRIM(CODIGO_REPARTIDOR),
+          TRIM(CODIGO_CLIENTE),
+          TRIM(TIPO_DOCUMENTO),
+          TRIM(ORIGEN_DOCUMENTO),
+          TRIM(SUBEMPRESA_DOCUMENTO),
+          EJERCICIO_DOCUMENTO,
+          TRIM(SERIE_DOCUMENTO),
+          TERMINAL_DOCUMENTO,
+          NUMERO_DOCUMENTO,
+          XDE_DOCUMENTO,
+          DEX_DOCUMENTO
+      ) APP_COBROS
+        ON APP_COBROS.CODIGO_REPARTIDOR = TRIM(OPP.CODIGOREPARTIDOR)
+        AND APP_COBROS.CODIGO_CLIENTE = TRIM(CVC.CODIGOCLIENTEALBARAN)
+        AND APP_COBROS.TIPO_DOCUMENTO = TRIM(CVC.TIPODOCUMENTO)
+        AND APP_COBROS.ORIGEN_DOCUMENTO = TRIM(CVC.ORIGENDOCUMENTO)
+        AND APP_COBROS.SUBEMPRESA_DOCUMENTO = TRIM(CVC.SUBEMPRESADOCUMENTO)
+        AND APP_COBROS.EJERCICIO_DOCUMENTO = CVC.EJERCICIODOCUMENTO
+        AND APP_COBROS.SERIE_DOCUMENTO = TRIM(CVC.SERIEDOCUMENTO)
+        AND APP_COBROS.TERMINAL_DOCUMENTO = CVC.TERMINALDOCUMENTO
+        AND APP_COBROS.NUMERO_DOCUMENTO = CVC.NUMERODOCUMENTO
+        AND COALESCE(APP_COBROS.XDE_DOCUMENTO, 1) = COALESCE(CVC.XDEDOCUMENTO, 1)
+        AND COALESCE(APP_COBROS.DEX_DOCUMENTO, 1) = COALESCE(CVC.DEXDOCUMENTO, 1)
       WHERE TRIM(OPP.CODIGOREPARTIDOR) = ?
         AND (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO) BETWEEN ? AND ?
         AND COALESCE(CVC.ANULADOSN, '') <> 'S'
-        AND CVC.TIPODOCUMENTO IN ('CAC', 'COB', 'DEV')
+        AND CVC.TIPODOCUMENTO IN ('CAC', 'COC', 'DEV')
         AND CVC.IMPORTEPENDIENTE <> 0
         ${clientFilter}
     ) V
@@ -351,77 +620,182 @@ async function getVencimientos({ repartidorId, from, to, limit, clientCode, esta
     ORDER BY V.ANOVENCIMIENTO, V.MESVENCIMIENTO, V.DIAVENCIMIENTO, V.NUMERODOCUMENTO
   `, params, false, false);
 
-  return rows.map(mapVencimiento);
+  const fromYmd = compactDate(from);
+  const toYmd = compactDate(to);
+  const now = new Date();
+  const todayYmd = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+
+  return rows
+    .map(mapVencimiento)
+    .filter((item) => {
+      const dueYmd = isoDateToCompact(item.fechaVencimiento);
+      if (dueYmd < fromYmd || dueYmd > toYmd) return false;
+      if (item.importePendiente === 0) return false;
+      if (estado === 'vencido') return dueYmd < todayYmd;
+      return true;
+    })
+    .slice(0, limit);
 }
 
 async function registerCobro(input) {
-  const existingRows = await queryWithParams(`
-    SELECT ID FROM JAVIER.REPARTIDOR_COBROS
-    WHERE IDEMPOTENCY_TOKEN = ?
-    FETCH FIRST 1 ROW ONLY
-  `, [input.idempotencyToken], false, false);
+  const replayExisting = async () => {
+    const existingRows = await queryWithParams(`
+      SELECT *
+      FROM JAVIER.REPARTIDOR_COBROS
+      WHERE IDEMPOTENCY_TOKEN = ?
+      FETCH FIRST 1 ROW ONLY
+    `, [input.idempotencyToken], false, false);
+    const existing = firstRow(existingRows);
+    assertCobroPayloadMatchesInput(existing, expectedCobroPayload(null, input));
+    return { created: false, id: String(value(existing, 'ID')) };
+  };
 
-  if (existingRows.length > 0) {
-    return { created: false, id: String(value(existingRows[0], 'ID')) };
+  try {
+    return await withTransaction(async (conn) => {
+      await validateCobroDocument(input, conn);
+
+      const existingRows = await conn.query(`
+        SELECT *
+        FROM JAVIER.REPARTIDOR_COBROS
+        WHERE IDEMPOTENCY_TOKEN = ?
+        FETCH FIRST 1 ROW ONLY
+      `, [input.idempotencyToken]);
+
+      if (existingRows.length > 0) {
+        const existing = firstRow(existingRows);
+        assertCobroPayloadMatchesInput(existing, expectedCobroPayload(null, input));
+        return { created: false, id: String(value(existing, 'ID')) };
+      }
+
+      await conn.query(`
+        INSERT INTO JAVIER.REPARTIDOR_COBROS (
+          ENTREGA_APP_ID,
+          CODIGO_CLIENTE,
+          NOMBRE_CLIENTE,
+          CODIGO_REPARTIDOR,
+          TIPO_DOCUMENTO,
+          ORIGEN_DOCUMENTO,
+          SUBEMPRESA_DOCUMENTO,
+          EJERCICIO_DOCUMENTO,
+          SERIE_DOCUMENTO,
+          TERMINAL_DOCUMENTO,
+          NUMERO_DOCUMENTO,
+          XDE_DOCUMENTO,
+          DEX_DOCUMENTO,
+          IMPORTE_COBRADO,
+          IMPORTE_PENDIENTE,
+          FORMA_PAGO,
+          IDEMPOTENCY_TOKEN,
+          PANTALLA_ORIGEN,
+          OPERADOR,
+          NOTAS
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        input.entregaId || null,
+        input.codigoCliente,
+        input.nombreCliente || null,
+        input.codigoRepartidor,
+        normalizeTipoDocumento(input.tipoDocumento),
+        input.origenDocumento || 'B',
+        input.subempresaDocumento || 'GMP',
+        input.ejercicioDocumento,
+        input.serieDocumento,
+        input.terminalDocumento,
+        input.numeroDocumento,
+        input.xdeDocumento || 1,
+        input.dexDocumento || 1,
+        roundMoney(input.importeCobrado),
+        roundMoney(input.importePendiente),
+        input.formaPago,
+        input.idempotencyToken,
+        input.pantallaOrigen,
+        input.operador,
+        input.notas || null,
+      ]);
+
+      const row = firstRow(await conn.query(`
+        SELECT ID FROM JAVIER.REPARTIDOR_COBROS
+        WHERE IDEMPOTENCY_TOKEN = ?
+        FETCH FIRST 1 ROW ONLY
+      `, [input.idempotencyToken]));
+
+      return { created: true, id: String(value(row, 'ID', '')) };
+    });
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      return replayExisting();
+    }
+    throw error;
   }
+}
 
-  await queryWithParams(`
-    INSERT INTO JAVIER.REPARTIDOR_COBROS (
-      ENTREGA_APP_ID,
-      CODIGO_CLIENTE,
-      NOMBRE_CLIENTE,
-      CODIGO_REPARTIDOR,
-      TIPO_DOCUMENTO,
-      ORIGEN_DOCUMENTO,
-      SUBEMPRESA_DOCUMENTO,
-      EJERCICIO_DOCUMENTO,
-      SERIE_DOCUMENTO,
-      TERMINAL_DOCUMENTO,
-      NUMERO_DOCUMENTO,
-      XDE_DOCUMENTO,
-      IMPORTE_COBRADO,
-      IMPORTE_PENDIENTE,
-      FORMA_PAGO,
-      IDEMPOTENCY_TOKEN,
-      PANTALLA_ORIGEN,
-      OPERADOR,
-      NOTAS
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `, [
-    input.entregaId || null,
-    input.codigoCliente,
-    input.nombreCliente || null,
-    input.codigoRepartidor,
-    input.tipoDocumento,
-    input.origenDocumento || 'B',
-    input.subempresaDocumento || 'GMP',
+async function validateCobroDocument(input, conn = null) {
+  const sql = `
+    SELECT 1 AS OK
+    FROM DSEDAC.CPC CPC
+    INNER JOIN DSEDAC.OPP OPP
+      ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+    WHERE CPC.EJERCICIOALBARAN = ?
+      AND TRIM(CPC.SERIEALBARAN) = ?
+      AND CPC.TERMINALALBARAN = ?
+      AND CPC.NUMEROALBARAN = ?
+      AND TRIM(CPC.CODIGOCLIENTEALBARAN) = ?
+      AND TRIM(OPP.CODIGOREPARTIDOR) = ?
+    FETCH FIRST 1 ROW ONLY
+  `;
+  const params = [
     input.ejercicioDocumento,
     input.serieDocumento,
     input.terminalDocumento,
     input.numeroDocumento,
-    input.xdeDocumento || 1,
-    roundMoney(input.importeCobrado),
-    roundMoney(input.importePendiente),
-    input.formaPago,
-    input.idempotencyToken,
-    input.pantallaOrigen,
-    input.operador,
-    input.notas || null,
-  ], false, false);
-
-  const row = firstRow(await queryWithParams(`
-    SELECT ID FROM JAVIER.REPARTIDOR_COBROS
-    WHERE IDEMPOTENCY_TOKEN = ?
-    FETCH FIRST 1 ROW ONLY
-  `, [input.idempotencyToken], false, false));
-
-  return { created: true, id: String(value(row, 'ID', '')) };
+    input.codigoCliente,
+    input.codigoRepartidor,
+  ];
+  const rows = conn
+    ? await conn.query(sql, params)
+    : await queryWithParams(sql, params, false, false);
+  if (!Array.isArray(rows) || rows.length === 0) {
+    const error = new Error('El documento no pertenece al repartidor o cliente indicado');
+    error.code = 'DOCUMENT_NOT_ASSIGNED';
+    throw error;
+  }
 }
 
 async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
-  return withTransaction(async (conn) => {
+  async function replayExisting() {
+    const existingRows = await queryWithParams(`
+      SELECT *
+      FROM JAVIER.REPARTIDOR_COBROS
+      WHERE IDEMPOTENCY_TOKEN = ?
+      FETCH FIRST 1 ROW ONLY
+    `, [cobro.idempotencyToken], false, false);
+    const existing = firstRow(existingRows);
+    assertCobroMatchesInput(existing, delivery, cobro);
+    const deliveryRows = await queryWithParams(`
+      SELECT STATUS
+      FROM JAVIER.DELIVERY_STATUS
+      WHERE ID = ?
+      FETCH FIRST 1 ROW ONLY
+    `, [delivery.itemId], false, false);
+    if (normalizeText(value(firstRow(deliveryRows), 'STATUS')) !== 'ENTREGADO') {
+      const error = new Error(
+        'Token de cobro existente sin entrega confirmada; requiere revision manual',
+      );
+      error.code = 'INCONSISTENT_IDEMPOTENCY';
+      throw error;
+    }
+    return {
+      created: false,
+      idempotent: true,
+      deliveryStatus: 'ENTREGADO',
+      cobroId: String(value(existing, 'ID', '')),
+    };
+  }
+
+  try {
+    return await withTransaction(async (conn) => {
     const tokenRows = await conn.query(`
-      SELECT ID
+      SELECT *
       FROM JAVIER.REPARTIDOR_COBROS
       WHERE IDEMPOTENCY_TOKEN = ?
       FETCH FIRST 1 ROW ONLY
@@ -438,6 +812,7 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
       String(value(existingDelivery, 'STATUS', '') || '').trim() === 'ENTREGADO';
 
     if (tokenRows.length > 0) {
+      assertCobroMatchesInput(tokenRows[0], delivery, cobro);
       if (isDelivered) {
         return {
           created: false,
@@ -457,6 +832,11 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
     if (isDelivered && !delivery.forceUpdate) {
       throw new AlreadyDeliveredError(existingDelivery);
     }
+
+    await validateCobroDocument({
+      ...cobro,
+      codigoRepartidor: cobro.codigoRepartidor || delivery.repartidorId,
+    }, conn);
 
     const lat = toNumber(delivery.latitud);
     const lon = toNumber(delivery.longitud);
@@ -503,6 +883,7 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
         TERMINAL_DOCUMENTO,
         NUMERO_DOCUMENTO,
         XDE_DOCUMENTO,
+        DEX_DOCUMENTO,
         IMPORTE_COBRADO,
         IMPORTE_PENDIENTE,
         FORMA_PAGO,
@@ -510,13 +891,13 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
         PANTALLA_ORIGEN,
         OPERADOR,
         NOTAS
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       cobro.entregaId || delivery.itemId,
       cobro.codigoCliente,
       cobro.nombreCliente || null,
       cobro.codigoRepartidor || repartidorId,
-      cobro.tipoDocumento,
+      normalizeTipoDocumento(cobro.tipoDocumento),
       cobro.origenDocumento || 'B',
       cobro.subempresaDocumento || 'GMP',
       cobro.ejercicioDocumento,
@@ -524,6 +905,7 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
       cobro.terminalDocumento,
       cobro.numeroDocumento,
       cobro.xdeDocumento || 1,
+      cobro.dexDocumento || 1,
       roundMoney(cobro.importeCobrado),
       roundMoney(cobro.importePendiente),
       cobro.formaPago,
@@ -539,18 +921,29 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
       deliveryStatus: delivery.status || 'ENTREGADO',
     };
   });
+  } catch (error) {
+    if (isDuplicateKeyError(error)) {
+      return replayExisting();
+    }
+    throw error;
+  }
 }
 
-async function nextLiquidacionNumber({ subempresa, ejercicio, serie, terminal }) {
-  const row = firstRow(await queryWithParams(`
+async function nextLiquidacionNumber({ conn, subempresa, ejercicio, serie, terminal }) {
+  const sql = `
     SELECT COALESCE(MAX(NUMEROLIQUIDACION), 0) + 1 AS NEXT_NUMERO
     FROM DSEDAC.LQD
     WHERE SUBEMPRESALIQUIDACION = ?
       AND EJERCICIOLIQUIDACION = ?
       AND SERIELIQUIDACION = ?
       AND TERMINALLIQUIDACION = ?
-  `, [subempresa, ejercicio, serie, terminal], false, false));
-  return toInt(value(row, 'NEXT_NUMERO', 1));
+  `;
+  const params = [subempresa, ejercicio, serie, terminal];
+  const rows = conn
+    ? await conn.query(sql, params)
+    : await queryWithParams(sql, params, false, false);
+  const numero = toInt(value(firstRow(rows), 'NEXT_NUMERO', 1));
+  return numero > 0 ? numero : 1;
 }
 
 async function withTransaction(callback) {
@@ -582,27 +975,167 @@ async function withTransaction(callback) {
 }
 
 async function closeLiquidacion(input) {
-  const existing = await findLiquidacionByToken(input.idempotencyToken);
-  if (existing) return { created: false, liquidacion: existing };
+  const existingRow = await findLiquidacionRowByToken(input.idempotencyToken);
+  if (existingRow && Object.keys(existingRow).length > 0) {
+    assertLiquidacionMatchesInput(existingRow, input);
+    return { created: false, liquidacion: mapLiquidacion(existingRow) };
+  }
 
   const { year, month, day } = dateParts(input.date);
   const subempresa = 'GMP';
   const serie = 'A';
   const terminal = toInt(input.repartidorId);
-  const numero = await nextLiquidacionNumber({
-    subempresa,
-    ejercicio: year,
-    serie,
-    terminal,
-  });
-
-  const totals = input.totals;
-  const saldoResultante = roundMoney(
-    totals.totalAIngresar - totals.ingresoBanco
-  );
   const hora = currentHhmmss();
+  let createdLiquidacion = null;
+  let replayedInsideTransaction = false;
 
   await withTransaction(async (conn) => {
+    const existingInsideRow = firstRow(await conn.query(`
+      SELECT
+        OPS.*,
+        LQD.DIALIQUIDACION,
+        LQD.MESLIQUIDACION,
+        LQD.ANOLIQUIDACION
+      FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS OPS
+      LEFT JOIN DSEDAC.LQD LQD
+        ON LQD.IDMARCALIQUIDACION = OPS.IDEMPOTENCY_TOKEN
+      WHERE OPS.IDEMPOTENCY_TOKEN = ?
+      FETCH FIRST 1 ROW ONLY
+    `, [input.idempotencyToken]));
+    if (existingInsideRow && Object.keys(existingInsideRow).length > 0) {
+      assertLiquidacionMatchesInput(existingInsideRow, input);
+      createdLiquidacion = mapLiquidacion(existingInsideRow);
+      replayedInsideTransaction = true;
+      return;
+    }
+
+    try {
+      await conn.query('LOCK TABLE DSEDAC.LQD IN EXCLUSIVE MODE');
+    } catch (lockError) {
+      logger.error(`[REPARTIDOR_FINANZAS] Could not lock DSEDAC.LQD before numbering: ${lockError.message}`);
+      throw lockError;
+    }
+
+    try {
+      await conn.query('LOCK TABLE JAVIER.REPARTIDOR_COBROS IN EXCLUSIVE MODE');
+      await conn.query('LOCK TABLE JAVIER.REPARTIDOR_FINANCIAL_BALANCES IN EXCLUSIVE MODE');
+    } catch (lockError) {
+      logger.error(`[REPARTIDOR_FINANZAS] Could not lock finance tables before closing: ${lockError.message}`);
+      throw lockError;
+    }
+
+    const existingAfterLockRow = firstRow(await conn.query(`
+      SELECT
+        OPS.*,
+        LQD.DIALIQUIDACION,
+        LQD.MESLIQUIDACION,
+        LQD.ANOLIQUIDACION
+      FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS OPS
+      LEFT JOIN DSEDAC.LQD LQD
+        ON LQD.IDMARCALIQUIDACION = OPS.IDEMPOTENCY_TOKEN
+      WHERE OPS.IDEMPOTENCY_TOKEN = ?
+      FETCH FIRST 1 ROW ONLY
+    `, [input.idempotencyToken]));
+    if (existingAfterLockRow && Object.keys(existingAfterLockRow).length > 0) {
+      assertLiquidacionMatchesInput(existingAfterLockRow, input);
+      createdLiquidacion = mapLiquidacion(existingAfterLockRow);
+      replayedInsideTransaction = true;
+      return;
+    }
+
+    const orphanLqd = firstRow(await conn.query(`
+      SELECT IDMARCALIQUIDACION
+      FROM DSEDAC.LQD
+      WHERE IDMARCALIQUIDACION = ?
+      FETCH FIRST 1 ROW ONLY
+    `, [input.idempotencyToken]));
+    if (orphanLqd && Object.keys(orphanLqd).length > 0) {
+      throw new IdempotencyConflictError(
+        'Existe una liquidacion ERP con este token pero sin ledger local; requiere revision manual',
+      );
+    }
+
+    const existingSameDay = firstRow(await conn.query(`
+      SELECT IDMARCALIQUIDACION
+      FROM DSEDAC.LQD
+      WHERE SUBEMPRESALIQUIDACION = ?
+        AND EJERCICIOLIQUIDACION = ?
+        AND SERIELIQUIDACION = ?
+        AND TERMINALLIQUIDACION = ?
+        AND DIALIQUIDACION = ?
+        AND MESLIQUIDACION = ?
+        AND ANOLIQUIDACION = ?
+      FETCH FIRST 1 ROW ONLY
+    `, [subempresa, year, serie, terminal, day, month, year]));
+    const existingDailyToken = normalizeText(value(existingSameDay, 'IDMARCALIQUIDACION'));
+    if (existingDailyToken && existingDailyToken !== input.idempotencyToken) {
+      throw new DuplicateLiquidacionError(
+        `Ya existe una liquidacion para el repartidor ${input.repartidorId} en ${input.date}`,
+      );
+    }
+
+    const numero = await nextLiquidacionNumber({
+      conn,
+      subempresa,
+      ejercicio: year,
+      serie,
+      terminal,
+    });
+    const [startAt, endAt] = dayBounds(input.date);
+
+    const totalsRow = firstRow(await conn.query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN UPPER(TRIM(FORMA_PAGO)) IN ('EFECTIVO', 'E', 'CONTADO') THEN IMPORTE_COBRADO ELSE 0 END), 0) AS TOTAL_EFECTIVO,
+        COALESCE(SUM(CASE WHEN UPPER(TRIM(FORMA_PAGO)) IN ('CHEQUE', 'TALON', 'TALON BANCARIO') THEN IMPORTE_COBRADO ELSE 0 END), 0) AS TOTAL_CHEQUES,
+        COALESCE(SUM(CASE WHEN UPPER(TRIM(FORMA_PAGO)) IN ('TARJETA', 'TPV', 'BIZUM') THEN IMPORTE_COBRADO ELSE 0 END), 0) AS TOTAL_TARJETA,
+        COALESCE(SUM(CASE WHEN UPPER(TRIM(FORMA_PAGO)) IN ('POSTDATADO', 'POSTDATADOS') THEN IMPORTE_COBRADO ELSE 0 END), 0) AS TOTAL_POSTDATADOS,
+        COALESCE(SUM(IMPORTE_COBRADO), 0) AS TOTAL_COBROS_DIA,
+        COUNT(*) AS COBROS_COUNT
+      FROM JAVIER.REPARTIDOR_COBROS
+      WHERE TRIM(CODIGO_REPARTIDOR) = ?
+        AND FECHA_COBRO >= ?
+        AND FECHA_COBRO < ?
+        AND COALESCE(LIQUIDADO_SN, 'N') <> 'S'
+    `, [input.repartidorId, startAt, endAt]));
+
+    const cobroRows = await conn.query(`
+      SELECT ID
+      FROM JAVIER.REPARTIDOR_COBROS
+      WHERE TRIM(CODIGO_REPARTIDOR) = ?
+        AND FECHA_COBRO >= ?
+        AND FECHA_COBRO < ?
+        AND COALESCE(LIQUIDADO_SN, 'N') <> 'S'
+      ORDER BY FECHA_COBRO, ID
+    `, [input.repartidorId, startAt, endAt]);
+
+    const balanceRow = firstRow(await conn.query(`
+      SELECT SALDO_PENDIENTE
+      FROM JAVIER.REPARTIDOR_FINANCIAL_BALANCES
+      WHERE TRIM(CODIGO_REPARTIDOR) = ?
+      FETCH FIRST 1 ROW ONLY
+    `, [input.repartidorId]));
+
+    const gastos = roundMoney(input.totals.gastos);
+    const totals = {
+      totalEfectivo: roundMoney(value(totalsRow, 'TOTAL_EFECTIVO')),
+      totalCheques: roundMoney(value(totalsRow, 'TOTAL_CHEQUES')),
+      totalTarjeta: roundMoney(value(totalsRow, 'TOTAL_TARJETA')),
+      totalPostdatados: roundMoney(value(totalsRow, 'TOTAL_POSTDATADOS')),
+      saldoActual: roundMoney(value(balanceRow, 'SALDO_PENDIENTE')),
+      totalCobrosDia: roundMoney(value(totalsRow, 'TOTAL_COBROS_DIA')),
+      gastos,
+      totalAIngresar: 0,
+      ingresoBanco: roundMoney(input.totals.ingresoBanco),
+      efectivo2: roundMoney(input.totals.efectivo2),
+      entregado2: roundMoney(input.totals.entregado2),
+    };
+    totals.totalAIngresar = roundMoney(
+      totals.saldoActual + totals.totalCobrosDia - totals.gastos
+    );
+    const saldoResultante = roundMoney(
+      totals.totalAIngresar - totals.ingresoBanco
+    );
+
     await conn.query(`
       INSERT INTO DSEDAC.LQD (
         SUBEMPRESALIQUIDACION,
@@ -729,18 +1262,23 @@ async function closeLiquidacion(input) {
         VALUES (V.CODIGO_REPARTIDOR, V.SALDO_PENDIENTE, V.UPDATED_BY)
     `, [input.repartidorId, saldoResultante, input.createdBy || 'unknown']);
 
-    await conn.query(`
-      UPDATE JAVIER.REPARTIDOR_COBROS
-      SET LIQUIDADO_SN = 'S',
-          LIQUIDACION_TOKEN = ?
-      WHERE TRIM(CODIGO_REPARTIDOR) = ?
-        AND DATE(FECHA_COBRO) = DATE(?)
-        AND COALESCE(LIQUIDADO_SN, 'N') <> 'S'
-    `, [input.idempotencyToken, input.repartidorId, input.date]);
+    if (cobroRows.length > 0) {
+      const placeholders = cobroRows.map(() => '?').join(', ');
+      await conn.query(`
+        UPDATE JAVIER.REPARTIDOR_COBROS
+        SET LIQUIDADO_SN = 'S',
+            LIQUIDACION_TOKEN = ?
+        WHERE ID IN (${placeholders})
+      `, [
+        input.idempotencyToken,
+        ...cobroRows.map((row) => value(row, 'ID')),
+      ]);
+    }
   });
 
-  const liquidacion = await findLiquidacionByToken(input.idempotencyToken);
-  return { created: true, liquidacion };
+  const liquidacion =
+    createdLiquidacion || await findLiquidacionByToken(input.idempotencyToken);
+  return { created: !replayedInsideTransaction, liquidacion };
 }
 
 async function getCommissionTiers() {
@@ -852,7 +1390,49 @@ async function saveCommissionTiers({ tiers, updatedBy }) {
   return getCommissionTiers();
 }
 
-async function deleteTestData(idempotencyToken) {
+async function deleteTestData(idempotencyToken, options = {}) {
+  const opRows = await queryWithParams(`
+    SELECT CODIGO_REPARTIDOR, SALDO_ANTERIOR, CREATED_AT
+    FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS
+    WHERE IDEMPOTENCY_TOKEN = ?
+    FETCH FIRST 1 ROW ONLY
+  `, [idempotencyToken], false, false);
+  const opRow = firstRow(opRows);
+
+  const cobroRows = await queryWithParams(`
+    SELECT ENTREGA_APP_ID, LIQUIDACION_TOKEN
+    FROM JAVIER.REPARTIDOR_COBROS
+    WHERE IDEMPOTENCY_TOKEN = ?
+  `, [idempotencyToken], false, false);
+
+  const liquidatedCobro = cobroRows.find((row) =>
+    normalizeText(value(row, 'LIQUIDACION_TOKEN')).length > 0
+  );
+  if (liquidatedCobro && Object.keys(opRow).length === 0) {
+    throw new Error(
+      'Cleanup bloqueado: el cobro ya pertenece a una liquidacion. Borra primero la liquidacion de prueba.',
+    );
+  }
+
+  if (Object.keys(opRow).length > 0) {
+    const newerRows = await queryWithParams(`
+      SELECT ID
+      FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS
+      WHERE TRIM(CODIGO_REPARTIDOR) = ?
+        AND CREATED_AT > ?
+        AND STATUS = 'CLOSED'
+      FETCH FIRST 1 ROW ONLY
+    `, [
+      normalizeText(value(opRow, 'CODIGO_REPARTIDOR')),
+      value(opRow, 'CREATED_AT'),
+    ], false, false);
+    if (newerRows.length > 0) {
+      throw new Error(
+        'Cleanup bloqueado: existen liquidaciones posteriores para este repartidor. No se restaura saldo de una prueba antigua.',
+      );
+    }
+  }
+
   await queryWithParams(`
     DELETE FROM JAVIER.REPARTIDOR_LIQUIDACION_EMAILS
     WHERE LIQUIDACION_OP_ID IN (
@@ -871,6 +1451,47 @@ async function deleteTestData(idempotencyToken) {
         LIQUIDACION_TOKEN = NULL
     WHERE LIQUIDACION_TOKEN = ?
   `, [idempotencyToken], false, false);
+
+  if (Object.keys(opRow).length > 0) {
+    await queryWithParams(`
+      MERGE INTO JAVIER.REPARTIDOR_FINANCIAL_BALANCES B
+      USING (VALUES (?, ?, 'cleanup')) AS V(CODIGO_REPARTIDOR, SALDO_PENDIENTE, UPDATED_BY)
+        ON B.CODIGO_REPARTIDOR = V.CODIGO_REPARTIDOR
+      WHEN MATCHED THEN
+        UPDATE SET SALDO_PENDIENTE = V.SALDO_PENDIENTE,
+                   UPDATED_BY = V.UPDATED_BY,
+                   UPDATED_AT = CURRENT_TIMESTAMP
+      WHEN NOT MATCHED THEN
+        INSERT (CODIGO_REPARTIDOR, SALDO_PENDIENTE, UPDATED_BY)
+        VALUES (V.CODIGO_REPARTIDOR, V.SALDO_PENDIENTE, V.UPDATED_BY)
+    `, [
+      value(opRow, 'CODIGO_REPARTIDOR'),
+      roundMoney(value(opRow, 'SALDO_ANTERIOR')),
+    ], false, false);
+  }
+
+  await queryWithParams(`
+    DELETE FROM JAVIER.REPARTIDOR_COBROS
+    WHERE IDEMPOTENCY_TOKEN = ?
+  `, [idempotencyToken], false, false);
+
+  if (options.deleteDeliveryStatus === true) {
+    const deliveryIds = new Set(
+      cobroRows
+        .map((row) => String(value(row, 'ENTREGA_APP_ID', '') || '').trim())
+        .filter(Boolean),
+    );
+    if (options.deliveryId) {
+      deliveryIds.add(String(options.deliveryId).trim());
+    }
+
+    for (const deliveryId of deliveryIds) {
+      await queryWithParams(`
+        DELETE FROM JAVIER.DELIVERY_STATUS
+        WHERE ID = ?
+      `, [deliveryId], false, false);
+    }
+  }
 }
 
 function simplePdfBuffer(title, lines) {
