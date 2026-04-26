@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "skills": {
+    "caveman": {
+      "source": "juliusbrussee/caveman",
+      "sourceType": "github",
+      "computedHash": "ac5fb2168c653fa5d660b5f510a4688d210717c7e10eb8fd91ef0d9b59f4e96e"
+    },
+    "caveman-commit": {
+      "source": "juliusbrussee/caveman",
+      "sourceType": "github",
+      "computedHash": "89fd592e14079fc99a3ccd4dfca5d609bac6a0252e4ec4e3939f1497e53c4cbe"
+    },
+    "caveman-compress": {
+      "source": "juliusbrussee/caveman",
+      "sourceType": "github",
+      "computedHash": "4f3cad023d7153f247fa6d9fda7b39477ee9c0c08054b8740c9a9dd9ec26aed7"
+    },
+    "caveman-help": {
+      "source": "juliusbrussee/caveman",
+      "sourceType": "github",
+      "computedHash": "3468ac41877d388fc19d902ed9d442cd36609bd9e8d16205c41b362f481ea731"
+    },
+    "caveman-review": {
+      "source": "juliusbrussee/caveman",
+      "sourceType": "github",
+      "computedHash": "368a26f2b079ffe0d584f48006524f65cf997cb9369411aa8c6ead216dee22eb"
+    },
+    "flowstudio-power-automate-debug": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "computedHash": "25e174d0bac74af212514c6f72a46637fedeb3d7c7e76340eb83a0a4b0437e7b"
+    },
+    "flowstudio-power-automate-governance": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "computedHash": "1f709cf3106f7883169b243e413be2e158e2e88b7f78914ceb9d19f4ee31c96e"
+    },
+    "flowstudio-power-automate-mcp": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "computedHash": "b3929990a9d5639e32179aa0d89e442b3be247173820c442b3db52bcbe75389c"
+    }
+  }
+}

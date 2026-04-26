@@ -7,6 +7,14 @@
 - **Database**: DB2 via ODBC (DSN='GMP'), custom tables in schema JAVIER
 - **Roles**: JEFE_VENTAS, COMERCIAL, REPARTIDOR
 
+## Caveman Mode
+
+- Caveman skills installed: `caveman`, `caveman-commit`, `caveman-review`, `caveman-compress`, `caveman-help`
+- Default mode: **full** — drop articles, filler, pleasantries, hedging. Fragments OK. Short synonyms.
+- Modes: `full`, `lite`, `ultra`, `wenyan-lite`, `wenyan-full`, `wenyan-ultra`
+- Disable: "/caveman off" or "stop caveman"
+- Config: `~/.config/caveman/config.json` → `{ "defaultMode": "full" }`
+
 ## Behavioral Rules (Always Enforced)
 
 - Do what has been asked; nothing more, nothing less
@@ -180,6 +188,45 @@ Core: `coder`, `reviewer`, `tester`, `planner`, `researcher`
 Specialized: `security-architect`, `security-auditor`, `performance-engineer`
 Swarm: `hierarchical-coordinator`, `mesh-coordinator`
 GitHub: `pr-manager`, `code-review-swarm`, `release-manager`
+
+## Installed Skills (`.agents/skills/`)
+
+### Caveman Suite
+- `caveman`, `caveman-commit`, `caveman-review`, `caveman-compress`, `caveman-help`
+- Default mode: **full** — drop articles, filler, pleasantries, hedging
+- Config: `~/.config/caveman/config.json` → `{ "defaultMode": "full" }`
+
+### Power Automate MCP (FlowStudio)
+- `flowstudio-power-automate-mcp` — CRUD flows, runs, triggers via MCP
+- `flowstudio-power-automate-debug` — Diagnose failing flows step-by-step
+- `flowstudio-power-automate-governance` — Compliance, tagging, archiving at scale
+- Requires: FlowStudio subscription + JWT token at https://mcp.flowstudio.app
+- **Python helper** (stdlib only, no pip needed):
+
+```python
+import json, urllib.request
+
+TOKEN = "<YOUR_JWT>"
+MCP = "https://mcp.flowstudio.app/mcp"
+
+def mcp(tool, args):
+    payload = {"jsonrpc": "2.0", "method": "tools/call", "id": 1,
+    "params": {"name": tool, "arguments": args}}
+    req = urllib.request.Request(MCP, data=json.dumps(payload).encode(),
+        headers={"x-api-key": TOKEN, "Content-Type": "application/json"})
+    raw = json.loads(urllib.request.urlopen(req, timeout=120).read())
+    return json.loads(raw["result"]["content"][0]["text"])
+```
+
+- **Node.js equivalent**: native `fetch` (Node 18+), same JSON-RPC pattern
+
+### Claude-Mem
+- Plugin `thedotmack/claude-mem` v12.4.7 — persistent memory compression
+- Hook-based: SessionStart, PostToolUse, SessionEnd → SQLite + Chroma FTS
+- MCP tools: `search`, `timeline`, `get_observations` for memory retrieval
+- Web viewer: http://localhost:37777
+- Config: `~/.claude-mem/settings.json` (auto-created on first run)
+- Active for Claude Code AND OpenCode via `npx claude-mem install --ide opencode`
 
 ## MCP Servers
 
