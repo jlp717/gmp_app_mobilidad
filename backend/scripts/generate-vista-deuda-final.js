@@ -36,6 +36,7 @@ async function getColumns(conn, table) {
   lines.push('-- ============================================================================');
   lines.push('-- VISTA DE DEUDA COMPLETA — Esquema JAVIER');
   lines.push('-- Ancla: DSEDAC.CVC (1 fila por registro de deuda/vencimiento)');
+  lines.push('-- FILTRO: CVC.IMPORTEPENDIENTE <> 0 AND CVC.ANULADOSN <> \'S\'');
   lines.push('-- JOINs: DSEDAC.CLI, CLC, CLIX, CRUT, VDD');
   lines.push('-- Tablas FISICAS (PF) — archivos logicos (CLIL1,CLCL1,VDDL1) no sirven en vistas SQL');
   lines.push('-- Columnas duplicadas: prefijo de tabla origen (CLI_, CLC_, CLIX_, RUT_, VDD_)');
@@ -118,7 +119,9 @@ async function getColumns(conn, table) {
   lines.push('  ON TRIM(CRUT.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)');
   lines.push('  AND CRUT.SECUENCIA = 1');
   lines.push('LEFT JOIN DSEDAC.VDD VDD');
-  lines.push('  ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(CVC.CODIGOVENDEDOR);');
+  lines.push('  ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(CVC.CODIGOVENDEDOR)');
+  lines.push('WHERE CVC.IMPORTEPENDIENTE <> 0');
+  lines.push('  AND CVC.ANULADOSN <> \'S\';');
 
   const sql = lines.join('\n');
 

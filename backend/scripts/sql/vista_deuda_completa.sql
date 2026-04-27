@@ -1,12 +1,13 @@
 -- ============================================================================
 -- VISTA DE DEUDA COMPLETA — Esquema JAVIER
 -- Ancla: DSEDAC.CVC (1 fila por registro de deuda/vencimiento)
+-- FILTRO: CVC.IMPORTEPENDIENTE <> 0 AND CVC.ANULADOSN <> 'S'
 -- JOINs: DSEDAC.CLI, CLC, CLIX, CRUT, VDD
 -- Tablas FISICAS (PF) — archivos logicos (CLIL1,CLCL1,VDDL1) no sirven en vistas SQL
 -- Columnas duplicadas: prefijo de tabla origen (CLI_, CLC_, CLIX_, RUT_, VDD_)
 -- CRUT filtrado por SECUENCIA = 1
 -- ID y MARCAACTUALIZACION omitidos
--- Generado: 2026-04-27T14:07:13.753Z
+-- Generado: 2026-04-27T20:19:40.085Z
 -- ============================================================================
 
 CREATE VIEW JAVIER.VISTA_DEUDA_COMPLETA AS
@@ -356,4 +357,6 @@ LEFT JOIN DSEDAC.CRUT CRUT
   ON TRIM(CRUT.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
   AND CRUT.SECUENCIA = 1
 LEFT JOIN DSEDAC.VDD VDD
-  ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(CVC.CODIGOVENDEDOR);
+  ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(CVC.CODIGOVENDEDOR)
+WHERE CVC.IMPORTEPENDIENTE <> 0
+  AND CVC.ANULADOSN <> 'S';
