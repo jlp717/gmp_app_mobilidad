@@ -16,7 +16,7 @@ const { TTL } = require('../services/redis-cache');
 const logger = require('../middleware/logger');
 const { sanitizeCodeListForParams, sanitizeForSQL } = require('../utils/common');
 const { generateInvoicePDF } = require('../app/services/pdfService');
-const { isDeliveryStatusAvailable } = require('../utils/delivery-status-check');
+const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema, getDeliveryStatusJoin, getDeliveryStatusColumns } = require('../utils/delivery-status-check');
 const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
 const { verifyToken } = require('../middleware/auth');
 const { CircuitBreaker: RepartidorCircuitBreaker } = require('../services/circuit-breaker');
@@ -319,17 +319,15 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
         const yearParam = req.query.year;
         const clientCode = clientId;
 
-        // Conditionally include DELIVERY_STATUS join
+        // Conditionally include DELIVERY_STATUS join (auto-detects OLD vs NEW schema)
+        const dsJoin = getDeliveryStatusJoin('CPC', 'DS');
+        const dsCols = getDeliveryStatusColumns('DS');
         const dsAvail = isDeliveryStatusAvailable();
-        const dsJoin = dsAvail
-            ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS 
-                ON DS.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
-                AND DS.SERIEALBARAN = CPC.SERIEALBARAN
-                AND DS.TERMINALALBARAN = CPC.TERMINALALBARAN
-                AND DS.NUMEROALBARAN = CPC.NUMEROALBARAN`
-            : '';
+
         const dsStatusCol = dsAvail ? 'DS.STATUS as DELIVERY_STATUS' : "CAST(NULL AS VARCHAR(20)) as DELIVERY_STATUS";
-        const dsUpdatedCol = dsAvail ? 'DS.UPDATED_AT as DELIVERY_UPDATED_AT' : "CAST(NULL AS TIMESTAMP) as DELIVERY_UPDATED_AT";
+        const dsUpdatedCol = dsAvail
+            ? (isDeliveryStatusNewSchema() ? 'DS.UPDATED_AT as DELIVERY_UPDATED_AT' : 'DS.FECHAACTUALIZACION as DELIVERY_UPDATED_AT')
+            : "CAST(NULL AS TIMESTAMP) as DELIVERY_UPDATED_AT";
         const dsFirmaCol = dsAvail ? 'DS.FIRMA_PATH' : "CAST(NULL AS VARCHAR(255)) as FIRMA_PATH";
         const dsObsCol = dsAvail ? 'DS.OBSERVACIONES' : "CAST(NULL AS VARCHAR(512)) as OBSERVACIONES";
         const dsRepartidorCol = dsAvail ? 'DS.REPARTIDOR_ID as DELIVERY_REPARTIDOR' : "CAST(NULL AS VARCHAR(20)) as DELIVERY_REPARTIDOR";
@@ -1181,14 +1179,7 @@ router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, r
 
         // Subquery deduplicates by unique albaran key FIRST, then outer query aggregates by day.
         // This prevents inflated counts when multiple CPC rows exist per albaran.
-        const dsAvail = isDeliveryStatusAvailable();
-        const dsJoinSub = dsAvail
-            ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS 
-                ON DS.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
-                AND DS.SERIEALBARAN = CPC.SERIEALBARAN
-                AND DS.TERMINALALBARAN = CPC.TERMINALALBARAN
-                AND DS.NUMEROALBARAN = CPC.NUMEROALBARAN`
-            : '';
+        const dsJoinSub = getDeliveryStatusJoin('CPC', 'DS');
 
         const sql = `
             SELECT DIA,
@@ -1859,6 +1850,7 @@ router.get('/rutero/week/:repartidorId', verifyToken, async (req, res) => {
         // Query to get daily aggregates
         // ENTREGADOS: ERP-confirmed (CONFORMADOSN) + app-confirmed (DELIVERY_STATUS) + past dates
         const dsWeekAvail = isDeliveryStatusAvailable();
+        const dsWeekJoin = getDeliveryStatusJoin('CPC', 'DS');
         const sql = `
             SELECT
                 OPP.DIAREPARTO as DIA,
@@ -1875,11 +1867,7 @@ router.get('/rutero/week/:repartidorId', verifyToken, async (req, res) => {
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-            ${dsWeekAvail ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS
-                ON DS.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
-                AND DS.SERIEALBARAN = CPC.SERIEALBARAN
-                AND DS.TERMINALALBARAN = CPC.TERMINALALBARAN
-                AND DS.NUMEROALBARAN = CPC.NUMEROALBARAN` : ''}
+            ${dsWeekAvail ? dsWeekJoin : ''}
             WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO)
                 BETWEEN ? AND ?
               AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
@@ -1955,6 +1943,7 @@ router.get('/history/:repartidorId', verifyToken, async (req, res) => {
         logger.info(`[REPARTIDOR] History for ${repartidorId} from ${startInt} to ${endInt}`);
 
         const dsHistAvail = isDeliveryStatusAvailable();
+        const dsHistJoin = getDeliveryStatusJoin('CPC', 'DS');
         let sql = `
             SELECT 
                 CPC.ANODOCUMENTO || '-' || RIGHT('0' || CPC.MESDOCUMENTO, 2) || '-' || RIGHT('0' || CPC.DIADOCUMENTO, 2) as FECHA,
@@ -1979,11 +1968,7 @@ router.get('/history/:repartidorId', verifyToken, async (req, res) => {
                 AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
             LEFT JOIN DSEDAC.CLI CLI 
                 ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-            ${dsHistAvail ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS 
-                ON DS.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
-                AND DS.SERIEALBARAN = CPC.SERIEALBARAN
-                AND DS.TERMINALALBARAN = CPC.TERMINALALBARAN
-                AND DS.NUMEROALBARAN = CPC.NUMEROALBARAN` : ''}
+            ${dsHistAvail ? dsHistJoin : ''}
             WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ? AND ?
               AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
         `;

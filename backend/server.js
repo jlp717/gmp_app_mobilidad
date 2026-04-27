@@ -36,7 +36,7 @@ const {
 const { loadMetadataCache } = require('./services/metadataCache');
 const { preloadCache } = require('./services/cache-preloader');
 const { MIN_YEAR, getCurrentDate } = require('./utils/common');
-const { setDeliveryStatusAvailable } = require('./utils/delivery-status-check');
+const { setDeliveryStatusAvailable, initSchemaCheck } = require('./utils/delivery-status-check');
 
 // ==================== OPTIMIZATION IMPORTS ====================
 const { initCache, getCacheStats } = require('./services/redis-cache');
@@ -523,6 +523,13 @@ async function startServer() {
     }
   } catch (e) {
     logger.warn(`⚠️ DELIVERY_STATUS setup skipped: ${e.message}`);
+  }
+
+  // Detect DELIVERY_STATUS schema version (OLD vs NEW migration 024)
+  try {
+    await initSchemaCheck();
+  } catch (e) {
+    logger.warn(`⚠️ DELIVERY_STATUS schema check skipped: ${e.message}`);
   }
 
   // ─── PHASE 2: Create/verify DB schema (direct connections, no pool recreation) ───

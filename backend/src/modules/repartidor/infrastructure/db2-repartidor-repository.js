@@ -4,6 +4,7 @@
 const { RepartidorRepository } = require('../domain/repartidor-repository');
 const { DeliveryRoute, DeliveryItem } = require('../domain/delivery');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
+const { getDeliveryStatusJoin, isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../../../../utils/delivery-status-check');
 
 class Db2RepartidorRepository extends RepartidorRepository {
   constructor(dbPool) {
@@ -67,16 +68,14 @@ class Db2RepartidorRepository extends RepartidorRepository {
         OPC.CODIGOCLIENTEALBARAN AS CLIENTE,
         COALESCE(CLI.NOMBRECLIENTE, OPC.CODIGOCLIENTEALBARAN) AS NOMBRE_CLIENTE,
         OPC.IMPORTETOTAL AS TOTAL,
-        COALESCE(DS.STATUS, 'PENDIENTE') AS ESTADO,
-        DS.FIRMA_PATH AS FIRMA
+        ${isDeliveryStatusAvailable() ? "COALESCE(DS.STATUS, 'PENDIENTE') AS ESTADO" : "CAST('PENDIENTE' AS VARCHAR(20)) AS ESTADO"},
+        ${isDeliveryStatusAvailable() ? 'DS.FIRMA_PATH AS FIRMA' : 'CAST(NULL AS VARCHAR(255)) AS FIRMA'}
       FROM DSEDAC.CPC OPC
       INNER JOIN DSEDAC.OPP OP 
         ON OP.NUMEROORDENPREPARACION = OPC.NUMEROORDENPREPARACION
         AND OP.EJERCICIOORDENPREPARACION = OPC.EJERCICIOORDENPREPARACION
       LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(OPC.CODIGOCLIENTEALBARAN)
-      LEFT JOIN JAVIER.DELIVERY_STATUS DS 
-        ON DS.EJERCICIOORDENPREPARACION = OPC.EJERCICIOORDENPREPARACION
-        AND DS.NUMEROORDENPREPARACION = OPC.NUMEROORDENPREPARACION
+      ${isDeliveryStatusAvailable() ? getDeliveryStatusJoin('OPC', 'DS') : ''}
       WHERE OP.CODIGOREPARTIDOR = ?
         AND OPC.DIADOCUMENTO = ?
         AND OPC.MESDOCUMENTO = ?
@@ -103,12 +102,10 @@ class Db2RepartidorRepository extends RepartidorRepository {
         OPC.CODIGOCLIENTEALBARAN AS CLIENTE,
         COALESCE(CLI.NOMBRECLIENTE, OPC.CODIGOCLIENTEALBARAN) AS NOMBRE_CLIENTE,
         OPC.IMPORTETOTAL AS TOTAL,
-        COALESCE(DS.STATUS, 'PENDIENTE') AS ESTADO
+        ${isDeliveryStatusAvailable() ? "COALESCE(DS.STATUS, 'PENDIENTE') AS ESTADO" : "CAST('PENDIENTE' AS VARCHAR(20)) AS ESTADO"}
       FROM DSEDAC.CPC OPC
       LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(OPC.CODIGOCLIENTEALBARAN)
-      LEFT JOIN JAVIER.DELIVERY_STATUS DS 
-        ON DS.EJERCICIOORDENPREPARACION = OPC.EJERCICIOORDENPREPARACION
-        AND DS.NUMEROORDENPREPARACION = OPC.NUMEROORDENPREPARACION
+      ${isDeliveryStatusAvailable() ? getDeliveryStatusJoin('OPC', 'DS') : ''}
       WHERE OPC.NUMEROORDENPREPARACION = ?
     `;
 

@@ -5,6 +5,66 @@ const { queryWithParams, getPool, initDb } = require('../config/db');
 const logger = require('../middleware/logger');
 const { sendEmailWithPdf } = require('./emailPdfService');
 
+// Schema detection for REPARTIDOR_COBROS (migration 024 adds ANOCOBRO/MESCOBRO/DIACOBRO)
+let _cobrosSchemaChecked = false;
+let _cobrosHasCollectionDate = false;
+
+async function getCobrosSchemaInfo() {
+  if (_cobrosSchemaChecked) return _cobrosHasCollectionDate;
+  _cobrosSchemaChecked = true;
+  try {
+    const rows = await queryWithParams(`
+      SELECT COLUMN_NAME 
+      FROM QSYS2.SYSCOLUMNS 
+      WHERE TABLE_SCHEMA = 'JAVIER' 
+        AND TABLE_NAME = 'REPARTIDOR_COBROS' 
+        AND COLUMN_NAME = 'ANOCOBRO'
+      FETCH FIRST 1 ROW ONLY
+    `, [], false, false);
+    _cobrosHasCollectionDate = rows && rows.length > 0;
+    logger.info(`[REPARTIDOR_COBROS] Schema: ${_cobrosHasCollectionDate ? 'NEW (has ANOCOBRO/MESCOBRO/DIACOBRO)' : 'OLD (ANOVENCIMIENTO only)'}`);
+  } catch (e) {
+    _cobrosHasCollectionDate = false;
+    logger.warn(`[REPARTIDOR_COBROS] Schema check failed, assuming OLD: ${e.message}`);
+  }
+  return _cobrosHasCollectionDate;
+}
+
+// Helper: returns date filter expression for REPARTIDOR_COBROS
+function cobrosDateFilterColumn() {
+  return _cobrosHasCollectionDate
+    ? 'ANOCOBRO * 10000 + MESCOBRO * 100 + DIACOBRO'
+    : 'ANOVENCIMIENTO * 10000 + MESVENCIMIENTO * 100 + DIAVENCIMIENTO';
+}
+
+// Helper: returns date columns for SELECT from REPARTIDOR_COBROS
+function cobrosDateSelectColumns() {
+  return _cobrosHasCollectionDate
+    ? 'RC.DIACOBRO, RC.MESCOBRO, RC.ANOCOBRO'
+    : 'RC.DIAVENCIMIENTO, RC.MESVENCIMIENTO, RC.ANOVENCIMIENTO';
+}
+
+// Helper: returns ORDER BY for date columns
+function cobrosDateOrderBy() {
+  return _cobrosHasCollectionDate
+    ? 'RC.ANOCOBRO, RC.MESCOBRO, RC.DIACOBRO'
+    : 'RC.ANOVENCIMIENTO, RC.MESVENCIMIENTO, RC.DIAVENCIMIENTO';
+}
+
+// Helper: returns INSERT columns for collection date
+function cobrosInsertDateColumns() {
+  return _cobrosHasCollectionDate
+    ? 'DIACOBRO, MESCOBRO, ANOCOBRO'
+    : '';
+}
+
+// Helper: returns INSERT placeholders count for collection date
+function cobrosInsertDateValues() {
+  return _cobrosHasCollectionDate
+    ? '?, ?, ?'
+    : '';
+}
+
 const INTERNAL_LIQUIDATION_RECIPIENTS = [
   'carmen@mari-pepa.com',
   'marisol@mari-pepa.com',
@@ -414,7 +474,12 @@ async function findLiquidacionByToken(idempotencyToken) {
 }
 
 async function getDailySummary({ repartidorId, date }) {
+  await getCobrosSchemaInfo();
   const dateYmd = compactDate(date);
+  const dateCol = cobrosDateFilterColumn();
+  const selectCols = cobrosDateSelectColumns();
+  const orderBy = cobrosDateOrderBy();
+
   const totalsRows = await queryWithParams(`
     SELECT
       COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('EFECTIVO', 'E', 'CONTADO') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_EFECTIVO,
@@ -425,7 +490,7 @@ async function getDailySummary({ repartidorId, date }) {
       COUNT(*) AS COBROS_COUNT
     FROM JAVIER.REPARTIDOR_COBROS
     WHERE TRIM(CODIGOVENDEDOR) = ?
-      AND ANOCOBRO * 10000 + MESCOBRO * 100 + DIACOBRO = ?
+      AND ${dateCol} = ?
       AND COALESCE(LIQUIDADO_SN, 'N') <> 'S'
   `, [repartidorId, dateYmd], false, false);
 
@@ -439,9 +504,7 @@ async function getDailySummary({ repartidorId, date }) {
   const cobroRows = await queryWithParams(`
     SELECT
       RC.ID,
-      RC.DIACOBRO,
-      RC.MESCOBRO,
-      RC.ANOCOBRO,
+      ${selectCols},
       RC.CODIGOCLIENTEALBARAN,
       TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), TRIM(CLI.NOMBRECLIENTE))) AS NOMBRE_CLIENTE,
       RC.CODIGOFORMAPAGO,
@@ -457,9 +520,9 @@ async function getDailySummary({ repartidorId, date }) {
     FROM JAVIER.REPARTIDOR_COBROS RC
     LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(RC.CODIGOCLIENTEALBARAN)
     WHERE TRIM(RC.CODIGOVENDEDOR) = ?
-      AND RC.ANOCOBRO * 10000 + RC.MESCOBRO * 100 + RC.DIACOBRO = ?
+      AND ${dateCol} = ?
       AND COALESCE(RC.LIQUIDADO_SN, 'N') <> 'S'
-    ORDER BY RC.ANOCOBRO, RC.MESCOBRO, RC.DIACOBRO, RC.ID
+    ORDER BY ${orderBy}, RC.ID
   `, [repartidorId, dateYmd], false, false);
 
   const totals = firstRow(totalsRows);
@@ -690,6 +753,35 @@ async function registerCobro(input) {
       }
 
       const now = new Date();
+      await getCobrosSchemaInfo();
+      const hasCollectionDate = _cobrosHasCollectionDate;
+      const dateCols = hasCollectionDate ? ', DIACOBRO, MESCOBRO, ANOCOBRO' : '';
+      const dateVals = hasCollectionDate ? ', ?, ?, ?' : '';
+      const dateParams = hasCollectionDate ? [now.getDate(), now.getMonth() + 1, now.getFullYear()] : [];
+
+      const allParams = [
+        input.entregaId || null,
+        input.codigoCliente,
+        input.codigoRepartidor,
+        normalizeTipoDocumento(input.tipoDocumento),
+        input.origenDocumento || 'B',
+        input.subempresaDocumento || 'GMP',
+        input.ejercicioDocumento,
+        input.serieDocumento,
+        input.terminalDocumento,
+        input.numeroDocumento,
+        input.xdeDocumento || 1,
+        input.dexDocumento || 1,
+        roundMoney(input.importeCobrado),
+        roundMoney(input.importePendiente),
+        input.formaPago,
+        input.idempotencyToken,
+        input.pantallaOrigen,
+        input.operador,
+        input.notas || null,
+        ...dateParams,
+      ];
+
       await conn.query(`
         INSERT INTO JAVIER.REPARTIDOR_COBROS (
           ENTREGA_APP_ID,
@@ -710,35 +802,10 @@ async function registerCobro(input) {
           IDEMPOTENCY_TOKEN,
           PANTALLA_ORIGEN,
           OPERADOR,
-          OBSERVACIONES,
-          DIACOBRO,
-          MESCOBRO,
-          ANOCOBRO
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        input.entregaId || null,
-        input.codigoCliente,
-        input.codigoRepartidor,
-        normalizeTipoDocumento(input.tipoDocumento),
-        input.origenDocumento || 'B',
-        input.subempresaDocumento || 'GMP',
-        input.ejercicioDocumento,
-        input.serieDocumento,
-        input.terminalDocumento,
-        input.numeroDocumento,
-        input.xdeDocumento || 1,
-        input.dexDocumento || 1,
-        roundMoney(input.importeCobrado),
-        roundMoney(input.importePendiente),
-        input.formaPago,
-        input.idempotencyToken,
-        input.pantallaOrigen,
-        input.operador,
-        input.notas || null,
-        now.getDate(),
-        now.getMonth() + 1,
-        now.getFullYear(),
-      ]);
+          OBSERVACIONES
+          ${dateCols}
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${dateVals})
+      `, allParams);
 
       const row = firstRow(await conn.query(`
         SELECT ID FROM JAVIER.REPARTIDOR_COBROS
@@ -897,6 +964,35 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
     ]);
 
     const now = new Date();
+    await getCobrosSchemaInfo();
+    const hasCollectionDate = _cobrosHasCollectionDate;
+    const dateCols = hasCollectionDate ? ', DIACOBRO, MESCOBRO, ANOCOBRO' : '';
+    const dateVals = hasCollectionDate ? ', ?, ?, ?' : '';
+    const dateParams = hasCollectionDate ? [now.getDate(), now.getMonth() + 1, now.getFullYear()] : [];
+
+    const allParams = [
+      cobro.entregaId || delivery.itemId,
+      cobro.codigoCliente,
+      cobro.codigoRepartidor || repartidorId,
+      normalizeTipoDocumento(cobro.tipoDocumento),
+      cobro.origenDocumento || 'B',
+      cobro.subempresaDocumento || 'GMP',
+      cobro.ejercicioDocumento,
+      cobro.serieDocumento,
+      cobro.terminalDocumento,
+      cobro.numeroDocumento,
+      cobro.xdeDocumento || 1,
+      cobro.dexDocumento || 1,
+      roundMoney(cobro.importeCobrado),
+      roundMoney(cobro.importePendiente),
+      cobro.formaPago,
+      cobro.idempotencyToken,
+      cobro.pantallaOrigen || 'RUTERO',
+      cobro.operador || 'unknown',
+      cobro.notas || null,
+      ...dateParams,
+    ];
+
     await conn.query(`
       INSERT INTO JAVIER.REPARTIDOR_COBROS (
         ENTREGA_APP_ID,
@@ -917,35 +1013,10 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
         IDEMPOTENCY_TOKEN,
         PANTALLA_ORIGEN,
         OPERADOR,
-        OBSERVACIONES,
-        DIACOBRO,
-        MESCOBRO,
-        ANOCOBRO
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
-      cobro.entregaId || delivery.itemId,
-      cobro.codigoCliente,
-      cobro.codigoRepartidor || repartidorId,
-      normalizeTipoDocumento(cobro.tipoDocumento),
-      cobro.origenDocumento || 'B',
-      cobro.subempresaDocumento || 'GMP',
-      cobro.ejercicioDocumento,
-      cobro.serieDocumento,
-      cobro.terminalDocumento,
-      cobro.numeroDocumento,
-      cobro.xdeDocumento || 1,
-      cobro.dexDocumento || 1,
-      roundMoney(cobro.importeCobrado),
-      roundMoney(cobro.importePendiente),
-      cobro.formaPago,
-      cobro.idempotencyToken,
-      cobro.pantallaOrigen || 'RUTERO',
-      cobro.operador || 'unknown',
-      cobro.notas || null,
-      now.getDate(),
-      now.getMonth() + 1,
-      now.getFullYear(),
-    ]);
+        OBSERVACIONES
+        ${dateCols}
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${dateVals})
+    `, allParams);
 
     return {
       created: true,
@@ -1114,6 +1185,8 @@ async function closeLiquidacion(input) {
       terminal,
     });
     const dateYmd = compactDate(input.date);
+    const dateCol = cobrosDateFilterColumn();
+    const orderBy = cobrosDateOrderBy();
 
     const totalsRow = firstRow(await conn.query(`
       SELECT
@@ -1125,7 +1198,7 @@ async function closeLiquidacion(input) {
         COUNT(*) AS COBROS_COUNT
       FROM JAVIER.REPARTIDOR_COBROS
       WHERE TRIM(CODIGOVENDEDOR) = ?
-        AND ANOCOBRO * 10000 + MESCOBRO * 100 + DIACOBRO = ?
+        AND ${dateCol} = ?
         AND COALESCE(LIQUIDADO_SN, 'N') <> 'S'
     `, [input.repartidorId, dateYmd]));
 
@@ -1133,9 +1206,9 @@ async function closeLiquidacion(input) {
       SELECT ID
       FROM JAVIER.REPARTIDOR_COBROS
       WHERE TRIM(CODIGOVENDEDOR) = ?
-        AND ANOCOBRO * 10000 + MESCOBRO * 100 + DIACOBRO = ?
+        AND ${dateCol} = ?
         AND COALESCE(LIQUIDADO_SN, 'N') <> 'S'
-      ORDER BY ANOCOBRO, MESCOBRO, DIACOBRO, ID
+      ORDER BY ${orderBy}, ID
     `, [input.repartidorId, dateYmd]);
 
     const balanceRow = firstRow(await conn.query(`
@@ -1358,6 +1431,9 @@ function calculateCommission({ deliveredAmount, collectedAmount, tiers }) {
 }
 
 async function getCommissionSummary({ repartidorId, from, to }) {
+  await getCobrosSchemaInfo();
+  const dateCol = cobrosDateFilterColumn();
+
   const deliveredRows = await queryWithParams(`
     SELECT COALESCE(SUM(CPC.IMPORTETOTAL), 0) AS TOTAL_REPARTIDO
     FROM DSEDAC.OPP OPP
@@ -1371,8 +1447,8 @@ async function getCommissionSummary({ repartidorId, from, to }) {
     SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_COBRADO
     FROM JAVIER.REPARTIDOR_COBROS
     WHERE TRIM(CODIGOVENDEDOR) = ?
-      AND ANOCOBRO * 10000 + MESCOBRO * 100 + DIACOBRO >= ?
-      AND ANOCOBRO * 10000 + MESCOBRO * 100 + DIACOBRO <= ?
+      AND ${dateCol} >= ?
+      AND ${dateCol} <= ?
   `, [repartidorId, compactDate(from), compactDate(nextIsoDate(to))], false, false);
 
   const tiers = await getCommissionTiers();
