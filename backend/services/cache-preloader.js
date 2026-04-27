@@ -226,12 +226,15 @@ async function preloadCache(port = 3000) {
             warmUpDashboardQueries().catch(e => logger.warn(`Warmup error: ${e.message}`));
         }, 2000);
 
-        // 3. Background: Warm up clients list ALL (JEFE_VENTAS, 3s delay)
-        setTimeout(() => {
-            warmUpClientsAll().catch(e => logger.warn(`Clients warmup error: ${e.message}`));
-        }, 3000);
+        // 3. Clients list pre-warm DISABLED — query joins DSED.LACLAE (millions of rows)
+        //    + LATERAL subquery = 30-60s execution. Not suitable for startup.
+        //    The first real request will cache the result with 1hr TTL.
+        //    Subsequent requests are instant from cache.
+        //    If eager pre-warm is needed, create a materialized summary table
+        //    (e.g., JAVIER.CLIENT_SALES_SUMMARY) updated via nightly cron.
+        logger.info('[CachePreWarmer] Clients pre-warm skipped (heavy LACLAE query — lazy cached on first request)');
 
-        // 4. Background: Pre-warm commissions ALL (non-blocking, 5s delay, runs only if needed)
+        // 4. Pre-warm commissions ALL (non-blocking, 5s delay, runs only if needed)
         setTimeout(() => {
             warmUpCommissionsAll().catch(e => logger.warn(`Commissions warmup error: ${e.message}`));
         }, 5000);
