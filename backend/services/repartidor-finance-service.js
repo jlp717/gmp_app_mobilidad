@@ -144,9 +144,13 @@ function buildDocument(row) {
 function mapCobro(row) {
   const importe = roundMoney(value(row, 'IMPORTEVENCIMIENTO'));
   const pendiente = roundMoney(value(row, 'IMPORTEPENDIENTE'));
+  const year = toInt(value(row, 'ANOCOBRO') || value(row, 'ANOVENCIMIENTO'));
+  const month = toInt(value(row, 'MESCOBRO') || value(row, 'MESVENCIMIENTO'));
+  const day = toInt(value(row, 'DIACOBRO') || value(row, 'DIAVENCIMIENTO'));
+  const fecha = (year && month && day) ? `${year}-${pad(month, 2)}-${pad(day, 2)}` : null;
   return {
     id: value(row, 'ID') == null ? null : String(value(row, 'ID')),
-    fecha: formatCvcDueDate(row),
+    fecha,
     codigoCliente: String(value(row, 'CODIGOCLIENTEALBARAN', '') || '').trim(),
     nombreCliente: String(value(row, 'NOMBRE_CLIENTE', '') || '').trim(),
     tipoCobro: String(value(row, 'CODIGOFORMAPAGO', '') || '').trim(),
@@ -421,7 +425,7 @@ async function getDailySummary({ repartidorId, date }) {
       COUNT(*) AS COBROS_COUNT
     FROM JAVIER.REPARTIDOR_COBROS
     WHERE TRIM(CODIGOVENDEDOR) = ?
-      AND ANOVENCIMIENTO * 10000 + MESVENCIMIENTO * 100 + DIAVENCIMIENTO = ?
+      AND ANOCOBRO * 10000 + MESCOBRO * 100 + DIACOBRO = ?
       AND COALESCE(LIQUIDADO_SN, 'N') <> 'S'
   `, [repartidorId, dateYmd], false, false);
 
@@ -435,9 +439,9 @@ async function getDailySummary({ repartidorId, date }) {
   const cobroRows = await queryWithParams(`
     SELECT
       RC.ID,
-      RC.DIAVENCIMIENTO,
-      RC.MESVENCIMIENTO,
-      RC.ANOVENCIMIENTO,
+      RC.DIACOBRO,
+      RC.MESCOBRO,
+      RC.ANOCOBRO,
       RC.CODIGOCLIENTEALBARAN,
       TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), TRIM(CLI.NOMBRECLIENTE))) AS NOMBRE_CLIENTE,
       RC.CODIGOFORMAPAGO,
@@ -453,9 +457,9 @@ async function getDailySummary({ repartidorId, date }) {
     FROM JAVIER.REPARTIDOR_COBROS RC
     LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(RC.CODIGOCLIENTEALBARAN)
     WHERE TRIM(RC.CODIGOVENDEDOR) = ?
-      AND RC.ANOVENCIMIENTO * 10000 + RC.MESVENCIMIENTO * 100 + RC.DIAVENCIMIENTO = ?
+      AND RC.ANOCOBRO * 10000 + RC.MESCOBRO * 100 + RC.DIACOBRO = ?
       AND COALESCE(RC.LIQUIDADO_SN, 'N') <> 'S'
-    ORDER BY RC.ANOVENCIMIENTO, RC.MESVENCIMIENTO, RC.DIAVENCIMIENTO, RC.ID
+    ORDER BY RC.ANOCOBRO, RC.MESCOBRO, RC.DIACOBRO, RC.ID
   `, [repartidorId, dateYmd], false, false);
 
   const totals = firstRow(totalsRows);
@@ -685,6 +689,7 @@ async function registerCobro(input) {
         return { created: false, id: String(value(existing, 'ID')) };
       }
 
+      const now = new Date();
       await conn.query(`
         INSERT INTO JAVIER.REPARTIDOR_COBROS (
           ENTREGA_APP_ID,
@@ -705,8 +710,11 @@ async function registerCobro(input) {
           IDEMPOTENCY_TOKEN,
           PANTALLA_ORIGEN,
           OPERADOR,
-          OBSERVACIONES
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          OBSERVACIONES,
+          DIACOBRO,
+          MESCOBRO,
+          ANOCOBRO
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         input.entregaId || null,
         input.codigoCliente,
@@ -727,6 +735,9 @@ async function registerCobro(input) {
         input.pantallaOrigen,
         input.operador,
         input.notas || null,
+        now.getDate(),
+        now.getMonth() + 1,
+        now.getFullYear(),
       ]);
 
       const row = firstRow(await conn.query(`
@@ -885,6 +896,7 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
       repartidorId,
     ]);
 
+    const now = new Date();
     await conn.query(`
       INSERT INTO JAVIER.REPARTIDOR_COBROS (
         ENTREGA_APP_ID,
@@ -905,8 +917,11 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
         IDEMPOTENCY_TOKEN,
         PANTALLA_ORIGEN,
         OPERADOR,
-        OBSERVACIONES
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        OBSERVACIONES,
+        DIACOBRO,
+        MESCOBRO,
+        ANOCOBRO
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       cobro.entregaId || delivery.itemId,
       cobro.codigoCliente,
@@ -927,6 +942,9 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
       cobro.pantallaOrigen || 'RUTERO',
       cobro.operador || 'unknown',
       cobro.notas || null,
+      now.getDate(),
+      now.getMonth() + 1,
+      now.getFullYear(),
     ]);
 
     return {
@@ -1107,7 +1125,7 @@ async function closeLiquidacion(input) {
         COUNT(*) AS COBROS_COUNT
       FROM JAVIER.REPARTIDOR_COBROS
       WHERE TRIM(CODIGOVENDEDOR) = ?
-        AND ANOVENCIMIENTO * 10000 + MESVENCIMIENTO * 100 + DIAVENCIMIENTO = ?
+        AND ANOCOBRO * 10000 + MESCOBRO * 100 + DIACOBRO = ?
         AND COALESCE(LIQUIDADO_SN, 'N') <> 'S'
     `, [input.repartidorId, dateYmd]));
 
@@ -1115,9 +1133,9 @@ async function closeLiquidacion(input) {
       SELECT ID
       FROM JAVIER.REPARTIDOR_COBROS
       WHERE TRIM(CODIGOVENDEDOR) = ?
-        AND ANOVENCIMIENTO * 10000 + MESVENCIMIENTO * 100 + DIAVENCIMIENTO = ?
+        AND ANOCOBRO * 10000 + MESCOBRO * 100 + DIACOBRO = ?
         AND COALESCE(LIQUIDADO_SN, 'N') <> 'S'
-      ORDER BY ANOVENCIMIENTO, MESVENCIMIENTO, DIAVENCIMIENTO, ID
+      ORDER BY ANOCOBRO, MESCOBRO, DIACOBRO, ID
     `, [input.repartidorId, dateYmd]);
 
     const balanceRow = firstRow(await conn.query(`
@@ -1353,8 +1371,8 @@ async function getCommissionSummary({ repartidorId, from, to }) {
     SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_COBRADO
     FROM JAVIER.REPARTIDOR_COBROS
     WHERE TRIM(CODIGOVENDEDOR) = ?
-      AND ANOVENCIMIENTO * 10000 + MESVENCIMIENTO * 100 + DIAVENCIMIENTO >= ?
-      AND ANOVENCIMIENTO * 10000 + MESVENCIMIENTO * 100 + DIAVENCIMIENTO <= ?
+      AND ANOCOBRO * 10000 + MESCOBRO * 100 + DIACOBRO >= ?
+      AND ANOCOBRO * 10000 + MESCOBRO * 100 + DIACOBRO <= ?
   `, [repartidorId, compactDate(from), compactDate(nextIsoDate(to))], false, false);
 
   const tiers = await getCommissionTiers();
