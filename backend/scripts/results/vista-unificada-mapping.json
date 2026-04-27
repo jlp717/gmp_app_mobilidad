@@ -1,0 +1,41 @@
+{
+  "vista": "JAVIER.VISTA_CLIENTES_UNIFICADA",
+  "tablas": {
+    "CLIL1": {
+      "alias": "CLIL1",
+      "columnas": 58,
+      "rol": "BASE (cliente maestro)"
+    },
+    "CLCL1": {
+      "alias": "CLCL1",
+      "columnas": 66,
+      "join": "CODIGOCLIENTE",
+      "rol": "Condiciones crédito"
+    },
+    "CLIX": {
+      "alias": "CLIX",
+      "columnas": 32,
+      "join": "CODIGOCLIENTE",
+      "rol": "Extensión cliente"
+    },
+    "CRUT": {
+      "alias": "CRUT",
+      "columnas": 57,
+      "join": "CODIGOCLIENTE",
+      "filtro": "SECUENCIA = 1",
+      "rol": "Datos ruta"
+    },
+    "VDDL1": {
+      "alias": "VDDL1",
+      "columnas": 17,
+      "join": "CODIGOVENDEDOR (vía CRUT)",
+      "rol": "Vendedor"
+    }
+  },
+  "colisiones_resueltas": [],
+  "columnas_omitidas": [
+    "ID",
+    "MARCAACTUALIZACION"
+  ],
+  "sql_file": "C:\\Users\\Javier\\Desktop\\Repositorios\\gmp_app_mobilidad\\backend\\scripts\\sql\\vista_clientes_unificada.sql"
+}
