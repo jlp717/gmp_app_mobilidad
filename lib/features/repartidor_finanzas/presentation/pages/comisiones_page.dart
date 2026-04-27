@@ -282,7 +282,7 @@ class _Content extends StatelessWidget {
     final totalTarget = summary.deliveredAmount;
     final totalActual = summary.collectedAmount;
     final overallCompliance =
-        totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
+        totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0.0;
     final isOnRhythm = overallCompliance >= 100;
 
     return Expanded(
