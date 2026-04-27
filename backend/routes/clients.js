@@ -70,9 +70,7 @@ const getClientsHandler = async (req, res) => {
     logger.info(`[CLIENTS] Starting query for vendor ${vendedorCodes || 'all'}, search: ${search || 'none'}`);
     const queryStart = Date.now();
 
-    // SIMPLIFIED QUERY v4: Single LACLAE scan — LATERAL replaced with pre-aggregated JOIN
-    // The LATERAL subquery was O(n × m) scanning LACLAE per client row.
-    // Now we scan LACLAE ONCE, aggregate both sales stats AND last vendor per client.
+    // SIMPLIFIED QUERY v3: Single LACLAE scan with pre-filtered client codes
     const clients = await cachedQuery(query, `
       SELECT
         C.CODIGOCLIENTE as code,
@@ -87,7 +85,7 @@ const getClientsHandler = async (req, res) => {
         COALESCE(S.TOTAL_MARGIN, 0) as totalMargin,
         C.ANOBAJA as yearInactive,
         TRIM(V.NOMBREVENDEDOR) as vendorName,
-        S.LAST_VENDOR as vendorCode
+        LV.LAST_VENDOR as vendorCode
       FROM DSEDAC.CLI C
       LEFT JOIN (
         SELECT
@@ -95,9 +93,7 @@ const getClientsHandler = async (req, res) => {
           SUM(LCIMVT) as TOTAL_PURCHASES,
           SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
           COUNT(DISTINCT LCAADC || LCMMDC || LCDDDC) as NUM_ORDERS,
-          MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE,
-          -- Last vendor: pick from the most recent transaction row
-          MAX(LCCDVD) KEEP (DENSE_RANK LAST ORDER BY LCAADC, LCMMDC, LCDDDC) as LAST_VENDOR
+          MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE
         FROM DSED.LACLAE
         WHERE LCAADC >= ${MIN_YEAR}
           AND TPDC = 'LAC'
@@ -107,9 +103,24 @@ const getClientsHandler = async (req, res) => {
           ${clientCodesFilter ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL') : vendedorFilter.replace(/L\./g, '')}
         GROUP BY LCCDCL
       ) S ON C.CODIGOCLIENTE = S.CLIENT_CODE
-      LEFT JOIN DSEDAC.VDD V ON S.LAST_VENDOR = V.CODIGOVENDEDOR
+      -- Get vendor from most recent transaction (DB2 compatible)
+      -- When cache is active, use C.CODIGOCLIENTE (always resolves, even without matching sales)
+      -- When no cache (fallback), use S.CLIENT_CODE (only resolves for clients with vendor-filtered sales)
+      LEFT JOIN LATERAL (
+        SELECT LCCDVD as LAST_VENDOR
+        FROM DSED.LACLAE
+        WHERE LCCDCL = ${clientCodesFilter ? 'C.CODIGOCLIENTE' : 'S.CLIENT_CODE'}
+          AND LCAADC >= ${MIN_YEAR}
+          AND TPDC = 'LAC'
+          AND LCTPVT IN ('CC', 'VC')
+          AND LCCLLN IN ('AB', 'VT')
+          AND LCSRAB NOT IN ('N', 'Z')
+        ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC
+        FETCH FIRST 1 ROWS ONLY
+      ) LV ON 1=1
+      LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
       WHERE C.ANOBAJA = 0
-        ${clientCodesFilter || (!vendedorCodes || vendedorCodes === 'ALL' || vendedorCodes.trim() === '' ? '' : `AND S.LAST_VENDOR IS NOT NULL`)}
+        ${clientCodesFilter || (!vendedorCodes || vendedorCodes === 'ALL' || vendedorCodes.trim() === '' ? '' : `AND LV.LAST_VENDOR IS NOT NULL`)}
         ${searchFilter}
       ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
       OFFSET ${parseInt(offset)} ROWS

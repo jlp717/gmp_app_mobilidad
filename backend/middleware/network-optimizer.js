@@ -72,12 +72,14 @@ const PREFETCH_HINTS = {
  */
 const pendingRequests = new Map();
 const COALESCE_WINDOW_MS = 50;
-const MAX_PENDING_AGE_MS = 30000;
+const MAX_PENDING_AGE_MS = 60000; // 60s — heavy DB2 queries (commissions ALL, clients) need this
 
 setInterval(() => {
     const now = Date.now();
     for (const [sig, entry] of pendingRequests) {
         if (now - (entry.createdAt || 0) > MAX_PENDING_AGE_MS) {
+            // Suppress unhandled rejection — the .catch() at line 222 handles it
+            entry.promise.catch(() => {});
             entry.reject(new Error('Coalescing request timed out'));
             pendingRequests.delete(sig);
         }

@@ -1059,9 +1059,9 @@ router.get('/summary', verifyToken, async (req, res) => {
             if (isGroupedRequest) {
                 // PERF: Check route-level cache first for ALL mode (most expensive)
                 const allSummaryCacheKey = aggregatedCacheKey;
-                const cachedResult = null;
-                if (cachedResult) {
-                    logger.info(`[COMMISSIONS] ⚡ Cache HIT for ALL summary (${allSummaryCacheKey})`);
+                const cachedResult = await redisCache.get('route', allSummaryCacheKey);
+                if (cachedResult && !shouldForceRefresh) {
+                    logger.info(`[COMMISSIONS] ⚡ Route Cache HIT for ALL summary (${allSummaryCacheKey})`);
                     return { success: true, ...cachedResult };
                 }
                 if (shouldForceRefresh) {
