@@ -32,6 +32,9 @@ jest.mock('../app/services/pdfService', () => ({
 
 jest.mock('../utils/delivery-status-check', () => ({
   isDeliveryStatusAvailable: jest.fn(() => false),
+  isDeliveryStatusNewSchema: jest.fn(() => false),
+  getDeliveryStatusJoin: jest.fn(() => ''),
+  getDeliveryStatusColumns: jest.fn(() => "CAST(NULL AS VARCHAR(20)) as DS_STATUS"),
 }));
 
 jest.mock('../services/emailPdfService', () => ({

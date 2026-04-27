@@ -163,13 +163,18 @@ router.get('/rutero/week', async (req, res) => {
 
                             // 2. Supplement: Add app-confirmed deliveries from DELIVERY_STATUS (if table exists)
                             try {
+                                const { isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
+                                const dsNew = isDeliveryStatusNewSchema();
                                 const appPlaceholders = cleanCodes.map(() => '?').join(',');
+                                const countCol = dsNew ? 'COUNT(DISTINCT DS.IDEMPOTENCY_TOKEN)' : 'COUNT(DISTINCT DS.ID)';
+                                const repCol = dsNew ? 'DS.OPERADOR' : 'DS.REPARTIDOR_ID';
+                                const dateCol = dsNew ? 'DS.UPDATED_AT' : 'DS.FECHAACTUALIZACION';
                                 const appSql = `
-                                    SELECT COUNT(DISTINCT DS.ID) as DELIVERED
+                                    SELECT ${countCol} as DELIVERED
                                     FROM JAVIER.DELIVERY_STATUS DS
                                     WHERE DS.STATUS = 'ENTREGADO'
-                                      AND DS.REPARTIDOR_ID IN (${appPlaceholders})
-                                      AND DATE(DS.FECHAACTUALIZACION) = CURRENT DATE
+                                      AND ${repCol} IN (${appPlaceholders})
+                                      AND DATE(${dateCol}) = CURRENT DATE
                                 `;
                                 const appRows = await queryWithParams(appSql, cleanCodes, false, false);
                                 const appDelivered = parseInt(appRows[0]?.DELIVERED) || 0;

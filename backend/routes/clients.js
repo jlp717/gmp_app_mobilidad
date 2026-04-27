@@ -11,7 +11,8 @@ const {
   LACLAE_SALES_FILTER,
   sanitizeForSQL,
   sanitizeCodeList,
-  handleRouteError
+  handleRouteError,
+  getCurrentDate
 } = require('../utils/common');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');

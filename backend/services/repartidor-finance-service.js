@@ -4,6 +4,7 @@ const PDFDocument = require('pdfkit');
 const { queryWithParams, getPool, initDb } = require('../config/db');
 const logger = require('../middleware/logger');
 const { sendEmailWithPdf } = require('./emailPdfService');
+const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
 
 // Schema detection for REPARTIDOR_COBROS (migration 024 adds ANOCOBRO/MESCOBRO/DIACOBRO)
 let _cobrosSchemaChecked = false;
@@ -281,8 +282,8 @@ class AlreadyDeliveredError extends Error {
     super('Esta entrega ya fue confirmada anteriormente');
     this.name = 'AlreadyDeliveredError';
     this.code = 'ALREADY_DELIVERED';
-    this.previousRepartidor = value(row, 'REPARTIDOR_ID');
-    this.previousDate = value(row, 'UPDATED_AT');
+    this.previousRepartidor = value(row, 'OPERADOR') ?? value(row, 'REPARTIDOR_ID');
+    this.previousDate = value(row, 'UPDATED_AT') ?? value(row, 'FECHAACTUALIZACION');
   }
 }
 
@@ -868,9 +869,9 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
     const deliveryRows = await queryWithParams(`
       SELECT CONFORMADOSN
       FROM JAVIER.DELIVERY_STATUS
-      WHERE ID = ?
+      WHERE IDEMPOTENCY_TOKEN = ?
       FETCH FIRST 1 ROW ONLY
-    `, [delivery.itemId], false, false);
+    `, [delivery.idempotencyToken], false, false);
     if (normalizeText(value(firstRow(deliveryRows), 'CONFORMADOSN')) !== 'ENTREGADO') {
       const error = new Error(
         'Token de cobro existente sin entrega confirmada; requiere revision manual',
@@ -895,15 +896,21 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
       FETCH FIRST 1 ROW ONLY
     `, [cobro.idempotencyToken]);
 
+    const dsNew = isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
+    const dsLookupCol = dsNew ? 'IDEMPOTENCY_TOKEN' : 'ID';
+    const dsLookupVal = dsNew ? delivery.idempotencyToken : delivery.itemId;
+    const dsStatusCol = dsNew ? 'STATUS' : 'CONFORMADOSN';
+    const dsRepCol = dsNew ? 'OPERADOR' : 'REPARTIDOR_ID';
+
     const deliveryRows = await conn.query(`
-      SELECT CONFORMADOSN, UPDATED_AT, REPARTIDOR_ID
+      SELECT ${dsStatusCol}, UPDATED_AT, ${dsRepCol}
       FROM JAVIER.DELIVERY_STATUS
-      WHERE ID = ?
+      WHERE ${dsLookupCol} = ?
       FETCH FIRST 1 ROW ONLY
-    `, [delivery.itemId]);
+    `, [dsLookupVal]);
     const existingDelivery = firstRow(deliveryRows);
     const isDelivered =
-      String(value(existingDelivery, 'CONFORMADOSN', '') || '').trim() === 'ENTREGADO';
+      String(value(existingDelivery, dsStatusCol, '') || '').trim() === 'ENTREGADO';
 
     if (tokenRows.length > 0) {
       assertCobroMatchesInput(tokenRows[0], delivery, cobro);
@@ -939,29 +946,49 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
 
     await conn.query(`
       DELETE FROM JAVIER.DELIVERY_STATUS
-      WHERE ID = ?
-    `, [delivery.itemId]);
+      WHERE ${dsLookupCol} = ?
+    `, [dsLookupVal]);
 
-    await conn.query(`
-      INSERT INTO JAVIER.DELIVERY_STATUS (
-        ID,
-        CONFORMADOSN,
-        OBSERVACIONES,
-        FIRMA_PATH,
-        LATITUD,
-        LONGITUD,
-        REPARTIDOR_ID,
-        UPDATED_AT
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP)
-    `, [
-      delivery.itemId,
-      delivery.status || 'ENTREGADO',
-      delivery.observaciones || '',
-      delivery.firma || '',
-      lat,
-      lon,
-      repartidorId,
-    ]);
+    if (dsNew) {
+      await conn.query(`
+        INSERT INTO JAVIER.DELIVERY_STATUS (
+          STATUS,
+          LATITUD,
+          LONGITUD,
+          OPERADOR,
+          PANTALLA_ORIGEN,
+          IDEMPOTENCY_TOKEN,
+          UPDATED_AT
+        ) VALUES (?, ?, ?, ?, 'COBROS', ?, CURRENT TIMESTAMP)
+      `, [
+        delivery.status || 'ENTREGADO',
+        lat,
+        lon,
+        repartidorId,
+        delivery.idempotencyToken,
+      ]);
+    } else {
+      await conn.query(`
+        INSERT INTO JAVIER.DELIVERY_STATUS (
+          ID,
+          CONFORMADOSN,
+          OBSERVACIONES,
+          FIRMA_PATH,
+          LATITUD,
+          LONGITUD,
+          REPARTIDOR_ID,
+          UPDATED_AT
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP)
+      `, [
+        delivery.itemId,
+        delivery.status || 'ENTREGADO',
+        delivery.observaciones || '',
+        delivery.firma || '',
+        lat,
+        lon,
+        repartidorId,
+      ]);
+    }
 
     const now = new Date();
     await getCobrosSchemaInfo();
@@ -1583,6 +1610,8 @@ async function deleteTestData(idempotencyToken, options = {}) {
   `, [idempotencyToken], false, false);
 
   if (options.deleteDeliveryStatus === true) {
+    const dsNew = isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
+    const dsDelCol = dsNew ? 'IDEMPOTENCY_TOKEN' : 'ID';
     const deliveryIds = new Set(
       cobroRows
         .map((row) => String(value(row, 'ENTREGA_APP_ID', '') || '').trim())
@@ -1595,7 +1624,7 @@ async function deleteTestData(idempotencyToken, options = {}) {
     for (const deliveryId of deliveryIds) {
       await queryWithParams(`
         DELETE FROM JAVIER.DELIVERY_STATUS
-        WHERE ID = ?
+        WHERE ${dsDelCol} = ?
       `, [deliveryId], false, false);
     }
   }

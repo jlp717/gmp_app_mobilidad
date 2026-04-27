@@ -71,17 +71,18 @@ describe('Repartidor finanzas routes', () => {
   });
 
    test('GET /daily-summary uses repartidor cobros and balance to build the liquidation form', async () => {
-    mockQueryWithParams
-      .mockResolvedValueOnce([{
-        TOTAL_EFECTIVO: '222.79',
-        TOTAL_CHEQUES: '0',
-        TOTAL_TARJETA: '0',
-        TOTAL_POSTDATADOS: '0',
-        TOTAL_COBROS_DIA: '222.79',
-        COBROS_COUNT: '2',
-      }])
-      .mockResolvedValueOnce([{ SALDO_PENDIENTE: '4.81' }])
-      .mockResolvedValueOnce([
+     mockQueryWithParams
+       .mockResolvedValueOnce([]) // Schema check (ANOCOBRO column)
+       .mockResolvedValueOnce([{
+         TOTAL_EFECTIVO: '222.79',
+         TOTAL_CHEQUES: '0',
+         TOTAL_TARJETA: '0',
+         TOTAL_POSTDATADOS: '0',
+         TOTAL_COBROS_DIA: '222.79',
+         COBROS_COUNT: '2',
+       }])
+       .mockResolvedValueOnce([{ SALDO_PENDIENTE: '4.81' }])
+       .mockResolvedValueOnce([
         {
           ID: 10,
           ANOVENCIMIENTO: 2026,
@@ -109,7 +110,9 @@ describe('Repartidor finanzas routes', () => {
     expect(res.body.summary.saldoActual).toBe(4.81);
     expect(res.body.summary.totalAIngresar).toBe(227.6);
     expect(res.body.cobros[0].documento).toBe('E 2026-B-S-010-000404-01');
-    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['94', 20260423]);
+    // First call is schema check ([]), second is the totals query
+    const totalsCall = mockQueryWithParams.mock.calls.find(c => c[1] && c[1][0] === '94');
+    expect(totalsCall[1]).toEqual(['94', 20260423]);
   });
 
   test('GET /daily-summary blocks repartidor access to another repartidor', async () => {

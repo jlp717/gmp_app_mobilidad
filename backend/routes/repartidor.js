@@ -923,15 +923,18 @@ router.get('/history/signature', verifyToken, async (req, res) => {
         logger.info(`[REPARTIDOR] Getting signature for albaran ${albId}`);
         let signatureSource = null; // Track where we found the signature
 
-        // 1. Check DELIVERY_STATUS for FIRMA_PATH
+        // 1. Check DELIVERY_STATUS for FIRMA_PATH (OLD schema only)
         let firmaPath = null;
         try {
-        const dsRows = await queryWithParams(`
-            SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?
-        `, [albId], false);
-            logger.info(`[REPARTIDOR] Step 1 DELIVERY_STATUS: ${dsRows.length} rows for ID='${albId}'`);
-            if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
-                firmaPath = dsRows[0].FIRMA_PATH;
+            const dsOldAvail = isDeliveryStatusAvailable() && !isDeliveryStatusNewSchema();
+            if (dsOldAvail) {
+                const dsRows = await queryWithParams(`
+                    SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?
+                `, [albId], false);
+                logger.info(`[REPARTIDOR] Step 1 DELIVERY_STATUS: ${dsRows.length} rows for ID='${albId}'`);
+                if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
+                    firmaPath = dsRows[0].FIRMA_PATH;
+                }
             }
         } catch (e) {
             logger.warn(`[REPARTIDOR] DELIVERY_STATUS query error: ${e.message}`);
@@ -1350,21 +1353,24 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
         let signatureSource = null;
         const albId = `${parsedYear}-${serie}-${parsedTerminal}-${parsedNumber}`;
 
-        // Step 3a: Check DELIVERY_STATUS for FIRMA_PATH
+        // Step 3a: Check DELIVERY_STATUS for FIRMA_PATH (OLD schema only)
         try {
-            const dsRows = await queryWithParams(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [albId], false);
-            if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
-                const basePaths = [
-                    path.join(__dirname, '../../uploads'),
-                    path.join(__dirname, '../../uploads/photos')
-                ];
-                for (const basePath of basePaths) {
-                    const fullPath = path.join(basePath, dsRows[0].FIRMA_PATH);
-                    if (fs.existsSync(fullPath)) {
-                        signatureBase64 = fs.readFileSync(fullPath).toString('base64');
-                        signatureSource = 'FILE';
-                        logger.info(`[PDF] Found signature file at ${fullPath}`);
-                        break;
+            const dsOldAvail = isDeliveryStatusAvailable() && !isDeliveryStatusNewSchema();
+            if (dsOldAvail) {
+                const dsRows = await queryWithParams(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [albId], false);
+                if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
+                    const basePaths = [
+                        path.join(__dirname, '../../uploads'),
+                        path.join(__dirname, '../../uploads/photos')
+                    ];
+                    for (const basePath of basePaths) {
+                        const fullPath = path.join(basePath, dsRows[0].FIRMA_PATH);
+                        if (fs.existsSync(fullPath)) {
+                            signatureBase64 = fs.readFileSync(fullPath).toString('base64');
+                            signatureSource = 'FILE';
+                            logger.info(`[PDF] Found signature file at ${fullPath}`);
+                            break;
+                        }
                     }
                 }
             }
@@ -1953,7 +1959,7 @@ router.get('/history/:repartidorId', verifyToken, async (req, res) => {
                 TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRE_CLIENTE,
                 CPC.IMPORTETOTAL as TOTAL,
                 ${dsHistAvail ? "DS.STATUS as ESTADO_ENTREGA" : "CAST(NULL AS VARCHAR(20)) as ESTADO_ENTREGA"},
-                ${dsHistAvail ? "DS.FIRMA_PATH" : "CAST(NULL AS VARCHAR(255)) as FIRMA_PATH"}
+                ${dsHistAvail && !isDeliveryStatusNewSchema() ? "DS.FIRMA_PATH" : "CAST(NULL AS VARCHAR(255)) as FIRMA_PATH"}
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC 
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
@@ -2132,20 +2138,23 @@ router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, async (req
         let signatureSource = null;
         const albId = `${actualEjAlb}-${actualSerieAlb}-${actualTermAlb}-${actualNumAlb}`;
 
-        // Step 3a: DELIVERY_STATUS
+        // Step 3a: DELIVERY_STATUS (OLD schema only)
         try {
-            const dsRows = await queryWithParams(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [albId], false);
-            if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
-                const basePaths = [
-                    path.join(__dirname, '../../uploads'),
-                    path.join(__dirname, '../../uploads/photos')
-                ];
-                for (const basePath of basePaths) {
-                    const fullPath = path.join(basePath, dsRows[0].FIRMA_PATH);
-                    if (fs.existsSync(fullPath)) {
-                        signatureBase64 = fs.readFileSync(fullPath).toString('base64');
-                        signatureSource = 'FILE';
-                        break;
+            const dsOldAvail = isDeliveryStatusAvailable() && !isDeliveryStatusNewSchema();
+            if (dsOldAvail) {
+                const dsRows = await queryWithParams(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [albId], false);
+                if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
+                    const basePaths = [
+                        path.join(__dirname, '../../uploads'),
+                        path.join(__dirname, '../../uploads/photos')
+                    ];
+                    for (const basePath of basePaths) {
+                        const fullPath = path.join(basePath, dsRows[0].FIRMA_PATH);
+                        if (fs.existsSync(fullPath)) {
+                            signatureBase64 = fs.readFileSync(fullPath).toString('base64');
+                            signatureSource = 'FILE';
+                            break;
+                        }
                     }
                 }
             }

@@ -9,7 +9,7 @@ const { TTL } = require('../services/redis-cache');
 const logger = require('../middleware/logger');
 const { verifyToken } = require('../middleware/auth');
 const { sanitizeCodeListForParams, sanitizeForSQL } = require('../utils/common');
-const { isDeliveryStatusAvailable } = require('../utils/delivery-status-check');
+const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema, getDeliveryStatusJoin } = require('../utils/delivery-status-check');
 
 /**
  * Strip leading vendor code from VDD names (e.g., "08 DAMIAN" → "DAMIAN")
@@ -75,6 +75,25 @@ function parseDeliveryItemId(itemId) {
 }
 
 async function getDeliveryOwner(itemId) {
+    const dsNewSchema = isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
+
+    if (dsNewSchema) {
+        // NEW schema: DELIVERY_STATUS has albaran columns + OPERADOR
+        const parsed = parseDeliveryItemId(itemId);
+        if (!parsed) return null;
+        const rows = await queryWithParams(`
+            SELECT TRIM(OPERADOR) AS CODIGO_REPARTIDOR
+            FROM JAVIER.DELIVERY_STATUS
+            WHERE EJERCICIOALBARAN = ?
+              AND TRIM(SERIEALBARAN) = ?
+              AND TERMINALALBARAN = ?
+              AND NUMEROALBARAN = ?
+            FETCH FIRST 1 ROW ONLY
+        `, [parsed.ejercicio, parsed.serie, parsed.terminal, parsed.numero], false, false);
+        return rows[0]?.CODIGO_REPARTIDOR?.trim() || null;
+    }
+
+    // OLD schema: query DSEDAC.CPC + DSEDAC.OPP
     const parsed = parseDeliveryItemId(itemId);
     if (!parsed) return null;
     const rows = await queryWithParams(`
@@ -296,16 +315,15 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
 
         // Conditionally include DELIVERY_STATUS join (table may not exist)
         const dsAvailable = isDeliveryStatusAvailable();
-        const dsJoin = dsAvailable ? `
-            LEFT JOIN JAVIER.DELIVERY_STATUS DS
-              ON DS.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
-              AND DS.SERIEALBARAN = CPC.SERIEALBARAN
-              AND DS.TERMINALALBARAN = CPC.TERMINALALBARAN
-              AND DS.NUMEROALBARAN = CPC.NUMEROALBARAN` : '';
+        const dsJoin = dsAvailable ? getDeliveryStatusJoin('CPC', 'DS') : '';
         const dsColumns = dsAvailable
-            ? `DS.STATUS as DS_STATUS,
-              DS.OBSERVACIONES as DS_OBS,
-              DS.FIRMA_PATH as DS_FIRMA`
+            ? (isDeliveryStatusNewSchema()
+                ? `DS.STATUS as DS_STATUS,
+                  CAST(NULL AS VARCHAR(512)) as DS_OBS,
+                  CAST(NULL AS VARCHAR(255)) as DS_FIRMA`
+                : `DS.ESTADO as DS_STATUS,
+                  DS.OBSERVACIONES as DS_OBS,
+                  DS.FIRMA_PATH as DS_FIRMA`)
             : `CAST(NULL AS VARCHAR(20)) as DS_STATUS,
               CAST(NULL AS VARCHAR(512)) as DS_OBS,
               CAST(NULL AS VARCHAR(255)) as DS_FIRMA`;
@@ -953,79 +971,99 @@ router.post('/update', verifyToken, async (req, res) => {
 
         logger.info(`[ENTREGAS] Updating ${itemId} to ${status} (Rep: ${repartidorId}, Force: ${forceUpdate || false})`);
 
-        // VALIDATION: Check if already delivered (prevents accidental duplicate confirmations)
+        const dsNewSchema = isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
+        const lookupKey = dsNewSchema ? `liq_${itemId}` : itemId;
+        const lookupColumn = dsNewSchema ? 'IDEMPOTENCY_TOKEN' : 'ID';
+
+        // VALIDATION: Check if already delivered
         if (status === 'ENTREGADO') {
             try {
-                const existing = await queryWithParams(`SELECT ESTADO, FECHAACTUALIZACION, REPARTIDOR_ID FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [itemId]);
+                const statusCol = dsNewSchema ? 'STATUS' : 'ESTADO';
+                const dateCol = dsNewSchema ? 'UPDATED_AT' : 'FECHAACTUALIZACION';
+                const repCol = dsNewSchema ? 'OPERADOR' : 'REPARTIDOR_ID';
+                const existing = await queryWithParams(
+                    `SELECT ${statusCol}, ${dateCol}, ${repCol} FROM JAVIER.DELIVERY_STATUS WHERE ${lookupColumn} = ?`,
+                    [lookupKey]
+                );
 
-                if (existing.length > 0 && existing[0].ESTADO === 'ENTREGADO') {
-                    // Already delivered - only allow if forceUpdate is true
+                if (existing.length > 0 && existing[0][statusCol] === 'ENTREGADO') {
                     if (!forceUpdate) {
-                        logger.warn(`[ENTREGAS] ⚠️ Duplicate confirmation attempt for ${itemId} (previously by ${existing[0].REPARTIDOR_ID} at ${existing[0].FECHAACTUALIZACION})`);
+                        logger.warn(`[ENTREGAS] Duplicate confirmation attempt for ${itemId}`);
                         return res.status(409).json({
                             success: false,
                             error: 'Esta entrega ya fue confirmada anteriormente',
                             alreadyDelivered: true,
-                            previousRepartidor: existing[0].REPARTIDOR_ID,
-                            previousDate: existing[0].FECHAACTUALIZACION
+                            previousRepartidor: existing[0][repCol],
+                            previousDate: existing[0][dateCol]
                         });
                     }
-                    logger.info(`[ENTREGAS] Force update enabled for ${itemId}, overwriting previous delivery`);
+                    logger.info(`[ENTREGAS] Force update enabled for ${itemId}`);
                 }
             } catch (checkErr) {
-                // Table might not exist yet, continue with insert
-                logger.warn(`[ENTREGAS] Check failed (table may not exist): ${checkErr.message}`);
+                logger.warn(`[ENTREGAS] Check failed: ${checkErr.message}`);
             }
         }
 
         // Upsert into JAVIER.DELIVERY_STATUS
-        // AUDIT FIX: Save old state for recovery before delete
         let previousState = null;
         try {
-            const prev = await queryWithParams(`SELECT * FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [itemId]);
+            const prev = await queryWithParams(
+                `SELECT * FROM JAVIER.DELIVERY_STATUS WHERE ${lookupColumn} = ?`,
+                [lookupKey]
+            );
             if (prev.length > 0) previousState = prev[0];
         } catch (_) {}
 
-        // 1. Delete existing (if any)
-        await queryWithParams(`DELETE FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [itemId]);
+        // Delete existing
+        await queryWithParams(
+            `DELETE FROM JAVIER.DELIVERY_STATUS WHERE ${lookupColumn} = ?`,
+            [lookupKey]
+        );
 
-        // 2. Insert new record
         const lat = latitud || 0;
         const lon = longitud || 0;
-
-        // Identify who is performing the update
-        // repartidorId from body = the actual repartidor who did the delivery
-        // req.user.code = who is logged in (could be Jefe viewing as repartidor)
-        // Always store the ACTUAL repartidor from the body, not the logged-in user
         let inspectorId = repartidorId;
-
-        // Safety truncation
         if (inspectorId && inspectorId.length > 20) {
             inspectorId = inspectorId.substring(0, 20);
         }
 
         try {
-            await queryWithParams(`
-                INSERT INTO JAVIER.DELIVERY_STATUS 
-                (ID, ESTADO, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, FECHAACTUALIZACION)
-                VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP)
-            `, [itemId, status, observaciones || '', firma || '', lat, lon, inspectorId]);
+            if (dsNewSchema) {
+                await queryWithParams(`
+                    INSERT INTO JAVIER.DELIVERY_STATUS 
+                    (STATUS, LATITUD, LONGITUD, OPERADOR, PANTALLA_ORIGEN, IDEMPOTENCY_TOKEN, UPDATED_AT)
+                    VALUES (?, ?, ?, ?, 'ENTREGAS', ?, CURRENT TIMESTAMP)
+                `, [status, lat, lon, inspectorId, lookupKey]);
+            } else {
+                await queryWithParams(`
+                    INSERT INTO JAVIER.DELIVERY_STATUS 
+                    (ID, ESTADO, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, FECHAACTUALIZACION)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP)
+                `, [itemId, status, observaciones || '', firma || '', lat, lon, inspectorId]);
+            }
         } catch (insertErr) {
-            // AUDIT FIX: Restore previous state if INSERT fails after DELETE
             logger.error(`[ENTREGAS] INSERT failed for ${itemId}: ${insertErr.message}`);
             if (previousState) {
                 try {
-                    await queryWithParams(`
-                        INSERT INTO JAVIER.DELIVERY_STATUS
-                        (ID, ESTADO, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, FECHAACTUALIZACION)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP)
-                    `, [
-                        previousState.ID, previousState.ESTADO,
-                        previousState.OBSERVACIONES || '',
-                        previousState.FIRMA_PATH || '',
-                        previousState.LATITUD || 0, previousState.LONGITUD || 0,
-                        previousState.REPARTIDOR_ID || ''
-                    ]);
+                    if (dsNewSchema) {
+                        await queryWithParams(`
+                            INSERT INTO JAVIER.DELIVERY_STATUS
+                            (STATUS, LATITUD, LONGITUD, OPERADOR, PANTALLA_ORIGEN, IDEMPOTENCY_TOKEN, UPDATED_AT)
+                            VALUES (?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP)
+                        `, [previousState.STATUS || 'PENDIENTE', previousState.LATITUD || 0, previousState.LONGITUD || 0, previousState.OPERADOR || '', previousState.PANTALLA_ORIGEN || 'ENTREGAS', lookupKey]);
+                    } else {
+                        await queryWithParams(`
+                            INSERT INTO JAVIER.DELIVERY_STATUS
+                            (ID, ESTADO, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, FECHAACTUALIZACION)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP)
+                        `, [
+                            previousState.ID, previousState.ESTADO,
+                            previousState.OBSERVACIONES || '',
+                            previousState.FIRMA_PATH || '',
+                            previousState.LATITUD || 0, previousState.LONGITUD || 0,
+                            previousState.REPARTIDOR_ID || ''
+                        ]);
+                    }
                     logger.warn(`[ENTREGAS] Restored previous state for ${itemId}`);
                 } catch (restoreErr) {
                     logger.error(`[ENTREGAS] CRITICAL: Could not restore ${itemId}: ${restoreErr.message}`);
@@ -1234,17 +1272,20 @@ router.post('/receipt/:entregaId', verifyToken, async (req, res) => {
             logger.info(`[RECEIPT] No signature path provided for ${entregaId}`);
         }
 
-        // Fallback: try to get signature base64 from DB if no file found
+        // Fallback: try to get signature from DB if no file found
         if (!fullSignaturePath && ejercicio && numero) {
             try {
-                const albId = `${ejercicio}-${(serie || '').trim()}-${terminal || 0}-${numero}`;
-                // Try DELIVERY_STATUS
-                const dsRows = await queryWithParams(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [albId], false);
-                if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
-                    const fpTest = path.join(photosDir, dsRows[0].FIRMA_PATH);
-                    if (fs.existsSync(fpTest)) {
-                        fullSignaturePath = fpTest;
-                        logger.info(`[RECEIPT] Found signature via DELIVERY_STATUS: ${fpTest}`);
+                const dsNewSchema = isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
+                // Try DELIVERY_STATUS (OLD schema only - NEW schema has no FIRMA_PATH)
+                if (!dsNewSchema) {
+                    const albId = `${ejercicio}-${(serie || '').trim()}-${terminal || 0}-${numero}`;
+                    const dsRows = await queryWithParams(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [albId], false);
+                    if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
+                        const fpTest = path.join(photosDir, dsRows[0].FIRMA_PATH);
+                        if (fs.existsSync(fpTest)) {
+                            fullSignaturePath = fpTest;
+                            logger.info(`[RECEIPT] Found signature via DELIVERY_STATUS: ${fpTest}`);
+                        }
                     }
                 }
                 // Try REPARTIDOR_FIRMAS for base64 
