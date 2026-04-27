@@ -322,13 +322,17 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
         // Conditionally include DELIVERY_STATUS join
         const dsAvail = isDeliveryStatusAvailable();
         const dsJoin = dsAvail
-            ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS ON 
-                DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))`
+            ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS 
+                ON DS.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+                AND DS.SERIEALBARAN = CPC.SERIEALBARAN
+                AND DS.TERMINALALBARAN = CPC.TERMINALALBARAN
+                AND DS.NUMEROALBARAN = CPC.NUMEROALBARAN`
             : '';
         const dsStatusCol = dsAvail ? 'DS.STATUS as DELIVERY_STATUS' : "CAST(NULL AS VARCHAR(20)) as DELIVERY_STATUS";
-        const dsUpdatedCol = dsAvail ? 'DS.FECHAACTUALIZACION as DELIVERY_UPDATED_AT' : "CAST(NULL AS TIMESTAMP) as DELIVERY_UPDATED_AT";
+        const dsUpdatedCol = dsAvail ? 'DS.UPDATED_AT as DELIVERY_UPDATED_AT' : "CAST(NULL AS TIMESTAMP) as DELIVERY_UPDATED_AT";
         const dsFirmaCol = dsAvail ? 'DS.FIRMA_PATH' : "CAST(NULL AS VARCHAR(255)) as FIRMA_PATH";
         const dsObsCol = dsAvail ? 'DS.OBSERVACIONES' : "CAST(NULL AS VARCHAR(512)) as OBSERVACIONES";
+        const dsRepartidorCol = dsAvail ? 'DS.REPARTIDOR_ID as DELIVERY_REPARTIDOR' : "CAST(NULL AS VARCHAR(20)) as DELIVERY_REPARTIDOR";
 
         let yearFilter = '';
         const yearFilterParams = [];
@@ -352,6 +356,7 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
                 ${dsUpdatedCol},
                 ${dsFirmaCol},
                 ${dsObsCol},
+                ${dsRepartidorCol},
                 COALESCE(CAC_J.NUMEROFACTURA, 0) as NUMEROFACTURA,
                 COALESCE(TRIM(CAC_J.SERIEFACTURA), '') as SERIEFACTURA,
                 COALESCE(CAC_J.EJERCICIOFACTURA, 0) as EJERCICIOFACTURA,
@@ -468,7 +473,7 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
                 status: overrides.status || status,
                 hasSignature: hasFirmaPath || hasLegacySig,
                 signaturePath: row.FIRMA_PATH || null,
-                deliveryDate: row.DELIVERY_DATE || null,
+                deliveryDate: row.DELIVERY_UPDATED_AT || null,
                 deliveryRepartidor: row.DELIVERY_REPARTIDOR || null,
                 deliveryObs: row.OBSERVACIONES || null,
                 legacySignatureName: legacyNombre || null,
@@ -1179,7 +1184,10 @@ router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, r
         const dsAvail = isDeliveryStatusAvailable();
         const dsJoinSub = dsAvail
             ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS 
-                ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))`
+                ON DS.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+                AND DS.SERIEALBARAN = CPC.SERIEALBARAN
+                AND DS.TERMINALALBARAN = CPC.TERMINALALBARAN
+                AND DS.NUMEROALBARAN = CPC.NUMEROALBARAN`
             : '';
 
         const sql = `
@@ -1868,7 +1876,10 @@ router.get('/rutero/week/:repartidorId', verifyToken, async (req, res) => {
             INNER JOIN DSEDAC.CPC CPC
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
             ${dsWeekAvail ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS
-                ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))` : ''}
+                ON DS.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+                AND DS.SERIEALBARAN = CPC.SERIEALBARAN
+                AND DS.TERMINALALBARAN = CPC.TERMINALALBARAN
+                AND DS.NUMEROALBARAN = CPC.NUMEROALBARAN` : ''}
             WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO)
                 BETWEEN ? AND ?
               AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
@@ -1969,7 +1980,10 @@ router.get('/history/:repartidorId', verifyToken, async (req, res) => {
             LEFT JOIN DSEDAC.CLI CLI 
                 ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
             ${dsHistAvail ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS 
-                ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))` : ''}
+                ON DS.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+                AND DS.SERIEALBARAN = CPC.SERIEALBARAN
+                AND DS.TERMINALALBARAN = CPC.TERMINALALBARAN
+                AND DS.NUMEROALBARAN = CPC.NUMEROALBARAN` : ''}
             WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ? AND ?
               AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
         `;

@@ -3,6 +3,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
@@ -24,6 +26,50 @@ class RepartidorComisionesFinanzasPage extends ConsumerStatefulWidget {
 
 class _RepartidorComisionesFinanzasPageState
     extends ConsumerState<RepartidorComisionesFinanzasPage> {
+  bool _isLoading = true;
+  String? _error;
+  DateTime? _lastFetchTime;
+  int _loadGeneration = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData({bool forceRefresh = false}) async {
+    final generation = ++_loadGeneration;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final now = DateTime.now();
+      final from = DateTime(now.year, now.month);
+      final to = DateTime(now.year, now.month + 1, 0);
+      final summaryArgs = (
+        repartidorId: widget.repartidorId,
+        from: from,
+        to: to,
+        forceRefresh: forceRefresh,
+      );
+      await ref.read(repartidorCommissionSummaryProvider(summaryArgs).future);
+      await ref.read(repartidorCommissionTiersProvider.future);
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _isLoading = false;
+        _lastFetchTime = DateTime.now();
+      });
+    } catch (e) {
+      if (mounted && generation == _loadGeneration) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (widget.repartidorId.isEmpty || widget.repartidorId.contains(',')) {
@@ -53,116 +99,127 @@ class _RepartidorComisionesFinanzasPageState
 
     return Scaffold(
       backgroundColor: AppTheme.darkBase,
-      body: summaryAsync.when(
-        data: (summary) => tiersAsync.when(
-          data: (tiers) => _buildContent(summary, tiers),
-          loading: () => const Center(child: CircularProgressIndicator()),
-          error: (e, st) {
-            Sentry.captureException(e, stackTrace: st);
-            return _ErrorState(
-              message: financeErrorMessage(e, 'No se pudieron cargar los tramos'),
-              onRetry: () => ref.invalidate(repartidorCommissionTiersProvider),
-            );
-          },
-        ),
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, st) {
-          Sentry.captureException(e, stackTrace: st);
-          return _ErrorState(
-            message: financeErrorMessage(e, 'No se pudo cargar el resumen'),
-            onRetry: () => ref.invalidate(
-              repartidorCommissionSummaryProvider(summaryArgs),
+      body: Column(
+        children: [
+          _SmartSyncHeader(
+            isLoading: _isLoading,
+            lastFetchTime: _lastFetchTime,
+            onSync: () => _loadData(forceRefresh: true),
+          ),
+          _Header(period: DateFormat('MM/yyyy').format(now)),
+          if (_isLoading)
+            const Expanded(child: Center(child: SkeletonList(itemCount: 6)))
+          else if (_error != null)
+            Expanded(
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      financeErrorMessage(
+                        _error!,
+                        'No se pudo cargar el resumen',
+                      ),
+                      style: const TextStyle(color: AppTheme.textSecondary),
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: () => _loadData(forceRefresh: true),
+                      child: const Text('Reintentar'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            summaryAsync.when(
+              data: (summary) => tiersAsync.when(
+                data: (tiers) =>
+                    _Content(summary: summary, tiers: tiers, now: now),
+                loading: () =>
+                    const Expanded(child: Center(child: CircularProgressIndicator())),
+                error: (e, st) {
+                  Sentry.captureException(e, stackTrace: st);
+                  return Expanded(
+                    child: Center(
+                      child: Text(
+                        financeErrorMessage(e, 'No se pudieron cargar los tramos'),
+                        style: const TextStyle(color: AppTheme.textSecondary),
+                      ),
+                    ),
+                  );
+                },
+              ),
+              loading: () =>
+                  const Expanded(child: Center(child: CircularProgressIndicator())),
+              error: (e, st) {
+                Sentry.captureException(e, stackTrace: st);
+                return Expanded(
+                  child: Center(
+                    child: Text(
+                      financeErrorMessage(e, 'No se pudo cargar el resumen'),
+                      style: const TextStyle(color: AppTheme.textSecondary),
+                    ),
+                  ),
+                );
+              },
             ),
-          );
-        },
+        ],
       ),
     );
   }
-
-  Widget _buildContent(
-    RepartidorCommissionSummary summary,
-    List<RepartidorCommissionTier> tiers,
-  ) {
-    final now = DateTime.now();
-
-    return Column(
-      children: [
-        _Header(
-          period: DateFormat('MM/yyyy').format(now),
-          commission: summary.commission,
-        ),
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(12),
-            children: [
-              _SummaryGrid(summary: summary),
-              const SizedBox(height: 12),
-              _ReachedPanel(summary: summary),
-              const SizedBox(height: 12),
-              _TiersDisplay(tiers: tiers),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
 }
 
-class ComisionesPage extends RepartidorComisionesFinanzasPage {
-  const ComisionesPage({
-    required super.repartidorId,
-    super.key,
+class _SmartSyncHeader extends StatelessWidget {
+  const _SmartSyncHeader({
+    required this.isLoading,
+    this.lastFetchTime,
+    required this.onSync,
   });
-}
 
-class _Header extends StatelessWidget {
-  const _Header({required this.period, required this.commission});
-
-  final String period;
-  final double commission;
+  final bool isLoading;
+  final DateTime? lastFetchTime;
+  final VoidCallback onSync;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
-      padding: EdgeInsets.fromLTRB(
-        16,
-        MediaQuery.of(context).padding.top + 14,
-        16,
-        14,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         border: Border(
           bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
+          const Icon(Icons.euro, color: AppTheme.neonGreen, size: 20),
+          const SizedBox(width: 8),
           const Text(
             'Comisiones',
             style: TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
             ),
           ),
-          const SizedBox(height: 4),
-          Text(
-            _money(commission),
-            style: const TextStyle(
-              color: AppTheme.textPrimary,
-              fontWeight: FontWeight.w800,
-              fontSize: 28,
+          const Spacer(),
+          if (lastFetchTime != null)
+            Text(
+              'Última: ${DateFormat('HH:mm').format(lastFetchTime!)}',
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
             ),
-          ),
-          Text(
-            'Periodo: $period',
-            style: const TextStyle(
-              color: AppTheme.textSecondary,
-              fontSize: 13,
-            ),
+          const SizedBox(width: 8),
+          IconButton(
+            icon: isLoading
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.refresh, color: AppTheme.neonBlue),
+            onPressed: isLoading ? null : onSync,
+            tooltip: 'Actualizar',
           ),
         ],
       ),
@@ -170,187 +227,507 @@ class _Header extends StatelessWidget {
   }
 }
 
-class _SummaryGrid extends StatelessWidget {
-  const _SummaryGrid({required this.summary});
+class _Header extends StatelessWidget {
+  const _Header({required this.period});
 
-  final RepartidorCommissionSummary summary;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Panel(
-      child: GridView.count(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 2.2,
-        children: [
-          _GridItem(
-            label: 'Entregado',
-            value: _money(summary.deliveredAmount),
-            icon: Icons.local_shipping,
-          ),
-          _GridItem(
-            label: 'Cobrado',
-            value: _money(summary.collectedAmount),
-            icon: Icons.trending_up,
-          ),
-          _GridItem(
-            label: '% Cobro',
-            value: _percent(summary.collectedPct),
-            icon: Icons.percent,
-          ),
-          _GridItem(
-            label: 'Comision',
-            value: _money(summary.commission),
-            icon: Icons.attach_money,
-            highlight: true,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _GridItem extends StatelessWidget {
-  const _GridItem({
-    required this.label,
-    required this.value,
-    required this.icon,
-    this.highlight = false,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-  final bool highlight;
+  final String period;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: highlight
-            ? AppTheme.neonBlue.withValues(alpha: 0.1)
-            : AppTheme.darkSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: highlight
-              ? AppTheme.neonBlue.withValues(alpha: 0.3)
-              : Colors.white.withValues(alpha: 0.05),
+      padding: const EdgeInsets.all(16),
+      color: AppTheme.surfaceColor,
+      child: Row(
+        children: [
+          const Icon(Icons.trending_up, color: AppTheme.neonGreen, size: 24),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Comisiones $period',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: Colors.white,
+                  ),
+                ),
+                const Text(
+                  'Seguimiento de cobros y entregas',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Content extends StatelessWidget {
+  const _Content({
+    required this.summary,
+    required this.tiers,
+    required this.now,
+  });
+
+  final RepartidorCommissionSummary summary;
+  final List<RepartidorCommissionTier> tiers;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalTarget = summary.deliveredAmount;
+    final totalActual = summary.collectedAmount;
+    final overallCompliance =
+        totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
+    final isOnRhythm = overallCompliance >= 100;
+
+    return Expanded(
+      child: Column(
+        children: [
+          if (!_isLoadingPlaceholder) ...[
+            _SummaryCards(
+              totalTarget: totalTarget,
+              totalActual: totalActual,
+              commission: summary.commission,
+              overallCompliance: overallCompliance,
+              isOnRhythm: isOnRhythm,
+              collectedPct: summary.collectedPct,
+            ),
+          ],
+          Expanded(
+            child: _buildTable(context, tiers, summary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static const _isLoadingPlaceholder = false;
+
+  Widget _buildTable(
+    BuildContext context,
+    List<RepartidorCommissionTier> tiers,
+    RepartidorCommissionSummary summary,
+  ) {
+    final rows = <DataRow>[];
+    final monthNames = [
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+    ];
+
+    final currentMonth = now.month;
+
+    for (var m = 1; m <= 12; m++) {
+      final isFuture = m > currentMonth;
+      final monthName = monthNames[m - 1];
+
+      final target = isFuture ? 0.0 : summary.deliveredAmount / currentMonth;
+      final actual = isFuture ? 0.0 : summary.collectedAmount;
+      final pct = target > 0 ? (actual / target) * 100 : 0;
+      final isPositive = actual >= target && target > 0;
+      final color = isFuture
+          ? Colors.grey
+          : (isPositive ? AppTheme.success : AppTheme.error);
+      final textOpacity = isFuture ? 0.4 : 1.0;
+
+      final pctText = isFuture
+          ? '-'
+          : (pct > 100
+              ? '+${(pct - 100).toStringAsFixed(1)}%'
+              : '${pct.toStringAsFixed(1)}%');
+
+      final tierReached = tiers.where((t) => pct >= t.thresholdPct).toList();
+      final tierChip = tierReached.isNotEmpty
+          ? 'F${tierReached.length}'
+          : '-';
+
+      rows.add(
+        DataRow(
+          color: WidgetStateProperty.all(
+            isFuture ? Colors.black38 : AppTheme.surfaceColor,
+          ),
+          cells: [
+            DataCell(
+              Row(
+                children: [
+                  Text(
+                    monthName,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white.withValues(alpha: textOpacity),
+                    ),
+                  ),
+                  if (isFuture) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.withValues(alpha: 0.3),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        'PENDIENTE',
+                        style: TextStyle(fontSize: 8, color: Colors.grey),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            DataCell(
+              Text(
+                isFuture ? '-' : CurrencyFormatter.format(target),
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: textOpacity),
+                ),
+              ),
+            ),
+            DataCell(
+              Text(
+                isFuture ? '-' : CurrencyFormatter.format(actual),
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            DataCell(
+              isFuture
+                  ? const Text('-', style: TextStyle(color: Colors.grey))
+                  : Row(
+                      children: [
+                        Icon(
+                          isPositive ? Icons.check_circle : Icons.cancel,
+                          color: color,
+                          size: 16,
+                        ),
+                        if (isPositive && tierReached.isNotEmpty) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.neonBlue.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              tierChip,
+                              style: const TextStyle(
+                                fontSize: 9,
+                                color: AppTheme.neonBlue,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+            ),
+            DataCell(
+              Text(
+                pctText,
+                style: TextStyle(
+                  color: isFuture ? Colors.grey : color,
+                  fontSize: 11,
+                ),
+              ),
+            ),
+            DataCell(
+              Text(
+                isFuture ? '-' : CurrencyFormatter.format(summary.commission),
+                style: TextStyle(
+                  color: isFuture ? Colors.grey : AppTheme.neonGreen,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
         ),
+      );
+    }
+
+    return SingleChildScrollView(
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: DataTable(
+          columnSpacing: 20,
+          headingRowColor: WidgetStateProperty.all(
+            AppTheme.surfaceColor.withValues(alpha: 0.8),
+          ),
+          columns: const [
+            DataColumn(
+              label: Text(
+                'MES',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'OBJ. MES',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'COBRADO',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'ESTADO',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                '%',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.textSecondary,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'COMISIÓN',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.neonGreen,
+                ),
+              ),
+            ),
+          ],
+          rows: rows,
+        ),
+      ),
+    );
+  }
+}
+
+class _SummaryCards extends StatelessWidget {
+  const _SummaryCards({
+    required this.totalTarget,
+    required this.totalActual,
+    required this.commission,
+    required this.overallCompliance,
+    required this.isOnRhythm,
+    required this.collectedPct,
+  });
+
+  final double totalTarget;
+  final double totalActual;
+  final double commission;
+  final double overallCompliance;
+  final bool isOnRhythm;
+  final double collectedPct;
+
+  @override
+  Widget build(BuildContext context) {
+    final rhythmStatus = overallCompliance >= 105
+        ? 'Adelantado'
+        : (overallCompliance >= 95 ? 'En ritmo' : 'Rezagado');
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(
+            child: _Card(
+              gradient: [
+                AppTheme.neonBlue.withValues(alpha: 0.2),
+                AppTheme.neonPurple.withValues(alpha: 0.1),
+              ],
+              borderColor: AppTheme.neonBlue.withValues(alpha: 0.3),
+              icon: Icons.calendar_today,
+              iconColor: AppTheme.neonBlue,
+              title: DateFormat('MMMM').format(DateTime.now()).toUpperCase(),
+              value: CurrencyFormatter.format(totalActual),
+              subtitle: 'de ${CurrencyFormatter.format(totalTarget)}',
+              progressValue: totalTarget > 0
+                  ? (totalActual / totalTarget).clamp(0.01, double.infinity)
+                  : 0.01,
+              progressColor:
+                  totalActual >= totalTarget ? AppTheme.success : AppTheme.neonBlue,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _Card(
+              gradient: [
+                AppTheme.neonGreen.withValues(alpha: 0.2),
+                AppTheme.success.withValues(alpha: 0.1),
+              ],
+              borderColor: AppTheme.neonGreen.withValues(alpha: 0.3),
+              icon: Icons.attach_money,
+              iconColor: AppTheme.neonGreen,
+              title: 'COMISIÓN',
+              value: CurrencyFormatter.format(commission),
+              subtitle: '${collectedPct.toStringAsFixed(1)}% cobro',
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isOnRhythm
+                    ? AppTheme.success.withValues(alpha: 0.15)
+                    : Colors.orange.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: isOnRhythm
+                      ? AppTheme.success.withValues(alpha: 0.3)
+                      : Colors.orange.withValues(alpha: 0.3),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        isOnRhythm ? Icons.trending_up : Icons.speed,
+                        color: isOnRhythm ? AppTheme.success : Colors.orange,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'RITMO',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: isOnRhythm ? AppTheme.success : Colors.orange,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    '${overallCompliance.toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: isOnRhythm ? AppTheme.success : Colors.orange,
+                    ),
+                  ),
+                  Text(
+                    rhythmStatus,
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      color: isOnRhythm ? AppTheme.success : Colors.orange,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Card extends StatelessWidget {
+  const _Card({
+    required this.gradient,
+    required this.borderColor,
+    required this.icon,
+    required this.iconColor,
+    required this.title,
+    required this.value,
+    this.subtitle,
+    this.progressValue,
+    this.progressColor,
+  });
+
+  final List<Color> gradient;
+  final Color borderColor;
+  final IconData icon;
+  final Color iconColor;
+  final String title;
+  final String value;
+  final String? subtitle;
+  final double? progressValue;
+  final Color? progressColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: gradient),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Row(
             children: [
-              Icon(icon, size: 14, color: AppTheme.textSecondary),
-              const SizedBox(width: 4),
+              Icon(icon, color: iconColor, size: 16),
+              const SizedBox(width: 6),
               Text(
-                label,
-                style: const TextStyle(
-                  color: AppTheme.textSecondary,
+                title,
+                style: TextStyle(
                   fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: iconColor,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 6),
           Text(
             value,
-            style: TextStyle(
-              color: highlight ? AppTheme.neonBlue : AppTheme.textPrimary,
-              fontWeight: FontWeight.w700,
-              fontSize: 15,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ReachedPanel extends StatelessWidget {
-  const _ReachedPanel({required this.summary});
-
-  final RepartidorCommissionSummary summary;
-
-  @override
-  Widget build(BuildContext context) {
-    if (summary.reached.isEmpty) {
-      return const SizedBox.shrink();
-    }
-
-    return _Panel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Tramos alcanzados',
-            style: TextStyle(
-              color: AppTheme.textPrimary,
-              fontWeight: FontWeight.w800,
+          if (subtitle != null)
+            Text(
+              subtitle!,
+              style: TextStyle(
+                fontSize: 9,
+                color: Colors.white.withValues(alpha: 0.6),
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: summary.reached
-                .map((t) => Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppTheme.neonGreen.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: AppTheme.neonGreen.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Text(
-                        '${_percent(t.thresholdPct)} → ${_percent(t.commissionPct)}',
-                        style: const TextStyle(
-                          color: AppTheme.neonGreen,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ))
-                .toList(),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _TiersDisplay extends StatelessWidget {
-  const _TiersDisplay({required this.tiers});
-
-  final List<RepartidorCommissionTier> tiers;
-
-  @override
-  Widget build(BuildContext context) {
-    return _Panel(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Tramos de comision',
-            style: TextStyle(
-              color: AppTheme.textPrimary,
-              fontWeight: FontWeight.w800,
+          if (progressValue != null) ...[
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: progressValue,
+                backgroundColor: Colors.white.withValues(alpha: 0.1),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  progressColor ?? AppTheme.success,
+                ),
+                minHeight: 6,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          for (var i = 0; i < tiers.length; i++) ...[
-            _TierDisplayRow(index: i, tier: tiers[i]),
-            const SizedBox(height: 8),
           ],
         ],
       ),
@@ -358,100 +735,6 @@ class _TiersDisplay extends StatelessWidget {
   }
 }
 
-class _TierDisplayRow extends StatelessWidget {
-  const _TierDisplayRow({required this.index, required this.tier});
-
-  final int index;
-  final RepartidorCommissionTier tier;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: AppTheme.neonBlue.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          alignment: Alignment.center,
-          child: Text(
-            '${index + 1}',
-            style: const TextStyle(
-              color: AppTheme.neonBlue,
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            'Umbral: ${_percent(tier.thresholdPct)}',
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
-          ),
-        ),
-        Text(
-          'Comision: ${_percent(tier.commissionPct)}',
-          style: const TextStyle(
-            color: AppTheme.textPrimary,
-            fontWeight: FontWeight.w600,
-            fontSize: 14,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _Panel extends StatelessWidget {
-  const _Panel({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: child,
-    );
-  }
-}
-
-class _ErrorState extends StatelessWidget {
-  const _ErrorState({required this.message, required this.onRetry});
-
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(message, style: const TextStyle(color: AppTheme.textSecondary)),
-          const SizedBox(height: 12),
-          ElevatedButton(onPressed: onRetry, child: const Text('Reintentar')),
-        ],
-      ),
-    );
-  }
-}
-
-String _money(double value) {
-  final fixed = value.toStringAsFixed(2).replaceAll('.', ',');
-  return '$fixed EUR';
-}
-
-String _percent(double value) {
-  final fixed = value.toStringAsFixed(1).replaceAll('.', ',');
-  return '$fixed%';
+class ComisionesPage extends RepartidorComisionesFinanzasPage {
+  const ComisionesPage({required super.repartidorId, super.key});
 }

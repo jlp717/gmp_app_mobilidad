@@ -298,7 +298,10 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         const dsAvailable = isDeliveryStatusAvailable();
         const dsJoin = dsAvailable ? `
             LEFT JOIN JAVIER.DELIVERY_STATUS DS
-              ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(COALESCE(CPC.SERIEALBARAN, '')) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.CODIGOCLIENTEALBARAN)` : '';
+              ON DS.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+              AND DS.SERIEALBARAN = CPC.SERIEALBARAN
+              AND DS.TERMINALALBARAN = CPC.TERMINALALBARAN
+              AND DS.NUMEROALBARAN = CPC.NUMEROALBARAN` : '';
         const dsColumns = dsAvailable
             ? `DS.STATUS as DS_STATUS,
               DS.OBSERVACIONES as DS_OBS,
