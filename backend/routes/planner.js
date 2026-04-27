@@ -167,7 +167,7 @@ router.get('/rutero/week', async (req, res) => {
                                 const appSql = `
                                     SELECT COUNT(DISTINCT DS.ID) as DELIVERED
                                     FROM JAVIER.DELIVERY_STATUS DS
-                                    WHERE DS.ESTADO = 'ENTREGADO'
+                                    WHERE DS.STATUS = 'ENTREGADO'
                                       AND DS.REPARTIDOR_ID IN (${appPlaceholders})
                                       AND DATE(DS.FECHAACTUALIZACION) = CURRENT DATE
                                 `;

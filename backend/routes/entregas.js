@@ -300,7 +300,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             LEFT JOIN JAVIER.DELIVERY_STATUS DS
               ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(COALESCE(CPC.SERIEALBARAN, '')) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.CODIGOCLIENTEALBARAN)` : '';
         const dsColumns = dsAvailable
-            ? `DS.ESTADO as DS_STATUS,
+            ? `DS.STATUS as DS_STATUS,
               DS.OBSERVACIONES as DS_OBS,
               DS.FIRMA_PATH as DS_FIRMA`
             : `CAST(NULL AS VARCHAR(20)) as DS_STATUS,

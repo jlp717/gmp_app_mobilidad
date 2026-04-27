@@ -325,7 +325,7 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
             ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS ON 
                 DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))`
             : '';
-        const dsStatusCol = dsAvail ? 'DS.ESTADO as DELIVERY_STATUS' : "CAST(NULL AS VARCHAR(20)) as DELIVERY_STATUS";
+        const dsStatusCol = dsAvail ? 'DS.STATUS as DELIVERY_STATUS' : "CAST(NULL AS VARCHAR(20)) as DELIVERY_STATUS";
         const dsUpdatedCol = dsAvail ? 'DS.FECHAACTUALIZACION as DELIVERY_UPDATED_AT' : "CAST(NULL AS TIMESTAMP) as DELIVERY_UPDATED_AT";
         const dsFirmaCol = dsAvail ? 'DS.FIRMA_PATH' : "CAST(NULL AS VARCHAR(255)) as FIRMA_PATH";
         const dsObsCol = dsAvail ? 'DS.OBSERVACIONES' : "CAST(NULL AS VARCHAR(512)) as OBSERVACIONES";
@@ -1194,9 +1194,9 @@ router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, r
                     OPP.DIAREPARTO as DIA,
                     CPC.EJERCICIOALBARAN, TRIM(CPC.SERIEALBARAN) as SERIE, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
                     MAX(CPC.IMPORTETOTAL) as IMPORTE,
-                    MAX(CASE WHEN TRIM(CPC.CONFORMADOSN) = 'S' ${dsAvail ? "OR DS.ESTADO = 'ENTREGADO'" : ''} THEN 1 ELSE 0 END) as ENTREGADO,
-                    MAX(CASE WHEN ${dsAvail ? "DS.ESTADO = 'NO_ENTREGADO'" : '1=0'} THEN 1 ELSE 0 END) as NO_ENTREGADO,
-                    MAX(CASE WHEN ${dsAvail ? "DS.ESTADO = 'PARCIAL'" : '1=0'} THEN 1 ELSE 0 END) as PARCIAL
+                    MAX(CASE WHEN TRIM(CPC.CONFORMADOSN) = 'S' ${dsAvail ? "OR DS.STATUS = 'ENTREGADO'" : ''} THEN 1 ELSE 0 END) as ENTREGADO,
+                    MAX(CASE WHEN ${dsAvail ? "DS.STATUS = 'NO_ENTREGADO'" : '1=0'} THEN 1 ELSE 0 END) as NO_ENTREGADO,
+                    MAX(CASE WHEN ${dsAvail ? "DS.STATUS = 'PARCIAL'" : '1=0'} THEN 1 ELSE 0 END) as PARCIAL
                 FROM DSEDAC.OPP OPP
                 INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
                 ${dsJoinSub}
@@ -1859,7 +1859,7 @@ router.get('/rutero/week/:repartidorId', verifyToken, async (req, res) => {
                 COUNT(DISTINCT CPC.NUMEROALBARAN) as TOTAL_ALBARANES,
                 COUNT(DISTINCT CASE
                     WHEN TRIM(CPC.CONFORMADOSN) = 'S' OR CPC.SITUACIONALBARAN IN ('F', 'R') THEN CPC.NUMEROALBARAN
-                    ${dsWeekAvail ? "WHEN DS.ESTADO = 'ENTREGADO' THEN CPC.NUMEROALBARAN" : ''}
+                    ${dsWeekAvail ? "WHEN DS.STATUS = 'ENTREGADO' THEN CPC.NUMEROALBARAN" : ''}
                     WHEN (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) < ?
                          THEN CPC.NUMEROALBARAN
                     ELSE NULL
@@ -1956,7 +1956,7 @@ router.get('/history/:repartidorId', verifyToken, async (req, res) => {
                 TRIM(CPC.CODIGOCLIENTEALBARAN) as CODIGO_CLIENTE,
                 TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRE_CLIENTE,
                 CPC.IMPORTETOTAL as TOTAL,
-                ${dsHistAvail ? "DS.ESTADO as ESTADO_ENTREGA" : "CAST(NULL AS VARCHAR(20)) as ESTADO_ENTREGA"},
+                ${dsHistAvail ? "DS.STATUS as ESTADO_ENTREGA" : "CAST(NULL AS VARCHAR(20)) as ESTADO_ENTREGA"},
                 ${dsHistAvail ? "DS.FIRMA_PATH" : "CAST(NULL AS VARCHAR(255)) as FIRMA_PATH"}
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC 
