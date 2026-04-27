@@ -27,9 +27,10 @@ const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID_FINAL};PWD=${DB_PWD_FINAL};NAM=1;C
 // Pool sizing — configurable via env for production tuning.
 // Defaults raised: /commissions/summary?vendor=ALL fans out to N parallel vendor
 // queries; with max=10 the pool exhausted and requests timed out at 10s.
+// Increased to 30 for high-concurrency commission scenarios (up to ~40 vendors in parallel).
 const POOL_CONFIG = {
     min: parseInt(process.env.DB_POOL_MIN, 10) || 3,
-    max: parseInt(process.env.DB_POOL_MAX, 10) || 25,
+    max: parseInt(process.env.DB_POOL_MAX, 10) || 30,
     idleTimeoutMs: parseInt(process.env.DB_POOL_IDLE_MS, 10) || 30000,
     acquireTimeoutMs: parseInt(process.env.DB_POOL_ACQUIRE_MS, 10) || 30000
 };
@@ -90,7 +91,7 @@ const pool = {
             if (Date.now() - start > this.acquireTimeoutMs) {
                 throw new Error('Pool: acquire timeout - max connections reached');
             }
-            await new Promise(res => setTimeout(res, 50));
+            await new Promise(res => setTimeout(res, 20));
         }
 
         let c = this.connections.find(c => !c.inUse);
@@ -108,7 +109,7 @@ const pool = {
                     if (Date.now() - start > this.acquireTimeoutMs) {
                         throw new Error('Pool: acquire timeout - no available connections');
                     }
-                    await new Promise(res => setTimeout(res, 50));
+                    await new Promise(res => setTimeout(res, 20));
                     c = this.connections.find(c => !c.inUse);
                 }
             }
@@ -165,9 +166,22 @@ const pool = {
     }
 };
 
+function queryWithTimeout(conn, sql, params, timeoutMs = QUERY_TIMEOUT_MS) {
+    const queryPromise = params !== undefined 
+        ? conn.query(sql, params)
+        : conn.query(sql);
+    
+    const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`Query timeout after ${timeoutMs}ms`)), timeoutMs)
+    );
+    
+    return Promise.race([queryPromise, timeoutPromise]);
+}
+
 let dbPool = null;
 const MAX_RETRIES = 3;
 const RETRY_DELAY_BASE_MS = 500;
+const QUERY_TIMEOUT_MS = 30000;  // Max 30s per individual query
 let poolRecreateInProgress = false;
 let keepaliveInterval = null;
 
@@ -267,6 +281,32 @@ function isSqlSyntaxError(error) {
         odbcCodes.includes(-104);
 }
 
+// Non-transient errors that should NOT be retried:
+//   - 22001 = string data right truncation (param too large for column)
+//   - 22003 = numeric value out of range
+//   - 22012 = division by zero
+//   - 23505 = unique constraint violation
+//   - 23502 = not null constraint violation
+function isNonTransientDataError(error) {
+    const odbcStates = (error.odbcErrors || []).map(e => e.state);
+    const msg = (error.message || '').toLowerCase();
+
+    return odbcStates.includes('22001') ||
+        odbcStates.includes('22003') ||
+        odbcStates.includes('22012') ||
+        odbcStates.includes('23505') ||
+        odbcStates.includes('23502') ||
+        msg.includes('cwb0111');  // ODBC driver's version of 22001
+}
+
+// Check if an error is worth retrying (only connection/timeout errors)
+function isRetryableError(error) {
+    if (isConnectionError(error)) return true;
+    if (isSqlSyntaxError(error)) return false;
+    if (isNonTransientDataError(error)) return false;
+    return false;  // default: don't retry unknown errors
+}
+
 function startKeepalive() {
     stopKeepalive();
     keepaliveInterval = setInterval(async () => {
@@ -329,7 +369,7 @@ async function query(sql, logQuery = true, logError = true) {
             await ensureUtf8(conn);
 
             const start = Date.now();
-            const result = await conn.query(sql);
+            const result = await queryWithTimeout(conn, sql);
             const duration = Date.now() - start;
 
             if (logQuery) {
@@ -348,21 +388,19 @@ async function query(sql, logQuery = true, logError = true) {
                 connectionErrorCount++;
             }
 
+            const retryable = isRetryableError(error);
+
             if (logError && attempt === MAX_RETRIES) {
                 const odbcDetails = error.odbcErrors ? JSON.stringify(error.odbcErrors) : '';
                 logger.error(`❌ Query Error (Final Attempt): ${error.message} ${odbcDetails}\n  SQL: ${sql ? sql.replace(/\s+/g, ' ').substring(0, 200) : 'N/A'}`);
-            } else if (logError) {
+            } else if (logError && retryable) {
                 logger.warn(`⚠️ Query Failed (Attempt ${attempt}/${MAX_RETRIES}): ${error.message}. Retrying...`);
+            } else if (logError) {
+                const states = (error.odbcErrors || []).map(e => e.state).join(',');
+                logger.error(`🚫 Non-retryable error (attempt ${attempt}): ${error.message} [state=${states}]`);
             }
 
-            if (isSqlSyntaxError(error)) {
-                if (logError) {
-                    logger.error(`🚫 SQL syntax/schema error (no retry): state=${(error.odbcErrors || []).map(e => e.state).join(',')} code=${(error.odbcErrors || []).map(e => e.code).join(',')}\n  SQL: ${sql ? sql.replace(/\s+/g, ' ') : 'N/A'}`);
-                }
-                break;
-            }
-
-            if (!connError && !error.message.includes('odbc')) {
+            if (!retryable) {
                 break;
             }
 
@@ -409,7 +447,7 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
             await ensureUtf8(conn);
 
             const start = Date.now();
-            const result = await conn.query(sql, params);
+            const result = await queryWithTimeout(conn, sql, params);
             const duration = Date.now() - start;
 
             if (logQuery) {
@@ -428,23 +466,21 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
                 connectionErrorCount++;
             }
 
+            const retryable = isRetryableError(error);
+
             if (logError && attempt === MAX_RETRIES) {
                 const odbcDetails = error.odbcErrors ? JSON.stringify(error.odbcErrors) : '';
                 const sqlPreview = sql ? sql.replace(/\s+/g, ' ').substring(0, 300) : 'N/A';
                 const paramPreview = params ? JSON.stringify(params).substring(0, 200) : '[]';
                 logger.error(`❌ Param Query Error (Final): ${error.message} ${odbcDetails}\n  SQL: ${sqlPreview}\n  Params: ${paramPreview}`);
-            } else if (logError) {
+            } else if (logError && retryable) {
                 logger.warn(`⚠️ Param Query Retry (${attempt}): ${error.message}`);
+            } else if (logError) {
+                const states = (error.odbcErrors || []).map(e => e.state).join(',');
+                logger.error(`🚫 Non-retryable param error (attempt ${attempt}): ${error.message} [state=${states}]`);
             }
 
-            if (isSqlSyntaxError(error)) {
-                if (logError) {
-                    logger.error(`🚫 SQL syntax/schema error (no retry): ${(error.odbcErrors || []).map(e => e.state).join(',')}`);
-                }
-                break;
-            }
-
-            if (!connError && !error.message.includes('odbc')) break;
+            if (!retryable) break;
 
             if (connectionErrorCount >= 2 && attempt < MAX_RETRIES) {
                 await recreatePool();

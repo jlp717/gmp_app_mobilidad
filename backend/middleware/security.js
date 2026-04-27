@@ -26,7 +26,7 @@ const isProduction = NODE_ENV === 'production';
 
 const RATE_LIMIT_WINDOW_MS = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '900000', 10);
 const RATE_LIMIT_MAX_REQUESTS = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '30000', 10); // 30k for production
-const LOGIN_RATE_LIMIT_MAX = parseInt(process.env.LOGIN_RATE_LIMIT || '30', 10);
+const LOGIN_RATE_LIMIT_MAX = parseInt(process.env.LOGIN_RATE_LIMIT || '10', 10);
 const API_RATE_LIMIT_MAX = parseInt(process.env.API_RATE_LIMIT || '30000', 10); // 30k for mobile apps
 
 // CORS configuration
@@ -458,4 +458,109 @@ exports.logSecurityEvent = (event, req, details) => {
         timestamp: new Date().toISOString(),
         ...details
     });
+};
+
+// =============================================================================
+// SCANNER PROBE DETECTION — blocks common scan paths, compact logging
+// =============================================================================
+
+const SCANNER_PATH_PATTERNS = [
+    /\.env$/i, /\.env\./i, /\.git/i, /\.aws/i, /\.htaccess/i, /\.htpasswd/i,
+    /phpinfo/i, /phpmyadmin/i, /wp-admin/i, /wp-login/i, /wp-content/i, /wp-includes/i, /wordpress/i,
+    /\.well-known/i, /adminer/i, /mysql/i, /config\./i, /backup$|backup\./i,
+    /database\./i, /\.sql$/i, /\.zip$/i, /\.tar/i, /\.gz$/i, /\.7z$/i, /\.rar$/i,
+    /cgi-bin/i, /actuator/i, /swagger/i, /api-docs/i, /vendor/i, /composer/i,
+    /server-status/i, /\.DS_Store/i, /\.svn/i, /\.hg/i, /\.bzr/i,
+    /credentials/i, /\.passwd/i, /\.history/i, /\.bash/i, /id_rsa/i, /id_dsa/i,
+    /known_hosts/i, /\.ssh/i, /dump\./i, /console/i, /manager/i, /jmx-console/i,
+    /web-console/i, /invoker/i, /struts/i,
+];
+
+const scannerIpTracker = new Map();
+const SCANNER_LOG_WINDOW_MS = 5 * 60 * 1000;
+
+exports.detectScannerProbes = (req, res, next) => {
+    const fullPath = req.path || '';
+
+    const isScannerProbe = SCANNER_PATH_PATTERNS.some(p => p.test(fullPath));
+
+    if (!isScannerProbe) return next();
+
+    const ip = req.ip || 'unknown';
+    const now = Date.now();
+
+    let tracker = scannerIpTracker.get(ip);
+    if (!tracker || now - tracker.lastSeen > SCANNER_LOG_WINDOW_MS) {
+        tracker = { count: 0, firstSeen: now, lastSeen: 0 };
+    }
+
+    tracker.count++;
+    tracker.lastSeen = now;
+    scannerIpTracker.set(ip, tracker);
+
+    if (tracker.count === 1) {
+        logger.warn(`[SCANNER] New scanner from ${ip}: ${req.method} ${fullPath}`);
+    } else if (tracker.count % 10 === 0) {
+        logger.warn(`[SCANNER] Persistent scanner from ${ip}: ${tracker.count} probes (latest: ${req.method} ${fullPath})`);
+    }
+
+    if (scannerIpTracker.size > 200) {
+        for (const [k, v] of scannerIpTracker) {
+            if (now - v.lastSeen > SCANNER_LOG_WINDOW_MS * 4) scannerIpTracker.delete(k);
+        }
+    }
+
+    return res.status(404).json({ error: 'Not found' });
+};
+
+// =============================================================================
+// BRUTE FORCE IP TRACKER — blocks IPs trying many different usernames
+// =============================================================================
+
+const bruteForceTracker = new Map();
+const BRUTE_FORCE_WINDOW_MS = 5 * 60 * 1000;
+const BRUTE_FORCE_MAX_USERS_PER_IP = parseInt(process.env.BRUTE_FORCE_MAX_USERS || '8', 10);
+
+exports.bruteForceIpTracker = (req, res, next) => {
+    if (req.method !== 'POST') return next();
+
+    const ip = req.ip || 'unknown';
+    const username = (req.body && req.body.username) || '__MISSING__';
+    const now = Date.now();
+
+    let tracker = bruteForceTracker.get(ip);
+    if (!tracker) {
+        tracker = { users: new Set(), first: now, last: now, blocked: false };
+        bruteForceTracker.set(ip, tracker);
+    } else if (now - tracker.last > BRUTE_FORCE_WINDOW_MS) {
+        tracker.users.clear();
+        tracker.first = now;
+        tracker.blocked = false;
+    }
+
+    tracker.users.add(username);
+    tracker.last = now;
+
+    if (!tracker.blocked && tracker.users.size > BRUTE_FORCE_MAX_USERS_PER_IP) {
+        tracker.blocked = true;
+        const windowSec = Math.round((now - tracker.first) / 1000);
+        logger.warn(`[BRUTE FORCE] IP ${ip} probed ${tracker.users.size} usernames in ${windowSec}s — BLOCKED for 30min`);
+        setTimeout(() => bruteForceTracker.delete(ip), 30 * 60 * 1000);
+    }
+
+    if (tracker.blocked) {
+        return res.status(429).json({
+            error: 'Demasiados intentos desde esta IP. Intente en 30 minutos.',
+            code: 'IP_BLOCKED'
+        });
+    }
+
+    // Periodic cleanup of old entries
+    if (bruteForceTracker.size > 200) {
+        for (const [k, v] of bruteForceTracker) {
+            if (now - v.last > BRUTE_FORCE_WINDOW_MS * 4) bruteForceTracker.delete(k);
+        }
+    }
+
+    next();
 };

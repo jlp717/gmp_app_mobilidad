@@ -350,14 +350,15 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
         ApiClient.get(
           '/dashboard/matrix-data',
           queryParameters: params,
-          cacheKey: 'dash_matrix_${params}_v2', // Changed key (v2)
-          cacheTTL: const Duration(minutes: 15),
+          cacheKey: 'dash_matrix_${params}_v2',
+          cacheTTL: const Duration(minutes: 60),
         ),
         ApiClient.get(
           '/dashboard/metrics',
           queryParameters: params,
-          cacheKey: 'dashboard_metrics_$params',
-          cacheTTL: const Duration(minutes: 5),
+          cacheKey: 'dash_metrics_${params.hashCode}',
+          cacheTTL: const Duration(minutes: 30),
+          receiveTimeout: const Duration(seconds: 20),
         ),
       ]);
 

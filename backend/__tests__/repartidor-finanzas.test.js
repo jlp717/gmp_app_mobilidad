@@ -70,7 +70,7 @@ describe('Repartidor finanzas routes', () => {
     }
   });
 
-  test('GET /daily-summary uses repartidor cobros and balance to build the liquidation form', async () => {
+   test('GET /daily-summary uses repartidor cobros and balance to build the liquidation form', async () => {
     mockQueryWithParams
       .mockResolvedValueOnce([{
         TOTAL_EFECTIVO: '222.79',
@@ -84,18 +84,19 @@ describe('Repartidor finanzas routes', () => {
       .mockResolvedValueOnce([
         {
           ID: 10,
-          FECHA_COBRO: '2026-04-23 11:28:57',
-          CODIGO_CLIENTE: '4300009479',
-          NOMBRE_CLIENTE: 'PEREZ DIAZ ALFONSO',
-          FORMA_PAGO: 'EFECTIVO',
-          TIPO_DOCUMENTO: 'CAC',
-          SERIE_DOCUMENTO: 'S',
-          TERMINAL_DOCUMENTO: 10,
-          NUMERO_DOCUMENTO: 404,
-          EJERCICIO_DOCUMENTO: 2026,
-          XDE_DOCUMENTO: 1,
-          IMPORTE_COBRADO: '189.60',
-          IMPORTE_PENDIENTE: '0',
+          ANOVENCIMIENTO: 2026,
+          MESVENCIMIENTO: 4,
+          DIAVENCIMIENTO: 23,
+          CODIGOCLIENTEALBARAN: '4300009479',
+          CODIGOFORMAPAGO: 'EFECTIVO',
+          TIPODOCUMENTO: 'CAC',
+          SERIEDOCUMENTO: 'S',
+          TERMINALDOCUMENTO: 10,
+          NUMERODOCUMENTO: 404,
+          EJERCICIODOCUMENTO: 2026,
+          XDEDOCUMENTO: 1,
+          IMPORTEVENCIMIENTO: '189.60',
+          IMPORTEPENDIENTE: '0',
         },
       ]);
 
@@ -108,7 +109,7 @@ describe('Repartidor finanzas routes', () => {
     expect(res.body.summary.saldoActual).toBe(4.81);
     expect(res.body.summary.totalAIngresar).toBe(227.6);
     expect(res.body.cobros[0].documento).toBe('E 2026-B-S-010-000404-01');
-    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['94', '2026-04-23']);
+    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['94', 20260423]);
   });
 
   test('GET /daily-summary blocks repartidor access to another repartidor', async () => {
@@ -173,26 +174,26 @@ describe('Repartidor finanzas routes', () => {
     expect(params).toEqual(['94', 20251202, 20260828, 1000]);
   });
 
-  test('POST /liquidaciones closes in configured LQD once and replays by idempotency token', async () => {
+   test('POST /liquidaciones closes in configured LQD once and replays by idempotency token', async () => {
     const existingRow = {
       ID: '501',
       IDEMPOTENCY_TOKEN: 'liq-20260423-94',
-      CODIGO_REPARTIDOR: '94',
-      SUBEMPRESA_LIQ: 'GMP',
-      EJERCICIO_LIQ: 2026,
-      SERIE_LIQ: 'A',
-      TERMINAL_LIQ: 94,
-      NUMERO_LIQ: 2,
-      TOTAL_EFECTIVO: '222.79',
-      TOTAL_CHEQUES: '0',
-      TOTAL_TARJETA: '0',
-      TOTAL_POSTDATADOS: '0',
-      SALDO_ANTERIOR: '0',
+      CODIGOVENDEDOR: '94',
+      SUBEMPRESALIQUIDACION: 'GMP',
+      EJERCICIOLIQUIDACION: 2026,
+      SERIELIQUIDACION: 'A',
+      TERMINALLIQUIDACION: 94,
+      NUMEROLIQUIDACION: 2,
+      IMPORTEEFECTIVO: '222.79',
+      IMPORTECHEQUES: '0',
+      IMPORTETARJETA: '0',
+      IMPORTEPOSTDATADOS: '0',
+      IMPORTESALDOACTUAL: '0',
       TOTAL_COBROS_DIA: '222.79',
-      TOTAL_A_INGRESAR: '222.79',
-      INGRESO_BANCO: '222.79',
+      IMPORTETOTALAINGRESAR: '222.79',
+      IMPORTEINGRESOENBANCO: '222.79',
       SALDO_RESULTANTE: '0',
-      STATUS: 'CLOSED',
+      REVISADOSN: 'S',
     };
 
     mockQueryWithParams
@@ -247,26 +248,26 @@ describe('Repartidor finanzas routes', () => {
     )).toBe(true);
   });
 
-  test('POST /liquidaciones rejects idempotency token replay with different payload', async () => {
+   test('POST /liquidaciones rejects idempotency token replay with different payload', async () => {
     mockQueryWithParams.mockResolvedValueOnce([{
       ID: '501',
       IDEMPOTENCY_TOKEN: 'liq-20260423-94',
-      CODIGO_REPARTIDOR: '94',
-      SUBEMPRESA_LIQ: 'GMP',
-      EJERCICIO_LIQ: 2026,
-      SERIE_LIQ: 'A',
-      TERMINAL_LIQ: 94,
-      NUMERO_LIQ: 2,
-      TOTAL_EFECTIVO: '222.79',
-      TOTAL_CHEQUES: '0',
-      TOTAL_TARJETA: '0',
-      TOTAL_POSTDATADOS: '0',
-      SALDO_ANTERIOR: '0',
+      CODIGOVENDEDOR: '94',
+      SUBEMPRESALIQUIDACION: 'GMP',
+      EJERCICIOLIQUIDACION: 2026,
+      SERIELIQUIDACION: 'A',
+      TERMINALLIQUIDACION: 94,
+      NUMEROLIQUIDACION: 2,
+      IMPORTEEFECTIVO: '222.79',
+      IMPORTECHEQUES: '0',
+      IMPORTETARJETA: '0',
+      IMPORTEPOSTDATADOS: '0',
+      IMPORTESALDOACTUAL: '0',
       TOTAL_COBROS_DIA: '222.79',
-      TOTAL_A_INGRESAR: '222.79',
-      INGRESO_BANCO: '222.79',
+      IMPORTETOTALAINGRESAR: '222.79',
+      IMPORTEINGRESOENBANCO: '222.79',
       SALDO_RESULTANTE: '0',
-      STATUS: 'CLOSED',
+      REVISADOSN: 'S',
     }]);
 
     const res = await request(app).post('/finanzas/liquidaciones').send({
@@ -482,31 +483,31 @@ describe('Repartidor finanzas routes', () => {
     expect(mockConnQuery).not.toHaveBeenCalled();
   });
 
-  test('POST /rutero/confirm-delivery-cobro replays an already completed token without duplicate inserts', async () => {
+   test('POST /rutero/confirm-delivery-cobro replays an already completed token without duplicate inserts', async () => {
     mockConnQuery.mockImplementation(async (sql) => {
       if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql)) {
         return [{
           ID: 15,
           ENTREGA_APP_ID: '2026-S-10-404-4300009479',
-          CODIGO_REPARTIDOR: '94',
-          CODIGO_CLIENTE: '4300009479',
-          TIPO_DOCUMENTO: 'ALBARAN',
-          ORIGEN_DOCUMENTO: 'B',
-          SUBEMPRESA_DOCUMENTO: 'GMP',
-          SERIE_DOCUMENTO: 'S',
-          EJERCICIO_DOCUMENTO: 2026,
-          TERMINAL_DOCUMENTO: 10,
-          NUMERO_DOCUMENTO: 404,
-          XDE_DOCUMENTO: 1,
-          DEX_DOCUMENTO: 1,
-          IMPORTE_COBRADO: 189.60,
-          IMPORTE_PENDIENTE: 0,
-          FORMA_PAGO: 'EFECTIVO',
+          CODIGOVENDEDOR: '94',
+          CODIGOCLIENTEALBARAN: '4300009479',
+          TIPODOCUMENTO: 'ALBARAN',
+          ORIGENDOCUMENTO: 'B',
+          SUBEMPRESADOCUMENTO: 'GMP',
+          SERIEDOCUMENTO: 'S',
+          EJERCICIODOCUMENTO: 2026,
+          TERMINALDOCUMENTO: 10,
+          NUMERODOCUMENTO: 404,
+          XDEDOCUMENTO: 1,
+          DEXDOCUMENTO: 1,
+          IMPORTEVENCIMIENTO: 189.60,
+          IMPORTEPENDIENTE: 0,
+          CODIGOFORMAPAGO: 'EFECTIVO',
           PANTALLA_ORIGEN: 'RUTERO',
         }];
       }
       if (/FROM JAVIER\.DELIVERY_STATUS/i.test(sql)) {
-        return [{ STATUS: 'ENTREGADO', UPDATED_AT: '2026-04-23 11:30:00', REPARTIDOR_ID: '94' }];
+        return [{ CONFORMADOSN: 'ENTREGADO', FECHAACTUALIZACION: '2026-04-23 11:30:00', REPARTIDOR_ID: '94' }];
       }
       return [];
     });

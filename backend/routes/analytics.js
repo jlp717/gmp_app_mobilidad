@@ -32,7 +32,7 @@ router.get('/yoy-comparison', verifyToken, async (req, res) => {
         const monthFilter = month ? `AND L.LCMMDC = ${parseInt(month) || 0}` : '';
         const cacheKeyBase = `analytics:yoy:${currentYear}:${month || 'all'}:${vendedorCodes}`;
 
-        const getData = async (yr) => {
+        const getData = (yr) => {
             const sql = `
           SELECT 
             SUM(L.LCIMVT) as sales, 
@@ -41,14 +41,17 @@ router.get('/yoy-comparison', verifyToken, async (req, res) => {
           FROM DSED.LACLAE L 
           WHERE L.LCAADC = ${yr} AND ${LACLAE_SALES_FILTER} ${monthFilter} ${vendedorFilter}
         `;
-            const result = await cachedQuery(query, sql, `${cacheKeyBase}:${yr}`, TTL.LONG);
-            return result[0] || {};
+            return cachedQuery(query, sql, `${cacheKeyBase}:${yr}`, TTL.LONG);
         };
 
 
-        const curr = await getData(currentYear);
         const lastYr = currentYear - 1;
-        const prev = await getData(lastYr);
+        const [currRows, prevRows] = await Promise.all([
+            getData(currentYear),
+            getData(lastYr)
+        ]);
+        const curr = currRows[0] || {};
+        const prev = prevRows[0] || {};
 
         const currSales = parseFloat(curr.SALES) || 0;
         const prevSales = parseFloat(prev.SALES) || 0;
@@ -270,7 +273,6 @@ router.get('/margins', verifyToken, async (req, res) => {
       GROUP BY MESDOCUMENTO
       ORDER BY MESDOCUMENTO
   `;
-        const monthlyMargins = await cachedQuery(query, monthlySql, `${cacheKey}:monthly`, TTL.MEDIUM);
 
         // Margin by product family
         const familySql = `
@@ -284,7 +286,11 @@ router.get('/margins', verifyToken, async (req, res) => {
       ORDER BY sales DESC
       FETCH FIRST 10 ROWS ONLY
     `;
-        const familyMargins = await cachedQuery(query, familySql, `${cacheKey}:family`, TTL.MEDIUM);
+
+        const [monthlyMargins, familyMargins] = await Promise.all([
+            cachedQuery(query, monthlySql, `${cacheKey}:monthly`, TTL.MEDIUM),
+            cachedQuery(query, familySql, `${cacheKey}:family`, TTL.MEDIUM)
+        ]);
 
         res.json({
             year,

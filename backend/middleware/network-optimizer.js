@@ -42,8 +42,14 @@ const CACHE_CONTROL = {
     '/api/products': 'public, max-age=86400, stale-while-revalidate=3600',
     '/api/vendedores': 'public, max-age=86400, stale-while-revalidate=3600',
     '/api/dashboard/metrics': 'private, max-age=60, stale-while-revalidate=30',
+    '/api/dashboard/sales-evolution': 'private, max-age=300, stale-while-revalidate=60',
+    '/api/dashboard/matrix-data': 'private, max-age=300, stale-while-revalidate=60',
     '/api/clients': 'private, max-age=300, stale-while-revalidate=60',
+    '/api/commissions': 'private, max-age=900, stale-while-revalidate=300',
+    '/api/analytics': 'private, max-age=300, stale-while-revalidate=60',
     '/api/objectives': 'private, max-age=180, stale-while-revalidate=60',
+    '/api/rutero/day': 'private, max-age=300, stale-while-revalidate=60',
+    '/api/rutero/week': 'private, max-age=900, stale-while-revalidate=300',
     default: 'private, no-cache',
 };
 
@@ -66,6 +72,17 @@ const PREFETCH_HINTS = {
  */
 const pendingRequests = new Map();
 const COALESCE_WINDOW_MS = 50;
+const MAX_PENDING_AGE_MS = 30000;
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [sig, entry] of pendingRequests) {
+        if (now - (entry.createdAt || 0) > MAX_PENDING_AGE_MS) {
+            entry.reject(new Error('Coalescing request timed out'));
+            pendingRequests.delete(sig);
+        }
+    }
+}, 10000).unref();
 
 /**
  * Main network optimizer middleware
@@ -217,7 +234,7 @@ function responseCoalescing(req, res, next) {
         rejectPromise = reject;
     });
 
-    pendingRequests.set(signature, { promise, resolve: resolvePromise, reject: rejectPromise });
+    pendingRequests.set(signature, { promise, resolve: resolvePromise, reject: rejectPromise, createdAt: Date.now() });
 
     // Override res.json to capture response
     const originalJson = res.json.bind(res);

@@ -27,8 +27,9 @@ function getCacheStats() {
 }
 
 function calculateHitRate() {
-    if (totalHits === 0) return 0;
-    return ((totalHits - totalMisses) / totalHits * 100).toFixed(2);
+    const total = totalHits + totalMisses;
+    if (total === 0) return 0;
+    return (totalHits / total * 100).toFixed(2);
 }
 
 let totalHits = 0;
@@ -189,11 +190,29 @@ function cacheMiddleware(req, res, next) {
         if (path.includes('/dashboard/metrics')) {
             return cached('metrics', CACHE_TTL.metrics)(req, res, next);
         }
+        if (path.includes('/dashboard/sales-evolution')) {
+            return cached('evolution', 300)(req, res, next);
+        }
+        if (path.includes('/dashboard/matrix-data')) {
+            return cached('matrix', 300)(req, res, next);
+        }
         if (path.includes('/clients')) {
             return cached('clients', CACHE_TTL.clients)(req, res, next);
         }
         if (path.includes('/products') && !path.includes('/image') && !path.includes('/ficha')) {
             return cached('products', CACHE_TTL.products)(req, res, next);
+        }
+        if (path.includes('/analytics')) {
+            return cached('analytics', 300)(req, res, next);
+        }
+        if (path.includes('/commissions') && !path.includes('/pay')) {
+            return cached('commissions', 900)(req, res, next);
+        }
+        if (path.includes('/objectives')) {
+            return cached('objectives', 180)(req, res, next);
+        }
+        if (path.includes('/rutero')) {
+            return cached('rutero', 300)(req, res, next);
         }
     }
 
@@ -212,6 +231,17 @@ function invalidationMiddleware(req, res, next) {
         }
         if (path.includes('/dashboard')) {
             invalidate('metrics:');
+            invalidate('evolution:');
+            invalidate('matrix:');
+        }
+        if (path.includes('/commissions')) {
+            invalidate('commissions:');
+        }
+        if (path.includes('/objectives')) {
+            invalidate('objectives:');
+        }
+        if (path.includes('/rutero')) {
+            invalidate('rutero:');
         }
     }
     next();

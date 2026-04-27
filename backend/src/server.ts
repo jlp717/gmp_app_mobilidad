@@ -25,6 +25,7 @@ import { RefreshTokenManager } from './core/infrastructure/security/refresh-toke
 import { errorHandler, notFoundHandler } from './middleware/error.middleware';
 import { authMiddleware } from './middleware/auth.middleware';
 import { auditMiddleware } from './middleware/audit.middleware';
+import { detectScannerProbes, detectSuspiciousAgents } from '../middleware/security';
 import { healthRoutes } from './routes/health.routes';
 import { authRoutes } from './routes/auth.routes';
 import { dashboardRoutes } from './routes/dashboard.routes';
@@ -69,25 +70,31 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// 3. Compression
+// 3. Scanner probe detection (must be early - returns 404 for .env, .git, wp-admin, etc.)
+app.use(detectScannerProbes);
+
+// 4. Suspicious user-agent detection (blocks sqlmap, nikto, curl, etc.)
+app.use(detectSuspiciousAgents);
+
+// 5. Compression
 app.use(compression({ level: 6 }));
 
-// 4. Body parsing
+// 6. Body parsing
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
-// 5. Request ID
+// 7. Request ID
 app.use((req: Request, _res: Response, next: NextFunction) => {
   (req as any).requestId = crypto.randomUUID();
   next();
 });
 
-// 6. Logging
+// 8. Logging
 if (config.env !== 'test') {
   app.use(morgan('combined', { stream: morganStream }));
 }
 
-// 7. Audit
+// 9. Audit
 app.use(auditMiddleware);
 
 // ============================================================

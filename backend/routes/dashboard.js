@@ -151,8 +151,10 @@ router.get('/metrics', verifyToken, async (req, res) => {
         if (vendedorCodes && vendedorCodes !== 'ALL') {
             const firstCode = vendedorCodes.split(',')[0]?.trim();
             if (firstCode) {
-                const bSalesCurr = await getBSales(firstCode, currentYear);
-                const bSalesLast = await getBSales(firstCode, currentYear - 1);
+                const [bSalesCurr, bSalesLast] = await Promise.all([
+                    getBSales(firstCode, currentYear),
+                    getBSales(firstCode, currentYear - 1),
+                ]);
                 currentSales += (bSalesCurr[currentMonth] || 0);
                 lastSales += (bSalesLast[currentMonth] || 0);
             }

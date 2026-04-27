@@ -366,7 +366,7 @@ if (clientInfo.length === 0) {
         ORDER BY totalSales DESC
         FETCH FIRST 10 ROWS ONLY
       `),
-      // Query 5: Payment status
+      // Query 5: Payment status (CVC)
       query(`
         SELECT
           SUM(CASE WHEN CVC.SITUACION = 'C' THEN CVC.IMPORTEVENCIMIENTO ELSE 0 END) as paid,
@@ -374,6 +374,15 @@ if (clientInfo.length === 0) {
           COUNT(CASE WHEN CVC.SITUACION = 'P' THEN 1 END) as pendingCount
         FROM DSEDAC.CVC CVC
         WHERE CVC.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND CVC.ANOEMISION >= ${MIN_YEAR}
+      `),
+      // Query 6: CAC cross-validation (invoice totals)
+      query(`
+        SELECT
+          SUM(CAC.IMPORTETOTAL) as totalInvoiced
+        FROM DSEDAC.CAC CAC
+        WHERE TRIM(CAC.CODIGOCLIENTEFACTURA) = '${safeClientCode}'
+          AND CAC.EJERCICIOFACTURA >= ${MIN_YEAR}
+          AND CAC.NUMEROFACTURA > 0
       `),
     ]);
 
@@ -383,38 +392,17 @@ if (clientInfo.length === 0) {
     const monthlyTrend = queryResults[2] || [];
     const topProducts = queryResults[3] || [];
     const paymentStatusResult = queryResults[4]?.[0] || {};
+    const cacValidationResult = queryResults[5]?.[0] || {};
 
-    // Payment status from CVC with CAC cross-validation
-    // CVC tracks payment/vencimiento records; CAC has the actual invoice totals.
-    // We query both and log discrepancies for auditing.
-    const paymentStatus = await query(`
-      SELECT
-        SUM(CASE WHEN CVC.SITUACION = 'C' THEN CVC.IMPORTEVENCIMIENTO ELSE 0 END) as paid,
-        SUM(CASE WHEN CVC.SITUACION = 'P' THEN CVC.IMPORTEPENDIENTE ELSE 0 END) as pending,
-        COUNT(CASE WHEN CVC.SITUACION = 'P' THEN 1 END) as pendingCount
-      FROM DSEDAC.CVC CVC
-      WHERE CVC.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND CVC.ANOEMISION >= ${MIN_YEAR}
-`);
-
-    // CAC cross-validation: sum invoice totals for comparison
-    const cacValidation = await query(`
-      SELECT
-        SUM(CAC.IMPORTETOTAL) as totalInvoiced
-      FROM DSEDAC.CAC CAC
-      WHERE TRIM(CAC.CODIGOCLIENTEFACTURA) = '${safeClientCode}'
-        AND CAC.EJERCICIOFACTURA >= ${MIN_YEAR}
-        AND CAC.NUMEROFACTURA > 0
-    `);
-
-    const pendingCVC = parseFloat(paymentStatus[0]?.PENDING) || 0;
-    const totalCAC = parseFloat(cacValidation[0]?.TOTALINVOICED) || 0;
+    const pendingCVC = parseFloat(paymentStatusResult.PENDING) || 0;
+    const totalCAC = parseFloat(cacValidationResult.TOTALINVOICED) || 0;
     if (Math.abs(pendingCVC - totalCAC) > 100) {
       logger.warn(`[CLIENT ${safeClientCode}] CVC/CAC discrepancy: CVC pending=${pendingCVC.toFixed(2)}, CAC total=${totalCAC.toFixed(2)}, diff=${(pendingCVC - totalCAC).toFixed(2)}`);
     }
 
     const c = clientInfo[0];
     const s = salesSummary;
-    const p = paymentStatus[0] || {};
+    const p = paymentStatusResult;
 
     // Build phone list for WhatsApp feature
     const phones = [];

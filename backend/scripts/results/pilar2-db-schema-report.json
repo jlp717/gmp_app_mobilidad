@@ -1,0 +1,755 @@
+{
+  "timestamp": "2026-04-27T10:27:40.032Z",
+  "mission": "PILAR 2: Verify ALL JAVIER tables match DSEDAC structure",
+  "summary": {
+    "totalTablePairs": 8,
+    "passed": 8,
+    "failed": 0,
+    "warnings": 0,
+    "totalIssues": 0,
+    "backupTablesPassed": 0,
+    "backupTablesFailed": 8,
+    "verifiedTablesPassed": 2,
+    "verifiedTablesFailed": 0
+  },
+  "tableChecks": [
+    {
+      "table": "REPARTIDOR_COBROS",
+      "dsedacEquivalent": "CVC",
+      "description": "Cobros",
+      "checks": {
+        "javier_table_exists": {
+          "status": "PASS",
+          "details": "JAVIER.REPARTIDOR_COBROS exists"
+        },
+        "dsedac_table_exists": {
+          "status": "PASS",
+          "details": "DSEDAC.CVC exists"
+        },
+        "column_count": {
+          "status": "PASS",
+          "details": "JAVIER: 110 cols, DSEDAC: 104 cols (JAVIER should have >= DSEDAC cols)",
+          "javierCount": 110,
+          "dsedacCount": 104
+        },
+        "dsedac_columns_present": {
+          "status": "PASS",
+          "details": "All DSEDAC columns present in JAVIER table",
+          "missingColumns": []
+        },
+        "column_types_match": {
+          "status": "PASS",
+          "details": "All column types compatible",
+          "mismatches": []
+        },
+        "app_only_columns": {
+          "status": "PASS",
+          "details": "6 app-only columns found (expected for idempotency, tracking, etc.)",
+          "appOnlyColumns": [
+            "IDEMPOTENCY_TOKEN",
+            "CREATED_AT",
+            "UPDATED_AT",
+            "STATUS",
+            "OPERADOR",
+            "PANTALLA_ORIGEN"
+          ]
+        },
+        "indexes_exist": {
+          "status": "PASS",
+          "details": "5 index(es) found on JAVIER.REPARTIDOR_COBROS",
+          "indexCount": 5,
+          "indexes": [
+            {
+              "name": "UX_REP_COBROS_TOKEN"
+            },
+            {
+              "name": "IDX_REP_COBROS_DOC"
+            },
+            {
+              "name": "REP_COBROS_VENDEDOR"
+            },
+            {
+              "name": "IDX_REP_COBROS_REP_LIQ_FECHA"
+            },
+            {
+              "name": "IDX_REP_COBROS_CLIENTE"
+            }
+          ]
+        },
+        "constraints_exist": {
+          "status": "WARN",
+          "details": "0 constraint(s) found (0 CHECK, 0 UNIQUE/PK)",
+          "checkConstraints": [],
+          "uniqueConstraints": []
+        },
+        "data_integrity": {
+          "check": "no_orphaned_records",
+          "status": "SKIP",
+          "details": "No foreign key columns found for orphan check",
+          "count": 0
+        }
+      },
+      "issues": [],
+      "warnings": [],
+      "javierColumnCount": 110,
+      "dsedacColumnCount": 104,
+      "javierRowCount": 0,
+      "dsedacRowCount": 123381
+    },
+    {
+      "table": "REPARTIDOR_LIQUIDACION_OPS",
+      "dsedacEquivalent": "LQD",
+      "description": "Liquidaciones",
+      "checks": {
+        "javier_table_exists": {
+          "status": "PASS",
+          "details": "JAVIER.REPARTIDOR_LIQUIDACION_OPS exists"
+        },
+        "dsedac_table_exists": {
+          "status": "PASS",
+          "details": "DSEDAC.LQD exists"
+        },
+        "column_count": {
+          "status": "PASS",
+          "details": "JAVIER: 38 cols, DSEDAC: 32 cols (JAVIER should have >= DSEDAC cols)",
+          "javierCount": 38,
+          "dsedacCount": 32
+        },
+        "dsedac_columns_present": {
+          "status": "PASS",
+          "details": "All DSEDAC columns present in JAVIER table",
+          "missingColumns": []
+        },
+        "column_types_match": {
+          "status": "PASS",
+          "details": "All column types compatible",
+          "mismatches": []
+        },
+        "app_only_columns": {
+          "status": "PASS",
+          "details": "6 app-only columns found (expected for idempotency, tracking, etc.)",
+          "appOnlyColumns": [
+            "IDEMPOTENCY_TOKEN",
+            "CREATED_AT",
+            "UPDATED_AT",
+            "STATUS",
+            "OPERADOR",
+            "PANTALLA_ORIGEN"
+          ]
+        },
+        "indexes_exist": {
+          "status": "PASS",
+          "details": "4 index(es) found on JAVIER.REPARTIDOR_LIQUIDACION_OPS",
+          "indexCount": 4,
+          "indexes": [
+            {
+              "name": "UX_REP_LIQ_TOKEN"
+            },
+            {
+              "name": "UX_REP_LIQ_NUMERO"
+            },
+            {
+              "name": "IDX_REP_LIQ_REP_FECHA"
+            },
+            {
+              "name": "IDX_REP_LIQ_IDMARCA"
+            }
+          ]
+        },
+        "constraints_exist": {
+          "status": "WARN",
+          "details": "0 constraint(s) found (0 CHECK, 0 UNIQUE/PK)",
+          "checkConstraints": [],
+          "uniqueConstraints": []
+        },
+        "data_integrity": {
+          "check": "no_orphaned_records",
+          "status": "SKIP",
+          "details": "No foreign key columns found for orphan check",
+          "count": 0
+        }
+      },
+      "issues": [],
+      "warnings": [],
+      "javierColumnCount": 38,
+      "dsedacColumnCount": 32,
+      "javierRowCount": 0,
+      "dsedacRowCount": 59439
+    },
+    {
+      "table": "REPARTIDOR_ENTREGAS",
+      "dsedacEquivalent": "OPP",
+      "description": "Entregas (cabecera)",
+      "checks": {
+        "javier_table_exists": {
+          "status": "PASS",
+          "details": "JAVIER.REPARTIDOR_ENTREGAS exists"
+        },
+        "dsedac_table_exists": {
+          "status": "PASS",
+          "details": "DSEDAC.OPP exists"
+        },
+        "column_count": {
+          "status": "PASS",
+          "details": "JAVIER: 50 cols, DSEDAC: 44 cols (JAVIER should have >= DSEDAC cols)",
+          "javierCount": 50,
+          "dsedacCount": 44
+        },
+        "dsedac_columns_present": {
+          "status": "PASS",
+          "details": "All DSEDAC columns present in JAVIER table",
+          "missingColumns": []
+        },
+        "column_types_match": {
+          "status": "PASS",
+          "details": "All column types compatible",
+          "mismatches": []
+        },
+        "app_only_columns": {
+          "status": "PASS",
+          "details": "6 app-only columns found (expected for idempotency, tracking, etc.)",
+          "appOnlyColumns": [
+            "IDEMPOTENCY_TOKEN",
+            "CREATED_AT",
+            "UPDATED_AT",
+            "STATUS",
+            "OPERADOR",
+            "PANTALLA_ORIGEN"
+          ]
+        },
+        "indexes_exist": {
+          "status": "PASS",
+          "details": "5 index(es) found on JAVIER.REPARTIDOR_ENTREGAS",
+          "indexCount": 5,
+          "indexes": [
+            {
+              "name": "UX_REP_ENTREGAS_TOKEN"
+            },
+            {
+              "name": "UX_REP_ENTREGAS_OPP"
+            },
+            {
+              "name": "IDX_REP_ENTREGAS_REPARTIDOR"
+            },
+            {
+              "name": "IDX_REP_ENTREGAS_ESTADO"
+            },
+            {
+              "name": "IDX_REP_ENTREGAS_VEHICULO"
+            }
+          ]
+        },
+        "constraints_exist": {
+          "status": "WARN",
+          "details": "0 constraint(s) found (0 CHECK, 0 UNIQUE/PK)",
+          "checkConstraints": [],
+          "uniqueConstraints": []
+        },
+        "data_integrity": {
+          "check": "no_orphaned_records",
+          "status": "SKIP",
+          "details": "No foreign key columns found for orphan check",
+          "count": 0
+        }
+      },
+      "issues": [],
+      "warnings": [],
+      "javierColumnCount": 50,
+      "dsedacColumnCount": 44,
+      "javierRowCount": 0,
+      "dsedacRowCount": 290045
+    },
+    {
+      "table": "REPARTIDOR_ENTREGA_LINEAS",
+      "dsedacEquivalent": "LAC",
+      "description": "Entrega lineas",
+      "checks": {
+        "javier_table_exists": {
+          "status": "PASS",
+          "details": "JAVIER.REPARTIDOR_ENTREGA_LINEAS exists"
+        },
+        "dsedac_table_exists": {
+          "status": "PASS",
+          "details": "DSEDAC.LAC exists"
+        },
+        "column_count": {
+          "status": "PASS",
+          "details": "JAVIER: 132 cols, DSEDAC: 126 cols (JAVIER should have >= DSEDAC cols)",
+          "javierCount": 132,
+          "dsedacCount": 126
+        },
+        "dsedac_columns_present": {
+          "status": "PASS",
+          "details": "All DSEDAC columns present in JAVIER table",
+          "missingColumns": []
+        },
+        "column_types_match": {
+          "status": "PASS",
+          "details": "All column types compatible",
+          "mismatches": []
+        },
+        "app_only_columns": {
+          "status": "PASS",
+          "details": "6 app-only columns found (expected for idempotency, tracking, etc.)",
+          "appOnlyColumns": [
+            "IDEMPOTENCY_TOKEN",
+            "CREATED_AT",
+            "UPDATED_AT",
+            "STATUS",
+            "OPERADOR",
+            "PANTALLA_ORIGEN"
+          ]
+        },
+        "indexes_exist": {
+          "status": "PASS",
+          "details": "6 index(es) found on JAVIER.REPARTIDOR_ENTREGA_LINEAS",
+          "indexCount": 6,
+          "indexes": [
+            {
+              "name": "UX_REP_LINEAS_TOKEN"
+            },
+            {
+              "name": "UX_REP_LINEAS_ALBARAN_SEQ"
+            },
+            {
+              "name": "IDX_REP_LINEAS_ALBARAN"
+            },
+            {
+              "name": "IDX_REP_LINEAS_ARTICULO"
+            },
+            {
+              "name": "IDX_REP_LINEAS_SITUACION"
+            },
+            {
+              "name": "IDX_REP_LINEAS_ENTREGA"
+            }
+          ]
+        },
+        "constraints_exist": {
+          "status": "WARN",
+          "details": "0 constraint(s) found (0 CHECK, 0 UNIQUE/PK)",
+          "checkConstraints": [],
+          "uniqueConstraints": []
+        },
+        "data_integrity": {
+          "check": "no_orphaned_records",
+          "status": "ERROR",
+          "details": "[odbc] Error executing the sql statement",
+          "count": 0
+        }
+      },
+      "issues": [],
+      "warnings": [],
+      "javierColumnCount": 132,
+      "dsedacColumnCount": 126,
+      "javierRowCount": 0,
+      "dsedacRowCount": 2781350
+    },
+    {
+      "table": "REPARTIDOR_FIRMAS",
+      "dsedacEquivalent": "CACFIRMAS",
+      "description": "Firmas",
+      "checks": {
+        "javier_table_exists": {
+          "status": "PASS",
+          "details": "JAVIER.REPARTIDOR_FIRMAS exists"
+        },
+        "dsedac_table_exists": {
+          "status": "PASS",
+          "details": "DSEDAC.CACFIRMAS exists"
+        },
+        "column_count": {
+          "status": "PASS",
+          "details": "JAVIER: 25 cols, DSEDAC: 17 cols (JAVIER should have >= DSEDAC cols)",
+          "javierCount": 25,
+          "dsedacCount": 17
+        },
+        "dsedac_columns_present": {
+          "status": "PASS",
+          "details": "All DSEDAC columns present in JAVIER table",
+          "missingColumns": []
+        },
+        "column_types_match": {
+          "status": "PASS",
+          "details": "All column types compatible",
+          "mismatches": []
+        },
+        "app_only_columns": {
+          "status": "PASS",
+          "details": "8 app-only columns found (expected for idempotency, tracking, etc.)",
+          "appOnlyColumns": [
+            "ID",
+            "MARCAACTUALIZACION",
+            "IDEMPOTENCY_TOKEN",
+            "CREATED_AT",
+            "UPDATED_AT",
+            "STATUS",
+            "OPERADOR",
+            "PANTALLA_ORIGEN"
+          ]
+        },
+        "indexes_exist": {
+          "status": "PASS",
+          "details": "4 index(es) found on JAVIER.REPARTIDOR_FIRMAS",
+          "indexCount": 4,
+          "indexes": [
+            {
+              "name": "UX_REP_FIRMAS_TOKEN"
+            },
+            {
+              "name": "UX_REP_FIRMAS_ALBARAN"
+            },
+            {
+              "name": "IDX_REP_FIRMAS_ALBARAN"
+            },
+            {
+              "name": "IDX_REP_FIRMAS_VENDEDOR"
+            }
+          ]
+        },
+        "constraints_exist": {
+          "status": "WARN",
+          "details": "0 constraint(s) found (0 CHECK, 0 UNIQUE/PK)",
+          "checkConstraints": [],
+          "uniqueConstraints": []
+        },
+        "data_integrity": {
+          "check": "no_orphaned_records",
+          "status": "SKIP",
+          "details": "No foreign key columns found for orphan check",
+          "count": 0
+        }
+      },
+      "issues": [],
+      "warnings": [],
+      "javierColumnCount": 25,
+      "dsedacColumnCount": 17,
+      "javierRowCount": 0,
+      "dsedacRowCount": 399457
+    },
+    {
+      "table": "REPARTIDOR_OBJETIVOS",
+      "dsedacEquivalent": "CMV",
+      "description": "Objetivos",
+      "checks": {
+        "javier_table_exists": {
+          "status": "PASS",
+          "details": "JAVIER.REPARTIDOR_OBJETIVOS exists"
+        },
+        "dsedac_table_exists": {
+          "status": "PASS",
+          "details": "DSEDAC.CMV exists"
+        },
+        "column_count": {
+          "status": "PASS",
+          "details": "JAVIER: 15 cols, DSEDAC: 9 cols (JAVIER should have >= DSEDAC cols)",
+          "javierCount": 15,
+          "dsedacCount": 9
+        },
+        "dsedac_columns_present": {
+          "status": "PASS",
+          "details": "All DSEDAC columns present in JAVIER table",
+          "missingColumns": []
+        },
+        "column_types_match": {
+          "status": "PASS",
+          "details": "All column types compatible",
+          "mismatches": []
+        },
+        "app_only_columns": {
+          "status": "PASS",
+          "details": "6 app-only columns found (expected for idempotency, tracking, etc.)",
+          "appOnlyColumns": [
+            "IDEMPOTENCY_TOKEN",
+            "CREATED_AT",
+            "UPDATED_AT",
+            "STATUS",
+            "OPERADOR",
+            "PANTALLA_ORIGEN"
+          ]
+        },
+        "indexes_exist": {
+          "status": "PASS",
+          "details": "3 index(es) found on JAVIER.REPARTIDOR_OBJETIVOS",
+          "indexCount": 3,
+          "indexes": [
+            {
+              "name": "UX_REP_OBJETIVOS_TOKEN"
+            },
+            {
+              "name": "UX_REP_OBJETIVOS_VENDEDOR"
+            },
+            {
+              "name": "IDX_REP_OBJETIVOS_PORCENTAJE"
+            }
+          ]
+        },
+        "constraints_exist": {
+          "status": "WARN",
+          "details": "0 constraint(s) found (0 CHECK, 0 UNIQUE/PK)",
+          "checkConstraints": [],
+          "uniqueConstraints": []
+        },
+        "data_integrity": {
+          "check": "no_orphaned_records",
+          "status": "SKIP",
+          "details": "No foreign key columns found for orphan check",
+          "count": 0
+        }
+      },
+      "issues": [],
+      "warnings": [],
+      "javierColumnCount": 15,
+      "dsedacColumnCount": 9,
+      "javierRowCount": 0,
+      "dsedacRowCount": 0
+    },
+    {
+      "table": "DELIVERY_STATUS",
+      "dsedacEquivalent": "CPC",
+      "description": "Delivery status",
+      "checks": {
+        "javier_table_exists": {
+          "status": "PASS",
+          "details": "JAVIER.DELIVERY_STATUS exists"
+        },
+        "dsedac_table_exists": {
+          "status": "PASS",
+          "details": "DSEDAC.CPC exists"
+        },
+        "column_count": {
+          "status": "PASS",
+          "details": "JAVIER: 146 cols, DSEDAC: 140 cols (JAVIER should have >= DSEDAC cols)",
+          "javierCount": 146,
+          "dsedacCount": 140
+        },
+        "dsedac_columns_present": {
+          "status": "PASS",
+          "details": "All DSEDAC columns present in JAVIER table",
+          "missingColumns": []
+        },
+        "column_types_match": {
+          "status": "PASS",
+          "details": "All column types compatible",
+          "mismatches": []
+        },
+        "app_only_columns": {
+          "status": "PASS",
+          "details": "6 app-only columns found (expected for idempotency, tracking, etc.)",
+          "appOnlyColumns": [
+            "IDEMPOTENCY_TOKEN",
+            "CREATED_AT",
+            "UPDATED_AT",
+            "STATUS",
+            "OPERADOR",
+            "PANTALLA_ORIGEN"
+          ]
+        },
+        "indexes_exist": {
+          "status": "PASS",
+          "details": "7 index(es) found on JAVIER.DELIVERY_STATUS",
+          "indexCount": 7,
+          "indexes": [
+            {
+              "name": "UX_DELIVERY_STATUS_TOKEN"
+            },
+            {
+              "name": "UX_DELIVERY_STATUS_PEDIDO"
+            },
+            {
+              "name": "IDX_DELIVERY_STATUS_REP"
+            },
+            {
+              "name": "IDX_DELIVERY_STATUS_SITUACION"
+            },
+            {
+              "name": "IDX_DELIVERY_STATUS_CLIENTE"
+            },
+            {
+              "name": "IDX_DELIVERY_STATUS_RUTA"
+            },
+            {
+              "name": "IDX_DELIVERY_STATUS_OPP"
+            }
+          ]
+        },
+        "constraints_exist": {
+          "status": "WARN",
+          "details": "0 constraint(s) found (0 CHECK, 0 UNIQUE/PK)",
+          "checkConstraints": [],
+          "uniqueConstraints": []
+        },
+        "data_integrity": {
+          "check": "no_orphaned_records",
+          "status": "SKIP",
+          "details": "No foreign key columns found for orphan check",
+          "count": 0
+        }
+      },
+      "issues": [],
+      "warnings": [],
+      "javierColumnCount": 146,
+      "dsedacColumnCount": 140,
+      "javierRowCount": 0,
+      "dsedacRowCount": 724010
+    },
+    {
+      "table": "CLIENT_SIGNERS",
+      "dsedacEquivalent": "CLI",
+      "description": "Client signers",
+      "checks": {
+        "javier_table_exists": {
+          "status": "PASS",
+          "details": "JAVIER.CLIENT_SIGNERS exists"
+        },
+        "dsedac_table_exists": {
+          "status": "PASS",
+          "details": "DSEDAC.CLI exists"
+        },
+        "column_count": {
+          "status": "PASS",
+          "details": "JAVIER: 56 cols, DSEDAC: 50 cols (JAVIER should have >= DSEDAC cols)",
+          "javierCount": 56,
+          "dsedacCount": 50
+        },
+        "dsedac_columns_present": {
+          "status": "PASS",
+          "details": "All DSEDAC columns present in JAVIER table",
+          "missingColumns": []
+        },
+        "column_types_match": {
+          "status": "PASS",
+          "details": "All column types compatible",
+          "mismatches": []
+        },
+        "app_only_columns": {
+          "status": "PASS",
+          "details": "6 app-only columns found (expected for idempotency, tracking, etc.)",
+          "appOnlyColumns": [
+            "IDEMPOTENCY_TOKEN",
+            "CREATED_AT",
+            "UPDATED_AT",
+            "STATUS",
+            "OPERADOR",
+            "PANTALLA_ORIGEN"
+          ]
+        },
+        "indexes_exist": {
+          "status": "PASS",
+          "details": "5 index(es) found on JAVIER.CLIENT_SIGNERS",
+          "indexCount": 5,
+          "indexes": [
+            {
+              "name": "UX_CLIENT_SIGNERS_TOKEN"
+            },
+            {
+              "name": "UX_CLIENT_SIGNERS_CODIGO"
+            },
+            {
+              "name": "IDX_CLIENT_SIGNERS_NOMBRE"
+            },
+            {
+              "name": "IDX_CLIENT_SIGNERS_RUTA"
+            },
+            {
+              "name": "IDX_CLIENT_SIGNERS_POBLACION"
+            }
+          ]
+        },
+        "constraints_exist": {
+          "status": "WARN",
+          "details": "0 constraint(s) found (0 CHECK, 0 UNIQUE/PK)",
+          "checkConstraints": [],
+          "uniqueConstraints": []
+        },
+        "data_integrity": {
+          "check": "no_orphaned_records",
+          "status": "PASS",
+          "details": "All client references valid",
+          "count": 0
+        }
+      },
+      "issues": [],
+      "warnings": [],
+      "javierColumnCount": 56,
+      "dsedacColumnCount": 50,
+      "javierRowCount": 0,
+      "dsedacRowCount": 13926
+    }
+  ],
+  "backupTables": [
+    {
+      "table": "BKP_REPARTIDOR_COBROS",
+      "exists": false,
+      "rowCount": null,
+      "status": "FAIL"
+    },
+    {
+      "table": "BKP_REPARTIDOR_LIQUIDACION_OPS",
+      "exists": false,
+      "rowCount": null,
+      "status": "FAIL"
+    },
+    {
+      "table": "BKP_REPARTIDOR_ENTREGAS",
+      "exists": false,
+      "rowCount": null,
+      "status": "FAIL"
+    },
+    {
+      "table": "BKP_REPARTIDOR_ENTREGA_LINEAS",
+      "exists": false,
+      "rowCount": null,
+      "status": "FAIL"
+    },
+    {
+      "table": "BKP_REPARTIDOR_FIRMAS",
+      "exists": false,
+      "rowCount": null,
+      "status": "FAIL"
+    },
+    {
+      "table": "BKP_REPARTIDOR_OBJETIVOS",
+      "exists": false,
+      "rowCount": null,
+      "status": "FAIL"
+    },
+    {
+      "table": "BKP_DELIVERY_STATUS",
+      "exists": false,
+      "rowCount": null,
+      "status": "FAIL"
+    },
+    {
+      "table": "BKP_CLIENT_SIGNERS",
+      "exists": false,
+      "rowCount": null,
+      "status": "FAIL"
+    }
+  ],
+  "verifiedTables": [
+    {
+      "table": "REPARTIDOR_LIQUIDACION_OPS",
+      "dsedacEquivalent": "LQD",
+      "description": "Liquidaciones (verified)",
+      "javierColumnCount": 38,
+      "dsedacColumnCount": 32,
+      "missingColumns": [],
+      "typeMismatches": [],
+      "status": "PASS",
+      "issues": []
+    },
+    {
+      "table": "COMM_CONFIG",
+      "dsedacEquivalent": "COMM_CONFIG",
+      "description": "Commission config (verified)",
+      "javierColumnCount": 10,
+      "dsedacColumnCount": 10,
+      "missingColumns": [],
+      "typeMismatches": [],
+      "status": "PASS",
+      "issues": []
+    }
+  ],
+  "overallStatus": "FAIL"
+}

@@ -50,7 +50,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       final monthParam = _selectedMonth?.toString() ?? '';
       final upToTodayParam = _upToToday.toString();
       
-      // Fetch all data in parallel
+      // Fetch all data in parallel with caching for LACLAE-heavy endpoints
+      final yoyYear = _selectedYears.first.toString();
       final results = await Future.wait([
         ApiClient.get('/dashboard/sales-evolution', queryParameters: {
           'years': yearsParam,
@@ -59,23 +60,23 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           'months': '36',
         },),
         ApiClient.get('/dashboard/yoy-comparison', queryParameters: {
-          'year': _selectedYears.first.toString(),
-        },),
+          'year': yoyYear,
+        }, cacheKey: 'analytics_yoy_$yoyYear', cacheTTL: const Duration(hours: 6)),
         ApiClient.get('/analytics/top-clients', queryParameters: {
-          'year': _selectedYears.first.toString(),
+          'year': yoyYear,
           if (monthParam.isNotEmpty) 'month': monthParam,
           'limit': '10',
-        },),
+        }, cacheKey: 'analytics_top_clients_$yoyYear${monthParam.isNotEmpty ? "_$monthParam" : ""}', cacheTTL: const Duration(hours: 3)),
         ApiClient.get('/analytics/top-products', queryParameters: {
-          'year': _selectedYears.first.toString(),
+          'year': yoyYear,
           if (monthParam.isNotEmpty) 'month': monthParam,
           'limit': '10',
-        },),
+        }, cacheKey: 'analytics_top_products_$yoyYear${monthParam.isNotEmpty ? "_$monthParam" : ""}', cacheTTL: const Duration(hours: 3)),
         ApiClient.get('/analytics/trends'),
         ApiClient.get('/analytics/margins', queryParameters: {
-          'year': _selectedYears.first.toString(),
-        },),
-        ApiClient.get('/dashboard/metrics'),
+          'year': yoyYear,
+        }, cacheKey: 'analytics_margins_$yoyYear', cacheTTL: const Duration(hours: 6)),
+        ApiClient.get('/dashboard/metrics', cacheKey: 'analytics_dash_metrics_$yoyYear', cacheTTL: const Duration(minutes: 30)),
       ]);
 
       setState(() {

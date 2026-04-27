@@ -785,6 +785,13 @@ function buildAggregatedYearResult(results, config) {
 
 async function discoverVendorCodesForYear(year) {
     const safeYr = parseInt(year);
+    const cacheKey = `comm:vendorCodes:${safeYr}`;
+
+    const cachedCodes = await redisCache.get('route', cacheKey);
+    if (cachedCodes) {
+        return cachedCodes;
+    }
+
     const col = getVendorColumn(safeYr);
     const vendorRows = await queryWithParams(`
         SELECT DISTINCT RTRIM(L.${col}) as VENDOR_CODE
@@ -794,9 +801,12 @@ async function discoverVendorCodesForYear(year) {
           AND L.${col} <> ''
     `, [safeYr, safeYr - 1], false);
 
-    return vendorRows
+    const codes = vendorRows
         .map(r => r.VENDOR_CODE)
         .filter(code => code && code !== '0');
+
+    await redisCache.set('route', cacheKey, codes, TTL.LONG);
+    return codes;
 }
 
 async function calculateGroupedVendorSummary(vendorCodes, year, config) {
@@ -835,8 +845,11 @@ async function calculateGroupedVendorSummary(vendorCodes, year, config) {
 
 router.get('/summary', verifyToken, async (req, res) => {
     try {
-        const { vendedorCode, year, forceRefresh } = req.query;
+        const { vendedorCode, year, forceRefresh, limit, offset } = req.query;
         if (!vendedorCode) return res.status(400).json({ success: false, error: 'Falta codigo vendedor' });
+
+        const pageLimit = Math.min(Math.max(parseInt(limit) || 0, 0), 1000);
+        const pageOffset = Math.max(parseInt(offset) || 0, 0);
 
         const shouldForceRefresh = forceRefresh === 'true' || forceRefresh === '1';
 
@@ -1039,7 +1052,7 @@ router.get('/summary', verifyToken, async (req, res) => {
         // Execution
         let aggregatedResult = null;
 
-        for (const yr of years) {
+        const yearPromises = years.map(async (yr) => {
             // Process Year
             let yearResult;
 
@@ -1049,7 +1062,7 @@ router.get('/summary', verifyToken, async (req, res) => {
                 const cachedResult = null;
                 if (cachedResult) {
                     logger.info(`[COMMISSIONS] ⚡ Cache HIT for ALL summary (${allSummaryCacheKey})`);
-                    return res.json({ success: true, ...cachedResult });
+                    return { success: true, ...cachedResult };
                 }
                 if (shouldForceRefresh) {
                     logger.info(`[COMMISSIONS] 🔄 Force refresh bypassing grouped cache (${aggregatedCacheKey})`);
@@ -1131,6 +1144,12 @@ router.get('/summary', verifyToken, async (req, res) => {
                 };
             }
 
+            return yearResult;
+        });
+
+        const yearResults = await Promise.all(yearPromises);
+
+        for (const yearResult of yearResults) {
             if (!aggregatedResult) {
                 aggregatedResult = yearResult;
             } else {
@@ -1143,8 +1162,22 @@ router.get('/summary', verifyToken, async (req, res) => {
             logger.info(`[COMMISSIONS] Cached grouped summary for 15min (${aggregatedCacheKey})`);
         }
 
+        // Apply pagination to breakdown when vendor=ALL or grouped request
+        let paginatedResult = { ...aggregatedResult };
+        if (isGroupedRequest && pageLimit > 0) {
+            const totalBreakdown = paginatedResult.breakdown?.length || 0;
+            const slicedBreakdown = (paginatedResult.breakdown || []).slice(pageOffset, pageOffset + pageLimit);
+            paginatedResult.breakdown = slicedBreakdown;
+            paginatedResult.pagination = {
+                total: totalBreakdown,
+                limit: pageLimit,
+                offset: pageOffset,
+                hasMore: pageOffset + pageLimit < totalBreakdown
+            };
+        }
+
         // AUDIT: Log what data the server actually returned (proof of response)
-        const responsePayload = { success: true, ...aggregatedResult };
+        const responsePayload = { success: true, ...paginatedResult };
         const responseHash = crypto.createHash('sha256')
             .update(JSON.stringify(responsePayload))
             .digest('hex')

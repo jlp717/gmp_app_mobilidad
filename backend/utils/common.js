@@ -160,6 +160,46 @@ function sanitizeCodeListForParams(codeString) {
         .filter(c => /^[a-zA-Z0-9]+$/.test(c));
 }
 
+/**
+ * Chunk vendor codes and execute a query with UNION ALL across batches.
+ * Prevents ODBC 22001/CWB0111 errors when passing 90+ vendor codes.
+ *
+ * @param {string} baseSql - Template SQL with @VENDOR_IN@ placeholder
+ * @param {string} vendorColumn - Column name for vendor filter
+ * @param {string} vendedorCodes - Comma-separated vendor codes or 'ALL'
+ * @param {Function} executeFn - Query execution function (sql, params) => rows
+ * @param {number} [batchSize=20] - Max vendor codes per batch
+ * @returns {Promise<Array>} Combined result rows
+ */
+async function chunkedVendorQuery(baseSql, vendorColumn, vendedorCodes, executeFn, batchSize = 20) {
+    if (!vendedorCodes || vendedorCodes.toUpperCase() === 'ALL') {
+        const sql = baseSql.replace('@VENDOR_IN@', '1=1');
+        return executeFn(sql, []);
+    }
+    const codes = sanitizeCodeListForParams(vendedorCodes);
+    if (codes.length === 0) return [];
+
+    if (codes.length <= batchSize) {
+        const placeholders = codes.map(() => '?').join(',');
+        const sql = baseSql.replace('@VENDOR_IN@', `TRIM(${vendorColumn}) IN (${placeholders})`);
+        return executeFn(sql, codes);
+    }
+
+    const batches = [];
+    for (let i = 0; i < codes.length; i += batchSize) {
+        batches.push(codes.slice(i, i + batchSize));
+    }
+
+    const results = await Promise.all(
+        batches.map(batch => {
+            const placeholders = batch.map(() => '?').join(',');
+            const sql = baseSql.replace('@VENDOR_IN@', `TRIM(${vendorColumn}) IN (${placeholders})`);
+            return executeFn(sql, batch);
+        })
+    );
+    return results.flat();
+}
+
 function formatCurrency(value) {
     // Returns raw number - formatting done in Flutter frontend with Spanish locale
     return parseFloat(value) || 0;
@@ -381,6 +421,7 @@ module.exports = {
     sanitizeForSQL,
     sanitizeCodeList,
     sanitizeCodeListForParams,
+    chunkedVendorQuery,
 
     // Helper to calculate working days (Mon-Fri + Sat/Sun if active)
     calculateWorkingDays: (year, month, activeWeekDays = []) => {

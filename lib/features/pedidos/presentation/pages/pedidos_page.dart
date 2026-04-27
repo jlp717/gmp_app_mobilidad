@@ -90,12 +90,15 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
     _catalogScrollController.addListener(_onCatalogScroll);
 
-    // Auto-refresh stock every 60 seconds for items in cart
+    // Auto-refresh stock every 120 seconds only when cart has items
     _stockRefreshTimer = Timer.periodic(
-      const Duration(seconds: 60),
+      const Duration(seconds: 120),
       (_) {
         if (mounted) {
-          ref.read(pedidosProvider).refreshCartStock();
+          final prov = ref.read(pedidosProvider);
+          if (prov.hasLines) {
+            prov.refreshCartStock();
+          }
         }
       },
     );

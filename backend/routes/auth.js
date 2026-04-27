@@ -17,7 +17,7 @@ const {
     handleLogout,
     registerSession
 } = require('../middleware/auth');
-const { loginLimiter, validateBody, sanitizeInput, detectSqlInjection } = require('../middleware/security');
+const { loginLimiter, validateBody, sanitizeInput, detectSqlInjection, bruteForceIpTracker } = require('../middleware/security');
 const { auditLogin, getClientIP } = require('../middleware/audit');
 const bcrypt = require('bcrypt');
 const fs = require('fs');
@@ -102,6 +102,7 @@ function sanitizeUsername(username) {
 // =============================================================================
 
 router.post('/login', 
+    bruteForceIpTracker,
     loginLimiter,
     sanitizeInput,
     async (req, res) => {
@@ -206,21 +207,59 @@ router.post('/login',
             const isJefeVentas = vendor.JEFEVENTASSN === 'S';
             const tipoVendedor = vendor.TIPOVENDEDOR?.trim();
 
-            // Verify PIN
+            // Verify PIN with migration support
             let pinValid = false;
 
-            if (dbPin && dbPin.startsWith('$2b$')) {
-                // Bcrypt hash - use compare
-                pinValid = await verifyPassword(trimmedPwd, dbPin);
-            } else if (dbPin === trimmedPwd) {
-                // Plaintext PIN (legacy) - VALID ONLY, don't migrate
-                pinValid = true;
+            // Step 1: Check JAVIER.VENDOR_PIN_HASHES for bcrypt hash
+            let storedHash = null;
+            try {
+                const hashResult = await queryWithParams(`
+                    SELECT PIN_HASH 
+                    FROM JAVIER.VENDOR_PIN_HASHES 
+                    WHERE CODIGOVENDEDOR = ?
+                `, [vendedorCode], false);
                 
-                // MIGRATION DISABLED: DB2 field CODIGOPIN is too small for bcrypt hashes
-                // Bcrypt produces ~60 char hashes, DB2 field is likely VARCHAR(20-30)
-                // To migrate, DBA must first: ALTER TABLE DSEDAC.VDPL1 ALTER COLUMN CODIGOPIN SET DATA TYPE VARCHAR(100)
-                // For now, plaintext PINs work but are NOT stored as hashes
-                logger.info(`[${requestId}] ⚠️ Vendor ${vendedorCode} has plaintext PIN (migration pending DB schema change)`);
+                if (hashResult.length > 0) {
+                    storedHash = hashResult[0].PIN_HASH?.toString().trim();
+                }
+            } catch (e) {
+                // Table may not exist yet (migration not run) - fallback to plaintext
+                logger.debug(`[${requestId}] PIN_HASHES table unavailable: ${e.message}`);
+            }
+
+            if (storedHash) {
+                // Step 2a: Hash exists - verify against bcrypt
+                pinValid = await verifyPassword(trimmedPwd, storedHash);
+                logger.info(`[${requestId}] Vendor ${vendedorCode} authenticated via bcrypt hash`);
+            } else if (dbPin && dbPin.startsWith('$2b$')) {
+                // Step 2b: Legacy bcrypt in DSEDAC.VDPL1.CODIGOPIN
+                pinValid = await verifyPassword(trimmedPwd, dbPin);
+                logger.info(`[${requestId}] Vendor ${vendedorCode} authenticated via legacy bcrypt`);
+            } else if (dbPin === trimmedPwd) {
+                // Step 2c: Plaintext PIN match (legacy)
+                pinValid = true;
+                logger.info(`[${requestId}] Vendor ${vendedorCode} authenticated via plaintext PIN`);
+
+                // MIGRATION: Hash the plaintext PIN and store in JAVIER.VENDOR_PIN_HASHES
+                try {
+                    const newHash = await hashPassword(trimmedPwd, BCRYPT_ROUNDS);
+                    // DB2 for i doesn't support ON DUPLICATE KEY UPDATE, use MERGE
+                    await queryWithParams(`
+                        MERGE INTO JAVIER.VENDOR_PIN_HASHES AS target
+                        USING (VALUES(CAST(? AS VARCHAR(20)), CAST(? AS VARCHAR(100)))) 
+                            AS source(CODIGOVENDEDOR, PIN_HASH)
+                        ON target.CODIGOVENDEDOR = source.CODIGOVENDEDOR
+                        WHEN MATCHED THEN 
+                            UPDATE SET PIN_HASH = source.PIN_HASH, UPDATED_AT = CURRENT_TIMESTAMP
+                        WHEN NOT MATCHED THEN 
+                            INSERT (CODIGOVENDEDOR, PIN_HASH, UPDATED_AT) 
+                            VALUES (source.CODIGOVENDEDOR, source.PIN_HASH, CURRENT_TIMESTAMP)
+                    `, [vendedorCode, newHash], false);
+                    logger.info(`[${requestId}] Migrated vendor ${vendedorCode} PIN to bcrypt hash`);
+                } catch (e) {
+                    // Non-critical: login succeeded, migration is best-effort
+                    logger.warn(`[${requestId}] Failed to migrate PIN hash for ${vendedorCode}: ${e.message}`);
+                }
             }
 
             if (!pinValid) {

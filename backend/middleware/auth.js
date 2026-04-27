@@ -111,6 +111,30 @@ function stopSessionCleanup() {
 
 startSessionCleanup();
 
+// Deduplicate noisy auth warnings per IP (signature mismatches, etc.)
+const _authWarnTracker = new Map();
+const _AUTH_WARN_WINDOW_MS = 5 * 60 * 1000;
+
+function _dedupWarn(ip, key, message) {
+    const now = Date.now();
+    const entry = _authWarnTracker.get(`${ip}:${key}`);
+    if (entry && now - entry.last < _AUTH_WARN_WINDOW_MS) {
+        entry.count++;
+        if (entry.count === 10 || entry.count % 50 === 0) {
+            logger.warn(`[AUTH-DEBUG] ${message} (from ${ip}, count=${entry.count}, suppressed ${entry.count - 1} similar)`);
+        }
+        return;
+    }
+    _authWarnTracker.set(`${ip}:${key}`, { count: 1, last: now });
+    logger.warn(`[AUTH-DEBUG] ${message}`);
+    // Cleanup old entries periodically
+    if (_authWarnTracker.size > 500) {
+        for (const [k, v] of _authWarnTracker) {
+            if (now - v.last > _AUTH_WARN_WINDOW_MS * 4) _authWarnTracker.delete(k);
+        }
+    }
+}
+
 // Graceful shutdown helper - call this on server shutdown
 function shutdown() {
     stopSessionCleanup();
@@ -144,7 +168,7 @@ function verifyTokenData(token, secret, ttlMs) {
     const expectedSig = crypto.createHmac('sha256', secret).update(data).digest('hex');
     
     if (sig.length !== expectedSig.length) {
-        logger.warn('[AUTH-DEBUG] Token rejected: sig length mismatch (wrong secret?)');
+        _dedupWarn('global', 'sig_length', 'Token rejected: sig length mismatch (wrong secret?)');
         return null;
     }
     
@@ -153,30 +177,30 @@ function verifyTokenData(token, secret, ttlMs) {
         const expectedBuffer = Buffer.from(expectedSig, 'hex');
         
         if (!crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
-            logger.warn('[AUTH-DEBUG] Token rejected: SIGNATURE MISMATCH (secret changed after token was issued?)');
+            _dedupWarn('global', 'sig_mismatch', 'Token rejected: SIGNATURE MISMATCH (secret changed after token was issued?)');
             return null;
         }
     } catch (e) {
-        logger.warn(`[AUTH-DEBUG] Token rejected: HMAC comparison error: ${e.message}`);
+        _dedupWarn('global', 'hmac_error', `Token rejected: HMAC comparison error: ${e.message}`);
         return null;
     }
     
     try {
         const payload = JSON.parse(Buffer.from(data, 'base64').toString('utf8'));
         if (!payload.timestamp) {
-            logger.warn('[AUTH-DEBUG] Token rejected: no timestamp field');
+            _dedupWarn('global', 'no_timestamp', 'Token rejected: no timestamp field');
             return null;
         }
         
         const age = Date.now() - payload.timestamp;
         if (age > ttlMs) {
-            logger.warn(`[AUTH-DEBUG] Token rejected: EXPIRED age=${age}ms ttl=${ttlMs}ms user=${payload.user || '?'}`);
+            _dedupWarn('global', 'expired', `Token rejected: EXPIRED age=${age}ms ttl=${ttlMs}ms user=${payload.user || '?'}`);
             return null;
         }
         
         return payload;
     } catch (e) {
-        logger.warn(`[AUTH-DEBUG] Token rejected: JSON parse error: ${e.message}`);
+        _dedupWarn('global', 'parse_error', `Token rejected: JSON parse error: ${e.message}`);
         return null;
     }
 }
@@ -287,7 +311,7 @@ exports.verifyToken = (req, res, next) => {
     const authHeader = req.headers['authorization'];
     
     if (!authHeader) {
-        logger.warn(`[AUTH] Access attempt without token: ${req.method} ${req.path} (${req.ip})`);
+        _dedupWarn(req.ip, 'no_token', `Access attempt without token: ${req.method} ${req.path}`);
         return res.status(401).json({ error: 'Acceso denegado. Se requiere autenticación.', code: 'MISSING_TOKEN' });
     }
     
@@ -302,7 +326,7 @@ exports.verifyToken = (req, res, next) => {
         const payload = exports.verifyAccessToken(token);
         
         if (!payload) {
-            logger.warn(`[AUTH] Invalid or expired token: ${req.ip}`);
+            _dedupWarn(req.ip, 'invalid_token', `Invalid or expired token from ${req.ip}`);
             return res.status(401).json({ error: 'Sesión expirada. Por favor, inicia sesión de nuevo.', code: 'TOKEN_EXPIRED' });
         }
         
@@ -384,7 +408,7 @@ exports.handleRefreshToken = async (req, res) => {
         const payload = exports.verifyRefreshToken(refreshToken);
         
         if (!payload) {
-            logger.warn(`[AUTH] Invalid or expired refresh token from IP: ${req.ip}`);
+            _dedupWarn(req.ip, 'invalid_refresh', `Invalid or expired refresh token from IP: ${req.ip}`);
             return res.status(401).json({ error: 'Refresh token inválido o expirado', code: 'INVALID_REFRESH_TOKEN' });
         }
         
@@ -392,7 +416,7 @@ exports.handleRefreshToken = async (req, res) => {
         const userCode = payload.user;
         
         if (!isRefreshTokenValid(userId, refreshToken)) {
-            logger.warn(`[AUTH] Revoked refresh token used from IP: ${req.ip}`);
+            _dedupWarn(req.ip, 'revoked_refresh', `Revoked refresh token used from IP: ${req.ip}`);
             exports.invalidateAllSessions(userId);
             return res.status(401).json({ error: 'Sesión revocada. Por favor, inicia sesión de nuevo.', code: 'SESSION_REVOKED' });
         }

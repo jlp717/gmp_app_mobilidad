@@ -1,0 +1,1185 @@
+{
+  "auditMeta": {
+    "date": "2026-04-27",
+    "auditor": "AI Backend Code Auditor",
+    "scope": "All backend files referencing JAVIER schema tables for repartidor liquidacion diaria, cobros, and comisiones features",
+    "filesAudited": 7,
+    "totalQueriesFound": 89,
+    "readQueries": 38,
+    "writeQueries": 51
+  },
+  "schemaMapping": {
+    "JAVIER.LQD": { "dsedac": "DSEDAC.LQD", "notes": "Same table name, different schema" },
+    "JAVIER.REPARTIDOR_COBROS": { "dsedac": "DSEDAC.CVC", "notes": "App-only cobros table; CVC is ERP vencimientos" },
+    "JAVIER.REPARTIDOR_ENTREGAS": { "dsedac": "DSEDAC.OPP", "notes": "App-only delivery tracking; OPP is ERP ordenes preparacion" },
+    "JAVIER.REPARTIDOR_ENTREGA_LINEAS": { "dsedac": "DSEDAC.LAC", "notes": "App-only line items; LAC is ERP lineas albaran" },
+    "JAVIER.REPARTIDOR_FIRMAS": { "dsedac": "DSEDAC.CACFIRMAS", "notes": "App-only firmas; CACFIRMAS is ERP firmas" },
+    "JAVIER.REPARTIDOR_OBJETIVOS": { "dsedac": "DSEDAC.CMV", "notes": "App-only objetivos; CMV is ERP objetivos" },
+    "JAVIER.DELIVERY_STATUS": { "dsedac": "DSEDAC.CPC", "notes": "App-only delivery status; CPC is ERP conformado status" },
+    "JAVIER.CLIENT_SIGNERS": { "dsedac": "DSEDAC.CLI", "notes": "App-only signer cache; CLI is ERP clientes" },
+    "JAVIER.COMM_CONFIG": { "dsedac": "DSEDAC.COMM_CONFIG", "notes": "Exact match, different schema" },
+    "JAVIER.REPARTIDOR_LIQUIDACION_OPS": { "dsedac": "DSEDAC.LQD", "notes": "App-only ops ledger; maps to LQD" },
+    "JAVIER.REPARTIDOR_FINANCIAL_BALANCES": { "dsedac": "derived", "notes": "Derived from LQD+CVC; no direct DSEDAC equiv" },
+    "JAVIER.REPARTIDOR_COMMISSION_TIERS": { "dsedac": "hardcoded", "notes": "Hardcoded in code; no DSEDAC equiv" },
+    "JAVIER.REPARTIDOR_LIQUIDACION_EMAILS": { "dsedac": "app-only", "notes": "App-only email log; no DSEDAC equiv" },
+    "JAVIER.COMMISSION_EXCEPTIONS": { "dsedac": "app-only", "notes": "App-only exclusion list; no DSEDAC equiv" },
+    "JAVIER.COMMISSION_PAYMENTS": { "dsedac": "app-only", "notes": "App-only payment ledger; no DSEDAC equiv" },
+    "JAVIER.RUTERO_CONFIG": { "dsedac": "DSEDAC.VDP or DSEDAC.RUT", "notes": "Route config overrides" },
+    "JAVIER.RUTERO_LOG": { "dsedac": "app-only", "notes": "Audit log for route changes" },
+    "JAVIER.PAYMENT_CONDITIONS": { "dsedac": "app-only", "notes": "App-only payment condition definitions" }
+  },
+  "files": [
+    {
+      "file": "backend/services/repartidor-finance-service.js",
+      "queries": [
+        {
+          "line": 399,
+          "table": "JAVIER.REPARTIDOR_LIQUIDACION_OPS",
+          "type": "READ",
+          "sql": "SELECT OPS.*, LQD.DIALIQUIDACION... FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS OPS LEFT JOIN ${LQD_TABLE} LQD",
+          "dsedacEquiv": "DSEDAC.LQD (for LQD_TABLE); app-only for OPS",
+          "columnTranslation": "none needed for OPS columns; LQD uses DSEDAC column names"
+        },
+        {
+          "line": 422,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "READ",
+          "sql": "SELECT COALESCE(SUM(...)) FROM JAVIER.REPARTIDOR_COBROS WHERE TRIM(CODIGO_REPARTIDOR) = ?",
+          "dsedacEquiv": "DSEDAC.CVC (conceptually)",
+          "columnTranslation": "CODIGO_REPARTIDOR -> CODIGOREPARTIDOR (DSEDAC), FECHA_COBRO -> app-only, FORMA_PAGO -> app-only, IMPORTE_COBRADO -> app-only"
+        },
+        {
+          "line": 431,
+          "table": "JAVIER.REPARTIDOR_FINANCIAL_BALANCES",
+          "type": "READ",
+          "sql": "SELECT SALDO_PENDIENTE FROM JAVIER.REPARTIDOR_FINANCIAL_BALANCES",
+          "dsedacEquiv": "derived from LQD+CVC",
+          "columnTranslation": "SALDO_PENDIENTE -> app-only, CODIGO_REPARTIDOR -> app-only"
+        },
+        {
+          "line": 452,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "READ",
+          "sql": "SELECT ID, FECHA_COBRO, CODIGO_CLIENTE... FROM JAVIER.REPARTIDOR_COBROS",
+          "dsedacEquiv": "DSEDAC.CVC (conceptually)",
+          "columnTranslation": "All columns are app-specific naming convention (snake_case with underscores)"
+        },
+        {
+          "line": 661,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "READ",
+          "sql": "SELECT * FROM JAVIER.REPARTIDOR_COBROS WHERE IDEMPOTENCY_TOKEN = ?",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "IDEMPOTENCY_TOKEN -> app-only"
+        },
+        {
+          "line": 676,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "READ",
+          "sql": "SELECT * FROM JAVIER.REPARTIDOR_COBROS WHERE IDEMPOTENCY_TOKEN = ?",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 688,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.REPARTIDOR_COBROS (...) VALUES (?, ?, ?, ...)",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "All columns app-specific: ENTREGA_APP_ID, CODIGO_CLIENTE, NOMBRE_CLIENTE, CODIGO_REPARTIDOR, TIPO_DOCUMENTO, ORIGEN_DOCUMENTO, etc."
+        },
+        {
+          "line": 734,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "READ",
+          "sql": "SELECT ID FROM JAVIER.REPARTIDOR_COBROS WHERE IDEMPOTENCY_TOKEN = ?",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 785,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "READ",
+          "sql": "SELECT * FROM JAVIER.REPARTIDOR_COBROS WHERE IDEMPOTENCY_TOKEN = ?",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 793,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "SELECT STATUS FROM JAVIER.DELIVERY_STATUS WHERE ID = ?",
+          "dsedacEquiv": "DSEDAC.CPC (CONFORMADOSN)",
+          "columnTranslation": "STATUS -> CONFORMADOSN, REPARTIDOR_ID -> CODIGOREPARTIDOR, UPDATED_AT -> app-only"
+        },
+        {
+          "line": 816,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "READ",
+          "sql": "SELECT * FROM JAVIER.REPARTIDOR_COBROS WHERE IDEMPOTENCY_TOKEN = ?",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 823,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "SELECT STATUS, UPDATED_AT, REPARTIDOR_ID FROM JAVIER.DELIVERY_STATUS WHERE ID = ?",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "STATUS -> CONFORMADOSN, REPARTIDOR_ID -> CODIGOREPARTIDOR"
+        },
+        {
+          "line": 864,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "WRITE",
+          "sql": "DELETE FROM JAVIER.DELIVERY_STATUS WHERE ID = ?",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "none (delete by app ID)"
+        },
+        {
+          "line": 869,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.DELIVERY_STATUS (ID, STATUS, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, UPDATED_AT) VALUES (...)",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "STATUS -> CONFORMADOSN, FIRMA_PATH -> app-only, LATITUD/LONGITUD -> app-only, REPARTIDOR_ID -> CODIGOREPARTIDOR"
+        },
+        {
+          "line": 890,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.REPARTIDOR_COBROS (...) VALUES (...)",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "all app-specific columns"
+        },
+        {
+          "line": 1016,
+          "table": "JAVIER.REPARTIDOR_LIQUIDACION_OPS",
+          "type": "READ",
+          "sql": "SELECT OPS.*, LQD.* FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS OPS LEFT JOIN ${LQD_TABLE} LQD",
+          "dsedacEquiv": "DSEDAC.LQD",
+          "columnTranslation": "OPS columns app-specific; LQD columns use DSEDAC names"
+        },
+        {
+          "line": 1037,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "WRITE",
+          "sql": "LOCK TABLE JAVIER.REPARTIDOR_COBROS IN EXCLUSIVE MODE",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 1038,
+          "table": "JAVIER.REPARTIDOR_FINANCIAL_BALANCES",
+          "type": "WRITE",
+          "sql": "LOCK TABLE JAVIER.REPARTIDOR_FINANCIAL_BALANCES IN EXCLUSIVE MODE",
+          "dsedacEquiv": "derived",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 1050,
+          "table": "JAVIER.REPARTIDOR_LIQUIDACION_OPS",
+          "type": "READ",
+          "sql": "SELECT OPS.*, LQD.* FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS OPS LEFT JOIN ${LQD_TABLE}",
+          "dsedacEquiv": "DSEDAC.LQD",
+          "columnTranslation": "same as line 1016"
+        },
+        {
+          "line": 1111,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "READ",
+          "sql": "SELECT COALESCE(SUM(...)) FROM JAVIER.REPARTIDOR_COBROS WHERE TRIM(CODIGO_REPARTIDOR) = ?",
+          "dsedacEquiv": "DSEDAC.CVC (conceptually)",
+          "columnTranslation": "same as line 422"
+        },
+        {
+          "line": 1120,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "READ",
+          "sql": "SELECT ID FROM JAVIER.REPARTIDOR_COBROS WHERE TRIM(CODIGO_REPARTIDOR) = ?",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 1130,
+          "table": "JAVIER.REPARTIDOR_FINANCIAL_BALANCES",
+          "type": "READ",
+          "sql": "SELECT SALDO_PENDIENTE FROM JAVIER.REPARTIDOR_FINANCIAL_BALANCES",
+          "dsedacEquiv": "derived",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 1223,
+          "table": "JAVIER.REPARTIDOR_LIQUIDACION_OPS",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.REPARTIDOR_LIQUIDACION_OPS (IDEMPOTENCY_TOKEN, SUBEMPRESA_LIQ, ...) VALUES (...)",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "All columns app-specific: IDEMPOTENCY_TOKEN, SUBEMPRESA_LIQ, EJERCICIO_LIQ, SERIE_LIQ, TERMINAL_LIQ, NUMERO_LIQ, etc."
+        },
+        {
+          "line": 1270,
+          "table": "JAVIER.REPARTIDOR_FINANCIAL_BALANCES",
+          "type": "WRITE",
+          "sql": "MERGE INTO JAVIER.REPARTIDOR_FINANCIAL_BALANCES B USING (VALUES ...) AS V...",
+          "dsedacEquiv": "derived",
+          "columnTranslation": "CODIGO_REPARTIDOR -> app-only, SALDO_PENDIENTE -> app-only, UPDATED_BY -> app-only"
+        },
+        {
+          "line": 1285,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "WRITE",
+          "sql": "UPDATE JAVIER.REPARTIDOR_COBROS SET LIQUIDADO_SN = 'S', LIQUIDACION_TOKEN = ? WHERE ID IN (...)",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "LIQUIDADO_SN -> app-only, LIQUIDACION_TOKEN -> app-only"
+        },
+        {
+          "line": 1303,
+          "table": "JAVIER.REPARTIDOR_COMMISSION_TIERS",
+          "type": "READ",
+          "sql": "SELECT ID, THRESHOLD_PCT, COMMISSION_PCT... FROM JAVIER.REPARTIDOR_COMMISSION_TIERS",
+          "dsedacEquiv": "hardcoded in code",
+          "columnTranslation": "THRESHOLD_PCT, COMMISSION_PCT, SORT_ORDER, ACTIVE_SN -> all app-specific"
+        },
+        {
+          "line": 1359,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "READ",
+          "sql": "SELECT COALESCE(SUM(IMPORTE_COBRADO)) FROM JAVIER.REPARTIDOR_COBROS WHERE TRIM(CODIGO_REPARTIDOR) = ?",
+          "dsedacEquiv": "DSEDAC.CVC (conceptually)",
+          "columnTranslation": "same as line 422"
+        },
+        {
+          "line": 1382,
+          "table": "JAVIER.REPARTIDOR_COMMISSION_TIERS",
+          "type": "WRITE",
+          "sql": "UPDATE JAVIER.REPARTIDOR_COMMISSION_TIERS SET ACTIVE_SN = 'N'...",
+          "dsedacEquiv": "hardcoded",
+          "columnTranslation": "THRESHOLD_PCT, COMMISSION_PCT, SORT_ORDER, ACTIVE_SN, CREATED_BY -> app-specific"
+        },
+        {
+          "line": 1392,
+          "table": "JAVIER.REPARTIDOR_COMMISSION_TIERS",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.REPARTIDOR_COMMISSION_TIERS (...) VALUES (...)",
+          "dsedacEquiv": "hardcoded",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 1413,
+          "table": "JAVIER.REPARTIDOR_LIQUIDACION_OPS",
+          "type": "READ",
+          "sql": "SELECT CODIGO_REPARTIDOR, SALDO_ANTERIOR, CREATED_AT FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "CODIGO_REPARTIDOR -> CODIGOREPARTIDOR (DSEDAC), SALDO_ANTERIOR -> app-only"
+        },
+        {
+          "line": 1421,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "READ",
+          "sql": "SELECT ENTREGA_APP_ID, LIQUIDACION_TOKEN FROM JAVIER.REPARTIDOR_COBROS",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 1437,
+          "table": "JAVIER.REPARTIDOR_LIQUIDACION_OPS",
+          "type": "READ",
+          "sql": "SELECT ID FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS WHERE TRIM(CODIGO_REPARTIDOR) = ?",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 1454,
+          "table": "JAVIER.REPARTIDOR_LIQUIDACION_EMAILS",
+          "type": "WRITE",
+          "sql": "DELETE FROM JAVIER.REPARTIDOR_LIQUIDACION_EMAILS WHERE LIQUIDACION_OP_ID IN (...)",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "LIQUIDACION_OP_ID -> app-only"
+        },
+        {
+          "line": 1460,
+          "table": "JAVIER.REPARTIDOR_LIQUIDACION_OPS",
+          "type": "WRITE",
+          "sql": "DELETE FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS WHERE IDEMPOTENCY_TOKEN = ?",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 1466,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "WRITE",
+          "sql": "UPDATE JAVIER.REPARTIDOR_COBROS SET LIQUIDADO_SN = 'N', LIQUIDACION_TOKEN = NULL",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "LIQUIDADO_SN, LIQUIDACION_TOKEN -> app-only"
+        },
+        {
+          "line": 1474,
+          "table": "JAVIER.REPARTIDOR_FINANCIAL_BALANCES",
+          "type": "WRITE",
+          "sql": "MERGE INTO JAVIER.REPARTIDOR_FINANCIAL_BALANCES B USING (VALUES ...)",
+          "dsedacEquiv": "derived",
+          "columnTranslation": "CODIGO_REPARTIDOR, SALDO_PENDIENTE, UPDATED_BY -> app-specific"
+        },
+        {
+          "line": 1491,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "WRITE",
+          "sql": "DELETE FROM JAVIER.REPARTIDOR_COBROS WHERE IDEMPOTENCY_TOKEN = ?",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 1507,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "WRITE",
+          "sql": "DELETE FROM JAVIER.DELIVERY_STATUS WHERE ID = ?",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "none"
+        }
+      ]
+    },
+    {
+      "file": "backend/routes/commissions.js",
+      "queries": [
+        {
+          "line": 26,
+          "table": "JAVIER.COMMISSION_EXCEPTIONS",
+          "type": "READ",
+          "sql": "SELECT TRIM(CODIGOVENDEDOR) as CODE FROM JAVIER.COMMISSION_EXCEPTIONS WHERE EXCLUIDO_COMISIONES = 'Y'",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "CODIGOVENDEDOR -> matches DSEDAC naming, EXCLUIDO_COMISIONES -> app-only"
+        },
+        {
+          "line": 78,
+          "table": "JAVIER.COMM_CONFIG",
+          "type": "READ",
+          "sql": "SELECT 1 FROM JAVIER.COMM_CONFIG FETCH FIRST 1 ROWS ONLY",
+          "dsedacEquiv": "DSEDAC.COMM_CONFIG",
+          "columnTranslation": "none (table existence check)"
+        },
+        {
+          "line": 87,
+          "table": "JAVIER.COMM_CONFIG",
+          "type": "WRITE",
+          "sql": "CREATE TABLE JAVIER.COMM_CONFIG (ID, YEAR, IPC_PCT, TIER1_MAX, ...)",
+          "dsedacEquiv": "DSEDAC.COMM_CONFIG",
+          "columnTranslation": "Columns match DSEDAC naming convention"
+        },
+        {
+          "line": 103,
+          "table": "JAVIER.COMM_CONFIG",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.COMM_CONFIG (ID, YEAR, IPC_PCT, ...) VALUES (1, 2026, 3.00, ...)",
+          "dsedacEquiv": "DSEDAC.COMM_CONFIG",
+          "columnTranslation": "none needed"
+        },
+        {
+          "line": 114,
+          "table": "JAVIER.COMMISSION_EXCEPTIONS",
+          "type": "READ",
+          "sql": "SELECT EXCLUIDO_COMISIONES FROM JAVIER.COMMISSION_EXCEPTIONS",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "EXCLUIDO_COMISIONES -> app-only"
+        },
+        {
+          "line": 120,
+          "table": "JAVIER.COMMISSION_EXCEPTIONS",
+          "type": "WRITE",
+          "sql": "ALTER TABLE JAVIER.COMMISSION_EXCEPTIONS ADD COLUMN EXCLUIDO_COMISIONES CHAR(1)",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 129,
+          "table": "JAVIER.COMMISSION_EXCEPTIONS",
+          "type": "READ",
+          "sql": "SELECT COUNT(*) as CNT FROM JAVIER.COMMISSION_EXCEPTIONS",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 133,
+          "table": "JAVIER.COMMISSION_EXCEPTIONS",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.COMMISSION_EXCEPTIONS (CODIGOVENDEDOR, HIDE_COMMISSIONS, EXCLUIDO_COMISIONES) VALUES (...)",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "HIDE_COMMISSIONS -> app-only, EXCLUIDO_COMISIONES -> app-only"
+        },
+        {
+          "line": 143,
+          "table": "JAVIER.COMMISSION_PAYMENTS",
+          "type": "READ",
+          "sql": "SELECT 1 FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 151,
+          "table": "JAVIER.COMMISSION_PAYMENTS",
+          "type": "WRITE",
+          "sql": "CREATE TABLE JAVIER.COMMISSION_PAYMENTS (ID, VENDEDOR_CODIGO, ANIO, MES, ...)",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "VENDEDOR_CODIGO -> CODIGOVENDEDOR (DSEDAC), ANIO -> ANODOCUMENTO (DSEDAC)"
+        },
+        {
+          "line": 175,
+          "table": "JAVIER.COMMISSION_PAYMENTS",
+          "type": "WRITE",
+          "sql": "ALTER TABLE JAVIER.COMMISSION_PAYMENTS ADD COLUMN OBJETIVO_MES DECIMAL(12,2)",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "OBJETIVO_MES -> app-only"
+        },
+        {
+          "line": 180,
+          "table": "JAVIER.COMMISSION_PAYMENTS",
+          "type": "WRITE",
+          "sql": "ALTER TABLE JAVIER.COMMISSION_PAYMENTS ADD COLUMN VENTAS_SOBRE_OBJETIVO DECIMAL(12,2)",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 187,
+          "table": "JAVIER.COMMISSION_PAYMENTS",
+          "type": "WRITE",
+          "sql": "CREATE INDEX IDX_CP_VENDOR_YEAR ON JAVIER.COMMISSION_PAYMENTS(VENDEDOR_CODIGO, ANIO)",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 296,
+          "table": "JAVIER.COMMISSION_PAYMENTS",
+          "type": "READ",
+          "sql": "SELECT MES, IMPORTE_PAGADO, COMISION_GENERADA... FROM JAVIER.COMMISSION_PAYMENTS WHERE VENDEDOR_CODIGO = ?",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "VENDEDOR_CODIGO -> CODIGOVENDEDOR, ANIO -> ANODOCUMENTO, MES -> MESDOCUMENTO"
+        },
+        {
+          "line": 498,
+          "table": "JAVIER.COMMERCIAL_TARGETS",
+          "type": "READ",
+          "sql": "SELECT IMPORTE_BASE_COMISION FROM JAVIER.COMMERCIAL_TARGETS WHERE CODIGOVENDEDOR = ?",
+          "dsedacEquiv": "DSEDAC.CMV (objetivos)",
+          "columnTranslation": "CODIGOVENDEDOR -> matches DSEDAC, IMPORTE_BASE_COMISION -> app-specific"
+        },
+        {
+          "line": 911,
+          "table": "JAVIER.COMM_CONFIG",
+          "type": "READ",
+          "sql": "SELECT * FROM JAVIER.COMM_CONFIG WHERE YEAR = ? FETCH FIRST 1 ROWS ONLY",
+          "dsedacEquiv": "DSEDAC.COMM_CONFIG",
+          "columnTranslation": "YEAR -> ANODOCUMENTO (DSEDAC convention)"
+        },
+        {
+          "line": 1269,
+          "table": "JAVIER.COMMISSION_PAYMENTS",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.COMMISSION_PAYMENTS (VENDEDOR_CODIGO, ANIO, MES, ...) VALUES (...)",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "VENDEDOR_CODIGO -> CODIGOVENDEDOR, ANIO -> ANODOCUMENTO, MES -> MESDOCUMENTO"
+        }
+      ]
+    },
+    {
+      "file": "backend/routes/entregas.js",
+      "queries": [
+        {
+          "line": 261,
+          "table": "JAVIER.PAYMENT_CONDITIONS",
+          "type": "READ",
+          "sql": "SELECT CODIGO, DESCRIPCION, TIPO, DIAS_PAGO... FROM JAVIER.PAYMENT_CONDITIONS WHERE ACTIVO = 'S'",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "All columns app-specific: CODIGO, DESCRIPCION, TIPO, DIAS_PAGO, DEBE_COBRAR, PUEDE_COBRAR, COLOR, ACTIVO"
+        },
+        {
+          "line": 297,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "LEFT JOIN JAVIER.DELIVERY_STATUS DS ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || ...",
+          "dsedacEquiv": "DSEDAC.CPC (CONFORMADOSN)",
+          "columnTranslation": "DS.STATUS -> CPC.CONFORMADOSN, DS.FIRMA_PATH -> app-only, DS.OBSERVACIONES -> app-only"
+        },
+        {
+          "line": 735,
+          "table": "JAVIER.PAYMENT_CONDITIONS",
+          "type": "READ",
+          "sql": "SELECT CODIGO, DESCRIPCION, TIPO... FROM JAVIER.PAYMENT_CONDITIONS WHERE ACTIVO = 'S'",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "same as line 261"
+        },
+        {
+          "line": 946,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "SELECT STATUS, UPDATED_AT, REPARTIDOR_ID FROM JAVIER.DELIVERY_STATUS WHERE ID = ?",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "STATUS -> CONFORMADOSN, REPARTIDOR_ID -> CODIGOREPARTIDOR"
+        },
+        {
+          "line": 971,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "SELECT * FROM JAVIER.DELIVERY_STATUS WHERE ID = ?",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 976,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "WRITE",
+          "sql": "DELETE FROM JAVIER.DELIVERY_STATUS WHERE ID = ?",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "none"
+        },
+        {
+          "line": 995,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.DELIVERY_STATUS (ID, STATUS, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, UPDATED_AT) VALUES (...)",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "STATUS -> CONFORMADOSN, FIRMA_PATH -> app-only, REPARTIDOR_ID -> CODIGOREPARTIDOR"
+        },
+        {
+          "line": 1005,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.DELIVERY_STATUS (restore) VALUES (...)",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 1105,
+          "table": "JAVIER.CLIENT_SIGNERS",
+          "type": "WRITE",
+          "sql": "DELETE FROM JAVIER.CLIENT_SIGNERS WHERE CODIGOCLIENTE = ? AND DNI = ?",
+          "dsedacEquiv": "DSEDAC.CLI",
+          "columnTranslation": "CODIGOCLIENTE -> matches DSEDAC, DNI -> NIF (DSEDAC.CLI), NOMBRE -> NOMBRECLIENTE"
+        },
+        {
+          "line": 1110,
+          "table": "JAVIER.CLIENT_SIGNERS",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.CLIENT_SIGNERS (CODIGOCLIENTE, DNI, NOMBRE, LAST_USED, USAGE_COUNT) VALUES (...)",
+          "dsedacEquiv": "DSEDAC.CLI",
+          "columnTranslation": "DNI -> NIF, NOMBRE -> NOMBRECLIENTE, LAST_USED/USAGE_COUNT -> app-only"
+        },
+        {
+          "line": 1146,
+          "table": "JAVIER.CLIENT_SIGNERS",
+          "type": "READ",
+          "sql": "SELECT DNI, NOMBRE FROM JAVIER.CLIENT_SIGNERS WHERE CODIGOCLIENTE = ?",
+          "dsedacEquiv": "DSEDAC.CLI",
+          "columnTranslation": "DNI -> NIF, NOMBRE -> NOMBRECLIENTE"
+        },
+        {
+          "line": 1228,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "FIRMA_PATH -> app-only"
+        },
+        {
+          "line": 1239,
+          "table": "JAVIER.REPARTIDOR_FIRMAS",
+          "type": "READ",
+          "sql": "SELECT RF.FIRMA_BASE64, RF.FIRMANTE_NOMBRE FROM JAVIER.REPARTIDOR_FIRMAS RF INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE",
+          "dsedacEquiv": "DSEDAC.CACFIRMAS / DSEDAC.OPP",
+          "columnTranslation": "FIRMA_BASE64 -> app-only, FIRMANTE_NOMBRE -> FIRMANOMBRE (CACFIRMAS), NUMERO_ALBARAN -> NUMEROALBARAN"
+        }
+      ]
+    },
+    {
+      "file": "backend/routes/repartidor.js",
+      "queries": [
+        {
+          "line": 325,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "LEFT JOIN JAVIER.DELIVERY_STATUS DS ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || ...",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "DS.STATUS -> CONFORMADOSN, DS.UPDATED_AT -> app-only, DS.FIRMA_PATH -> app-only"
+        },
+        {
+          "line": 937,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "FIRMA_PATH -> app-only"
+        },
+        {
+          "line": 953,
+          "table": "JAVIER.REPARTIDOR_FIRMAS",
+          "type": "READ",
+          "sql": "SELECT RF.FIRMA_BASE64, RF.FIRMANTE_NOMBRE, RF.FECHA_FIRMA FROM JAVIER.REPARTIDOR_FIRMAS RF INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE",
+          "dsedacEquiv": "DSEDAC.CACFIRMAS / DSEDAC.OPP",
+          "columnTranslation": "FIRMA_BASE64 -> app-only, FIRMANTE_NOMBRE -> FIRMANOMBRE, NUMERO_ALBARAN -> NUMEROALBARAN, EJERCICIO_ALBARAN -> EJERCICIOALBARAN"
+        },
+        {
+          "line": 1177,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "LEFT JOIN JAVIER.DELIVERY_STATUS DS ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || ...",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "same as line 325"
+        },
+        {
+          "line": 1356,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "FIRMA_PATH -> app-only"
+        },
+        {
+          "line": 1379,
+          "table": "JAVIER.REPARTIDOR_FIRMAS",
+          "type": "READ",
+          "sql": "SELECT RF.FIRMA_BASE64 FROM JAVIER.REPARTIDOR_FIRMAS RF INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE",
+          "dsedacEquiv": "DSEDAC.CACFIRMAS",
+          "columnTranslation": "same as line 953"
+        },
+        {
+          "line": 1485,
+          "table": "JAVIER.REPARTIDOR_ENTREGAS",
+          "type": "READ",
+          "sql": "SELECT ID FROM JAVIER.REPARTIDOR_ENTREGAS WHERE NUMERO_ALBARAN = ? AND EJERCICIO_ALBARAN = ?",
+          "dsedacEquiv": "DSEDAC.OPP",
+          "columnTranslation": "NUMERO_ALBARAN -> NUMEROALBARAN, EJERCICIO_ALBARAN -> EJERCICIOALBARAN, SERIE_ALBARAN -> SERIEALBARAN, CODIGO_CLIENTE -> CODIGOCLIENTEALBARAN"
+        },
+        {
+          "line": 1497,
+          "table": "JAVIER.REPARTIDOR_ENTREGAS",
+          "type": "WRITE",
+          "sql": "UPDATE JAVIER.REPARTIDOR_ENTREGAS SET ESTADO = ?, FECHA_ENTREGA = ?, OBSERVACIONES = ? WHERE ID = ?",
+          "dsedacEquiv": "DSEDAC.OPP",
+          "columnTranslation": "ESTADO -> app-only, FECHA_ENTREGA -> app-only, OBSERVACIONES -> app-only"
+        },
+        {
+          "line": 1506,
+          "table": "JAVIER.REPARTIDOR_ENTREGAS",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.REPARTIDOR_ENTREGAS (NUMERO_ALBARAN, EJERCICIO_ALBARAN, SERIE_ALBARAN, CODIGO_CLIENTE, ...) VALUES (...)",
+          "dsedacEquiv": "DSEDAC.OPP",
+          "columnTranslation": "All columns use underscore naming vs DSEDAC concatenated naming"
+        },
+        {
+          "line": 1523,
+          "table": "JAVIER.REPARTIDOR_ENTREGAS",
+          "type": "READ",
+          "sql": "SELECT ID FROM JAVIER.REPARTIDOR_ENTREGAS WHERE NUMERO_ALBARAN = ?",
+          "dsedacEquiv": "DSEDAC.OPP",
+          "columnTranslation": "same as line 1485"
+        },
+        {
+          "line": 1566,
+          "table": "JAVIER.REPARTIDOR_FIRMAS",
+          "type": "WRITE",
+          "sql": "DELETE FROM JAVIER.REPARTIDOR_FIRMAS WHERE ENTREGA_ID = ?",
+          "dsedacEquiv": "DSEDAC.CACFIRMAS",
+          "columnTranslation": "ENTREGA_ID -> app-only (no DSEDAC equiv)"
+        },
+        {
+          "line": 1570,
+          "table": "JAVIER.REPARTIDOR_FIRMAS",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.REPARTIDOR_FIRMAS (ENTREGA_ID, FIRMA_BASE64, FIRMANTE_NOMBRE, FIRMANTE_DNI, ...) VALUES (...)",
+          "dsedacEquiv": "DSEDAC.CACFIRMAS",
+          "columnTranslation": "ENTREGA_ID -> app-only, FIRMA_BASE64 -> FIRMABASE64, FIRMANTE_NOMBRE -> FIRMANOMBRE, FIRMANTE_DNI -> app-only"
+        },
+        {
+          "line": 1586,
+          "table": "JAVIER.REPARTIDOR_ENTREGAS",
+          "type": "WRITE",
+          "sql": "UPDATE JAVIER.REPARTIDOR_ENTREGAS SET ESTADO = 'ENTREGADO', FECHA_ENTREGA = CURRENT_TIMESTAMP WHERE ID = ?",
+          "dsedacEquiv": "DSEDAC.OPP",
+          "columnTranslation": "ESTADO -> app-only, FECHA_ENTREGA -> app-only"
+        },
+        {
+          "line": 1619,
+          "table": "JAVIER.REPARTIDOR_ENTREGA_LINEAS",
+          "type": "WRITE",
+          "sql": "DELETE FROM JAVIER.REPARTIDOR_ENTREGA_LINEAS WHERE ENTREGA_ID = ?",
+          "dsedacEquiv": "DSEDAC.LAC",
+          "columnTranslation": "ENTREGA_ID -> app-only, LINEA_ALBARAN -> SECUENCIA, CODIGO_ARTICULO -> CODIGOARTICULO"
+        },
+        {
+          "line": 1624,
+          "table": "JAVIER.REPARTIDOR_ENTREGA_LINEAS",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.REPARTIDOR_ENTREGA_LINEAS (ENTREGA_ID, LINEA_ALBARAN, CODIGO_ARTICULO, ...) VALUES (...)",
+          "dsedacEquiv": "DSEDAC.LAC",
+          "columnTranslation": "All columns use underscore naming: LINEA_ALBARAN -> SECUENCIA, CODIGO_ARTICULO -> CODIGOARTICULO, DESCRIPCION_ARTICULO -> DESCRIPCION, CANTIDAD_PEDIDA -> CANTIDADUNIDADES"
+        },
+        {
+          "line": 1649,
+          "table": "JAVIER.REPARTIDOR_ENTREGAS",
+          "type": "WRITE",
+          "sql": "UPDATE JAVIER.REPARTIDOR_ENTREGAS SET ESTADO = ? WHERE ID = ?",
+          "dsedacEquiv": "DSEDAC.OPP",
+          "columnTranslation": "ESTADO -> app-only"
+        },
+        {
+          "line": 1693,
+          "table": "JAVIER.REPARTIDOR_COBROS",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.REPARTIDOR_COBROS (ENTREGA_ID, ENTREGA_APP_ID, CODIGO_CLIENTE, ...) VALUES (...)",
+          "dsedacEquiv": "DSEDAC.CVC (conceptually)",
+          "columnTranslation": "ENTREGA_ID -> app-only, ENTREGA_APP_ID -> app-only, CODIGO_CLIENTE -> CODIGOCLIENTEALBARAN, CODIGO_REPARTIDOR -> CODIGOREPARTIDOR, TIPO_DOCUMENTO -> TIPODOCUMENTO"
+        },
+        {
+          "line": 1739,
+          "table": "JAVIER.REPARTIDOR_ENTREGAS",
+          "type": "WRITE",
+          "sql": "UPDATE JAVIER.REPARTIDOR_ENTREGAS SET CTR_COBRADO = 'S', IMPORTE_COBRADO = IMPORTE_COBRADO + ? WHERE ID = ?",
+          "dsedacEquiv": "DSEDAC.OPP",
+          "columnTranslation": "CTR_COBRADO -> app-only, IMPORTE_COBRADO -> app-only"
+        },
+        {
+          "line": 1766,
+          "table": "JAVIER.REPARTIDOR_FIRMAS",
+          "type": "READ",
+          "sql": "SELECT FIRMA_BASE64, FIRMANTE_NOMBRE, FECHA_FIRMA FROM JAVIER.REPARTIDOR_FIRMAS WHERE ENTREGA_ID = ?",
+          "dsedacEquiv": "DSEDAC.CACFIRMAS",
+          "columnTranslation": "FIRMA_BASE64 -> FIRMABASE64, FIRMANTE_NOMBRE -> FIRMANOMBRE, ENTREGA_ID -> app-only"
+        },
+        {
+          "line": 1862,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "LEFT JOIN JAVIER.DELIVERY_STATUS DS ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || ...",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "same as line 325"
+        },
+        {
+          "line": 1963,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "LEFT JOIN JAVIER.DELIVERY_STATUS DS ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || ...",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "same as line 325"
+        },
+        {
+          "line": 2134,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "FIRMA_PATH -> app-only"
+        },
+        {
+          "line": 2155,
+          "table": "JAVIER.REPARTIDOR_FIRMAS",
+          "type": "READ",
+          "sql": "SELECT RF.FIRMA_BASE64 FROM JAVIER.REPARTIDOR_FIRMAS RF INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE",
+          "dsedacEquiv": "DSEDAC.CACFIRMAS",
+          "columnTranslation": "same as line 953"
+        }
+      ]
+    },
+    {
+      "file": "backend/routes/planner.js",
+      "queries": [
+        {
+          "line": 169,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "SELECT COUNT(DISTINCT DS.ID) FROM JAVIER.DELIVERY_STATUS DS WHERE DS.STATUS = 'ENTREGADO' AND DS.REPARTIDOR_ID IN (?)",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "DS.STATUS -> CONFORMADOSN, DS.REPARTIDOR_ID -> CODIGOREPARTIDOR, DS.UPDATED_AT -> app-only"
+        },
+        {
+          "line": 398,
+          "table": "JAVIER.RUTERO_CONFIG",
+          "type": "READ",
+          "sql": "SELECT TRIM(DIA) as DIA, ORDEN FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND TRIM(CLIENTE) = ?",
+          "dsedacEquiv": "DSEDAC.VDP or DSEDAC.RUT",
+          "columnTranslation": "DIA -> app-only (day name), ORDEN -> app-only (position), VENDEDOR -> CODIGOVENDEDOR, CLIENTE -> CODIGOCLIENTE"
+        },
+        {
+          "line": 414,
+          "table": "JAVIER.RUTERO_CONFIG",
+          "type": "WRITE",
+          "sql": "DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND TRIM(CLIENTE) = ?",
+          "dsedacEquiv": "DSEDAC.VDP",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 419,
+          "table": "JAVIER.RUTERO_CONFIG",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) VALUES (?, ?, ?, -1)",
+          "dsedacEquiv": "DSEDAC.VDP",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 431,
+          "table": "JAVIER.RUTERO_CONFIG",
+          "type": "WRITE",
+          "sql": "UPDATE JAVIER.RUTERO_CONFIG SET ORDEN = ORDEN + 10 WHERE VENDEDOR = ? AND DIA = ?",
+          "dsedacEquiv": "DSEDAC.VDP",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 438,
+          "table": "JAVIER.RUTERO_CONFIG",
+          "type": "WRITE",
+          "sql": "UPDATE JAVIER.RUTERO_CONFIG SET ORDEN = ORDEN + 10 WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= ?",
+          "dsedacEquiv": "DSEDAC.VDP",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 445,
+          "table": "JAVIER.RUTERO_CONFIG",
+          "type": "READ",
+          "sql": "SELECT MAX(ORDEN) as MAX_ORD FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND DIA = ?",
+          "dsedacEquiv": "DSEDAC.VDP",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 458,
+          "table": "JAVIER.RUTERO_CONFIG",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) VALUES (?, ?, ?, ?)",
+          "dsedacEquiv": "DSEDAC.VDP",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 484,
+          "table": "JAVIER.RUTERO_LOG",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.RUTERO_LOG (VENDEDOR, TIPO_CAMBIO, DIA_ORIGEN, DIA_DESTINO, CLIENTE, ...) VALUES (...)",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "All columns app-specific: TIPO_CAMBIO, DIA_ORIGEN, DIA_DESTINO, POSICION_ANTERIOR, POSICION_NUEVA, DETALLES"
+        },
+        {
+          "line": 499,
+          "table": "JAVIER.RUTERO_CONFIG",
+          "type": "READ",
+          "sql": "SELECT COUNT(*) as CNT FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= 0",
+          "dsedacEquiv": "DSEDAC.VDP",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 599,
+          "table": "JAVIER.RUTERO_CONFIG",
+          "type": "READ",
+          "sql": "SELECT CLIENTE, ORDEN FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND DIA = ?",
+          "dsedacEquiv": "DSEDAC.VDP",
+          "columnTranslation": "CLIENTE -> CODIGOCLIENTE, ORDEN -> app-only"
+        },
+        {
+          "line": 611,
+          "table": "JAVIER.RUTERO_CONFIG",
+          "type": "WRITE",
+          "sql": "DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= 0",
+          "dsedacEquiv": "DSEDAC.VDP",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 621,
+          "table": "JAVIER.RUTERO_CONFIG",
+          "type": "WRITE",
+          "sql": "DELETE FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND DIA = ? AND TRIM(CLIENTE) IN (...)",
+          "dsedacEquiv": "DSEDAC.VDP",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 641,
+          "table": "JAVIER.RUTERO_CONFIG",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) VALUES (?, ?, ?, ?)",
+          "dsedacEquiv": "DSEDAC.VDP",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 657,
+          "table": "JAVIER.RUTERO_CONFIG",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.RUTERO_CONFIG (VENDEDOR, DIA, CLIENTE, ORDEN) VALUES (?, ?, ?, -1)",
+          "dsedacEquiv": "DSEDAC.VDP",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 691,
+          "table": "JAVIER.RUTERO_LOG",
+          "type": "WRITE",
+          "sql": "INSERT INTO JAVIER.RUTERO_LOG (VENDEDOR, TIPO_CAMBIO, DIA_ORIGEN, DIA_DESTINO, CLIENTE, ...) VALUES (...)",
+          "dsedacEquiv": "app-only",
+          "columnTranslation": "same as line 484"
+        },
+        {
+          "line": 765,
+          "table": "JAVIER.RUTERO_CONFIG",
+          "type": "READ",
+          "sql": "SELECT CLIENTE, ORDEN FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND DIA = ? AND ORDEN >= 0",
+          "dsedacEquiv": "DSEDAC.VDP",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 947,
+          "table": "JAVIER.RUTERO_CONFIG",
+          "type": "READ",
+          "sql": "SELECT TRIM(CLIENTE) as CLIENTE, ORDEN FROM JAVIER.RUTERO_CONFIG WHERE VENDEDOR = ? AND DIA = ?",
+          "dsedacEquiv": "DSEDAC.VDP",
+          "columnTranslation": "same as above"
+        }
+      ]
+    },
+    {
+      "file": "backend/server.js",
+      "queries": [
+        {
+          "line": 489,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "SELECT COUNT(*) as CNT FROM JAVIER.DELIVERY_STATUS",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "none (existence check)"
+        },
+        {
+          "line": 495,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "WRITE",
+          "sql": "CREATE TABLE JAVIER.DELIVERY_STATUS (ID, STATUS, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, UPDATED_AT, REPARTIDOR_ID)",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "STATUS -> CONFORMADOSN, REPARTIDOR_ID -> CODIGOREPARTIDOR, FIRMA_PATH -> app-only"
+        }
+      ]
+    },
+    {
+      "file": "backend/src/modules/repartidor/infrastructure/db2-repartidor-repository.js",
+      "queries": [
+        {
+          "line": 19,
+          "table": "JAVIER.RUTERO_CONFIG",
+          "type": "READ",
+          "sql": "SELECT RC.DIA, RC.CLIENTE, C.NOMBRECLIENTE, C.DIRECCION, RC.ORDEN FROM JAVIER.RUTERO_CONFIG RC LEFT JOIN DSEDAC.CLI C",
+          "dsedacEquiv": "DSEDAC.VDP",
+          "columnTranslation": "DIA -> app-only, CLIENTE -> CODIGOCLIENTE, ORDEN -> app-only, VENDEDOR -> CODIGOVENDEDOR"
+        },
+        {
+          "line": 75,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "LEFT JOIN JAVIER.DELIVERY_STATUS DS ON DS.REPARTIDOR_ID = TRIM(OP.CODIGOREPARTIDOR) AND DS.ID = OPC.NUMEROORDENPREPARACION",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "DS.STATUS -> CONFORMADOSN, DS.FIRMA_PATH -> app-only, DS.REPARTIDOR_ID -> CODIGOREPARTIDOR"
+        },
+        {
+          "line": 109,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "LEFT JOIN JAVIER.DELIVERY_STATUS DS ON DS.ID = OPC.NUMEROORDENPREPARACION",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "same as above"
+        },
+        {
+          "line": 149,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "WRITE",
+          "sql": "MERGE INTO JAVIER.DELIVERY_STATUS DS USING (VALUES (?, ?)) AS V(ID, REPARTIDOR_ID) ON DS.ID = V.ID WHEN MATCHED THEN UPDATE...",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "STATUS -> CONFORMADOSN, OBSERVACIONES -> app-only, REPARTIDOR_ID -> CODIGOREPARTIDOR"
+        },
+        {
+          "line": 166,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "WRITE",
+          "sql": "MERGE INTO JAVIER.DELIVERY_STATUS DS USING (VALUES (?)) AS V(ID) ON DS.ID = V.ID WHEN MATCHED THEN UPDATE SET FIRMA_PATH...",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "FIRMA_PATH -> app-only, LATITUD/LONGITUD -> app-only"
+        },
+        {
+          "line": 210,
+          "table": "JAVIER.DELIVERY_STATUS",
+          "type": "READ",
+          "sql": "LEFT JOIN JAVIER.DELIVERY_STATUS DS ON DS.ID = OPC.NUMEROORDENPREPARACION",
+          "dsedacEquiv": "DSEDAC.CPC",
+          "columnTranslation": "same as line 75"
+        }
+      ]
+    }
+  ],
+  "refactoringPlan": {
+    "phase1_configFile": {
+      "description": "Create a centralized schema/table mapping config file",
+      "file": "backend/config/schema-tables.js",
+      "content": {
+        "schema": "process.env.ERP_SCHEMA || 'DSEDAC'",
+        "appSchema": "process.env.APP_SCHEMA || 'JAVIER'",
+        "tables": {
+          "LQD": "${ERP_SCHEMA}.LQD",
+          "CVC": "${ERP_SCHEMA}.CVC",
+          "OPP": "${ERP_SCHEMA}.OPP",
+          "LAC": "${ERP_SCHEMA}.LAC",
+          "CACFIRMAS": "${ERP_SCHEMA}.CACFIRMAS",
+          "CMV": "${ERP_SCHEMA}.CMV",
+          "CPC": "${ERP_SCHEMA}.CPC",
+          "CLI": "${ERP_SCHEMA}.CLI",
+          "COMM_CONFIG": "${ERP_SCHEMA}.COMM_CONFIG",
+          "VDP": "${ERP_SCHEMA}.VDP",
+          "REPARTIDOR_COBROS": "${APP_SCHEMA}.REPARTIDOR_COBROS",
+          "REPARTIDOR_ENTREGAS": "${APP_SCHEMA}.REPARTIDOR_ENTREGAS",
+          "REPARTIDOR_ENTREGA_LINEAS": "${APP_SCHEMA}.REPARTIDOR_ENTREGA_LINEAS",
+          "REPARTIDOR_FIRMAS": "${APP_SCHEMA}.REPARTIDOR_FIRMAS",
+          "REPARTIDOR_LIQUIDACION_OPS": "${APP_SCHEMA}.REPARTIDOR_LIQUIDACION_OPS",
+          "REPARTIDOR_FINANCIAL_BALANCES": "${APP_SCHEMA}.REPARTIDOR_FINANCIAL_BALANCES",
+          "REPARTIDOR_COMMISSION_TIERS": "${APP_SCHEMA}.REPARTIDOR_COMMISSION_TIERS",
+          "REPARTIDOR_LIQUIDACION_EMAILS": "${APP_SCHEMA}.REPARTIDOR_LIQUIDACION_EMAILS",
+          "COMMISSION_EXCEPTIONS": "${APP_SCHEMA}.COMMISSION_EXCEPTIONS",
+          "COMMISSION_PAYMENTS": "${APP_SCHEMA}.COMMISSION_PAYMENTS",
+          "COMMERCIAL_TARGETS": "${APP_SCHEMA}.COMMERCIAL_TARGETS",
+          "DELIVERY_STATUS": "${APP_SCHEMA}.DELIVERY_STATUS",
+          "CLIENT_SIGNERS": "${APP_SCHEMA}.CLIENT_SIGNERS",
+          "RUTERO_CONFIG": "${APP_SCHEMA}.RUTERO_CONFIG",
+          "RUTERO_LOG": "${APP_SCHEMA}.RUTERO_LOG",
+          "PAYMENT_CONDITIONS": "${APP_SCHEMA}.PAYMENT_CONDITIONS"
+        }
+      }
+    },
+    "phase2_schemaVariable": {
+      "description": "Replace hardcoded JAVIER. with configurable schema variable",
+      "pattern": "Already partially implemented in repartidor-finance-service.js with ERP_FINANCE_SCHEMA and LQD_TABLE",
+      "action": "Extend this pattern to ALL files",
+      "example": "const SCHEMA = process.env.ERP_SCHEMA || 'DSEDAC'; const APP_SCHEMA = process.env.APP_SCHEMA || 'JAVIER'; const TABLES = { COBROS: `${APP_SCHEMA}.REPARTIDOR_COBROS`, ... };"
+    },
+    "phase3_columnTranslation": {
+      "description": "Create column name mapping for app tables vs DSEDAC tables",
+      "mappings": [
+        { "app": "CODIGO_REPARTIDOR", "dsedac": "CODIGOREPARTIDOR", "tables": ["REPARTIDOR_COBROS", "REPARTIDOR_ENTREGAS", "DELIVERY_STATUS"] },
+        { "app": "CODIGO_CLIENTE", "dsedac": "CODIGOCLIENTEALBARAN", "tables": ["REPARTIDOR_COBROS", "REPARTIDOR_ENTREGAS"] },
+        { "app": "NUMERO_ALBARAN", "dsedac": "NUMEROALBARAN", "tables": ["REPARTIDOR_ENTREGAS", "REPARTIDOR_FIRMAS"] },
+        { "app": "EJERCICIO_ALBARAN", "dsedac": "EJERCICIOALBARAN", "tables": ["REPARTIDOR_ENTREGAS", "REPARTIDOR_FIRMAS"] },
+        { "app": "SERIE_ALBARAN", "dsedac": "SERIEALBARAN", "tables": ["REPARTIDOR_ENTREGAS", "REPARTIDOR_FIRMAS"] },
+        { "app": "TIPO_DOCUMENTO", "dsedac": "TIPODOCUMENTO", "tables": ["REPARTIDOR_COBROS"] },
+        { "app": "ORIGEN_DOCUMENTO", "dsedac": "ORIGENDOCUMENTO", "tables": ["REPARTIDOR_COBROS"] },
+        { "app": "SUBEMPRESA_DOCUMENTO", "dsedac": "SUBEMPRESADOCUMENTO", "tables": ["REPARTIDOR_COBROS"] },
+        { "app": "SERIE_DOCUMENTO", "dsedac": "SERIEDOCUMENTO", "tables": ["REPARTIDOR_COBROS"] },
+        { "app": "TERMINAL_DOCUMENTO", "dsedac": "TERMINALDOCUMENTO", "tables": ["REPARTIDOR_COBROS"] },
+        { "app": "NUMERO_DOCUMENTO", "dsedac": "NUMERODOCUMENTO", "tables": ["REPARTIDOR_COBROS"] },
+        { "app": "EJERCICIO_DOCUMENTO", "dsedac": "EJERCICIODOCUMENTO", "tables": ["REPARTIDOR_COBROS"] },
+        { "app": "XDE_DOCUMENTO", "dsedac": "XDEDOCUMENTO", "tables": ["REPARTIDOR_COBROS"] },
+        { "app": "DEX_DOCUMENTO", "dsedac": "DEXDOCUMENTO", "tables": ["REPARTIDOR_COBROS"] },
+        { "app": "IMPORTE_COBRADO", "dsedac": "IMPORTEPENDIENTE (CVC)", "tables": ["REPARTIDOR_COBROS"] },
+        { "app": "IMPORTE_PENDIENTE", "dsedac": "IMPORTEPENDIENTE", "tables": ["REPARTIDOR_COBROS"] },
+        { "app": "FORMA_PAGO", "dsedac": "CODIGOFORMAPAGO (CPC)", "tables": ["REPARTIDOR_COBROS"] },
+        { "app": "FECHA_COBRO", "dsedac": "app-only", "tables": ["REPARTIDOR_COBROS"] },
+        { "app": "LIQUIDADO_SN", "dsedac": "app-only", "tables": ["REPARTIDOR_COBROS"] },
+        { "app": "LIQUIDACION_TOKEN", "dsedac": "IDMARCALIQUIDACION (LQD)", "tables": ["REPARTIDOR_COBROS"] },
+        { "app": "IDEMPOTENCY_TOKEN", "dsedac": "IDMARCALIQUIDACION (LQD)", "tables": ["REPARTIDOR_COBROS", "REPARTIDOR_LIQUIDACION_OPS"] },
+        { "app": "STATUS", "dsedac": "CONFORMADOSN (CPC)", "tables": ["DELIVERY_STATUS"] },
+        { "app": "FIRMA_PATH", "dsedac": "FIRMABASE64 (CACFIRMAS)", "tables": ["DELIVERY_STATUS"] },
+        { "app": "REPARTIDOR_ID", "dsedac": "CODIGOREPARTIDOR", "tables": ["DELIVERY_STATUS"] },
+        { "app": "OBSERVACIONES", "dsedac": "app-only", "tables": ["DELIVERY_STATUS", "REPARTIDOR_ENTREGAS"] },
+        { "app": "FIRMA_BASE64", "dsedac": "FIRMABASE64", "tables": ["REPARTIDOR_FIRMAS"] },
+        { "app": "FIRMANTE_NOMBRE", "dsedac": "FIRMANOMBRE", "tables": ["REPARTIDOR_FIRMAS"] },
+        { "app": "ENTREGA_ID", "dsedac": "app-only", "tables": ["REPARTIDOR_FIRMAS", "REPARTIDOR_ENTREGA_LINEAS"] },
+        { "app": "VENDEDOR_CODIGO", "dsedac": "CODIGOVENDEDOR", "tables": ["COMMISSION_PAYMENTS"] },
+        { "app": "ANIO", "dsedac": "ANODOCUMENTO", "tables": ["COMMISSION_PAYMENTS", "COMM_CONFIG"] },
+        { "app": "MES", "dsedac": "MESDOCUMENTO", "tables": ["COMMISSION_PAYMENTS"] },
+        { "app": "VENDEDOR", "dsedac": "CODIGOVENDEDOR", "tables": ["RUTERO_CONFIG", "RUTERO_LOG"] },
+        { "app": "CLIENTE", "dsedac": "CODIGOCLIENTE", "tables": ["RUTERO_CONFIG", "RUTERO_LOG"] },
+        { "app": "DIA", "dsedac": "app-only (day name string)", "tables": ["RUTERO_CONFIG"] },
+        { "app": "ORDEN", "dsedac": "app-only (position number)", "tables": ["RUTERO_CONFIG"] },
+        { "app": "DNI", "dsedac": "NIF (CLI)", "tables": ["CLIENT_SIGNERS"] },
+        { "app": "NOMBRE", "dsedac": "NOMBRECLIENTE (CLI)", "tables": ["CLIENT_SIGNERS"] }
+      ]
+    },
+    "phase4_fileSpecificActions": [
+      {
+        "file": "backend/services/repartidor-finance-service.js",
+        "priority": "CRITICAL",
+        "actions": [
+          "Already has ERP_FINANCE_SCHEMA pattern — extend to all tables",
+          "Create TABLES constant: { COBROS: `${APP_SCHEMA}.REPARTIDOR_COBROS`, DELIVERY_STATUS: `${APP_SCHEMA}.DELIVERY_STATUS`, ... }",
+          "Replace all 38 JAVIER. references with TABLES.* constants",
+          "LQD_TABLE already uses variable pattern — replicate for all other tables"
+        ]
+      },
+      {
+        "file": "backend/routes/commissions.js",
+        "priority": "HIGH",
+        "actions": [
+          "Replace JAVIER.COMMISSION_EXCEPTIONS with TABLES.COMMISSION_EXCEPTIONS",
+          "Replace JAVIER.COMM_CONFIG with TABLES.COMM_CONFIG",
+          "Replace JAVIER.COMMISSION_PAYMENTS with TABLES.COMMISSION_PAYMENTS",
+          "Replace JAVIER.COMMERCIAL_TARGETS with TABLES.COMMERCIAL_TARGETS",
+          "initCommissionTables() needs schema variable for CREATE TABLE statements"
+        ]
+      },
+      {
+        "file": "backend/routes/entregas.js",
+        "priority": "HIGH",
+        "actions": [
+          "Replace JAVIER.DELIVERY_STATUS with TABLES.DELIVERY_STATUS (10 occurrences)",
+          "Replace JAVIER.CLIENT_SIGNERS with TABLES.CLIENT_SIGNERS (3 occurrences)",
+          "Replace JAVIER.PAYMENT_CONDITIONS with TABLES.PAYMENT_CONDITIONS (2 occurrences)",
+          "Replace JAVIER.REPARTIDOR_FIRMAS with TABLES.REPARTIDOR_FIRMAS (1 occurrence)",
+          "Replace JAVIER.REPARTIDOR_ENTREGAS with TABLES.REPARTIDOR_ENTREGAS (1 occurrence)"
+        ]
+      },
+      {
+        "file": "backend/routes/repartidor.js",
+        "priority": "HIGH",
+        "actions": [
+          "Replace all JAVIER.DELIVERY_STATUS references (8 occurrences)",
+          "Replace all JAVIER.REPARTIDOR_FIRMAS references (5 occurrences)",
+          "Replace all JAVIER.REPARTIDOR_ENTREGAS references (7 occurrences)",
+          "Replace all JAVIER.REPARTIDOR_ENTREGA_LINEAS references (2 occurrences)",
+          "Replace all JAVIER.REPARTIDOR_COBROS references (2 occurrences)"
+        ]
+      },
+      {
+        "file": "backend/routes/planner.js",
+        "priority": "MEDIUM",
+        "actions": [
+          "Replace JAVIER.DELIVERY_STATUS (1 occurrence)",
+          "Replace all JAVIER.RUTERO_CONFIG references (12 occurrences)",
+          "Replace all JAVIER.RUTERO_LOG references (2 occurrences)",
+          "Note: RUTERO_CONFIG ORDEN >= 0 filter must be preserved"
+        ]
+      },
+      {
+        "file": "backend/server.js",
+        "priority": "LOW",
+        "actions": [
+          "Replace JAVIER.DELIVERY_STATUS in startup probe (2 occurrences)",
+          "Use TABLES.DELIVERY_STATUS constant instead of hardcoded"
+        ]
+      },
+      {
+        "file": "backend/src/modules/repartidor/infrastructure/db2-repartidor-repository.js",
+        "priority": "MEDIUM",
+        "actions": [
+          "Replace JAVIER.RUTERO_CONFIG (1 occurrence)",
+          "Replace all JAVIER.DELIVERY_STATUS references (4 occurrences)",
+          "Import TABLES config from backend/config/schema-tables.js"
+        ]
+      }
+    ],
+    "summary": {
+      "totalFiles": 7,
+      "totalJavierReferences": 89,
+      "tablesNeedingDsedacMapping": 12,
+      "appOnlyTables": 10,
+      "erpTables": 8,
+      "criticalRefactoringFiles": [
+        "backend/services/repartidor-finance-service.js (38 queries)",
+        "backend/routes/repartidor.js (24 queries)",
+        "backend/routes/planner.js (18 queries)",
+        "backend/routes/commissions.js (17 queries)",
+        "backend/routes/entregas.js (13 queries)"
+      ],
+      "keyInsights": [
+        "repartidor-finance-service.js already has the LQD_TABLE variable pattern — use as template",
+        "App tables use snake_case (CODIGO_REPARTIDOR) vs DSEDAC concatenated (CODIGOREPARTIDOR)",
+        "DELIVERY_STATUS is the most referenced app table across 6 of 7 files",
+        "REPARTIDOR_COBROS is the second most referenced — 15+ queries across 3 files",
+        "RUTERO_CONFIG has the most WRITE operations (12) — all in planner.js",
+        "COMMISSION_* tables are app-only with no DSEDAC equivalent",
+        "Column name translation is the biggest refactoring challenge — 35+ column mappings needed"
+      ]
+    }
+  }
+}

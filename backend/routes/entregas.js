@@ -227,7 +227,10 @@ function getSmartSuggestions(albaranes) {
 router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
-        const { date } = req.query; // Support ?date=YYYY-MM-DD
+        const { date, limit, offset } = req.query;
+
+        const pageLimit = Math.min(Math.max(parseInt(limit) || 100, 1), 1000);
+        const pageOffset = Math.max(parseInt(offset) || 0, 0);
 
         let targetDate = new Date();
         if (date) {
@@ -297,7 +300,7 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
             LEFT JOIN JAVIER.DELIVERY_STATUS DS
               ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(COALESCE(CPC.SERIEALBARAN, '')) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.CODIGOCLIENTEALBARAN)` : '';
         const dsColumns = dsAvailable
-            ? `DS.STATUS as DS_STATUS,
+            ? `DS.ESTADO as DS_STATUS,
               DS.OBSERVACIONES as DS_OBS,
               DS.FIRMA_PATH as DS_FIRMA`
             : `CAST(NULL AS VARCHAR(20)) as DS_STATUS,
@@ -422,45 +425,26 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         const creditLimitByClient = new Map();
         const pendingDebtByClient = new Map();
         if (clientCodes.length > 0) {
-            try {
-                const clxPlaceholders = clientCodes.map(() => '?').join(',');
-                const clxRows = await queryWithParams(`
+            const clxPlaceholders = clientCodes.map(() => '?').join(',');
+            const clpPlaceholders = clientCodes.map(() => '?').join(',');
+            const cvcPlaceholders = clientCodes.map(() => '?').join(',');
+
+            const [clxRows, clpRows, cvcRows] = await Promise.allSettled([
+                queryWithParams(`
                     SELECT TRIM(CODIGOCLIENTE) as CLIENTE
                     FROM DSEDAC.CLX
                     WHERE TRIM(CODIGOCLIENTE) IN (${clxPlaceholders})
                       AND TRIM(COALESCE(COBRORIGUROSOSN, '')) = 'S'
-                `, clientCodes, false, false) || [];
-                clxRows.forEach(row => {
-                    const cliente = (row.CLIENTE || '').trim();
-                    if (cliente) cobroRigurosoClientes.add(cliente);
-                });
-            } catch (clxError) {
-                logger.warn(`[ENTREGAS] Could not load CLX.COBRORIGUROSOSN: ${clxError.message}`);
-            }
-
-            try {
-                const clpPlaceholders = clientCodes.map(() => '?').join(',');
-                const clpRows = await queryWithParams(`
+                `, clientCodes, false, false),
+                queryWithParams(`
                     SELECT
                       TRIM(CODIGOCLIENTE) as CLIENTE,
                       IMPORTELIMITERIESGO,
                       IMPORTELIMITERIESGOEMPRESA
                     FROM DSEDAC.CLP
                     WHERE TRIM(CODIGOCLIENTE) IN (${clpPlaceholders})
-                `, clientCodes, false, false) || [];
-                clpRows.forEach(row => {
-                    const cliente = (row.CLIENTE || '').trim();
-                    const limit = parseMoney(row.IMPORTELIMITERIESGO) ||
-                        parseMoney(row.IMPORTELIMITERIESGOEMPRESA);
-                    if (cliente && limit > 0) creditLimitByClient.set(cliente, limit);
-                });
-            } catch (clpError) {
-                logger.warn(`[ENTREGAS] Could not load CLP credit limits: ${clpError.message}`);
-            }
-
-            try {
-                const cvcPlaceholders = clientCodes.map(() => '?').join(',');
-                const cvcRows = await queryWithParams(`
+                `, clientCodes, false, false),
+                queryWithParams(`
                     SELECT
                       TRIM(CODIGOCLIENTEALBARAN) as CLIENTE,
                       COALESCE(SUM(IMPORTEPENDIENTE), 0) as PENDIENTE
@@ -469,13 +453,33 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
                       AND COALESCE(ANULADOSN, '') <> 'S'
                       AND IMPORTEPENDIENTE <> 0
                     GROUP BY TRIM(CODIGOCLIENTEALBARAN)
-                `, clientCodes, false, false) || [];
-                cvcRows.forEach(row => {
-                    const cliente = (row.CLIENTE || '').trim();
-                    if (cliente) pendingDebtByClient.set(cliente, parseMoney(row.PENDIENTE));
-                });
-            } catch (cvcError) {
-                logger.warn(`[ENTREGAS] Could not load CVC pending debt for credit-limit check: ${cvcError.message}`);
+                `, clientCodes, false, false),
+            ]);
+
+            (clxRows.status === 'fulfilled' ? (clxRows.value || []) : []).forEach(row => {
+                const cliente = (row.CLIENTE || '').trim();
+                if (cliente) cobroRigurosoClientes.add(cliente);
+            });
+            if (clxRows.status === 'rejected') {
+                logger.warn(`[ENTREGAS] Could not load CLX.COBRORIGUROSOSN: ${clxRows.reason?.message || clxRows.reason}`);
+            }
+
+            (clpRows.status === 'fulfilled' ? (clpRows.value || []) : []).forEach(row => {
+                const cliente = (row.CLIENTE || '').trim();
+                const limit = parseMoney(row.IMPORTELIMITERIESGO) ||
+                    parseMoney(row.IMPORTELIMITERIESGOEMPRESA);
+                if (cliente && limit > 0) creditLimitByClient.set(cliente, limit);
+            });
+            if (clpRows.status === 'rejected') {
+                logger.warn(`[ENTREGAS] Could not load CLP credit limits: ${clpRows.reason?.message || clpRows.reason}`);
+            }
+
+            (cvcRows.status === 'fulfilled' ? (cvcRows.value || []) : []).forEach(row => {
+                const cliente = (row.CLIENTE || '').trim();
+                if (cliente) pendingDebtByClient.set(cliente, parseMoney(row.PENDIENTE));
+            });
+            if (cvcRows.status === 'rejected') {
+                logger.warn(`[ENTREGAS] Could not load CVC pending debt for credit-limit check: ${cvcRows.reason?.message || cvcRows.reason}`);
             }
         }
 
@@ -706,13 +710,20 @@ router.get('/pendientes/:repartidorId', verifyToken, async (req, res) => {
         const totalOpcional = albaranes.filter(a => a.puedeCobrarse && !a.esCTR).reduce((sum, a) => sum + (a.importe || 0), 0);
         const completedCount = albaranes.filter(a => a.estado === 'ENTREGADO').length;
 
-        logger.info(`[ENTREGAS] Date=${targetDate.toISOString().split('T')[0]} Repartidor=${repartidorId} → albaranes=${filteredAlbaranes.length}, totalBruto=${totalBruto.toFixed(2)}, totalACobrar=${totalACobrar.toFixed(2)}, totalOpcional=${totalOpcional.toFixed(2)}, completed=${completedCount}`);
+        const totalFiltered = filteredAlbaranes.length;
+        const totalUnfiltered = albaranes.length;
+        const paginatedAlbaranes = filteredAlbaranes.slice(pageOffset, pageOffset + pageLimit);
+
+        logger.info(`[ENTREGAS] Date=${targetDate.toISOString().split('T')[0]} Repartidor=${repartidorId} → albaranes=${paginatedAlbaranes.length} (offset=${pageOffset}, limit=${pageLimit}), totalBruto=${totalBruto.toFixed(2)}, totalACobrar=${totalACobrar.toFixed(2)}, totalOpcional=${totalOpcional.toFixed(2)}, completed=${completedCount}`);
 
         res.json({
             success: true,
-            albaranes: filteredAlbaranes,
-            total: filteredAlbaranes.length,
-            originalTotal: albaranes.length,
+            albaranes: paginatedAlbaranes,
+            total: totalFiltered,
+            originalTotal: totalUnfiltered,
+            limit: pageLimit,
+            offset: pageOffset,
+            hasMore: pageOffset + pageLimit < totalFiltered,
             resumen: {
                 totalBruto: Math.round(totalBruto * 100) / 100,
                 totalACobrar: Math.round(totalACobrar * 100) / 100,
@@ -942,18 +953,18 @@ router.post('/update', verifyToken, async (req, res) => {
         // VALIDATION: Check if already delivered (prevents accidental duplicate confirmations)
         if (status === 'ENTREGADO') {
             try {
-                const existing = await queryWithParams(`SELECT STATUS, UPDATED_AT, REPARTIDOR_ID FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [itemId]);
+                const existing = await queryWithParams(`SELECT ESTADO, FECHAACTUALIZACION, REPARTIDOR_ID FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [itemId]);
 
-                if (existing.length > 0 && existing[0].STATUS === 'ENTREGADO') {
+                if (existing.length > 0 && existing[0].ESTADO === 'ENTREGADO') {
                     // Already delivered - only allow if forceUpdate is true
                     if (!forceUpdate) {
-                        logger.warn(`[ENTREGAS] ⚠️ Duplicate confirmation attempt for ${itemId} (previously by ${existing[0].REPARTIDOR_ID} at ${existing[0].UPDATED_AT})`);
+                        logger.warn(`[ENTREGAS] ⚠️ Duplicate confirmation attempt for ${itemId} (previously by ${existing[0].REPARTIDOR_ID} at ${existing[0].FECHAACTUALIZACION})`);
                         return res.status(409).json({
                             success: false,
                             error: 'Esta entrega ya fue confirmada anteriormente',
                             alreadyDelivered: true,
                             previousRepartidor: existing[0].REPARTIDOR_ID,
-                            previousDate: existing[0].UPDATED_AT
+                            previousDate: existing[0].FECHAACTUALIZACION
                         });
                     }
                     logger.info(`[ENTREGAS] Force update enabled for ${itemId}, overwriting previous delivery`);
@@ -993,7 +1004,7 @@ router.post('/update', verifyToken, async (req, res) => {
         try {
             await queryWithParams(`
                 INSERT INTO JAVIER.DELIVERY_STATUS 
-                (ID, STATUS, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, UPDATED_AT)
+                (ID, ESTADO, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, FECHAACTUALIZACION)
                 VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP)
             `, [itemId, status, observaciones || '', firma || '', lat, lon, inspectorId]);
         } catch (insertErr) {
@@ -1003,10 +1014,10 @@ router.post('/update', verifyToken, async (req, res) => {
                 try {
                     await queryWithParams(`
                         INSERT INTO JAVIER.DELIVERY_STATUS
-                        (ID, STATUS, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, UPDATED_AT)
+                        (ID, ESTADO, OBSERVACIONES, FIRMA_PATH, LATITUD, LONGITUD, REPARTIDOR_ID, FECHAACTUALIZACION)
                         VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP)
                     `, [
-                        previousState.ID, previousState.STATUS,
+                        previousState.ID, previousState.ESTADO,
                         previousState.OBSERVACIONES || '',
                         previousState.FIRMA_PATH || '',
                         previousState.LATITUD || 0, previousState.LONGITUD || 0,
@@ -1236,16 +1247,16 @@ router.post('/receipt/:entregaId', verifyToken, async (req, res) => {
                 // Try REPARTIDOR_FIRMAS for base64 
                 if (!fullSignaturePath) {
                     const firmaRows = await queryWithParams(`
-                        SELECT RF.FIRMA_BASE64, RF.FIRMANTE_NOMBRE FROM JAVIER.REPARTIDOR_FIRMAS RF
+                        SELECT RF.FIRMABASE64, RF.FIRMANOMBRE, RF.DIA, RF.MES, RF.ANO, RF.HORA FROM JAVIER.REPARTIDOR_FIRMAS RF
                         INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
-                        WHERE RE.NUMERO_ALBARAN = ?
-                          AND RE.EJERCICIO_ALBARAN = ?
-                          AND TRIM(RE.SERIE_ALBARAN) = ?
+                        WHERE RE.NUMEROORDENPREPARACION = ?
+                          AND RE.EJERCICIOALBARAN = ?
+                          AND TRIM(RE.SERIEALBARAN) = ?
                         FETCH FIRST 1 ROW ONLY
                     `, [numero, ejercicio, (serie || '').trim()], false);
-                    if (firmaRows.length > 0 && firmaRows[0].FIRMA_BASE64) {
-                        deliveryData.signatureBase64 = firmaRows[0].FIRMA_BASE64;
-                        deliveryData.firmante = firmaRows[0].FIRMANTE_NOMBRE || null;
+                    if (firmaRows.length > 0 && firmaRows[0].FIRMABASE64) {
+                        deliveryData.signatureBase64 = firmaRows[0].FIRMABASE64;
+                        deliveryData.firmante = firmaRows[0].FIRMANOMBRE || null;
                         logger.info(`[RECEIPT] Using base64 signature from REPARTIDOR_FIRMAS`);
                     }
                 }

@@ -19,7 +19,7 @@ const helmet = require('helmet');
 const compression = require('compression');
 const logger = require('./middleware/logger');
 const { verifyToken, handleRefreshToken, handleLogout } = require('./middleware/auth');
-const { initDb, query } = require('./config/db');
+  const { initDb, query, getPoolMetrics } = require('./config/db');
 const {
     globalLimiter,
     createSecurityHeaders,
@@ -29,7 +29,9 @@ const {
     emailLimiter,
     detectSuspiciousAgents,
     validateContentLength,
-    addRequestId
+    addRequestId,
+    detectScannerProbes,
+    bruteForceIpTracker
 } = require('./middleware/security');
 const { loadMetadataCache } = require('./services/metadataCache');
 const { preloadCache } = require('./services/cache-preloader');
@@ -43,6 +45,7 @@ const { cacheMiddleware, invalidationMiddleware, getCacheStats: getHttpCacheStat
 const { createOptimizedQuery } = require('./services/query-optimizer');
 const { auditMiddleware, getRecentAuditEntries, getActiveSessions } = require('./middleware/audit');
 const { createCompressionMiddleware } = require('./middleware/compression');
+const { prometheusMetrics, metricsHandler } = require('./middleware/prometheus-metrics');
 
 // =============================================================================
 // FEATURE TOGGLE: USE_TS_ROUTES
@@ -188,6 +191,7 @@ app.use(cors({
     maxAge: 86400
 }));
 app.use(addRequestId);
+app.use(detectScannerProbes);
 app.use(detectSuspiciousAgents);
 app.use(validateContentLength);
 app.use(createSecurityHeaders());
@@ -206,11 +210,11 @@ app.use(compression({
         return compression.filter(req, res);
     }
 }));
-app.use(createCompressionMiddleware);
 app.use(express.json({ limit: '2mb' }));
 app.use(validateContentType);
 
 // ==================== OPTIMIZATION MIDDLEWARE ====================
+app.use(prometheusMetrics);  // Prometheus metrics collection (must be before other middleware)
 app.use(networkOptimizer);  // HTTP/2 hints, ETag, cache headers
 app.use(responseCoalescing); // Combine identical concurrent requests
 app.use(cacheMiddleware);    // In-memory HTTP cache with TTL
@@ -283,17 +287,22 @@ if (process.env.USE_DDD_ROUTES === 'true' && dddAuthRoutes) {
   app.use('/api/auth', authRoutes);
 }
 
+// Prometheus metrics endpoint (public for scraping)
+app.get('/api/metrics', metricsHandler);
+
 // Health check (Public for monitoring) - FULLY ENHANCED v3 with ALL metrics
 app.get('/api/health', async (req, res) => {
   const start = Date.now();
   let dbStatus = 'disconnected';
   let dbQueryTime = 0;
+  let poolMetrics = {};
   
   try {
     const dbStart = Date.now();
     await query('SELECT 1 as ok FROM SYSIBM.SYSDUMMY1', false);
     dbQueryTime = Date.now() - dbStart;
     dbStatus = 'connected';
+    poolMetrics = getPoolMetrics();
   } catch (e) {
     dbStatus = 'error';
   }
@@ -489,12 +498,12 @@ async function startServer() {
         await conn.query(`
             CREATE TABLE JAVIER.DELIVERY_STATUS (
                 ID VARCHAR(64) NOT NULL PRIMARY KEY,
-                STATUS VARCHAR(20) DEFAULT 'PENDIENTE',
+                ESTADO VARCHAR(20) DEFAULT 'PENDIENTE',
                 OBSERVACIONES VARCHAR(512),
                 FIRMA_PATH VARCHAR(255),
                 LATITUD DECIMAL(10, 8),
                 LONGITUD DECIMAL(11, 8),
-                UPDATED_AT TIMESTAMP DEFAULT CURRENT TIMESTAMP,
+                FECHAACTUALIZACION TIMESTAMP DEFAULT CURRENT TIMESTAMP,
                 REPARTIDOR_ID VARCHAR(20)
             )
         `);
@@ -729,7 +738,7 @@ app.use((err, req, res, next) => {
 process.on('uncaughtException', (err) => {
   console.error(`🔥 UNCAUGHT EXCEPTION: ${err.message}`, err.stack);
   if (err.code !== 'ERR_HTTP_HEADERS_SENT') {
-    // process.exit(1); // Let PM2 restart for critical state corruption
+    process.exit(1); // Let PM2 restart for critical state corruption
   }
 });
 

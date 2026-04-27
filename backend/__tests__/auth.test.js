@@ -141,8 +141,9 @@ describe('Auth Flow Tests', () => {
                     JEFEVENTASSN: 'N',
                     HIDE_COMMISSIONS: null
                 }])
-                .mockResolvedValueOnce([{ VEHICULO: 'V001', MATRICULA: '1234ABC' }])
-                .mockResolvedValueOnce([]);
+                .mockResolvedValueOnce([]) // PIN_HASH lookup (empty - not migrated yet)
+                .mockResolvedValueOnce([]) // PIN_HASH MERGE (best-effort)
+                .mockResolvedValueOnce([{ VEHICULO: 'V001', MATRICULA: '1234ABC' }]); // VEH lookup
 
             const res = await request(app)
                 .post('/api/auth/login')

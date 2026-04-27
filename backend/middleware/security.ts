@@ -496,6 +496,122 @@ export function logSecurityEvent(
 }
 
 // =============================================================================
+// SCANNER PROBE DETECTION — blocks common scan paths, compact logging
+// =============================================================================
+
+const SCANNER_PATH_PATTERNS = [
+    /\.env$/i, /\.env\./i, /\.git/i, /\.aws/i, /\.htaccess/i, /\.htpasswd/i,
+    /phpinfo/i, /phpmyadmin/i, /wp-admin/i, /wp-login/i, /wp-content/i, /wp-includes/i, /wordpress/i,
+    /\.well-known/i, /adminer/i, /mysql/i, /config\./i, /backup$|backup\./i,
+    /database\./i, /\.sql$/i, /\.zip$/i, /\.tar/i, /\.gz$/i, /\.7z$/i, /\.rar$/i,
+    /cgi-bin/i, /actuator/i, /swagger/i, /api-docs/i, /vendor/i, /composer/i,
+    /server-status/i, /\.DS_Store/i, /\.svn/i, /\.hg/i, /\.bzr/i,
+    /credentials/i, /\.passwd/i, /\.history/i, /\.bash/i, /id_rsa/i, /id_dsa/i,
+    /known_hosts/i, /\.ssh/i, /dump\./i, /console/i, /manager/i, /jmx-console/i,
+    /web-console/i, /invoker/i, /struts/i,
+];
+
+const scannerIpTracker = new Map<string, { count: number; firstSeen: number; lastSeen: number }>();
+const SCANNER_LOG_WINDOW_MS = 5 * 60 * 1000;
+
+export function detectScannerProbes(req: Request, res: Response, next: NextFunction) {
+    const fullPath = req.path || '';
+
+    const isScannerProbe = SCANNER_PATH_PATTERNS.some(p => p.test(fullPath));
+
+    if (!isScannerProbe) return next();
+
+    const ip = req.ip || 'unknown';
+    const now = Date.now();
+
+    let tracker = scannerIpTracker.get(ip);
+    if (!tracker || now - tracker.lastSeen > SCANNER_LOG_WINDOW_MS) {
+        tracker = { count: 0, firstSeen: now, lastSeen: 0 };
+    }
+
+    tracker.count++;
+    tracker.lastSeen = now;
+    scannerIpTracker.set(ip, tracker);
+
+    if (tracker.count === 1) {
+        logger.warn(`[SCANNER] New scanner from ${ip}: ${req.method} ${fullPath}`);
+    } else if (tracker.count % 10 === 0) {
+        logger.warn(`[SCANNER] Persistent scanner from ${ip}: ${tracker.count} probes (latest: ${req.method} ${fullPath})`);
+    }
+
+    if (scannerIpTracker.size > 200) {
+        for (const [k, v] of scannerIpTracker) {
+            if (now - v.lastSeen > SCANNER_LOG_WINDOW_MS * 4) scannerIpTracker.delete(k);
+        }
+    }
+
+    return res.status(404).json({ error: 'Not found' });
+}
+
+// =============================================================================
+// SUSPICIOUS USER-AGENT DETECTION
+// =============================================================================
+
+const suspiciousUserAgents = [
+    /sqlmap/i,
+    /nikto/i,
+    /nmap/i,
+    /masscan/i,
+    /dirbuster/i,
+    /gobuster/i,
+    /wfuzz/i,
+    /hydra/i,
+    /burpsuite/i,
+    /zap/i,
+    /nessus/i,
+    /openvas/i,
+    /acunetix/i,
+    /w3af/i,
+    /arachni/i,
+    /skipfish/i,
+    /whatweb/i,
+    /nuclei/i,
+    /httpx/i,
+    /subfinder/i,
+    /curl\/[0-9]/i,
+    /python-requests\/[0-9]/i,
+    /python-urllib/i,
+    /wget\//i,
+    /libwww-perl/i,
+    /java\//i,
+    /go-http-client/i,
+    /scrapy/i,
+];
+
+export function detectSuspiciousAgents(req: Request, res: Response, next: NextFunction) {
+    const userAgent = req.get('user-agent') || '';
+
+    // Allow our own app and health checks
+    if (!userAgent) {
+        // Allow health checks without User-Agent (monitoring probes)
+        if (req.path === '/api/health' || req.path === '/health') {
+            return next();
+        }
+        logger.warn(`[Security] Blocked request with empty User-Agent from IP: ${req.ip} on ${req.path}`);
+        return res.status(403).json({ error: 'User-Agent header required' });
+    }
+
+    // Whitelist our own app and Dart runtime
+    if (userAgent.startsWith('GMP-App/') || userAgent.startsWith('Dart/')) {
+        return next();
+    }
+
+    for (const pattern of suspiciousUserAgents) {
+        if (pattern.test(userAgent)) {
+            logger.warn(`[Security] Blocked suspicious User-Agent "${userAgent}" from IP: ${req.ip}`);
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+    }
+
+    next();
+}
+
+// =============================================================================
 // EXPORTS
 // =============================================================================
 
@@ -506,10 +622,10 @@ export default {
     apiLimiter,
     uploadLimiter,
     emailLimiter,
-    
+
     // Security headers
     createSecurityHeaders,
-    
+
     // Input validation
     validateBody,
     validateQuery,
@@ -517,10 +633,14 @@ export default {
     validateContentType,
     limitRequestBodySize,
     validationSchemas,
-    
+
     // SQL injection prevention
     detectSqlInjection,
-    
+
+    // Scanner & agent protection
+    detectScannerProbes,
+    detectSuspiciousAgents,
+
     // Utilities
     logSecurityEvent
 };

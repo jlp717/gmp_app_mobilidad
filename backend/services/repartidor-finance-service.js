@@ -142,15 +142,15 @@ function buildDocument(row) {
 }
 
 function mapCobro(row) {
-  const importe = roundMoney(value(row, 'IMPORTE_COBRADO'));
-  const pendiente = roundMoney(value(row, 'IMPORTE_PENDIENTE'));
+  const importe = roundMoney(value(row, 'IMPORTEVENCIMIENTO'));
+  const pendiente = roundMoney(value(row, 'IMPORTEPENDIENTE'));
   return {
     id: value(row, 'ID') == null ? null : String(value(row, 'ID')),
-    fecha: value(row, 'FECHA_COBRO') || value(row, 'fecha_cobro'),
-    codigoCliente: String(value(row, 'CODIGO_CLIENTE', '') || '').trim(),
+    fecha: formatCvcDueDate(row),
+    codigoCliente: String(value(row, 'CODIGOCLIENTEALBARAN', '') || '').trim(),
     nombreCliente: String(value(row, 'NOMBRE_CLIENTE', '') || '').trim(),
-    tipoCobro: String(value(row, 'FORMA_PAGO', '') || '').trim(),
-    tipoDocumento: String(value(row, 'TIPO_DOCUMENTO', '') || '').trim(),
+    tipoCobro: String(value(row, 'CODIGOFORMAPAGO', '') || '').trim(),
+    tipoDocumento: String(value(row, 'TIPODOCUMENTO', '') || '').trim(),
     documento: buildDocument(row),
     importe,
     cobrado: importe,
@@ -188,27 +188,27 @@ function mapLiquidacion(row) {
   return {
     id: value(row, 'ID') == null ? null : String(value(row, 'ID')),
     idempotencyToken: value(row, 'IDEMPOTENCY_TOKEN'),
-    repartidorId: value(row, 'CODIGO_REPARTIDOR'),
+    repartidorId: value(row, 'CODIGOVENDEDOR'),
     numero: {
-      subempresa: value(row, 'SUBEMPRESA_LIQ'),
-      ejercicio: toInt(value(row, 'EJERCICIO_LIQ')),
-      serie: value(row, 'SERIE_LIQ'),
-      terminal: toInt(value(row, 'TERMINAL_LIQ')),
-      numero: toInt(value(row, 'NUMERO_LIQ')),
-      display: `${value(row, 'EJERCICIO_LIQ')}-${value(row, 'SERIE_LIQ')}-${pad(value(row, 'TERMINAL_LIQ'), 3)}-${pad(value(row, 'NUMERO_LIQ'), 6)}`,
+      subempresa: value(row, 'SUBEMPRESALIQUIDACION'),
+      ejercicio: toInt(value(row, 'EJERCICIOLIQUIDACION')),
+      serie: value(row, 'SERIELIQUIDACION'),
+      terminal: toInt(value(row, 'TERMINALLIQUIDACION')),
+      numero: toInt(value(row, 'NUMEROLIQUIDACION')),
+      display: `${value(row, 'EJERCICIOLIQUIDACION')}-${value(row, 'SERIELIQUIDACION')}-${pad(value(row, 'TERMINALLIQUIDACION'), 3)}-${pad(value(row, 'NUMEROLIQUIDACION'), 6)}`,
     },
     totals: {
-      totalEfectivo: roundMoney(value(row, 'TOTAL_EFECTIVO')),
-      totalCheques: roundMoney(value(row, 'TOTAL_CHEQUES')),
-      totalTarjeta: roundMoney(value(row, 'TOTAL_TARJETA')),
-      totalPostdatados: roundMoney(value(row, 'TOTAL_POSTDATADOS')),
-      saldoAnterior: roundMoney(value(row, 'SALDO_ANTERIOR')),
+      totalEfectivo: roundMoney(value(row, 'IMPORTEEFECTIVO')),
+      totalCheques: roundMoney(value(row, 'IMPORTECHEQUES')),
+      totalTarjeta: roundMoney(value(row, 'IMPORTETARJETA')),
+      totalPostdatados: roundMoney(value(row, 'IMPORTEPOSTDATADOS')),
+      saldoAnterior: roundMoney(value(row, 'IMPORTESALDOACTUAL')),
       totalCobrosDia: roundMoney(value(row, 'TOTAL_COBROS_DIA')),
-      totalAIngresar: roundMoney(value(row, 'TOTAL_A_INGRESAR')),
-      ingresoBanco: roundMoney(value(row, 'INGRESO_BANCO')),
+      totalAIngresar: roundMoney(value(row, 'IMPORTETOTALAINGRESAR')),
+      ingresoBanco: roundMoney(value(row, 'IMPORTEINGRESOENBANCO')),
       saldoResultante: roundMoney(value(row, 'SALDO_RESULTANTE')),
     },
-    status: value(row, 'STATUS'),
+    status: value(row, 'REVISADOSN'),
   };
 }
 
@@ -291,13 +291,13 @@ function assertCobroPayloadMatchesInput(row, expected) {
   const mismatches = [];
   const checks = [
     ['ENTREGA_APP_ID', expected.entregaId, normalizeText],
-    ['CODIGO_REPARTIDOR', expected.codigoRepartidor, normalizeText],
-    ['CODIGO_CLIENTE', expected.codigoCliente, normalizeText],
-    ['TIPO_DOCUMENTO', expected.tipoDocumento, normalizeTipoDocumento],
-    ['ORIGEN_DOCUMENTO', expected.origenDocumento, normalizeText],
-    ['SUBEMPRESA_DOCUMENTO', expected.subempresaDocumento, normalizeText],
-    ['SERIE_DOCUMENTO', expected.serieDocumento, normalizeText],
-    ['FORMA_PAGO', expected.formaPago, normalizeText],
+    ['CODIGOVENDEDOR', expected.codigoRepartidor, normalizeText],
+    ['CODIGOCLIENTEALBARAN', expected.codigoCliente, normalizeText],
+    ['TIPODOCUMENTO', expected.tipoDocumento, normalizeTipoDocumento],
+    ['ORIGENDOCUMENTO', expected.origenDocumento, normalizeText],
+    ['SUBEMPRESADOCUMENTO', expected.subempresaDocumento, normalizeText],
+    ['SERIEDOCUMENTO', expected.serieDocumento, normalizeText],
+    ['CODIGOFORMAPAGO', expected.formaPago, normalizeText],
     ['PANTALLA_ORIGEN', expected.pantallaOrigen, normalizeText],
   ];
   for (const [column, expected, normalizer] of checks) {
@@ -306,25 +306,25 @@ function assertCobroPayloadMatchesInput(row, expected) {
     }
   }
   const numericChecks = [
-    ['EJERCICIO_DOCUMENTO', expected.ejercicioDocumento],
-    ['TERMINAL_DOCUMENTO', expected.terminalDocumento],
-    ['NUMERO_DOCUMENTO', expected.numeroDocumento],
-    ['XDE_DOCUMENTO', expected.xdeDocumento || 1],
-    ['DEX_DOCUMENTO', expected.dexDocumento || 1],
+    ['EJERCICIODOCUMENTO', expected.ejercicioDocumento],
+    ['TERMINALDOCUMENTO', expected.terminalDocumento],
+    ['NUMERODOCUMENTO', expected.numeroDocumento],
+    ['XDEDOCUMENTO', expected.xdeDocumento || 1],
+    ['DEXDOCUMENTO', expected.dexDocumento || 1],
   ];
   for (const [column, expected] of numericChecks) {
     if (!sameNumeric(value(row, column, expected), expected)) {
       mismatches.push(column);
     }
   }
-  if (roundMoney(value(row, 'IMPORTE_COBRADO')) !== roundMoney(expected.importeCobrado)) {
-    mismatches.push('IMPORTE_COBRADO');
+  if (roundMoney(value(row, 'IMPORTEVENCIMIENTO')) !== roundMoney(expected.importeCobrado)) {
+    mismatches.push('IMPORTEVENCIMIENTO');
   }
   if (
-    roundMoney(value(row, 'IMPORTE_PENDIENTE', expected.importePendiente || 0)) !==
+    roundMoney(value(row, 'IMPORTEPENDIENTE', expected.importePendiente || 0)) !==
     roundMoney(expected.importePendiente || 0)
   ) {
-    mismatches.push('IMPORTE_PENDIENTE');
+    mismatches.push('IMPORTEPENDIENTE');
   }
   if (mismatches.length > 0) {
     throw new IdempotencyConflictError(`Token existente con payload distinto: ${mismatches.join(', ')}`);
@@ -342,9 +342,9 @@ function assertLiquidacionMatchesInput(row, input) {
   const { year, month, day } = dateParts(input.date);
   const mismatches = [];
   const textChecks = [
-    ['CODIGO_REPARTIDOR', input.repartidorId, normalizeText],
-    ['SUBEMPRESA_LIQ', 'GMP', normalizeText],
-    ['SERIE_LIQ', 'A', normalizeText],
+    ['CODIGOVENDEDOR', input.repartidorId, normalizeText],
+    ['SUBEMPRESALIQUIDACION', 'GMP', normalizeText],
+    ['SERIELIQUIDACION', 'A', normalizeText],
   ];
   for (const [column, expected, normalizer] of textChecks) {
     if (normalizer(value(row, column)) !== normalizer(expected)) {
@@ -352,8 +352,8 @@ function assertLiquidacionMatchesInput(row, input) {
     }
   }
   const numericChecks = [
-    ['EJERCICIO_LIQ', year],
-    ['TERMINAL_LIQ', toInt(input.repartidorId)],
+    ['EJERCICIOLIQUIDACION', year],
+    ['TERMINALLIQUIDACION', toInt(input.repartidorId)],
     ['DIALIQUIDACION', day],
     ['MESLIQUIDACION', month],
     ['ANOLIQUIDACION', year],
@@ -365,17 +365,17 @@ function assertLiquidacionMatchesInput(row, input) {
     }
   }
   const moneyChecks = [
-    ['TOTAL_EFECTIVO', input.totals.totalEfectivo],
-    ['TOTAL_CHEQUES', input.totals.totalCheques],
-    ['TOTAL_TARJETA', input.totals.totalTarjeta],
-    ['TOTAL_POSTDATADOS', input.totals.totalPostdatados],
-    ['SALDO_ANTERIOR', input.totals.saldoActual],
+    ['IMPORTEEFECTIVO', input.totals.totalEfectivo],
+    ['IMPORTECHEQUES', input.totals.totalCheques],
+    ['IMPORTETARJETA', input.totals.totalTarjeta],
+    ['IMPORTEPOSTDATADOS', input.totals.totalPostdatados],
+    ['IMPORTESALDOACTUAL', input.totals.saldoActual],
     ['TOTAL_COBROS_DIA', input.totals.totalCobrosDia],
-    ['TOTAL_A_INGRESAR', input.totals.totalAIngresar],
-    ['INGRESO_BANCO', input.totals.ingresoBanco],
-    ['GASTOS', input.totals.gastos],
-    ['EFECTIVO_2', input.totals.efectivo2],
-    ['ENTREGADO_2', input.totals.entregado2],
+    ['IMPORTETOTALAINGRESAR', input.totals.totalAIngresar],
+    ['IMPORTEINGRESOENBANCO', input.totals.ingresoBanco],
+    ['IMPORTEGASTOS', input.totals.gastos],
+    ['IMPORTEEFECTIVO2', input.totals.efectivo2],
+    ['IMPORTEENTREGADO2', input.totals.entregado2],
   ];
   for (const [column, expected] of moneyChecks) {
     if (roundMoney(value(row, column, expected)) !== roundMoney(expected)) {
@@ -410,49 +410,52 @@ async function findLiquidacionByToken(idempotencyToken) {
 }
 
 async function getDailySummary({ repartidorId, date }) {
+  const dateYmd = compactDate(date);
   const totalsRows = await queryWithParams(`
     SELECT
-      COALESCE(SUM(CASE WHEN UPPER(TRIM(FORMA_PAGO)) IN ('EFECTIVO', 'E', 'CONTADO') THEN IMPORTE_COBRADO ELSE 0 END), 0) AS TOTAL_EFECTIVO,
-      COALESCE(SUM(CASE WHEN UPPER(TRIM(FORMA_PAGO)) IN ('CHEQUE', 'TALON', 'TALON BANCARIO') THEN IMPORTE_COBRADO ELSE 0 END), 0) AS TOTAL_CHEQUES,
-      COALESCE(SUM(CASE WHEN UPPER(TRIM(FORMA_PAGO)) IN ('TARJETA', 'TPV', 'BIZUM') THEN IMPORTE_COBRADO ELSE 0 END), 0) AS TOTAL_TARJETA,
-      COALESCE(SUM(CASE WHEN UPPER(TRIM(FORMA_PAGO)) IN ('POSTDATADO', 'POSTDATADOS') THEN IMPORTE_COBRADO ELSE 0 END), 0) AS TOTAL_POSTDATADOS,
-      COALESCE(SUM(IMPORTE_COBRADO), 0) AS TOTAL_COBROS_DIA,
+      COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('EFECTIVO', 'E', 'CONTADO') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_EFECTIVO,
+      COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('CHEQUE', 'TALON', 'TALON BANCARIO') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_CHEQUES,
+      COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('TARJETA', 'TPV', 'BIZUM') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_TARJETA,
+      COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('POSTDATADO', 'POSTDATADOS') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_POSTDATADOS,
+      COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_COBROS_DIA,
       COUNT(*) AS COBROS_COUNT
     FROM JAVIER.REPARTIDOR_COBROS
-    WHERE TRIM(CODIGO_REPARTIDOR) = ?
-      AND DATE(FECHA_COBRO) = DATE(?)
+    WHERE TRIM(CODIGOVENDEDOR) = ?
+      AND ANOVENCIMIENTO * 10000 + MESVENCIMIENTO * 100 + DIAVENCIMIENTO = ?
       AND COALESCE(LIQUIDADO_SN, 'N') <> 'S'
-  `, [repartidorId, date], false, false);
+  `, [repartidorId, dateYmd], false, false);
 
   const balanceRows = await queryWithParams(`
     SELECT SALDO_PENDIENTE
     FROM JAVIER.REPARTIDOR_FINANCIAL_BALANCES
-    WHERE TRIM(CODIGO_REPARTIDOR) = ?
+    WHERE TRIM(CODIGOVENDEDOR) = ?
     FETCH FIRST 1 ROW ONLY
   `, [repartidorId], false, false);
 
   const cobroRows = await queryWithParams(`
     SELECT
       ID,
-      FECHA_COBRO,
-      CODIGO_CLIENTE,
+      DIAVENCIMIENTO,
+      MESVENCIMIENTO,
+      ANOVENCIMIENTO,
+      CODIGOCLIENTEALBARAN,
       NOMBRE_CLIENTE,
-      FORMA_PAGO,
-      TIPO_DOCUMENTO,
-      ORIGEN_DOCUMENTO AS ORIGENDOCUMENTO,
-      SERIE_DOCUMENTO,
-      TERMINAL_DOCUMENTO,
-      NUMERO_DOCUMENTO,
-      EJERCICIO_DOCUMENTO,
-      XDE_DOCUMENTO,
-      IMPORTE_COBRADO,
-      IMPORTE_PENDIENTE
+      CODIGOFORMAPAGO,
+      TIPODOCUMENTO,
+      ORIGENDOCUMENTO,
+      SERIEDOCUMENTO,
+      TERMINALDOCUMENTO,
+      NUMERODOCUMENTO,
+      EJERCICIODOCUMENTO,
+      XDEDOCUMENTO,
+      IMPORTEVENCIMIENTO,
+      IMPORTEPENDIENTE
     FROM JAVIER.REPARTIDOR_COBROS
-    WHERE TRIM(CODIGO_REPARTIDOR) = ?
-      AND DATE(FECHA_COBRO) = DATE(?)
+    WHERE TRIM(CODIGOVENDEDOR) = ?
+      AND ANOVENCIMIENTO * 10000 + MESVENCIMIENTO * 100 + DIAVENCIMIENTO = ?
       AND COALESCE(LIQUIDADO_SN, 'N') <> 'S'
-    ORDER BY FECHA_COBRO, ID
-  `, [repartidorId, date], false, false);
+    ORDER BY ANOVENCIMIENTO, MESVENCIMIENTO, DIAVENCIMIENTO, ID
+  `, [repartidorId, dateYmd], false, false);
 
   const totals = firstRow(totalsRows);
   const saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
@@ -564,10 +567,9 @@ async function getVencimientos({ repartidorId, from, to, limit, clientCode, esta
         CLCL1.DIASLIMITECREDITO,
         CLCL1.DIASLIMITECREDITOCONFECHAALB,
         CVC.IMPORTEVENCIMIENTO,
-        DECIMAL(
-          CVC.IMPORTEPENDIENTE - COALESCE(APP_COBROS.IMPORTE_COBRADO_APP, 0),
-          15,
-          2
+        CAST(
+          CVC.IMPORTEPENDIENTE - COALESCE(APP_COBROS.IMPORTE_COBRADO_APP, 0)
+          AS DECIMAL(15,2)
         ) AS IMPORTEPENDIENTE,
         ROW_NUMBER() OVER (
           ORDER BY CVC.ANOVENCIMIENTO, CVC.MESVENCIMIENTO, CVC.DIAVENCIMIENTO, CVC.NUMERODOCUMENTO
@@ -587,43 +589,43 @@ async function getVencimientos({ repartidorId, from, to, limit, clientCode, esta
         ON TRIM(CLCL1.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
       LEFT JOIN (
         SELECT
-          TRIM(CODIGO_REPARTIDOR) AS CODIGO_REPARTIDOR,
-          TRIM(CODIGO_CLIENTE) AS CODIGO_CLIENTE,
-          TRIM(TIPO_DOCUMENTO) AS TIPO_DOCUMENTO,
-          TRIM(ORIGEN_DOCUMENTO) AS ORIGEN_DOCUMENTO,
-          TRIM(SUBEMPRESA_DOCUMENTO) AS SUBEMPRESA_DOCUMENTO,
-          EJERCICIO_DOCUMENTO,
-          TRIM(SERIE_DOCUMENTO) AS SERIE_DOCUMENTO,
-          TERMINAL_DOCUMENTO,
-          NUMERO_DOCUMENTO,
-          XDE_DOCUMENTO,
-          DEX_DOCUMENTO,
-          SUM(COALESCE(IMPORTE_COBRADO, 0)) AS IMPORTE_COBRADO_APP
+          TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR,
+          TRIM(CODIGOCLIENTEALBARAN) AS CODIGOCLIENTEALBARAN,
+          TRIM(TIPODOCUMENTO) AS TIPODOCUMENTO,
+          TRIM(ORIGENDOCUMENTO) AS ORIGENDOCUMENTO,
+          TRIM(SUBEMPRESADOCUMENTO) AS SUBEMPRESADOCUMENTO,
+          EJERCICIODOCUMENTO,
+          TRIM(SERIEDOCUMENTO) AS SERIEDOCUMENTO,
+          TERMINALDOCUMENTO,
+          NUMERODOCUMENTO,
+          XDEDOCUMENTO,
+          DEXDOCUMENTO,
+          SUM(COALESCE(IMPORTEVENCIMIENTO, 0)) AS IMPORTE_COBRADO_APP
         FROM JAVIER.REPARTIDOR_COBROS
         GROUP BY
-          TRIM(CODIGO_REPARTIDOR),
-          TRIM(CODIGO_CLIENTE),
-          TRIM(TIPO_DOCUMENTO),
-          TRIM(ORIGEN_DOCUMENTO),
-          TRIM(SUBEMPRESA_DOCUMENTO),
-          EJERCICIO_DOCUMENTO,
-          TRIM(SERIE_DOCUMENTO),
-          TERMINAL_DOCUMENTO,
-          NUMERO_DOCUMENTO,
-          XDE_DOCUMENTO,
-          DEX_DOCUMENTO
+          TRIM(CODIGOVENDEDOR),
+          TRIM(CODIGOCLIENTEALBARAN),
+          TRIM(TIPODOCUMENTO),
+          TRIM(ORIGENDOCUMENTO),
+          TRIM(SUBEMPRESADOCUMENTO),
+          EJERCICIODOCUMENTO,
+          TRIM(SERIEDOCUMENTO),
+          TERMINALDOCUMENTO,
+          NUMERODOCUMENTO,
+          XDEDOCUMENTO,
+          DEXDOCUMENTO
       ) APP_COBROS
-        ON APP_COBROS.CODIGO_REPARTIDOR = TRIM(OPP.CODIGOREPARTIDOR)
-        AND APP_COBROS.CODIGO_CLIENTE = TRIM(CVC.CODIGOCLIENTEALBARAN)
-        AND APP_COBROS.TIPO_DOCUMENTO = TRIM(CVC.TIPODOCUMENTO)
-        AND APP_COBROS.ORIGEN_DOCUMENTO = TRIM(CVC.ORIGENDOCUMENTO)
-        AND APP_COBROS.SUBEMPRESA_DOCUMENTO = TRIM(CVC.SUBEMPRESADOCUMENTO)
-        AND APP_COBROS.EJERCICIO_DOCUMENTO = CVC.EJERCICIODOCUMENTO
-        AND APP_COBROS.SERIE_DOCUMENTO = TRIM(CVC.SERIEDOCUMENTO)
-        AND APP_COBROS.TERMINAL_DOCUMENTO = CVC.TERMINALDOCUMENTO
-        AND APP_COBROS.NUMERO_DOCUMENTO = CVC.NUMERODOCUMENTO
-        AND COALESCE(APP_COBROS.XDE_DOCUMENTO, 1) = COALESCE(CVC.XDEDOCUMENTO, 1)
-        AND COALESCE(APP_COBROS.DEX_DOCUMENTO, 1) = COALESCE(CVC.DEXDOCUMENTO, 1)
+        ON APP_COBROS.CODIGOVENDEDOR = TRIM(OPP.CODIGOREPARTIDOR)
+        AND APP_COBROS.CODIGOCLIENTEALBARAN = TRIM(CVC.CODIGOCLIENTEALBARAN)
+        AND APP_COBROS.TIPODOCUMENTO = TRIM(CVC.TIPODOCUMENTO)
+        AND APP_COBROS.ORIGENDOCUMENTO = TRIM(CVC.ORIGENDOCUMENTO)
+        AND APP_COBROS.SUBEMPRESADOCUMENTO = TRIM(CVC.SUBEMPRESADOCUMENTO)
+        AND APP_COBROS.EJERCICIODOCUMENTO = CVC.EJERCICIODOCUMENTO
+        AND APP_COBROS.SERIEDOCUMENTO = TRIM(CVC.SERIEDOCUMENTO)
+        AND APP_COBROS.TERMINALDOCUMENTO = CVC.TERMINALDOCUMENTO
+        AND APP_COBROS.NUMERODOCUMENTO = CVC.NUMERODOCUMENTO
+        AND COALESCE(APP_COBROS.XDEDOCUMENTO, 1) = COALESCE(CVC.XDEDOCUMENTO, 1)
+        AND COALESCE(APP_COBROS.DEXDOCUMENTO, 1) = COALESCE(CVC.DEXDOCUMENTO, 1)
       WHERE TRIM(OPP.CODIGOREPARTIDOR) = ?
         AND (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO) BETWEEN ? AND ?
         AND COALESCE(CVC.ANULADOSN, '') <> 'S'
@@ -685,30 +687,28 @@ async function registerCobro(input) {
       await conn.query(`
         INSERT INTO JAVIER.REPARTIDOR_COBROS (
           ENTREGA_APP_ID,
-          CODIGO_CLIENTE,
-          NOMBRE_CLIENTE,
-          CODIGO_REPARTIDOR,
-          TIPO_DOCUMENTO,
-          ORIGEN_DOCUMENTO,
-          SUBEMPRESA_DOCUMENTO,
-          EJERCICIO_DOCUMENTO,
-          SERIE_DOCUMENTO,
-          TERMINAL_DOCUMENTO,
-          NUMERO_DOCUMENTO,
-          XDE_DOCUMENTO,
-          DEX_DOCUMENTO,
-          IMPORTE_COBRADO,
-          IMPORTE_PENDIENTE,
-          FORMA_PAGO,
+          CODIGOCLIENTEALBARAN,
+          CODIGOVENDEDOR,
+          TIPODOCUMENTO,
+          ORIGENDOCUMENTO,
+          SUBEMPRESADOCUMENTO,
+          EJERCICIODOCUMENTO,
+          SERIEDOCUMENTO,
+          TERMINALDOCUMENTO,
+          NUMERODOCUMENTO,
+          XDEDOCUMENTO,
+          DEXDOCUMENTO,
+          IMPORTEVENCIMIENTO,
+          IMPORTEPENDIENTE,
+          CODIGOFORMAPAGO,
           IDEMPOTENCY_TOKEN,
           PANTALLA_ORIGEN,
           OPERADOR,
-          NOTAS
+          OBSERVACIONES
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         input.entregaId || null,
         input.codigoCliente,
-        input.nombreCliente || null,
         input.codigoRepartidor,
         normalizeTipoDocumento(input.tipoDocumento),
         input.origenDocumento || 'B',
@@ -787,12 +787,12 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
     const existing = firstRow(existingRows);
     assertCobroMatchesInput(existing, delivery, cobro);
     const deliveryRows = await queryWithParams(`
-      SELECT STATUS
+      SELECT CONFORMADOSN
       FROM JAVIER.DELIVERY_STATUS
       WHERE ID = ?
       FETCH FIRST 1 ROW ONLY
     `, [delivery.itemId], false, false);
-    if (normalizeText(value(firstRow(deliveryRows), 'STATUS')) !== 'ENTREGADO') {
+    if (normalizeText(value(firstRow(deliveryRows), 'CONFORMADOSN')) !== 'ENTREGADO') {
       const error = new Error(
         'Token de cobro existente sin entrega confirmada; requiere revision manual',
       );
@@ -817,14 +817,14 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
     `, [cobro.idempotencyToken]);
 
     const deliveryRows = await conn.query(`
-      SELECT STATUS, UPDATED_AT, REPARTIDOR_ID
+      SELECT CONFORMADOSN, UPDATED_AT, REPARTIDOR_ID
       FROM JAVIER.DELIVERY_STATUS
       WHERE ID = ?
       FETCH FIRST 1 ROW ONLY
     `, [delivery.itemId]);
     const existingDelivery = firstRow(deliveryRows);
     const isDelivered =
-      String(value(existingDelivery, 'STATUS', '') || '').trim() === 'ENTREGADO';
+      String(value(existingDelivery, 'CONFORMADOSN', '') || '').trim() === 'ENTREGADO';
 
     if (tokenRows.length > 0) {
       assertCobroMatchesInput(tokenRows[0], delivery, cobro);
@@ -866,7 +866,7 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
     await conn.query(`
       INSERT INTO JAVIER.DELIVERY_STATUS (
         ID,
-        STATUS,
+        CONFORMADOSN,
         OBSERVACIONES,
         FIRMA_PATH,
         LATITUD,
@@ -887,30 +887,28 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
     await conn.query(`
       INSERT INTO JAVIER.REPARTIDOR_COBROS (
         ENTREGA_APP_ID,
-        CODIGO_CLIENTE,
-        NOMBRE_CLIENTE,
-        CODIGO_REPARTIDOR,
-        TIPO_DOCUMENTO,
-        ORIGEN_DOCUMENTO,
-        SUBEMPRESA_DOCUMENTO,
-        EJERCICIO_DOCUMENTO,
-        SERIE_DOCUMENTO,
-        TERMINAL_DOCUMENTO,
-        NUMERO_DOCUMENTO,
-        XDE_DOCUMENTO,
-        DEX_DOCUMENTO,
-        IMPORTE_COBRADO,
-        IMPORTE_PENDIENTE,
-        FORMA_PAGO,
+        CODIGOCLIENTEALBARAN,
+        CODIGOVENDEDOR,
+        TIPODOCUMENTO,
+        ORIGENDOCUMENTO,
+        SUBEMPRESADOCUMENTO,
+        EJERCICIODOCUMENTO,
+        SERIEDOCUMENTO,
+        TERMINALDOCUMENTO,
+        NUMERODOCUMENTO,
+        XDEDOCUMENTO,
+        DEXDOCUMENTO,
+        IMPORTEVENCIMIENTO,
+        IMPORTEPENDIENTE,
+        CODIGOFORMAPAGO,
         IDEMPOTENCY_TOKEN,
         PANTALLA_ORIGEN,
         OPERADOR,
-        NOTAS
+        OBSERVACIONES
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, [
       cobro.entregaId || delivery.itemId,
       cobro.codigoCliente,
-      cobro.nombreCliente || null,
       cobro.codigoRepartidor || repartidorId,
       normalizeTipoDocumento(cobro.tipoDocumento),
       cobro.origenDocumento || 'B',
@@ -1096,37 +1094,35 @@ async function closeLiquidacion(input) {
       serie,
       terminal,
     });
-    const [startAt, endAt] = dayBounds(input.date);
+    const dateYmd = compactDate(input.date);
 
     const totalsRow = firstRow(await conn.query(`
       SELECT
-        COALESCE(SUM(CASE WHEN UPPER(TRIM(FORMA_PAGO)) IN ('EFECTIVO', 'E', 'CONTADO') THEN IMPORTE_COBRADO ELSE 0 END), 0) AS TOTAL_EFECTIVO,
-        COALESCE(SUM(CASE WHEN UPPER(TRIM(FORMA_PAGO)) IN ('CHEQUE', 'TALON', 'TALON BANCARIO') THEN IMPORTE_COBRADO ELSE 0 END), 0) AS TOTAL_CHEQUES,
-        COALESCE(SUM(CASE WHEN UPPER(TRIM(FORMA_PAGO)) IN ('TARJETA', 'TPV', 'BIZUM') THEN IMPORTE_COBRADO ELSE 0 END), 0) AS TOTAL_TARJETA,
-        COALESCE(SUM(CASE WHEN UPPER(TRIM(FORMA_PAGO)) IN ('POSTDATADO', 'POSTDATADOS') THEN IMPORTE_COBRADO ELSE 0 END), 0) AS TOTAL_POSTDATADOS,
-        COALESCE(SUM(IMPORTE_COBRADO), 0) AS TOTAL_COBROS_DIA,
+        COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('EFECTIVO', 'E', 'CONTADO') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_EFECTIVO,
+        COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('CHEQUE', 'TALON', 'TALON BANCARIO') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_CHEQUES,
+        COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('TARJETA', 'TPV', 'BIZUM') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_TARJETA,
+        COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('POSTDATADO', 'POSTDATADOS') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_POSTDATADOS,
+        COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_COBROS_DIA,
         COUNT(*) AS COBROS_COUNT
       FROM JAVIER.REPARTIDOR_COBROS
-      WHERE TRIM(CODIGO_REPARTIDOR) = ?
-        AND FECHA_COBRO >= ?
-        AND FECHA_COBRO < ?
+      WHERE TRIM(CODIGOVENDEDOR) = ?
+        AND ANOVENCIMIENTO * 10000 + MESVENCIMIENTO * 100 + DIAVENCIMIENTO = ?
         AND COALESCE(LIQUIDADO_SN, 'N') <> 'S'
-    `, [input.repartidorId, startAt, endAt]));
+    `, [input.repartidorId, dateYmd]));
 
     const cobroRows = await conn.query(`
       SELECT ID
       FROM JAVIER.REPARTIDOR_COBROS
-      WHERE TRIM(CODIGO_REPARTIDOR) = ?
-        AND FECHA_COBRO >= ?
-        AND FECHA_COBRO < ?
+      WHERE TRIM(CODIGOVENDEDOR) = ?
+        AND ANOVENCIMIENTO * 10000 + MESVENCIMIENTO * 100 + DIAVENCIMIENTO = ?
         AND COALESCE(LIQUIDADO_SN, 'N') <> 'S'
-      ORDER BY FECHA_COBRO, ID
-    `, [input.repartidorId, startAt, endAt]);
+      ORDER BY ANOVENCIMIENTO, MESVENCIMIENTO, DIAVENCIMIENTO, ID
+    `, [input.repartidorId, dateYmd]);
 
     const balanceRow = firstRow(await conn.query(`
       SELECT SALDO_PENDIENTE
       FROM JAVIER.REPARTIDOR_FINANCIAL_BALANCES
-      WHERE TRIM(CODIGO_REPARTIDOR) = ?
+      WHERE TRIM(CODIGOVENDEDOR) = ?
       FETCH FIRST 1 ROW ONLY
     `, [input.repartidorId]));
 
@@ -1220,26 +1216,26 @@ async function closeLiquidacion(input) {
     await conn.query(`
       INSERT INTO JAVIER.REPARTIDOR_LIQUIDACION_OPS (
         IDEMPOTENCY_TOKEN,
-        SUBEMPRESA_LIQ,
-        EJERCICIO_LIQ,
-        SERIE_LIQ,
-        TERMINAL_LIQ,
-        NUMERO_LIQ,
-        CODIGO_REPARTIDOR,
-        TOTAL_EFECTIVO,
-        TOTAL_CHEQUES,
-        TOTAL_TARJETA,
-        TOTAL_POSTDATADOS,
-        SALDO_ANTERIOR,
+        SUBEMPRESALIQUIDACION,
+        EJERCICIOLIQUIDACION,
+        SERIELIQUIDACION,
+        TERMINALLIQUIDACION,
+        NUMEROLIQUIDACION,
+        CODIGOVENDEDOR,
+        IMPORTEEFECTIVO,
+        IMPORTECHEQUES,
+        IMPORTETARJETA,
+        IMPORTEPOSTDATADOS,
+        IMPORTESALDOACTUAL,
         TOTAL_COBROS_DIA,
-        GASTOS,
-        TOTAL_A_INGRESAR,
-        INGRESO_BANCO,
-        EFECTIVO_2,
-        ENTREGADO_2,
+        IMPORTEGASTOS,
+        IMPORTETOTALAINGRESAR,
+        IMPORTEINGRESOENBANCO,
+        IMPORTEEFECTIVO2,
+        IMPORTEENTREGADO2,
         SALDO_RESULTANTE,
-        CREADO_POR,
-        STATUS
+        CODIGOUSUARIO,
+        REVISADOSN
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'CLOSED')
     `, [
       input.idempotencyToken,
@@ -1266,15 +1262,15 @@ async function closeLiquidacion(input) {
 
     await conn.query(`
       MERGE INTO JAVIER.REPARTIDOR_FINANCIAL_BALANCES B
-      USING (VALUES (?, ?, ?)) AS V(CODIGO_REPARTIDOR, SALDO_PENDIENTE, UPDATED_BY)
-        ON B.CODIGO_REPARTIDOR = V.CODIGO_REPARTIDOR
+      USING (VALUES (?, ?, ?)) AS V(CODIGOVENDEDOR, SALDO_PENDIENTE, UPDATED_BY)
+        ON B.CODIGOVENDEDOR = V.CODIGOVENDEDOR
       WHEN MATCHED THEN
         UPDATE SET SALDO_PENDIENTE = V.SALDO_PENDIENTE,
                    UPDATED_BY = V.UPDATED_BY,
                    UPDATED_AT = CURRENT_TIMESTAMP
       WHEN NOT MATCHED THEN
-        INSERT (CODIGO_REPARTIDOR, SALDO_PENDIENTE, UPDATED_BY)
-        VALUES (V.CODIGO_REPARTIDOR, V.SALDO_PENDIENTE, V.UPDATED_BY)
+        INSERT (CODIGOVENDEDOR, SALDO_PENDIENTE, UPDATED_BY)
+        VALUES (V.CODIGOVENDEDOR, V.SALDO_PENDIENTE, V.UPDATED_BY)
     `, [input.repartidorId, saldoResultante, input.createdBy || 'unknown']);
 
     if (cobroRows.length > 0) {
@@ -1353,11 +1349,12 @@ async function getCommissionSummary({ repartidorId, from, to }) {
   `, [repartidorId, compactDate(from), compactDate(to)], false, false);
 
   const collectedRows = await queryWithParams(`
-    SELECT COALESCE(SUM(IMPORTE_COBRADO), 0) AS TOTAL_COBRADO
+    SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_COBRADO
     FROM JAVIER.REPARTIDOR_COBROS
-    WHERE TRIM(CODIGO_REPARTIDOR) = ?
-      AND DATE(FECHA_COBRO) BETWEEN DATE(?) AND DATE(?)
-  `, [repartidorId, from, to], false, false);
+    WHERE TRIM(CODIGOVENDEDOR) = ?
+      AND ANOVENCIMIENTO * 10000 + MESVENCIMIENTO * 100 + DIAVENCIMIENTO >= ?
+      AND ANOVENCIMIENTO * 10000 + MESVENCIMIENTO * 100 + DIAVENCIMIENTO <= ?
+  `, [repartidorId, compactDate(from), compactDate(nextIsoDate(to))], false, false);
 
   const tiers = await getCommissionTiers();
   const result = calculateCommission({
@@ -1407,7 +1404,7 @@ async function saveCommissionTiers({ tiers, updatedBy }) {
 
 async function deleteTestData(idempotencyToken, options = {}) {
   const opRows = await queryWithParams(`
-    SELECT CODIGO_REPARTIDOR, SALDO_ANTERIOR, CREATED_AT
+    SELECT CODIGOVENDEDOR, IMPORTESALDOACTUAL, CREATED_AT
     FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS
     WHERE IDEMPOTENCY_TOKEN = ?
     FETCH FIRST 1 ROW ONLY
@@ -1433,12 +1430,12 @@ async function deleteTestData(idempotencyToken, options = {}) {
     const newerRows = await queryWithParams(`
       SELECT ID
       FROM JAVIER.REPARTIDOR_LIQUIDACION_OPS
-      WHERE TRIM(CODIGO_REPARTIDOR) = ?
+      WHERE TRIM(CODIGOVENDEDOR) = ?
         AND CREATED_AT > ?
-        AND STATUS = 'CLOSED'
+        AND REVISADOSN = 'CLOSED'
       FETCH FIRST 1 ROW ONLY
     `, [
-      normalizeText(value(opRow, 'CODIGO_REPARTIDOR')),
+      normalizeText(value(opRow, 'CODIGOVENDEDOR')),
       value(opRow, 'CREATED_AT'),
     ], false, false);
     if (newerRows.length > 0) {
@@ -1470,18 +1467,18 @@ async function deleteTestData(idempotencyToken, options = {}) {
   if (Object.keys(opRow).length > 0) {
     await queryWithParams(`
       MERGE INTO JAVIER.REPARTIDOR_FINANCIAL_BALANCES B
-      USING (VALUES (?, ?, 'cleanup')) AS V(CODIGO_REPARTIDOR, SALDO_PENDIENTE, UPDATED_BY)
-        ON B.CODIGO_REPARTIDOR = V.CODIGO_REPARTIDOR
+      USING (VALUES (?, ?, 'cleanup')) AS V(CODIGOVENDEDOR, SALDO_PENDIENTE, UPDATED_BY)
+        ON B.CODIGOVENDEDOR = V.CODIGOVENDEDOR
       WHEN MATCHED THEN
         UPDATE SET SALDO_PENDIENTE = V.SALDO_PENDIENTE,
                    UPDATED_BY = V.UPDATED_BY,
                    UPDATED_AT = CURRENT_TIMESTAMP
       WHEN NOT MATCHED THEN
-        INSERT (CODIGO_REPARTIDOR, SALDO_PENDIENTE, UPDATED_BY)
-        VALUES (V.CODIGO_REPARTIDOR, V.SALDO_PENDIENTE, V.UPDATED_BY)
+        INSERT (CODIGOVENDEDOR, SALDO_PENDIENTE, UPDATED_BY)
+        VALUES (V.CODIGOVENDEDOR, V.SALDO_PENDIENTE, V.UPDATED_BY)
     `, [
-      value(opRow, 'CODIGO_REPARTIDOR'),
-      roundMoney(value(opRow, 'SALDO_ANTERIOR')),
+      value(opRow, 'CODIGOVENDEDOR'),
+      roundMoney(value(opRow, 'IMPORTESALDOACTUAL')),
     ], false, false);
   }
 

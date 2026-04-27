@@ -325,8 +325,8 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
             ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS ON 
                 DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))`
             : '';
-        const dsStatusCol = dsAvail ? 'DS.STATUS as DELIVERY_STATUS' : "CAST(NULL AS VARCHAR(20)) as DELIVERY_STATUS";
-        const dsUpdatedCol = dsAvail ? 'DS.UPDATED_AT as DELIVERY_UPDATED_AT' : "CAST(NULL AS TIMESTAMP) as DELIVERY_UPDATED_AT";
+        const dsStatusCol = dsAvail ? 'DS.ESTADO as DELIVERY_STATUS' : "CAST(NULL AS VARCHAR(20)) as DELIVERY_STATUS";
+        const dsUpdatedCol = dsAvail ? 'DS.FECHAACTUALIZACION as DELIVERY_UPDATED_AT' : "CAST(NULL AS TIMESTAMP) as DELIVERY_UPDATED_AT";
         const dsFirmaCol = dsAvail ? 'DS.FIRMA_PATH' : "CAST(NULL AS VARCHAR(255)) as FIRMA_PATH";
         const dsObsCol = dsAvail ? 'DS.OBSERVACIONES' : "CAST(NULL AS VARCHAR(512)) as OBSERVACIONES";
 
@@ -747,13 +747,15 @@ router.get('/history/objectives-detail/:repartidorId', verifyToken, async (req, 
                 fi3Names = getCachedFi3Names() || {};
                 fi4Names = getCachedFi4Names() || {};
             } else {
-                const fi1Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI1`, false, false);
+                const [fi1Rows, fi2Rows, fi3Rows, fi4Rows] = await Promise.all([
+                    query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI1`, false, false),
+                    query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI2`, false, false),
+                    query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI3`, false, false),
+                    query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI4`, false, false),
+                ]);
                 fi1Rows.forEach(r => { fi1Names[(r.CODIGOFILTRO || '').trim()] = (r.DESCRIPCIONFILTRO || '').trim(); });
-                const fi2Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI2`, false, false);
                 fi2Rows.forEach(r => { fi2Names[(r.CODIGOFILTRO || '').trim()] = (r.DESCRIPCIONFILTRO || '').trim(); });
-                const fi3Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI3`, false, false);
                 fi3Rows.forEach(r => { fi3Names[(r.CODIGOFILTRO || '').trim()] = (r.DESCRIPCIONFILTRO || '').trim(); });
-                const fi4Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI4`, false, false);
                 fi4Rows.forEach(r => { fi4Names[(r.CODIGOFILTRO || '').trim()] = (r.DESCRIPCIONFILTRO || '').trim(); });
             }
         } catch (e) {
@@ -950,18 +952,20 @@ router.get('/history/signature', verifyToken, async (req, res) => {
         let fechaFirma = null;
         try {
             const firmaRows = await queryWithParams(`
-                SELECT RF.FIRMA_BASE64, RF.FIRMANTE_NOMBRE, RF.FECHA_FIRMA
+                SELECT RF.FIRMABASE64, RF.FIRMANOMBRE, RF.DIA, RF.MES, RF.ANO, RF.HORA
                 FROM JAVIER.REPARTIDOR_FIRMAS RF
                 INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
-                WHERE RE.NUMERO_ALBARAN = ?
-                  AND RE.EJERCICIO_ALBARAN = ?
-                  AND TRIM(RE.SERIE_ALBARAN) = ?
+                WHERE RE.NUMEROORDENPREPARACION = ?
+                  AND RE.EJERCICIOALBARAN = ?
+                  AND TRIM(RE.SERIEALBARAN) = ?
                 FETCH FIRST 1 ROW ONLY
             `, [parseInt(numero), parseInt(ejercicio), (serie || 'A').trim()], false);
             if (firmaRows.length > 0) {
-                firmaBase64 = firmaRows[0].FIRMA_BASE64;
-                firmante = firmaRows[0].FIRMANTE_NOMBRE;
-                fechaFirma = firmaRows[0].FECHA_FIRMA;
+                firmaBase64 = firmaRows[0].FIRMABASE64;
+                firmante = firmaRows[0].FIRMANOMBRE;
+                fechaFirma = (firmaRows[0].ANO > 0)
+                    ? `${firmaRows[0].ANO}-${String(firmaRows[0].MES).padStart(2, '0')}-${String(firmaRows[0].DIA).padStart(2, '0')} ${String(firmaRows[0].HORA).padStart(6, '0').substring(0, 2)}:${String(firmaRows[0].HORA).padStart(6, '0').substring(2, 4)}`
+                    : null;
                 if (firmaBase64) signatureSource = 'REPARTIDOR_FIRMAS';
                 logger.info(`[REPARTIDOR] Step 2 REPARTIDOR_FIRMAS: found row, hasBase64=${!!firmaBase64}`);
             } else {
@@ -1190,9 +1194,9 @@ router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, r
                     OPP.DIAREPARTO as DIA,
                     CPC.EJERCICIOALBARAN, TRIM(CPC.SERIEALBARAN) as SERIE, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
                     MAX(CPC.IMPORTETOTAL) as IMPORTE,
-                    MAX(CASE WHEN TRIM(CPC.CONFORMADOSN) = 'S' ${dsAvail ? "OR DS.STATUS = 'ENTREGADO'" : ''} THEN 1 ELSE 0 END) as ENTREGADO,
-                    MAX(CASE WHEN ${dsAvail ? "DS.STATUS = 'NO_ENTREGADO'" : '1=0'} THEN 1 ELSE 0 END) as NO_ENTREGADO,
-                    MAX(CASE WHEN ${dsAvail ? "DS.STATUS = 'PARCIAL'" : '1=0'} THEN 1 ELSE 0 END) as PARCIAL
+                    MAX(CASE WHEN TRIM(CPC.CONFORMADOSN) = 'S' ${dsAvail ? "OR DS.ESTADO = 'ENTREGADO'" : ''} THEN 1 ELSE 0 END) as ENTREGADO,
+                    MAX(CASE WHEN ${dsAvail ? "DS.ESTADO = 'NO_ENTREGADO'" : '1=0'} THEN 1 ELSE 0 END) as NO_ENTREGADO,
+                    MAX(CASE WHEN ${dsAvail ? "DS.ESTADO = 'PARCIAL'" : '1=0'} THEN 1 ELSE 0 END) as PARCIAL
                 FROM DSEDAC.OPP OPP
                 INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
                 ${dsJoinSub}
@@ -1377,15 +1381,15 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
         if (!signatureBase64) {
             try {
                 const firmaRows = await queryWithParams(`
-                    SELECT RF.FIRMA_BASE64 FROM JAVIER.REPARTIDOR_FIRMAS RF
+                    SELECT RF.FIRMABASE64 FROM JAVIER.REPARTIDOR_FIRMAS RF
                     INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
-                    WHERE RE.NUMERO_ALBARAN = ?
-                      AND RE.EJERCICIO_ALBARAN = ?
-                      AND TRIM(RE.SERIE_ALBARAN) = ?
+                    WHERE RE.NUMEROORDENPREPARACION = ?
+                      AND RE.EJERCICIOALBARAN = ?
+                      AND TRIM(RE.SERIEALBARAN) = ?
                     FETCH FIRST 1 ROW ONLY
                 `, [parsedNumber, parsedYear, serie], false);
-                if (firmaRows.length > 0 && firmaRows[0].FIRMA_BASE64) {
-                    signatureBase64 = firmaRows[0].FIRMA_BASE64;
+                if (firmaRows.length > 0 && firmaRows[0].FIRMABASE64) {
+                    signatureBase64 = firmaRows[0].FIRMABASE64;
                     signatureSource = 'REPARTIDOR_FIRMAS';
                     logger.info(`[PDF] Using signature from REPARTIDOR_FIRMAS`);
                 }
@@ -1483,9 +1487,9 @@ router.post('/entregas', verifyToken, async (req, res) => {
         // Check if delivery already exists
         const existing = await queryWithParams(`
             SELECT ID FROM JAVIER.REPARTIDOR_ENTREGAS 
-            WHERE NUMERO_ALBARAN = ? 
-              AND EJERCICIO_ALBARAN = ? 
-              AND SERIE_ALBARAN = ?
+            WHERE NUMEROORDENPREPARACION = ? 
+              AND EJERCICIOALBARAN = ? 
+              AND SERIEALBARAN = ?
         `, [numeroAlbaran, ejercicioAlbaran, serieAlbaran]);
 
         let entregaId;
@@ -1495,8 +1499,8 @@ router.post('/entregas', verifyToken, async (req, res) => {
             entregaId = existing[0].ID;
             await queryWithParams(`
                 UPDATE JAVIER.REPARTIDOR_ENTREGAS SET
-                    ESTADO = ?,
-                    FECHA_ENTREGA = ${estado === 'ENTREGADO' ? 'CURRENT_TIMESTAMP' : 'NULL'},
+                    ESTADOENTREGA = ?,
+                    FECHAENTREGA = ${estado === 'ENTREGADO' ? 'CURRENT_TIMESTAMP' : 'NULL'},
                     OBSERVACIONES = ?
                 WHERE ID = ?
             `, [estado, observaciones || null, entregaId]);
@@ -1504,10 +1508,10 @@ router.post('/entregas', verifyToken, async (req, res) => {
             // Insert new
             await queryWithParams(`
                 INSERT INTO JAVIER.REPARTIDOR_ENTREGAS (
-                    NUMERO_ALBARAN, EJERCICIO_ALBARAN, SERIE_ALBARAN,
-                    CODIGO_CLIENTE, NOMBRE_CLIENTE,
-                    CODIGO_REPARTIDOR, CODIGO_CONDUCTOR,
-                    ESTADO, FECHA_PREVISTA, IMPORTE_TOTAL, ES_CTR, OBSERVACIONES
+                    NUMEROORDENPREPARACION, EJERCICIOALBARAN, SERIEALBARAN,
+                    CODIGOCLIENTE, NOMBRECLIENTE,
+                    CODIGOREPARTIDOR, CODIGOCONDUCTOR,
+                    ESTADOENTREGA, FECHAPREVISTAENTREGA, IMPORTEVENCIMIENTO, ESCTR, OBSERVACIONES
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `, [
                 numeroAlbaran, ejercicioAlbaran, serieAlbaran,
@@ -1521,9 +1525,9 @@ router.post('/entregas', verifyToken, async (req, res) => {
             // Get the new ID
             const newIdResult = await queryWithParams(`
                 SELECT ID FROM JAVIER.REPARTIDOR_ENTREGAS 
-                WHERE NUMERO_ALBARAN = ? 
-                  AND EJERCICIO_ALBARAN = ? 
-                  AND SERIE_ALBARAN = ?
+                WHERE NUMEROORDENPREPARACION = ? 
+                  AND EJERCICIOALBARAN = ? 
+                  AND SERIEALBARAN = ?
             `, [numeroAlbaran, ejercicioAlbaran, serieAlbaran]);
             entregaId = newIdResult[0]?.ID;
         }
@@ -1568,7 +1572,7 @@ router.post('/entregas/:entregaId/firma', verifyToken, async (req, res) => {
         // Insert new signature
         await queryWithParams(`
             INSERT INTO JAVIER.REPARTIDOR_FIRMAS (
-                ENTREGA_ID, FIRMA_BASE64, FIRMANTE_NOMBRE, FIRMANTE_DNI,
+                ENTREGA_ID, FIRMABASE64, FIRMANOMBRE, FIRMADNI,
                 DISPOSITIVO, LATITUD, LONGITUD
             ) VALUES (?, ?, ?, ?, ?, ?, ?)
         `, [
@@ -1584,8 +1588,8 @@ router.post('/entregas/:entregaId/firma', verifyToken, async (req, res) => {
         // Update entrega status to delivered
         await queryWithParams(`
             UPDATE JAVIER.REPARTIDOR_ENTREGAS SET 
-                ESTADO = 'ENTREGADO', 
-                FECHA_ENTREGA = CURRENT_TIMESTAMP 
+                ESTADOENTREGA = 'ENTREGADO', 
+                FECHAENTREGA = CURRENT_TIMESTAMP 
             WHERE ID = ?
         `, [entregaId]);
 
@@ -1622,9 +1626,9 @@ router.post('/entregas/:entregaId/lineas', verifyToken, async (req, res) => {
         for (const linea of lineas) {
             await queryWithParams(`
                 INSERT INTO JAVIER.REPARTIDOR_ENTREGA_LINEAS (
-                    ENTREGA_ID, LINEA_ALBARAN, CODIGO_ARTICULO, DESCRIPCION_ARTICULO,
-                    CANTIDAD_PEDIDA, CANTIDAD_ENTREGADA, CANTIDAD_RECHAZADA,
-                    ESTADO, OBSERVACIONES, MOTIVO_NO_ENTREGA
+                    ENTREGA_ID, LINEAALBARAN, CODIGOARTICULO, DESCRIPCION,
+                    CANTIDADPEDIDA, CANTIDADENTREGADA, CANTIDADRECHAZADA,
+                    ESTADO, OBSERVACIONES, MOTIVONOENTREGA
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `, [
                 entregaId,
@@ -1646,7 +1650,7 @@ router.post('/entregas/:entregaId/lineas', verifyToken, async (req, res) => {
         const overallStatus = allDelivered ? 'ENTREGADO' : (noneDelivered ? 'NO_ENTREGADO' : 'PARCIAL');
 
         await queryWithParams(`
-            UPDATE JAVIER.REPARTIDOR_ENTREGAS SET ESTADO = ? WHERE ID = ?
+            UPDATE JAVIER.REPARTIDOR_ENTREGAS SET ESTADOENTREGA = ? WHERE ID = ?
         `, [overallStatus, entregaId]);
 
         res.json({
@@ -1691,12 +1695,12 @@ router.post('/cobros', verifyToken, async (req, res) => {
 
         const insertSql = `
             INSERT INTO JAVIER.REPARTIDOR_COBROS (
-                ENTREGA_ID, ENTREGA_APP_ID, CODIGO_CLIENTE, NOMBRE_CLIENTE,
-                CODIGO_REPARTIDOR, TIPO_DOCUMENTO, ORIGEN_DOCUMENTO,
-                SUBEMPRESA_DOCUMENTO, SERIE_DOCUMENTO, TERMINAL_DOCUMENTO,
-                NUMERO_DOCUMENTO, EJERCICIO_DOCUMENTO, XDE_DOCUMENTO,
-                IMPORTE_COBRADO, IMPORTE_PENDIENTE, FORMA_PAGO,
-                IDEMPOTENCY_TOKEN, PANTALLA_ORIGEN, OPERADOR, NOTAS
+                ENTREGA_ID, ENTREGA_APP_ID, CODIGOCLIENTE, NOMBRECLIENTE,
+                CODIGOREPARTIDOR, TIPODOCUMENTO, ORIGENDOCUMENTO,
+                SUBEMPRESADOCUMENTO, SERIEDOCUMENTO, TERMINALDOCUMENTO,
+                NUMERODOCUMENTO, EJERCICIODOCUMENTO, XDEDOCUMENTO,
+                IMPORTECOBRADO, IMPORTEPENDIENTE, FORMAPAGO,
+                IDEMPOTENCYTOKEN, PANTALLAORIGEN, OPERADOR, NOTAS
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
         const numericEntregaId =
@@ -1737,9 +1741,9 @@ router.post('/cobros', verifyToken, async (req, res) => {
         if (entregaId) {
             await queryWithParams(`
                 UPDATE JAVIER.REPARTIDOR_ENTREGAS SET 
-                    CTR_COBRADO = 'S',
-                    IMPORTE_COBRADO = IMPORTE_COBRADO + ?
-                WHERE ID = ? AND ES_CTR = 'S'
+                    CTRCOBRADO = 'S',
+                    IMPORTECOBRADO = IMPORTECOBRADO + ?
+                WHERE ID = ? AND ESCTR = 'S'
             `, [importeCobrado, entregaId]);
         }
 
@@ -1763,7 +1767,7 @@ router.get('/entregas/:entregaId/firma', verifyToken, async (req, res) => {
         const { entregaId } = req.params;
 
         const rows = await queryWithParams(`
-            SELECT FIRMA_BASE64, FIRMANTE_NOMBRE, FECHA_FIRMA
+            SELECT FIRMABASE64, FIRMANOMBRE, DIA, MES, ANO, HORA
             FROM JAVIER.REPARTIDOR_FIRMAS 
             WHERE ENTREGA_ID = ?
             FETCH FIRST 1 ROW ONLY
@@ -1773,13 +1777,17 @@ router.get('/entregas/:entregaId/firma', verifyToken, async (req, res) => {
             return res.json({ success: true, hasSignature: false });
         }
 
+        const fechaFirma = (rows[0].ANO > 0)
+            ? `${rows[0].ANO}-${String(rows[0].MES).padStart(2, '0')}-${String(rows[0].DIA).padStart(2, '0')} ${String(rows[0].HORA).padStart(6, '0').substring(0, 2)}:${String(rows[0].HORA).padStart(6, '0').substring(2, 4)}`
+            : null;
+
         res.json({
             success: true,
             hasSignature: true,
             signature: {
-                base64: rows[0].FIRMA_BASE64,
-                firmante: rows[0].FIRMANTE_NOMBRE,
-                fecha: rows[0].FECHA_FIRMA
+                base64: rows[0].FIRMABASE64,
+                firmante: rows[0].FIRMANOMBRE,
+                fecha: fechaFirma
             }
         });
 
@@ -1851,7 +1859,7 @@ router.get('/rutero/week/:repartidorId', verifyToken, async (req, res) => {
                 COUNT(DISTINCT CPC.NUMEROALBARAN) as TOTAL_ALBARANES,
                 COUNT(DISTINCT CASE
                     WHEN TRIM(CPC.CONFORMADOSN) = 'S' OR CPC.SITUACIONALBARAN IN ('F', 'R') THEN CPC.NUMEROALBARAN
-                    ${dsWeekAvail ? "WHEN DS.STATUS = 'ENTREGADO' THEN CPC.NUMEROALBARAN" : ''}
+                    ${dsWeekAvail ? "WHEN DS.ESTADO = 'ENTREGADO' THEN CPC.NUMEROALBARAN" : ''}
                     WHEN (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) < ?
                          THEN CPC.NUMEROALBARAN
                     ELSE NULL
@@ -1948,7 +1956,7 @@ router.get('/history/:repartidorId', verifyToken, async (req, res) => {
                 TRIM(CPC.CODIGOCLIENTEALBARAN) as CODIGO_CLIENTE,
                 TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRE_CLIENTE,
                 CPC.IMPORTETOTAL as TOTAL,
-                ${dsHistAvail ? "DS.STATUS as ESTADO_ENTREGA" : "CAST(NULL AS VARCHAR(20)) as ESTADO_ENTREGA"},
+                ${dsHistAvail ? "DS.ESTADO as ESTADO_ENTREGA" : "CAST(NULL AS VARCHAR(20)) as ESTADO_ENTREGA"},
                 ${dsHistAvail ? "DS.FIRMA_PATH" : "CAST(NULL AS VARCHAR(255)) as FIRMA_PATH"}
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC 
@@ -2152,15 +2160,15 @@ router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, async (req
         if (!signatureBase64) {
             try {
                 const firmaRows = await queryWithParams(`
-                    SELECT RF.FIRMA_BASE64 FROM JAVIER.REPARTIDOR_FIRMAS RF
+                    SELECT RF.FIRMABASE64 FROM JAVIER.REPARTIDOR_FIRMAS RF
                     INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
-                    WHERE RE.NUMERO_ALBARAN = ?
-                      AND RE.EJERCICIO_ALBARAN = ?
-                      AND TRIM(RE.SERIE_ALBARAN) = ?
+                    WHERE RE.NUMEROORDENPREPARACION = ?
+                      AND RE.EJERCICIOALBARAN = ?
+                      AND TRIM(RE.SERIEALBARAN) = ?
                     FETCH FIRST 1 ROW ONLY
                 `, [actualNumAlb, actualEjAlb, actualSerieAlb], false);
-                if (firmaRows.length > 0 && firmaRows[0].FIRMA_BASE64) {
-                    signatureBase64 = firmaRows[0].FIRMA_BASE64;
+                if (firmaRows.length > 0 && firmaRows[0].FIRMABASE64) {
+                    signatureBase64 = firmaRows[0].FIRMABASE64;
                     signatureSource = 'REPARTIDOR_FIRMAS';
                 }
             } catch (e) { logger.warn(`[PDF] Invoice sig REPARTIDOR_FIRMAS error: ${e.message}`); }

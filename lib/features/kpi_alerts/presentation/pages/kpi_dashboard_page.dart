@@ -84,7 +84,9 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
         url += '?vendorCode=$vendorCode';
       }
 
-      final data = await ApiClient.get(url);
+      final data = await ApiClient.get(url,
+          cacheKey: 'kpi_dashboard_${vendorCode ?? "all"}',
+          cacheTTL: const Duration(minutes: 10));
       if (!mounted || generation != _loadGeneration) return;
       if (data != null && data['success'] == true) {
         setState(() {

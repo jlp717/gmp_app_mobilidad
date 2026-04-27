@@ -398,7 +398,7 @@ class FacturasService {
             const linesSql = `
         SELECT 
           LAC.CODIGOARTICULO,
-          LAC.DESCRIPCION as DESCRIPCIONARTICULO,
+          LAC.DESCRIPCIONARTICULO as DESCRIPCIONARTICULO,
           LAC.CANTIDADUNIDADES as CANTIDAD,
           LAC.PRECIOVENTA as PRECIO,
           LAC.IMPORTEVENTA as IMPORTE,
@@ -408,17 +408,16 @@ class FacturasService {
           LAC.TERMINALALBARAN,
           LAC.EJERCICIOALBARAN,
           LAC.CODIGOIVA,
-          LAC.CANTIDADENVASES as CAJAS,
+          COALESCE(LAC.CANTIDADENVASES, 0) as CAJAS,
           LAC.IMPORTEVENTA as IMPORTENETO,
           LAC.DIADOCUMENTO,
           LAC.MESDOCUMENTO,
-          LAC.ANODOCUMENTO,
-          LAC.CODIGOLOTE
+          LAC.ANODOCUMENTO
         FROM DSEDAC.LAC LAC
         INNER JOIN DSEDAC.CAC CAC 
           ON LAC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
           AND LAC.SERIEALBARAN = CAC.SERIEALBARAN
-          AND LAC.TERMINALALBARAN = CAC.TERMINALALBARAN
+          AND LAC.TERMINALBARAN = CAC.TERMINALALBARAN
           AND LAC.NUMEROALBARAN = CAC.NUMEROALBARAN
         WHERE TRIM(CAC.SERIEFACTURA) = ?
           AND CAC.NUMEROFACTURA = ?
@@ -464,8 +463,7 @@ class FacturasService {
                         : '',
                     codigoIva: l.CODIGOIVA ? l.CODIGOIVA.trim() : '',
                     cajas: l.CAJAS || 0,
-                    importeNeto: parseFloat(l.IMPORTENETO) || 0,
-                    lote: l.CODIGOLOTE ? l.CODIGOLOTE.trim() : ''
+                    importeNeto: parseFloat(l.IMPORTENETO) || 0
                 }))
             };
         } catch (error) {

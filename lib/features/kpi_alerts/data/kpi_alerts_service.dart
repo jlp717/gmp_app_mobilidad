@@ -179,10 +179,13 @@ class KpiAlertsService {
   }
 
   /// Obtiene resumen global de alertas
-  Future<Map<String, dynamic>?> getAlertsSummary() async {
+  Future<Map<String, dynamic>?> getAlertsSummary({String? vendorCode}) async {
     try {
+      final cacheSuffix = vendorCode ?? 'all';
       final data = await ApiClient.get(
         '${ApiConfig.kpiAlerts}/summary',
+        cacheKey: 'kpi_alerts_summary_$cacheSuffix',
+        cacheTTL: const Duration(minutes: 10),
       );
       if (data['success'] == true) return data;
     } catch (e) {
@@ -213,6 +216,8 @@ class KpiAlertsService {
       final response = await ApiClient.get(
         '${ApiConfig.kpiAlerts}/clients',
         queryParameters: params,
+        cacheKey: 'kpi_alerts_clients_${vendedorCodes ?? "all"}_${type ?? "all"}_${severity ?? "all"}',
+        cacheTTL: const Duration(minutes: 5),
       );
 
       if (response['success'] == true) {
