@@ -308,16 +308,18 @@ async function getVendorPayments(vendorCode, year) {
             if (mes > 0) {
                 payments.monthly[mes] = (payments.monthly[mes] || 0) + amount;
 
-                if (!payments.details[mes]) {
-                    payments.details[mes] = {
-                        totalPaid: 0,
-                        ventaComision: parseFloat(r.VENTAS_REAL) || 0,
-                        objetivoReal: parseFloat(r.OBJETIVO_MES) || 0,
-                        observaciones: [],
-                        ultimaFecha: r.FECHA_PAGO
-                    };
-                }
-                payments.details[mes].totalPaid += amount;
+            if (!payments.details[mes]) {
+                payments.details[mes] = {
+                    totalPaid: 0,
+                    comisionGenerada: 0,
+                    ventaComision: parseFloat(r.VENTAS_REAL) || 0,
+                    objetivoReal: parseFloat(r.OBJETIVO_MES) || 0,
+                    observaciones: [],
+                    ultimaFecha: r.FECHA_PAGO
+                };
+            }
+            payments.details[mes].totalPaid += amount;
+            payments.details[mes].comisionGenerada += parseFloat(r.COMISION_GENERADA) || 0;
                 if (r.OBSERVACIONES && r.OBSERVACIONES.trim()) {
                     payments.details[mes].observaciones.push(r.OBSERVACIONES.trim());
                 }
@@ -432,10 +434,11 @@ async function batchFetchAllVendorData(vendorCodes, year) {
         const payments = { monthly: {}, quarterly: {}, total: 0, details: {} };
         paymentRows.forEach(r => {
             const m = r.MES;
-            payments.details[m] = payments.details[m] || { totalPaid: 0, observaciones: '', ventaComision: 0 };
-            payments.details[m].totalPaid += parseFloat(r.COMISION_GENERADA) || 0;
+            payments.details[m] = payments.details[m] || { totalPaid: 0, comisionGenerada: 0, observaciones: '', ventaComision: 0 };
+            payments.details[m].comisionGenerada += parseFloat(r.COMISION_GENERADA) || 0;
             payments.details[m].observaciones = r.OBSERVACIONES || '';
             payments.total += parseFloat(r.IMPORTE_PAGADO) || 0;
+            payments.details[m].totalPaid += parseFloat(r.IMPORTE_PAGADO) || 0;
         });
 
         // Build fixed target
@@ -723,9 +726,9 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         const paymentDetail = payments.details[m];
         let snapshotApplied = false;
 
-        if (isPreTransitionMonth && paymentDetail && paymentDetail.totalPaid > 0) {
-            // Use stored values from COMMISSION_PAYMENTS
-            commValue = isExcluded ? 0 : parseFloat(paymentDetail.totalPaid);
+        if (isPreTransitionMonth && paymentDetail && paymentDetail.comisionGenerada > 0) {
+            // Use stored COMISION_GENERADA from COMMISSION_PAYMENTS
+            commValue = isExcluded ? 0 : parseFloat(paymentDetail.comisionGenerada);
             snapshotApplied = true;
             logger.debug(`[COMMISSIONS] SNAPSHOT month ${m}/2026 for ${vendedorCode}: using stored commission ${commValue.toFixed(2)}€ (calculated was ${result.commission.toFixed(2)}€)`);
         }

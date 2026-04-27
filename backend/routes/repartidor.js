@@ -14,7 +14,7 @@ const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const logger = require('../middleware/logger');
-const { sanitizeCodeListForParams, sanitizeForSQL } = require('../utils/common');
+const { sanitizeCodeListForParams, sanitizeForSQL, chunkedInQuery } = require('../utils/common');
 const { generateInvoicePDF } = require('../app/services/pdfService');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema, getDeliveryStatusJoin, getDeliveryStatusColumns } = require('../utils/delivery-status-check');
 const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
@@ -324,14 +324,6 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
         const dsCols = getDeliveryStatusColumns('DS');
         const dsAvail = isDeliveryStatusAvailable();
 
-        const dsStatusCol = dsAvail ? 'DS.STATUS as DELIVERY_STATUS' : "CAST(NULL AS VARCHAR(20)) as DELIVERY_STATUS";
-        const dsUpdatedCol = dsAvail
-            ? (isDeliveryStatusNewSchema() ? 'DS.UPDATED_AT as DELIVERY_UPDATED_AT' : 'DS.FECHAACTUALIZACION as DELIVERY_UPDATED_AT')
-            : "CAST(NULL AS TIMESTAMP) as DELIVERY_UPDATED_AT";
-        const dsFirmaCol = dsAvail ? 'DS.FIRMA_PATH' : "CAST(NULL AS VARCHAR(255)) as FIRMA_PATH";
-        const dsObsCol = dsAvail ? 'DS.OBSERVACIONES' : "CAST(NULL AS VARCHAR(512)) as OBSERVACIONES";
-        const dsRepartidorCol = dsAvail ? 'DS.REPARTIDOR_ID as DELIVERY_REPARTIDOR' : "CAST(NULL AS VARCHAR(20)) as DELIVERY_REPARTIDOR";
-
         let yearFilter = '';
         const yearFilterParams = [];
         if (yearParam) {
@@ -350,11 +342,7 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
                 CPC.SITUACIONALBARAN,
                 CPC.HORALLEGADA,
                 CPC.HORACREACION,
-                ${dsStatusCol},
-                ${dsUpdatedCol},
-                ${dsFirmaCol},
-                ${dsObsCol},
-                ${dsRepartidorCol},
+                ${dsCols},
                 COALESCE(CAC_J.NUMEROFACTURA, 0) as NUMEROFACTURA,
                 COALESCE(TRIM(CAC_J.SERIEFACTURA), '') as SERIEFACTURA,
                 COALESCE(CAC_J.EJERCICIOFACTURA, 0) as EJERCICIOFACTURA,
@@ -1179,9 +1167,10 @@ router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, r
 
         // Subquery deduplicates by unique albaran key FIRST, then outer query aggregates by day.
         // This prevents inflated counts when multiple CPC rows exist per albaran.
+        const dsAvail = isDeliveryStatusAvailable();
         const dsJoinSub = getDeliveryStatusJoin('CPC', 'DS');
 
-        const sql = `
+        const baseSql = `
             SELECT DIA,
                 COUNT(*) as TOTAL_ALBARANES,
                 SUM(ENTREGADO) as ENTREGADOS,
@@ -1202,15 +1191,22 @@ router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, r
                 WHERE OPP.ANOREPARTO = ?
                   AND OPP.MESREPARTO = ?
                   ${dayFilter}
-                  AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+                  AND @IN_IDS@
                 GROUP BY OPP.DIAREPARTO, CPC.EJERCICIOALBARAN, TRIM(CPC.SERIEALBARAN), CPC.TERMINALALBARAN, CPC.NUMEROALBARAN
             ) ALBS
             GROUP BY DIA
             ORDER BY DIA
         `;
 
-        const sqlParams = [selectedYear, selectedMonth, ...dayFilterParams, ...repartidorIdList];
-        const rows = await queryWithParams(sql, sqlParams, false) || [];
+        const rows = await chunkedInQuery(
+            baseSql,
+            'TRIM(OPP.CODIGOREPARTIDOR)',
+            repartidorIdList,
+            async (sql, batchParams) => {
+                const params = [selectedYear, selectedMonth, ...dayFilterParams, ...batchParams];
+                return queryWithParams(sql, params, false) || [];
+            }
+        );
 
         let totalAlbaranes = 0, totalEntregados = 0, totalNoEntregados = 0, totalParciales = 0, totalImporte = 0;
 
@@ -2234,10 +2230,9 @@ router.get('/history/clients/:repartidorId', verifyToken, async (req, res) => {
             return res.status(400).json({ error: 'Invalid repartidor ID format' });
         }
 
-        // FIX: Use DISTINCT subquery to deduplicate OPP-CPC joins (one albaran can have multiple OPP records)
-        // FIX: Remove 6-month cutoff so client list counts match what the documents endpoint returns
-        // The documents endpoint has no cutoff, so the client summary must aggregate ALL documents too
-        let mainSql = `
+        // FIX: Use chunkedInQuery to handle 90+ repartidor IDs without exceeding DB2 ODBC parameter limits
+        const rows = await chunkedInQuery(
+            `
             SELECT
                 TRIM(UNIQ.CODIGOCLIENTEALBARAN) as ID,
                 TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as NAME,
@@ -2253,29 +2248,32 @@ router.get('/history/clients/:repartidorId', verifyToken, async (req, res) => {
                     CPC.ANODOCUMENTO, CPC.MESDOCUMENTO, CPC.DIADOCUMENTO
                 FROM DSEDAC.CPC CPC
                 INNER JOIN DSEDAC.OPP OPP ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-                WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+                WHERE @IN_IDS@
                   AND CPC.NUMEROALBARAN < 900000
                   AND CPC.EJERCICIOALBARAN > 0
             ) UNIQ
             LEFT JOIN DSEDAC.CLI CLI
                 ON TRIM(CLI.CODIGOCLIENTE) = TRIM(UNIQ.CODIGOCLIENTEALBARAN)
             WHERE (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL)
-        `;
-
-        const mainSqlParams = [...repartidorIdList];
-
-        if (search) {
-            const cleanSearch = `%${search.toUpperCase()}%`;
-            mainSql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR TRIM(UNIQ.CODIGOCLIENTEALBARAN) LIKE ?)`;
-            mainSqlParams.push(cleanSearch, cleanSearch, cleanSearch);
-        }
-
-        mainSql += ` GROUP BY TRIM(UNIQ.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, ''))`;
-        mainSql += ` ORDER BY LAST_VISIT DESC`;
-        mainSql += ` FETCH FIRST 500 ROWS ONLY`;
-
-        logger.info(`[REPARTIDOR] Clients SQL for repartidorId ${repartidorId}`);
-        const rows = await cachedQuery(queryWithParams, mainSql, `repartidor:clients:${repartidorIdList.join(',')}:${search || ''}`, TTL.REALTIME, mainSqlParams);
+            GROUP BY TRIM(UNIQ.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, ''))
+            ORDER BY LAST_VISIT DESC
+            FETCH FIRST 500 ROWS ONLY
+            `,
+            'TRIM(OPP.CODIGOREPARTIDOR)',
+            repartidorIdList,
+            async (sql, params) => {
+                // Apply search filter to each chunk query
+                let finalSql = sql;
+                let finalParams = [...params];
+                if (search) {
+                    const cleanSearch = `%${search.toUpperCase()}%`;
+                    finalSql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR TRIM(UNIQ.CODIGOCLIENTEALBARAN) LIKE ?)`;
+                    finalParams.push(cleanSearch, cleanSearch, cleanSearch);
+                }
+                return cachedQuery(queryWithParams, finalSql, `repartidor:clients:${repartidorIdList.join(',')}:${search || ''}`, TTL.REALTIME, finalParams);
+            },
+            20
+        );
         logger.info(`[REPARTIDOR] Found ${rows.length} clients with deliveries for ${repartidorId}`);
 
         // Deduplicate by client ID (a client may appear with different repartidors)

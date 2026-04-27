@@ -82,6 +82,9 @@ module.exports = {
     /**
      * Returns DS column references if table is available, NULL aliases otherwise.
      * Uses OLD or NEW column names based on detected schema.
+     * 
+     * OLD schema (020): ID, STATUS, OBSERVACIONES, FIRMA_PATH, FECHAACTUALIZACION, REPARTIDOR_ID
+     * NEW schema (024): STATUS, UPDATED_AT, OPERADOR — NO FIRMA_PATH, OBSERVACIONES, REPARTIDOR_ID
      */
     getDeliveryStatusColumns(dsAlias = 'DS') {
         if (!_isAvailable) {
@@ -95,16 +98,18 @@ module.exports = {
             `;
         }
         if (_isNewSchema) {
+            // NEW schema (024) has STATUS and UPDATED_AT but NOT FIRMA_PATH, OBSERVACIONES, REPARTIDOR_ID
             return `
                 ${dsAlias}.STATUS as DELIVERY_STATUS,
                 ${dsAlias}.UPDATED_AT as DELIVERY_UPDATED_AT,
-                ${dsAlias}.FIRMA_PATH,
-                ${dsAlias}.OBSERVACIONES,
-                ${dsAlias}.OBSERVACIONES as DS_OBS,
-                ${dsAlias}.FIRMA_PATH as DS_FIRMA,
-                ${dsAlias}.REPARTIDOR_ID as DELIVERY_REPARTIDOR
+                CAST(NULL AS VARCHAR(255)) as FIRMA_PATH,
+                CAST(NULL AS VARCHAR(512)) as OBSERVACIONES,
+                CAST(NULL AS VARCHAR(255)) as DS_OBS,
+                CAST(NULL AS VARCHAR(255)) as DS_FIRMA,
+                CAST(NULL AS VARCHAR(20)) as DELIVERY_REPARTIDOR
             `;
         }
+        // OLD schema (020) has all columns
         return `
                 ${dsAlias}.STATUS as DELIVERY_STATUS,
                 ${dsAlias}.FECHAACTUALIZACION as DELIVERY_UPDATED_AT,

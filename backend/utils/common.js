@@ -200,6 +200,41 @@ async function chunkedVendorQuery(baseSql, vendorColumn, vendedorCodes, executeF
     return results.flat();
 }
 
+/**
+ * Execute a query with a large IN-clause by batching into parallel sub-queries.
+ * Prevents DB2 ODBC statement-preparation errors when passing 30+ parameters.
+ *
+ * @param {string} baseSql - Template SQL with @IN_IDS@ placeholder
+ * @param {string} columnExpr - Column expression for the IN filter (e.g. 'TRIM(OPP.CODIGOREPARTIDOR)')
+ * @param {string[]} ids - Sanitized list of IDs
+ * @param {Function} executeFn - Query execution function (sql, params) => rows
+ * @param {number} [batchSize=20] - Max IDs per batch
+ * @returns {Promise<Array>} Combined result rows
+ */
+async function chunkedInQuery(baseSql, columnExpr, ids, executeFn, batchSize = 20) {
+    if (!ids || ids.length === 0) return [];
+
+    if (ids.length <= batchSize) {
+        const placeholders = ids.map(() => '?').join(',');
+        const sql = baseSql.replace('@IN_IDS@', `${columnExpr} IN (${placeholders})`);
+        return executeFn(sql, ids);
+    }
+
+    const batches = [];
+    for (let i = 0; i < ids.length; i += batchSize) {
+        batches.push(ids.slice(i, i + batchSize));
+    }
+
+    const results = await Promise.all(
+        batches.map(batch => {
+            const placeholders = batch.map(() => '?').join(',');
+            const sql = baseSql.replace('@IN_IDS@', `${columnExpr} IN (${placeholders})`);
+            return executeFn(sql, batch);
+        })
+    );
+    return results.flat();
+}
+
 function formatCurrency(value) {
     // Returns raw number - formatting done in Flutter frontend with Spanish locale
     return parseFloat(value) || 0;
@@ -422,6 +457,7 @@ module.exports = {
     sanitizeCodeList,
     sanitizeCodeListForParams,
     chunkedVendorQuery,
+    chunkedInQuery,
 
     // Helper to calculate working days (Mon-Fri + Sat/Sun if active)
     calculateWorkingDays: (year, month, activeWeekDays = []) => {
