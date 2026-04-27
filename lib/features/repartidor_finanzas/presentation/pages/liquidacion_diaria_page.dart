@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
@@ -32,11 +33,6 @@ class _RepartidorLiquidacionDiariaPageState
   late String _idempotencyToken;
   bool _saving = false;
   final _draftsByRepartidor = <String, _LiquidacionDraft>{};
-
-  static const _topBar = Color(0xFF202020);
-  static const _background = Color(0xFFDCDCDC);
-  static const _blueText = Color(0xFF6799D6);
-  static const _redText = Color(0xFFE0503C);
 
   @override
   void initState() {
@@ -77,10 +73,10 @@ class _RepartidorLiquidacionDiariaPageState
     final asyncSummary = ref.watch(repartidorDailySummaryProvider(args));
 
     return Scaffold(
-      backgroundColor: _background,
+      backgroundColor: AppColors.darkBase,
       body: asyncSummary.when(
         data: _buildForm,
-        loading: () => const Center(child: CircularProgressIndicator()),
+        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.neonBlue)),
         error: (error, stackTrace) {
           Sentry.captureException(error, stackTrace: stackTrace);
           return _ErrorState(
@@ -98,67 +94,85 @@ class _RepartidorLiquidacionDiariaPageState
   Widget _buildForm(RepartidorDailySummary summary) {
     return Column(
       children: [
-        const _TitleBar(title: 'Liquidacion Diaria'),
+        _ModernHeader(
+          title: 'Liquidacion Diaria',
+          date: _sessionDate,
+        ),
         Expanded(
           child: Form(
             key: _formKey,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(10, 12, 10, 120),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _AmountLine(
-                    label: 'Total efectivo',
+                  _SectionTitle(icon: Icons.payments, label: 'COBROS DEL DIA'),
+                  _PaymentMethodCard(
+                    icon: Icons.money,
+                    label: 'Efectivo',
                     value: summary.totalEfectivo,
+                    color: AppColors.neonGreen,
                   ),
-                  _AmountLine(
-                    label: 'Total cheques',
+                  const SizedBox(height: 8),
+                  _PaymentMethodCard(
+                    icon: Icons.receipt_long,
+                    label: 'Cheques',
                     value: summary.totalCheques,
+                    color: AppColors.neonPurple,
                   ),
-                  _AmountLine(
-                    label: 'Total tarjeta',
+                  const SizedBox(height: 8),
+                  _PaymentMethodCard(
+                    icon: Icons.credit_card,
+                    label: 'Tarjeta',
                     value: summary.totalTarjeta,
+                    color: AppColors.neonBlue,
                   ),
-                  _AmountLine(
-                    label: 'Total postdatados',
+                  const SizedBox(height: 8),
+                  _PaymentMethodCard(
+                    icon: Icons.calendar_today,
+                    label: 'Postdatados',
                     value: summary.totalPostdatados,
+                    color: AppColors.warning,
                   ),
-                  const SizedBox(height: 16),
-                  _AmountLine(
+                  const SizedBox(height: 20),
+                  _SectionTitle(icon: Icons.account_balance_wallet, label: 'BALANCE'),
+                  _BalanceCard(
                     label: 'Saldo actual',
                     value: summary.saldoActual,
+                    icon: Icons.wallet,
                   ),
-                  _AmountLine(
+                  const SizedBox(height: 8),
+                  _BalanceCard(
                     label: 'Total a ingresar',
                     value: summary.totalAIngresar,
-                    valueColor: _redText,
+                    icon: Icons.upload_file,
+                    highlight: true,
                   ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 24),
+                  _SectionTitle(icon: Icons.input, label: 'REGISTRO'),
                   _MoneyInputLine(
                     label: 'Ingreso en banco',
                     controller: _ingresoBancoController,
+                    icon: Icons.account_balance,
                     autofocus: true,
                   ),
-                  const SizedBox(height: 22),
-                  Container(height: 3, color: const Color(0xFF666666)),
-                  const SizedBox(height: 22),
-                  _AmountLine(
-                    label: 'Total efectivo',
-                    value: summary.totalEfectivo,
-                  ),
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
                   _MoneyInputLine(
                     label: 'Entregado',
                     controller: _entregadoController,
+                    icon: Icons.handshake,
                   ),
-                  const SizedBox(height: 22),
-                  if (summary.cobros.isNotEmpty)
+                  if (summary.cobros.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    _SectionTitle(icon: Icons.receipt, label: 'COBROS DETALLE'),
                     _CobrosPreview(cobros: summary.cobros),
+                  ],
                 ],
               ),
             ),
           ),
         ),
-        _BottomSaveBar(
+        _ModernSaveBar(
           isSaving: _saving,
           onPressed: () => _save(summary),
         ),
@@ -314,79 +328,207 @@ class LiquidacionDiariaPage extends RepartidorLiquidacionDiariaPage {
   });
 }
 
-class _TitleBar extends StatelessWidget {
-  const _TitleBar({required this.title});
+class _ModernHeader extends StatelessWidget {
+  const _ModernHeader({required this.title, required this.date});
 
   final String title;
+  final DateTime date;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
-      height: MediaQuery.of(context).padding.top + 52,
-      color: _RepartidorLiquidacionDiariaPageState._topBar,
-      alignment: Alignment.bottomCenter,
-      padding: const EdgeInsets.only(bottom: 14),
-      child: Text(
-        title,
-        style: const TextStyle(
-          color: Colors.white,
-          fontWeight: FontWeight.w800,
-          fontSize: 16,
+      padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 12, 16, 16),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [AppColors.darkSurface, AppColors.darkBase],
         ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppColors.neonBlue.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.account_balance_wallet, color: AppColors.neonBlue, size: 24),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                Text(
+                  DateFormat('EEEE, d MMMM yyyy', 'es_ES').format(date),
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _AmountLine extends StatelessWidget {
-  const _AmountLine({
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: AppColors.neonBlue),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PaymentMethodCard extends StatelessWidget {
+  const _PaymentMethodCard({
+    required this.icon,
     required this.label,
     required this.value,
-    this.valueColor = _RepartidorLiquidacionDiariaPageState._blueText,
+    required this.color,
   });
 
+  final IconData icon;
   final String label;
   final double value;
-  final Color valueColor;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 27,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Color(0xFFD0D0D0))),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: AppColors.darkSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
+          Icon(icon, color: color, size: 22),
+          const SizedBox(width: 14),
           Expanded(
             child: Text(
               label,
               style: const TextStyle(
-                color: Color(0xFF333333),
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
               ),
             ),
           ),
           Text(
             _money(value, symbol: false),
             style: TextStyle(
-              color: valueColor,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
+              color: color,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
             ),
           ),
-          const SizedBox(width: 22),
+          const SizedBox(width: 8),
           const Text(
             'EUR',
-            style: TextStyle(
-              color: Color(0xFF333333),
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BalanceCard extends StatelessWidget {
+  const _BalanceCard({
+    required this.label,
+    required this.value,
+    required this.icon,
+    this.highlight = false,
+  });
+
+  final String label;
+  final double value;
+  final IconData icon;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final accentColor = highlight ? AppColors.warning : AppColors.neonBlue;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        gradient: highlight
+            ? LinearGradient(
+                colors: [
+                  AppColors.warning.withValues(alpha: 0.15),
+                  AppColors.darkSurface,
+                ],
+              )
+            : null,
+        color: highlight ? null : AppColors.darkSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accentColor.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(8),
             ),
+            child: Icon(icon, color: accentColor, size: 20),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
+            ),
+          ),
+          Text(
+            _money(value, symbol: false),
+            style: TextStyle(
+              color: accentColor,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
+          ),
+          const SizedBox(width: 8),
+          const Text(
+            'EUR',
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
           ),
         ],
       ),
@@ -398,59 +540,65 @@ class _MoneyInputLine extends StatelessWidget {
   const _MoneyInputLine({
     required this.label,
     required this.controller,
+    required this.icon,
     this.autofocus = false,
   });
 
   final String label;
   final TextEditingController controller;
+  final IconData icon;
   final bool autofocus;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 48,
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.darkSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.3)),
+      ),
       child: Row(
         children: [
-          SizedBox(
-            width: 130,
+          Icon(icon, color: AppColors.neonBlue, size: 20),
+          const SizedBox(width: 14),
+          Expanded(
             child: Text(
               label,
               style: const TextStyle(
-                color: Color(0xFF333333),
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
               ),
             ),
           ),
-          Expanded(
+          SizedBox(
+            width: 120,
             child: TextFormField(
               controller: controller,
               autofocus: autofocus,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [
-                FilteringTextInputFormatter.allow(RegExp('[0-9,.]')),
-              ],
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp('[0-9,.]'))],
               validator: _RepartidorLiquidacionDiariaPageState._validateAmount,
               textAlign: TextAlign.right,
+              style: const TextStyle(
+                color: AppColors.neonGreen,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
               decoration: const InputDecoration(
                 isDense: true,
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                border: OutlineInputBorder(),
+                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                border: InputBorder.none,
+                hintText: '0,00',
+                hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 14),
               ),
             ),
           ),
-          const SizedBox(width: 18),
+          const SizedBox(width: 8),
           const Text(
             'EUR',
-            style: TextStyle(
-              color: Color(0xFF333333),
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-            ),
+            style: TextStyle(color: AppColors.textSecondary, fontSize: 11),
           ),
         ],
       ),
@@ -466,35 +614,55 @@ class _CobrosPreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
-      color: Colors.white,
-      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppColors.darkSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.3)),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Cobros de la liquidacion',
-            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
-          ),
-          const SizedBox(height: 6),
-          for (final cobro in cobros.take(6))
-            Padding(
-              padding: const EdgeInsets.only(bottom: 4),
+          for (final cobro in cobros.take(8))
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                border: Border(
+                  bottom: BorderSide(color: AppColors.borderColor.withValues(alpha: 0.15)),
+                ),
+              ),
               child: Row(
                 children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: AppColors.neonGreen.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: const Icon(Icons.person, color: AppColors.neonGreen, size: 16),
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      '${cobro.codigoCliente} ${cobro.nombreCliente}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          cobro.nombreCliente.isNotEmpty ? cobro.nombreCliente : cobro.codigoCliente,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                        ),
+                        Text(
+                          cobro.codigoCliente,
+                          style: const TextStyle(color: AppColors.textSecondary, fontSize: 11),
+                        ),
+                      ],
                     ),
                   ),
                   Text(
                     _money(cobro.importe),
                     style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
+                      color: AppColors.neonGreen,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
                     ),
                   ),
                 ],
@@ -506,11 +674,8 @@ class _CobrosPreview extends StatelessWidget {
   }
 }
 
-class _BottomSaveBar extends StatelessWidget {
-  const _BottomSaveBar({
-    required this.isSaving,
-    required this.onPressed,
-  });
+class _ModernSaveBar extends StatelessWidget {
+  const _ModernSaveBar({required this.isSaving, required this.onPressed});
 
   final bool isSaving;
   final VoidCallback onPressed;
@@ -518,33 +683,39 @@ class _BottomSaveBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: double.infinity,
-      height: 72 + MediaQuery.of(context).padding.bottom,
-      color: const Color(0xFF303030),
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
-      child: TextButton(
-        onPressed: isSaving ? null : onPressed,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (isSaving)
-              const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            else
-              const Icon(Icons.check, color: Color(0xFF08A718), size: 34),
-            const SizedBox(height: 2),
-            const Text(
-              'Grabar',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-          ],
+      padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+      decoration: const BoxDecoration(
+        color: AppColors.darkSurface,
+        border: Border(top: BorderSide(color: AppColors.borderColor, width: 0.5)),
+      ),
+      child: SizedBox(
+        width: double.infinity,
+        height: 52,
+        child: ElevatedButton(
+          onPressed: isSaving ? null : onPressed,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.neonGreen,
+            foregroundColor: AppColors.darkBase,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            elevation: 0,
+          ),
+          child: isSaving
+              ? const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.darkBase),
+                )
+              : const Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.check_circle, size: 22),
+                    SizedBox(width: 8),
+                    Text(
+                      'Grabar Liquidacion',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
@@ -557,11 +728,11 @@ class _SelectSingleRepartidor extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const Scaffold(
-      backgroundColor: _RepartidorLiquidacionDiariaPageState._background,
+      backgroundColor: AppColors.darkBase,
       body: Center(
         child: Text(
           'Selecciona un repartidor para liquidar',
-          style: TextStyle(fontWeight: FontWeight.w700),
+          style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
         ),
       ),
     );
@@ -569,10 +740,7 @@ class _SelectSingleRepartidor extends StatelessWidget {
 }
 
 class _ErrorState extends StatelessWidget {
-  const _ErrorState({
-    required this.message,
-    required this.onRetry,
-  });
+  const _ErrorState({required this.message, required this.onRetry});
 
   final String message;
   final VoidCallback onRetry;
@@ -580,16 +748,30 @@ class _ErrorState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(message),
-          const SizedBox(height: 12),
-          ElevatedButton(
-            onPressed: onRetry,
-            child: const Text('Reintentar'),
-          ),
-        ],
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, color: AppColors.error, size: 48),
+            const SizedBox(height: 16),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Reintentar'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.neonBlue,
+                foregroundColor: AppColors.darkBase,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
