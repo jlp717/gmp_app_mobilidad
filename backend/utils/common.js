@@ -152,12 +152,12 @@ function sanitizeCodeList(codeString) {
  * @param {string} codeString - Comma-separated codes
  * @returns {string[]} Sanitized code list safe for bind params
  */
-function sanitizeCodeListForParams(codeString) {
+function sanitizeCodeListForParams(codeString, maxLen = 2) {
     if (!codeString) return [];
     return codeString
         .split(',')
         .map(c => c.trim())
-        .filter(c => /^[a-zA-Z0-9]+$/.test(c));
+        .filter(c => /^[a-zA-Z0-9]+$/.test(c) && c.length <= maxLen);
 }
 
 /**

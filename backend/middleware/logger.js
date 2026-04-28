@@ -92,5 +92,5 @@ const log = {
 };
 
 module.exports = logger;
-module.exports.log = log;
+module.exports.secureLog = log;
 module.exports.NODE_ENV = NODE_ENV;

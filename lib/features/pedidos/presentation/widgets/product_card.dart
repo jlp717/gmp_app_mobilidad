@@ -587,12 +587,46 @@ class _ProductCardState extends State<ProductCard> {
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 5,
-                child: SmartProductImage(
-                  imageUrl: imageUrl,
-                  productCode: code,
-                  productName: widget.product.name,
-                  fit: BoxFit.contain,
+                child: Image.network(
+                  imageUrl,
                   headers: ApiClient.authHeaders,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (context, child, progress) {
+                    if (progress == null) return child;
+                    final total = progress.expectedTotalBytes;
+                    return SizedBox(
+                      width: 80,
+                      height: 80,
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          value: total != null
+                              ? progress.cumulativeBytesLoaded / total
+                              : null,
+                          strokeWidth: 2,
+                          color: Colors.white54,
+                        ),
+                      ),
+                    );
+                  },
+                  errorBuilder: (context, error, stack) => Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.broken_image_outlined,
+                        color: Colors.white38,
+                        size: 64,
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.product.name,
+                        style: const TextStyle(
+                          color: Colors.white38,
+                          fontSize: 12,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

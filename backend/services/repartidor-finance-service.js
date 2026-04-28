@@ -163,7 +163,7 @@ function codeList(raw) {
   return String(raw || '')
     .split(',')
     .map((item) => item.trim())
-    .filter(Boolean);
+    .filter((item) => item && /^[a-zA-Z0-9]+$/.test(item) && item.length <= 2);
 }
 
 function inClause(column, values) {
