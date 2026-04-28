@@ -9,6 +9,7 @@ const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../uti
 // Schema detection for REPARTIDOR_COBROS (migration 024 adds ANOCOBRO/MESCOBRO/DIACOBRO)
 let _cobrosSchemaChecked = false;
 let _cobrosHasCollectionDate = false;
+let _cobrosIsAlignedSchema = false; // true only after migration 024 (CVC-compatible columns exist)
 
 async function getCobrosSchemaInfo() {
   if (_cobrosSchemaChecked) return _cobrosHasCollectionDate;
@@ -23,9 +24,22 @@ async function getCobrosSchemaInfo() {
       FETCH FIRST 1 ROW ONLY
     `, [], false, false);
     _cobrosHasCollectionDate = rows && rows.length > 0;
-    logger.info(`[REPARTIDOR_COBROS] Schema: ${_cobrosHasCollectionDate ? 'NEW (has ANOCOBRO/MESCOBRO/DIACOBRO)' : 'OLD (ANOVENCIMIENTO only)'}`);
+
+    // Check if migration 024 aligned REPARTIDOR_COBROS to DSEDAC.CVC naming
+    const alignedRows = await queryWithParams(`
+      SELECT COLUMN_NAME 
+      FROM QSYS2.SYSCOLUMNS 
+      WHERE TABLE_SCHEMA = 'JAVIER' 
+        AND TABLE_NAME = 'REPARTIDOR_COBROS' 
+        AND COLUMN_NAME = 'CODIGOFORMAPAGO'
+      FETCH FIRST 1 ROW ONLY
+    `, [], false, false);
+    _cobrosIsAlignedSchema = alignedRows && alignedRows.length > 0;
+
+    logger.info(`[REPARTIDOR_COBROS] Schema: ${_cobrosHasCollectionDate ? 'NEW (has ANOCOBRO/MESCOBRO/DIACOBRO)' : 'OLD (ANOVENCIMIENTO only)'}, aligned=${_cobrosIsAlignedSchema}`);
   } catch (e) {
     _cobrosHasCollectionDate = false;
+    _cobrosIsAlignedSchema = false;
     logger.warn(`[REPARTIDOR_COBROS] Schema check failed, assuming OLD: ${e.message}`);
   }
   return _cobrosHasCollectionDate;
@@ -476,6 +490,22 @@ async function findLiquidacionByToken(idempotencyToken) {
 
 async function getDailySummary({ repartidorId, date }) {
   await getCobrosSchemaInfo();
+
+  // Migration 024 hasn't been run yet — REPARTIDOR_COBROS uses old column names
+  if (!_cobrosIsAlignedSchema) {
+    logger.warn(`[REPARTIDOR_COBROS] getDailySummary: schema not aligned (migration 024 not run), returning empty`);
+    return {
+      repartidorId,
+      date,
+      summary: {
+        totalEfectivo: 0, totalCheques: 0, totalTarjeta: 0, totalPostdatados: 0,
+        saldoActual: 0, totalCobrosDia: 0, gastos: 0, totalAIngresar: 0,
+        ingresoBanco: 0, totalEfectivo2: 0, entregado: 0, cobrosCount: 0,
+      },
+      cobros: [],
+    };
+  }
+
   const dateYmd = compactDate(date);
   const dateCol = cobrosDateFilterColumn();
   const selectCols = cobrosDateSelectColumns();

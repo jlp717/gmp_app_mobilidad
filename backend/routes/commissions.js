@@ -434,9 +434,24 @@ async function batchFetchAllVendorData(vendorCodes, year) {
         const payments = { monthly: {}, quarterly: {}, total: 0, details: {} };
         paymentRows.forEach(r => {
             const m = r.MES;
-            payments.details[m] = payments.details[m] || { totalPaid: 0, comisionGenerada: 0, observaciones: '', ventaComision: 0 };
+            if (!payments.details[m]) {
+                payments.details[m] = {
+                    totalPaid: 0,
+                    comisionGenerada: 0,
+                    observaciones: [],
+                    ventaComision: parseFloat(r.VENTAS_REAL) || 0,
+                    objetivoReal: parseFloat(r.OBJETIVO_MES) || 0,
+                    ultimaFecha: r.FECHA_PAGO
+                };
+            }
             payments.details[m].comisionGenerada += parseFloat(r.COMISION_GENERADA) || 0;
-            payments.details[m].observaciones = r.OBSERVACIONES || '';
+            if (r.OBSERVACIONES && r.OBSERVACIONES.trim()) {
+                payments.details[m].observaciones.push(r.OBSERVACIONES.trim());
+            }
+            if (r.FECHA_PAGO && new Date(r.FECHA_PAGO) > new Date(payments.details[m].ultimaFecha || 0)) {
+                payments.details[m].ultimaFecha = r.FECHA_PAGO;
+            }
+            payments.monthly[m] = (payments.monthly[m] || 0) + (parseFloat(r.IMPORTE_PAGADO) || 0);
             payments.total += parseFloat(r.IMPORTE_PAGADO) || 0;
             payments.details[m].totalPaid += parseFloat(r.IMPORTE_PAGADO) || 0;
         });

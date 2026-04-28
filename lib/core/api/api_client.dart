@@ -403,6 +403,19 @@ class ApiClient {
     return '$method:$endpoint?$queryString';
   }
 
+  /// Recursively converts all nested Map<dynamic,dynamic> to Map<String,dynamic>.
+  /// Hive deserialization returns _Map<dynamic,dynamic> for nested objects;
+  /// a shallow Map.from() only fixes the top level.
+  static Map<String, dynamic> _deepCastMap(Map src) {
+    return src.map((k, v) => MapEntry(k.toString(), _deepCastValue(v)));
+  }
+
+  static dynamic _deepCastValue(dynamic v) {
+    if (v is Map) return _deepCastMap(v);
+    if (v is List) return v.map(_deepCastValue).toList();
+    return v;
+  }
+
   /// GET request with optional caching
   ///
   /// [cacheKey] - If provided, response will be cached and returned from cache if valid
@@ -432,7 +445,7 @@ class ApiClient {
         try {
           final cached = CacheService.get(cacheKey);
           if (cached != null && cached is Map) {
-            return Map<String, dynamic>.from(cached);
+            return _deepCastMap(cached);
           }
         } catch (e) {
           // Continue to network request
@@ -456,7 +469,7 @@ class ApiClient {
             'Expected Map response but got ${rawData.runtimeType}',
           );
         }
-        final data = Map<String, dynamic>.from(rawData);
+        final data = _deepCastMap(rawData);
 
         // Cache the response if cacheKey provided
         if (cacheKey != null) {
@@ -469,7 +482,7 @@ class ApiClient {
           try {
             final cached = CacheService.getStale(cacheKey);
             if (cached != null && cached is Map) {
-              return Map<String, dynamic>.from(cached);
+              return _deepCastMap(cached);
             }
           } catch (_) {}
         }

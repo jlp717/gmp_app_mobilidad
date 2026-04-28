@@ -398,7 +398,7 @@ class FacturasService {
             const linesSql = `
         SELECT 
           LAC.CODIGOARTICULO,
-          LAC.DESCRIPCIONARTICULO as DESCRIPCIONARTICULO,
+          LAC.DESCRIPCION as DESCRIPCIONARTICULO,
           LAC.CANTIDADUNIDADES as CANTIDAD,
           LAC.PRECIOVENTA as PRECIO,
           LAC.IMPORTEVENTA as IMPORTE,

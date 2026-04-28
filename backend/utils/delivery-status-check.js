@@ -109,10 +109,10 @@ module.exports = {
                 CAST(NULL AS VARCHAR(20)) as DELIVERY_REPARTIDOR
             `;
         }
-        // OLD schema (020) has all columns
+        // OLD schema (020) has all columns (UPDATED_AT is the actual column name, not FECHAACTUALIZACION)
         return `
                 ${dsAlias}.STATUS as DELIVERY_STATUS,
-                ${dsAlias}.FECHAACTUALIZACION as DELIVERY_UPDATED_AT,
+                ${dsAlias}.UPDATED_AT as DELIVERY_UPDATED_AT,
                 ${dsAlias}.FIRMA_PATH,
                 ${dsAlias}.OBSERVACIONES,
                 ${dsAlias}.OBSERVACIONES as DS_OBS,

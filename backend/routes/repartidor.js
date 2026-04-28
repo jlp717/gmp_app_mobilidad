@@ -100,13 +100,13 @@ router.get('/collections/summary/:repartidorId', verifyToken, async (req, res) =
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
             WHERE OPP.MESREPARTO = ?
               AND OPP.ANOREPARTO = ?
-              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorParams.map(() => '?').join(',')})
+              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorParams.map(c => `'${c}'`).join(',')})
             GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), CPC.CODIGOFORMAPAGO
             ORDER BY TOTAL_COBRABLE DESC
             FETCH FIRST 100 ROWS ONLY
         `;
 
-        const sqlParams = [selectedMonth, selectedYear, ...repartidorParams];
+        const sqlParams = [selectedMonth, selectedYear];
 
         let rows = [];
         try {
@@ -289,7 +289,7 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
             repartidorJoin = `
                 INNER JOIN DSEDAC.OPP OPP
                     ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-                    AND TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(() => '?').join(',')})`;
+                    AND TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(c => `'${c}'`).join(',')})`;
         }
 
         // Date range filter (YYYY-MM-DD format)
@@ -371,7 +371,7 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
             ORDER BY CPC.EJERCICIOALBARAN DESC, CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC, CPC.NUMEROALBARAN DESC
         `;
 
-        const allParams = [...repartidorParams, clientCode, ...yearFilterParams, ...dateParams];
+        const allParams = [clientCode, ...yearFilterParams, ...dateParams];
         const rows = await queryWithParams(sql, allParams);
 
         // --- DEDUPLICATION PASS 1: Eliminate duplicate CPC rows per albaran ---
@@ -1179,12 +1179,12 @@ router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, r
                 SUM(ENTREGADO) as ENTREGADOS,
                 SUM(NO_ENTREGADO) as NO_ENTREGADOS,
                 SUM(PARCIAL) as PARCIALES,
-                SUM(IMPORTE) as IMPORTE_TOTAL
+                CAST(SUM(IMPORTE) AS DECIMAL(15,2)) as IMPORTE_TOTAL
             FROM (
                 SELECT 
                     OPP.DIAREPARTO as DIA,
                     CPC.EJERCICIOALBARAN, TRIM(CPC.SERIEALBARAN) as SERIE, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
-                    MAX(CPC.IMPORTETOTAL) as IMPORTE,
+                    CAST(MAX(CPC.IMPORTETOTAL) AS DECIMAL(15,2)) as IMPORTE,
                     MAX(CASE WHEN TRIM(CPC.CONFORMADOSN) = 'S' ${dsAvail ? "OR DS.STATUS = 'ENTREGADO'" : ''} THEN 1 ELSE 0 END) as ENTREGADO,
                     MAX(CASE WHEN ${dsAvail ? "DS.STATUS = 'NO_ENTREGADO'" : '1=0'} THEN 1 ELSE 0 END) as NO_ENTREGADO,
                     MAX(CASE WHEN ${dsAvail ? "DS.STATUS = 'PARCIAL'" : '1=0'} THEN 1 ELSE 0 END) as PARCIAL

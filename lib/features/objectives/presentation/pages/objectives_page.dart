@@ -192,10 +192,13 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
       final clientsRes = results[1];
 
       // Parse new backend format: yearlyData
-      final rawYearlyData =
-          evolutionRes['yearlyData'] as Map<String, dynamic>? ?? {};
-      final rawYearTotals =
-          evolutionRes['yearTotals'] as Map<String, dynamic>? ?? {};
+      // Use `as Map?` + Map.from to handle Map<dynamic,dynamic> from cache
+      final rawYearlyData = evolutionRes['yearlyData'] is Map
+          ? Map<String, dynamic>.from(evolutionRes['yearlyData'] as Map)
+          : <String, dynamic>{};
+      final rawYearTotals = evolutionRes['yearTotals'] is Map
+          ? Map<String, dynamic>.from(evolutionRes['yearTotals'] as Map)
+          : <String, dynamic>{};
 
       final parsedYearlyData = <String, List<Map<String, dynamic>>>{};
       final parsedYearTotals = <String, Map<String, dynamic>>{};
