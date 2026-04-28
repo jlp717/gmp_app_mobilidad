@@ -34,22 +34,12 @@ const tableChecks = [
 ];
 
 const columnChecks = [
-  ['JAVIER', 'REPARTIDOR_COBROS', 'ENTREGA_APP_ID'],
   ['JAVIER', 'REPARTIDOR_COBROS', 'IDEMPOTENCY_TOKEN'],
-  ['JAVIER', 'REPARTIDOR_COBROS', 'TIPO_DOCUMENTO'],
-  ['JAVIER', 'REPARTIDOR_COBROS', 'ORIGEN_DOCUMENTO'],
-  ['JAVIER', 'REPARTIDOR_COBROS', 'SUBEMPRESA_DOCUMENTO'],
-  ['JAVIER', 'REPARTIDOR_COBROS', 'SERIE_DOCUMENTO'],
-  ['JAVIER', 'REPARTIDOR_COBROS', 'TERMINAL_DOCUMENTO'],
-  ['JAVIER', 'REPARTIDOR_COBROS', 'XDE_DOCUMENTO'],
-  ['JAVIER', 'REPARTIDOR_COBROS', 'DEX_DOCUMENTO'],
   ['JAVIER', 'REPARTIDOR_COBROS', 'PANTALLA_ORIGEN'],
   ['JAVIER', 'REPARTIDOR_COBROS', 'OPERADOR'],
-  ['JAVIER', 'REPARTIDOR_COBROS', 'LIQUIDADO_SN'],
-  ['JAVIER', 'REPARTIDOR_COBROS', 'LIQUIDACION_TOKEN'],
   ['JAVIER', 'REPARTIDOR_COBROS', 'CREATED_AT'],
   ['JAVIER', 'REPARTIDOR_LIQUIDACION_OPS', 'IDEMPOTENCY_TOKEN'],
-  ['JAVIER', 'REPARTIDOR_LIQUIDACION_OPS', 'SALDO_RESULTANTE'],
+  ['JAVIER', 'REPARTIDOR_LIQUIDACION_OPS', 'CODIGOVENDEDOR'],
   ['JAVIER', 'REPARTIDOR_COMMISSION_TIERS', 'THRESHOLD_PCT'],
   ['DSEDAC', 'CLCL1', 'DIASLIMITECREDITO'],
   ['DSEDAC', 'CLCL1', 'DIASLIMITECREDITOCONFECHAALB'],
@@ -58,15 +48,45 @@ const columnChecks = [
   [erpSchema, 'LQD', 'IDMARCALIQUIDACION'],
 ];
 
+const columnGroupChecks = [
+  {
+    label: 'JAVIER.REPARTIDOR_COBROS document layout',
+    alternatives: [
+      [
+        ['JAVIER', 'REPARTIDOR_COBROS', 'CODIGOVENDEDOR'],
+        ['JAVIER', 'REPARTIDOR_COBROS', 'CODIGOCLIENTEALBARAN'],
+        ['JAVIER', 'REPARTIDOR_COBROS', 'IMPORTEVENCIMIENTO'],
+        ['JAVIER', 'REPARTIDOR_COBROS', 'NUMEROLIQUIDACION'],
+      ],
+      [
+        ['JAVIER', 'REPARTIDOR_COBROS', 'CODIGO_REPARTIDOR'],
+        ['JAVIER', 'REPARTIDOR_COBROS', 'CODIGO_CLIENTE'],
+        ['JAVIER', 'REPARTIDOR_COBROS', 'IMPORTE_COBRADO'],
+        ['JAVIER', 'REPARTIDOR_COBROS', 'LIQUIDADO_SN'],
+      ],
+    ],
+  },
+  {
+    label: 'JAVIER.REPARTIDOR_FINANCIAL_BALANCES repartidor key',
+    alternatives: [
+      [['JAVIER', 'REPARTIDOR_FINANCIAL_BALANCES', 'CODIGO_REPARTIDOR']],
+      [['JAVIER', 'REPARTIDOR_FINANCIAL_BALANCES', 'CODIGOVENDEDOR']],
+    ],
+  },
+];
+
 const indexChecks = [
   ['JAVIER', 'UX_REP_COBROS_TOKEN'],
   ['JAVIER', 'IDX_REP_COBROS_REP_LIQ_FECHA'],
-  ['JAVIER', 'IDX_REP_COBROS_LIQ_TOKEN'],
   ['JAVIER', 'IDX_REP_LIQ_REP_FECHA'],
   ['JAVIER', 'IDX_REP_COMM_ACTIVE'],
 ];
 
-const constraintChecks = [
+const optionalIndexChecks = [
+  ['JAVIER', 'IDX_REP_COBROS_LIQ_TOKEN'],
+];
+
+const optionalConstraintChecks = [
   ['JAVIER', 'UK_REP_LIQ_TOKEN'],
   ['JAVIER', 'UK_REP_LIQ_NUMERO'],
 ];
@@ -138,6 +158,27 @@ async function main() {
     }
   }
 
+  for (const group of columnGroupChecks) {
+    let ok = false;
+    for (const alternative of group.alternatives) {
+      const results = await Promise.all(
+        alternative.map(([schema, tableName, columnName]) =>
+          columnExists(schema, tableName, columnName)
+        ),
+      );
+      if (results.every(Boolean)) {
+        ok = true;
+        break;
+      }
+    }
+    if (ok) {
+      console.log(`[OK] COLUMN GROUP ${group.label}`);
+    } else {
+      missing.push(`COLUMN GROUP ${group.label}`);
+      console.log(`[MISSING] COLUMN GROUP ${group.label}`);
+    }
+  }
+
   for (const [schema, indexName] of indexChecks) {
     if (await indexExists(schema, indexName)) {
       console.log(`[OK] INDEX ${schema}.${indexName}`);
@@ -147,17 +188,24 @@ async function main() {
     }
   }
 
-  for (const [schema, constraintName] of constraintChecks) {
-    if (await constraintExists(schema, constraintName)) {
-      console.log(`[OK] CONSTRAINT ${schema}.${constraintName}`);
+  for (const [schema, indexName] of optionalIndexChecks) {
+    if (await indexExists(schema, indexName)) {
+      console.log(`[OK] OPTIONAL INDEX ${schema}.${indexName}`);
     } else {
-      missing.push(`CONSTRAINT ${schema}.${constraintName}`);
-      console.log(`[MISSING] CONSTRAINT ${schema}.${constraintName}`);
+      console.log(`[WARN] OPTIONAL INDEX ${schema}.${indexName} no existe en este layout`);
+    }
+  }
+
+  for (const [schema, constraintName] of optionalConstraintChecks) {
+    if (await constraintExists(schema, constraintName)) {
+      console.log(`[OK] OPTIONAL CONSTRAINT ${schema}.${constraintName}`);
+    } else {
+      console.log(`[WARN] OPTIONAL CONSTRAINT ${schema}.${constraintName} no existe en este layout`);
     }
   }
 
   if (missing.length > 0) {
-    console.error('\nSchema incompleto. Ejecuta backend/scripts/sql/020_repartidor_finance_tables.sql y repite esta verificacion.');
+    console.error('\nSchema incompleto. Revisa 020/024 de repartidor-finanzas y repite esta verificacion.');
     process.exitCode = 1;
     return;
   }

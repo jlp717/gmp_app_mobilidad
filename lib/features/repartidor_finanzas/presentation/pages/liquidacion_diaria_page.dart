@@ -61,7 +61,7 @@ class _RepartidorLiquidacionDiariaPageState
   Widget build(BuildContext context) {
     _refreshSessionDateIfSafe();
 
-    if (widget.repartidorId.isEmpty || widget.repartidorId.contains(',')) {
+    if (widget.repartidorId.isEmpty) {
       return const _SelectSingleRepartidor();
     }
 
@@ -92,6 +92,7 @@ class _RepartidorLiquidacionDiariaPageState
   }
 
   Widget _buildForm(RepartidorDailySummary summary) {
+    final isAggregate = widget.repartidorId.contains(',');
     return Column(
       children: [
         _ModernHeader(
@@ -149,19 +150,21 @@ class _RepartidorLiquidacionDiariaPageState
                     highlight: true,
                   ),
                   const SizedBox(height: 24),
-                  _SectionTitle(icon: Icons.input, label: 'REGISTRO'),
-                  _MoneyInputLine(
-                    label: 'Ingreso en banco',
-                    controller: _ingresoBancoController,
-                    icon: Icons.account_balance,
-                    autofocus: true,
-                  ),
-                  const SizedBox(height: 16),
-                  _MoneyInputLine(
-                    label: 'Entregado',
-                    controller: _entregadoController,
-                    icon: Icons.handshake,
-                  ),
+                  if (!isAggregate) ...[
+                    _SectionTitle(icon: Icons.input, label: 'REGISTRO'),
+                    _MoneyInputLine(
+                      label: 'Ingreso en banco',
+                      controller: _ingresoBancoController,
+                      icon: Icons.account_balance,
+                      autofocus: true,
+                    ),
+                    const SizedBox(height: 16),
+                    _MoneyInputLine(
+                      label: 'Entregado',
+                      controller: _entregadoController,
+                      icon: Icons.handshake,
+                    ),
+                  ],
                   if (summary.cobros.isNotEmpty) ...[
                     const SizedBox(height: 24),
                     _SectionTitle(icon: Icons.receipt, label: 'COBROS DETALLE'),
@@ -172,10 +175,11 @@ class _RepartidorLiquidacionDiariaPageState
             ),
           ),
         ),
-        _ModernSaveBar(
-          isSaving: _saving,
-          onPressed: () => _save(summary),
-        ),
+        if (!isAggregate)
+          _ModernSaveBar(
+            isSaving: _saving,
+            onPressed: () => _save(summary),
+          ),
       ],
     );
   }

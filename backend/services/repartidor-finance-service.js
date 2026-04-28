@@ -6,78 +6,353 @@ const logger = require('../middleware/logger');
 const { sendEmailWithPdf } = require('./emailPdfService');
 const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema } = require('../utils/delivery-status-check');
 
-// Schema detection for REPARTIDOR_COBROS (migration 024 adds ANOCOBRO/MESCOBRO/DIACOBRO)
-let _cobrosSchemaChecked = false;
-let _cobrosHasCollectionDate = false;
-let _cobrosIsAlignedSchema = false; // true only after migration 024 (CVC-compatible columns exist)
+let _financeSchemaInfo = null;
+
+const DEFAULT_FINANCE_SCHEMA_COLUMNS = [
+  ['REPARTIDOR_COBROS', 'TIPODOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'ORIGENDOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'SUBEMPRESADOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'EJERCICIODOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'SERIEDOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'TERMINALDOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'NUMERODOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'XDEDOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'DEXDOCUMENTO'],
+  ['REPARTIDOR_COBROS', 'CODIGOCLIENTEALBARAN'],
+  ['REPARTIDOR_COBROS', 'CODIGOVENDEDOR'],
+  ['REPARTIDOR_COBROS', 'CODIGOFORMAPAGO'],
+  ['REPARTIDOR_COBROS', 'DIAVENCIMIENTO'],
+  ['REPARTIDOR_COBROS', 'MESVENCIMIENTO'],
+  ['REPARTIDOR_COBROS', 'ANOVENCIMIENTO'],
+  ['REPARTIDOR_COBROS', 'DIACOBRO'],
+  ['REPARTIDOR_COBROS', 'MESCOBRO'],
+  ['REPARTIDOR_COBROS', 'ANOCOBRO'],
+  ['REPARTIDOR_COBROS', 'NUMEROLIQUIDACION'],
+  ['REPARTIDOR_COBROS', 'IMPORTEVENCIMIENTO'],
+  ['REPARTIDOR_COBROS', 'IMPORTEPENDIENTE'],
+  ['REPARTIDOR_COBROS', 'IDEMPOTENCY_TOKEN'],
+  ['REPARTIDOR_COBROS', 'PANTALLA_ORIGEN'],
+  ['REPARTIDOR_COBROS', 'OPERADOR'],
+  ['REPARTIDOR_COBROS', 'CREATED_AT'],
+  ['REPARTIDOR_FINANCIAL_BALANCES', 'CODIGO_REPARTIDOR'],
+  ['REPARTIDOR_FINANCIAL_BALANCES', 'SALDO_PENDIENTE'],
+  ['REPARTIDOR_FINANCIAL_BALANCES', 'UPDATED_BY'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'IDEMPOTENCY_TOKEN'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'SUBEMPRESALIQUIDACION'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'EJERCICIOLIQUIDACION'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'SERIELIQUIDACION'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'TERMINALLIQUIDACION'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'NUMEROLIQUIDACION'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'CODIGOVENDEDOR'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTEEFECTIVO'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTECHEQUES'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTETARJETA'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTEPOSTDATADOS'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTESALDOACTUAL'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTEGASTOS'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTETOTALAINGRESAR'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTEINGRESOENBANCO'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTEEFECTIVO2'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'IMPORTEENTREGADO2'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'CODIGOUSUARIO'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'REVISADOSN'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'STATUS'],
+  ['REPARTIDOR_LIQUIDACION_OPS', 'OPERADOR'],
+  ['DELIVERY_STATUS', 'IDEMPOTENCY_TOKEN'],
+  ['DELIVERY_STATUS', 'STATUS'],
+  ['DELIVERY_STATUS', 'OPERADOR'],
+];
+
+function normalizeColumnName(raw) {
+  return String(raw || '').trim().toUpperCase();
+}
+
+function normalizeTableName(raw) {
+  return String(raw || '').trim().toUpperCase();
+}
+
+async function getFinanceSchemaInfo() {
+  if (_financeSchemaInfo && process.env.NODE_ENV !== 'test') {
+    return _financeSchemaInfo;
+  }
+
+  const tables = [
+    'REPARTIDOR_COBROS',
+    'REPARTIDOR_FINANCIAL_BALANCES',
+    'REPARTIDOR_LIQUIDACION_OPS',
+    'DELIVERY_STATUS',
+  ];
+  const columnsByTable = new Map(tables.map((table) => [table, new Set()]));
+  let rows = [];
+
+  try {
+    rows = await queryWithParams(`
+      SELECT TABLE_NAME, COLUMN_NAME
+      FROM QSYS2.SYSCOLUMNS
+      WHERE TABLE_SCHEMA = 'JAVIER'
+        AND TABLE_NAME IN (${tables.map(() => '?').join(', ')})
+    `, tables, false, false);
+  } catch (error) {
+    logger.warn(`[REPARTIDOR_FINANZAS] Schema detection failed: ${error.message}`);
+  }
+  const detectedRows = Array.isArray(rows)
+    ? rows.filter((row) =>
+        normalizeTableName(value(row, 'TABLE_NAME')) &&
+        normalizeColumnName(value(row, 'COLUMN_NAME'))
+      )
+    : [];
+  if (detectedRows.length === 0) {
+    rows = DEFAULT_FINANCE_SCHEMA_COLUMNS.map(([TABLE_NAME, COLUMN_NAME]) => ({
+      TABLE_NAME,
+      COLUMN_NAME,
+    }));
+  } else {
+    rows = detectedRows;
+  }
+
+  for (const row of rows || []) {
+    const tableName = normalizeTableName(value(row, 'TABLE_NAME'));
+    const columnName = normalizeColumnName(value(row, 'COLUMN_NAME'));
+    if (columnsByTable.has(tableName) && columnName) {
+      columnsByTable.get(tableName).add(columnName);
+    }
+  }
+
+  const has = (table, column) =>
+    columnsByTable.get(table)?.has(normalizeColumnName(column)) === true;
+  const cobrosAligned = has('REPARTIDOR_COBROS', 'CODIGOVENDEDOR') &&
+    has('REPARTIDOR_COBROS', 'IMPORTEVENCIMIENTO');
+  const cobrosLegacy = has('REPARTIDOR_COBROS', 'CODIGO_REPARTIDOR') &&
+    has('REPARTIDOR_COBROS', 'IMPORTE_COBRADO');
+
+  const info = {
+    has,
+    cobrosAligned,
+    cobrosLegacy,
+    cobrosHasCollectionDate: has('REPARTIDOR_COBROS', 'ANOCOBRO') &&
+      has('REPARTIDOR_COBROS', 'MESCOBRO') &&
+      has('REPARTIDOR_COBROS', 'DIACOBRO'),
+    cobrosHasLiquidado: has('REPARTIDOR_COBROS', 'LIQUIDADO_SN'),
+    cobrosHasLiquidacionToken: has('REPARTIDOR_COBROS', 'LIQUIDACION_TOKEN'),
+    cobrosHasEntregaAppId: has('REPARTIDOR_COBROS', 'ENTREGA_APP_ID'),
+    cobrosHasCreatedAt: has('REPARTIDOR_COBROS', 'CREATED_AT'),
+    cobrosHasFechaCobro: has('REPARTIDOR_COBROS', 'FECHA_COBRO'),
+    cobrosHasNumeroLiquidacion: has('REPARTIDOR_COBROS', 'NUMEROLIQUIDACION'),
+    balanceCodeColumn: has('REPARTIDOR_FINANCIAL_BALANCES', 'CODIGOVENDEDOR')
+      ? 'CODIGOVENDEDOR'
+      : 'CODIGO_REPARTIDOR',
+    opsHasSaldoResultante: has('REPARTIDOR_LIQUIDACION_OPS', 'SALDO_RESULTANTE'),
+  };
+
+  logger.info(
+    `[REPARTIDOR_FINANZAS] Schema detected: cobros=${cobrosAligned ? 'aligned' : cobrosLegacy ? 'legacy' : 'unknown'}, ` +
+    `liqFlag=${info.cobrosHasLiquidado}, balanceCode=${info.balanceCodeColumn}`,
+  );
+  if (process.env.NODE_ENV !== 'test') {
+    _financeSchemaInfo = info;
+  }
+  return info;
+}
 
 async function getCobrosSchemaInfo() {
-  if (_cobrosSchemaChecked) return _cobrosHasCollectionDate;
-  _cobrosSchemaChecked = true;
-  try {
-    const rows = await queryWithParams(`
-      SELECT COLUMN_NAME 
-      FROM QSYS2.SYSCOLUMNS 
-      WHERE TABLE_SCHEMA = 'JAVIER' 
-        AND TABLE_NAME = 'REPARTIDOR_COBROS' 
-        AND COLUMN_NAME = 'ANOCOBRO'
-      FETCH FIRST 1 ROW ONLY
-    `, [], false, false);
-    _cobrosHasCollectionDate = rows && rows.length > 0;
+  const info = await getFinanceSchemaInfo();
+  return info.cobrosHasCollectionDate;
+}
 
-    // Check if migration 024 aligned REPARTIDOR_COBROS to DSEDAC.CVC naming
-    const alignedRows = await queryWithParams(`
-      SELECT COLUMN_NAME 
-      FROM QSYS2.SYSCOLUMNS 
-      WHERE TABLE_SCHEMA = 'JAVIER' 
-        AND TABLE_NAME = 'REPARTIDOR_COBROS' 
-        AND COLUMN_NAME = 'CODIGOFORMAPAGO'
-      FETCH FIRST 1 ROW ONLY
-    `, [], false, false);
-    _cobrosIsAlignedSchema = alignedRows && alignedRows.length > 0;
+function codeList(raw) {
+  return String(raw || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
 
-    logger.info(`[REPARTIDOR_COBROS] Schema: ${_cobrosHasCollectionDate ? 'NEW (has ANOCOBRO/MESCOBRO/DIACOBRO)' : 'OLD (ANOVENCIMIENTO only)'}, aligned=${_cobrosIsAlignedSchema}`);
-  } catch (e) {
-    _cobrosHasCollectionDate = false;
-    _cobrosIsAlignedSchema = false;
-    logger.warn(`[REPARTIDOR_COBROS] Schema check failed, assuming OLD: ${e.message}`);
+function inClause(column, values) {
+  if (values.length === 1) {
+    return { sql: `${column} = ?`, params: values };
   }
-  return _cobrosHasCollectionDate;
+  return {
+    sql: `${column} IN (${values.map(() => '?').join(', ')})`,
+    params: values,
+  };
 }
 
-// Helper: returns date filter expression for REPARTIDOR_COBROS
-function cobrosDateFilterColumn() {
-  return _cobrosHasCollectionDate
-    ? 'ANOCOBRO * 10000 + MESCOBRO * 100 + DIACOBRO'
-    : 'ANOVENCIMIENTO * 10000 + MESVENCIMIENTO * 100 + DIAVENCIMIENTO';
+function cobrosDateFilterColumn(info, alias = '') {
+  const prefix = alias ? `${alias}.` : '';
+  if (info.cobrosHasCollectionDate) {
+    return `${prefix}ANOCOBRO * 10000 + ${prefix}MESCOBRO * 100 + ${prefix}DIACOBRO`;
+  }
+  if (info.cobrosHasFechaCobro) {
+    return `YEAR(${prefix}FECHA_COBRO) * 10000 + MONTH(${prefix}FECHA_COBRO) * 100 + DAY(${prefix}FECHA_COBRO)`;
+  }
+  return `${prefix}ANOVENCIMIENTO * 10000 + ${prefix}MESVENCIMIENTO * 100 + ${prefix}DIAVENCIMIENTO`;
 }
 
-// Helper: returns date columns for SELECT from REPARTIDOR_COBROS
-function cobrosDateSelectColumns() {
-  return _cobrosHasCollectionDate
-    ? 'RC.DIACOBRO, RC.MESCOBRO, RC.ANOCOBRO'
-    : 'RC.DIAVENCIMIENTO, RC.MESVENCIMIENTO, RC.ANOVENCIMIENTO';
+function cobrosDateSelectColumns(info) {
+  if (info.cobrosHasCollectionDate) return 'RC.DIACOBRO, RC.MESCOBRO, RC.ANOCOBRO';
+  if (info.cobrosHasFechaCobro) {
+    return 'DAY(RC.FECHA_COBRO) AS DIACOBRO, MONTH(RC.FECHA_COBRO) AS MESCOBRO, YEAR(RC.FECHA_COBRO) AS ANOCOBRO';
+  }
+  return 'RC.DIAVENCIMIENTO, RC.MESVENCIMIENTO, RC.ANOVENCIMIENTO';
 }
 
-// Helper: returns ORDER BY for date columns
-function cobrosDateOrderBy() {
-  return _cobrosHasCollectionDate
-    ? 'RC.ANOCOBRO, RC.MESCOBRO, RC.DIACOBRO'
-    : 'RC.ANOVENCIMIENTO, RC.MESVENCIMIENTO, RC.DIAVENCIMIENTO';
+function cobrosDateOrderBy(info, alias = 'RC') {
+  const prefix = alias ? `${alias}.` : '';
+  if (info.cobrosHasCollectionDate) return `${prefix}ANOCOBRO, ${prefix}MESCOBRO, ${prefix}DIACOBRO`;
+  if (info.cobrosHasFechaCobro) return `${prefix}FECHA_COBRO`;
+  return `${prefix}ANOVENCIMIENTO, ${prefix}MESVENCIMIENTO, ${prefix}DIAVENCIMIENTO`;
 }
 
-// Helper: returns INSERT columns for collection date
-function cobrosInsertDateColumns() {
-  return _cobrosHasCollectionDate
-    ? 'DIACOBRO, MESCOBRO, ANOCOBRO'
-    : '';
+function cobrosNotLiquidatedCondition(info, alias = '') {
+  const prefix = alias ? `${alias}.` : '';
+  if (info.cobrosHasLiquidado) {
+    return `COALESCE(${prefix}LIQUIDADO_SN, 'N') <> 'S'`;
+  }
+  if (info.cobrosHasNumeroLiquidacion) {
+    return `COALESCE(${prefix}NUMEROLIQUIDACION, 0) = 0`;
+  }
+  return '1 = 1';
 }
 
-// Helper: returns INSERT placeholders count for collection date
-function cobrosInsertDateValues() {
-  return _cobrosHasCollectionDate
-    ? '?, ?, ?'
-    : '';
+function cobrosCodeColumn(info, alias = '') {
+  const prefix = alias ? `${alias}.` : '';
+  return info.cobrosAligned ? `${prefix}CODIGOVENDEDOR` : `${prefix}CODIGO_REPARTIDOR`;
+}
+
+function cobrosAmountColumn(info, alias = '') {
+  const prefix = alias ? `${alias}.` : '';
+  return info.cobrosAligned ? `${prefix}IMPORTEVENCIMIENTO` : `${prefix}IMPORTE_COBRADO`;
+}
+
+function cobrosPendingColumn(info, alias = '') {
+  const prefix = alias ? `${alias}.` : '';
+  return info.cobrosAligned ? `${prefix}IMPORTEPENDIENTE` : `${prefix}IMPORTE_PENDIENTE`;
+}
+
+function cobrosPaymentColumn(info, alias = '') {
+  const prefix = alias ? `${alias}.` : '';
+  return info.cobrosAligned ? `${prefix}CODIGOFORMAPAGO` : `${prefix}FORMA_PAGO`;
+}
+
+function storagePaymentCode(raw, info) {
+  const value = normalizeText(raw).toUpperCase();
+  if (!info.cobrosAligned) return value;
+  if (value === 'EFECTIVO' || value === 'CONTADO') return 'EF';
+  if (value === 'TARJETA' || value === 'TPV') return 'TJ';
+  if (value === 'BIZUM') return 'BI';
+  if (value === 'CHEQUE' || value === 'TALON' || value === 'TALON BANCARIO') return 'CH';
+  if (value === 'POSTDATADO' || value === 'POSTDATADOS') return 'PD';
+  return value.slice(0, 2);
+}
+
+function cobroInsertStatement(info, input) {
+  const now = new Date();
+  const columns = [];
+  const params = [];
+  const add = (column, value) => {
+    if (!info.has('REPARTIDOR_COBROS', column)) return;
+    columns.push(column);
+    params.push(value);
+  };
+
+  if (info.cobrosAligned) {
+    add('ENTREGA_APP_ID', input.entregaId || null);
+    add('CODIGOCLIENTEALBARAN', input.codigoCliente);
+    add('CODIGOCLIENTEFACTURA', input.codigoCliente);
+    add('CODIGOVENDEDOR', input.codigoRepartidor);
+    add('CODIGOVENDEDORCOBRO', input.codigoRepartidor);
+    add('TIPODOCUMENTO', normalizeTipoDocumento(input.tipoDocumento));
+    add('ORIGENDOCUMENTO', input.origenDocumento || 'B');
+    add('SUBEMPRESADOCUMENTO', input.subempresaDocumento || 'GMP');
+    add('EJERCICIODOCUMENTO', input.ejercicioDocumento);
+    add('SERIEDOCUMENTO', input.serieDocumento);
+    add('TERMINALDOCUMENTO', input.terminalDocumento);
+    add('NUMERODOCUMENTO', input.numeroDocumento);
+    add('XDEDOCUMENTO', input.xdeDocumento || 1);
+    add('DEXDOCUMENTO', input.dexDocumento || 1);
+    add('IMPORTEVENCIMIENTO', roundMoney(input.importeCobrado));
+    add('IMPORTEPENDIENTE', roundMoney(input.importePendiente));
+    add('CODIGOFORMAPAGO', storagePaymentCode(input.formaPago, info));
+    add('DIACOBRO', now.getDate());
+    add('MESCOBRO', now.getMonth() + 1);
+    add('ANOCOBRO', now.getFullYear());
+    add('IDEMPOTENCY_TOKEN', input.idempotencyToken);
+    add('PANTALLA_ORIGEN', input.pantallaOrigen || 'RUTERO');
+    add('OPERADOR', input.operador || 'unknown');
+    add('OBSERVACIONES', input.notas || null);
+  } else {
+    add('ENTREGA_APP_ID', input.entregaId || null);
+    add('CODIGO_CLIENTE', input.codigoCliente);
+    add('NOMBRE_CLIENTE', input.nombreCliente || '');
+    add('CODIGO_REPARTIDOR', input.codigoRepartidor);
+    add('TIPO_DOCUMENTO', normalizeTipoDocumento(input.tipoDocumento));
+    add('ORIGEN_DOCUMENTO', input.origenDocumento || 'B');
+    add('SUBEMPRESA_DOCUMENTO', input.subempresaDocumento || 'GMP');
+    add('EJERCICIO_DOCUMENTO', input.ejercicioDocumento);
+    add('SERIE_DOCUMENTO', input.serieDocumento);
+    add('TERMINAL_DOCUMENTO', input.terminalDocumento);
+    add('NUMERO_DOCUMENTO', input.numeroDocumento);
+    add('XDE_DOCUMENTO', input.xdeDocumento || 1);
+    add('DEX_DOCUMENTO', input.dexDocumento || 1);
+    add('IMPORTE_COBRADO', roundMoney(input.importeCobrado));
+    add('IMPORTE_PENDIENTE', roundMoney(input.importePendiente));
+    add('FORMA_PAGO', storagePaymentCode(input.formaPago, info));
+    add('IDEMPOTENCY_TOKEN', input.idempotencyToken);
+    add('PANTALLA_ORIGEN', input.pantallaOrigen || 'RUTERO');
+    add('OPERADOR', input.operador || 'unknown');
+    add('NOTAS', input.notas || null);
+  }
+
+  return {
+    sql: `
+      INSERT INTO JAVIER.REPARTIDOR_COBROS (
+        ${columns.join(',\n        ')}
+      ) VALUES (${columns.map(() => '?').join(', ')})
+    `,
+    params,
+  };
+}
+
+function liquidacionOpsInsertStatement(info, input) {
+  const columns = [];
+  const params = [];
+  const add = (column, raw) => {
+    if (!info.has('REPARTIDOR_LIQUIDACION_OPS', column)) return;
+    columns.push(column);
+    params.push(raw);
+  };
+
+  add('IDEMPOTENCY_TOKEN', input.idempotencyToken);
+  add('SUBEMPRESALIQUIDACION', input.subempresa);
+  add('EJERCICIOLIQUIDACION', input.year);
+  add('SERIELIQUIDACION', input.serie);
+  add('TERMINALLIQUIDACION', input.terminal);
+  add('NUMEROLIQUIDACION', input.numero);
+  add('CODIGOVENDEDOR', input.repartidorId);
+  add('IMPORTEEFECTIVO', roundMoney(input.totals.totalEfectivo));
+  add('IMPORTECHEQUES', roundMoney(input.totals.totalCheques));
+  add('IMPORTETARJETA', roundMoney(input.totals.totalTarjeta));
+  add('IMPORTEPOSTDATADOS', roundMoney(input.totals.totalPostdatados));
+  add('IMPORTESALDOACTUAL', roundMoney(input.totals.saldoActual));
+  add('TOTAL_COBROS_DIA', roundMoney(input.totals.totalCobrosDia));
+  add('IMPORTEGASTOS', roundMoney(input.totals.gastos));
+  add('IMPORTETOTALAINGRESAR', roundMoney(input.totals.totalAIngresar));
+  add('IMPORTEINGRESOENBANCO', roundMoney(input.totals.ingresoBanco));
+  add('IMPORTEEFECTIVO2', roundMoney(input.totals.efectivo2));
+  add('IMPORTEENTREGADO2', roundMoney(input.totals.entregado2));
+  add('SALDO_RESULTANTE', roundMoney(input.saldoResultante));
+  add('CODIGOUSUARIO', input.createdBy || 'unknown');
+  add('REVISADOSN', 'S');
+  add('STATUS', 'CLOSED');
+  add('OPERADOR', input.createdBy || 'unknown');
+
+  return {
+    sql: `
+      INSERT INTO JAVIER.REPARTIDOR_LIQUIDACION_OPS (
+        ${columns.join(',\n        ')}
+      ) VALUES (${columns.map(() => '?').join(', ')})
+    `,
+    params,
+  };
 }
 
 const INTERNAL_LIQUIDATION_RECIPIENTS = [
@@ -333,6 +608,24 @@ function normalizeTipoDocumento(raw) {
   return value;
 }
 
+function firstDefinedValue(row, keys, fallback = undefined) {
+  for (const key of keys) {
+    const current = value(row, key);
+    if (current !== undefined && current !== null) return current;
+  }
+  return fallback;
+}
+
+function normalizePaymentForCompare(raw) {
+  const current = normalizeText(raw).toUpperCase();
+  if (['EF', 'E', 'CT', 'EFECTIVO', 'CONTADO'].includes(current)) return 'EFECTIVO';
+  if (['TJ', 'TARJETA', 'TPV'].includes(current)) return 'TARJETA';
+  if (['BI', 'BIZUM'].includes(current)) return 'BIZUM';
+  if (['CH', 'CHEQUE', 'TALON', 'TALON BANCARIO'].includes(current)) return 'CHEQUE';
+  if (['PD', 'POSTDATADO', 'POSTDATADOS'].includes(current)) return 'POSTDATADO';
+  return current;
+}
+
 function isDuplicateKeyError(error) {
   const text = `${error?.message || ''} ${JSON.stringify(error?.odbcErrors || [])}`.toLowerCase();
   return text.includes('duplicate') ||
@@ -369,38 +662,44 @@ function assertCobroPayloadMatchesInput(row, expected) {
   }
   const mismatches = [];
   const checks = [
-    ['ENTREGA_APP_ID', expected.entregaId, normalizeText],
-    ['CODIGOVENDEDOR', expected.codigoRepartidor, normalizeText],
-    ['CODIGOCLIENTEALBARAN', expected.codigoCliente, normalizeText],
-    ['TIPODOCUMENTO', expected.tipoDocumento, normalizeTipoDocumento],
-    ['ORIGENDOCUMENTO', expected.origenDocumento, normalizeText],
-    ['SUBEMPRESADOCUMENTO', expected.subempresaDocumento, normalizeText],
-    ['SERIEDOCUMENTO', expected.serieDocumento, normalizeText],
-    ['CODIGOFORMAPAGO', expected.formaPago, normalizeText],
-    ['PANTALLA_ORIGEN', expected.pantallaOrigen, normalizeText],
+    [['ENTREGA_APP_ID', 'ENTREGA_ID'], expected.entregaId, normalizeText],
+    [['CODIGOVENDEDOR', 'CODIGO_REPARTIDOR'], expected.codigoRepartidor, normalizeText],
+    [['CODIGOCLIENTEALBARAN', 'CODIGO_CLIENTE'], expected.codigoCliente, normalizeText],
+    [['TIPODOCUMENTO', 'TIPO_DOCUMENTO'], expected.tipoDocumento, normalizeTipoDocumento],
+    [['ORIGENDOCUMENTO', 'ORIGEN_DOCUMENTO'], expected.origenDocumento, normalizeText],
+    [['SUBEMPRESADOCUMENTO', 'SUBEMPRESA_DOCUMENTO'], expected.subempresaDocumento, normalizeText],
+    [['SERIEDOCUMENTO', 'SERIE_DOCUMENTO'], expected.serieDocumento, normalizeText],
+    [['CODIGOFORMAPAGO', 'FORMA_PAGO'], expected.formaPago, normalizePaymentForCompare],
+    [['PANTALLA_ORIGEN'], expected.pantallaOrigen, normalizeText],
   ];
-  for (const [column, expected, normalizer] of checks) {
-    if (normalizer(value(row, column)) !== normalizer(expected)) {
-      mismatches.push(column);
+  for (const [columns, expectedValue, normalizer] of checks) {
+    const actual = firstDefinedValue(row, columns);
+    if (actual === undefined && columns[0] === 'ENTREGA_APP_ID') continue;
+    if (actual === undefined && expectedValue == null) continue;
+    if (normalizer(actual) !== normalizer(expectedValue)) {
+      mismatches.push(columns[0]);
     }
   }
   const numericChecks = [
-    ['EJERCICIODOCUMENTO', expected.ejercicioDocumento],
-    ['TERMINALDOCUMENTO', expected.terminalDocumento],
-    ['NUMERODOCUMENTO', expected.numeroDocumento],
-    ['XDEDOCUMENTO', expected.xdeDocumento || 1],
-    ['DEXDOCUMENTO', expected.dexDocumento || 1],
+    [['EJERCICIODOCUMENTO', 'EJERCICIO_DOCUMENTO'], expected.ejercicioDocumento],
+    [['TERMINALDOCUMENTO', 'TERMINAL_DOCUMENTO'], expected.terminalDocumento],
+    [['NUMERODOCUMENTO', 'NUMERO_DOCUMENTO'], expected.numeroDocumento],
+    [['XDEDOCUMENTO', 'XDE_DOCUMENTO'], expected.xdeDocumento || 1],
+    [['DEXDOCUMENTO', 'DEX_DOCUMENTO'], expected.dexDocumento || 1],
   ];
-  for (const [column, expected] of numericChecks) {
-    if (!sameNumeric(value(row, column, expected), expected)) {
-      mismatches.push(column);
+  for (const [columns, expectedValue] of numericChecks) {
+    if (!sameNumeric(firstDefinedValue(row, columns, expectedValue), expectedValue)) {
+      mismatches.push(columns[0]);
     }
   }
-  if (roundMoney(value(row, 'IMPORTEVENCIMIENTO')) !== roundMoney(expected.importeCobrado)) {
+  if (
+    roundMoney(firstDefinedValue(row, ['IMPORTEVENCIMIENTO', 'IMPORTE_COBRADO'])) !==
+    roundMoney(expected.importeCobrado)
+  ) {
     mismatches.push('IMPORTEVENCIMIENTO');
   }
   if (
-    roundMoney(value(row, 'IMPORTEPENDIENTE', expected.importePendiente || 0)) !==
+    roundMoney(firstDefinedValue(row, ['IMPORTEPENDIENTE', 'IMPORTE_PENDIENTE'], expected.importePendiente || 0)) !==
     roundMoney(expected.importePendiente || 0)
   ) {
     mismatches.push('IMPORTEPENDIENTE');
@@ -488,11 +787,12 @@ async function findLiquidacionByToken(idempotencyToken) {
   return mapLiquidacion(await findLiquidacionRowByToken(idempotencyToken));
 }
 
-async function getDailySummary({ repartidorId, date }) {
+async function getDailySummaryLegacyUnused({ repartidorId, date }) {
   await getCobrosSchemaInfo();
 
   // Migration 024 hasn't been run yet — REPARTIDOR_COBROS uses old column names
-  if (!_cobrosIsAlignedSchema) {
+  const legacySchemaUnavailable = normalizeText('yes') === 'yes';
+  if (legacySchemaUnavailable) {
     logger.warn(`[REPARTIDOR_COBROS] getDailySummary: schema not aligned (migration 024 not run), returning empty`);
     return {
       repartidorId,
@@ -582,6 +882,109 @@ async function getDailySummary({ repartidorId, date }) {
   };
 }
 
+async function getDailySummary({ repartidorId, date }) {
+  const info = await getFinanceSchemaInfo();
+  const ids = codeList(repartidorId);
+
+  if (ids.length === 0 || (!info.cobrosAligned && !info.cobrosLegacy)) {
+    if (ids.length > 0) {
+      logger.warn('[REPARTIDOR_COBROS] getDailySummary: unknown schema, returning empty');
+    }
+    return {
+      repartidorId,
+      date,
+      summary: {
+        totalEfectivo: 0, totalCheques: 0, totalTarjeta: 0, totalPostdatados: 0,
+        saldoActual: 0, totalCobrosDia: 0, gastos: 0, totalAIngresar: 0,
+        ingresoBanco: 0, totalEfectivo2: 0, entregado: 0, cobrosCount: 0,
+      },
+      cobros: [],
+    };
+  }
+
+  const dateYmd = compactDate(date);
+  const dateCol = cobrosDateFilterColumn(info);
+  const aliasedDateCol = cobrosDateFilterColumn(info, 'RC');
+  const selectCols = cobrosDateSelectColumns(info);
+  const orderBy = cobrosDateOrderBy(info);
+  const repFilter = inClause(`TRIM(${cobrosCodeColumn(info)})`, ids);
+  const repFilterRc = inClause(`TRIM(${cobrosCodeColumn(info, 'RC')})`, ids);
+  const balanceFilter = inClause(`TRIM(${info.balanceCodeColumn})`, ids);
+  const amountCol = cobrosAmountColumn(info);
+  const paymentCol = cobrosPaymentColumn(info);
+  const notLiquidated = cobrosNotLiquidatedCondition(info);
+  const notLiquidatedRc = cobrosNotLiquidatedCondition(info, 'RC');
+
+  const totalsRows = await queryWithParams(`
+    SELECT
+      COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('EFECTIVO', 'EF', 'E', 'CONTADO', 'CT') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_EFECTIVO,
+      COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('CHEQUE', 'CH', 'TALON', 'TALON BANCARIO') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_CHEQUES,
+      COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('TARJETA', 'TJ', 'TPV', 'BIZUM', 'BI') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_TARJETA,
+      COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('POSTDATADO', 'PD', 'POSTDATADOS') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_POSTDATADOS,
+      COALESCE(SUM(${amountCol}), 0) AS TOTAL_COBROS_DIA,
+      COUNT(*) AS COBROS_COUNT
+    FROM JAVIER.REPARTIDOR_COBROS
+    WHERE ${repFilter.sql}
+      AND ${dateCol} = ?
+      AND ${notLiquidated}
+  `, [...repFilter.params, dateYmd], false, false);
+
+  const balanceRows = await queryWithParams(`
+    SELECT COALESCE(SUM(SALDO_PENDIENTE), 0) AS SALDO_PENDIENTE
+    FROM JAVIER.REPARTIDOR_FINANCIAL_BALANCES
+    WHERE ${balanceFilter.sql}
+  `, balanceFilter.params, false, false);
+
+  const cobroRows = await queryWithParams(`
+    SELECT
+      RC.ID,
+      ${selectCols},
+      ${info.cobrosAligned ? 'RC.CODIGOCLIENTEALBARAN' : 'RC.CODIGO_CLIENTE AS CODIGOCLIENTEALBARAN'},
+      TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), TRIM(CLI.NOMBRECLIENTE))) AS NOMBRE_CLIENTE,
+      ${info.cobrosAligned ? 'RC.CODIGOFORMAPAGO' : 'RC.FORMA_PAGO AS CODIGOFORMAPAGO'},
+      ${info.cobrosAligned ? 'RC.TIPODOCUMENTO' : 'RC.TIPO_DOCUMENTO AS TIPODOCUMENTO'},
+      ${info.cobrosAligned ? 'RC.ORIGENDOCUMENTO' : "COALESCE(RC.ORIGEN_DOCUMENTO, 'B') AS ORIGENDOCUMENTO"},
+      ${info.cobrosAligned ? 'RC.SERIEDOCUMENTO' : "COALESCE(RC.SERIE_DOCUMENTO, '') AS SERIEDOCUMENTO"},
+      ${info.cobrosAligned ? 'RC.TERMINALDOCUMENTO' : 'COALESCE(RC.TERMINAL_DOCUMENTO, 0) AS TERMINALDOCUMENTO'},
+      ${info.cobrosAligned ? 'RC.NUMERODOCUMENTO' : 'RC.NUMERO_DOCUMENTO AS NUMERODOCUMENTO'},
+      ${info.cobrosAligned ? 'RC.EJERCICIODOCUMENTO' : 'RC.EJERCICIO_DOCUMENTO AS EJERCICIODOCUMENTO'},
+      ${info.cobrosAligned ? 'RC.XDEDOCUMENTO' : 'COALESCE(RC.XDE_DOCUMENTO, 1) AS XDEDOCUMENTO'},
+      ${cobrosAmountColumn(info, 'RC')} AS IMPORTEVENCIMIENTO,
+      ${cobrosPendingColumn(info, 'RC')} AS IMPORTEPENDIENTE
+    FROM JAVIER.REPARTIDOR_COBROS RC
+    LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(${info.cobrosAligned ? 'RC.CODIGOCLIENTEALBARAN' : 'RC.CODIGO_CLIENTE'})
+    WHERE ${repFilterRc.sql}
+      AND ${aliasedDateCol} = ?
+      AND ${notLiquidatedRc}
+    ORDER BY ${orderBy}, RC.ID
+  `, [...repFilterRc.params, dateYmd], false, false);
+
+  const totals = firstRow(totalsRows);
+  const saldoActual = roundMoney(value(firstRow(balanceRows), 'SALDO_PENDIENTE', 0));
+  const totalCobrosDia = roundMoney(value(totals, 'TOTAL_COBROS_DIA'));
+  const gastos = 0;
+
+  return {
+    repartidorId,
+    date,
+    summary: {
+      totalEfectivo: roundMoney(value(totals, 'TOTAL_EFECTIVO')),
+      totalCheques: roundMoney(value(totals, 'TOTAL_CHEQUES')),
+      totalTarjeta: roundMoney(value(totals, 'TOTAL_TARJETA')),
+      totalPostdatados: roundMoney(value(totals, 'TOTAL_POSTDATADOS')),
+      saldoActual,
+      totalCobrosDia,
+      gastos,
+      totalAIngresar: roundMoney(saldoActual + totalCobrosDia - gastos),
+      ingresoBanco: 0,
+      totalEfectivo2: roundMoney(value(totals, 'TOTAL_EFECTIVO')),
+      entregado: 0,
+      cobrosCount: toInt(value(totals, 'COBROS_COUNT')),
+    },
+    cobros: cobroRows.map(mapCobro),
+  };
+}
+
 async function getSummary({ repartidorId, year, month }) {
   const today = new Date();
   const todayYmd = today.getFullYear() * 10000 + (today.getMonth() + 1) * 100 + today.getDate();
@@ -624,11 +1027,14 @@ async function getSummary({ repartidorId, year, month }) {
 }
 
 async function getVencimientos({ repartidorId, from, to, limit, clientCode, estado }) {
+  await getFinanceSchemaInfo();
   const fromParts = dateParts(from);
   const toParts = dateParts(to);
   const broadFrom = compactDate(addDaysIso(fromParts.year, fromParts.month, fromParts.day, -120));
   const broadTo = compactDate(addDaysIso(toParts.year, toParts.month, toParts.day, 120));
-  const params = [repartidorId, broadFrom, broadTo];
+  const ids = codeList(repartidorId);
+  const repFilter = inClause('TRIM(OPP.CODIGOREPARTIDOR)', ids);
+  const params = [...repFilter.params, broadFrom, broadTo];
   let clientFilter = '';
   if (clientCode) {
     clientFilter = ' AND TRIM(CVC.CODIGOCLIENTEALBARAN) = ?';
@@ -725,7 +1131,7 @@ async function getVencimientos({ repartidorId, from, to, limit, clientCode, esta
         AND APP_COBROS.NUMERODOCUMENTO = CVC.NUMERODOCUMENTO
         AND COALESCE(APP_COBROS.XDEDOCUMENTO, 1) = COALESCE(CVC.XDEDOCUMENTO, 1)
         AND COALESCE(APP_COBROS.DEXDOCUMENTO, 1) = COALESCE(CVC.DEXDOCUMENTO, 1)
-      WHERE TRIM(OPP.CODIGOREPARTIDOR) = ?
+      WHERE ${repFilter.sql}
         AND (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO) BETWEEN ? AND ?
         AND COALESCE(CVC.ANULADOSN, '') <> 'S'
         AND CVC.TIPODOCUMENTO IN ('CAC', 'COC', 'DEV')
@@ -783,60 +1189,9 @@ async function registerCobro(input) {
         return { created: false, id: String(value(existing, 'ID')) };
       }
 
-      const now = new Date();
-      await getCobrosSchemaInfo();
-      const hasCollectionDate = _cobrosHasCollectionDate;
-      const dateCols = hasCollectionDate ? ', DIACOBRO, MESCOBRO, ANOCOBRO' : '';
-      const dateVals = hasCollectionDate ? ', ?, ?, ?' : '';
-      const dateParams = hasCollectionDate ? [now.getDate(), now.getMonth() + 1, now.getFullYear()] : [];
-
-      const allParams = [
-        input.entregaId || null,
-        input.codigoCliente,
-        input.codigoRepartidor,
-        normalizeTipoDocumento(input.tipoDocumento),
-        input.origenDocumento || 'B',
-        input.subempresaDocumento || 'GMP',
-        input.ejercicioDocumento,
-        input.serieDocumento,
-        input.terminalDocumento,
-        input.numeroDocumento,
-        input.xdeDocumento || 1,
-        input.dexDocumento || 1,
-        roundMoney(input.importeCobrado),
-        roundMoney(input.importePendiente),
-        input.formaPago,
-        input.idempotencyToken,
-        input.pantallaOrigen,
-        input.operador,
-        input.notas || null,
-        ...dateParams,
-      ];
-
-      await conn.query(`
-        INSERT INTO JAVIER.REPARTIDOR_COBROS (
-          ENTREGA_APP_ID,
-          CODIGOCLIENTEALBARAN,
-          CODIGOVENDEDOR,
-          TIPODOCUMENTO,
-          ORIGENDOCUMENTO,
-          SUBEMPRESADOCUMENTO,
-          EJERCICIODOCUMENTO,
-          SERIEDOCUMENTO,
-          TERMINALDOCUMENTO,
-          NUMERODOCUMENTO,
-          XDEDOCUMENTO,
-          DEXDOCUMENTO,
-          IMPORTEVENCIMIENTO,
-          IMPORTEPENDIENTE,
-          CODIGOFORMAPAGO,
-          IDEMPOTENCY_TOKEN,
-          PANTALLA_ORIGEN,
-          OPERADOR,
-          OBSERVACIONES
-          ${dateCols}
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${dateVals})
-      `, allParams);
+      const info = await getFinanceSchemaInfo();
+      const insert = cobroInsertStatement(info, input);
+      await conn.query(insert.sql, insert.params);
 
       const row = firstRow(await conn.query(`
         SELECT ID FROM JAVIER.REPARTIDOR_COBROS
@@ -1020,60 +1375,15 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
       ]);
     }
 
-    const now = new Date();
-    await getCobrosSchemaInfo();
-    const hasCollectionDate = _cobrosHasCollectionDate;
-    const dateCols = hasCollectionDate ? ', DIACOBRO, MESCOBRO, ANOCOBRO' : '';
-    const dateVals = hasCollectionDate ? ', ?, ?, ?' : '';
-    const dateParams = hasCollectionDate ? [now.getDate(), now.getMonth() + 1, now.getFullYear()] : [];
-
-    const allParams = [
-      cobro.entregaId || delivery.itemId,
-      cobro.codigoCliente,
-      cobro.codigoRepartidor || repartidorId,
-      normalizeTipoDocumento(cobro.tipoDocumento),
-      cobro.origenDocumento || 'B',
-      cobro.subempresaDocumento || 'GMP',
-      cobro.ejercicioDocumento,
-      cobro.serieDocumento,
-      cobro.terminalDocumento,
-      cobro.numeroDocumento,
-      cobro.xdeDocumento || 1,
-      cobro.dexDocumento || 1,
-      roundMoney(cobro.importeCobrado),
-      roundMoney(cobro.importePendiente),
-      cobro.formaPago,
-      cobro.idempotencyToken,
-      cobro.pantallaOrigen || 'RUTERO',
-      cobro.operador || 'unknown',
-      cobro.notas || null,
-      ...dateParams,
-    ];
-
-    await conn.query(`
-      INSERT INTO JAVIER.REPARTIDOR_COBROS (
-        ENTREGA_APP_ID,
-        CODIGOCLIENTEALBARAN,
-        CODIGOVENDEDOR,
-        TIPODOCUMENTO,
-        ORIGENDOCUMENTO,
-        SUBEMPRESADOCUMENTO,
-        EJERCICIODOCUMENTO,
-        SERIEDOCUMENTO,
-        TERMINALDOCUMENTO,
-        NUMERODOCUMENTO,
-        XDEDOCUMENTO,
-        DEXDOCUMENTO,
-        IMPORTEVENCIMIENTO,
-        IMPORTEPENDIENTE,
-        CODIGOFORMAPAGO,
-        IDEMPOTENCY_TOKEN,
-        PANTALLA_ORIGEN,
-        OPERADOR,
-        OBSERVACIONES
-        ${dateCols}
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${dateVals})
-    `, allParams);
+    const info = await getFinanceSchemaInfo();
+    const insert = cobroInsertStatement(info, {
+      ...cobro,
+      entregaId: cobro.entregaId || delivery.itemId,
+      codigoRepartidor: cobro.codigoRepartidor || repartidorId,
+      pantallaOrigen: cobro.pantallaOrigen || 'RUTERO',
+      operador: cobro.operador || 'unknown',
+    });
+    await conn.query(insert.sql, insert.params);
 
     return {
       created: true,
@@ -1142,6 +1452,7 @@ async function closeLiquidacion(input) {
   }
 
   const { year, month, day } = dateParts(input.date);
+  const info = await getFinanceSchemaInfo();
   const subempresa = 'GMP';
   const serie = 'A';
   const terminal = toInt(input.repartidorId);
@@ -1242,36 +1553,40 @@ async function closeLiquidacion(input) {
       terminal,
     });
     const dateYmd = compactDate(input.date);
-    const dateCol = cobrosDateFilterColumn();
-    const orderBy = cobrosDateOrderBy();
+    const dateCol = cobrosDateFilterColumn(info);
+    const orderBy = cobrosDateOrderBy(info, '');
+    const codeColumn = cobrosCodeColumn(info);
+    const amountCol = cobrosAmountColumn(info);
+    const paymentCol = cobrosPaymentColumn(info);
+    const notLiquidated = cobrosNotLiquidatedCondition(info);
 
     const totalsRow = firstRow(await conn.query(`
       SELECT
-        COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('EFECTIVO', 'E', 'CONTADO') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_EFECTIVO,
-        COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('CHEQUE', 'TALON', 'TALON BANCARIO') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_CHEQUES,
-        COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('TARJETA', 'TPV', 'BIZUM') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_TARJETA,
-        COALESCE(SUM(CASE WHEN UPPER(TRIM(CODIGOFORMAPAGO)) IN ('POSTDATADO', 'POSTDATADOS') THEN IMPORTEVENCIMIENTO ELSE 0 END), 0) AS TOTAL_POSTDATADOS,
-        COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_COBROS_DIA,
+        COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('EFECTIVO', 'EF', 'E', 'CONTADO', 'CT') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_EFECTIVO,
+        COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('CHEQUE', 'CH', 'TALON', 'TALON BANCARIO') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_CHEQUES,
+        COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('TARJETA', 'TJ', 'TPV', 'BIZUM', 'BI') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_TARJETA,
+        COALESCE(SUM(CASE WHEN UPPER(TRIM(${paymentCol})) IN ('POSTDATADO', 'PD', 'POSTDATADOS') THEN ${amountCol} ELSE 0 END), 0) AS TOTAL_POSTDATADOS,
+        COALESCE(SUM(${amountCol}), 0) AS TOTAL_COBROS_DIA,
         COUNT(*) AS COBROS_COUNT
       FROM JAVIER.REPARTIDOR_COBROS
-      WHERE TRIM(CODIGOVENDEDOR) = ?
+      WHERE TRIM(${codeColumn}) = ?
         AND ${dateCol} = ?
-        AND COALESCE(LIQUIDADO_SN, 'N') <> 'S'
+        AND ${notLiquidated}
     `, [input.repartidorId, dateYmd]));
 
     const cobroRows = await conn.query(`
       SELECT ID
       FROM JAVIER.REPARTIDOR_COBROS
-      WHERE TRIM(CODIGOVENDEDOR) = ?
+      WHERE TRIM(${codeColumn}) = ?
         AND ${dateCol} = ?
-        AND COALESCE(LIQUIDADO_SN, 'N') <> 'S'
+        AND ${notLiquidated}
       ORDER BY ${orderBy}, ID
     `, [input.repartidorId, dateYmd]);
 
     const balanceRow = firstRow(await conn.query(`
       SELECT SALDO_PENDIENTE
       FROM JAVIER.REPARTIDOR_FINANCIAL_BALANCES
-      WHERE TRIM(CODIGOVENDEDOR) = ?
+      WHERE TRIM(${info.balanceCodeColumn}) = ?
       FETCH FIRST 1 ROW ONLY
     `, [input.repartidorId]));
 
@@ -1362,77 +1677,56 @@ async function closeLiquidacion(input) {
       roundMoney(totals.totalTarjeta),
     ]);
 
-    await conn.query(`
-      INSERT INTO JAVIER.REPARTIDOR_LIQUIDACION_OPS (
-        IDEMPOTENCY_TOKEN,
-        SUBEMPRESALIQUIDACION,
-        EJERCICIOLIQUIDACION,
-        SERIELIQUIDACION,
-        TERMINALLIQUIDACION,
-        NUMEROLIQUIDACION,
-        CODIGOVENDEDOR,
-        IMPORTEEFECTIVO,
-        IMPORTECHEQUES,
-        IMPORTETARJETA,
-        IMPORTEPOSTDATADOS,
-        IMPORTESALDOACTUAL,
-        TOTAL_COBROS_DIA,
-        IMPORTEGASTOS,
-        IMPORTETOTALAINGRESAR,
-        IMPORTEINGRESOENBANCO,
-        IMPORTEEFECTIVO2,
-        IMPORTEENTREGADO2,
-        SALDO_RESULTANTE,
-        CODIGOUSUARIO,
-        REVISADOSN
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'CLOSED')
-    `, [
-      input.idempotencyToken,
+    const opsInsert = liquidacionOpsInsertStatement(info, {
+      idempotencyToken: input.idempotencyToken,
       subempresa,
       year,
       serie,
       terminal,
       numero,
-      input.repartidorId,
-      roundMoney(totals.totalEfectivo),
-      roundMoney(totals.totalCheques),
-      roundMoney(totals.totalTarjeta),
-      roundMoney(totals.totalPostdatados),
-      roundMoney(totals.saldoActual),
-      roundMoney(totals.totalCobrosDia),
-      roundMoney(totals.gastos),
-      roundMoney(totals.totalAIngresar),
-      roundMoney(totals.ingresoBanco),
-      roundMoney(totals.efectivo2),
-      roundMoney(totals.entregado2),
+      repartidorId: input.repartidorId,
+      totals,
       saldoResultante,
-      input.createdBy || 'unknown',
-    ]);
+      createdBy: input.createdBy,
+    });
+    await conn.query(opsInsert.sql, opsInsert.params);
 
     await conn.query(`
       MERGE INTO JAVIER.REPARTIDOR_FINANCIAL_BALANCES B
-      USING (VALUES (?, ?, ?)) AS V(CODIGOVENDEDOR, SALDO_PENDIENTE, UPDATED_BY)
-        ON B.CODIGOVENDEDOR = V.CODIGOVENDEDOR
+      USING (VALUES (?, ?, ?)) AS V(${info.balanceCodeColumn}, SALDO_PENDIENTE, UPDATED_BY)
+        ON B.${info.balanceCodeColumn} = V.${info.balanceCodeColumn}
       WHEN MATCHED THEN
         UPDATE SET SALDO_PENDIENTE = V.SALDO_PENDIENTE,
                    UPDATED_BY = V.UPDATED_BY,
                    UPDATED_AT = CURRENT_TIMESTAMP
       WHEN NOT MATCHED THEN
-        INSERT (CODIGOVENDEDOR, SALDO_PENDIENTE, UPDATED_BY)
-        VALUES (V.CODIGOVENDEDOR, V.SALDO_PENDIENTE, V.UPDATED_BY)
+        INSERT (${info.balanceCodeColumn}, SALDO_PENDIENTE, UPDATED_BY)
+        VALUES (V.${info.balanceCodeColumn}, V.SALDO_PENDIENTE, V.UPDATED_BY)
     `, [input.repartidorId, saldoResultante, input.createdBy || 'unknown']);
 
     if (cobroRows.length > 0) {
       const placeholders = cobroRows.map(() => '?').join(', ');
-      await conn.query(`
-        UPDATE JAVIER.REPARTIDOR_COBROS
-        SET LIQUIDADO_SN = 'S',
-            LIQUIDACION_TOKEN = ?
-        WHERE ID IN (${placeholders})
-      `, [
-        input.idempotencyToken,
-        ...cobroRows.map((row) => value(row, 'ID')),
-      ]);
+      const setParts = [];
+      const updateParams = [];
+      if (info.cobrosHasLiquidado) setParts.push("LIQUIDADO_SN = 'S'");
+      if (info.cobrosHasLiquidacionToken) {
+        setParts.push('LIQUIDACION_TOKEN = ?');
+        updateParams.push(input.idempotencyToken);
+      }
+      if (info.cobrosHasNumeroLiquidacion) {
+        setParts.push('NUMEROLIQUIDACION = ?');
+        updateParams.push(numero);
+      }
+      if (setParts.length > 0) {
+        await conn.query(`
+          UPDATE JAVIER.REPARTIDOR_COBROS
+          SET ${setParts.join(',\n              ')}
+          WHERE ID IN (${placeholders})
+        `, [
+          ...updateParams,
+          ...cobroRows.map((row) => value(row, 'ID')),
+        ]);
+      }
     }
   });
 
@@ -1487,7 +1781,7 @@ function calculateCommission({ deliveredAmount, collectedAmount, tiers }) {
   };
 }
 
-async function getCommissionSummary({ repartidorId, from, to }) {
+async function getCommissionSummaryLegacyUnused({ repartidorId, from, to }) {
   await getCobrosSchemaInfo();
   const dateCol = cobrosDateFilterColumn();
 
@@ -1507,6 +1801,56 @@ async function getCommissionSummary({ repartidorId, from, to }) {
       AND ${dateCol} >= ?
       AND ${dateCol} <= ?
   `, [repartidorId, compactDate(from), compactDate(nextIsoDate(to))], false, false);
+
+  const tiers = await getCommissionTiers();
+  const result = calculateCommission({
+    deliveredAmount: value(firstRow(deliveredRows), 'TOTAL_REPARTIDO'),
+    collectedAmount: value(firstRow(collectedRows), 'TOTAL_COBRADO'),
+    tiers,
+  });
+
+  return {
+    repartidorId,
+    range: { from, to },
+    ...result,
+    tiers,
+  };
+}
+
+async function getCommissionSummary({ repartidorId, from, to }) {
+  await getFinanceSchemaInfo();
+  const ids = codeList(repartidorId);
+  const repFilter = inClause('TRIM(OPP.CODIGOREPARTIDOR)', ids);
+  const fromYmd = compactDate(from);
+  const toYmd = compactDate(to);
+
+  const deliveredRows = await queryWithParams(`
+    SELECT COALESCE(SUM(CPC.IMPORTETOTAL), 0) AS TOTAL_REPARTIDO
+    FROM DSEDAC.OPP OPP
+    INNER JOIN DSEDAC.CPC CPC
+      ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+    WHERE ${repFilter.sql}
+      AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ? AND ?
+  `, [...repFilter.params, fromYmd, toYmd], false, false);
+
+  const collectedRows = await queryWithParams(`
+    SELECT COALESCE(SUM(CASE
+      WHEN COALESCE(CVC.IMPORTEPENDIENTE, 0) = 0
+      THEN CPC.IMPORTETOTAL
+      ELSE CPC.IMPORTETOTAL - COALESCE(CVC.IMPORTEPENDIENTE, 0)
+    END), 0) AS TOTAL_COBRADO
+    FROM DSEDAC.OPP OPP
+    INNER JOIN DSEDAC.CPC CPC
+      ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+    LEFT JOIN DSEDAC.CVC CVC
+      ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
+      AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
+      AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
+      AND CVC.TERMINALDOCUMENTO = CPC.TERMINALALBARAN
+      AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
+    WHERE ${repFilter.sql}
+      AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ? AND ?
+  `, [...repFilter.params, fromYmd, toYmd], false, false);
 
   const tiers = await getCommissionTiers();
   const result = calculateCommission({

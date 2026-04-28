@@ -37,7 +37,22 @@ class _RepartidorComisionesFinanzasPageState
     _loadData();
   }
 
+  @override
+  void didUpdateWidget(covariant RepartidorComisionesFinanzasPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.repartidorId != widget.repartidorId) {
+      _loadData(forceRefresh: true);
+    }
+  }
+
   Future<void> _loadData({bool forceRefresh = false}) async {
+    if (widget.repartidorId.isEmpty) {
+      setState(() {
+        _isLoading = false;
+        _error = null;
+      });
+      return;
+    }
     final generation = ++_loadGeneration;
     setState(() {
       _isLoading = true;
@@ -72,7 +87,7 @@ class _RepartidorComisionesFinanzasPageState
 
   @override
   Widget build(BuildContext context) {
-    if (widget.repartidorId.isEmpty || widget.repartidorId.contains(',')) {
+    if (widget.repartidorId.isEmpty) {
       return const Scaffold(
         backgroundColor: AppTheme.darkBase,
         body: Center(

@@ -1200,20 +1200,6 @@ class _MainShellState extends ConsumerState<MainShell> {
 
       Widget pageForIndex(int idx) {
         final label = idx < navItems.length ? navItems[idx].label : '';
-        final requiresSingleRepartidor = label == 'Liquidacion Diaria' ||
-            label == 'Vencimientos' ||
-            label == 'Comisiones';
-        if (requiresSingleRepartidor && effectiveRepartidorId.contains(',')) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'Selecciona un repartidor concreto para consultar finanzas.',
-                textAlign: TextAlign.center,
-              ),
-            ),
-          );
-        }
 
         if (label == 'Panel') {
           return RepartidorPanelPage(repartidorId: effectiveRepartidorId);

@@ -203,6 +203,58 @@ class RepartidorFinanzasService {
     return _mapList(response['vencimientos'], RepartidorVencimiento.fromJson);
   }
 
+  Future<void> registerVencimientoCobro({
+    required String repartidorId,
+    required String codigoCliente,
+    required String nombreCliente,
+    required String tipoDocumento,
+    required String documento,
+    required JsonMap keys,
+    required double importeCobrado,
+    required double importePendiente,
+    required String formaPago,
+  }) async {
+    String keyString(String key, [String fallback = '']) {
+      final value = keys[key];
+      return value == null ? fallback : value.toString();
+    }
+
+    int keyInt(String key, [int fallback = 0]) {
+      final value = keys[key];
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      return int.tryParse(value?.toString() ?? '') ?? fallback;
+    }
+
+    final safeRep = repartidorId.replaceAll(RegExp('[^A-Za-z0-9_-]'), '_');
+    final token = 'vto_${safeRep}_${DateTime.now().microsecondsSinceEpoch}';
+    await ApiClient.post(
+      '/repartidor-finanzas/cobros',
+      {
+        'codigoCliente': codigoCliente,
+        'nombreCliente': nombreCliente,
+        'codigoRepartidor': repartidorId,
+        'tipoDocumento': keyString('tipoDocumento', tipoDocumento),
+        'origenDocumento': keyString('origenDocumento', 'B'),
+        'subempresaDocumento': keyString('subempresaDocumento', 'GMP'),
+        'ejercicioDocumento': keyInt('ejercicioDocumento'),
+        'serieDocumento': keyString('serieDocumento'),
+        'terminalDocumento': keyInt('terminalDocumento'),
+        'numeroDocumento': keyInt('numeroDocumento'),
+        'xdeDocumento': keyInt('xdeDocumento', 1),
+        'dexDocumento': keyInt('dexDocumento', 1),
+        'importeCobrado': importeCobrado,
+        'importePendiente': importePendiente < 0 ? 0 : importePendiente,
+        'formaPago': formaPago,
+        'pantallaOrigen': 'VENCIMIENTOS',
+        'idempotencyToken': token,
+        'notas': 'Abono vencimiento $documento',
+      },
+    );
+
+    await invalidateAllForRepartidor(repartidorId);
+  }
+
   Future<RepartidorCommissionSummary> getCommissionSummary({
     required String repartidorId,
     required DateTime from,

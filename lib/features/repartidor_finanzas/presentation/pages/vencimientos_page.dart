@@ -25,6 +25,11 @@ class VencimientoItem {
     this.id,
     this.vendedor,
     this.notas,
+    this.codigoCliente = '',
+    this.nombreCliente = '',
+    this.tipoDocumento = '',
+    this.importePendiente = 0,
+    this.keys = const {},
   });
 
   final String? id;
@@ -35,6 +40,11 @@ class VencimientoItem {
   final VencimientoEstado estado;
   final String? vendedor;
   final String? notas;
+  final String codigoCliente;
+  final String nombreCliente;
+  final String tipoDocumento;
+  final double importePendiente;
+  final JsonMap keys;
 }
 
 enum VencimientosFiltro {
@@ -156,7 +166,7 @@ class RepartidorVencimientosPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (repartidorId.isEmpty || repartidorId.contains(',')) {
+    if (repartidorId.isEmpty) {
       return const Scaffold(
         backgroundColor: AppTheme.darkBase,
         body: Center(
@@ -188,7 +198,7 @@ class RepartidorVencimientosPage extends ConsumerWidget {
     return asyncItems.when(
       data: (items) => VencimientosPage(
         vencimientos: items.map(_mapVencimiento).toList(),
-        onItemTap: (item) => _showDetail(context, item),
+        onItemTap: (item) => _showDetail(context, ref, repartidorId, item),
       ),
       loading: () => const Scaffold(
         backgroundColor: AppTheme.darkBase,
@@ -243,6 +253,11 @@ class RepartidorVencimientosPage extends ConsumerWidget {
       fecha: fecha,
       importe: item.importePendiente,
       estado: estado,
+      codigoCliente: item.codigoCliente,
+      nombreCliente: item.nombreCliente,
+      tipoDocumento: item.tipoDocumento,
+      importePendiente: item.importePendiente,
+      keys: item.keys,
       notas: [
         if (parsedFecha == null) 'Fecha de vencimiento no calculada',
         if (item.tipoDocumento.isNotEmpty) item.tipoDocumento,
@@ -252,14 +267,22 @@ class RepartidorVencimientosPage extends ConsumerWidget {
     );
   }
 
-  static void _showDetail(BuildContext context, VencimientoItem item) {
+  static void _showDetail(
+    BuildContext context,
+    WidgetRef ref,
+    String repartidorId,
+    VencimientoItem item,
+  ) {
+    final canAbonar = !repartidorId.contains(',') &&
+        item.keys.isNotEmpty &&
+        item.importePendiente > 0;
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppTheme.surfaceColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
       ),
-      builder: (context) {
+      builder: (sheetContext) {
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -301,12 +324,183 @@ class RepartidorVencimientosPage extends ConsumerWidget {
                     style: const TextStyle(color: AppTheme.textTertiary),
                   ),
                 ],
+                if (canAbonar) ...[
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.of(sheetContext).pop();
+                        _showAbonoDialog(context, ref, repartidorId, item);
+                      },
+                      icon: const Icon(Icons.payments),
+                      label: const Text('Abonar'),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
         );
       },
     );
+  }
+
+  static Future<void> _showAbonoDialog(
+    BuildContext context,
+    WidgetRef ref,
+    String repartidorId,
+    VencimientoItem item,
+  ) async {
+    final amountController = TextEditingController(
+      text: item.importePendiente.toStringAsFixed(2).replaceAll('.', ','),
+    );
+    var formaPago = 'EFECTIVO';
+    var saving = false;
+    String? errorText;
+    final rootContext = context;
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (contentContext, setState) {
+            Future<void> submit() async {
+              final amount = double.tryParse(
+                amountController.text.trim().replaceAll(',', '.'),
+              );
+              if (amount == null || amount <= 0) {
+                setState(() => errorText = 'Importe invalido');
+                return;
+              }
+              if (amount > item.importePendiente) {
+                setState(() => errorText = 'Importe superior al pendiente');
+                return;
+              }
+
+              setState(() {
+                saving = true;
+                errorText = null;
+              });
+              try {
+                await ref
+                    .read(repartidorFinanzasServiceProvider)
+                    .registerVencimientoCobro(
+                      repartidorId: repartidorId,
+                      codigoCliente: item.codigoCliente,
+                      nombreCliente: item.nombreCliente,
+                      tipoDocumento: item.tipoDocumento,
+                      documento: item.documento,
+                      keys: item.keys,
+                      importeCobrado: amount,
+                      importePendiente: item.importePendiente - amount,
+                      formaPago: formaPago,
+                    );
+                ref
+                  ..invalidate(repartidorVencimientosProvider)
+                  ..invalidate(repartidorDailySummaryProvider)
+                  ..invalidate(repartidorCommissionSummaryProvider);
+                if (!dialogContext.mounted) return;
+                Navigator.of(dialogContext).pop();
+                if (!rootContext.mounted) return;
+                ScaffoldMessenger.of(rootContext).showSnackBar(
+                  const SnackBar(content: Text('Abono registrado')),
+                );
+              } catch (error, stackTrace) {
+                await Sentry.captureException(error, stackTrace: stackTrace);
+                if (!contentContext.mounted) return;
+                setState(() {
+                  saving = false;
+                  errorText = financeErrorMessage(
+                    error,
+                    'No se pudo registrar el abono',
+                  );
+                });
+              }
+            }
+
+            return AlertDialog(
+              backgroundColor: AppTheme.surfaceColor,
+              title: const Text(
+                'Abonar vencimiento',
+                style: TextStyle(color: AppTheme.textPrimary),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.documento,
+                    style: const TextStyle(color: AppTheme.textSecondary),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: amountController,
+                    enabled: !saving,
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
+                    style: const TextStyle(color: AppTheme.textPrimary),
+                    decoration: const InputDecoration(
+                      labelText: 'Importe',
+                      prefixIcon: Icon(Icons.euro),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: formaPago,
+                    dropdownColor: AppTheme.surfaceColor,
+                    style: const TextStyle(color: AppTheme.textPrimary),
+                    items: const [
+                      DropdownMenuItem(value: 'EFECTIVO', child: Text('Efectivo')),
+                      DropdownMenuItem(value: 'TARJETA', child: Text('Tarjeta')),
+                      DropdownMenuItem(value: 'BIZUM', child: Text('Bizum')),
+                      DropdownMenuItem(value: 'CHEQUE', child: Text('Cheque')),
+                    ],
+                    onChanged: saving
+                        ? null
+                        : (value) {
+                            if (value != null) {
+                              setState(() => formaPago = value);
+                            }
+                          },
+                    decoration: const InputDecoration(
+                      labelText: 'Forma de pago',
+                    ),
+                  ),
+                  if (errorText != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      errorText!,
+                      style: const TextStyle(color: AppTheme.error),
+                    ),
+                  ],
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: saving
+                      ? null
+                      : () => Navigator.of(contentContext).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                ElevatedButton.icon(
+                  onPressed: saving ? null : submit,
+                  icon: saving
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.payments),
+                  label: const Text('Abonar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    ).whenComplete(amountController.dispose);
   }
 }
 

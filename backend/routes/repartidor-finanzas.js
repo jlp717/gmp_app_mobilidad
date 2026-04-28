@@ -29,6 +29,12 @@ const paramsSchema = z.object({
   repartidorId: singleCodeSchema,
 });
 
+const codeListSchema = z.string().trim().min(1).max(500).regex(/^[A-Za-z0-9_,-]+$/);
+
+const listParamsSchema = z.object({
+  repartidorId: codeListSchema,
+});
+
 const numericParamsSchema = z.object({
   repartidorId: numericCodeSchema,
 });
@@ -285,7 +291,7 @@ async function invalidateFinanceCaches(repartidorId) {
 
 router.get('/daily-summary/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
   try {
-    const params = paramsSchema.parse(req.params);
+    const params = listParamsSchema.parse(req.params);
     const query = dailySummaryQuerySchema.parse(req.query);
     const result = await financeService.getDailySummary({
       repartidorId: params.repartidorId,
@@ -299,7 +305,7 @@ router.get('/daily-summary/:repartidorId', verifyToken, requireRepartidorAccess(
 
 router.get('/summary/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
   try {
-    const params = paramsSchema.parse(req.params);
+    const params = listParamsSchema.parse(req.params);
     const query = summaryQuerySchema.parse(req.query);
     const result = await financeService.getSummary({
       repartidorId: params.repartidorId,
@@ -314,7 +320,7 @@ router.get('/summary/:repartidorId', verifyToken, requireRepartidorAccess((req) 
 
 router.get('/vencimientos/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
   try {
-    const params = paramsSchema.parse(req.params);
+    const params = listParamsSchema.parse(req.params);
     const query = vencimientosQuerySchema.parse(req.query);
     const vencimientos = await financeService.getVencimientos({
       repartidorId: params.repartidorId,
@@ -510,7 +516,7 @@ router.put('/commissions/tiers', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN
 
 router.get('/commissions/summary/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
   try {
-    const params = paramsSchema.parse(req.params);
+    const params = listParamsSchema.parse(req.params);
     const query = rangeQuerySchema.parse(req.query);
     const summary = await financeService.getCommissionSummary({
       repartidorId: params.repartidorId,

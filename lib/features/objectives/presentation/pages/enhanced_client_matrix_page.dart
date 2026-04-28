@@ -36,9 +36,6 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   String? _error;
   bool _showFilters = false;
 
-  // NEW: Family grouping toggle
-  bool _groupByFamilyEnabled = true;
-  int _groupByFamilyLevel = 1;
   List<Map<String, dynamic>> _productList = [];
   bool _isLoadingProducts = false;
 
@@ -69,8 +66,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   FiFilterState _fiFilters = const FiFilterState();
   FiFilterOptions? _fiOptions;
 
-  // Depth level selector (1-5, default 5 = all levels including products)
-  int _maxDepthLevel = 5;
+  // Grouping depth: 0=sin grupos, 1=FI1 only (default), 2=FI1+FI2, 3=FI1+FI2+FI3, 4=FI1+FI2+FI3+FI4, 5=todos
+  int _maxDepthLevel = 1;
 
   final _codeCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
@@ -466,9 +463,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       if (_showFilters) _buildFilters(),
                       _buildSummaryRow(),
                       _buildMonthlyRow(),
+                      _buildGroupingBar(),
                       // Solo jerarquía FI de 5 niveles
                       Expanded(
-                        child: !_groupByFamilyEnabled
+                        child: _maxDepthLevel == 0
                             ? _buildProductsList()
                             : (_fiHierarchy.isEmpty
                                 ? const Center(
@@ -672,105 +670,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 ],
               ),
             ),
-            const SizedBox(height: 8),
-            // Depth level selector and monthly toggle
-            Row(
-              children: [
-                // Depth selector
-                const Text(
-                  'Niveles: ',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  decoration: BoxDecoration(
-                    color: AppTheme.darkBase,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.grey.shade700),
-                  ),
-                  child: DropdownButton<int>(
-                    value: _maxDepthLevel,
-                    isDense: true,
-                    underline: const SizedBox(),
-                    style: const TextStyle(fontSize: 10, color: Colors.white),
-                    dropdownColor: AppTheme.surfaceColor,
-                    items: const [
-                      DropdownMenuItem(value: 1, child: Text('FI1')),
-                      DropdownMenuItem(value: 2, child: Text('FI1-FI2')),
-                      DropdownMenuItem(value: 3, child: Text('FI1-FI3')),
-                      DropdownMenuItem(value: 4, child: Text('FI1-FI4')),
-                      DropdownMenuItem(
-                        value: 5,
-                        child: Text('Todos (+ Productos)'),
-                      ),
-                    ],
-                    onChanged: (v) => setState(() => _maxDepthLevel = v ?? 5),
-                  ),
-                ),
-                const Spacer(),
-              ],
-            ),
-            const SizedBox(height: 8),
-            // NEW: Family grouping toggle
-            Row(
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    color: _groupByFamilyEnabled ? AppTheme.neonGreen.withValues(alpha: 0.2) : AppTheme.surfaceColor,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: _groupByFamilyEnabled ? AppTheme.neonGreen : Colors.grey.shade700,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Transform.scale(
-                        scale: 0.8,
-                        child: Switch(
-                          value: _groupByFamilyEnabled,
-                          onChanged: (value) {
-                            setState(() {
-                              _groupByFamilyEnabled = value;
-                            });
-                            if (!value) {
-                              _loadProductsView();
-                            }
-                          },
-                          activeColor: AppTheme.neonGreen,
-                        ),
-                      ),
-                      if (_groupByFamilyEnabled)
-                        Container(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: DropdownButton<int>(
-                            value: _groupByFamilyLevel,
-                            underline: const SizedBox(),
-                            isDense: true,
-                            style: const TextStyle(fontSize: 10, color: Colors.white),
-                            dropdownColor: AppTheme.surfaceColor,
-                            items: const [
-                              DropdownMenuItem(value: 1, child: Text('Fam 1')),
-                              DropdownMenuItem(value: 2, child: Text('Fam 1+2')),
-                              DropdownMenuItem(value: 3, child: Text('Fam 1+2+3')),
-                              DropdownMenuItem(value: 13, child: Text('Fam 1+3')),
-                            ],
-                            onChanged: (value) {
-                              if (value != null) {
-                                setState(() {
-                                  _groupByFamilyLevel = value;
-                                });
-                                _loadData();
-                              }
-                            },
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const Spacer(),
-              ],
-            ),
+
             const SizedBox(height: 8),
             // APPLY BUTTON
             Center(
@@ -1077,6 +977,77 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
 
   // ===== FI HIERARCHY WIDGETS (5 niveles) =====
 
+  /// Recursively collects all products from any node in the FI hierarchy.
+  List<Map<String, dynamic>> _collectAllProducts(Map<String, dynamic> node) {
+    final List<Map<String, dynamic>> results = [];
+    final products = node['products'] as List?;
+    if (products != null) {
+      results.addAll(products.map((p) => Map<String, dynamic>.from(p as Map)));
+      return results;
+    }
+    final children = node['children'] as List?;
+    if (children != null) {
+      for (final child in children) {
+        results.addAll(_collectAllProducts(Map<String, dynamic>.from(child as Map)));
+      }
+    }
+    return results;
+  }
+
+  /// Renders a flat column of product tiles from all products in a node's subtree.
+  Widget _buildFlatProductsFromNode(Map<String, dynamic> node) {
+    final allProducts = _collectAllProducts(node);
+    if (allProducts.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.all(8),
+        child: Text('Sin productos', style: TextStyle(color: Colors.grey, fontSize: 11)),
+      );
+    }
+    return Column(children: allProducts.map(_buildFiProduct).toList());
+  }
+
+  /// Always-visible grouping level bar — chip per depth level.
+  Widget _buildGroupingBar() {
+    const labels = ['Sin grupos', 'FI1', 'FI1+2', 'FI1+2+3', 'FI1+2+3+4', 'Todos'];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceColor,
+        border: Border(bottom: BorderSide(color: Colors.grey.withOpacity(0.25))),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            const Text(
+              'Grupos: ',
+              style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+            ),
+            const SizedBox(width: 4),
+            ...List.generate(labels.length, (depth) {
+              return Padding(
+                padding: const EdgeInsets.only(right: 4),
+                child: ChoiceChip(
+                  label: Text(labels[depth], style: const TextStyle(fontSize: 9)),
+                  selected: _maxDepthLevel == depth,
+                  onSelected: (_) {
+                    setState(() => _maxDepthLevel = depth);
+                    if (depth == 0) _loadProductsView();
+                  },
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+                  selectedColor: AppTheme.neonBlue.withOpacity(0.3),
+                  checkmarkColor: AppTheme.neonBlue,
+                ),
+              );
+            }),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildFiHierarchyList() {
     return ListView.builder(
       padding: const EdgeInsets.all(4),
@@ -1108,8 +1079,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final monthlyData = fi1['monthlyData'] as Map<String, dynamic>?;
     final childCount = (fi1['childCount'] as num?)?.toInt() ?? children.length;
 
-    // Hide expand arrow if max depth reached
-    final canExpand = _maxDepthLevel > 1 && children.isNotEmpty;
+    // Always expandable if has children; depth level controls what is shown when expanded
+    final canExpand = children.isNotEmpty;
 
     return Card(
       color: AppTheme.neonPurple.withOpacity(0.08),
@@ -1215,10 +1186,11 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           if (expanded && canExpand)
             Padding(
               padding: const EdgeInsets.only(left: 12, bottom: 4),
-              child: Column(
-                children:
-                    children.map((fi2) => _buildFi2Card(fi2, code)).toList(),
-              ),
+              child: _maxDepthLevel <= 1
+                  ? _buildFlatProductsFromNode(fi1)
+                  : Column(
+                      children: children.map((fi2) => _buildFi2Card(fi2, code)).toList(),
+                    ),
             ),
         ],
       ),
@@ -1248,7 +1220,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final monthlyData = fi2['monthlyData'] as Map<String, dynamic>?;
     final childCount = (fi2['childCount'] as num?)?.toInt() ?? children.length;
 
-    final canExpand = _maxDepthLevel > 2 && children.isNotEmpty;
+    final canExpand = children.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(right: 4, bottom: 4),
@@ -1351,10 +1323,11 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           if (expanded && canExpand)
             Padding(
               padding: const EdgeInsets.only(left: 12, bottom: 4),
-              child: Column(
-                children:
-                    children.map((fi3) => _buildFi3Card(fi3, nodeKey)).toList(),
-              ),
+              child: _maxDepthLevel <= 2
+                  ? _buildFlatProductsFromNode(fi2)
+                  : Column(
+                      children: children.map((fi3) => _buildFi3Card(fi3, nodeKey)).toList(),
+                    ),
             ),
         ],
       ),
@@ -1384,7 +1357,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final monthlyData = fi3['monthlyData'] as Map<String, dynamic>?;
     final childCount = (fi3['childCount'] as num?)?.toInt() ?? children.length;
 
-    final canExpand = _maxDepthLevel > 3 && children.isNotEmpty;
+    final canExpand = children.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(right: 4, bottom: 2),
@@ -1486,10 +1459,11 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           if (expanded && canExpand)
             Padding(
               padding: const EdgeInsets.only(left: 12, bottom: 4),
-              child: Column(
-                children:
-                    children.map((fi4) => _buildFi4Card(fi4, nodeKey)).toList(),
-              ),
+              child: _maxDepthLevel <= 3
+                  ? _buildFlatProductsFromNode(fi3)
+                  : Column(
+                      children: children.map((fi4) => _buildFi4Card(fi4, nodeKey)).toList(),
+                    ),
             ),
         ],
       ),
@@ -1520,7 +1494,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final productCount =
         (fi4['productCount'] as num?)?.toInt() ?? products.length;
 
-    final canExpand = _maxDepthLevel > 4 && products.isNotEmpty;
+    final canExpand = products.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.only(right: 4, bottom: 2),

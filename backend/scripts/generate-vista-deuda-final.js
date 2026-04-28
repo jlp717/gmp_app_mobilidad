@@ -21,13 +21,14 @@ async function getColumns(conn, table) {
   const pool = await odbc.pool(CONN);
   const conn = await pool.connect();
 
-  const [cvcCols, cliCols, clcCols, clixCols, crutCols, vddCols] = await Promise.all([
+  const [cvcCols, cliCols, clcCols, clixCols, crutCols, vddCols, clpCols] = await Promise.all([
     getColumns(conn, 'CVC'),
     getColumns(conn, 'CLI'),
     getColumns(conn, 'CLC'),
     getColumns(conn, 'CLIX'),
     getColumns(conn, 'CRUT'),
     getColumns(conn, 'VDD'),
+    getColumns(conn, 'CLP'),
   ]);
 
   const used = new Set();
@@ -37,9 +38,9 @@ async function getColumns(conn, table) {
   lines.push('-- VISTA DE DEUDA COMPLETA — Esquema JAVIER');
   lines.push('-- Ancla: DSEDAC.CVC (1 fila por registro de deuda/vencimiento)');
   lines.push('-- FILTRO: CVC.IMPORTEPENDIENTE <> 0 AND CVC.ANULADOSN <> \'S\'');
-  lines.push('-- JOINs: DSEDAC.CLI, CLC, CLIX, CRUT, VDD');
+  lines.push('-- JOINs: DSEDAC.CLI, CLC, CLIX, CRUT, CLP, VDD');
   lines.push('-- Tablas FISICAS (PF) — archivos logicos (CLIL1,CLCL1,VDDL1) no sirven en vistas SQL');
-  lines.push('-- Columnas duplicadas: prefijo de tabla origen (CLI_, CLC_, CLIX_, RUT_, VDD_)');
+  lines.push('-- Columnas duplicadas: prefijo de tabla origen (CLI_, CLC_, CLIX_, CLP_, RUT_, VDD_)');
   lines.push('-- CRUT filtrado por SECUENCIA = 1');
   lines.push('-- ID y MARCAACTUALIZACION omitidos');
   lines.push(`-- Generado: ${new Date().toISOString()}`);
@@ -89,14 +90,21 @@ async function getColumns(conn, table) {
     addCol('CLIX', col);
   }
 
-  // 5. CRUT — datos ruta
+  // 5. CLP — limite de riesgo / datos comerciales
+  lines.push('');
+  lines.push('  -- ═══ DSEDAC.CLP (Limite de riesgo / Datos comerciales) ═══');
+  for (const col of clpCols) {
+    addCol('CLP', col);
+  }
+
+  // 6. CRUT — datos ruta
   lines.push('');
   lines.push('  -- ═══ DSEDAC.CRUT (Datos ruta, SECUENCIA=1) ═══');
   for (const col of crutCols) {
     addCol('CRUT', col);
   }
 
-  // 6. VDD — vendedor
+  // 7. VDD — vendedor
   lines.push('');
   lines.push('  -- ═══ DSEDAC.VDD (Vendedor, via CVC.CODIGOVENDEDOR) ═══');
   for (const col of vddCols) {
@@ -115,6 +123,8 @@ async function getColumns(conn, table) {
   lines.push('  ON TRIM(CLC.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)');
   lines.push('LEFT JOIN DSEDAC.CLIX CLIX');
   lines.push('  ON TRIM(CLIX.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)');
+  lines.push('LEFT JOIN DSEDAC.CLP CLP');
+  lines.push('  ON TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)');
   lines.push('LEFT JOIN DSEDAC.CRUT CRUT');
   lines.push('  ON TRIM(CRUT.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)');
   lines.push('  AND CRUT.SECUENCIA = 1');
@@ -137,20 +147,13 @@ async function getColumns(conn, table) {
   console.log(`   SQL:  ${sqlPath}`);
   console.log(`   MD:   ${mdPath}`);
   console.log(`   Columnas totales: ~${totalCols}`);
-  console.log(`   Tablas PF: CVC, CLI, CLC, CLIX, CRUT, VDD`);
+  console.log(`   Tablas PF: CVC, CLI, CLC, CLIX, CRUT, CLP, VDD`);
 
-  // Verificar colisiones resueltas
-  const collisionCols = ['CUENTABANCO', 'CODIGOPAIS', 'IBAN01', 'IBAN02', 'IBAN03', 'IBAN04', 'IBAN05', 'IBAN06',
-    'DIRECCIONBANCO', 'CODIGOPOSTALBANCO', 'SECUENCIACODIGOPOSTALBANCO', 'POBLACIONBANCO', 'PROVINCIABANCO',
-    'CODIGOCLIENTE', 'CODIGOCLIENTEFACTURA', 'CODIGORUTA', 'CODIGOIVA', 'CODIGOVENDEDOR',
-    'OBSERVACIONES', 'CLAVE1', 'CLAVE2'];
-  console.log('\n📋 Colisiones verificadas en SQL:');
-  for (const cc of collisionCols) {
-    const regex = new RegExp(`AS \\w+_${cc}`, 'g');
-    const matches = sql.match(regex);
-    if (matches) {
-      console.log(`   ${cc} → ${matches.join(', ')}`);
-    }
+  // Verificar campos de riesgo
+  console.log('\n📋 Campos de riesgo en la vista:');
+  for (const cc of ['IMPORTELIMITERIESGO', 'PORCENTAJESUPERACIONRIESGO', 'DIASRIESGOSEGURO', 'IMPORTELIMITERIESGOEMPRESA', 'SEGUROCREDITOSN']) {
+    const found = sql.includes(cc);
+    console.log(`   ${cc}: ${found ? '✅' : '❌'}`);
   }
 
   await conn.close();

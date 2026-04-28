@@ -49,6 +49,37 @@ function makeApp() {
 describe('Repartidor finanzas routes', () => {
   let app;
   const originalCleanupFlag = process.env.REPARTIDOR_FINANCE_ENABLE_TEST_CLEANUP;
+  const alignedSchemaRows = [
+    ['REPARTIDOR_COBROS', 'TIPODOCUMENTO'],
+    ['REPARTIDOR_COBROS', 'ORIGENDOCUMENTO'],
+    ['REPARTIDOR_COBROS', 'SUBEMPRESADOCUMENTO'],
+    ['REPARTIDOR_COBROS', 'EJERCICIODOCUMENTO'],
+    ['REPARTIDOR_COBROS', 'SERIEDOCUMENTO'],
+    ['REPARTIDOR_COBROS', 'TERMINALDOCUMENTO'],
+    ['REPARTIDOR_COBROS', 'NUMERODOCUMENTO'],
+    ['REPARTIDOR_COBROS', 'XDEDOCUMENTO'],
+    ['REPARTIDOR_COBROS', 'DEXDOCUMENTO'],
+    ['REPARTIDOR_COBROS', 'CODIGOCLIENTEALBARAN'],
+    ['REPARTIDOR_COBROS', 'CODIGOVENDEDOR'],
+    ['REPARTIDOR_COBROS', 'CODIGOFORMAPAGO'],
+    ['REPARTIDOR_COBROS', 'DIAVENCIMIENTO'],
+    ['REPARTIDOR_COBROS', 'MESVENCIMIENTO'],
+    ['REPARTIDOR_COBROS', 'ANOVENCIMIENTO'],
+    ['REPARTIDOR_COBROS', 'DIACOBRO'],
+    ['REPARTIDOR_COBROS', 'MESCOBRO'],
+    ['REPARTIDOR_COBROS', 'ANOCOBRO'],
+    ['REPARTIDOR_COBROS', 'NUMEROLIQUIDACION'],
+    ['REPARTIDOR_COBROS', 'IMPORTEVENCIMIENTO'],
+    ['REPARTIDOR_COBROS', 'IMPORTEPENDIENTE'],
+    ['REPARTIDOR_COBROS', 'IDEMPOTENCY_TOKEN'],
+    ['REPARTIDOR_COBROS', 'PANTALLA_ORIGEN'],
+    ['REPARTIDOR_COBROS', 'OPERADOR'],
+    ['REPARTIDOR_COBROS', 'CREATED_AT'],
+    ['REPARTIDOR_FINANCIAL_BALANCES', 'CODIGO_REPARTIDOR'],
+    ['REPARTIDOR_FINANCIAL_BALANCES', 'SALDO_PENDIENTE'],
+    ['REPARTIDOR_LIQUIDACION_OPS', 'IDEMPOTENCY_TOKEN'],
+    ['REPARTIDOR_LIQUIDACION_OPS', 'CODIGOVENDEDOR'],
+  ].map(([TABLE_NAME, COLUMN_NAME]) => ({ TABLE_NAME, COLUMN_NAME }));
 
   beforeAll(() => {
     app = makeApp();
@@ -72,7 +103,7 @@ describe('Repartidor finanzas routes', () => {
 
    test('GET /daily-summary uses repartidor cobros and balance to build the liquidation form', async () => {
      mockQueryWithParams
-       .mockResolvedValueOnce([]) // Schema check (ANOCOBRO column)
+       .mockResolvedValueOnce(alignedSchemaRows)
        .mockResolvedValueOnce([{
          TOTAL_EFECTIVO: '222.79',
          TOTAL_CHEQUES: '0',
@@ -110,9 +141,44 @@ describe('Repartidor finanzas routes', () => {
     expect(res.body.summary.saldoActual).toBe(4.81);
     expect(res.body.summary.totalAIngresar).toBe(227.6);
     expect(res.body.cobros[0].documento).toBe('E 2026-B-S-010-000404-01');
-    // First call is schema check ([]), second is the totals query
+    const sqlText = mockQueryWithParams.mock.calls.map(([sql]) => sql).join('\n');
+    expect(sqlText).not.toContain('LIQUIDADO_SN');
+    expect(sqlText).toContain('COALESCE(NUMEROLIQUIDACION, 0) = 0');
+    expect(sqlText).toContain('CODIGO_REPARTIDOR');
+    // First call is schema detection, second is the totals query
     const totalsCall = mockQueryWithParams.mock.calls.find(c => c[1] && c[1][0] === '94');
     expect(totalsCall[1]).toEqual(['94', 20260423]);
+  });
+
+  test('GET /daily-summary aggregates multiple repartidores for jefe view', async () => {
+    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true };
+    mockQueryWithParams
+      .mockResolvedValueOnce(alignedSchemaRows)
+      .mockResolvedValueOnce([{
+        TOTAL_EFECTIVO: '300',
+        TOTAL_CHEQUES: '0',
+        TOTAL_TARJETA: '50',
+        TOTAL_POSTDATADOS: '0',
+        TOTAL_COBROS_DIA: '350',
+        COBROS_COUNT: '3',
+      }])
+      .mockResolvedValueOnce([{ SALDO_PENDIENTE: '25' }])
+      .mockResolvedValueOnce([]);
+
+    const res = await request(app)
+      .get('/finanzas/daily-summary/94,95')
+      .query({ date: '2026-04-23' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.repartidorId).toBe('94,95');
+    expect(res.body.summary.totalCobrosDia).toBe(350);
+    expect(res.body.summary.totalAIngresar).toBe(375);
+
+    const totalsCall = mockQueryWithParams.mock.calls.find(([sql]) =>
+      /SUM\(CASE WHEN UPPER\(TRIM\(CODIGOFORMAPAGO\)\)/i.test(sql)
+    );
+    expect(totalsCall[0]).toContain('TRIM(CODIGOVENDEDOR) IN (?, ?)');
+    expect(totalsCall[1]).toEqual(['94', '95', 20260423]);
   });
 
   test('GET /daily-summary blocks repartidor access to another repartidor', async () => {
@@ -125,7 +191,9 @@ describe('Repartidor finanzas routes', () => {
   });
 
   test('GET /vencimientos builds due dates from CLCL1 credit-day rules', async () => {
-    mockQueryWithParams.mockResolvedValueOnce([{
+    mockQueryWithParams
+      .mockResolvedValueOnce(alignedSchemaRows)
+      .mockResolvedValueOnce([{
       TIPODOCUMENTO: 'CAC',
       ORIGENDOCUMENTO: 'B',
       SUBEMPRESADOCUMENTO: 'GMP',
@@ -170,11 +238,40 @@ describe('Repartidor finanzas routes', () => {
       importePendiente: 40,
     });
 
-    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    const [sql, params] = mockQueryWithParams.mock.calls[1];
     expect(sql).not.toContain('FECHAVENCIMIENTO');
     expect(sql).toContain('CLCL1.DIASLIMITECREDITO');
     expect(sql).toContain('CLCL1.DIASLIMITECREDITOCONFECHAALB');
     expect(params).toEqual(['94', 20251202, 20260828, 1000]);
+  });
+
+  test('GET /commissions/summary uses ERP collected amount and accepts jefe multi-repartidor view', async () => {
+    mockAuthUser = { id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true };
+    mockQueryWithParams
+      .mockResolvedValueOnce(alignedSchemaRows)
+      .mockResolvedValueOnce([{ TOTAL_REPARTIDO: '1000' }])
+      .mockResolvedValueOnce([{ TOTAL_COBRADO: '275' }])
+      .mockResolvedValueOnce([{
+        ID: 1,
+        THRESHOLD_PCT: '20',
+        COMMISSION_PCT: '1',
+        SORT_ORDER: 1,
+      }]);
+
+    const res = await request(app)
+      .get('/finanzas/commissions/summary/94,95')
+      .query({ from: '2026-04-01', to: '2026-04-30' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.deliveredAmount).toBe(1000);
+    expect(res.body.collectedAmount).toBe(275);
+    expect(res.body.collectedPct).toBe(27.5);
+
+    const collectedCall = mockQueryWithParams.mock.calls.find(([sql]) =>
+      /CVC\.IMPORTEPENDIENTE/i.test(sql)
+    );
+    expect(collectedCall[0]).toContain('TRIM(OPP.CODIGOREPARTIDOR) IN (?, ?)');
+    expect(collectedCall[1]).toEqual(['94', '95', 20260401, 20260430]);
   });
 
    test('POST /liquidaciones closes in configured LQD once and replays by idempotency token', async () => {
