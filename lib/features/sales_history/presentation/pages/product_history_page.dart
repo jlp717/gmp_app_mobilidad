@@ -602,7 +602,7 @@ class _ProductThumbnail extends StatelessWidget {
     Navigator.of(context).push(
       PageRouteBuilder(
         opaque: false,
-        barrierColor: Colors.black87,
+        barrierColor: Colors.black54,
         barrierDismissible: true,
         pageBuilder: (ctx, anim, secondAnim) {
           return _FullscreenImageViewer(
@@ -630,36 +630,50 @@ class _FullscreenImageViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const viewerBackground = Color(0xFFF8FAFC);
+    const viewerForeground = Color(0xFF0F172A);
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: viewerBackground,
       appBar: AppBar(
-        backgroundColor: Colors.black,
+        backgroundColor: viewerBackground,
         elevation: 0,
+        iconTheme: const IconThemeData(color: viewerForeground),
         title: Text(
           productName,
-          style: const TextStyle(color: Colors.white70, fontSize: 14),
+          style: const TextStyle(color: viewerForeground, fontSize: 14),
           overflow: TextOverflow.ellipsis,
         ),
         leading: IconButton(
-          icon: const Icon(Icons.close, color: Colors.white),
+          icon: const Icon(Icons.close),
           onPressed: () => Navigator.of(context).pop(),
         ),
       ),
-      body: Center(
-        child: InteractiveViewer(
-          minScale: 0.5,
-          maxScale: 5,
-          child: SmartProductImage(
-            imageUrl: imageUrl,
-            productCode: '',
-            productName: productName,
-            fit: BoxFit.contain,
-            headers: {
-              'Accept': 'image/*',
-              if (ApiClient.dio.options.headers['Authorization'] != null)
-                'Authorization':
-                    ApiClient.dio.options.headers['Authorization'] as String,
-            },
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: ColoredBox(
+              color: Colors.white,
+              child: InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 5,
+                child: SmartProductImage(
+                  imageUrl: imageUrl,
+                  productCode: '',
+                  productName: productName,
+                  fit: BoxFit.contain,
+                  borderRadius: BorderRadius.zero,
+                  headers: {
+                    'Accept': 'image/*',
+                    if (ApiClient.dio.options.headers['Authorization'] != null)
+                      'Authorization': ApiClient
+                          .dio.options.headers['Authorization'] as String,
+                  },
+                ),
+              ),
+            ),
           ),
         ),
       ),

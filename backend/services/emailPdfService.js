@@ -14,6 +14,7 @@
 
 const nodemailer = require('nodemailer');
 const logger = require('../middleware/logger');
+const { smtpLogger, isSmtpDebugEnabled } = require('./smtpLogger');
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // CONFIGURACIÓN SMTP
@@ -40,7 +41,8 @@ const SMTP_CONFIG = {
     tls: {
         rejectUnauthorized: false
     },
-    logger: false
+    logger: smtpLogger,
+    debug: isSmtpDebugEnabled()
 };
 
 // Fallback ports to try when primary fails (in order)

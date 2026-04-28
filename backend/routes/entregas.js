@@ -1333,14 +1333,14 @@ router.post('/receipt/:entregaId', verifyToken, async (req, res) => {
 router.post('/receipt/:entregaId/email', verifyToken, async (req, res) => {
     try {
         const { entregaId } = req.params;
-        const { email, signaturePath, items, clientCode, clientName, albaranNum, facturaNum, fecha, subtotal, iva, total, formaPago, repartidor, ordenPreparacion, firmante, firmanteDni } = req.body;
+        const { email, subject, body, signaturePath, items, clientCode, clientName, albaranNum, facturaNum, fecha, subtotal, iva, total, formaPago, repartidor, ordenPreparacion, firmante, firmanteDni } = req.body;
 
         if (!email) {
             return res.status(400).json({ success: false, error: 'Email is required' });
         }
 
         const { saveReceipt } = require('../app/services/deliveryReceiptService');
-        const { sendDeliveryReceipt } = require('../app/services/emailService');
+        const { sendEmailWithPdf, generateDeliveryEmailHtml } = require('../services/emailPdfService');
 
         // Parse entregaId for DB lookup
         const parts = entregaId.split('-');
@@ -1389,13 +1389,26 @@ router.post('/receipt/:entregaId/email', verifyToken, async (req, res) => {
         }
 
         const receipt = await saveReceipt(deliveryData, fullSignaturePath);
+        const docNum = facturaNum || albaranNum || `${serie}-${terminal}-${numero}`;
+        const pdfFilename = `Nota_Entrega_${String(docNum).replace(/[^\w.-]+/g, '_')}.pdf`;
+        const emailSubject = subject || `Nota de Entrega - Albaran ${docNum}`;
+        const textBody = body || `Adjunto le remitimos la nota de entrega ${docNum}.`;
+        const htmlBody = generateDeliveryEmailHtml({
+            serie: serie || '',
+            numero: terminal !== null && numero !== null ? `${terminal}-${numero}` : docNum,
+            fecha,
+            total: Number(total || 0),
+            clienteNombre: clientName,
+            customBody: body
+        });
 
-        // Send email
-        const emailResult = await sendDeliveryReceipt(email, receipt.buffer, {
-            albaranNum: facturaNum || albaranNum,
-            clientName,
-            total: (total || 0).toFixed(2),
-            fecha
+        const emailResult = await sendEmailWithPdf({
+            to: email,
+            subject: emailSubject,
+            htmlBody,
+            textBody,
+            pdfBuffer: receipt.buffer,
+            pdfFilename
         });
 
         logger.info(`[RECEIPT] Email sent to ${email} for ${entregaId}`);

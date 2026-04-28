@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const logger = require('../middleware/logger');
+const { smtpLogger, isSmtpDebugEnabled } = require('./smtpLogger');
 
 // SMTP Configuration
 const SMTP_CONFIG = {
@@ -16,6 +17,8 @@ const SMTP_CONFIG = {
     tls: {
         rejectUnauthorized: false
     },
+    logger: smtpLogger,
+    debug: isSmtpDebugEnabled(),
     pool: true,
     maxConnections: 5,
     maxMessages: 100

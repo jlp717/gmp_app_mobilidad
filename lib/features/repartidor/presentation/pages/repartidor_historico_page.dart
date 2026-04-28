@@ -2254,8 +2254,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                       Expanded(
                         child: Container(
                           decoration: BoxDecoration(
-                            // Use dark background so both white (legacy) and black (new) signatures are visible
-                            color: const Color(0xFF2A2D35),
+                            color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
                                 color: AppTheme.neonPurple.withOpacity(0.3),),

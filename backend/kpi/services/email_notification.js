@@ -3,6 +3,7 @@
 
 const nodemailer = require('nodemailer');
 const logger = require('../../middleware/logger');
+const { smtpLogger, isSmtpDebugEnabled } = require('../../services/smtpLogger');
 
 const SMTP_CONFIG = {
   host: process.env.SMTP_HOST,
@@ -16,6 +17,8 @@ const SMTP_CONFIG = {
   greetingTimeout: 8000,
   socketTimeout: 15000,
   tls: { rejectUnauthorized: false, minVersion: 'TLSv1.2' },
+  logger: smtpLogger,
+  debug: isSmtpDebugEnabled(),
 };
 
 const FROM_EMAIL = process.env.SMTP_FROM || 'noreply@mari-pepa.com';
