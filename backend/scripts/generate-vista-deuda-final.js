@@ -112,9 +112,20 @@ async function getColumns(conn, table) {
     used.add(col.COLUMN_NAME);
   }
 
-  // 2. CPC
+  // 2. CPC - renombrar con prefijo ALBARAN_ para claridad
   for (const col of cpcUseful) {
-    addCol('CPC', col);
+    const name = col.COLUMN_NAME;
+    if (name === 'SUBEMPRESAPEDIDO' || name === 'EJERCICIOPEDIDO' || name === 'SERIEPEDIDO' || name === 'TERMINALPEDIDO' || name === 'NUMEROPEDIDO' ||
+        name === 'SUBEMPRESAALBARAN' || name === 'EJERCICIOALBARAN' || name === 'SERIEALBARAN' || name === 'TERMINALALBARAN' || name === 'NUMEROALBARAN') {
+      // Claves de join, mantener nombre original para claridad del JOIN
+      lines.push(`  CPC.${name},`);
+    } else if (used.has(name)) {
+      lines.push(`  CPC.${name} AS ALBARAN_${name},`);
+      used.add(`ALBARAN_${name}`);
+    } else {
+      lines.push(`  CPC.${name} AS ALBARAN_${name},`);
+      used.add(`ALBARAN_${name}`);
+    }
   }
 
   // 3. CLI
