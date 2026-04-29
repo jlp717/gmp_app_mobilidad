@@ -1,22 +1,14 @@
 ```sql
--- VISTA DEUDA COMPLETA — JAVIER
--- CVC + CPC + CLI + CLC + CLP | Filtro: pendiente<>0, no anulado, emision>=2003
---
--- NOTAS DE RELACIONES:
---   CVC  → tabla principal de cobros/vencimientos
---   CPC  → cabecera pedidos; join por serie+terminal+número del albarán asociado al documento CVC.
---          Para TIPODOCUMENTO='COB' (cobro agrupado), CPC será NULL porque el número
---          de cobro no coincide con un número de albarán. Solo habrá datos CPC cuando
---          el documento CVC sea directamente un albarán/factura unitaria.
---   CLI  → datos del cliente; NULL para filas PAG (proveedores, código 4100...).
---   CLC  → configuración comercial del cliente; NULL para filas PAG.
---   CLP  → política de precios/vendedores del cliente; NULL para filas PAG.
---
--- CAMPOS HABITUALMENTE VACÍOS EN CVC (por tipo de documento):
---   CLAUSULASBANCO..PROVINCIABANCO  → solo para remesas domiciliadas
---   EMPRESACONTABLE, EMPRESACONTABLE2 → integración contable opcional
---   CODIGOCLIENTECADENA             → solo si el cliente pertenece a una cadena
---   CUENTAPAGO..CUENTAEFECTOSDESCONTADOS → solo en operativa especial
+-- ============================================================================
+-- VISTA DE DEUDA BASE — JAVIER
+-- Ancla: DSEDAC.CVC (1 fila = 1 vencimiento/documento de deuda)
+-- JOINs: CPC (albarán), CLI (cliente), CLC (crédito), CLP (riesgo)
+-- FILTRO: IMPORTEPENDIENTE <> 0, no anulado, emision >= 01/01/2003
+-- FECHA_DOCUMENTO: COALESCE(CPC.fecha_albaran, CVC.fecha_emision)
+-- ORIGEN_FECHA: indica si la fecha viene de albarán o de emisión
+-- NOTA: CPC vacío para TIPODOCUMENTO IN (COB, PGC, PAG, CNP) = no son albaranes
+-- ============================================================================
+
 CREATE VIEW JAVIER.VISTA_DEUDA_BASE AS
 SELECT
   CVC.TIPODOCUMENTO,
@@ -158,6 +150,19 @@ SELECT
   CPC.TERMINALPROYECTO,
   CPC.NUMEROPROYECTO,
   CPC.NUMEROBULTOS,
+
+  -- ═══ COLUMNAS CALCULADAS (fecha unificada + origen) ═══
+  COALESCE(CPC.DIADOCUMENTO, CVC.DIAEMISION) AS FECHA_DOC_DIA,
+  COALESCE(CPC.MESDOCUMENTO, CVC.MESEMISION) AS FECHA_DOC_MES,
+  COALESCE(CPC.ANODOCUMENTO, CVC.ANOEMISION) AS FECHA_DOC_ANO,
+  CASE
+    WHEN CPC.DIADOCUMENTO IS NOT NULL THEN 'ALBARAN'
+    ELSE 'EMISION_CVC'
+  END AS ORIGEN_FECHA_DOC,
+  CASE
+    WHEN CPC.DIADOCUMENTO IS NOT NULL THEN 'Fecha del albarán (CPC)'
+    ELSE 'Fecha de emisión del documento de deuda (CVC). No es albarán.'
+  END AS ORIGEN_FECHA_DOC_DESC,
   CLI.CODIGOCLIENTE,
   CLI.NOMBRECLIENTE,
   CLI.DIRECCION,
@@ -306,18 +311,18 @@ SELECT
   CLP.IMPORTELIMITERIESGOEMPRESA,
   CLP.DIAVENCIMIENTOSEGURO,
   CLP.MESVENCIMIENTOSEGURO,
-  CLP.ANOVENCIMIENTOSEGURO
-  -- CLP.PORCENTAJECOMISION eliminado: no existe en la tabla CLP real (no aparece en output)
+  CLP.ANOVENCIMIENTOSEGURO,
+  CLP.PORCENTAJECOMISION
 FROM DSEDAC.CVC CVC
 LEFT JOIN DSEDAC.CPC CPC
-  -- JOIN por albaran: serie/terminal/número del documento CVC vs albaran en CPC.
-  -- TRIM en campos char para evitar mismatch por espacios en DB2.
-  -- Resultado NULL para TIPODOCUMENTO='COB'/'PAG' cuando el nº cobro ≠ nº albarán.
-  ON CVC.SUBEMPRESADOCUMENTO    = CPC.SUBEMPRESAALBARAN
-  AND CVC.EJERCICIODOCUMENTO    = CPC.EJERCICIOALBARAN
-  AND TRIM(CVC.SERIEDOCUMENTO)  = TRIM(CPC.SERIEALBARAN)
-  AND CVC.TERMINALDOCUMENTO     = CPC.TERMINALALBARAN
-  AND CVC.NUMERODOCUMENTO       = CPC.NUMEROALBARAN
+  ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
+  AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
+  AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
+  AND CVC.TERMINALDOCUMENTO = CPC.TERMINALALBARAN
+  AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
+  AND TRIM(CPC.SUBEMPRESAALBARAN) <> ''
+  AND CPC.NUMEROALBARAN <> 0
+  AND CPC.NUMEROALBARAN <> 999999
 LEFT JOIN DSEDAC.CLI CLI
   ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
 LEFT JOIN DSEDAC.CLC CLC
@@ -325,6 +330,6 @@ LEFT JOIN DSEDAC.CLC CLC
 LEFT JOIN DSEDAC.CLP CLP
   ON TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
 WHERE CVC.IMPORTEPENDIENTE <> 0
-  AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')  -- NULL-safe: en DB2, NULL <> 'S' = UNKNOWN (falla silencioso)
+  AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
   AND (CVC.ANOEMISION * 10000 + CVC.MESEMISION * 100 + CVC.DIAEMISION) >= 20030101;
 ```
