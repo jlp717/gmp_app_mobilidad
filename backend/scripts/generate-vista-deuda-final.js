@@ -20,39 +20,30 @@ async function getColumns(conn, table) {
 (async () => {
   const pool = await odbc.pool(CONN);
   const conn = await pool.connect();
+  console.log('✅ Conectado\n');
 
-  const [cvcCols, cliCols, clcCols, clixCols, crutCols, vddCols, clpCols] = await Promise.all([
+  const [cvcCols, cpcCols, cliCols, clcCols, clpCols] = await Promise.all([
     getColumns(conn, 'CVC'),
+    getColumns(conn, 'CPC'),
     getColumns(conn, 'CLI'),
     getColumns(conn, 'CLC'),
-    getColumns(conn, 'CLIX'),
-    getColumns(conn, 'CRUT'),
-    getColumns(conn, 'VDD'),
     getColumns(conn, 'CLP'),
   ]);
 
+  console.log(`CVC:${cvcCols.length} CPC:${cpcCols.length} CLI:${cliCols.length} CLC:${clcCols.length} CLP:${clpCols.length}`);
+
+  // ===== VISTA DEUDA COMPLETA (con CPC para DIADOCUMENTO/MESDOCUMENTO) =====
   const used = new Set();
   const lines = [];
 
-  lines.push('-- ============================================================================');
-  lines.push('-- VISTA DE DEUDA COMPLETA — Esquema JAVIER');
-  lines.push('-- Ancla: DSEDAC.CVC (1 fila por registro de deuda/vencimiento)');
-  lines.push('-- FILTRO: CVC.IMPORTEPENDIENTE <> 0 AND CVC.ANULADOSN <> \'S\'');
-  lines.push('-- JOINs: DSEDAC.CLI, CLC, CLIX, CRUT, CLP, VDD');
-  lines.push('-- Tablas FISICAS (PF) — archivos logicos (CLIL1,CLCL1,VDDL1) no sirven en vistas SQL');
-  lines.push('-- Columnas duplicadas: prefijo de tabla origen (CLI_, CLC_, CLIX_, CLP_, RUT_, VDD_)');
-  lines.push('-- CRUT filtrado por SECUENCIA = 1');
-  lines.push('-- ID y MARCAACTUALIZACION omitidos');
-  lines.push(`-- Generado: ${new Date().toISOString()}`);
-  lines.push('-- ============================================================================');
-  lines.push('');
-  lines.push('CREATE VIEW JAVIER.VISTA_DEUDA_COMPLETA AS');
+  lines.push('-- VISTA DEUDA COMPLETA — JAVIER');
+  lines.push('-- CVC + CPC + CLI + CLC + CLP | Filtro: pendiente<>0, no anulado, emision>=2003');
+  lines.push('CREATE VIEW JAVIER.VISTA_DEUDA_BASE AS');
   lines.push('SELECT');
 
-  function addCol(alias, col, forcePrefix = false) {
+  function addCol(alias, col) {
     const name = col.COLUMN_NAME;
-    const needsPrefix = forcePrefix || used.has(name);
-    if (needsPrefix) {
+    if (used.has(name)) {
       lines.push(`  ${alias}.${name} AS ${alias}_${name},`);
       used.add(`${alias}_${name}`);
     } else {
@@ -61,100 +52,79 @@ async function getColumns(conn, table) {
     }
   }
 
-  // 1. CVC — ancla
-  lines.push('');
-  lines.push('  -- ═══ DSEDAC.CVC (ANCLA: Deuda / Vencimientos) ═══');
+  // 1. CVC
   for (const col of cvcCols) {
     lines.push(`  CVC.${col.COLUMN_NAME},`);
     used.add(col.COLUMN_NAME);
   }
 
-  // 2. CLI — cliente maestro
-  lines.push('');
-  lines.push('  -- ═══ DSEDAC.CLI (Cliente maestro) ═══');
+  // 2. CPC — solo columnas útiles (no todas para mantener < 10000 bytes)
+  const cpcUseful = cpcCols.filter(c => {
+    const n = c.COLUMN_NAME;
+    return n.includes('DIADOC') || n.includes('MESDOC') || n.includes('ANODOC') ||
+           n.includes('HORADOC') || n.includes('CODIGOCL') || n.includes('ALBARAN') ||
+           n.includes('SITUACION') || n.includes('SUBEMPRESA') || n.includes('EJERCICIO') ||
+           n.includes('SERIE') || n.includes('TERMINAL') || n.includes('NUMERO') ||
+           n.includes('IMPORTETOTAL') || n.includes('PEDIDO') || n.includes('BULTO');
+  });
+  for (const col of cpcUseful) {
+    addCol('CPC', col);
+  }
+
+  // 3. CLI
   for (const col of cliCols) {
     addCol('CLI', col);
   }
 
-  // 3. CLC — condiciones de crédito
-  lines.push('');
-  lines.push('  -- ═══ DSEDAC.CLC (Condiciones de crédito) ═══');
+  // 4. CLC
   for (const col of clcCols) {
     addCol('CLC', col);
   }
 
-  // 4. CLIX — extensión
-  lines.push('');
-  lines.push('  -- ═══ DSEDAC.CLIX (Extensión cliente) ═══');
-  for (const col of clixCols) {
-    addCol('CLIX', col);
-  }
-
-  // 5. CLP — limite de riesgo / datos comerciales
-  lines.push('');
-  lines.push('  -- ═══ DSEDAC.CLP (Limite de riesgo / Datos comerciales) ═══');
+  // 5. CLP
   for (const col of clpCols) {
     addCol('CLP', col);
-  }
-
-  // 6. CRUT — datos ruta
-  lines.push('');
-  lines.push('  -- ═══ DSEDAC.CRUT (Datos ruta, SECUENCIA=1) ═══');
-  for (const col of crutCols) {
-    addCol('CRUT', col);
-  }
-
-  // 7. VDD — vendedor
-  lines.push('');
-  lines.push('  -- ═══ DSEDAC.VDD (Vendedor, via CVC.CODIGOVENDEDOR) ═══');
-  for (const col of vddCols) {
-    addCol('VDD', col);
   }
 
   // Quitar última coma
   const lastIdx = lines.length - 1;
   lines[lastIdx] = lines[lastIdx].replace(/,$/, '');
 
-  // FROM + JOINs
+  // JOIN: CVC → CPC por albarán (como en producción)
   lines.push('FROM DSEDAC.CVC CVC');
+  lines.push('LEFT JOIN DSEDAC.CPC CPC');
+  lines.push('  ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN');
+  lines.push('  AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN');
+  lines.push('  AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN');
+  lines.push('  AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN');
   lines.push('LEFT JOIN DSEDAC.CLI CLI');
   lines.push('  ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)');
   lines.push('LEFT JOIN DSEDAC.CLC CLC');
   lines.push('  ON TRIM(CLC.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)');
-  lines.push('LEFT JOIN DSEDAC.CLIX CLIX');
-  lines.push('  ON TRIM(CLIX.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)');
   lines.push('LEFT JOIN DSEDAC.CLP CLP');
   lines.push('  ON TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)');
-  lines.push('LEFT JOIN DSEDAC.CRUT CRUT');
-  lines.push('  ON TRIM(CRUT.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)');
-  lines.push('  AND CRUT.SECUENCIA = 1');
-  lines.push('LEFT JOIN DSEDAC.VDD VDD');
-  lines.push('  ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(CVC.CODIGOVENDEDOR)');
   lines.push('WHERE CVC.IMPORTEPENDIENTE <> 0');
-  lines.push('  AND CVC.ANULADOSN <> \'S\';');
+  lines.push('  AND CVC.ANULADOSN <> \'S\'');
+  lines.push('  AND (CVC.ANOEMISION * 10000 + CVC.MESEMISION * 100 + CVC.DIAEMISION) >= 20030101;');
 
   const sql = lines.join('\n');
+  const bytes = Buffer.byteLength(sql, 'utf8');
+  const colCount = (sql.match(/,/g) || []).length;
 
-  const sqlPath = path.resolve(__dirname, 'sql', 'vista_deuda_completa.sql');
+  console.log(`\n📊 VISTA_DEUDA_COMPLETA:`);
+  console.log(`   Columnas: ~${colCount}`);
+  console.log(`   Bytes: ${bytes}`);
+  console.log(`   ${bytes < 10000 ? '✅ Cabe en catálogo' : '⚠️ Supera 10000 bytes'}`);
+
+  // Verificar DIADOCUMENTO/MESDOCUMENTO
+  console.log(`\n📋 DIADOCUMENTO: ${sql.includes('DIADOCUMENTO') ? '✅' : '❌'}`);
+  console.log(`📋 MESDOCUMENTO: ${sql.includes('MESDOCUMENTO') ? '✅' : '❌'}`);
+  console.log(`📋 ANODOCUMENTO: ${sql.includes('ANODOCUMENTO') ? '✅' : '❌'}`);
+
+  // Guardar
   const mdPath = path.resolve(__dirname, '..', '..', 'VISTA_DEUDA_COMPLETA.md');
-
-  fs.mkdirSync(path.dirname(sqlPath), { recursive: true });
-  fs.writeFileSync(sqlPath, sql);
   fs.writeFileSync(mdPath, '```sql\n' + sql + '\n```\n');
-
-  const totalCols = (sql.match(/,/g) || []).length;
-  console.log(`✅ Vista generada:`);
-  console.log(`   SQL:  ${sqlPath}`);
-  console.log(`   MD:   ${mdPath}`);
-  console.log(`   Columnas totales: ~${totalCols}`);
-  console.log(`   Tablas PF: CVC, CLI, CLC, CLIX, CRUT, CLP, VDD`);
-
-  // Verificar campos de riesgo
-  console.log('\n📋 Campos de riesgo en la vista:');
-  for (const cc of ['IMPORTELIMITERIESGO', 'PORCENTAJESUPERACIONRIESGO', 'DIASRIESGOSEGURO', 'IMPORTELIMITERIESGOEMPRESA', 'SEGUROCREDITOSN']) {
-    const found = sql.includes(cc);
-    console.log(`   ${cc}: ${found ? '✅' : '❌'}`);
-  }
+  console.log(`\n📄 Guardado: ${mdPath}`);
 
   await conn.close();
   await pool.close();
