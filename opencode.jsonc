@@ -1,0 +1,12 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "flutter-architect": { "model": "opencode-go/glm-5.1" },
+    "flutter-ui-dev": { "model": "opencode-go/kimi-k2.6" },
+    "flutter-state-dev": { "model": "opencode-go/kimi-k2.6" },
+    "flutter-api-dev": { "model": "opencode-go/qwen3.6-plus" },
+    "flutter-test-dev": { "model": "opencode-go/qwen3.6-plus" },
+    "nodejs-dev": { "model": "opencode-go/kimi-k2.6" },
+    "db2-specialist": { "model": "opencode-go/glm-5.1" }
+  }
+}
