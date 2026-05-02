@@ -1,0 +1,16 @@
+// GMP APP MOBILIDAD — OpenCode project config
+// Stack: Flutter 3 + Riverpod 2.5 + Dio + Material 3 + GetIt/Injectable + Freezed
+// Backend: Node.js + IBM DB2 — NO TOCAR
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode-go/glm-5.1",
+  "default_agent": "flutter-architect",
+  "instructions": ["./.opencode/AGENTS.md"],
+  "mcp": {
+    "context7": { "enabled": true },
+    "git": { "enabled": true },
+    "sequential-thinking": { "enabled": true },
+    "memory": { "enabled": true },
+    "fetch": { "enabled": true }
+  }
+}
