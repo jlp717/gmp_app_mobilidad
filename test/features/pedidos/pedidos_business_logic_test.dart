@@ -59,4 +59,27 @@ void main() {
       expect(product.minimumPriceForUnit('KILOGRAMOS'), 2);
     });
   });
+
+  group('Order delivery options', () {
+    test('parses delivery date, allowed days and truck suggestion', () {
+      final options = OrderDeliveryOptions.fromJson({
+        'clientCode': '4300010363',
+        'vendedorCode': '57',
+        'allowedDeliveryDays': ['martes', 'jueves'],
+        'selectedDeliveryDate': '2026-05-05',
+        'selectedDeliveryDateFormatted': '05/05/2026',
+        'vehicleCode': '11',
+        'driverCode': '57',
+        'vehicleMatricula': '0883HFF',
+        'routeCode': 'R1',
+        'validated': true,
+      });
+
+      expect(options.deliveryLabel, '05/05/2026');
+      expect(options.allowedDeliveryDays, ['martes', 'jueves']);
+      expect(options.truckLabel, '11 - 0883HFF - Rep. 57');
+      expect(options.hasTruck, true);
+      expect(options.validated, true);
+    });
+  });
 }

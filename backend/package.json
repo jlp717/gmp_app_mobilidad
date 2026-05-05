@@ -31,6 +31,8 @@
     "cache:cleanup": "node scripts/cache-cleanup.js",
     "finance:cleanup": "node scripts/cleanup-repartidor-finance-test-data.js",
     "finance:inventory-db": "node scripts/repartidor_finance_db_inventory.js",
+    "pedidos:inventory-reparto": "node scripts/truck_route_driver_inventory.js",
+    "pedidos:inventory-system": "node scripts/pedidos_system_inventory.js",
     "finance:verify-schema": "node scripts/verify-repartidor-finance-schema.js",
     "flutter:test": "node scripts/flutterTestRunner.js"
   },

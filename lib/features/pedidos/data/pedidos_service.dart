@@ -12,7 +12,6 @@ import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 
 /// Product in catalog list
 class Product {
-
   Product({
     required this.code,
     required this.name,
@@ -506,7 +505,6 @@ class Product {
 
 /// Tariff entry for product detail
 class TariffEntry {
-
   TariffEntry({
     required this.code,
     required this.description,
@@ -530,12 +528,12 @@ class TariffEntry {
 
 /// Stock entry per warehouse
 class StockEntry {
-
-  StockEntry(
-      {required this.almacenCode,
-      required this.almacenName,
-      required this.envases,
-      required this.unidades,});
+  StockEntry({
+    required this.almacenCode,
+    required this.almacenName,
+    required this.envases,
+    required this.unidades,
+  });
 
   factory StockEntry.fromJson(Map<String, dynamic> json) {
     final code = json['almacenCode'] ?? json['almacen'];
@@ -555,7 +553,6 @@ class StockEntry {
 
 /// Promotion item from backend
 class PromotionItem {
-
   PromotionItem({
     required this.code,
     required this.name,
@@ -639,7 +636,6 @@ class PromotionItem {
 
 /// Full product detail
 class ProductDetail {
-
   ProductDetail({
     required this.product,
     required this.tariffs,
@@ -681,10 +677,13 @@ class ProductDetail {
 }
 
 /// Order line (for cart and saved orders)
-class OrderLine { // 'VT' = Venta, 'SC' = Sin Cargo
+class OrderLine {
+  // 'VT' = Venta, 'SC' = Sin Cargo
 
   OrderLine({
-    required this.codigoArticulo, required this.descripcion, this.id,
+    required this.codigoArticulo,
+    required this.descripcion,
+    this.id,
     this.cantidadEnvases = 0,
     this.cantidadUnidades = 0,
     this.unidadMedida = 'CAJAS',
@@ -730,8 +729,10 @@ class OrderLine { // 'VT' = Venta, 'SC' = Sin Cargo
       importeMargen: _toDouble(json['importeMargen'] ?? json['IMPORTEMARGEN']),
       porcentajeMargen:
           _toDouble(json['porcentajeMargen'] ?? json['PORCENTAJEMARGEN']),
-      ivaRate: _toDouble(json['ivaRate'] ?? json['IVARATE'] ?? json['TIPOIVA'],
-          fallback: 0.21,),
+      ivaRate: _toDouble(
+        json['ivaRate'] ?? json['IVARATE'] ?? json['TIPOIVA'],
+        fallback: 0.21,
+      ),
       unidadesFraccion:
           _toDouble(json['unidadesFraccion'] ?? json['UNIDADESFRACCION']),
       claseLinea:
@@ -827,14 +828,14 @@ class OrderLine { // 'VT' = Venta, 'SC' = Sin Cargo
         double.parse((importeVenta - importeCosto).toStringAsFixed(2));
     porcentajeMargen = importeVenta > 0
         ? double.parse(
-            ((importeMargen / importeVenta) * 100).toStringAsFixed(2),)
+            ((importeMargen / importeVenta) * 100).toStringAsFixed(2),
+          )
         : 0;
   }
 }
 
 /// Order summary (list item)
 class OrderSummary {
-
   OrderSummary({
     required this.id,
     required this.numeroPedido,
@@ -858,6 +859,13 @@ class OrderSummary {
     this.tarifa = 1,
     this.formaPago = '02',
     this.origen = 'A',
+    this.fechaReparto = '',
+    this.fechaRepartoFormatted = '',
+    this.repartidorCode = '',
+    this.vehicleCode = '',
+    this.ruta = '',
+    this.diasReparto = '',
+    this.repartoValidado = false,
   });
 
   factory OrderSummary.fromJson(Map<String, dynamic> json) {
@@ -884,6 +892,15 @@ class OrderSummary {
       tarifa: _toInt(json['tarifa']),
       formaPago: (json['formaPago'] ?? '02').toString().trim(),
       origen: (json['origen'] ?? 'A').toString().trim(),
+      fechaReparto: (json['fechaReparto'] ?? '').toString().trim(),
+      fechaRepartoFormatted:
+          (json['fechaRepartoFormatted'] ?? '').toString().trim(),
+      repartidorCode: (json['repartidorCode'] ?? '').toString().trim(),
+      vehicleCode: (json['vehicleCode'] ?? '').toString().trim(),
+      ruta: (json['ruta'] ?? '').toString().trim(),
+      diasReparto: (json['diasReparto'] ?? '').toString().trim(),
+      repartoValidado: json['repartoValidado'] == true ||
+          json['repartoValidado'].toString().toUpperCase() == 'S',
     );
   }
   final int id;
@@ -909,11 +926,108 @@ class OrderSummary {
   final int tarifa;
   final String formaPago;
   final String origen;
+  final String fechaReparto;
+  final String fechaRepartoFormatted;
+  final String repartidorCode;
+  final String vehicleCode;
+  final String ruta;
+  final String diasReparto;
+  final bool repartoValidado;
+}
+
+/// Delivery date + provisional truck options before confirming an order.
+class OrderDeliveryOptions {
+  OrderDeliveryOptions({
+    required this.clientCode,
+    required this.vendedorCode,
+    this.allowedDeliveryDays = const [],
+    this.allowedDeliveryDaysShort = '',
+    this.suggestedDeliveryDate = '',
+    this.suggestedDeliveryDateFormatted = '',
+    this.selectedDeliveryDate = '',
+    this.selectedDeliveryDateFormatted = '',
+    this.vehicleCode = '',
+    this.driverCode = '',
+    this.vehicleMatricula = '',
+    this.vehicleDescription = '',
+    this.truckConfidence = '',
+    this.truckSource = '',
+    this.routeCode = '',
+    this.validated = false,
+  });
+
+  factory OrderDeliveryOptions.fromJson(Map<String, dynamic> json) {
+    final daysRaw = json['allowedDeliveryDays'];
+    final days = daysRaw is List
+        ? daysRaw
+            .map((d) => d.toString().trim())
+            .where((d) => d.isNotEmpty)
+            .toList()
+        : <String>[];
+    return OrderDeliveryOptions(
+      clientCode: (json['clientCode'] ?? '').toString().trim(),
+      vendedorCode: (json['vendedorCode'] ?? '').toString().trim(),
+      allowedDeliveryDays: days,
+      allowedDeliveryDaysShort:
+          (json['allowedDeliveryDaysShort'] ?? '').toString().trim(),
+      suggestedDeliveryDate:
+          (json['suggestedDeliveryDate'] ?? '').toString().trim(),
+      suggestedDeliveryDateFormatted:
+          (json['suggestedDeliveryDateFormatted'] ?? '').toString().trim(),
+      selectedDeliveryDate:
+          (json['selectedDeliveryDate'] ?? '').toString().trim(),
+      selectedDeliveryDateFormatted:
+          (json['selectedDeliveryDateFormatted'] ?? '').toString().trim(),
+      vehicleCode: (json['vehicleCode'] ?? '').toString().trim(),
+      driverCode: (json['driverCode'] ?? '').toString().trim(),
+      vehicleMatricula: (json['vehicleMatricula'] ?? '').toString().trim(),
+      vehicleDescription: (json['vehicleDescription'] ?? '').toString().trim(),
+      truckConfidence: (json['truckConfidence'] ?? '').toString().trim(),
+      truckSource: (json['truckSource'] ?? '').toString().trim(),
+      routeCode: (json['routeCode'] ?? '').toString().trim(),
+      validated: json['validated'] == true ||
+          json['validated'].toString().toUpperCase() == 'S',
+    );
+  }
+
+  final String clientCode;
+  final String vendedorCode;
+  final List<String> allowedDeliveryDays;
+  final String allowedDeliveryDaysShort;
+  final String suggestedDeliveryDate;
+  final String suggestedDeliveryDateFormatted;
+  final String selectedDeliveryDate;
+  final String selectedDeliveryDateFormatted;
+  final String vehicleCode;
+  final String driverCode;
+  final String vehicleMatricula;
+  final String vehicleDescription;
+  final String truckConfidence;
+  final String truckSource;
+  final String routeCode;
+  final bool validated;
+
+  bool get hasTruck => vehicleCode.isNotEmpty || driverCode.isNotEmpty;
+
+  String get deliveryLabel {
+    if (selectedDeliveryDateFormatted.isNotEmpty) {
+      return selectedDeliveryDateFormatted;
+    }
+    return suggestedDeliveryDateFormatted;
+  }
+
+  String get truckLabel {
+    final parts = [
+      if (vehicleCode.isNotEmpty) vehicleCode,
+      if (vehicleMatricula.isNotEmpty) vehicleMatricula,
+      if (driverCode.isNotEmpty) 'Rep. $driverCode',
+    ];
+    return parts.isEmpty ? 'Sin camion sugerido' : parts.join(' - ');
+  }
 }
 
 /// Order statistics
 class OrderStats {
-
   OrderStats({
     required this.totalOrders,
     required this.totalAmount,
@@ -940,7 +1054,9 @@ class OrderStats {
       avgTicket: _toDouble(json['avgTicket']),
       byStatus: (json['byStatus'] as Map? ?? {}).map(
         (k, v) => MapEntry(
-            k.toString(), v is int ? v : int.tryParse(v.toString()) ?? 0,),
+          k.toString(),
+          v is int ? v : int.tryParse(v.toString()) ?? 0,
+        ),
       ),
       dailyTrend: (json['dailyTrend'] as List? ?? [])
           .map((e) => Map<String, dynamic>.from(e as Map<dynamic, dynamic>))
@@ -967,7 +1083,6 @@ class OrderStats {
 
 /// Order detail (header + lines)
 class OrderDetail {
-
   OrderDetail({required this.header, required this.lines});
 
   factory OrderDetail.fromJson(Map<String, dynamic> json) {
@@ -985,7 +1100,6 @@ class OrderDetail {
 
 /// Recommendation item
 class Recommendation {
-
   Recommendation({
     required this.code,
     required this.name,
@@ -1020,7 +1134,8 @@ class PedidosService {
   static const _base = '/pedidos';
 
   static Map<String, dynamic> _normalizeOrderResponse(
-      Map<String, dynamic> response,) {
+    Map<String, dynamic> response,
+  ) {
     final normalized = Map<String, dynamic>.from(response);
     final orderRaw = response['order'];
     final order = orderRaw is Map ? Map<String, dynamic>.from(orderRaw) : null;
@@ -1079,8 +1194,10 @@ class PedidosService {
     }
   }
 
-  static Future<ProductDetail> getProductDetail(String code,
-      {String? clientCode,}) async {
+  static Future<ProductDetail> getProductDetail(
+    String code, {
+    String? clientCode,
+  }) async {
     final trimmedCode = code.trim();
     if (trimmedCode.isEmpty) {
       throw Exception('Product code is required');
@@ -1160,7 +1277,8 @@ class PedidosService {
     required String clientCode,
     required String clientName,
     required String vendedorCode,
-    required List<OrderLine> lines, String tipoVenta = 'CC',
+    required List<OrderLine> lines,
+    String tipoVenta = 'CC',
     int almacen = 1,
     int tarifa = 1,
     String observaciones = '',
@@ -1262,6 +1380,35 @@ class PedidosService {
     }
   }
 
+  static Future<OrderDeliveryOptions> getDeliveryOptions({
+    required String clientCode,
+    required String vendedorCode,
+    String? deliveryDate,
+  }) async {
+    try {
+      final params = <String, dynamic>{
+        'clientCode': clientCode,
+        'vendedorCode': vendedorCode,
+      };
+      if (deliveryDate != null && deliveryDate.trim().isNotEmpty) {
+        params['deliveryDate'] = deliveryDate.trim();
+      }
+      final response = await ApiClient.get(
+        '$_base/delivery-options',
+        queryParameters: params,
+        cacheKey:
+            'pedidos:delivery:$clientCode:$vendedorCode:${deliveryDate ?? ''}',
+        cacheTTL: const Duration(minutes: 2),
+        forceRefresh: deliveryDate != null,
+      );
+      final raw = response['options'] as Map? ?? {};
+      return OrderDeliveryOptions.fromJson(Map<String, dynamic>.from(raw));
+    } catch (e) {
+      debugPrint('[PedidosService] Error getDeliveryOptions: $e');
+      rethrow;
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> getOrderAlbaran(int orderId) async {
     try {
       final response = await ApiClient.get('$_base/$orderId/albaran');
@@ -1300,7 +1447,10 @@ class PedidosService {
   }
 
   static Future<void> updateLine(
-      int orderId, int lineId, Map<String, dynamic> data,) async {
+    int orderId,
+    int lineId,
+    Map<String, dynamic> data,
+  ) async {
     try {
       await ApiClient.put('$_base/$orderId/lines/$lineId', data: data);
       CacheService.invalidate('pedidos:order:$orderId');
@@ -1323,16 +1473,38 @@ class PedidosService {
   }
 
   static Future<Map<String, dynamic>> confirmOrder(
-      int orderId, String saleType,) async {
+    int orderId,
+    String saleType, {
+    String? deliveryDate,
+    String? vehicleCode,
+    String? driverCode,
+    String? routeCode,
+  }) async {
     try {
-      final response = await ApiClient.put('$_base/$orderId/confirm',
-          data: {'saleType': saleType},);
+      final data = <String, dynamic>{'saleType': saleType};
+      if (deliveryDate != null && deliveryDate.trim().isNotEmpty) {
+        data['deliveryDate'] = deliveryDate.trim();
+      }
+      if (vehicleCode != null && vehicleCode.trim().isNotEmpty) {
+        data['vehicleCode'] = vehicleCode.trim();
+      }
+      if (driverCode != null && driverCode.trim().isNotEmpty) {
+        data['driverCode'] = driverCode.trim();
+      }
+      if (routeCode != null && routeCode.trim().isNotEmpty) {
+        data['routeCode'] = routeCode.trim();
+      }
+      final response = await ApiClient.put(
+        '$_base/$orderId/confirm',
+        data: data,
+      );
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
+      CacheService.invalidateByPrefix('pedidos:delivery:');
       return _normalizeOrderResponse(response);
     } on ApiException catch (e) {
-      // Capture 409 errors (stock insufficient) and return the data
-      if (e.statusCode == 409) {
+      // Capture only stock 409 as blocked. Delivery-date 409 must surface.
+      if (e.statusCode == 409 && e.message.toLowerCase().contains('stock')) {
         debugPrint('[PedidosService] Order blocked due to stock: ${e.message}');
         return {
           'blocked': true,
@@ -1360,10 +1532,14 @@ class PedidosService {
   }
 
   static Future<Map<String, dynamic>> updateOrderStatus(
-      int orderId, String status,) async {
+    int orderId,
+    String status,
+  ) async {
     try {
-      final response = await ApiClient.put('$_base/$orderId/status',
-          data: {'status': status},);
+      final response = await ApiClient.put(
+        '$_base/$orderId/status',
+        data: {'status': status},
+      );
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
       return response;
@@ -1404,7 +1580,8 @@ class PedidosService {
 
   // ── Client Balance ──
   static Future<Map<String, dynamic>> getClientBalance(
-      String clientCode,) async {
+    String clientCode,
+  ) async {
     try {
       final response = await ApiClient.get(
         '$_base/client-balance/$clientCode',
@@ -1435,8 +1612,9 @@ class PedidosService {
 
   // ── Complementary Products ──
   static Future<List<Map<String, dynamic>>> getComplementaryProducts(
-      List<String> productCodes,
-      {String? clientCode,}) async {
+    List<String> productCodes, {
+    String? clientCode,
+  }) async {
     try {
       final response = await ApiClient.post('$_base/complementary', {
         'productCodes': productCodes,

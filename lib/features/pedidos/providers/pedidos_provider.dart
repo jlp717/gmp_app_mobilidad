@@ -689,6 +689,10 @@ class PedidosProvider with ChangeNotifier {
   Future<Map<String, dynamic>?> confirmOrder(
     String vendedorCode, {
     String observaciones = '',
+    String? deliveryDate,
+    String? vehicleCode,
+    String? driverCode,
+    String? routeCode,
   }) async {
     if (!hasClient || !hasLines) {
       _error = 'Seleccione un cliente y añada al menos un producto';
@@ -726,8 +730,14 @@ class PedidosProvider with ChangeNotifier {
 
       // Step 2: Immediately confirm the order (set to CONFIRMADO)
       final orderId = createResult['id'] as int;
-      final confirmedResult =
-          await PedidosService.confirmOrder(orderId, _saleType);
+      final confirmedResult = await PedidosService.confirmOrder(
+        orderId,
+        _saleType,
+        deliveryDate: deliveryDate,
+        vehicleCode: vehicleCode,
+        driverCode: driverCode,
+        routeCode: routeCode,
+      );
 
       // Clear cart after successful creation
       _lines.clear();
