@@ -61,8 +61,13 @@ function getVendorColumn(year, month) {
 function getVendorColumnExpr(tableAlias = 'L', { forLACTable = false } = {}) {
     const prefix = tableAlias ? `${tableAlias}.` : '';
     if (VENDOR_COLUMN === 'LCCDVD' || forLACTable) return `${prefix}LCCDVD`;
-    // Multi-month transition: rows before March 2026 use LCCDVD, from March 2026+ use R1_T8CDVD
-    return `CASE WHEN ${prefix}LCAADC < ${TRANSITION_YEAR} OR (${prefix}LCAADC = ${TRANSITION_YEAR} AND ${prefix}LCMMDC < ${TRANSITION_MONTH}) THEN ${prefix}LCCDVD ELSE ${prefix}${VENDOR_COLUMN} END`;
+    // Month-based transition: Jan/Feb (any year) use LCCDVD, Mar+ (any year) use R1_T8CDVD.
+    // This correctly handles both current-year actual sales AND prior-year objective baseline:
+    //   - 2026 Jan/Feb actual sales: LCCDVD (snapshot transition period)
+    //   - 2026 Mar+ actual sales: R1_T8CDVD (new criterion)
+    //   - 2025 Jan/Feb prevSales baseline: LCCDVD (matches the Jan/Feb 2026 objective criterion)
+    //   - 2025 Mar+ prevSales baseline: R1_T8CDVD (matches the Mar+ 2026 objective criterion)
+    return `CASE WHEN ${prefix}LCMMDC < ${TRANSITION_MONTH} THEN ${prefix}LCCDVD ELSE ${prefix}${VENDOR_COLUMN} END`;
 }
 
 logger.info(`[CONFIG] VENDOR_COLUMN = ${VENDOR_COLUMN} (transition: ${TRANSITION_MONTH}/${TRANSITION_YEAR})`);
