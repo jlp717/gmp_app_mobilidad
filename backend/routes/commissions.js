@@ -838,8 +838,8 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         let prevSales = prevRow ? parseFloat(prevRow.SALES) : 0;
         let currentSales = currRow ? parseFloat(currRow.SALES) : 0;
 
-        // ADD B-SALES to both totals
-        prevSales += (bSalesPrevYear[m] || 0);
+        // ADD B-SALES to current sales. Objective base stays on previous LAC
+        // sales, matching the commissions screen and historical objectives.
         currentSales += (bSalesCurrYear[m] || 0);
 
         // INHERITED OBJECTIVES: Use inherited sales when vendor has no own sales for this month
@@ -1649,9 +1649,91 @@ router.post('/pay', verifyToken, async (req, res) => {
 // PDF REPORT — DIEGO ONLY
 // =============================================================================
 
+async function loadCommissionConfigForPdf(year) {
+    try {
+        const dbConfig = await queryWithParams(
+            `SELECT * FROM JAVIER.COMM_CONFIG WHERE YEAR = ? FETCH FIRST 1 ROWS ONLY`,
+            [parseInt(year)],
+            false,
+            false
+        );
+        if (dbConfig && dbConfig.length > 0) {
+            const row = dbConfig[0];
+            return {
+                ipc: parseFloat(row.IPC_PCT),
+                TIER1_MAX: parseFloat(row.TIER1_MAX),
+                TIER1_PCT: parseFloat(row.TIER1_PCT),
+                TIER2_MAX: parseFloat(row.TIER2_MAX),
+                TIER2_PCT: parseFloat(row.TIER2_PCT),
+                TIER3_MAX: parseFloat(row.TIER3_MAX),
+                TIER3_PCT: parseFloat(row.TIER3_PCT),
+                TIER4_PCT: parseFloat(row.TIER4_PCT)
+            };
+        }
+    } catch (e) {
+        logger.warn(`[PDF] COMM_CONFIG lookup failed: ${e.message}. Using defaults.`);
+    }
+
+    return {
+        ipc: 3.0,
+        TIER1_MAX: 103.00, TIER1_PCT: 1.0,
+        TIER2_MAX: 106.00, TIER2_PCT: 1.3,
+        TIER3_MAX: 110.00, TIER3_PCT: 1.6,
+        TIER4_PCT: 2.0
+    };
+}
+
+async function buildPdfSummaryVendors(vendorCode, year, config) {
+    const safeVendorCode = (vendorCode || 'ALL').toString().replace(/[^a-zA-Z0-9,]/g, '').substring(0, 50) || 'ALL';
+    const requestedVendorCodes = safeVendorCode === 'ALL'
+        ? []
+        : [...new Set(
+            safeVendorCode
+                .split(',')
+                .map(code => code.trim())
+                .filter(code => /^[a-zA-Z0-9]+$/.test(code))
+        )];
+    const isGroupedRequest = safeVendorCode === 'ALL' || requestedVendorCodes.length > 1;
+
+    if (!isGroupedRequest) {
+        return [await calculateVendorData(safeVendorCode, year, config)];
+    }
+
+    const vendorCodes = safeVendorCode === 'ALL'
+        ? await discoverVendorCodesForYear(year)
+        : requestedVendorCodes;
+
+    const [allVendorData, allSnapshotResult] = await Promise.all([
+        batchFetchAllVendorData(vendorCodes, year),
+        getVendorSalesSnapshot(vendorCodes, year)
+    ]);
+
+    const { snapshotMap, monthsWithData } = allSnapshotResult;
+    for (const code of vendorCodes) {
+        if (allVendorData[code]) {
+            const trimmed = code.trim();
+            const normalized = trimmed.replace(/^0+/, '') || trimmed;
+            allVendorData[code].salesSnapshotData = snapshotMap[trimmed] || snapshotMap[normalized] || {};
+            allVendorData[code].snapshotMonthsWithData = monthsWithData;
+        }
+    }
+
+    const settled = await Promise.allSettled(
+        vendorCodes.map(code => calculateVendorData(code, year, config, allVendorData[code]))
+    );
+    const failed = settled.filter(result => result.status === 'rejected');
+    if (failed.length > 0) {
+        logger.warn(`[PDF] ${failed.length} vendor(s) failed building PDF summary: ${failed.map(f => f.reason?.message || f.reason).join('; ')}`);
+    }
+
+    return settled
+        .filter(result => result.status === 'fulfilled')
+        .map(result => result.value);
+}
+
 router.get('/pdf', verifyToken, async (req, res) => {
     try {
-        const { year, months, range } = req.query;
+        const { year, months, range, vendorCode } = req.query;
         
         // FIX: Use user code (req.user.code) instead of name, as name is not in JWT payload
         // The middleware auth.js sets: req.user = { id, code, role, isJefeVentas }
@@ -1710,15 +1792,16 @@ router.get('/pdf', verifyToken, async (req, res) => {
 
         logger.info(`[PDF] Generating for DIEGO: year=${targetYear}, months ${startMonth}-${endMonth}`);
 
-        // Fetch data with error handling
+        // Fetch data with same calculation path as /summary.
         let vendorData, condorData;
         try {
+            const config = await loadCommissionConfigForPdf(targetYear);
             [vendorData, condorData] = await Promise.all([
-                pdfService.getLacSalesData(targetYear, startMonth, endMonth),
+                buildPdfSummaryVendors(vendorCode || 'ALL', targetYear, config),
                 pdfService.getCondorSalesData(targetYear, startMonth, endMonth)
             ]);
             
-            logger.info(`[PDF] Data fetched successfully: ${vendorData.length} LAC vendors, ${condorData.size} Condor vendors`);
+            logger.info(`[PDF] Summary data fetched successfully: ${vendorData.length} vendors, ${condorData.size} B-sales vendors`);
         } catch (dataError) {
             logger.error(`[PDF] Error fetching sales data: ${dataError.message}`);
             return res.status(500).json({ 
@@ -1731,7 +1814,7 @@ router.get('/pdf', verifyToken, async (req, res) => {
         // Generate PDF with error handling
         let pdfBuffer;
         try {
-            pdfBuffer = await pdfService.generateCommissionsPdf(vendorData, condorData, targetYear, startMonth, endMonth);
+            pdfBuffer = await pdfService.generateCommissionsPdfFromSummary(vendorData, condorData, targetYear, startMonth, endMonth);
             logger.info(`[PDF] PDF generated successfully (${(pdfBuffer.length / 1024).toFixed(2)} KB)`);
         } catch (pdfError) {
             logger.error(`[PDF] Error generating PDF: ${pdfError.message}`);
@@ -1781,4 +1864,11 @@ router.get('/excluded-vendors', verifyToken, async (req, res) => {
     }
 });
 
-module.exports = { router, initCommissionTables };
+module.exports = {
+    router,
+    initCommissionTables,
+    _private: {
+        buildPdfSummaryVendors,
+        loadCommissionConfigForPdf,
+    },
+};

@@ -532,11 +532,10 @@ function getSnapshotEntry(snapshotData, code, month) {
 
 async function buildMonthlyTargetsAndCommissions(vendorData, condorDataMap, year, startMonth, endMonth) {
     const vendorCodes = getVendorCodesFromData(vendorData, condorDataMap);
-    const [config, fixedTargets, prevLac, prevCondor, snapshotData] = await Promise.all([
+    const [config, fixedTargets, prevLac, snapshotData] = await Promise.all([
         getCommissionConfig(year),
         getFixedCommissionTargets(year, vendorCodes),
         getPreviousYearLacSales(year, startMonth, endMonth, vendorCodes),
-        getPreviousYearCondorSales(year, startMonth, endMonth, vendorCodes),
         getSnapshotCommissionData(year, startMonth, endMonth),
     ]);
 
@@ -553,8 +552,7 @@ async function buildMonthlyTargetsAndCommissions(vendorData, condorDataMap, year
             const condorData = condorEntry?.months?.[month] || {};
             const lacSales = toNumber(lacData.lac);
             const condorSales = toNumber(condorData.condor);
-            const previousSales = toNumber(getMonthValue(prevLac, normalized, month)) +
-                toNumber(getMonthValue(prevCondor, normalized, month));
+            const previousSales = toNumber(getMonthValue(prevLac, normalized, month));
 
             let target = fixedTarget && fixedTarget > 0
                 ? fixedTarget
@@ -632,6 +630,292 @@ function pctColor(pct) {
     if (pct >= 100) return COLORS.good;
     if (pct > 0) return COLORS.warning;
     return COLORS.muted;
+}
+
+function getVendorCondorMonth(condorDataMap, vendorCode, month) {
+    const entry = getVendorEntry(condorDataMap, vendorCode);
+    return toNumber(entry?.months?.[month]?.condor);
+}
+
+function getSummaryPayment(vendor, month) {
+    const payments = vendor?.payments || {};
+    const monthlyPaid = toNumber(payments.monthly?.[month]);
+    const detailPaid = toNumber(payments.details?.[month]?.totalPaid);
+    return detailPaid || monthlyPaid;
+}
+
+function drawSummaryPdfTable({
+    doc,
+    vendor,
+    condorDataMap,
+    startMonth,
+    endMonth,
+    margin,
+    tableWidth,
+    cols,
+    yPos,
+}) {
+    const ROW_H = 15;
+    const HDR_H = 18;
+    const normalized = normalizeVendorCode(vendor.vendedorCode || vendor.code);
+
+    doc.rect(margin, yPos, tableWidth, HDR_H).fill(COLORS.header);
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(COLORS.headerText)
+        .text(`${displayVendorCode(vendor.vendedorCode || vendor.code)}  ${vendor.vendorName || vendor.name || ''}`, margin + 5, yPos + 5, {
+            width: tableWidth - 10,
+            align: 'left'
+        });
+    yPos += HDR_H;
+
+    let xPos = margin;
+    cols.forEach(col => {
+        doc.rect(xPos, yPos, col.width, HDR_H).fill(COLORS.columnHeader).stroke(COLORS.grid);
+        doc.font('Helvetica-Bold').fontSize(7).fillColor(COLORS.text)
+            .text(col.label, xPos + 2, yPos + 5, {
+                width: col.width - 4,
+                align: col.key === 'obs' ? 'left' : 'center'
+            });
+        xPos += col.width;
+    });
+    yPos += HDR_H;
+
+    const totals = {
+        objective: 0,
+        lac: 0,
+        condor: 0,
+        sales: 0,
+        generated: 0,
+        paid: 0,
+    };
+
+    for (let month = startMonth; month <= endMonth; month++) {
+        const monthData = (vendor.months || []).find(item => parseInt(item.month, 10) === month) || {};
+        const actual = toNumber(monthData.actual);
+        const objective = toNumber(monthData.target);
+        const condorAmount = getVendorCondorMonth(condorDataMap, normalized, month);
+        const lacAmount = Math.max(actual - condorAmount, 0);
+        const generated = toNumber(monthData.complianceCtx?.commission);
+        const paid = getSummaryPayment(vendor, month);
+        const pct = objective > 0 ? (actual / objective) * 100 : 0;
+
+        totals.objective += objective;
+        totals.lac += lacAmount;
+        totals.condor += condorAmount;
+        totals.sales += actual;
+        totals.generated += generated;
+        totals.paid += paid;
+
+        const rowBg = (month - startMonth) % 2 === 0 ? COLORS.rowAlt : '#FFFFFF';
+        doc.rect(margin, yPos, tableWidth, ROW_H).fill(rowBg);
+
+        const values = {
+            mes: getMonthName(month).substring(0, 3).toUpperCase(),
+            obj: formatCurrency(objective),
+            lac: formatCurrency(lacAmount),
+            condor: formatCurrency(condorAmount),
+            total: formatCurrency(actual),
+            pct: objective > 0 ? formatPct(pct) : '-',
+            gen: formatCurrency(generated),
+            pag: formatCurrency(paid),
+            obs: monthData.isFuture ? 'Mes futuro' : '',
+        };
+
+        xPos = margin;
+        cols.forEach(col => {
+            let color = COLORS.text;
+            const align = col.key === 'mes' || col.key === 'obs' ? 'left' : 'right';
+
+            if (col.key === 'obj' && objective > 0) color = COLORS.objective;
+            if (col.key === 'condor' && condorAmount > 0) color = COLORS.condor;
+            if (col.key === 'total' && objective > 0) color = pctColor(pct);
+            if (col.key === 'pct') color = pctColor(pct);
+            if (col.key === 'gen') color = generated > 0 ? COLORS.good : COLORS.muted;
+            if (col.key === 'pag') color = paid > 0 ? COLORS.header : COLORS.muted;
+            if (col.key === 'obs') color = COLORS.muted;
+
+            doc.font('Helvetica').fontSize(7).fillColor(color)
+                .text(values[col.key], xPos + 2, yPos + 4, {
+                    width: col.width - 4,
+                    align,
+                });
+            doc.rect(xPos, yPos, col.width, ROW_H).stroke(COLORS.grid);
+            xPos += col.width;
+        });
+
+        yPos += ROW_H;
+    }
+
+    doc.rect(margin, yPos, tableWidth, HDR_H).fill(COLORS.totalBg);
+    const totalPct = totals.objective > 0 ? (totals.sales / totals.objective) * 100 : 0;
+    const totalValues = {
+        mes: 'TOTAL',
+        obj: formatCurrency(totals.objective),
+        lac: formatCurrency(totals.lac),
+        condor: formatCurrency(totals.condor),
+        total: formatCurrency(totals.sales),
+        pct: totals.objective > 0 ? formatPct(totalPct) : '-',
+        gen: formatCurrency(totals.generated),
+        pag: formatCurrency(totals.paid),
+        obs: totals.condor > 0 ? 'Incluye ventas B' : '',
+    };
+
+    xPos = margin;
+    cols.forEach(col => {
+        const align = col.key === 'mes' || col.key === 'obs' ? 'left' : 'right';
+        doc.font('Helvetica-Bold').fontSize(7).fillColor(COLORS.totalText)
+            .text(totalValues[col.key], xPos + 2, yPos + 5, {
+                width: col.width - 4,
+                align,
+            });
+        doc.rect(xPos, yPos, col.width, HDR_H).stroke(COLORS.grid);
+        xPos += col.width;
+    });
+
+    return {
+        yPos: yPos + HDR_H + 8,
+        totals,
+    };
+}
+
+async function generateCommissionsPdfFromSummary(summaryVendors, condorDataMap, year, startMonth, endMonth) {
+    const vendors = [...(summaryVendors || [])].sort((a, b) => {
+        const aCode = displayVendorCode(a.vendedorCode || a.code || '');
+        const bCode = displayVendorCode(b.vendedorCode || b.code || '');
+        return aCode.localeCompare(bCode);
+    });
+
+    return new Promise((resolve, reject) => {
+        try {
+            const doc = new PDFDocument({
+                size: 'A4',
+                margin: 30,
+                layout: 'landscape'
+            });
+
+            const chunks = [];
+            doc.on('data', chunk => chunks.push(chunk));
+            doc.on('end', () => resolve(Buffer.concat(chunks)));
+            doc.on('error', reject);
+
+            const pageWidth = doc.page.width;
+            const pageHeight = doc.page.height;
+            const margin = 30;
+            const contentWidth = pageWidth - margin * 2;
+            const tableWidth = contentWidth;
+            const periodLabel = startMonth === endMonth
+                ? `${getMonthName(startMonth)} ${year}`
+                : `${getMonthName(startMonth)} - ${getMonthName(endMonth)} ${year}`;
+            const now = new Date();
+            const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+            const cols = [
+                { key: 'mes', label: 'Mes', width: 48 },
+                { key: 'obj', label: 'Objetivo', width: 80 },
+                { key: 'lac', label: 'Venta LAC', width: 80 },
+                { key: 'condor', label: 'Venta B', width: 82 },
+                { key: 'total', label: 'Total ventas', width: 82 },
+                { key: 'pct', label: '% Cumpl.', width: 58 },
+                { key: 'gen', label: 'Com. gen.', width: 74 },
+                { key: 'pag', label: 'Com. pag.', width: 74 },
+                { key: 'obs', label: 'Observaciones', width: 204 },
+            ];
+
+            const drawPageHeader = (y) => {
+                doc.font('Helvetica-Bold').fontSize(12).fillColor(COLORS.header)
+                    .text('Informe de comisiones comerciales', margin, y, {
+                        width: contentWidth / 2,
+                        align: 'left'
+                    });
+                doc.font('Helvetica').fontSize(8).fillColor(COLORS.muted)
+                    .text(`${periodLabel} | Generado: ${dateStr}`, margin + contentWidth / 2, y + 2, {
+                        width: contentWidth / 2,
+                        align: 'right'
+                    });
+                return y + 20;
+            };
+
+            let yPos = drawPageHeader(margin);
+            let firstVendor = true;
+            const globalTotals = {
+                objective: 0,
+                lac: 0,
+                condor: 0,
+                sales: 0,
+                generated: 0,
+                paid: 0,
+            };
+
+            vendors.forEach(vendor => {
+                const monthsInRange = endMonth - startMonth + 1;
+                const estimatedHeight = 18 * 3 + 15 * monthsInRange + 18;
+                if (!firstVendor && yPos + estimatedHeight > pageHeight - margin - 20) {
+                    doc.addPage();
+                    yPos = drawPageHeader(margin);
+                }
+                firstVendor = false;
+
+                const drawn = drawSummaryPdfTable({
+                    doc,
+                    vendor,
+                    condorDataMap,
+                    startMonth,
+                    endMonth,
+                    margin,
+                    tableWidth,
+                    cols,
+                    yPos,
+                });
+                yPos = drawn.yPos;
+                Object.keys(globalTotals).forEach(key => {
+                    globalTotals[key] += drawn.totals[key] || 0;
+                });
+            });
+
+            const globalNeededHeight = 36;
+            if (yPos + globalNeededHeight > pageHeight - margin - 20) {
+                doc.addPage();
+                yPos = drawPageHeader(margin);
+            }
+
+            doc.rect(margin, yPos, tableWidth, 20).fill('#111827');
+            const globalPct = globalTotals.objective > 0
+                ? (globalTotals.sales / globalTotals.objective) * 100
+                : 0;
+            const globalValues = [
+                'ACUMULADO',
+                formatCurrency(globalTotals.objective),
+                formatCurrency(globalTotals.lac),
+                formatCurrency(globalTotals.condor),
+                formatCurrency(globalTotals.sales),
+                globalTotals.objective > 0 ? formatPct(globalPct) : '-',
+                formatCurrency(globalTotals.generated),
+                formatCurrency(globalTotals.paid),
+                '',
+            ];
+
+            let xPos = margin;
+            cols.forEach((col, index) => {
+                const align = index === 0 || col.key === 'obs' ? 'left' : 'right';
+                doc.font('Helvetica-Bold').fontSize(7).fillColor('#FFFFFF')
+                    .text(globalValues[index], xPos + 2, yPos + 6, {
+                        width: col.width - 4,
+                        align,
+                    });
+                doc.rect(xPos, yPos, col.width, 20).stroke(COLORS.grid);
+                xPos += col.width;
+            });
+
+            doc.font('Helvetica').fontSize(7).fillColor(COLORS.muted)
+                .text('GMP App Movilidad | Uso interno', margin, pageHeight - 28, {
+                    width: contentWidth,
+                    align: 'left'
+                });
+
+            doc.end();
+        } catch (e) {
+            reject(e);
+        }
+    });
 }
 
 async function generateCommissionsPdf(vendorData, condorDataMap, year, startMonth, endMonth) {
@@ -864,9 +1148,11 @@ module.exports = {
     getLacSalesData,
     getCondorSalesData,
     generateCommissionsPdf,
+    generateCommissionsPdfFromSummary,
     _private: {
         calculateCommission,
         buildMonthlyTargetsAndCommissions,
+        generateCommissionsPdfFromSummary,
         getSnapshotCommissionData,
         normalizeVendorCode,
     },

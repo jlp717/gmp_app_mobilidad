@@ -78,7 +78,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(color: Colors.blue.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
               child: const Text(
-                '⚠️ El PDF incluirá ventas LAC (reales) por comercial.\nSolo disponible para DIEGO.',
+                'El PDF incluirá objetivo, ventas LAC, ventas B, comisiones y totales.\nSolo disponible para DIEGO.',
                 style: TextStyle(color: Colors.lightBlue, fontSize: 11),
               ),
             ),

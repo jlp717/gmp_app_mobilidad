@@ -11,8 +11,8 @@ class CommissionsService {
     bool forceRefresh = false,
   }) async {
     try {
-      // Changed to 'commissions_v2' to bust old cache that lacked 'isExcluded'
-      final cacheKey = 'commissions_v2_${vendedorCode}_$year';
+      // v3 busts commission target cache after Jan/Feb 2026 snapshot alignment.
+      final cacheKey = 'commissions_v3_${vendedorCode}_$year';
 
       final response = await ApiClient.get(
         '/commissions/summary',
@@ -89,6 +89,7 @@ class CommissionsService {
       );
 
       // Force cache clear for this vendor AND the ALL view after payment
+      CacheService.invalidate('commissions_v3_${vendedorCode}_$year');
       CacheService.invalidate('commissions_v2_${vendedorCode}_$year');
       CacheService.invalidateByPrefix('comm:summary:ALL');
 
