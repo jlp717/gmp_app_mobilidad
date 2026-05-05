@@ -20,7 +20,8 @@ class CommissionsPdfService {
     required VoidCallback onSuccess,
     required Function(String) onError,
     int? year,
-    String? range, // '1', '2', '3', 'all'
+    String? range, // '1', '2', '3', 'all' (deprecated)
+    String? months, // '1,2,3' (new multi-month selector)
   }) async {
     onLoading();
 
@@ -39,6 +40,7 @@ class CommissionsPdfService {
           vendorCode: vendorCode,
           year: year,
           range: range,
+          months: months,
           onSuccess: onSuccess,
           onError: onError,
         );
@@ -68,6 +70,7 @@ class CommissionsPdfService {
     required Function(String) onError,
     int? year,
     String? range,
+    String? months,
   }) async {
     try {
       // Build URL with query params
@@ -77,7 +80,8 @@ class CommissionsPdfService {
         queryParameters: {
           if (vendorCode.isNotEmpty) 'vendorCode': vendorCode,
           if (year != null) 'year': year.toString(),
-          if (range != null) 'range': range,
+          if (months != null) 'months': months, // New: comma-separated months
+          if (range != null && months == null) 'range': range, // Fallback for old API
         },
       );
 
