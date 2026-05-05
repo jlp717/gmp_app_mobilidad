@@ -1,10 +1,13 @@
+'use strict';
+
 /**
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * COMMISSIONS PDF REPORT SERVICE
- * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * Generates PDF report with per-vendor monthly breakdown:
- *   Mes | Objetivo | Ventas LAC | Ventas CONDOR | Total | % | Generada | Pagada | Obs
- * Format: landscape A4, DIEGO-only.
+ * Commissions PDF report service.
+ *
+ * The PDF must follow the same historical rule as the commissions screen:
+ * - Jan/Feb 2026 are covered by JAVIER.COMMISSION_SNAPSHOT_2026_0102.
+ * - If a vendor has a row there, sales/target/generated/paid come from it.
+ * - If a vendor is absent in a covered month, sales and target stay calculated
+ *   with the historical vendor criterion, but generated and paid commission are 0.
  */
 
 const PDFDocument = require('pdfkit');
@@ -24,35 +27,46 @@ const commissionsPdfBreaker = new CircuitBreaker({
     timeout: 30000
 });
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// CONFIGURATION
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+const SNAPSHOT_TABLE = 'JAVIER.COMMISSION_SNAPSHOT_2026_0102';
+
+const DEFAULT_CONFIG = {
+    ipc: 3.0,
+    TIER1_MAX: 103.00,
+    TIER1_PCT: 1.0,
+    TIER2_MAX: 106.00,
+    TIER2_PCT: 1.3,
+    TIER3_MAX: 110.00,
+    TIER3_PCT: 1.6,
+    TIER4_PCT: 2.0,
+};
 
 const COLORS = {
     header: '#003d7a',
     headerText: '#FFFFFF',
-    border: '#000000',
+    text: '#111827',
+    muted: '#6B7280',
+    grid: '#B7C3D0',
+    rowAlt: '#F3F8FC',
+    columnHeader: '#DCEBFA',
     totalBg: '#003d7a',
     totalText: '#FFFFFF',
-    text: '#000000',
-    lightBg: '#E8F4FD',
-    condorBg: '#FFF8E1',
+    objective: '#0057A3',
+    condor: '#9A5B00',
+    good: '#166534',
+    warning: '#B45309',
+    bad: '#B91C1C',
 };
 
-// Allowed users who can generate this PDF
 const ALLOWED_USERS = ['DIEGO', 'diego'];
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// HELPER FUNCTIONS
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 function formatCurrency(num) {
-    if (num === null || num === undefined || isNaN(num)) return '0,00';
-    const fixed = Math.abs(num).toFixed(2);
+    const value = parseFloat(num);
+    if (!Number.isFinite(value)) return '0,00';
+    const fixed = Math.abs(value).toFixed(2);
     const parts = fixed.split('.');
     const integerPart = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-    const result = parts[1] ? integerPart + ',' + parts[1] : integerPart;
-    return num < 0 ? '-' + result : result;
+    const result = `${integerPart},${parts[1]}`;
+    return value < 0 ? `-${result}` : result;
 }
 
 function getMonthName(monthNum) {
@@ -62,280 +76,568 @@ function getMonthName(monthNum) {
 }
 
 function formatPct(pct) {
-    if (!pct && pct !== 0) return '-';
-    return pct.toFixed(1) + '%';
+    const value = parseFloat(pct);
+    if (!Number.isFinite(value)) return '-';
+    return `${value.toFixed(1)}%`;
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// PERMISSION CHECK
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function toNumber(value) {
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeVendorCode(code) {
+    const raw = String(code || '').trim();
+    return raw.replace(/^0+/, '') || raw;
+}
+
+function displayVendorCode(code) {
+    const raw = String(code || '').trim();
+    const normalized = normalizeVendorCode(raw);
+    if (/^\d$/.test(normalized)) return normalized.padStart(2, '0');
+    return raw || normalized;
+}
+
+function getCodeVariants(code) {
+    const raw = String(code || '').trim().replace(/[^a-zA-Z0-9]/g, '');
+    if (!raw) return [];
+    const normalized = normalizeVendorCode(raw);
+    const padded = /^\d{1,2}$/.test(normalized) ? normalized.padStart(2, '0') : normalized;
+    return [...new Set([raw, normalized, padded].filter(Boolean))];
+}
+
+function upsertVendorMonth(vendorMap, code, name, month, values) {
+    const normalized = normalizeVendorCode(code);
+    if (!normalized) return null;
+
+    if (!vendorMap.has(normalized)) {
+        vendorMap.set(normalized, {
+            code: displayVendorCode(code),
+            normalizedCode: normalized,
+            name: name || `Vendedor ${displayVendorCode(code)}`,
+            months: {},
+        });
+    }
+
+    const vendor = vendorMap.get(normalized);
+    if (name && (!vendor.name || vendor.name.startsWith('Vendedor '))) {
+        vendor.name = name;
+    }
+    if (!vendor.months[month]) vendor.months[month] = {};
+    vendor.months[month] = { ...vendor.months[month], ...values };
+    return vendor;
+}
+
+function getVendorEntry(map, code) {
+    if (!map || !code) return null;
+    return map.get(normalizeVendorCode(code)) || map.get(String(code).trim()) || null;
+}
+
+function setNestedMonthValue(map, code, month, value) {
+    const normalized = normalizeVendorCode(code);
+    if (!normalized) return;
+    if (!map.has(normalized)) map.set(normalized, {});
+    map.get(normalized)[month] = value;
+}
+
+function calculateCommission(actual, target, config) {
+    if (target <= 0) {
+        return { commission: 0, tier: 0, rate: 0, increment: 0, compliancePct: 0 };
+    }
+
+    const compliancePct = (actual / target) * 100;
+    const increment = actual - target;
+    let rate = 0;
+    let tier = 0;
+
+    if (compliancePct > config.TIER3_MAX) {
+        rate = config.TIER4_PCT;
+        tier = 4;
+    } else if (compliancePct > config.TIER2_MAX) {
+        rate = config.TIER3_PCT;
+        tier = 3;
+    } else if (compliancePct > config.TIER1_MAX) {
+        rate = config.TIER2_PCT;
+        tier = 2;
+    } else if (compliancePct > 100.00) {
+        rate = config.TIER1_PCT;
+        tier = 1;
+    }
+
+    return {
+        commission: increment > 0 && rate > 0 ? increment * (rate / 100) : 0,
+        tier,
+        rate,
+        increment,
+        compliancePct,
+    };
+}
 
 function isAuthorized(userName) {
     return ALLOWED_USERS.includes(userName?.toUpperCase());
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// DATA QUERIES
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function getMonthsInRange(startMonth, endMonth) {
+    const months = [];
+    for (let month = startMonth; month <= endMonth; month++) months.push(month);
+    return months;
+}
 
-/**
- * Get LAC sales data per vendor for the specified month range.
- * Uses getVendorColumnExpr for correct LCCDVD/R1_T8CDVD per row.
- * For months <= SNAPSHOT_UNTIL_MONTH of 2026, reads from snapshot table.
- */
-async function getLacSalesData(year, startMonth, endMonth) {
-    // For snapshot months of 2026, we'll merge live + snapshot data below.
-    // Build the CASE expression for the vendor column.
-    const vendorColExpr = getVendorColumnExpr('L');
+function getSnapshotMonths(year, startMonth, endMonth) {
+    if (parseInt(year, 10) !== 2026 || SNAPSHOT_UNTIL_MONTH <= 0) return [];
+    return getMonthsInRange(startMonth, endMonth).filter(month => month <= SNAPSHOT_UNTIL_MONTH);
+}
 
-    // Determine which months to query live vs from snapshot
-    const isSnapshotYear = (year === 2026 && SNAPSHOT_UNTIL_MONTH > 0);
-    const snapshotMonths = isSnapshotYear
-        ? Array.from({ length: Math.min(SNAPSHOT_UNTIL_MONTH, endMonth) - startMonth + 1 }, (_, i) => i + startMonth)
-              .filter(m => m <= SNAPSHOT_UNTIL_MONTH)
-        : [];
-    const liveMonths = [];
-    for (let m = startMonth; m <= endMonth; m++) {
-        if (!snapshotMonths.includes(m)) liveMonths.push(m);
+async function getCommissionConfig(year) {
+    try {
+        const rows = await queryWithParams(`
+            SELECT *
+            FROM JAVIER.COMM_CONFIG
+            WHERE YEAR = ?
+            FETCH FIRST 1 ROWS ONLY
+        `, [parseInt(year, 10)], false, false);
+
+        if (!rows || rows.length === 0) return DEFAULT_CONFIG;
+        const row = rows[0];
+        return {
+            ipc: toNumber(row.IPC_PCT) || DEFAULT_CONFIG.ipc,
+            TIER1_MAX: toNumber(row.TIER1_MAX) || DEFAULT_CONFIG.TIER1_MAX,
+            TIER1_PCT: toNumber(row.TIER1_PCT) || DEFAULT_CONFIG.TIER1_PCT,
+            TIER2_MAX: toNumber(row.TIER2_MAX) || DEFAULT_CONFIG.TIER2_MAX,
+            TIER2_PCT: toNumber(row.TIER2_PCT) || DEFAULT_CONFIG.TIER2_PCT,
+            TIER3_MAX: toNumber(row.TIER3_MAX) || DEFAULT_CONFIG.TIER3_MAX,
+            TIER3_PCT: toNumber(row.TIER3_PCT) || DEFAULT_CONFIG.TIER3_PCT,
+            TIER4_PCT: toNumber(row.TIER4_PCT) || DEFAULT_CONFIG.TIER4_PCT,
+        };
+    } catch (e) {
+        logger.warn(`[PDF] COMM_CONFIG lookup failed: ${e.message}. Using defaults.`);
+        return DEFAULT_CONFIG;
+    }
+}
+
+async function getSnapshotCommissionData(year, startMonth, endMonth) {
+    const snapshotMonths = getSnapshotMonths(year, startMonth, endMonth);
+    const rowsByVendor = new Map();
+    const coveredMonths = new Set();
+
+    if (snapshotMonths.length === 0) {
+        return { rowsByVendor, coveredMonths };
     }
 
+    try {
+        const placeholders = snapshotMonths.map(() => '?').join(',');
+        const rows = await queryWithParams(`
+            SELECT
+                TRIM(VENDEDOR_CODIGO) as VENDEDOR_CODIGO,
+                MES,
+                MAX(VENTAS_REAL) as VENTAS_REAL,
+                MAX(OBJETIVO_MES) as OBJETIVO_MES,
+                MAX(COMISION_GENERADA) as COMISION_GENERADA,
+                SUM(IMPORTE_PAGADO) as IMPORTE_PAGADO
+            FROM ${SNAPSHOT_TABLE}
+            WHERE ANIO = ?
+              AND MES IN (${placeholders})
+            GROUP BY TRIM(VENDEDOR_CODIGO), MES
+        `, [parseInt(year, 10), ...snapshotMonths], false, false);
+
+        rows.forEach(row => {
+            const month = parseInt(row.MES, 10);
+            const code = row.VENDEDOR_CODIGO || '';
+            if (!Number.isFinite(month)) return;
+            coveredMonths.add(month);
+            setNestedMonthValue(rowsByVendor, code, month, {
+                ventasReal: toNumber(row.VENTAS_REAL),
+                objetivoMes: toNumber(row.OBJETIVO_MES),
+                comisionGenerada: toNumber(row.COMISION_GENERADA),
+                importePagado: toNumber(row.IMPORTE_PAGADO),
+            });
+        });
+
+        logger.info(`[PDF] Loaded ${rows.length} historical commission rows from ${SNAPSHOT_TABLE}.`);
+    } catch (e) {
+        logger.warn(`[PDF] Historical commission snapshot lookup failed: ${e.message}`);
+    }
+
+    return { rowsByVendor, coveredMonths };
+}
+
+async function getLacSalesData(year, startMonth, endMonth) {
+    const vendorColExpr = getVendorColumnExpr('L');
     const vendorMap = new Map();
 
-    // Helper to upsert vendor entry
-    const upsertVendor = (code, name) => {
-        if (!vendorMap.has(code)) {
-            vendorMap.set(code, { code, name: name || `Vendedor ${code}`, months: {} });
-        } else if (name && !vendorMap.get(code).name) {
-            vendorMap.get(code).name = name;
-        }
-    };
-
-    // 1. Query snapshot months from JAVIER.COMMISSION_SNAPSHOT_2026_0102
-    // VENTAS_REAL = LAC + CONDOR combined (no split available in this table).
-    // We store it under 'lac' so the PDF column shows the total; CONDOR will be 0
-    // for snapshot rows. A footer note explains this.
-    if (snapshotMonths.length > 0) {
-        try {
-            const monthPlaceholders = snapshotMonths.map(() => '?').join(',');
-            const snapRows = await queryWithParams(`
-                SELECT CSS.VENDEDOR_CODIGO, CSS.MES, CSS.VENTAS_REAL,
-                       COALESCE(TRIM(V.NOMBREVENDEDOR), '') as NOMBRE_VENDEDOR
-                FROM JAVIER.COMMISSION_SNAPSHOT_2026_0102 CSS
-                LEFT JOIN DSEDAC.VDD V ON TRIM(V.CODIGOVENDEDOR) = TRIM(CSS.VENDEDOR_CODIGO)
-                WHERE CSS.ANIO = ?
-                  AND CSS.MES IN (${monthPlaceholders})
-            `, [year, ...snapshotMonths], false);
-
-            for (const row of snapRows) {
-                const code = (row.VENDEDOR_CODIGO || '').trim();
-                const name = row.NOMBRE_VENDEDOR || `Vendedor ${code}`;
-                upsertVendor(code, name);
-                vendorMap.get(code).months[row.MES] = {
-                    // VENTAS_REAL is the total (LAC + CONDOR); no split available.
-                    lac: parseFloat(row.VENTAS_REAL) || 0,
-                    isSnapshot: true,
-                };
-            }
-            logger.info(`[PDF] Snapshot LAC data loaded from COMMISSION_SNAPSHOT_2026_0102: ${snapRows.length} rows for months ${snapshotMonths.join(',')}`);
-        } catch (e) {
-            logger.warn(`[PDF] Snapshot LAC query failed (COMMISSION_SNAPSHOT_2026_0102): ${e.message}`);
-            // Fall through to live query for these months
-            liveMonths.push(...snapshotMonths);
-        }
-    }
-
-    // 2. Query live months from DSED.LACLAE
-    if (liveMonths.length > 0) {
-        const monthPlaceholders = liveMonths.map(() => '?').join(',');
-        const sql = `
+    try {
+        const rows = await queryWithParams(`
             SELECT
-                (${vendorColExpr}) as VENDEDOR,
+                RTRIM(${vendorColExpr}) as VENDEDOR,
                 COALESCE(TRIM(V.NOMBREVENDEDOR), '') as NOMBRE_VENDEDOR,
                 L.LCMMDC as MES,
                 COALESCE(SUM(L.LCIMVT), 0) as LAC_TOTAL
             FROM DSED.LACLAE L
-            LEFT JOIN DSEDAC.VDD V ON (${vendorColExpr}) = RTRIM(V.CODIGOVENDEDOR)
+            LEFT JOIN DSEDAC.VDD V ON RTRIM(${vendorColExpr}) = RTRIM(V.CODIGOVENDEDOR)
             WHERE L.LCAADC = ?
-              AND L.LCMMDC IN (${monthPlaceholders})
-              AND L.LCTPVT IN ('CC', 'VC')
-              AND L.LCCLLN IN ('AB', 'VT')
-              AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
-              AND L.TPDC = 'LAC'
+              AND L.LCMMDC BETWEEN ? AND ?
+              AND ${LACLAE_SALES_FILTER}
               AND (${vendorColExpr}) IS NOT NULL
-              AND (${vendorColExpr}) <> ''
-            GROUP BY (${vendorColExpr}), V.NOMBREVENDEDOR, L.LCMMDC
-            ORDER BY (${vendorColExpr}), L.LCMMDC
-        `;
+              AND RTRIM(${vendorColExpr}) <> ''
+            GROUP BY RTRIM(${vendorColExpr}), V.NOMBREVENDEDOR, L.LCMMDC
+            ORDER BY RTRIM(${vendorColExpr}), L.LCMMDC
+        `, [parseInt(year, 10), parseInt(startMonth, 10), parseInt(endMonth, 10)], false, false);
 
-        const rows = await queryWithParams(sql, [year, ...liveMonths], false);
-        for (const row of rows) {
-            const code = (row.VENDEDOR || '').trim();
-            const name = row.NOMBRE_VENDEDOR || `Vendedor ${code}`;
-            upsertVendor(code, name);
-            vendorMap.get(code).months[row.MES] = {
-                lac: parseFloat(row.LAC_TOTAL) || 0,
-                isSnapshot: false,
-            };
-        }
+        rows.forEach(row => {
+            upsertVendorMonth(
+                vendorMap,
+                row.VENDEDOR,
+                row.NOMBRE_VENDEDOR,
+                parseInt(row.MES, 10),
+                { lac: toNumber(row.LAC_TOTAL), isHistoricalCommissionMonth: false }
+            );
+        });
+    } catch (e) {
+        logger.warn(`[PDF] LAC sales lookup failed: ${e.message}`);
     }
+
+    const snapshotData = await getSnapshotCommissionData(year, startMonth, endMonth);
+    snapshotData.rowsByVendor.forEach((months, normalizedCode) => {
+        Object.entries(months).forEach(([monthKey, snapshotRow]) => {
+            const month = parseInt(monthKey, 10);
+            upsertVendorMonth(
+                vendorMap,
+                normalizedCode,
+                null,
+                month,
+                {
+                    snapshotTotal: snapshotRow.ventasReal,
+                    isHistoricalCommissionMonth: snapshotData.coveredMonths.has(month),
+                    snapshotStatus: 'recorded',
+                }
+            );
+        });
+    });
 
     return Array.from(vendorMap.values()).sort((a, b) => a.code.localeCompare(b.code));
 }
 
-/**
- * Get CONDOR (VENTAS_B) sales per vendor for the specified month range.
- * For snapshot months of 2026, CONDOR is set to 0 (no split in COMMISSION_SNAPSHOT_2026_0102; total is in LAC column).
- */
 async function getCondorSalesData(year, startMonth, endMonth) {
-    const isSnapshotYear = (year === 2026 && SNAPSHOT_UNTIL_MONTH > 0);
-    const snapshotMonths = isSnapshotYear
-        ? Array.from({ length: Math.min(SNAPSHOT_UNTIL_MONTH, endMonth) - startMonth + 1 }, (_, i) => i + startMonth)
-              .filter(m => m <= SNAPSHOT_UNTIL_MONTH)
-        : [];
-    const liveMonths = [];
-    for (let m = startMonth; m <= endMonth; m++) {
-        if (!snapshotMonths.includes(m)) liveMonths.push(m);
-    }
+    const condorMap = new Map();
 
-    const condorMap = new Map(); // vendorCode → { mes → { condor, isSnapshot } }
+    try {
+        const rows = await queryWithParams(`
+            SELECT
+                TRIM(B.CODIGOVENDEDOR) as VENDEDOR_CODIGO,
+                COALESCE(TRIM(V.NOMBREVENDEDOR), '') as NOMBRE_VENDEDOR,
+                B.MES,
+                SUM(B.IMPORTE) as VENTAS_CONDOR
+            FROM JAVIER.VENTAS_B B
+            LEFT JOIN DSEDAC.VDD V ON TRIM(B.CODIGOVENDEDOR) = TRIM(V.CODIGOVENDEDOR)
+            WHERE B.EJERCICIO = ?
+              AND B.MES BETWEEN ? AND ?
+            GROUP BY TRIM(B.CODIGOVENDEDOR), V.NOMBREVENDEDOR, B.MES
+            ORDER BY TRIM(B.CODIGOVENDEDOR), B.MES
+        `, [parseInt(year, 10), parseInt(startMonth, 10), parseInt(endMonth, 10)], false, false);
 
-    // 1. Snapshot months — COMMISSION_SNAPSHOT_2026_0102 has no LAC/CONDOR split.
-    // VENTAS_REAL is already stored as 'lac' in getLacSalesData; we return 0 CONDOR
-    // for snapshot rows so the PDF doesn't double-count. A PDF footer note explains this.
-    // (No DB query needed — condorMap simply has no entries for snapshot months.)
-    if (snapshotMonths.length > 0) {
-        logger.info(`[PDF] Snapshot months [${snapshotMonths.join(',')}]: CONDOR set to 0 (no split in COMMISSION_SNAPSHOT_2026_0102; VENTAS_REAL shown in LAC column)`);
-    }
-
-    // 2. Live months from JAVIER.VENTAS_B
-    if (liveMonths.length > 0) {
-        try {
-            const monthPlaceholders = liveMonths.map(() => '?').join(',');
-            const rows = await queryWithParams(`
-                SELECT TRIM(CODIGOVENDEDOR) as VENDEDOR_CODIGO, MES, SUM(IMPORTE) as VENTAS_CONDOR
-                FROM JAVIER.VENTAS_B
-                WHERE EJERCICIO = ?
-                  AND MES IN (${monthPlaceholders})
-                GROUP BY TRIM(CODIGOVENDEDOR), MES
-                ORDER BY TRIM(CODIGOVENDEDOR), MES
-            `, [year, ...liveMonths], false);
-
-            for (const row of rows) {
-                const code = (row.VENDEDOR_CODIGO || '').trim();
-                if (!condorMap.has(code)) condorMap.set(code, {});
-                condorMap.get(code)[row.MES] = {
-                    condor: parseFloat(row.VENTAS_CONDOR) || 0,
-                    isSnapshot: false,
-                };
+        rows.forEach(row => {
+            const normalized = normalizeVendorCode(row.VENDEDOR_CODIGO);
+            if (!normalized) return;
+            if (!condorMap.has(normalized)) {
+                condorMap.set(normalized, {
+                    code: displayVendorCode(row.VENDEDOR_CODIGO),
+                    normalizedCode: normalized,
+                    name: row.NOMBRE_VENDEDOR || `Vendedor ${displayVendorCode(row.VENDEDOR_CODIGO)}`,
+                    months: {},
+                });
             }
-            logger.info(`[PDF] Live CONDOR data loaded: ${rows.length} rows`);
-        } catch (e) {
-            logger.warn(`[PDF] CONDOR (VENTAS_B) query failed: ${e.message}`);
-        }
+            const entry = condorMap.get(normalized);
+            if (row.NOMBRE_VENDEDOR && (!entry.name || entry.name.startsWith('Vendedor '))) {
+                entry.name = row.NOMBRE_VENDEDOR;
+            }
+            entry.months[parseInt(row.MES, 10)] = { condor: toNumber(row.VENTAS_CONDOR) };
+        });
+
+        logger.info(`[PDF] Loaded CONDOR sales for ${condorMap.size} vendors.`);
+    } catch (e) {
+        logger.warn(`[PDF] CONDOR sales lookup failed: ${e.message}`);
     }
 
     return condorMap;
 }
 
-/**
- * Get monthly targets and commission amounts per vendor.
- * For snapshot months: reads authoritative values from COMMISSION_SNAPSHOT_2026_0102.
- * For live months: uses COMMERCIAL_TARGETS table for objectives.
- * Returns: Map of vendorCode → month → { objetivo, comisionGenerada, isSnapshot }
- */
-async function getMonthlyTargetsAndCommissions(year, startMonth, endMonth) {
-    const isSnapshotYear = (year === 2026 && SNAPSHOT_UNTIL_MONTH > 0);
-    const snapshotMonths = isSnapshotYear
-        ? Array.from({ length: Math.min(SNAPSHOT_UNTIL_MONTH, endMonth) - startMonth + 1 }, (_, i) => i + startMonth)
-              .filter(m => m <= SNAPSHOT_UNTIL_MONTH)
-        : [];
+async function getVendorPaymentsForPdf(year) {
+    const map = new Map();
 
-    const targetMap = new Map(); // vendorCode → month → { objetivo, comisionGenerada, isSnapshot }
+    try {
+        const rows = await queryWithParams(`
+            SELECT
+                VENDEDOR_CODIGO,
+                MES,
+                IMPORTE_PAGADO,
+                OBSERVACIONES
+            FROM JAVIER.COMMISSION_PAYMENTS
+            WHERE ANIO = ?
+            ORDER BY VENDEDOR_CODIGO, MES
+        `, [parseInt(year, 10)], false, false);
 
-    // Snapshot months: get objetivo + comisionGenerada from COMMISSION_SNAPSHOT_2026_0102.
-    // Column names: OBJETIVO_MES (not OBJETIVO).
-    if (snapshotMonths.length > 0) {
-        try {
-            const monthPlaceholders = snapshotMonths.map(() => '?').join(',');
-            const rows = await queryWithParams(`
-                SELECT TRIM(VENDEDOR_CODIGO) as VENDEDOR_CODIGO, MES, OBJETIVO_MES, COMISION_GENERADA
-                FROM JAVIER.COMMISSION_SNAPSHOT_2026_0102
-                WHERE ANIO = ?
-                  AND MES IN (${monthPlaceholders})
-            `, [year, ...snapshotMonths], false);
+        rows.forEach(row => {
+            const code = row.VENDEDOR_CODIGO || '';
+            const month = parseInt(row.MES, 10);
+            const normalized = normalizeVendorCode(code);
+            if (!normalized || !Number.isFinite(month)) return;
 
-            for (const row of rows) {
-                const code = (row.VENDEDOR_CODIGO || '').trim();
-                if (!targetMap.has(code)) targetMap.set(code, {});
-                targetMap.get(code)[row.MES] = {
-                    objetivo: parseFloat(row.OBJETIVO_MES) || 0,
-                    comisionGenerada: parseFloat(row.COMISION_GENERADA) || 0,
-                    isSnapshot: true,
-                };
+            if (!map.has(normalized)) map.set(normalized, {});
+            if (!map.get(normalized)[month]) {
+                map.get(normalized)[month] = { importePagado: 0, observaciones: [] };
             }
-        } catch (e) {
-            logger.warn(`[PDF] Snapshot targets query failed: ${e.message}`);
-        }
+
+            map.get(normalized)[month].importePagado += toNumber(row.IMPORTE_PAGADO);
+            if (row.OBSERVACIONES && row.OBSERVACIONES.trim()) {
+                map.get(normalized)[month].observaciones.push(row.OBSERVACIONES.trim());
+            }
+        });
+    } catch (e) {
+        logger.warn(`[PDF] Payments lookup failed: ${e.message}`);
     }
 
-    // For live months, COMMERCIAL_TARGETS gives the objective
-    // (commission for live months is shown from COMMISSION_PAYMENTS)
-    // No separate query needed here — the PDF uses live data directly from
-    // getLacSalesData / getCondorSalesData and payments for live months.
+    return map;
+}
+
+function getVendorCodesFromData(vendorData, condorDataMap) {
+    const codes = new Set();
+    (vendorData || []).forEach(vendor => {
+        if (vendor?.code) codes.add(normalizeVendorCode(vendor.code));
+    });
+    (condorDataMap || new Map()).forEach((entry, code) => {
+        codes.add(normalizeVendorCode(entry?.code || code));
+    });
+    return Array.from(codes).filter(Boolean);
+}
+
+function buildVariantParams(vendorCodes) {
+    return [...new Set(vendorCodes.flatMap(getCodeVariants))];
+}
+
+async function getPreviousYearLacSales(year, startMonth, endMonth, vendorCodes) {
+    const map = new Map();
+    const codeParams = buildVariantParams(vendorCodes);
+    if (codeParams.length === 0) return map;
+
+    try {
+        const vendorColExpr = getVendorColumnExpr('L');
+        const codePlaceholders = codeParams.map(() => '?').join(',');
+        const rows = await queryWithParams(`
+            SELECT
+                RTRIM(${vendorColExpr}) as VENDEDOR_CODIGO,
+                L.LCMMDC as MES,
+                SUM(L.LCIMVT) as VENTAS_LAC
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC = ?
+              AND L.LCMMDC BETWEEN ? AND ?
+              AND ${LACLAE_SALES_FILTER}
+              AND RTRIM(${vendorColExpr}) IN (${codePlaceholders})
+            GROUP BY RTRIM(${vendorColExpr}), L.LCMMDC
+        `, [parseInt(year, 10) - 1, parseInt(startMonth, 10), parseInt(endMonth, 10), ...codeParams], false, false);
+
+        rows.forEach(row => {
+            setNestedMonthValue(map, row.VENDEDOR_CODIGO, parseInt(row.MES, 10), toNumber(row.VENTAS_LAC));
+        });
+    } catch (e) {
+        logger.warn(`[PDF] Previous-year LAC lookup failed: ${e.message}`);
+    }
+
+    return map;
+}
+
+async function getPreviousYearCondorSales(year, startMonth, endMonth, vendorCodes) {
+    const map = new Map();
+    const codeParams = buildVariantParams(vendorCodes);
+    if (codeParams.length === 0) return map;
+
+    try {
+        const placeholders = codeParams.map(() => '?').join(',');
+        const rows = await queryWithParams(`
+            SELECT
+                TRIM(CODIGOVENDEDOR) as VENDEDOR_CODIGO,
+                MES,
+                SUM(IMPORTE) as VENTAS_CONDOR
+            FROM JAVIER.VENTAS_B
+            WHERE EJERCICIO = ?
+              AND MES BETWEEN ? AND ?
+              AND TRIM(CODIGOVENDEDOR) IN (${placeholders})
+            GROUP BY TRIM(CODIGOVENDEDOR), MES
+        `, [parseInt(year, 10) - 1, parseInt(startMonth, 10), parseInt(endMonth, 10), ...codeParams], false, false);
+
+        rows.forEach(row => {
+            setNestedMonthValue(map, row.VENDEDOR_CODIGO, parseInt(row.MES, 10), toNumber(row.VENTAS_CONDOR));
+        });
+    } catch (e) {
+        logger.warn(`[PDF] Previous-year CONDOR lookup failed: ${e.message}`);
+    }
+
+    return map;
+}
+
+async function getFixedCommissionTargets(year, vendorCodes) {
+    const map = new Map();
+    const codeParams = buildVariantParams(vendorCodes);
+    if (codeParams.length === 0) return map;
+
+    try {
+        const currentMonth = new Date().getMonth() + 1;
+        const placeholders = codeParams.map(() => '?').join(',');
+        const rows = await queryWithParams(`
+            SELECT
+                TRIM(CODIGOVENDEDOR) as VENDEDOR_CODIGO,
+                IMPORTE_BASE_COMISION,
+                MES
+            FROM JAVIER.COMMERCIAL_TARGETS
+            WHERE ANIO = ?
+              AND ACTIVO = 1
+              AND TRIM(CODIGOVENDEDOR) IN (${placeholders})
+            ORDER BY TRIM(CODIGOVENDEDOR), MES DESC
+        `, [parseInt(year, 10), ...codeParams], false, false);
+
+        const rowsByVendor = new Map();
+        rows.forEach(row => {
+            const normalized = normalizeVendorCode(row.VENDEDOR_CODIGO);
+            if (!normalized) return;
+            if (!rowsByVendor.has(normalized)) rowsByVendor.set(normalized, []);
+            rowsByVendor.get(normalized).push(row);
+        });
+
+        rowsByVendor.forEach((vendorRows, normalizedCode) => {
+            const best = vendorRows
+                .sort((a, b) => (toNumber(b.MES) || 0) - (toNumber(a.MES) || 0))
+                .find(row => !row.MES || parseInt(row.MES, 10) <= currentMonth);
+            if (best) {
+                const amount = toNumber(best.IMPORTE_BASE_COMISION);
+                if (amount > 0) map.set(normalizedCode, amount);
+            }
+        });
+    } catch (e) {
+        logger.warn(`[PDF] COMMERCIAL_TARGETS lookup failed: ${e.message}`);
+    }
+
+    return map;
+}
+
+function getMonthValue(nestedMap, code, month, fallback = 0) {
+    const entry = getVendorEntry(nestedMap, code);
+    if (!entry) return fallback;
+    const value = entry[month];
+    return value === undefined || value === null ? fallback : value;
+}
+
+function getSnapshotEntry(snapshotData, code, month) {
+    const months = getVendorEntry(snapshotData.rowsByVendor, code);
+    return months ? months[month] || null : null;
+}
+
+async function buildMonthlyTargetsAndCommissions(vendorData, condorDataMap, year, startMonth, endMonth) {
+    const vendorCodes = getVendorCodesFromData(vendorData, condorDataMap);
+    const [config, fixedTargets, prevLac, prevCondor, snapshotData] = await Promise.all([
+        getCommissionConfig(year),
+        getFixedCommissionTargets(year, vendorCodes),
+        getPreviousYearLacSales(year, startMonth, endMonth, vendorCodes),
+        getPreviousYearCondorSales(year, startMonth, endMonth, vendorCodes),
+        getSnapshotCommissionData(year, startMonth, endMonth),
+    ]);
+
+    const targetMap = new Map();
+
+    vendorCodes.forEach(code => {
+        const normalized = normalizeVendorCode(code);
+        const vendor = (vendorData || []).find(v => normalizeVendorCode(v.code) === normalized);
+        const condorEntry = getVendorEntry(condorDataMap, normalized);
+        const fixedTarget = fixedTargets.get(normalized);
+
+        for (let month = startMonth; month <= endMonth; month++) {
+            const lacData = vendor?.months?.[month] || {};
+            const condorData = condorEntry?.months?.[month] || {};
+            const lacSales = toNumber(lacData.lac);
+            const condorSales = toNumber(condorData.condor);
+            const previousSales = toNumber(getMonthValue(prevLac, normalized, month)) +
+                toNumber(getMonthValue(prevCondor, normalized, month));
+
+            let target = fixedTarget && fixedTarget > 0
+                ? fixedTarget
+                : previousSales * (1 + (config.ipc / 100));
+            let totalSales = lacSales + condorSales;
+            let commission = calculateCommission(totalSales, target, config).commission;
+            let paidOverride = null;
+            let status = 'live';
+
+            const snapshotEntry = getSnapshotEntry(snapshotData, normalized, month);
+            const coveredHistoricalMonth = parseInt(year, 10) === 2026 &&
+                SNAPSHOT_UNTIL_MONTH > 0 &&
+                month <= SNAPSHOT_UNTIL_MONTH &&
+                snapshotData.coveredMonths.has(month);
+
+            if (coveredHistoricalMonth && snapshotEntry) {
+                target = snapshotEntry.objetivoMes > 0 ? snapshotEntry.objetivoMes : target;
+                totalSales = snapshotEntry.ventasReal;
+                commission = snapshotEntry.comisionGenerada;
+                paidOverride = snapshotEntry.importePagado;
+                status = 'recorded';
+            } else if (coveredHistoricalMonth) {
+                commission = 0;
+                paidOverride = 0;
+                status = 'not_commissioned';
+            }
+
+            setNestedMonthValue(targetMap, normalized, month, {
+                objetivo: target,
+                totalVentas: totalSales,
+                comisionGenerada: commission,
+                importePagadoOverride: paidOverride,
+                isHistoricalCommissionMonth: coveredHistoricalMonth,
+                snapshotStatus: status,
+            });
+        }
+    });
 
     return targetMap;
 }
 
-/**
- * Get registered payments (COMMISSION_PAYMENTS) per vendor for the year.
- * Returns: Map of vendorCode → month → { importePagado, comisionGenerada, observaciones }
- */
-async function getVendorPaymentsForPdf(year) {
-    try {
-        const rows = await queryWithParams(`
-            SELECT VENDEDOR_CODIGO, MES, IMPORTE_PAGADO, COMISION_GENERADA,
-                   VENTAS_REAL, OBJETIVO_MES, OBSERVACIONES
-            FROM JAVIER.COMMISSION_PAYMENTS
-            WHERE ANIO = ?
-            ORDER BY VENDEDOR_CODIGO, MES
-        `, [year], false, false);
+function buildPdfVendorList(vendorData, condorDataMap) {
+    const map = new Map();
 
-        const map = new Map();
-        rows.forEach(r => {
-            const code = (r.VENDEDOR_CODIGO || '').trim();
-            const mes = parseInt(r.MES);
-            if (!map.has(code)) map.set(code, {});
-            if (!map.get(code)[mes]) {
-                map.get(code)[mes] = { importePagado: 0, comisionGenerada: 0, observaciones: [] };
-            }
-            map.get(code)[mes].importePagado += parseFloat(r.IMPORTE_PAGADO) || 0;
-            map.get(code)[mes].comisionGenerada += parseFloat(r.COMISION_GENERADA) || 0;
-            if (r.OBSERVACIONES && r.OBSERVACIONES.trim()) {
-                map.get(code)[mes].observaciones.push(r.OBSERVACIONES.trim());
-            }
+    (vendorData || []).forEach(vendor => {
+        const normalized = normalizeVendorCode(vendor.code);
+        if (!normalized) return;
+        map.set(normalized, {
+            ...vendor,
+            normalizedCode: normalized,
+            months: vendor.months || {},
         });
-        return map;
-    } catch (e) {
-        logger.warn(`[PDF] Payments query failed: ${e.message}`);
-        return new Map();
-    }
+    });
+
+    (condorDataMap || new Map()).forEach((condorEntry, code) => {
+        const normalized = normalizeVendorCode(condorEntry?.code || code);
+        if (!normalized || map.has(normalized)) return;
+        map.set(normalized, {
+            code: displayVendorCode(condorEntry?.code || code),
+            normalizedCode: normalized,
+            name: condorEntry?.name || `Vendedor ${displayVendorCode(condorEntry?.code || code)}`,
+            months: {},
+        });
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.code.localeCompare(b.code));
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// PDF GENERATION
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function getMetricEntry(targetMap, code, month) {
+    const months = getVendorEntry(targetMap, code);
+    return months ? months[month] || null : null;
+}
 
-/**
- * Generates a landscape A4 PDF report for DIEGO.
- * One section per comercial, with a table:
- *   Mes | Objetivo | Ventas LAC | Ventas CONDOR | Total | % | Gen. | Pagado | Obs.
- * Footer per vendor: totales anuales + flag "Tiene CONDOR".
- */
+function pctColor(pct) {
+    if (pct >= 100) return COLORS.good;
+    if (pct > 0) return COLORS.warning;
+    return COLORS.muted;
+}
+
 async function generateCommissionsPdf(vendorData, condorDataMap, year, startMonth, endMonth) {
-    // Load targets/commissions from snapshot
-    const targetMap = await getMonthlyTargetsAndCommissions(year, startMonth, endMonth);
-    // Load payments for the full year
+    const targetMap = await buildMonthlyTargetsAndCommissions(vendorData, condorDataMap, year, startMonth, endMonth);
     const paymentsMap = await getVendorPaymentsForPdf(year);
+    const vendors = buildPdfVendorList(vendorData, condorDataMap);
 
     return new Promise((resolve, reject) => {
         try {
@@ -350,246 +652,205 @@ async function generateCommissionsPdf(vendorData, condorDataMap, year, startMont
             doc.on('end', () => resolve(Buffer.concat(chunks)));
             doc.on('error', reject);
 
-            const pageWidth = doc.page.width;   // ~842 landscape
-            const pageHeight = doc.page.height; // ~595 landscape
+            const pageWidth = doc.page.width;
+            const pageHeight = doc.page.height;
             const margin = 30;
             const contentWidth = pageWidth - margin * 2;
-
-            const now = new Date();
-            const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+            const tableWidth = contentWidth;
             const periodLabel = startMonth === endMonth
                 ? `${getMonthName(startMonth)} ${year}`
                 : `${getMonthName(startMonth)} - ${getMonthName(endMonth)} ${year}`;
 
-            // Column definitions (total ~782px for A4 landscape content width ~782)
-            const cols = [
-                { key: 'mes',     label: 'Mes',         width: 62  },
-                { key: 'obj',     label: 'Objetivo',    width: 82  },
-                { key: 'lac',     label: 'Venta LAC',   width: 82  },
-                { key: 'condor',  label: 'V. CONDOR',   width: 78  },
-                { key: 'total',   label: 'Total',       width: 82  },
-                { key: 'pct',     label: '%Cumpl.',     width: 55  },
-                { key: 'gen',     label: 'Com.Gen.',    width: 72  },
-                { key: 'pag',     label: 'Com.Pag.',    width: 72  },
-                { key: 'obs',     label: 'Observaciones', width: 143 },
-            ];
-            const tableWidth = cols.reduce((s, c) => s + c.width, 0);
+            const now = new Date();
+            const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-            const ROW_H = 14;
+            const cols = [
+                { key: 'mes', label: 'Mes', width: 48 },
+                { key: 'obj', label: 'Objetivo', width: 80 },
+                { key: 'lac', label: 'Venta LAC', width: 80 },
+                { key: 'condor', label: 'Venta CONDOR', width: 82 },
+                { key: 'total', label: 'Total ventas', width: 82 },
+                { key: 'pct', label: '% Cumpl.', width: 58 },
+                { key: 'gen', label: 'Com. gen.', width: 74 },
+                { key: 'pag', label: 'Com. pag.', width: 74 },
+                { key: 'obs', label: 'Observaciones', width: 204 },
+            ];
+
+            const ROW_H = 15;
             const HDR_H = 18;
 
-            let firstPage = true;
-
-            // Helper: draw page header
             const drawPageHeader = (y) => {
-                doc.fontSize(9).fillColor(COLORS.text).text(
-                    `Informe de Comisiones ${year} — ${periodLabel}   |   Generado: ${dateStr}`,
-                    margin, y, { width: contentWidth, align: 'center' }
-                );
-                return y + 14;
+                doc.font('Helvetica-Bold').fontSize(12).fillColor(COLORS.header)
+                    .text('Informe de comisiones comerciales', margin, y, {
+                        width: contentWidth / 2,
+                        align: 'left'
+                    });
+                doc.font('Helvetica').fontSize(8).fillColor(COLORS.muted)
+                    .text(`${periodLabel} | Generado: ${dateStr}`, margin + contentWidth / 2, y + 2, {
+                        width: contentWidth / 2,
+                        align: 'right'
+                    });
+                return y + 20;
             };
 
-            let yPos = margin;
-            yPos = drawPageHeader(yPos);
-            yPos += 4;
+            let yPos = drawPageHeader(margin);
+            let firstVendor = true;
 
-            // Iterate vendors
-            for (const vendor of vendorData) {
-                const vendorCondorMap = condorDataMap.get(vendor.code) || {};
-                const vendorTargets = targetMap.get(vendor.code) || {};
-                const vendorPayments = paymentsMap.get(vendor.code) || {};
-
-                // Estimate rows needed: months + header + vendor header + footer = months+3
+            vendors.forEach(vendor => {
+                const normalized = normalizeVendorCode(vendor.code);
+                const condorEntry = getVendorEntry(condorDataMap, normalized) || { months: {} };
+                const vendorPayments = getVendorEntry(paymentsMap, normalized) || {};
                 const monthsInRange = endMonth - startMonth + 1;
-                const estimatedHeight = HDR_H * 2 + ROW_H * monthsInRange + HDR_H + 10;
+                const estimatedHeight = HDR_H * 2 + ROW_H * monthsInRange + HDR_H + 14;
 
-                // New page if not enough space
-                if (!firstPage && yPos + estimatedHeight > pageHeight - margin - 20) {
+                if (!firstVendor && yPos + estimatedHeight > pageHeight - margin - 20) {
                     doc.addPage();
-                    yPos = margin;
-                    yPos = drawPageHeader(yPos);
-                    yPos += 4;
+                    yPos = drawPageHeader(margin);
                 }
-                firstPage = false;
+                firstVendor = false;
 
-                // ── Vendor header bar ──
                 doc.rect(margin, yPos, tableWidth, HDR_H).fill(COLORS.header);
-                doc.fillColor(COLORS.headerText).fontSize(9).font('Helvetica-Bold')
-                    .text(`${vendor.code} — ${vendor.name}`, margin + 4, yPos + 4, {
-                        width: tableWidth - 8, align: 'left'
+                doc.font('Helvetica-Bold').fontSize(9).fillColor(COLORS.headerText)
+                    .text(`${vendor.code}  ${vendor.name || ''}`, margin + 5, yPos + 5, {
+                        width: tableWidth - 10,
+                        align: 'left'
                     });
                 yPos += HDR_H;
 
-                // ── Column headers ──
                 let xPos = margin;
-                doc.font('Helvetica-Bold').fontSize(7).fillColor(COLORS.text);
                 cols.forEach(col => {
-                    doc.rect(xPos, yPos, col.width, HDR_H).fill('#D0E4F7').stroke();
-                    doc.fillColor(COLORS.text).text(col.label, xPos + 2, yPos + 4, {
-                        width: col.width - 4, align: 'center'
-                    });
+                    doc.rect(xPos, yPos, col.width, HDR_H).fill(COLORS.columnHeader).stroke(COLORS.grid);
+                    doc.font('Helvetica-Bold').fontSize(7).fillColor(COLORS.text)
+                        .text(col.label, xPos + 2, yPos + 5, {
+                            width: col.width - 4,
+                            align: col.key === 'obs' ? 'left' : 'center'
+                        });
                     xPos += col.width;
                 });
                 yPos += HDR_H;
 
-                // ── Data rows ──
-                let totalLac = 0, totalCondor = 0, totalObj = 0, totalGen = 0, totalPag = 0;
-                let tieneCondorAnual = false;
-                let rowIdx = 0;
+                let totalObj = 0;
+                let totalLac = 0;
+                let totalCondor = 0;
+                let totalSales = 0;
+                let totalGenerated = 0;
+                let totalPaid = 0;
+                let hasCondor = false;
 
-                for (let m = startMonth; m <= endMonth; m++) {
-                    const monthLacData = vendor.months[m] || { lac: 0, isSnapshot: false };
-                    const condorData = vendorCondorMap[m] || { condor: 0, isSnapshot: false };
-                    const targData = vendorTargets[m];
-                    const payData = vendorPayments[m];
+                for (let month = startMonth; month <= endMonth; month++) {
+                    const monthLacData = vendor.months?.[month] || {};
+                    const condorData = condorEntry.months?.[month] || {};
+                    const metric = getMetricEntry(targetMap, normalized, month) || {};
+                    const payment = vendorPayments[month] || { importePagado: 0, observaciones: [] };
 
-                    const lacAmt = monthLacData.lac || 0;
-                    const condorAmt = condorData.condor || 0;
-                    const totalAmt = lacAmt + condorAmt;
+                    const condorAmount = toNumber(condorData.condor);
+                    const totalAmount = Number.isFinite(parseFloat(metric.totalVentas))
+                        ? toNumber(metric.totalVentas)
+                        : toNumber(monthLacData.lac) + condorAmount;
+                    const lacAmount = metric.snapshotStatus === 'recorded'
+                        ? Math.max(totalAmount - condorAmount, 0)
+                        : toNumber(monthLacData.lac);
+                    const objective = toNumber(metric.objetivo);
+                    const pct = objective > 0 ? (totalAmount / objective) * 100 : 0;
+                    const generated = toNumber(metric.comisionGenerada);
+                    const paid = metric.importePagadoOverride !== null && metric.importePagadoOverride !== undefined
+                        ? toNumber(metric.importePagadoOverride)
+                        : toNumber(payment.importePagado);
+                    const observations = [];
 
-                    // Objective: from snapshot → targData.objetivo, otherwise 0 (live months don't have it here)
-                    const objAmt = targData ? targData.objetivo : 0;
-                    const pct = (objAmt > 0 && totalAmt > 0) ? (totalAmt / objAmt) * 100 : 0;
+                    if (metric.snapshotStatus === 'not_commissioned') {
+                        observations.push('Mes cerrado sin comision registrada');
+                    }
+                    if (payment.observaciones && payment.observaciones.length > 0) {
+                        observations.push(...payment.observaciones);
+                    }
 
-                    // Commission generated: snapshot → targData.comisionGenerada, else payment recorded value
-                    const genAmt = targData ? targData.comisionGenerada
-                        : (payData ? payData.comisionGenerada : 0);
-                    const pagAmt = payData ? payData.importePagado : 0;
-                    const obs = payData ? payData.observaciones.join('; ') : '';
-                    if (condorAmt > 0) tieneCondorAnual = true;
-                    totalLac += lacAmt;
-                    totalCondor += condorAmt;
-                    totalObj += objAmt;
-                    totalGen += genAmt;
-                    totalPag += pagAmt;
+                    totalObj += objective;
+                    totalLac += lacAmount;
+                    totalCondor += condorAmount;
+                    totalSales += totalAmount;
+                    totalGenerated += generated;
+                    totalPaid += paid;
+                    if (condorAmount > 0) hasCondor = true;
 
-                    // Row background
-                    const rowBg = rowIdx % 2 === 0 ? COLORS.lightBg : '#FFFFFF';
+                    const rowBg = (month - startMonth) % 2 === 0 ? COLORS.rowAlt : '#FFFFFF';
                     doc.rect(margin, yPos, tableWidth, ROW_H).fill(rowBg);
 
+                    const values = {
+                        mes: getMonthName(month).substring(0, 3).toUpperCase(),
+                        obj: objective > 0 ? formatCurrency(objective) : '0,00',
+                        lac: formatCurrency(lacAmount),
+                        condor: formatCurrency(condorAmount),
+                        total: formatCurrency(totalAmount),
+                        pct: objective > 0 ? formatPct(pct) : '-',
+                        gen: formatCurrency(generated),
+                        pag: formatCurrency(paid),
+                        obs: observations.join('; '),
+                    };
+
                     xPos = margin;
-                    doc.font('Helvetica').fontSize(7).fillColor(COLORS.text);
-
                     cols.forEach(col => {
-                        let cellText = '';
-                        let cellColor = COLORS.text;
-                        let align = 'right';
+                        let color = COLORS.text;
+                        let align = col.key === 'mes' || col.key === 'obs' ? 'left' : 'right';
 
-                        switch (col.key) {
-                            case 'mes':
-                                align = 'left';
-                                doc.fillColor(COLORS.text).text(
-                                    getMonthName(m).substring(0, 3).toUpperCase(),
-                                    xPos + 2, yPos + 3,
-                                    { width: col.width - 4, align: 'left' }
-                                );
-                                xPos += col.width;
-                                return; // handled manually
-                            case 'obj':
-                                cellText = objAmt > 0 ? formatCurrency(objAmt) : '-';
-                                break;
-                            case 'lac':
-                                cellText = formatCurrency(lacAmt);
-                                break;
-                            case 'condor':
-                                cellText = condorAmt > 0 ? formatCurrency(condorAmt) : '-';
-                                if (condorAmt > 0) cellColor = '#8B6914';
-                                break;
-                            case 'total':
-                                cellText = formatCurrency(totalAmt);
-                                cellColor = pct >= 100 ? '#1A6B1A' : COLORS.text;
-                                break;
-                            case 'pct':
-                                cellText = objAmt > 0 ? formatPct(pct) : '-';
-                                cellColor = pct >= 100 ? '#1A6B1A' : (pct > 0 ? '#A05000' : COLORS.text);
-                                break;
-                            case 'gen':
-                                cellText = genAmt > 0 ? formatCurrency(genAmt) : '0,00';
-                                cellColor = genAmt > 0 ? '#1A6B1A' : '#888888';
-                                break;
-                            case 'pag':
-                                cellText = pagAmt > 0 ? formatCurrency(pagAmt) : '-';
-                                cellColor = pagAmt > 0 ? '#003d7a' : '#888888';
-                                break;
-                            case 'obs':
-                                align = 'left';
-                                cellText = obs.length > 30 ? obs.substring(0, 28) + '...' : obs;
-                                break;
-                        }
+                        if (col.key === 'obj' && objective > 0) color = COLORS.objective;
+                        if (col.key === 'condor' && condorAmount > 0) color = COLORS.condor;
+                        if (col.key === 'total' && objective > 0) color = pctColor(pct);
+                        if (col.key === 'pct') color = pctColor(pct);
+                        if (col.key === 'gen') color = generated > 0 ? COLORS.good : COLORS.muted;
+                        if (col.key === 'pag') color = paid > 0 ? COLORS.header : COLORS.muted;
+                        if (col.key === 'obs') color = COLORS.muted;
 
-                        doc.fillColor(cellColor).text(cellText, xPos + 2, yPos + 3, {
-                            width: col.width - 4, align
-                        });
-                        xPos += col.width;
-                    });
+                        const text = col.key === 'obs' && values.obs.length > 58
+                            ? `${values.obs.substring(0, 55)}...`
+                            : values[col.key];
 
-                    // Draw row borders
-                    xPos = margin;
-                    doc.lineWidth(0.3).strokeColor('#AAAAAA');
-                    cols.forEach(col => {
-                        doc.rect(xPos, yPos, col.width, ROW_H).stroke();
+                        doc.font('Helvetica').fontSize(7).fillColor(color)
+                            .text(text, xPos + 2, yPos + 4, {
+                                width: col.width - 4,
+                                align,
+                            });
+                        doc.rect(xPos, yPos, col.width, ROW_H).stroke(COLORS.grid);
                         xPos += col.width;
                     });
 
                     yPos += ROW_H;
-                    rowIdx++;
-
-                    // New page if needed
-                    if (yPos > pageHeight - margin - ROW_H * 4) {
-                        doc.addPage();
-                        yPos = margin;
-                        yPos = drawPageHeader(yPos);
-                        yPos += 4;
-                    }
                 }
 
-                // ── Vendor total row ──
                 doc.rect(margin, yPos, tableWidth, HDR_H).fill(COLORS.totalBg);
-                doc.fillColor(COLORS.totalText).font('Helvetica-Bold').fontSize(7);
+                const totalPct = totalObj > 0 ? (totalSales / totalObj) * 100 : 0;
+                const totalValues = {
+                    mes: 'TOTAL',
+                    obj: formatCurrency(totalObj),
+                    lac: formatCurrency(totalLac),
+                    condor: formatCurrency(totalCondor),
+                    total: formatCurrency(totalSales),
+                    pct: totalObj > 0 ? formatPct(totalPct) : '-',
+                    gen: formatCurrency(totalGenerated),
+                    pag: formatCurrency(totalPaid),
+                    obs: hasCondor ? 'Tiene ventas CONDOR' : '',
+                };
 
                 xPos = margin;
-                const totalRowData = {
-                    mes: 'TOTAL',
-                    obj: totalObj > 0 ? formatCurrency(totalObj) : '-',
-                    lac: formatCurrency(totalLac),
-                    condor: totalCondor > 0 ? formatCurrency(totalCondor) : '-',
-                    total: formatCurrency(totalLac + totalCondor),
-                    pct: totalObj > 0 ? formatPct(((totalLac + totalCondor) / totalObj) * 100) : '-',
-                    gen: formatCurrency(totalGen),
-                    pag: formatCurrency(totalPag),
-                    obs: tieneCondorAnual ? 'Tiene ventas CONDOR' : '',
-                };
                 cols.forEach(col => {
-                    const align = (col.key === 'mes' || col.key === 'obs') ? 'left' : 'right';
-                    doc.text(totalRowData[col.key] || '', xPos + 2, yPos + 4, {
-                        width: col.width - 4, align
-                    });
-                    xPos += col.width;
-                });
-                doc.strokeColor(COLORS.border).lineWidth(0.5);
-                xPos = margin;
-                cols.forEach(col => {
-                    doc.rect(xPos, yPos, col.width, HDR_H).stroke();
+                    const align = col.key === 'mes' || col.key === 'obs' ? 'left' : 'right';
+                    doc.font('Helvetica-Bold').fontSize(7).fillColor(COLORS.totalText)
+                        .text(totalValues[col.key], xPos + 2, yPos + 5, {
+                            width: col.width - 4,
+                            align,
+                        });
+                    doc.rect(xPos, yPos, col.width, HDR_H).stroke(COLORS.grid);
                     xPos += col.width;
                 });
 
                 yPos += HDR_H + 8;
-                doc.font('Helvetica');
-            }
+            });
 
-            // ── Global footer ──
-            doc.fontSize(7).fillColor('#555555')
-                .text(
-                    `Informe de comisiones ${year} (${periodLabel}) — Solo para uso interno`,
-                    margin, pageHeight - 30,
-                    { width: contentWidth, align: 'left' }
-                );
-            doc.fontSize(7).fillColor('#555555')
-                .text(
-                    'GMP App Movilidad',
-                    margin + contentWidth / 2, pageHeight - 30,
-                    { width: contentWidth / 2, align: 'right' }
-                );
+            doc.font('Helvetica').fontSize(7).fillColor(COLORS.muted)
+                .text('GMP App Movilidad | Uso interno', margin, pageHeight - 28, {
+                    width: contentWidth,
+                    align: 'left'
+                });
 
             doc.end();
         } catch (e) {
@@ -598,10 +859,15 @@ async function generateCommissionsPdf(vendorData, condorDataMap, year, startMont
     });
 }
 
-// MAIN EXPORT
 module.exports = {
     isAuthorized,
     getLacSalesData,
     getCondorSalesData,
-    generateCommissionsPdf
+    generateCommissionsPdf,
+    _private: {
+        calculateCommission,
+        buildMonthlyTargetsAndCommissions,
+        getSnapshotCommissionData,
+        normalizeVendorCode,
+    },
 };

@@ -114,8 +114,8 @@ async function run() {
 
             if (vendor05Rows.length === 0) {
                 console.log(`\n  → CORRECTO: vendedor 05 NO aparece en COMMISSION_SNAPSHOT_2026_0102.`);
-                console.log(`  → La API forzará comisión = 0 para Ene y Feb 2026 (snapshotApplied=true).`);
-                console.log(`  → Badge FOTO se mostrará en la app.\n`);
+                console.log(`  → La API forzará comisión = 0 para Ene y Feb 2026.`);
+                console.log(`  → La app no debe mostrar ninguna etiqueta interna.\n`);
                 // Show a few other vendors found (to confirm table has real data)
                 const others = [...new Set(snapRows.map(r => r.VENDEDOR_CODIGO))].slice(0, 5);
                 console.log(`  Vendedores encontrados (muestra): ${others.join(', ')}`);
@@ -172,9 +172,8 @@ async function run() {
     console.log('  Lógica para vendedor 05:');
     console.log('    - La tabla NO contiene fila para vendedor 05 en Ene ni Feb.');
     console.log('    - monthsWithData tiene {1, 2} (otros vendedores sí están).');
-    console.log('    - calculateVendorData → commValue = 0, snapshotApplied = true.');
-    console.log('    - API devuelve: commission=0, snapshotApplied=true para mes 1 y 2.');
-    console.log('    - Badge FOTO se muestra en la app.');
+    console.log('    - calculateVendorData → mantiene ventas/objetivo históricos y commValue = 0.');
+    console.log('    - API devuelve: commission=0 para mes 1 y 2 sin etiqueta visible interna.');
     console.log('');
     console.log('  Deploy: git pull origin test && pm2 restart gmp-api');
     console.log('  NO ejecutar ninguna migración SQL.\n');

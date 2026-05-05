@@ -11,7 +11,7 @@ describe('commission historical snapshot handling', () => {
         commission: 320.96,
     };
 
-    test('covered Jan/Feb month with no snapshot row is treated as no generated commission', () => {
+    test('covered Jan/Feb month with no snapshot row keeps historical figures but zero commission', () => {
         const result = resolveHistoricalCommissionMonth({
             year: 2026,
             month: 1,
@@ -24,8 +24,8 @@ describe('commission historical snapshot handling', () => {
 
         expect(result.isHistoricalSnapshot).toBe(true);
         expect(result.status).toBe('not_commissioned');
-        expect(result.actual).toBe(0);
-        expect(result.target).toBe(0);
+        expect(result.actual).toBe(liveMetrics.actual);
+        expect(result.target).toBe(liveMetrics.target);
         expect(result.commission).toBe(0);
     });
 

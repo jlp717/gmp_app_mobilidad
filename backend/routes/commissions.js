@@ -62,6 +62,7 @@ const DEFAULT_CONFIG_2026 = {
         { min: 110.01, max: 999.99, pct: 2.0 }
     ]
 };
+const COMMISSIONS_CACHE_VERSION = 'v20260505-snapshot';
 
 // =============================================================================
 // DATABASE INITIALIZATION (JAVIER Schema)
@@ -721,7 +722,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             GROUP BY L.LCAADC, LCMMDC
             ORDER BY YEAR, MONTH
         `;
-        const cacheKey = `commissions:sales:${vendedorCode}:${safeYear}`;
+        const cacheKey = `commissions:${COMMISSIONS_CACHE_VERSION}:sales:${vendedorCode}:${safeYear}`;
         salesRows = await redisCache.get('route', cacheKey);
         if (!salesRows) {
             salesRows = await queryWithParams(salesQuery, [safeYear, safePrevYear], false);
@@ -863,7 +864,8 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         // =====================================================================
         // Jan/Feb 2026 are closed commission months. The historical table only
         // stores vendors that generated commission; absence means zero generated
-        // commission and no live sales should be mixed into this screen.
+        // commission, while sales/target stay calculated with the historical
+        // vendor column so the figures remain explainable.
         const snap = snapshotForVendor[m] || null;
         const historicalMonth = resolveHistoricalCommissionMonth({
             year: selectedYear,
@@ -1089,7 +1091,7 @@ function buildAggregatedYearResult(results, config) {
 
 async function discoverVendorCodesForYear(year) {
     const safeYr = parseInt(year);
-    const cacheKey = `comm:vendorCodes:${safeYr}`;
+    const cacheKey = `comm:${COMMISSIONS_CACHE_VERSION}:vendorCodes:${safeYr}`;
 
     const cachedCodes = await redisCache.get('route', cacheKey);
     if (cachedCodes) {
@@ -1200,8 +1202,8 @@ router.get('/summary', verifyToken, async (req, res) => {
             : 'all';
         const aggregatedCacheKey = isGroupedRequest
             ? (safeVendorCode === 'ALL'
-                ? `comm:summary:ALL:${years.join(',')}`
-                : `comm:summary:GROUP:${groupHash}:${years.join(',')}`)
+                ? `comm:summary:${COMMISSIONS_CACHE_VERSION}:ALL:${years.join(',')}`
+                : `comm:summary:${COMMISSIONS_CACHE_VERSION}:GROUP:${groupHash}:${years.join(',')}`)
             : null;
 
         if (aggregatedCacheKey && !shouldForceRefresh) {
@@ -1626,6 +1628,8 @@ router.post('/pay', verifyToken, async (req, res) => {
         // INVALIDATE CACHE: Clear summary cache for this vendor/year so next request fetches fresh data
         try {
             await invalidateCachePattern(`comm:summary:${vendedorCode.trim()}:${year}`);
+            await invalidateCachePattern(`comm:summary:${COMMISSIONS_CACHE_VERSION}:ALL:*`);
+            await invalidateCachePattern(`comm:summary:${COMMISSIONS_CACHE_VERSION}:GROUP:*`);
             await invalidateCachePattern('comm:summary:ALL:*');
             await invalidateCachePattern('comm:summary:GROUP:*');
             logger.info(`[COMMISSIONS] Cache invalidated for ${vendedorCode}:${year}`);
