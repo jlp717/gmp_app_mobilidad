@@ -68,6 +68,16 @@ function getVendorColumnExpr(tableAlias = 'L', { forLACTable = false } = {}) {
 logger.info(`[CONFIG] VENDOR_COLUMN = ${VENDOR_COLUMN} (transition: ${TRANSITION_MONTH}/${TRANSITION_YEAR})`);
 
 // =============================================================================
+// SNAPSHOT UNTIL MONTH — controls which months use the immutable sales snapshot
+// =============================================================================
+// Months 1..SNAPSHOT_UNTIL_MONTH of year 2026 will read from
+// JAVIER.COMMISSION_SNAPSHOT_2026_0102 instead of live LACLAE queries.
+// Set SNAPSHOT_UNTIL_MONTH=0 to disable snapshot entirely (rollback).
+// Default: 2 (covers January and February 2026).
+const SNAPSHOT_UNTIL_MONTH = parseInt(process.env.SNAPSHOT_UNTIL_MONTH || '2', 10);
+logger.info(`[CONFIG] SNAPSHOT_UNTIL_MONTH = ${SNAPSHOT_UNTIL_MONTH}`);
+
+// =============================================================================
 // SALES FILTER CONSTANTS
 // =============================================================================
 // SALES FILTERS (GOLDEN DATA ALIGNMENT)
@@ -440,6 +450,7 @@ module.exports = {
     getCurrentYear,
     MIN_YEAR,
     VENDOR_COLUMN,
+    SNAPSHOT_UNTIL_MONTH,
     getVendorColumn,
     getVendorColumnExpr,
     LAC_SALES_FILTER,

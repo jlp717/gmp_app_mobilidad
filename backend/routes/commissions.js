@@ -5,7 +5,7 @@ const { cachedQuery } = require('../services/query-optimizer');
 const logger = require('../middleware/logger');
 const { auditDataAccess } = require('../middleware/audit');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
-const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, getVendorColumn, buildVendedorFilterLACLAE, buildColumnaVendedorFilter, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL, handleRouteError } = require('../utils/common');
+const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, SNAPSHOT_UNTIL_MONTH, getVendorColumn, getVendorColumnExpr, buildVendedorFilterLACLAE, buildColumnaVendedorFilter, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL, handleRouteError } = require('../utils/common');
 const { verifyToken } = require('../middleware/auth');
 const { redisCache, TTL, invalidateCachePattern } = require('../services/redis-cache');
 
@@ -336,24 +336,109 @@ async function getVendorPayments(vendorCode, year) {
 }
 
 /**
+ * Read the immutable sales snapshot for pre-transition months (Jan/Feb 2026).
+ * Returns { snapshotMap, monthsWithData } where:
+ *   snapshotMap: { [normalizedVendorCode]: { [month]: { ventasTotales, objetivo, comisionGenerada } } }
+ *   monthsWithData: Set<number> of months for which the snapshot table has at least one row.
+ *
+ * Uses JAVIER.COMMISSION_SNAPSHOT_2026_0102 (existing table with VENTAS_REAL = LAC + CONDOR combined).
+ * No LAC/CONDOR split is available — ventasTotales carries the full amount.
+ *
+ * Only queries if year === 2026 and SNAPSHOT_UNTIL_MONTH > 0.
+ *
+ * @param {string[]} vendorCodes - Vendor codes to fetch (empty → fetch all)
+ * @param {number} year - Year to fetch
+ * @returns {{ snapshotMap: Object, monthsWithData: Set<number> }}
+ */
+async function getVendorSalesSnapshot(vendorCodes, year) {
+    if (year !== 2026 || SNAPSHOT_UNTIL_MONTH <= 0) return { snapshotMap: {}, monthsWithData: new Set() };
+
+    try {
+        const monthList = Array.from({ length: SNAPSHOT_UNTIL_MONTH }, (_, i) => i + 1);
+        const monthPlaceholders = monthList.map(() => '?').join(',');
+
+        let rows;
+        if (!vendorCodes || vendorCodes.length === 0) {
+            // Fetch all vendors (ALL mode) — no vendor filter
+            rows = await queryWithParams(`
+                SELECT TRIM(VENDEDOR_CODIGO) as VENDEDOR_CODIGO, MES, VENTAS_REAL,
+                       OBJETIVO_MES, COMISION_GENERADA
+                FROM JAVIER.COMMISSION_SNAPSHOT_2026_0102
+                WHERE ANIO = ?
+                  AND MES IN (${monthPlaceholders})
+            `, [year, ...monthList], false, false);
+        } else {
+            const safeCodes = vendorCodes.map(c => c.replace(/[^a-zA-Z0-9]/g, '')).filter(Boolean);
+            if (safeCodes.length === 0) return { snapshotMap: {}, monthsWithData: new Set() };
+            const codePlaceholders = safeCodes.map(() => '?').join(',');
+            rows = await queryWithParams(`
+                SELECT TRIM(VENDEDOR_CODIGO) as VENDEDOR_CODIGO, MES, VENTAS_REAL,
+                       OBJETIVO_MES, COMISION_GENERADA
+                FROM JAVIER.COMMISSION_SNAPSHOT_2026_0102
+                WHERE ANIO = ?
+                  AND MES IN (${monthPlaceholders})
+                  AND VENDEDOR_CODIGO IN (${codePlaceholders})
+            `, [year, ...monthList, ...safeCodes], false, false);
+        }
+
+        // Track which months have at least one row — used to distinguish
+        // "table empty for this month" from "vendor not present this month".
+        const monthsWithData = new Set();
+        const snapshotMap = {};
+
+        rows.forEach(r => {
+            const rawCode = (r.VENDEDOR_CODIGO || '').trim();
+            // Normalize: strip leading zeros so '02' === '2'. Keep both forms as keys
+            // to handle whatever format the rest of the code uses.
+            const normalizedCode = rawCode.replace(/^0+/, '') || rawCode;
+            const mes = parseInt(r.MES);
+
+            monthsWithData.add(mes);
+
+            const entry = {
+                ventasTotales: parseFloat(r.VENTAS_REAL) || 0,
+                objetivo: parseFloat(r.OBJETIVO_MES) || 0,
+                comisionGenerada: parseFloat(r.COMISION_GENERADA) || 0,
+            };
+
+            // Store under both the raw padded code ('02') and normalized ('2')
+            // so lookups succeed regardless of which format callers use.
+            for (const key of [rawCode, normalizedCode]) {
+                if (!snapshotMap[key]) snapshotMap[key] = {};
+                snapshotMap[key][mes] = entry;
+            }
+        });
+
+        logger.info(`[COMMISSIONS] Snapshot loaded from COMMISSION_SNAPSHOT_2026_0102: ${rows.length} rows, ${Object.keys(snapshotMap).length / 2} vendors, months [${[...monthsWithData].join(',')}] of ${year}`);
+        return { snapshotMap, monthsWithData };
+    } catch (e) {
+        logger.warn(`[COMMISSIONS] getVendorSalesSnapshot failed: ${e.message}`);
+        return { snapshotMap: {}, monthsWithData: new Set() };
+    }
+}
+
+/**
  * BATCH FETCH: Load all vendor data in parallel queries instead of N×7 sequential.
  * Reduces 145+ queries → 5 queries for ALL mode.
  */
 async function batchFetchAllVendorData(vendorCodes, year) {
-    const col = getVendorColumn(year);
-    const prevCol = getVendorColumn(year - 1);
+    // Use CASE expression to handle LCCDVD→R1_T8CDVD transition per-row (Jan/Feb 2026 use LCCDVD)
+    const vendorColExpr = getVendorColumnExpr('L');
     const safeCodes = vendorCodes.map(c => c.replace(/[^a-zA-Z0-9]/g, '')).filter(Boolean);
     const placeholders = safeCodes.map(() => '?').join(',');
 
     const [allSalesRows, allBSalesRows, allPaymentsRows, allFixedTargets, allVendorNames] = await Promise.all([
         // 1. LACLAE sales for ALL vendors (current + prev year)
+        // NOTE: GROUP BY must use the same CASE expression as SELECT.
+        // For prev year, LCCDVD is always correct (transition only affects 2026+).
+        // The CASE expr naturally handles this: rows with LCAADC < 2026 always return LCCDVD.
         queryWithParams(`
-            SELECT L.${col} as VENDOR_CODE, L.LCAADC as YEAR, LCMMDC as MONTH, SUM(L.LCIMVT) as SALES
+            SELECT (${vendorColExpr}) as VENDOR_CODE, L.LCAADC as YEAR, LCMMDC as MONTH, SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L
             WHERE L.LCAADC IN (?, ?)
               AND ${LACLAE_SALES_FILTER}
-              AND L.${col} IN (${placeholders})
-            GROUP BY L.${col}, L.LCAADC, LCMMDC
+              AND (${vendorColExpr}) IN (${placeholders})
+            GROUP BY (${vendorColExpr}), L.LCAADC, LCMMDC
         `, [year, year - 1, ...safeCodes], false),
 
         // 2. B-Sales for ALL vendors (current + prev year) from JAVIER.VENTAS_B
@@ -701,6 +786,31 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
     let grandTotalCommission = 0;
     const now = new Date(); // To restrict "future coverage"
 
+    // =====================================================================
+    // SALES SNAPSHOT: Load authoritative data for pre-transition months.
+    // This covers ALL comerciales including those with 0 commission (e.g. vendor 05).
+    // When snapshot exists for a month, it overrides live LACLAE calculations.
+    // In batch mode, salesSnapshotData is pre-loaded by the caller (1 query for all).
+    // In single mode, query the snapshot table directly.
+    // =====================================================================
+    // salesSnapshot shape: { snapshotMap, monthsWithData }
+    // snapshotForVendor: month → { ventasTotales, objetivo, comisionGenerada }
+    let snapshotForVendor = {};
+    let snapshotMonthsWithData = new Set();
+
+    if (preloadedData && preloadedData.salesSnapshotData) {
+        // Batch mode: snapshot already loaded — preloadedData carries the vendor slice + Set
+        snapshotForVendor = preloadedData.salesSnapshotData;
+        snapshotMonthsWithData = preloadedData.snapshotMonthsWithData || new Set();
+    } else {
+        // Single vendor mode: query now
+        const salesSnapshot = await getVendorSalesSnapshot([vendedorCode], selectedYear);
+        snapshotForVendor = salesSnapshot.snapshotMap[vendedorCode.trim()]
+            || salesSnapshot.snapshotMap[normalizedCode]
+            || {};
+        snapshotMonthsWithData = salesSnapshot.monthsWithData;
+    }
+
     for (let m = 1; m <= 12; m++) {
         const prevRow = salesRows.find(r => r.YEAR == prevYear && r.MONTH == m);
         const currRow = salesRows.find(r => r.YEAR == selectedYear && r.MONTH == m);
@@ -718,7 +828,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             prevSales = inheritedMonthlySales[m];
         }
 
-        // Target 2026: 
+        // Target 2026:
         // - If vendor has FIXED commission base from COMMERCIAL_TARGETS, use that
         // - Otherwise: prevSales * (1 + IPC)
         let target;
@@ -728,24 +838,47 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             target = prevSales * (1 + (config.ipc / 100));
         }
 
-        // Commission for this month
+        // Commission for this month (live calculation as baseline)
         const result = calculateCommission(currentSales, target, config);
         let commValue = isExcluded ? 0 : result.commission;
 
         // =====================================================================
-        // SNAPSHOT: For pre-transition months (Jan/Feb 2026) with recorded
-        // payments, use the stored COMISION_GENERADA instead of recalculating.
-        // This ensures the app shows exactly what was paid/confirmed.
+        // AUTHORITATIVE SNAPSHOT: For months 1..SNAPSHOT_UNTIL_MONTH of 2026,
+        // use JAVIER.COMMISSION_SNAPSHOT_2026_0102 values instead of live recalc.
+        //
+        // monthsWithData tells us which months the table actually covers.
+        // If a month is covered but the vendor has no row → vendor had no commission
+        // that month → force commValue = 0 (snapshotApplied = true so UI shows FOTO badge).
+        // If the month has no rows at all in the table → fall back to live calc.
         // =====================================================================
-        const isPreTransitionMonth = (selectedYear === 2026 && m < 3 && VENDOR_COLUMN === 'R1_T8CDVD');
-        const paymentDetail = payments.details[m];
+        const isSnapshotMonth = (selectedYear === 2026 && m <= SNAPSHOT_UNTIL_MONTH && SNAPSHOT_UNTIL_MONTH > 0);
+        const monthHasSnapshotData = isSnapshotMonth && snapshotMonthsWithData.has(m);
+        const snap = snapshotForVendor[m] || null;
         let snapshotApplied = false;
+        let snapshotSource = null;
 
-        if (isPreTransitionMonth && paymentDetail && paymentDetail.comisionGenerada > 0) {
-            // Use stored COMISION_GENERADA from COMMISSION_PAYMENTS
-            commValue = isExcluded ? 0 : parseFloat(paymentDetail.comisionGenerada);
-            snapshotApplied = true;
-            logger.debug(`[COMMISSIONS] SNAPSHOT month ${m}/2026 for ${vendedorCode}: using stored commission ${commValue.toFixed(2)}€ (calculated was ${result.commission.toFixed(2)}€)`);
+        if (monthHasSnapshotData) {
+            if (snap) {
+                // Vendor present in snapshot → authoritative values
+                currentSales = snap.ventasTotales;
+                target = snap.objetivo > 0 ? snap.objetivo : target;
+                commValue = isExcluded ? 0 : snap.comisionGenerada;
+                snapshotApplied = true;
+                snapshotSource = 'JAVIER.COMMISSION_SNAPSHOT_2026_0102';
+                logger.debug(`[COMMISSIONS] SNAPSHOT month ${m}/2026 for ${vendedorCode}: total=${snap.ventasTotales.toFixed(2)} obj=${snap.objetivo.toFixed(2)} comm=${snap.comisionGenerada.toFixed(2)} (live was ${result.commission.toFixed(2)})`);
+            } else {
+                // Month has snapshot data globally but this vendor has NO row →
+                // vendor was not commissioning that month → force commission = 0.
+                // Keep currentSales/target from live calc so UI has some context,
+                // but mark snapshotApplied so the FOTO badge is shown.
+                commValue = 0;
+                snapshotApplied = true;
+                snapshotSource = 'JAVIER.COMMISSION_SNAPSHOT_2026_0102';
+                logger.debug(`[COMMISSIONS] SNAPSHOT month ${m}/2026: vendor ${vendedorCode} not in snapshot → commission forced to 0`);
+            }
+        } else if (isSnapshotMonth) {
+            // Snapshot month but table has NO rows for this month at all → fall back to live.
+            logger.warn(`[COMMISSIONS] No snapshot data found for month ${m}/2026 — using live calc (table may be empty for this month).`);
         }
 
         // Add to totals
@@ -785,11 +918,10 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         // Daily Flag: "Green if accumulated sales >= pro-rated target"
         const isOnTrack = currentSales >= proRatedTarget;
 
-        // Calculate provisional / actual commission on current accumulated amount
+        // Calculate provisional commission on current accumulated amount
         const provisionalResult = calculateCommission(currentSales, proRatedTarget, config);
+        // For snapshot months, provisional = confirmed commission (month is closed)
         let provisionalCommission = isExcluded ? 0 : provisionalResult.commission;
-
-        // SNAPSHOT: For pre-transition months, provisional = actual stored commission
         if (snapshotApplied) {
             provisionalCommission = commValue;
         }
@@ -805,13 +937,17 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             dailyTarget: dailyTarget,
             dailyActual: dailyActual,
             isFuture: isFuture,
+            snapshotApplied: snapshotApplied,
+            snapshotSource: snapshotSource,
             complianceCtx: {
                 pct: (target > 0) ? (currentSales / target) * 100 : 0,
                 increment: result.increment,
                 tier: result.tier,
                 rate: result.rate,
                 commission: commValue,
-                isExcluded: isExcluded
+                isExcluded: isExcluded,
+                snapshotApplied: snapshotApplied,
+                snapshotSource: snapshotSource
             },
             dailyComplianceCtx: {
                 pct: (proRatedTarget > 0) ? (currentSales / proRatedTarget) * 100 : 0,
@@ -1216,7 +1352,23 @@ router.get('/summary', verifyToken, async (req, res) => {
 
                 // PERF: Batch fetch ALL vendor data in 5 queries instead of N×7
                 const batchStart = Date.now();
-                const allVendorData = await batchFetchAllVendorData(vendorCodes, yr);
+                // Also pre-load sales snapshot once for all vendors (1 query instead of N)
+                const [allVendorData, allSnapshotResult] = await Promise.all([
+                    batchFetchAllVendorData(vendorCodes, yr),
+                    getVendorSalesSnapshot(vendorCodes, yr)
+                ]);
+                // allSnapshotResult = { snapshotMap, monthsWithData }
+                const { snapshotMap: allSnapshotMap, monthsWithData: allMonthsWithData } = allSnapshotResult;
+                // Attach each vendor's snapshot slice + shared monthsWithData to their preloaded data object
+                for (const code of vendorCodes) {
+                    if (allVendorData[code]) {
+                        const trimmed = code.trim();
+                        const normalized = trimmed.replace(/^0+/, '') || trimmed;
+                        allVendorData[code].salesSnapshotData = allSnapshotMap[trimmed] || allSnapshotMap[normalized] || {};
+                        // Share the same Set — it's read-only in calculateVendorData
+                        allVendorData[code].snapshotMonthsWithData = allMonthsWithData;
+                    }
+                }
                 logger.info(`[COMMISSIONS] Batch fetch completed in ${Date.now() - batchStart}ms for ${vendorCodes.length} vendors`);
 
                 // Process each vendor with preloaded data (no DB queries)
@@ -1536,7 +1688,7 @@ router.get('/pdf', verifyToken, async (req, res) => {
                 pdfService.getCondorSalesData(targetYear, startMonth, endMonth)
             ]);
             
-            logger.info(`[PDF] Data fetched successfully: ${vendorData.length} LAC vendors, ${condorData.length} Condor vendors`);
+            logger.info(`[PDF] Data fetched successfully: ${vendorData.length} LAC vendors, ${condorData.size} Condor vendors`);
         } catch (dataError) {
             logger.error(`[PDF] Error fetching sales data: ${dataError.message}`);
             return res.status(500).json({ 

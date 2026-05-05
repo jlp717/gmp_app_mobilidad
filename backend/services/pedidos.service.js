@@ -5,12 +5,13 @@
  * Tables live in schema JAVIER; product/stock reads go to DSEDAC.
  */
 
-const { query, queryWithParams, getPool } = require('../config/db');
+const { query, queryWithParams, getPool, initDb } = require('../config/db');
 const logger = require('../middleware/logger');
 const { cachedQuery } = require('./query-optimizer');
 const { redisCache, TTL } = require('./redis-cache');
 const { LACLAE_SALES_FILTER } = require('../utils/common');
 const { CircuitBreaker } = require('./circuit-breaker');
+const { getClientDays } = require('./laclae');
 
 if (typeof CircuitBreaker !== 'function') {
     throw new Error('CircuitBreaker import failed: got ' + typeof CircuitBreaker);
@@ -61,6 +62,24 @@ CREATE TABLE JAVIER.PEDIDOS_CAB (
     IMPORTEMARGEN NUMERIC(11,2) DEFAULT 0,
     OBSERVACIONES VARCHAR(200) DEFAULT '',
     ORIGEN CHAR(1) DEFAULT 'A',
+    FECHAREPARTO DATE,
+    DIAREPARTO NUMERIC(2) DEFAULT 0,
+    MESREPARTO NUMERIC(2) DEFAULT 0,
+    ANOREPARTO NUMERIC(4) DEFAULT 0,
+    CODIGOREPARTIDOR CHAR(2) DEFAULT ' ',
+    CODIGOVEHICULO CHAR(10) DEFAULT ' ',
+    RUTA VARCHAR(10) DEFAULT '',
+    DIASREPARTO VARCHAR(80) DEFAULT '',
+    REPARTO_VALIDADO_SN CHAR(1) DEFAULT 'N',
+    REPARTO_VALIDADO_AT TIMESTAMP,
+    TARGET_SCHEMA CHAR(10) DEFAULT 'JAVIER',
+    SYNC_STATUS VARCHAR(16) DEFAULT 'LOCAL',
+    SYNC_AT TIMESTAMP,
+    SYSTEM_SUBEMPRESAPEDIDO CHAR(3) DEFAULT ' ',
+    SYSTEM_EJERCICIOPEDIDO NUMERIC(4) DEFAULT 0,
+    SYSTEM_SERIEPEDIDO CHAR(1) DEFAULT ' ',
+    SYSTEM_TERMINALPEDIDO NUMERIC(3) DEFAULT 0,
+    SYSTEM_NUMEROPEDIDO NUMERIC(6) DEFAULT 0,
     CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UPDATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )`;
@@ -118,6 +137,13 @@ function isTableNotFound(err) {
     return codes.includes(-204) || msg.includes('sql0204');
 }
 
+function isColumnNotFound(err) {
+    const msg = (err.message || '').toLowerCase();
+    const codes = (err.odbcErrors || []).map(e => e.code);
+    const states = (err.odbcErrors || []).map(e => e.state);
+    return codes.includes(-205) || states.includes('42S22') || msg.includes('sql0205') || msg.includes('column not found');
+}
+
 /**
  * Sanitize a string for safe SQL interpolation (only used where
  * parameterized queries are not possible, e.g. dynamic IN lists).
@@ -125,6 +151,779 @@ function isTableNotFound(err) {
 function sanitize(val) {
     if (val == null) return '';
     return String(val).replace(/'/g, "''");
+}
+
+function trimString(value) {
+    return value == null ? '' : String(value).trim();
+}
+
+function pedidosSchemaName(raw) {
+    const schema = String(raw || 'JAVIER').trim().toUpperCase();
+    if (!['JAVIER', 'DSEDAC'].includes(schema)) {
+        throw new Error(`PEDIDOS_CONFIRMATION_SCHEMA invalido: ${schema}. Use JAVIER o DSEDAC.`);
+    }
+    return schema;
+}
+
+function parseIntConfig(raw, fallback) {
+    const parsed = parseInt(raw, 10);
+    return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function getPedidosConfirmationTarget() {
+    const schema = pedidosSchemaName(
+        process.env.PEDIDOS_CONFIRMATION_SCHEMA ||
+        process.env.PEDIDOS_ERP_SCHEMA ||
+        process.env.PEDIDOS_TARGET_SCHEMA ||
+        'JAVIER'
+    );
+    const subempresa = trimString(process.env.PEDIDOS_SYSTEM_SUBEMPRESA || 'GMP').substring(0, 3) || 'GMP';
+    const serie = trimString(process.env.PEDIDOS_SYSTEM_SERIE || 'P').substring(0, 1) || 'P';
+    const terminal = parseIntConfig(process.env.PEDIDOS_SYSTEM_TERMINAL, 10);
+    return {
+        schema,
+        mode: schema === 'DSEDAC' ? 'SYSTEM' : 'LOCAL',
+        shouldExportToSystem: schema === 'DSEDAC',
+        subempresa,
+        serie,
+        terminal,
+        codigoOperacion: trimString(process.env.PEDIDOS_SYSTEM_CODIGO_OPERACION || 'V').substring(0, 1) || 'V',
+        situacionPedido: trimString(process.env.PEDIDOS_SYSTEM_SITUACION_PEDIDO || 'A').substring(0, 1) || 'A',
+        codigoTipoPedido: trimString(process.env.PEDIDOS_SYSTEM_CODIGO_TIPO_PEDIDO || '').substring(0, 3),
+        codigoUsuario: trimString(process.env.PEDIDOS_SYSTEM_CODIGO_USUARIO || 'APP').substring(0, 10) || 'APP',
+        tables: {
+            cab: `${schema}.CPC`,
+            lin: `${schema}.LPC`,
+            obs: `${schema}.OCPC`,
+        },
+    };
+}
+
+const DELIVERY_DAY_ORDER = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+const DAY_NAMES_BY_JS_INDEX = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
+const DAY_LABELS = {
+    lunes: 'lunes',
+    martes: 'martes',
+    miercoles: 'miercoles',
+    jueves: 'jueves',
+    viernes: 'viernes',
+    sabado: 'sabado',
+    domingo: 'domingo',
+};
+const DAY_SHORT = {
+    lunes: 'L',
+    martes: 'M',
+    miercoles: 'X',
+    jueves: 'J',
+    viernes: 'V',
+    sabado: 'S',
+    domingo: 'D',
+};
+const CRUT_DELIVERY_COLUMNS = {
+    lunes: 'DIAREPARTOLUNESSN',
+    martes: 'DIAREPARTOMARTESSN',
+    miercoles: 'DIAREPARTOMIERCOLESSN',
+    jueves: 'DIAREPARTOJUEVESSN',
+    viernes: 'DIAREPARTOVIERNESSN',
+    sabado: 'DIAREPARTOSABADOSN',
+    domingo: 'DIAREPARTODOMINGOSN',
+};
+const LACLAE_DELIVERY_COLUMNS = {
+    lunes: 'R1_T8DIRL',
+    martes: 'R1_T8DIRM',
+    miercoles: 'R1_T8DIRX',
+    jueves: 'R1_T8DIRJ',
+    viernes: 'R1_T8DIRV',
+    sabado: 'R1_T8DIRS',
+    domingo: 'R1_T8DIRD',
+};
+
+function normalizeDayName(value) {
+    const normalized = trimString(value)
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+    const aliases = {
+        l: 'lunes',
+        lu: 'lunes',
+        lunes: 'lunes',
+        m: 'martes',
+        ma: 'martes',
+        martes: 'martes',
+        x: 'miercoles',
+        mi: 'miercoles',
+        miercoles: 'miercoles',
+        miercolesn: 'miercoles',
+        j: 'jueves',
+        ju: 'jueves',
+        jueves: 'jueves',
+        v: 'viernes',
+        vi: 'viernes',
+        viernes: 'viernes',
+        s: 'sabado',
+        sa: 'sabado',
+        sabado: 'sabado',
+        d: 'domingo',
+        do: 'domingo',
+        domingo: 'domingo',
+    };
+    return aliases[normalized] || '';
+}
+
+function normalizeDayList(days) {
+    if (!days) return [];
+    const raw = String(days).trim();
+    const source = Array.isArray(days)
+        ? days
+        : /^[LMXJVSD]+$/i.test(raw)
+            ? raw.split('')
+            : raw.split(/[,;|\s]+/);
+    const set = new Set(source.map(normalizeDayName).filter(Boolean));
+    return DELIVERY_DAY_ORDER.filter(day => set.has(day));
+}
+
+function deliveryDaysShort(days) {
+    return normalizeDayList(days).map(day => DAY_SHORT[day]).join('');
+}
+
+function yesFlag(value) {
+    return trimString(value).toUpperCase() === 'S' || trimString(value).toUpperCase() === 'Y' || trimString(value) === '1';
+}
+
+function pad2(value) {
+    return String(value).padStart(2, '0');
+}
+
+function parseDeliveryDate(value) {
+    if (!value) return null;
+
+    if (value instanceof Date) {
+        const y = value.getUTCFullYear();
+        const m = value.getUTCMonth() + 1;
+        const d = value.getUTCDate();
+        const iso = `${y}-${pad2(m)}-${pad2(d)}`;
+        return { iso, year: y, month: m, day: d, dayName: DAY_NAMES_BY_JS_INDEX[value.getUTCDay()] };
+    }
+
+    const raw = trimString(value);
+    let y;
+    let m;
+    let d;
+    let match = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (match) {
+        y = parseInt(match[1], 10);
+        m = parseInt(match[2], 10);
+        d = parseInt(match[3], 10);
+    } else {
+        match = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (!match) throw new Error('Fecha reparto invalida');
+        d = parseInt(match[1], 10);
+        m = parseInt(match[2], 10);
+        y = parseInt(match[3], 10);
+    }
+
+    const parsed = new Date(Date.UTC(y, m - 1, d));
+    if (parsed.getUTCFullYear() !== y || parsed.getUTCMonth() + 1 !== m || parsed.getUTCDate() !== d) {
+        throw new Error('Fecha reparto invalida');
+    }
+
+    return {
+        iso: `${y}-${pad2(m)}-${pad2(d)}`,
+        year: y,
+        month: m,
+        day: d,
+        dayName: DAY_NAMES_BY_JS_INDEX[parsed.getUTCDay()],
+    };
+}
+
+function formatDateDisplay(value) {
+    const parsed = parseDeliveryDate(value);
+    if (!parsed) return '';
+    return `${pad2(parsed.day)}/${pad2(parsed.month)}/${parsed.year}`;
+}
+
+function getNextDeliveryDate(allowedDays, fromDate = new Date()) {
+    const days = normalizeDayList(allowedDays);
+    const base = fromDate instanceof Date ? fromDate : new Date(fromDate);
+    const start = new Date(Date.UTC(base.getFullYear(), base.getMonth(), base.getDate()));
+
+    for (let i = 0; i < 31; i++) {
+        const candidate = new Date(start);
+        candidate.setUTCDate(start.getUTCDate() + i);
+        const dayName = DAY_NAMES_BY_JS_INDEX[candidate.getUTCDay()];
+        if (days.length === 0 || days.includes(dayName)) {
+            return parseDeliveryDate(candidate);
+        }
+    }
+
+    return parseDeliveryDate(start);
+}
+
+function deliveryDaysFromRows(rows, columnMap) {
+    const present = new Set();
+    for (const row of rows || []) {
+        for (const day of DELIVERY_DAY_ORDER) {
+            if (yesFlag(row[columnMap[day]])) present.add(day);
+        }
+    }
+    return DELIVERY_DAY_ORDER.filter(day => present.has(day));
+}
+
+async function fetchClientDeliveryDays({ clientCode, vendedorCode }) {
+    const cleanClient = trimString(clientCode);
+    const cleanVendor = trimString(vendedorCode).split(',')[0].substring(0, 2);
+
+    try {
+        if (typeof getClientDays === 'function') {
+            const cached = getClientDays(cleanVendor, cleanClient);
+            const cachedDays = normalizeDayList(cached?.deliveryDays || cached?.deliveryDaysShort);
+            if (cachedDays.length > 0) {
+                return { days: cachedDays, source: 'laclae-cache' };
+            }
+        }
+    } catch (error) {
+        logger.warn(`[PEDIDOS] getClientDays failed for ${cleanClient}/${cleanVendor}: ${error.message}`);
+    }
+
+    try {
+        const params = [cleanClient];
+        let vendorFilter = '';
+        if (cleanVendor) {
+            vendorFilter = ' AND TRIM(CODIGOVENDEDOR) = ?';
+            params.push(cleanVendor);
+        }
+        const rows = await queryWithParams(`
+            SELECT DIAREPARTOLUNESSN, DIAREPARTOMARTESSN, DIAREPARTOMIERCOLESSN,
+                   DIAREPARTOJUEVESSN, DIAREPARTOVIERNESSN, DIAREPARTOSABADOSN,
+                   DIAREPARTODOMINGOSN
+            FROM DSEDAC.CRUT
+            WHERE TRIM(CODIGOCLIENTE) = ?
+              ${vendorFilter}
+              AND COALESCE(TRIM(MARCAACTUALIZACION), '') <> 'B'
+            ORDER BY SECUENCIA
+            FETCH FIRST 10 ROWS ONLY`,
+            params,
+            false
+        );
+        const crutDays = deliveryDaysFromRows(rows, CRUT_DELIVERY_COLUMNS);
+        if (crutDays.length > 0) {
+            return { days: crutDays, source: 'DSEDAC.CRUT' };
+        }
+        if (cleanVendor) {
+            const allVendorRows = await queryWithParams(`
+                SELECT DIAREPARTOLUNESSN, DIAREPARTOMARTESSN, DIAREPARTOMIERCOLESSN,
+                       DIAREPARTOJUEVESSN, DIAREPARTOVIERNESSN, DIAREPARTOSABADOSN,
+                       DIAREPARTODOMINGOSN
+                FROM DSEDAC.CRUT
+                WHERE TRIM(CODIGOCLIENTE) = ?
+                  AND COALESCE(TRIM(MARCAACTUALIZACION), '') <> 'B'
+                ORDER BY SECUENCIA
+                FETCH FIRST 10 ROWS ONLY`,
+                [cleanClient],
+                false
+            );
+            const allCrutDays = deliveryDaysFromRows(allVendorRows, CRUT_DELIVERY_COLUMNS);
+            if (allCrutDays.length > 0) {
+                return { days: allCrutDays, source: 'DSEDAC.CRUT' };
+            }
+        }
+    } catch (error) {
+        logger.warn(`[PEDIDOS] CRUT delivery days lookup failed for ${cleanClient}/${cleanVendor}: ${error.message}`);
+    }
+
+    try {
+        const currentYear = new Date().getFullYear();
+        const params = [cleanClient, currentYear - 1];
+        let vendorFilter = '';
+        if (cleanVendor) {
+            vendorFilter = ' AND TRIM(R1_T8CDVD) = ?';
+            params.push(cleanVendor);
+        }
+        const rows = await queryWithParams(`
+            SELECT R1_T8DIRL, R1_T8DIRM, R1_T8DIRX, R1_T8DIRJ,
+                   R1_T8DIRV, R1_T8DIRS, R1_T8DIRD
+            FROM DSED.LACLAE
+            WHERE TRIM(LCCDCL) = ?
+              AND LCAADC >= ?
+              ${vendorFilter}
+            FETCH FIRST 20 ROWS ONLY`,
+            params,
+            false
+        );
+        const laclaeDays = deliveryDaysFromRows(rows, LACLAE_DELIVERY_COLUMNS);
+        if (laclaeDays.length > 0) {
+            return { days: laclaeDays, source: 'DSED.LACLAE' };
+        }
+        if (cleanVendor) {
+            const allVendorRows = await queryWithParams(`
+                SELECT R1_T8DIRL, R1_T8DIRM, R1_T8DIRX, R1_T8DIRJ,
+                       R1_T8DIRV, R1_T8DIRS, R1_T8DIRD
+                FROM DSED.LACLAE
+                WHERE TRIM(LCCDCL) = ?
+                  AND LCAADC >= ?
+                FETCH FIRST 20 ROWS ONLY`,
+                [cleanClient, currentYear - 1],
+                false
+            );
+            const allLaclaeDays = deliveryDaysFromRows(allVendorRows, LACLAE_DELIVERY_COLUMNS);
+            if (allLaclaeDays.length > 0) {
+                return { days: allLaclaeDays, source: 'DSED.LACLAE' };
+            }
+        }
+    } catch (error) {
+        logger.warn(`[PEDIDOS] LACLAE delivery days lookup failed for ${cleanClient}/${cleanVendor}: ${error.message}`);
+    }
+
+    return { days: [], source: 'none' };
+}
+
+async function resolveDeliveryPlan({ clientCode, vendedorCode, deliveryDate, fromDate }) {
+    const deliveryInfo = await fetchClientDeliveryDays({ clientCode, vendedorCode });
+    const allowedDays = normalizeDayList(deliveryInfo.days);
+    const requestedDate = deliveryDate ? parseDeliveryDate(deliveryDate) : getNextDeliveryDate(allowedDays, fromDate);
+
+    if (allowedDays.length > 0 && !allowedDays.includes(requestedDate.dayName)) {
+        throw new Error(`Fecha reparto ${formatDateDisplay(requestedDate.iso)} (${DAY_LABELS[requestedDate.dayName]}) no permitida. Dias reparto cliente: ${allowedDays.map(day => DAY_LABELS[day]).join(', ')}`);
+    }
+
+    return {
+        date: requestedDate,
+        allowedDays,
+        allowedDaysShort: deliveryDaysShort(allowedDays),
+        source: deliveryInfo.source,
+        validated: allowedDays.length > 0,
+    };
+}
+
+function normalizeAssignmentRow(row) {
+    if (!row) return {};
+    return {
+        vehicleCode: trimString(row.CODIGOVEHICULO || row.VEHICLECODE).substring(0, 10),
+        driverCode: trimString(row.CODIGOREPARTIDOR || row.DRIVERCODE).substring(0, 2),
+        vehicleMatricula: trimString(row.MATRICULA || row.VEHICULOMATRICULA),
+        vehicleDescription: trimString(row.DESC_VEHICULO || row.DESCRIPCIONVEHICULO || row.VEHICLEDESCRIPTION),
+        routeCode: trimString(row.RUTA || row.CODIGORUTA).substring(0, 10),
+    };
+}
+
+async function getDefaultTruckAssignment({ clientCode, vendedorCode, deliveryDate, routeCode }) {
+    const cleanClient = trimString(clientCode);
+    const cleanVendor = trimString(vendedorCode).split(',')[0].substring(0, 2);
+
+    try {
+        const params = [cleanClient];
+        let vendorFilter = '';
+        if (cleanVendor) {
+            vendorFilter = ' OR TRIM(CPC.CODIGOVENDEDOR) = ?';
+            params.push(cleanVendor);
+        }
+        const rows = await queryWithParams(`
+            SELECT TRIM(OPP.CODIGOVEHICULO) AS CODIGOVEHICULO,
+                   TRIM(OPP.CODIGOREPARTIDOR) AS CODIGOREPARTIDOR,
+                   TRIM(CPC.CODIGORUTA) AS RUTA,
+                   TRIM(VEH.MATRICULA) AS MATRICULA,
+                   TRIM(VEH.DESCRIPCIONVEHICULO) AS DESC_VEHICULO,
+                   COUNT(*) AS USOS,
+                   MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) AS ULTIMA_FECHA
+            FROM DSEDAC.OPP OPP
+            LEFT JOIN DSEDAC.CPC CPC
+              ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+             AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
+            LEFT JOIN DSEDAC.VEH VEH ON TRIM(VEH.CODIGOVEHICULO) = TRIM(OPP.CODIGOVEHICULO)
+            WHERE (TRIM(CPC.CODIGOCLIENTEALBARAN) = ?${vendorFilter})
+              AND OPP.ANOREPARTO >= YEAR(CURRENT DATE) - 1
+              AND TRIM(OPP.CODIGOVEHICULO) <> ''
+            GROUP BY TRIM(OPP.CODIGOVEHICULO), TRIM(OPP.CODIGOREPARTIDOR),
+                     TRIM(CPC.CODIGORUTA), TRIM(VEH.MATRICULA), TRIM(VEH.DESCRIPCIONVEHICULO)
+            ORDER BY USOS DESC, ULTIMA_FECHA DESC
+            FETCH FIRST 1 ROW ONLY`,
+            params,
+            false
+        );
+        const assignment = normalizeAssignmentRow(rows?.[0]);
+        if (assignment.vehicleCode || assignment.driverCode) {
+            return {
+                ...assignment,
+                routeCode: routeCode || assignment.routeCode,
+                confidence: 'media',
+                source: 'DSEDAC.OPP',
+            };
+        }
+    } catch (error) {
+        logger.warn(`[PEDIDOS] Default truck lookup failed for ${cleanClient}/${cleanVendor}: ${error.message}`);
+    }
+
+    return {
+        vehicleCode: '',
+        driverCode: '',
+        vehicleMatricula: '',
+        vehicleDescription: '',
+        routeCode: routeCode || '',
+        confidence: 'sin-datos',
+        source: 'none',
+    };
+}
+
+async function getDeliveryOptions({ clientCode, vendedorCode, deliveryDate }) {
+    if (!clientCode || !vendedorCode) {
+        throw new Error('clientCode and vendedorCode are required');
+    }
+
+    const deliveryPlan = await resolveDeliveryPlan({ clientCode, vendedorCode, deliveryDate });
+    const assignment = await getDefaultTruckAssignment({
+        clientCode,
+        vendedorCode,
+        deliveryDate: deliveryPlan.date.iso,
+    });
+
+    return {
+        clientCode: trimString(clientCode),
+        vendedorCode: trimString(vendedorCode).split(',')[0].substring(0, 2),
+        allowedDeliveryDays: deliveryPlan.allowedDays,
+        allowedDeliveryDaysShort: deliveryPlan.allowedDaysShort,
+        suggestedDeliveryDate: deliveryPlan.date.iso,
+        suggestedDeliveryDateFormatted: formatDateDisplay(deliveryPlan.date.iso),
+        selectedDeliveryDate: deliveryPlan.date.iso,
+        selectedDeliveryDateFormatted: formatDateDisplay(deliveryPlan.date.iso),
+        vehicleCode: assignment.vehicleCode || '',
+        driverCode: assignment.driverCode || '',
+        vehicleMatricula: assignment.vehicleMatricula || '',
+        vehicleDescription: assignment.vehicleDescription || '',
+        truckConfidence: assignment.confidence || 'sin-datos',
+        truckSource: assignment.source || 'none',
+        routeCode: assignment.routeCode || '',
+        validated: deliveryPlan.validated,
+        deliveryDaysSource: deliveryPlan.source,
+    };
+}
+
+function numberValue(raw) {
+    const num = Number(raw);
+    return Number.isFinite(num) ? num : 0;
+}
+
+function integerValue(raw) {
+    const num = parseInt(raw, 10);
+    return Number.isFinite(num) ? num : 0;
+}
+
+function roundMoney(raw) {
+    return Math.round((numberValue(raw) + Number.EPSILON) * 100) / 100;
+}
+
+function currentHhmmss() {
+    const now = new Date();
+    return parseInt(
+        `${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}`,
+        10
+    );
+}
+
+function truncate(value, length) {
+    return trimString(value).substring(0, length);
+}
+
+function splitFixedText(value, width, count) {
+    const text = trimString(value);
+    const chunks = [];
+    for (let i = 0; i < count; i++) {
+        chunks.push(text.substring(i * width, (i + 1) * width));
+    }
+    return chunks;
+}
+
+function cajaUnidadFlag(unidadMedida) {
+    const unit = trimString(unidadMedida).toUpperCase();
+    if (unit === 'CAJA' || unit === 'CAJAS' || unit === '') return 'C';
+    return 'U';
+}
+
+async function withPedidosTransaction(callback) {
+    let pool = getPool();
+    if (!pool && typeof initDb === 'function') {
+        await initDb();
+        pool = getPool();
+    }
+    if (!pool || typeof pool.connect !== 'function') {
+        throw new Error('No DB pool available for pedidos transaction');
+    }
+
+    const conn = await pool.connect();
+    try {
+        await conn.query('BEGIN WORK');
+        const result = await callback(conn);
+        await conn.query('COMMIT');
+        return result;
+    } catch (error) {
+        try {
+            await conn.query('ROLLBACK');
+        } catch (rollbackError) {
+            logger.error(`[PEDIDOS] Rollback failed: ${rollbackError.message}`);
+        }
+        throw error;
+    } finally {
+        try {
+            await conn.close();
+        } catch (_) {
+            // ignore close errors
+        }
+    }
+}
+
+async function nextSystemPedidoNumber(conn, target, ejercicio) {
+    await conn.query(`LOCK TABLE ${target.tables.cab} IN EXCLUSIVE MODE`);
+    const rows = await conn.query(`
+        SELECT COALESCE(MAX(NUMEROPEDIDO), 0) + 1 AS NEXT_NUMERO
+        FROM ${target.tables.cab}
+        WHERE TRIM(SUBEMPRESAPEDIDO) = ?
+          AND EJERCICIOPEDIDO = ?
+          AND TRIM(SERIEPEDIDO) = ?
+          AND TERMINALPEDIDO = ?`,
+        [target.subempresa, ejercicio, target.serie, target.terminal]
+    );
+    return integerValue(rows?.[0]?.NEXT_NUMERO) || 1;
+}
+
+function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCode, saleType, userId }) {
+    const docDay = integerValue(header.DIADOCUMENTO) || new Date().getDate();
+    const docMonth = integerValue(header.MESDOCUMENTO) || new Date().getMonth() + 1;
+    const docYear = integerValue(header.ANODOCUMENTO) || integerValue(header.EJERCICIO) || new Date().getFullYear();
+    const hora = integerValue(header.HORADOCUMENTO) || currentHhmmss();
+    const vendedor = truncate(header.CODIGOVENDEDOR, 2);
+    const cliente = truncate(header.CODIGOCLIENTE, 10);
+    const observaciones = splitFixedText(header.OBSERVACIONES, 50, 2);
+    const total = roundMoney(header.IMPORTETOTAL || header.IMPORTEBASE);
+    const base = roundMoney(header.IMPORTEBASE || total);
+    const costo = roundMoney(header.IMPORTECOSTO);
+    const margen = roundMoney(header.IMPORTEMARGEN || (base - costo));
+
+    const columns = [
+        'SUBEMPRESAPEDIDO', 'EJERCICIOPEDIDO', 'SERIEPEDIDO', 'TERMINALPEDIDO', 'NUMEROPEDIDO',
+        'DIADOCUMENTO', 'MESDOCUMENTO', 'ANODOCUMENTO', 'HORADOCUMENTO',
+        'CODIGOCLIENTEALBARAN', 'CODIGOCLIENTEFACTURA', 'CODIGOCLIENTECADENA',
+        'CODIGOVENDEDOR', 'CODIGOVENDEDORCOBRO', 'CODIGOPROMOTORPREVENTA', 'CODIGOCOMERCIAL',
+        'CODIGORUTA', 'CODIGOFORMAPAGO', 'CODIGOTARIFA', 'CODIGOALMACEN', 'RECARGOSN',
+        'IMPORTEBASEIMPONIBLEBRUTA1', 'IMPORTEBASEIMPONIBLE1', 'IMPORTEBRUTO',
+        'IMPORTETOTAL', 'IMPORTECOSTO', 'IMPORTEMARGEN',
+        'SITUACIONPEDIDO', 'CODIGOOPERACION', 'OBSERVACION1', 'OBSERVACION2',
+        'DIACREACION', 'MESCREACION', 'ANOCREACION', 'HORACREACION',
+        'CODIGOVENDEDORUSUARIO', 'CODIGOUSUARIO', 'CODIGOTIPOPEDIDO',
+        'DIASERVICIO', 'MESSERVICIO', 'ANOSERVICIO',
+    ];
+    const params = [
+        systemRef.subempresa, systemRef.ejercicio, systemRef.serie, systemRef.terminal, systemRef.numero,
+        docDay, docMonth, docYear, hora,
+        cliente, cliente, '',
+        vendedor, vendedor, vendedor, vendedor,
+        truncate(routeCode, 4), truncate(header.CODIGOFORMAPAGO || '02', 2),
+        integerValue(header.CODIGOTARIFA) || 1, integerValue(header.CODIGOALMACEN) || 1, 'N',
+        base, base, base,
+        total, costo, margen,
+        target.situacionPedido, target.codigoOperacion, observaciones[0], observaciones[1],
+        docDay, docMonth, docYear, hora,
+        vendedor, truncate(userId || target.codigoUsuario, 10), target.codigoTipoPedido,
+        deliveryPlan.date.day, deliveryPlan.date.month, deliveryPlan.date.year,
+    ];
+
+    return {
+        sql: `INSERT INTO ${target.tables.cab} (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+        params,
+    };
+}
+
+function buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, routeCode, saleType }) {
+    const docDay = integerValue(header.DIADOCUMENTO) || new Date().getDate();
+    const docMonth = integerValue(header.MESDOCUMENTO) || new Date().getMonth() + 1;
+    const docYear = integerValue(header.ANODOCUMENTO) || integerValue(header.EJERCICIO) || new Date().getFullYear();
+    const hora = integerValue(header.HORADOCUMENTO) || currentHhmmss();
+    const vendedor = truncate(header.CODIGOVENDEDOR, 2);
+    const cliente = truncate(header.CODIGOCLIENTE, 10);
+    const effectiveSaleType = truncate(saleType || line.TIPOVENTA || header.TIPOVENTA || 'CC', 2) || 'CC';
+
+    const columns = [
+        'SUBEMPRESAPEDIDO', 'EJERCICIOPEDIDO', 'SERIEPEDIDO', 'TERMINALPEDIDO', 'NUMEROPEDIDO',
+        'SECUENCIAPEDIDO', 'DIADOCUMENTO', 'MESDOCUMENTO', 'ANODOCUMENTO', 'HORADOCUMENTO',
+        'CODIGOCLIENTEALBARAN', 'CODIGOCLIENTEFACTURA', 'CODIGOCLIENTECADENA',
+        'CODIGOVENDEDOR', 'CODIGOVENDEDORCOBRO', 'CODIGOPROMOTORPREVENTA', 'CODIGOCOMERCIAL',
+        'CODIGORUTA', 'CODIGOFORMAPAGO', 'CODIGOTARIFA', 'CODIGOALMACEN', 'RECARGOSN',
+        'TIPOLINEA', 'TIPOVENTA', 'CLASELINEA', 'CODIGOARTICULO', 'DESCRIPCION',
+        'CANTIDADENVASES', 'CANTIDADUNIDADES', 'PRECIOVENTA', 'IMPORTEVENTA',
+        'PRECIOCOSTO', 'IMPORTECOSTO', 'CAJASUNIDADES', 'PRECIOTARIFACLIENTE',
+        'PRECIOTARIFA01', 'CODIGOESTADO',
+    ];
+    const params = [
+        systemRef.subempresa, systemRef.ejercicio, systemRef.serie, systemRef.terminal, systemRef.numero,
+        integerValue(line.SECUENCIA || line.ORDEN) || 1,
+        docDay, docMonth, docYear, hora,
+        cliente, cliente, '',
+        vendedor, vendedor, vendedor, vendedor,
+        truncate(routeCode, 4), truncate(header.CODIGOFORMAPAGO || '02', 2),
+        integerValue(header.CODIGOTARIFA) || 1, integerValue(header.CODIGOALMACEN) || 1, 'N',
+        truncate(line.TIPOLINEA || 'R', 1) || 'R',
+        effectiveSaleType,
+        truncate(line.CLASELINEA || 'VT', 2) || 'VT',
+        truncate(line.CODIGOARTICULO, 10),
+        truncate(line.DESCRIPCION, 40),
+        numberValue(line.CANTIDADENVASES),
+        numberValue(line.CANTIDADUNIDADES),
+        numberValue(line.PRECIOVENTA),
+        roundMoney(line.IMPORTEVENTA),
+        numberValue(line.PRECIOCOSTO),
+        roundMoney(line.IMPORTECOSTO),
+        cajaUnidadFlag(line.UNIDADMEDIDA),
+        numberValue(line.PRECIOTARIFACLIENTE),
+        numberValue(line.PRECIOTARIFA),
+        '',
+    ];
+
+    return {
+        sql: `INSERT INTO ${target.tables.lin} (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+        params,
+    };
+}
+
+function buildDsedacOcpcInsert({ target, header, systemRef, userId }) {
+    const chunks = splitFixedText(header.OBSERVACIONES, 120, 10);
+    if (chunks.every(chunk => !trimString(chunk))) return null;
+
+    const docDay = integerValue(header.DIADOCUMENTO) || new Date().getDate();
+    const docMonth = integerValue(header.MESDOCUMENTO) || new Date().getMonth() + 1;
+    const docYear = integerValue(header.ANODOCUMENTO) || integerValue(header.EJERCICIO) || new Date().getFullYear();
+    const columns = [
+        'SUBEMPRESAPEDIDO', 'EJERCICIOPEDIDO', 'SERIEPEDIDO', 'TERMINALPEDIDO', 'NUMEROPEDIDO',
+        'DIAOBSERVACION', 'MESOBSERVACION', 'ANOOBSERVACION', 'SECUENCIA',
+        'OBSERVACION01', 'OBSERVACION02', 'OBSERVACION03', 'OBSERVACION04', 'OBSERVACION05',
+        'OBSERVACION06', 'OBSERVACION07', 'OBSERVACION08', 'OBSERVACION09', 'OBSERVACION10',
+        'CODIGOUSUARIO',
+    ];
+    const params = [
+        systemRef.subempresa, systemRef.ejercicio, systemRef.serie, systemRef.terminal, systemRef.numero,
+        docDay, docMonth, docYear, 1,
+        ...chunks,
+        truncate(userId || target.codigoUsuario, 10),
+    ];
+    return {
+        sql: `INSERT INTO ${target.tables.obs} (${columns.join(', ')}) VALUES (${columns.map(() => '?').join(', ')})`,
+        params,
+    };
+}
+
+async function exportCommercialOrderToSystem(conn, { header, lines, deliveryPlan, routeCode, saleType, userId }) {
+    const target = getPedidosConfirmationTarget();
+    if (!target.shouldExportToSystem) {
+        return {
+            targetSchema: 'JAVIER',
+            syncStatus: 'LOCAL',
+            synced: false,
+            systemRef: {
+                subempresa: ' ',
+                ejercicio: 0,
+                serie: ' ',
+                terminal: 0,
+                numero: 0,
+            },
+        };
+    }
+
+    const ejercicio = integerValue(header.EJERCICIO) || deliveryPlan.date.year || new Date().getFullYear();
+    const numero = await nextSystemPedidoNumber(conn, target, ejercicio);
+    const systemRef = {
+        subempresa: target.subempresa,
+        ejercicio,
+        serie: target.serie,
+        terminal: target.terminal,
+        numero,
+    };
+
+    const cab = buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCode, saleType, userId });
+    await conn.query(cab.sql, cab.params);
+
+    for (const line of lines || []) {
+        const lin = buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, routeCode, saleType });
+        await conn.query(lin.sql, lin.params);
+    }
+
+    const obs = buildDsedacOcpcInsert({ target, header, systemRef, userId });
+    if (obs) {
+        await conn.query(obs.sql, obs.params);
+    }
+
+    return {
+        targetSchema: target.schema,
+        syncStatus: 'SYNCED',
+        synced: true,
+        systemRef,
+    };
+}
+
+function buildConfirmOrderUpdate({ id, deliveryPlan, vehicleCode, driverCode, routeCode, saleType, syncResult }) {
+    const sync = syncResult || {
+        targetSchema: 'JAVIER',
+        syncStatus: 'LOCAL',
+        synced: false,
+        systemRef: { subempresa: ' ', ejercicio: 0, serie: ' ', terminal: 0, numero: 0 },
+    };
+    const ref = sync.systemRef || {};
+    const params = [
+        deliveryPlan.date.iso,
+        deliveryPlan.date.day,
+        deliveryPlan.date.month,
+        deliveryPlan.date.year,
+        deliveryPlan.allowedDays.join(','),
+        deliveryPlan.validated ? 'S' : 'N',
+        vehicleCode,
+        driverCode,
+        routeCode,
+        truncate(sync.targetSchema || 'JAVIER', 10),
+        truncate(sync.syncStatus || 'LOCAL', 16),
+        truncate(ref.subempresa || ' ', 3),
+        integerValue(ref.ejercicio),
+        truncate(ref.serie || ' ', 1),
+        integerValue(ref.terminal),
+        integerValue(ref.numero),
+    ];
+    let sql = `UPDATE JAVIER.PEDIDOS_CAB SET ESTADO = 'CONFIRMADO',
+        UPDATED_AT = CURRENT_TIMESTAMP,
+        FECHAREPARTO = ?,
+        DIAREPARTO = ?,
+        MESREPARTO = ?,
+        ANOREPARTO = ?,
+        DIASREPARTO = ?,
+        REPARTO_VALIDADO_SN = ?,
+        REPARTO_VALIDADO_AT = CURRENT_TIMESTAMP,
+        CODIGOVEHICULO = ?,
+        CODIGOREPARTIDOR = ?,
+        RUTA = ?,
+        TARGET_SCHEMA = ?,
+        SYNC_STATUS = ?,
+        SYNC_AT = ${sync.synced ? 'CURRENT_TIMESTAMP' : 'SYNC_AT'},
+        SYSTEM_SUBEMPRESAPEDIDO = ?,
+        SYSTEM_EJERCICIOPEDIDO = ?,
+        SYSTEM_SERIEPEDIDO = ?,
+        SYSTEM_TERMINALPEDIDO = ?,
+        SYSTEM_NUMEROPEDIDO = ?`;
+    if (saleType) {
+        sql += `, TIPOVENTA = ?`;
+        params.push(saleType.trim());
+    }
+    params.push(id);
+    sql += ` WHERE ID = ?`;
+    return { sql, params };
+}
+
+async function reserveStockLines(executor, lines, orderId) {
+    for (const line of lines) {
+        const code = trimString(line.CODIGOARTICULO);
+        if (!code) continue;
+        const resEnv = parseFloat(line.CANTIDADENVASES) || 0;
+        const resUni = parseFloat(line.CANTIDADUNIDADES) || 0;
+        if (resEnv > 0 || resUni > 0) {
+            await executor(
+                `INSERT INTO JAVIER.PEDIDOS_STOCK_RESERVE (PEDIDO_ID, CODIGOARTICULO, CANTIDADENVASES, CANTIDADUNIDADES) VALUES (?, ?, ?, ?)`,
+                [orderId, code, resEnv, resUni]
+            );
+        }
+    }
 }
 
 // ============================================================================
@@ -163,17 +962,45 @@ async function initPedidosTables() {
             }
         }
 
-        // Ensure ORIGEN column exists in PEDIDOS_CAB (may be missing in older installs)
-        try {
-            await conn.query(`SELECT ORIGEN FROM JAVIER.PEDIDOS_CAB FETCH FIRST 1 ROW ONLY`);
-        } catch (colErr) {
+        // Ensure additive PEDIDOS_CAB columns exist in older JAVIER installs.
+        const cabColumns = [
+            { name: 'ORIGEN', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN ORIGEN CHAR(1) DEFAULT 'A'` },
+            { name: 'FECHAREPARTO', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN FECHAREPARTO DATE` },
+            { name: 'DIAREPARTO', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN DIAREPARTO NUMERIC(2) DEFAULT 0` },
+            { name: 'MESREPARTO', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN MESREPARTO NUMERIC(2) DEFAULT 0` },
+            { name: 'ANOREPARTO', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN ANOREPARTO NUMERIC(4) DEFAULT 0` },
+            { name: 'CODIGOREPARTIDOR', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN CODIGOREPARTIDOR CHAR(2) DEFAULT ' '` },
+            { name: 'CODIGOVEHICULO', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN CODIGOVEHICULO CHAR(10) DEFAULT ' '` },
+            { name: 'RUTA', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN RUTA VARCHAR(10) DEFAULT ''` },
+            { name: 'DIASREPARTO', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN DIASREPARTO VARCHAR(80) DEFAULT ''` },
+            { name: 'REPARTO_VALIDADO_SN', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN REPARTO_VALIDADO_SN CHAR(1) DEFAULT 'N'` },
+            { name: 'REPARTO_VALIDADO_AT', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN REPARTO_VALIDADO_AT TIMESTAMP` },
+            { name: 'TARGET_SCHEMA', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN TARGET_SCHEMA CHAR(10) DEFAULT 'JAVIER'` },
+            { name: 'SYNC_STATUS', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN SYNC_STATUS VARCHAR(16) DEFAULT 'LOCAL'` },
+            { name: 'SYNC_AT', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN SYNC_AT TIMESTAMP` },
+            { name: 'SYSTEM_SUBEMPRESAPEDIDO', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN SYSTEM_SUBEMPRESAPEDIDO CHAR(3) DEFAULT ' '` },
+            { name: 'SYSTEM_EJERCICIOPEDIDO', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN SYSTEM_EJERCICIOPEDIDO NUMERIC(4) DEFAULT 0` },
+            { name: 'SYSTEM_SERIEPEDIDO', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN SYSTEM_SERIEPEDIDO CHAR(1) DEFAULT ' '` },
+            { name: 'SYSTEM_TERMINALPEDIDO', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN SYSTEM_TERMINALPEDIDO NUMERIC(3) DEFAULT 0` },
+            { name: 'SYSTEM_NUMEROPEDIDO', ddl: `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN SYSTEM_NUMEROPEDIDO NUMERIC(6) DEFAULT 0` },
+        ];
+
+        for (const col of cabColumns) {
             try {
-                try { await conn.close(); } catch (_) { /* ignore */ }
-                conn = await pool.connect();
-                await conn.query(`ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN ORIGEN CHAR(1) DEFAULT 'A'`);
-                logger.info(`[PEDIDOS] Added missing ORIGEN column to PEDIDOS_CAB`);
-            } catch (alterErr) {
-                logger.warn(`[PEDIDOS] Could not add ORIGEN column: ${alterErr.message}`);
+                await conn.query(`SELECT ${col.name} FROM JAVIER.PEDIDOS_CAB FETCH FIRST 1 ROW ONLY`);
+            } catch (colErr) {
+                if (!isColumnNotFound(colErr)) {
+                    logger.warn(`[PEDIDOS] Could not verify ${col.name} column: ${colErr.message}`);
+                    continue;
+                }
+                try {
+                    try { await conn.close(); } catch (_) { /* ignore */ }
+                    conn = await pool.connect();
+                    await conn.query(col.ddl);
+                    logger.info(`[PEDIDOS] Added missing ${col.name} column to PEDIDOS_CAB`);
+                } catch (alterErr) {
+                    logger.warn(`[PEDIDOS] Could not add ${col.name} column: ${alterErr.message}`);
+                }
             }
         }
     } catch (err) {
@@ -825,6 +1652,12 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
             TRIM(C.CODIGOFORMAPAGO) AS CODIGOFORMAPAGO,
             C.CODIGOTARIFA,
             TRIM(C.ORIGEN) AS ORIGEN,
+            C.FECHAREPARTO, C.DIAREPARTO, C.MESREPARTO, C.ANOREPARTO,
+            TRIM(C.CODIGOREPARTIDOR) AS CODIGOREPARTIDOR,
+            TRIM(C.CODIGOVEHICULO) AS CODIGOVEHICULO,
+            TRIM(C.RUTA) AS RUTA,
+            TRIM(C.DIASREPARTO) AS DIASREPARTO,
+            TRIM(C.REPARTO_VALIDADO_SN) AS REPARTO_VALIDADO_SN,
             C.CREATED_AT, C.UPDATED_AT,
             COALESCE(LC.LINE_COUNT, 0) AS LINE_COUNT
         FROM JAVIER.PEDIDOS_CAB C
@@ -936,6 +1769,7 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
             const hh = hora.substring(0, 2);
             const mm = hora.substring(2, 4);
             const numPedido = String(r.NUMEROPEDIDO).padStart(6, '0');
+            const fechaReparto = r.FECHAREPARTO ? parseDeliveryDate(r.FECHAREPARTO) : null;
             return {
                 id: r.ID,
                 ejercicio: r.EJERCICIO,
@@ -958,6 +1792,16 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
                 formaPago: r.CODIGOFORMAPAGO,
                 tarifa: r.CODIGOTARIFA,
                 origen: r.ORIGEN,
+                fechaReparto: fechaReparto?.iso || '',
+                fechaRepartoFormatted: fechaReparto ? formatDateDisplay(fechaReparto.iso) : '',
+                diaReparto: parseInt(r.DIAREPARTO) || 0,
+                mesReparto: parseInt(r.MESREPARTO) || 0,
+                anoReparto: parseInt(r.ANOREPARTO) || 0,
+                repartidorCode: r.CODIGOREPARTIDOR || '',
+                vehicleCode: r.CODIGOVEHICULO || '',
+                ruta: r.RUTA || '',
+                diasReparto: r.DIASREPARTO || '',
+                repartoValidado: (r.REPARTO_VALIDADO_SN || '').trim() === 'S',
                 lineCount: parseInt(r.LINE_COUNT) || 0,
                 createdAt: r.CREATED_AT,
                 updatedAt: r.UPDATED_AT,
@@ -990,6 +1834,12 @@ async function getOrderDetail(orderId) {
             TRIM(ESTADO) AS ESTADO,
             IMPORTETOTAL, IMPORTEBASE, IMPORTEIVA, IMPORTECOSTO, IMPORTEMARGEN,
             TRIM(OBSERVACIONES) AS OBSERVACIONES,
+            FECHAREPARTO, DIAREPARTO, MESREPARTO, ANOREPARTO,
+            TRIM(CODIGOREPARTIDOR) AS CODIGOREPARTIDOR,
+            TRIM(CODIGOVEHICULO) AS CODIGOVEHICULO,
+            TRIM(RUTA) AS RUTA,
+            TRIM(DIASREPARTO) AS DIASREPARTO,
+            TRIM(REPARTO_VALIDADO_SN) AS REPARTO_VALIDADO_SN,
             CREATED_AT, UPDATED_AT
         FROM JAVIER.PEDIDOS_CAB
         WHERE ID = ?`;
@@ -1021,6 +1871,7 @@ async function getOrderDetail(orderId) {
         }
 
         const cab = cabRows[0];
+        const fechaReparto = cab.FECHAREPARTO ? parseDeliveryDate(cab.FECHAREPARTO) : null;
         return {
             header: {
                 id: cab.ID,
@@ -1044,6 +1895,16 @@ async function getOrderDetail(orderId) {
                 costo: parseFloat(cab.IMPORTECOSTO) || 0,
                 margen: parseFloat(cab.IMPORTEMARGEN) || 0,
                 observaciones: cab.OBSERVACIONES,
+                fechaReparto: fechaReparto?.iso || '',
+                fechaRepartoFormatted: fechaReparto ? formatDateDisplay(fechaReparto.iso) : '',
+                diaReparto: parseInt(cab.DIAREPARTO) || 0,
+                mesReparto: parseInt(cab.MESREPARTO) || 0,
+                anoReparto: parseInt(cab.ANOREPARTO) || 0,
+                repartidorCode: cab.CODIGOREPARTIDOR || '',
+                vehicleCode: cab.CODIGOVEHICULO || '',
+                ruta: cab.RUTA || '',
+                diasReparto: cab.DIASREPARTO || '',
+                repartoValidado: (cab.REPARTO_VALIDADO_SN || '').trim() === 'S',
                 createdAt: cab.CREATED_AT,
                 updatedAt: cab.UPDATED_AT,
             },
@@ -1260,7 +2121,18 @@ async function confirmOrder(orderId, saleType, options = {}) {
 
     // STATE GUARD: Check current state to prevent double-confirm
     const currentRows = await queryWithParams(
-        `SELECT ESTADO FROM JAVIER.PEDIDOS_CAB WHERE ID = ?`,
+        `SELECT ESTADO,
+                ID, EJERCICIO, NUMEROPEDIDO, SERIEPEDIDO, TERMINAL,
+                DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO, HORADOCUMENTO,
+                TRIM(CODIGOCLIENTE) AS CODIGOCLIENTE,
+                TRIM(NOMBRECLIENTE) AS NOMBRECLIENTE,
+                TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR,
+                TRIM(CODIGOFORMAPAGO) AS CODIGOFORMAPAGO,
+                CODIGOTARIFA, CODIGOALMACEN,
+                TRIM(TIPOVENTA) AS TIPOVENTA,
+                IMPORTETOTAL, IMPORTEBASE, IMPORTEIVA, IMPORTECOSTO, IMPORTEMARGEN,
+                TRIM(OBSERVACIONES) AS OBSERVACIONES
+         FROM JAVIER.PEDIDOS_CAB WHERE ID = ?`,
         [id], false
     );
     
@@ -1288,9 +2160,36 @@ async function confirmOrder(orderId, saleType, options = {}) {
         throw new Error(`Solo se pueden confirmar pedidos en estado BORRADOR (estado actual: ${currentState})`);
     }
 
-    // P0-C: Validate stock BEFORE confirming — block if insufficient
+    const clientCode = trimString(currentRows[0].CODIGOCLIENTE || options.clientCode);
+    const vendedorCode = trimString(currentRows[0].CODIGOVENDEDOR || options.vendedorCode);
+    const deliveryPlan = await resolveDeliveryPlan({
+        clientCode,
+        vendedorCode,
+        deliveryDate: options.deliveryDate,
+    });
+    const inferredAssignment = await getDefaultTruckAssignment({
+        clientCode,
+        vendedorCode,
+        deliveryDate: deliveryPlan.date.iso,
+        routeCode: options.routeCode,
+    });
+    const vehicleCode = trimString(options.vehicleCode || inferredAssignment.vehicleCode).substring(0, 10);
+    const driverCode = trimString(options.driverCode || inferredAssignment.driverCode).substring(0, 2);
+    const routeCode = trimString(options.routeCode || inferredAssignment.routeCode).substring(0, 10);
+
+    // P0-C: Validate stock BEFORE confirming - block if insufficient
     const lines = await queryWithParams(
-        `SELECT CODIGOARTICULO, CANTIDADENVASES, CANTIDADUNIDADES, DESCRIPCION
+        `SELECT ID, PEDIDO_ID, SECUENCIA,
+                TRIM(CODIGOARTICULO) AS CODIGOARTICULO,
+                TRIM(DESCRIPCION) AS DESCRIPCION,
+                CANTIDADENVASES, CANTIDADUNIDADES,
+                TRIM(UNIDADMEDIDA) AS UNIDADMEDIDA, UNIDADESCAJA,
+                PRECIOVENTA, PRECIOCOSTO, PRECIOTARIFA, PRECIOTARIFACLIENTE, PRECIOMINIMO,
+                IMPORTEVENTA, IMPORTECOSTO, IMPORTEMARGEN, PORCENTAJEMARGEN,
+                TRIM(TIPOLINEA) AS TIPOLINEA,
+                TRIM(TIPOVENTA) AS TIPOVENTA,
+                TRIM(CLASELINEA) AS CLASELINEA,
+                ORDEN
          FROM JAVIER.PEDIDOS_LIN WHERE PEDIDO_ID = ?`, [id]);
 
     const stockWarnings = [];
@@ -1355,34 +2254,59 @@ async function confirmOrder(orderId, saleType, options = {}) {
     }
 
     // P0-B: Confirm + reserve in sequence, rollback estado if reserves fail
-    const params = [id];
-    let sql = `UPDATE JAVIER.PEDIDOS_CAB SET ESTADO = 'CONFIRMADO', UPDATED_AT = CURRENT_TIMESTAMP`;
-    if (saleType) {
-        sql += `, TIPOVENTA = ?`;
-        params.unshift(saleType.trim());
-    }
-    sql += ` WHERE ID = ?`;
-
-    await queryWithParams(sql, params, false);
+    const target = getPedidosConfirmationTarget();
+    let syncResult = {
+        targetSchema: 'JAVIER',
+        syncStatus: 'LOCAL',
+        synced: false,
+        systemRef: { subempresa: ' ', ejercicio: 0, serie: ' ', terminal: 0, numero: 0 },
+    };
 
     // ── Stock reservation: insert rows for each line ──
-    let reserveSuccess = true;
-    try {
-        for (const line of lines) {
-            const code = (line.CODIGOARTICULO || '').trim();
-            if (!code) continue;
-            const resEnv = parseFloat(line.CANTIDADENVASES) || 0;
-            const resUni = parseFloat(line.CANTIDADUNIDADES) || 0;
-            if (resEnv > 0 || resUni > 0) {
-                await queryWithParams(
-                    `INSERT INTO JAVIER.PEDIDOS_STOCK_RESERVE (PEDIDO_ID, CODIGOARTICULO, CANTIDADENVASES, CANTIDADUNIDADES) VALUES (?, ?, ?, ?)`,
-                    [id, code, resEnv, resUni], false
-                );
-            }
+    if (target.shouldExportToSystem) {
+        try {
+            await withPedidosTransaction(async (conn) => {
+                syncResult = await exportCommercialOrderToSystem(conn, {
+                    header: currentRows[0],
+                    lines,
+                    deliveryPlan,
+                    routeCode,
+                    saleType,
+                    userId: options.userId,
+                });
+                const update = buildConfirmOrderUpdate({
+                    id,
+                    deliveryPlan,
+                    vehicleCode,
+                    driverCode,
+                    routeCode,
+                    saleType,
+                    syncResult,
+                });
+                await conn.query(update.sql, update.params);
+                await reserveStockLines((sql, params) => conn.query(sql, params), lines, id);
+            });
+            logger.info(`[PEDIDOS] Order #${id} exported to ${syncResult.targetSchema}.CPC and confirmed`);
+        } catch (systemErr) {
+            logger.error(`[PEDIDOS] System export failed for order #${id}: ${systemErr.message}`);
+            throw new Error(`No se pudo pasar el pedido a sistema. No se ha confirmado. Error: ${systemErr.message}`);
         }
-        logger.info(`[PEDIDOS] Stock reserved for order #${id}`);
-    } catch (resErr) {
-        reserveSuccess = false;
+    } else {
+        const update = buildConfirmOrderUpdate({
+            id,
+            deliveryPlan,
+            vehicleCode,
+            driverCode,
+            routeCode,
+            saleType,
+            syncResult,
+        });
+        await queryWithParams(update.sql, update.params, false);
+
+        try {
+            await reserveStockLines((sql, params) => queryWithParams(sql, params, false), lines, id);
+            logger.info(`[PEDIDOS] Stock reserved for order #${id}`);
+        } catch (resErr) {
         logger.error(`[PEDIDOS] CRITICAL: Stock reservation failed for order #${id}, rolling back: ${resErr.message}`);
         // P0-B: Rollback — set estado back to BORRADOR if reservation fails
         try {
@@ -1395,6 +2319,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
             logger.error(`[PEDIDOS] CRITICAL: Rollback also failed for order #${id}: ${rollbackErr.message}`);
         }
         throw new Error(`No se pudo completar la reserva de stock. El pedido no ha sido confirmado. Error: ${resErr.message}`);
+    }
     }
 
     // P4-A: Invalidate stock and product cache to ensure real-time updates for all sales reps
@@ -1419,6 +2344,11 @@ async function confirmOrder(orderId, saleType, options = {}) {
             vendedorCode: order?.header?.vendedor,
             total: order?.header?.total,
             saleType: saleType || order?.header?.tipoventa,
+            deliveryDate: deliveryPlan.date.iso,
+            deliveryDays: deliveryPlan.allowedDays,
+            vehicleCode,
+            driverCode,
+            routeCode,
             lineCount: lines.length,
             stockWarningCount: stockWarnings.length,
             forceConfirm: !!options.forceConfirm,
@@ -3090,6 +4020,8 @@ module.exports = {
     getStock,
     getProductStock,
     getClientPricing,
+    getDeliveryOptions,
+    getPedidosConfirmationTarget,
     createOrder,
     getOrders,
     getOrderDetail,

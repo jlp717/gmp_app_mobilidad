@@ -453,6 +453,29 @@ router.get('/orders/stats', async (req, res) => {
 });
 
 /**
+ * GET /api/pedidos/delivery-options
+ * Delivery days + provisional truck for client/vendor.
+ */
+router.get('/delivery-options', async (req, res) => {
+    try {
+        const clientCode = req.query.clientCode ? String(req.query.clientCode).trim() : '';
+        const vendedorCode = req.query.vendedorCode ? String(req.query.vendedorCode).trim() : '';
+        const deliveryDate = req.query.deliveryDate ? String(req.query.deliveryDate).trim() : undefined;
+
+        if (!clientCode || !vendedorCode) {
+            return res.status(400).json({ success: false, error: 'clientCode and vendedorCode are required' });
+        }
+
+        const options = await pedidosService.getDeliveryOptions({ clientCode, vendedorCode, deliveryDate });
+        res.json({ success: true, options });
+    } catch (error) {
+        logger.error(`[PEDIDOS] Error in GET /delivery-options: ${error.message}`);
+        const status = error.message.includes('Fecha reparto') ? 409 : 500;
+        res.status(status).json({ success: false, error: error.message });
+    }
+});
+
+/**
  * GET /api/pedidos/:id/albaran
  * Find albaranes linked to an order
  */
@@ -689,14 +712,18 @@ router.put('/:id/confirm', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid order id' });
         }
 
-        const { saleType, forceConfirm } = req.body;
+        const { saleType, forceConfirm, deliveryDate, vehicleCode, driverCode, routeCode } = req.body;
         if (!saleType || !['CC', 'VC', 'NV'].includes(saleType)) {
             return res.status(400).json({ success: false, error: 'saleType must be CC, VC, or NV' });
         }
 
         const options = {
             forceConfirm: forceConfirm === true,
-            userId: req.user?.code || 'SYSTEM'
+            userId: req.user?.code || 'SYSTEM',
+            deliveryDate: deliveryDate ? String(deliveryDate).trim() : undefined,
+            vehicleCode: vehicleCode ? String(vehicleCode).trim() : undefined,
+            driverCode: driverCode ? String(driverCode).trim() : undefined,
+            routeCode: routeCode ? String(routeCode).trim() : undefined,
         };
         const order = await pedidosService.confirmOrder(id, saleType, options);
 
@@ -719,6 +746,7 @@ router.put('/:id/confirm', async (req, res) => {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/confirm: ${error.message}`);
         const status = error.message.includes('not found') ? 404
             : error.message.includes('BORRADOR') ? 409
+            : error.message.includes('Fecha reparto') ? 409
             : error.message.includes('reserva de stock') ? 500
             : 500;
         res.status(status).json({ success: false, error: error.message });

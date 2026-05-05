@@ -657,6 +657,27 @@ function createPedidosRoutes() {
     }
   });
 
+  // GET /api/pedidos/delivery-options
+  router.get('/delivery-options', async (req, res) => {
+    try {
+      const clientCode = req.query.clientCode ? String(req.query.clientCode).trim() : '';
+      const vendedorCode = req.query.vendedorCode ? String(req.query.vendedorCode).trim() : '';
+      const deliveryDate = req.query.deliveryDate ? String(req.query.deliveryDate).trim() : undefined;
+
+      if (!clientCode || !vendedorCode) {
+        return res.status(400).json({ success: false, error: 'clientCode and vendedorCode are required' });
+      }
+
+      const pedidosService = require('../../../services/pedidos.service');
+      const options = await pedidosService.getDeliveryOptions({ clientCode, vendedorCode, deliveryDate });
+      res.json({ success: true, options });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /delivery-options: ${error.message}`);
+      const status = error.message.includes('Fecha reparto') ? 409 : 500;
+      res.status(status).json({ success: false, error: error.message });
+    }
+  });
+
   // GET /api/pedidos/:id
   router.get('/:id', async (req, res) => {
     try {
@@ -718,9 +739,16 @@ function createPedidosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const { saleType, forceConfirm } = req.body || {};
+      const { saleType, forceConfirm, deliveryDate, vehicleCode, driverCode, routeCode } = req.body || {};
       const pedidosService = require('../../../services/pedidos.service');
-      const result = await pedidosService.confirmOrder(parseInt(id), saleType, { forceConfirm: !!forceConfirm, userId });
+      const result = await pedidosService.confirmOrder(parseInt(id), saleType, {
+        forceConfirm: !!forceConfirm,
+        userId,
+        deliveryDate: deliveryDate ? String(deliveryDate).trim() : undefined,
+        vehicleCode: vehicleCode ? String(vehicleCode).trim() : undefined,
+        driverCode: driverCode ? String(driverCode).trim() : undefined,
+        routeCode: routeCode ? String(routeCode).trim() : undefined,
+      });
 
       if (result && result.blocked) {
         return res.status(409).json({ success: false, ...result });
@@ -735,7 +763,11 @@ function createPedidosRoutes() {
       res.json({ success: true, ...normalized });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/confirm: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      const status = error.message.includes('Fecha reparto') ? 409
+        : error.message.includes('BORRADOR') ? 409
+        : error.message.includes('no encontrado') ? 404
+        : 500;
+      res.status(status).json({ success: false, error: error.message });
     }
   });
 

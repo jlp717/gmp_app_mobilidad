@@ -1,15 +1,21 @@
 /**
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * 📊 COMMISSIONS PDF REPORT SERVICE
+ * COMMISSIONS PDF REPORT SERVICE
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * Generates PDF report with LAC sales data for DIEGO only
- * Format matches the printed template exactly
+ * Generates PDF report with per-vendor monthly breakdown:
+ *   Mes | Objetivo | Ventas LAC | Ventas CONDOR | Total | % | Generada | Pagada | Origen | Obs
+ * Format: landscape A4, DIEGO-only.
  */
 
 const PDFDocument = require('pdfkit');
 const logger = require('../middleware/logger');
 const { queryWithParams } = require('../config/db');
 const { CircuitBreaker } = require('./circuit-breaker');
+const {
+    getVendorColumnExpr,
+    LACLAE_SALES_FILTER,
+    SNAPSHOT_UNTIL_MONTH,
+} = require('../utils/common');
 
 const commissionsPdfBreaker = new CircuitBreaker({
     name: 'commissions-pdf',
@@ -29,7 +35,10 @@ const COLORS = {
     totalBg: '#003d7a',
     totalText: '#FFFFFF',
     text: '#000000',
-    lightBg: '#E8F4FD'
+    lightBg: '#E8F4FD',
+    snapshotBadge: '#cc7700',
+    snapshotBadgeText: '#FFFFFF',
+    condorBg: '#FFF8E1',
 };
 
 // Allowed users who can generate this PDF
@@ -54,6 +63,11 @@ function getMonthName(monthNum) {
     return months[monthNum] || '';
 }
 
+function formatPct(pct) {
+    if (!pct && pct !== 0) return '-';
+    return pct.toFixed(1) + '%';
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // PERMISSION CHECK
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -67,64 +81,245 @@ function isAuthorized(userName) {
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 /**
- * Get LAC sales data per vendor for the specified month range
+ * Get LAC sales data per vendor for the specified month range.
+ * Uses getVendorColumnExpr for correct LCCDVD/R1_T8CDVD per row.
+ * For months <= SNAPSHOT_UNTIL_MONTH of 2026, reads from snapshot table.
  */
 async function getLacSalesData(year, startMonth, endMonth) {
-    const sql = `
-        SELECT
-            RTRIM(L.R1_T8CDVD) as VENDEDOR,
-            COALESCE(TRIM(V.NOMBREVENDEDOR), '') as NOMBRE_VENDEDOR,
-            L.LCMMDC as MES,
-            COALESCE(SUM(L.LCIMVT), 0) as LAC_TOTAL
-        FROM DSED.LACLAE L
-        LEFT JOIN DSEDAC.VDD V ON RTRIM(L.R1_T8CDVD) = RTRIM(V.CODIGOVENDEDOR)
-        WHERE L.LCAADC = ?
-          AND L.LCMMDC BETWEEN ? AND ?
-          AND L.LCTPVT IN ('CC', 'VC')
-          AND L.LCCLLN IN ('AB', 'VT')
-          AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
-          AND L.R1_T8CDVD IS NOT NULL
-          AND L.R1_T8CDVD <> ''
-        GROUP BY L.R1_T8CDVD, V.NOMBREVENDEDOR, L.LCMMDC
-        ORDER BY L.R1_T8CDVD, L.LCMMDC
-    `;
+    // For snapshot months of 2026, we'll merge live + snapshot data below.
+    // Build the CASE expression for the vendor column.
+    const vendorColExpr = getVendorColumnExpr('L');
 
-    const rows = await queryWithParams(sql, [year, startMonth, endMonth], false);
-    
-    // Aggregate by vendor
-    const vendorMap = new Map();
-    for (const row of rows) {
-        const code = row.VENDEDOR;
-        const name = row.NOMBRE_VENDEDOR || `Vendedor ${code}`;
-        if (!vendorMap.has(code)) {
-            vendorMap.set(code, { code, name, months: {} });
-        }
-        vendorMap.get(code).months[row.MES] = parseFloat(row.LAC_TOTAL) || 0;
+    // Determine which months to query live vs from snapshot
+    const isSnapshotYear = (year === 2026 && SNAPSHOT_UNTIL_MONTH > 0);
+    const snapshotMonths = isSnapshotYear
+        ? Array.from({ length: Math.min(SNAPSHOT_UNTIL_MONTH, endMonth) - startMonth + 1 }, (_, i) => i + startMonth)
+              .filter(m => m <= SNAPSHOT_UNTIL_MONTH)
+        : [];
+    const liveMonths = [];
+    for (let m = startMonth; m <= endMonth; m++) {
+        if (!snapshotMonths.includes(m)) liveMonths.push(m);
     }
-    
+
+    const vendorMap = new Map();
+
+    // Helper to upsert vendor entry
+    const upsertVendor = (code, name) => {
+        if (!vendorMap.has(code)) {
+            vendorMap.set(code, { code, name: name || `Vendedor ${code}`, months: {} });
+        } else if (name && !vendorMap.get(code).name) {
+            vendorMap.get(code).name = name;
+        }
+    };
+
+    // 1. Query snapshot months from JAVIER.COMMISSION_SNAPSHOT_2026_0102
+    // VENTAS_REAL = LAC + CONDOR combined (no split available in this table).
+    // We store it under 'lac' so the PDF column shows the total; CONDOR will be 0
+    // for snapshot rows. A footer note explains this.
+    if (snapshotMonths.length > 0) {
+        try {
+            const monthPlaceholders = snapshotMonths.map(() => '?').join(',');
+            const snapRows = await queryWithParams(`
+                SELECT CSS.VENDEDOR_CODIGO, CSS.MES, CSS.VENTAS_REAL,
+                       COALESCE(TRIM(V.NOMBREVENDEDOR), '') as NOMBRE_VENDEDOR
+                FROM JAVIER.COMMISSION_SNAPSHOT_2026_0102 CSS
+                LEFT JOIN DSEDAC.VDD V ON TRIM(V.CODIGOVENDEDOR) = TRIM(CSS.VENDEDOR_CODIGO)
+                WHERE CSS.ANIO = ?
+                  AND CSS.MES IN (${monthPlaceholders})
+            `, [year, ...snapshotMonths], false);
+
+            for (const row of snapRows) {
+                const code = (row.VENDEDOR_CODIGO || '').trim();
+                const name = row.NOMBRE_VENDEDOR || `Vendedor ${code}`;
+                upsertVendor(code, name);
+                vendorMap.get(code).months[row.MES] = {
+                    // VENTAS_REAL is the total (LAC + CONDOR); no split available.
+                    lac: parseFloat(row.VENTAS_REAL) || 0,
+                    isSnapshot: true,
+                };
+            }
+            logger.info(`[PDF] Snapshot LAC data loaded from COMMISSION_SNAPSHOT_2026_0102: ${snapRows.length} rows for months ${snapshotMonths.join(',')}`);
+        } catch (e) {
+            logger.warn(`[PDF] Snapshot LAC query failed (COMMISSION_SNAPSHOT_2026_0102): ${e.message}`);
+            // Fall through to live query for these months
+            liveMonths.push(...snapshotMonths);
+        }
+    }
+
+    // 2. Query live months from DSED.LACLAE
+    if (liveMonths.length > 0) {
+        const monthPlaceholders = liveMonths.map(() => '?').join(',');
+        const sql = `
+            SELECT
+                (${vendorColExpr}) as VENDEDOR,
+                COALESCE(TRIM(V.NOMBREVENDEDOR), '') as NOMBRE_VENDEDOR,
+                L.LCMMDC as MES,
+                COALESCE(SUM(L.LCIMVT), 0) as LAC_TOTAL
+            FROM DSED.LACLAE L
+            LEFT JOIN DSEDAC.VDD V ON (${vendorColExpr}) = RTRIM(V.CODIGOVENDEDOR)
+            WHERE L.LCAADC = ?
+              AND L.LCMMDC IN (${monthPlaceholders})
+              AND L.LCTPVT IN ('CC', 'VC')
+              AND L.LCCLLN IN ('AB', 'VT')
+              AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
+              AND L.TPDC = 'LAC'
+              AND (${vendorColExpr}) IS NOT NULL
+              AND (${vendorColExpr}) <> ''
+            GROUP BY (${vendorColExpr}), V.NOMBREVENDEDOR, L.LCMMDC
+            ORDER BY (${vendorColExpr}), L.LCMMDC
+        `;
+
+        const rows = await queryWithParams(sql, [year, ...liveMonths], false);
+        for (const row of rows) {
+            const code = (row.VENDEDOR || '').trim();
+            const name = row.NOMBRE_VENDEDOR || `Vendedor ${code}`;
+            upsertVendor(code, name);
+            vendorMap.get(code).months[row.MES] = {
+                lac: parseFloat(row.LAC_TOTAL) || 0,
+                isSnapshot: false,
+            };
+        }
+    }
+
     return Array.from(vendorMap.values()).sort((a, b) => a.code.localeCompare(b.code));
 }
 
 /**
- * Get CONDOR sales data per vendor for the specified month range
- * NOTE: Adjust table/column names to match your actual CONDOR data source
+ * Get CONDOR (VENTAS_B) sales per vendor for the specified month range.
+ * For snapshot months of 2026, CONDOR is set to 0 (no split in COMMISSION_SNAPSHOT_2026_0102; total is in LAC column).
  */
 async function getCondorSalesData(year, startMonth, endMonth) {
-    // TODO: Replace with actual CONDOR table query
-    // For now, returns empty array - update with actual table name
+    const isSnapshotYear = (year === 2026 && SNAPSHOT_UNTIL_MONTH > 0);
+    const snapshotMonths = isSnapshotYear
+        ? Array.from({ length: Math.min(SNAPSHOT_UNTIL_MONTH, endMonth) - startMonth + 1 }, (_, i) => i + startMonth)
+              .filter(m => m <= SNAPSHOT_UNTIL_MONTH)
+        : [];
+    const liveMonths = [];
+    for (let m = startMonth; m <= endMonth; m++) {
+        if (!snapshotMonths.includes(m)) liveMonths.push(m);
+    }
+
+    const condorMap = new Map(); // vendorCode → { mes → { condor, isSnapshot } }
+
+    // 1. Snapshot months — COMMISSION_SNAPSHOT_2026_0102 has no LAC/CONDOR split.
+    // VENTAS_REAL is already stored as 'lac' in getLacSalesData; we return 0 CONDOR
+    // for snapshot rows so the PDF doesn't double-count. A PDF footer note explains this.
+    // (No DB query needed — condorMap simply has no entries for snapshot months.)
+    if (snapshotMonths.length > 0) {
+        logger.info(`[PDF] Snapshot months [${snapshotMonths.join(',')}]: CONDOR set to 0 (no split in COMMISSION_SNAPSHOT_2026_0102; VENTAS_REAL shown in LAC column)`);
+    }
+
+    // 2. Live months from JAVIER.VENTAS_B
+    if (liveMonths.length > 0) {
+        try {
+            const monthPlaceholders = liveMonths.map(() => '?').join(',');
+            const rows = await queryWithParams(`
+                SELECT TRIM(CODIGOVENDEDOR) as VENDEDOR_CODIGO, MES, SUM(IMPORTE) as VENTAS_CONDOR
+                FROM JAVIER.VENTAS_B
+                WHERE EJERCICIO = ?
+                  AND MES IN (${monthPlaceholders})
+                GROUP BY TRIM(CODIGOVENDEDOR), MES
+                ORDER BY TRIM(CODIGOVENDEDOR), MES
+            `, [year, ...liveMonths], false);
+
+            for (const row of rows) {
+                const code = (row.VENDEDOR_CODIGO || '').trim();
+                if (!condorMap.has(code)) condorMap.set(code, {});
+                condorMap.get(code)[row.MES] = {
+                    condor: parseFloat(row.VENTAS_CONDOR) || 0,
+                    isSnapshot: false,
+                };
+            }
+            logger.info(`[PDF] Live CONDOR data loaded: ${rows.length} rows`);
+        } catch (e) {
+            logger.warn(`[PDF] CONDOR (VENTAS_B) query failed: ${e.message}`);
+        }
+    }
+
+    return condorMap;
+}
+
+/**
+ * Get monthly targets and commission amounts per vendor.
+ * For snapshot months: reads authoritative values from COMMISSION_SNAPSHOT_2026_0102.
+ * For live months: uses COMMERCIAL_TARGETS table for objectives.
+ * Returns: Map of vendorCode → month → { objetivo, comisionGenerada, isSnapshot }
+ */
+async function getMonthlyTargetsAndCommissions(year, startMonth, endMonth) {
+    const isSnapshotYear = (year === 2026 && SNAPSHOT_UNTIL_MONTH > 0);
+    const snapshotMonths = isSnapshotYear
+        ? Array.from({ length: Math.min(SNAPSHOT_UNTIL_MONTH, endMonth) - startMonth + 1 }, (_, i) => i + startMonth)
+              .filter(m => m <= SNAPSHOT_UNTIL_MONTH)
+        : [];
+
+    const targetMap = new Map(); // vendorCode → month → { objetivo, comisionGenerada, isSnapshot }
+
+    // Snapshot months: get objetivo + comisionGenerada from COMMISSION_SNAPSHOT_2026_0102.
+    // Column names: OBJETIVO_MES (not OBJETIVO).
+    if (snapshotMonths.length > 0) {
+        try {
+            const monthPlaceholders = snapshotMonths.map(() => '?').join(',');
+            const rows = await queryWithParams(`
+                SELECT TRIM(VENDEDOR_CODIGO) as VENDEDOR_CODIGO, MES, OBJETIVO_MES, COMISION_GENERADA
+                FROM JAVIER.COMMISSION_SNAPSHOT_2026_0102
+                WHERE ANIO = ?
+                  AND MES IN (${monthPlaceholders})
+            `, [year, ...snapshotMonths], false);
+
+            for (const row of rows) {
+                const code = (row.VENDEDOR_CODIGO || '').trim();
+                if (!targetMap.has(code)) targetMap.set(code, {});
+                targetMap.get(code)[row.MES] = {
+                    objetivo: parseFloat(row.OBJETIVO_MES) || 0,
+                    comisionGenerada: parseFloat(row.COMISION_GENERADA) || 0,
+                    isSnapshot: true,
+                };
+            }
+        } catch (e) {
+            logger.warn(`[PDF] Snapshot targets query failed: ${e.message}`);
+        }
+    }
+
+    // For live months, COMMERCIAL_TARGETS gives the objective
+    // (commission for live months is shown from COMMISSION_PAYMENTS)
+    // No separate query needed here — the PDF uses live data directly from
+    // getLacSalesData / getCondorSalesData and payments for live months.
+
+    return targetMap;
+}
+
+/**
+ * Get registered payments (COMMISSION_PAYMENTS) per vendor for the year.
+ * Returns: Map of vendorCode → month → { importePagado, comisionGenerada, observaciones }
+ */
+async function getVendorPaymentsForPdf(year) {
     try {
-        // Placeholder: If CONDOR data exists in a table, query it here
-        // Example structure:
-        // SELECT CODIGOVENDEDOR as vd, MESDOCUMENTO as Mes, IMPORTEVENTA as Importe
-        // FROM YOUR_CONDOR_TABLE
-        // WHERE ANODOCUMENTO = ? AND MESDOCUMENTO BETWEEN ? AND ?
-        
-        // For now, return empty - the PDF will show just LAC data
-        logger.info('[PDF] CONDOR data source not configured - showing LAC only');
-        return [];
+        const rows = await queryWithParams(`
+            SELECT VENDEDOR_CODIGO, MES, IMPORTE_PAGADO, COMISION_GENERADA,
+                   VENTAS_REAL, OBJETIVO_MES, OBSERVACIONES
+            FROM JAVIER.COMMISSION_PAYMENTS
+            WHERE ANIO = ?
+            ORDER BY VENDEDOR_CODIGO, MES
+        `, [year], false, false);
+
+        const map = new Map();
+        rows.forEach(r => {
+            const code = (r.VENDEDOR_CODIGO || '').trim();
+            const mes = parseInt(r.MES);
+            if (!map.has(code)) map.set(code, {});
+            if (!map.get(code)[mes]) {
+                map.get(code)[mes] = { importePagado: 0, comisionGenerada: 0, observaciones: [] };
+            }
+            map.get(code)[mes].importePagado += parseFloat(r.IMPORTE_PAGADO) || 0;
+            map.get(code)[mes].comisionGenerada += parseFloat(r.COMISION_GENERADA) || 0;
+            if (r.OBSERVACIONES && r.OBSERVACIONES.trim()) {
+                map.get(code)[mes].observaciones.push(r.OBSERVACIONES.trim());
+            }
+        });
+        return map;
     } catch (e) {
-        logger.warn(`[PDF] CONDOR query failed: ${e.message}`);
-        return [];
+        logger.warn(`[PDF] Payments query failed: ${e.message}`);
+        return new Map();
     }
 }
 
@@ -132,12 +327,23 @@ async function getCondorSalesData(year, startMonth, endMonth) {
 // PDF GENERATION
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-async function generateCommissionsPdf(vendorData, condorData, year, startMonth, endMonth) {
+/**
+ * Generates a landscape A4 PDF report for DIEGO.
+ * One section per comercial, with a table:
+ *   Mes | Objetivo | Ventas LAC | Ventas CONDOR | Total | % | Gen. | Pagado | Origen | Obs.
+ * Footer per vendor: totales anuales + flag "Tiene CONDOR".
+ */
+async function generateCommissionsPdf(vendorData, condorDataMap, year, startMonth, endMonth) {
+    // Load targets/commissions from snapshot
+    const targetMap = await getMonthlyTargetsAndCommissions(year, startMonth, endMonth);
+    // Load payments for the full year
+    const paymentsMap = await getVendorPaymentsForPdf(year);
+
     return new Promise((resolve, reject) => {
         try {
             const doc = new PDFDocument({
                 size: 'A4',
-                margin: 40,
+                margin: 30,
                 layout: 'landscape'
             });
 
@@ -146,212 +352,274 @@ async function generateCommissionsPdf(vendorData, condorData, year, startMonth, 
             doc.on('end', () => resolve(Buffer.concat(chunks)));
             doc.on('error', reject);
 
-            const pageWidth = doc.page.width;
-            const pageHeight = doc.page.height;
-            const margin = 40;
+            const pageWidth = doc.page.width;   // ~842 landscape
+            const pageHeight = doc.page.height; // ~595 landscape
+            const margin = 30;
             const contentWidth = pageWidth - margin * 2;
 
-            // Title
             const now = new Date();
             const dateStr = `${String(now.getDate()).padStart(2, '0')}/${String(now.getMonth() + 1).padStart(2, '0')}/${now.getFullYear()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-            
-            const periodLabel = startMonth === endMonth 
-                ? `${getMonthName(startMonth)} ${year}` 
+            const periodLabel = startMonth === endMonth
+                ? `${getMonthName(startMonth)} ${year}`
                 : `${getMonthName(startMonth)} - ${getMonthName(endMonth)} ${year}`;
 
-            doc.fontSize(10).fillColor(COLORS.text).text(dateStr, { align: 'center' });
-            doc.moveDown(0.5);
-
-            // ──────────────────────────────────────────
-            // LEFT TABLE: VENTA (LAC)
-            // ──────────────────────────────────────────
-            const tableLeftX = margin;
-            const tableWidth = contentWidth * 0.65;
-            const rowHeight = 14;
-            const headerHeight = 18;
-
-            // Table header - VENTA
-            let y = doc.y;
-            doc.fontSize(9).fillColor(COLORS.headerText);
-            doc.rect(tableLeftX, y, tableWidth, headerHeight).fill(COLORS.header);
-            doc.text('VENTA', tableLeftX + 4, y + 4, { width: tableWidth - 8, align: 'left' });
-
-            y += headerHeight;
-
-            // Column headers
-            const colDefs = [
-                { key: 'code', label: 'VENDEDOR', width: 50 },
-                { key: 'name', label: 'NOMBRE VENDEDOR', width: 200 },
-                { key: 'mes', label: 'MES', width: 35 },
-                { key: 'lac', label: 'LAC', width: 100 },
-                { key: 'total', label: 'Total general', width: 100 }
+            // Column definitions (total ~782px for A4 landscape content width ~782)
+            const cols = [
+                { key: 'mes',     label: 'Mes',         width: 62  },
+                { key: 'obj',     label: 'Objetivo',    width: 82  },
+                { key: 'lac',     label: 'Venta LAC',   width: 82  },
+                { key: 'condor',  label: 'V. CONDOR',   width: 78  },
+                { key: 'total',   label: 'Total',       width: 82  },
+                { key: 'pct',     label: '%Cumpl.',     width: 55  },
+                { key: 'gen',     label: 'Com.Gen.',    width: 72  },
+                { key: 'pag',     label: 'Com.Pag.',    width: 72  },
+                { key: 'origen',  label: 'Origen',      width: 48  },
+                { key: 'obs',     label: 'Observaciones', width: 95 },
             ];
+            const tableWidth = cols.reduce((s, c) => s + c.width, 0);
 
-            let x = tableLeftX;
-            colDefs.forEach(col => {
-                doc.rect(x, y, col.width, headerHeight).fill(COLORS.secondary);
-                doc.text(col.label, x + 3, y + 4, { width: col.width - 6, align: 'center' });
-                x += col.width;
-            });
+            const ROW_H = 14;
+            const HDR_H = 18;
 
-            y += headerHeight;
+            let firstPage = true;
 
-            // Data rows
-            let lacTotal = 0;
-            vendorData.forEach(vendor => {
-                // Sum all months for this vendor
-                let vendorTotal = 0;
-                Object.values(vendor.months).forEach(v => vendorTotal += v);
-                lacTotal += vendorTotal;
+            // Helper: draw page header
+            const drawPageHeader = (y) => {
+                doc.fontSize(9).fillColor(COLORS.text).text(
+                    `Informe de Comisiones ${year} — ${periodLabel}   |   Generado: ${dateStr}`,
+                    margin, y, { width: contentWidth, align: 'center' }
+                );
+                return y + 14;
+            };
 
-                Object.entries(vendor.months).forEach(([month, amount]) => {
-                    x = tableLeftX;
-                    
-                    // Alternating row colors
-                    if (Object.keys(vendor.months).indexOf(month) % 2 === 0) {
-                        doc.rect(tableLeftX, y, tableWidth, rowHeight).fill(COLORS.lightBg);
-                    }
+            let yPos = margin;
+            yPos = drawPageHeader(yPos);
+            yPos += 4;
 
-                    doc.fillColor(COLORS.text).fontSize(8);
-                    
-                    colDefs.forEach(col => {
+            // Iterate vendors
+            for (const vendor of vendorData) {
+                const vendorCondorMap = condorDataMap.get(vendor.code) || {};
+                const vendorTargets = targetMap.get(vendor.code) || {};
+                const vendorPayments = paymentsMap.get(vendor.code) || {};
+
+                // Estimate rows needed: months + header + vendor header + footer = months+3
+                const monthsInRange = endMonth - startMonth + 1;
+                const estimatedHeight = HDR_H * 2 + ROW_H * monthsInRange + HDR_H + 10;
+
+                // New page if not enough space
+                if (!firstPage && yPos + estimatedHeight > pageHeight - margin - 20) {
+                    doc.addPage();
+                    yPos = margin;
+                    yPos = drawPageHeader(yPos);
+                    yPos += 4;
+                }
+                firstPage = false;
+
+                // ── Vendor header bar ──
+                doc.rect(margin, yPos, tableWidth, HDR_H).fill(COLORS.header);
+                doc.fillColor(COLORS.headerText).fontSize(9).font('Helvetica-Bold')
+                    .text(`${vendor.code} — ${vendor.name}`, margin + 4, yPos + 4, {
+                        width: tableWidth - 8, align: 'left'
+                    });
+                yPos += HDR_H;
+
+                // ── Column headers ──
+                let xPos = margin;
+                doc.font('Helvetica-Bold').fontSize(7).fillColor(COLORS.text);
+                cols.forEach(col => {
+                    doc.rect(xPos, yPos, col.width, HDR_H).fill('#D0E4F7').stroke();
+                    doc.fillColor(COLORS.text).text(col.label, xPos + 2, yPos + 4, {
+                        width: col.width - 4, align: 'center'
+                    });
+                    xPos += col.width;
+                });
+                yPos += HDR_H;
+
+                // ── Data rows ──
+                let totalLac = 0, totalCondor = 0, totalObj = 0, totalGen = 0, totalPag = 0;
+                let tieneCondorAnual = false;
+                let rowIdx = 0;
+
+                for (let m = startMonth; m <= endMonth; m++) {
+                    const monthLacData = vendor.months[m] || { lac: 0, isSnapshot: false };
+                    const condorData = vendorCondorMap[m] || { condor: 0, isSnapshot: false };
+                    const targData = vendorTargets[m];
+                    const payData = vendorPayments[m];
+
+                    const lacAmt = monthLacData.lac || 0;
+                    const condorAmt = condorData.condor || 0;
+                    const totalAmt = lacAmt + condorAmt;
+                    const isSnapshotRow = monthLacData.isSnapshot || (targData && targData.isSnapshot);
+
+                    // Objective: from snapshot → targData.objetivo, otherwise 0 (live months don't have it here)
+                    const objAmt = targData ? targData.objetivo : 0;
+                    const pct = (objAmt > 0 && totalAmt > 0) ? (totalAmt / objAmt) * 100 : 0;
+
+                    // Commission generated: snapshot → targData.comisionGenerada, else payment recorded value
+                    const genAmt = targData ? targData.comisionGenerada
+                        : (payData ? payData.comisionGenerada : 0);
+                    const pagAmt = payData ? payData.importePagado : 0;
+                    const obs = payData ? payData.observaciones.join('; ') : '';
+                    const origen = isSnapshotRow ? 'FOTO' : 'LIVE';
+
+                    if (condorAmt > 0) tieneCondorAnual = true;
+                    totalLac += lacAmt;
+                    totalCondor += condorAmt;
+                    totalObj += objAmt;
+                    totalGen += genAmt;
+                    totalPag += pagAmt;
+
+                    // Row background
+                    const rowBg = isSnapshotRow
+                        ? '#FFF3CD' // warm tint for snapshot rows
+                        : (rowIdx % 2 === 0 ? COLORS.lightBg : '#FFFFFF');
+                    doc.rect(margin, yPos, tableWidth, ROW_H).fill(rowBg);
+
+                    xPos = margin;
+                    doc.font('Helvetica').fontSize(7).fillColor(COLORS.text);
+
+                    cols.forEach(col => {
                         let cellText = '';
-                        switch(col.key) {
-                            case 'code': cellText = vendor.code; break;
-                            case 'name': cellText = vendor.name; break;
-                            case 'mes': cellText = month; break;
-                            case 'lac': cellText = formatCurrency(amount); break;
-                            case 'total': cellText = formatCurrency(vendorTotal); break;
+                        let cellColor = COLORS.text;
+                        let align = 'right';
+
+                        switch (col.key) {
+                            case 'mes':
+                                align = 'left';
+                                // Month name + FOTO badge inline
+                                doc.fillColor(COLORS.text).text(
+                                    getMonthName(m).substring(0, 3).toUpperCase(),
+                                    xPos + 2, yPos + 3,
+                                    { width: 28, align: 'left' }
+                                );
+                                if (isSnapshotRow) {
+                                    // Small FOTO badge
+                                    doc.rect(xPos + 32, yPos + 2, 24, 10).fill(COLORS.snapshotBadge);
+                                    doc.fillColor(COLORS.snapshotBadgeText).fontSize(6)
+                                        .text('FOTO', xPos + 33, yPos + 3, { width: 22, align: 'center' });
+                                    doc.fontSize(7);
+                                }
+                                xPos += col.width;
+                                return; // handled manually
+                            case 'obj':
+                                cellText = objAmt > 0 ? formatCurrency(objAmt) : '-';
+                                break;
+                            case 'lac':
+                                cellText = formatCurrency(lacAmt);
+                                break;
+                            case 'condor':
+                                cellText = condorAmt > 0 ? formatCurrency(condorAmt) : '-';
+                                if (condorAmt > 0) cellColor = '#8B6914';
+                                break;
+                            case 'total':
+                                cellText = formatCurrency(totalAmt);
+                                cellColor = pct >= 100 ? '#1A6B1A' : COLORS.text;
+                                break;
+                            case 'pct':
+                                cellText = objAmt > 0 ? formatPct(pct) : '-';
+                                cellColor = pct >= 100 ? '#1A6B1A' : (pct > 0 ? '#A05000' : COLORS.text);
+                                break;
+                            case 'gen':
+                                cellText = genAmt > 0 ? formatCurrency(genAmt) : '0,00';
+                                cellColor = genAmt > 0 ? '#1A6B1A' : '#888888';
+                                break;
+                            case 'pag':
+                                cellText = pagAmt > 0 ? formatCurrency(pagAmt) : '-';
+                                cellColor = pagAmt > 0 ? '#003d7a' : '#888888';
+                                break;
+                            case 'origen':
+                                cellText = origen;
+                                cellColor = isSnapshotRow ? COLORS.snapshotBadge : '#555555';
+                                break;
+                            case 'obs':
+                                align = 'left';
+                                cellText = obs.length > 30 ? obs.substring(0, 28) + '...' : obs;
+                                break;
                         }
-                        doc.text(cellText, x + 3, y + 3, { width: col.width - 6, align: col.key === 'name' ? 'left' : 'center' });
-                        x += col.width;
+
+                        doc.fillColor(cellColor).text(cellText, xPos + 2, yPos + 3, {
+                            width: col.width - 4, align
+                        });
+                        xPos += col.width;
                     });
 
-                    // Draw borders
-                    x = tableLeftX;
-                    doc.lineWidth(0.5).strokeColor(COLORS.border);
-                    colDefs.forEach(col => {
-                        doc.rect(x, y, col.width, rowHeight).stroke();
-                        x += col.width;
+                    // Draw row borders
+                    xPos = margin;
+                    doc.lineWidth(0.3).strokeColor('#AAAAAA');
+                    cols.forEach(col => {
+                        doc.rect(xPos, yPos, col.width, ROW_H).stroke();
+                        xPos += col.width;
                     });
 
-                    y += rowHeight;
+                    yPos += ROW_H;
+                    rowIdx++;
 
-                    // Check if we need a new page
-                    if (y > pageHeight - margin - rowHeight * 5) {
+                    // New page if needed
+                    if (yPos > pageHeight - margin - ROW_H * 4) {
                         doc.addPage();
-                        y = margin;
+                        yPos = margin;
+                        yPos = drawPageHeader(yPos);
+                        yPos += 4;
                     }
+                }
+
+                // ── Vendor total row ──
+                doc.rect(margin, yPos, tableWidth, HDR_H).fill(COLORS.totalBg);
+                doc.fillColor(COLORS.totalText).font('Helvetica-Bold').fontSize(7);
+
+                xPos = margin;
+                const totalRowData = {
+                    mes: 'TOTAL',
+                    obj: totalObj > 0 ? formatCurrency(totalObj) : '-',
+                    lac: formatCurrency(totalLac),
+                    condor: totalCondor > 0 ? formatCurrency(totalCondor) : '-',
+                    total: formatCurrency(totalLac + totalCondor),
+                    pct: totalObj > 0 ? formatPct(((totalLac + totalCondor) / totalObj) * 100) : '-',
+                    gen: formatCurrency(totalGen),
+                    pag: formatCurrency(totalPag),
+                    origen: tieneCondorAnual ? 'CONDOR' : '',
+                    obs: tieneCondorAnual ? 'Tiene ventas CONDOR' : '',
+                };
+                cols.forEach(col => {
+                    const align = (col.key === 'mes' || col.key === 'obs') ? 'left' : 'right';
+                    doc.text(totalRowData[col.key] || '', xPos + 2, yPos + 4, {
+                        width: col.width - 4, align
+                    });
+                    xPos += col.width;
                 });
-            });
-
-            // Total row
-            doc.rect(tableLeftX, y, tableWidth, headerHeight).fill(COLORS.totalBg);
-            doc.fillColor(COLORS.totalText).fontSize(9).text('Total general', tableLeftX + 4, y + 4);
-            
-            let totalX = tableLeftX + colDefs.slice(0, 3).reduce((s, c) => s + c.width, 0);
-            doc.text(formatCurrency(lacTotal), totalX + 3, y + 4, { width: colDefs[3].width - 6, align: 'center' });
-            doc.text(formatCurrency(lacTotal), totalX + colDefs[3].width + 3, y + 4, { width: colDefs[4].width - 6, align: 'center' });
-            
-            x = tableLeftX;
-            colDefs.forEach(col => {
-                doc.rect(x, y, col.width, headerHeight).strokeColor(COLORS.border).stroke();
-                x += col.width;
-            });
-
-            // ──────────────────────────────────────────
-            // RIGHT TABLE: CONDOR
-            // ──────────────────────────────────────────
-            const tableRightX = margin + tableWidth + 30;
-            const tableRightWidth = contentWidth * 0.3;
-
-            y = margin + headerHeight * 2 + 20;
-
-            // CONDOR header
-            doc.fontSize(9).fillColor(COLORS.headerText);
-            doc.rect(tableRightX, y, tableRightWidth, headerHeight).fill('#DAA520');
-            doc.text('CONDOR', tableRightX + 4, y + 4, { width: tableRightWidth - 8, align: 'left' });
-
-            y += headerHeight;
-
-            // CONDOR column headers
-            const condorColDefs = [
-                { key: 'vd', label: 'vd', width: 40 },
-                { key: 'mes', label: 'Mes', width: 35 },
-                { key: 'ejercicio', label: year.toString(), width: 80 },
-                { key: 'total', label: 'Total general', width: 100 }
-            ];
-
-            x = tableRightX;
-            condorColDefs.forEach(col => {
-                doc.rect(x, y, col.width, headerHeight).fill(COLORS.header);
-                doc.text(col.label, x + 3, y + 4, { width: col.width - 6, align: 'center' });
-                x += col.width;
-            });
-
-            y += headerHeight;
-
-            // CONDOR data rows
-            let condorTotal = 0;
-            if (condorData && condorData.length > 0) {
-                condorData.forEach(row => {
-                    x = tableRightX;
-                    
-                    if (condorData.indexOf(row) % 2 === 0) {
-                        doc.rect(tableRightX, y, tableRightWidth, rowHeight).fill(COLORS.lightBg);
-                    }
-
-                    doc.fillColor(COLORS.text).fontSize(8);
-                    
-                    condorColDefs.forEach(col => {
-                        let cellText = '';
-                        switch(col.key) {
-                            case 'vd': cellText = row.vd || ''; break;
-                            case 'mes': cellText = row.mes || ''; break;
-                            case 'ejercicio': cellText = formatCurrency(row.importe || 0); break;
-                            case 'total': cellText = formatCurrency(row.total || row.importe || 0); break;
-                        }
-                        doc.text(cellText, x + 3, y + 3, { width: col.width - 6, align: 'center' });
-                        x += col.width;
-                    });
-
-                    x = tableRightX;
-                    doc.lineWidth(0.5).strokeColor(COLORS.border);
-                    condorColDefs.forEach(col => {
-                        doc.rect(x, y, col.width, rowHeight).stroke();
-                        x += col.width;
-                    });
-
-                    y += rowHeight;
+                doc.strokeColor(COLORS.border).lineWidth(0.5);
+                xPos = margin;
+                cols.forEach(col => {
+                    doc.rect(xPos, yPos, col.width, HDR_H).stroke();
+                    xPos += col.width;
                 });
 
-                // CONDOR total
-                condorTotal = condorData.reduce((sum, r) => sum + (r.total || r.importe || 0), 0);
-            } else {
-                doc.rect(tableRightX, y, tableRightWidth, rowHeight).fill(COLORS.lightBg);
-                doc.fillColor(COLORS.mediumGray).fontSize(8).text('Sin datos', tableRightX + 4, y + 3, { width: tableRightWidth - 8, align: 'center' });
-                y += rowHeight;
-                doc.rect(tableRightX, y - rowHeight, tableRightWidth, rowHeight).strokeColor(COLORS.border).stroke();
+                yPos += HDR_H + 8;
+                doc.font('Helvetica');
             }
 
-            // CONDOR total row
-            doc.rect(tableRightX, y, tableRightWidth, headerHeight).fill(COLORS.totalBg);
-            doc.fillColor(COLORS.totalText).fontSize(9).text('Total general', tableRightX + 4, y + 4);
-            
-            let condTotalX = tableRightX + condorColDefs.slice(0, 2).reduce((s, c) => s + c.width, 0);
-            doc.text(formatCurrency(condorTotal), condTotalX + 3, y + 4, { width: condorColDefs[2].width - 6, align: 'center' });
-            doc.text(formatCurrency(condorTotal), condTotalX + condorColDefs[2].width + 3, y + 4, { width: condorColDefs[3].width - 6, align: 'center' });
-            
-            x = tableRightX;
-            condorColDefs.forEach(col => {
-                doc.rect(x, y, col.width, headerHeight).strokeColor(COLORS.border).stroke();
-                x += col.width;
-            });
-
-            // Footer
-            doc.fontSize(8).fillColor(COLORS.mediumGray)
-                .text(`Informe de comisiones - ${periodLabel}`, margin, pageHeight - 20, { align: 'left' })
-                .text(`Generado por GMP App Movilidad`, pageWidth - margin - 150, pageHeight - 20, { align: 'right' });
+            // ── Global footer ──
+            doc.fontSize(7).fillColor('#555555')
+                .text(
+                    `Informe de comisiones ${year} (${periodLabel}) — Solo para uso interno`,
+                    margin, pageHeight - 30,
+                    { width: contentWidth, align: 'left' }
+                );
+            // Snapshot note when applicable
+            if (year === 2026 && SNAPSHOT_UNTIL_MONTH > 0) {
+                doc.fontSize(6).fillColor('#8B6914')
+                    .text(
+                        `(*) Filas con badge FOTO: datos de COMMISSION_SNAPSHOT_2026_0102. La columna "Venta LAC" contiene el total Ventas Real (LAC + CONDOR combinados; sin desglose disponible en el snapshot histórico).`,
+                        margin, pageHeight - 20,
+                        { width: contentWidth, align: 'left' }
+                    );
+            }
+            doc.fontSize(7).fillColor('#555555')
+                .text(
+                    'GMP App Movilidad',
+                    margin + contentWidth / 2, pageHeight - 30,
+                    { width: contentWidth / 2, align: 'right' }
+                );
 
             doc.end();
         } catch (e) {

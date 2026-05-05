@@ -12,12 +12,20 @@ import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
+typedef OrderPreviewConfirm = Future<Map<String, dynamic>?> Function(
+  String observaciones, {
+  String? deliveryDate,
+  String? vehicleCode,
+  String? driverCode,
+  String? routeCode,
+});
+
 /// Shows the order preview as a centered dialog. Returns true if confirmed.
 Future<bool?> showOrderPreviewSheet({
   required BuildContext context,
   required PedidosProvider provider,
   required String vendedorCode,
-  required Future<Map<String, dynamic>?> Function(String observaciones) onConfirm,
+  required OrderPreviewConfirm onConfirm,
 }) {
   return showDialog<bool>(
     context: context,
@@ -31,7 +39,6 @@ Future<bool?> showOrderPreviewSheet({
 }
 
 class _OrderPreviewSheet extends StatefulWidget {
-
   const _OrderPreviewSheet({
     required this.provider,
     required this.vendedorCode,
@@ -39,7 +46,7 @@ class _OrderPreviewSheet extends StatefulWidget {
   });
   final PedidosProvider provider;
   final String vendedorCode;
-  final Future<Map<String, dynamic>?> Function(String observaciones) onConfirm;
+  final OrderPreviewConfirm onConfirm;
 
   @override
   State<_OrderPreviewSheet> createState() => _OrderPreviewSheetState();
@@ -49,6 +56,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     with SingleTickerProviderStateMixin {
   late final AnimationController _pulseController;
   bool _isConfirming = false;
+  bool _isLoadingDeliveryOptions = false;
+  OrderDeliveryOptions? _deliveryOptions;
+  DateTime? _selectedDeliveryDate;
+  String? _deliveryError;
 
   @override
   void initState() {
@@ -57,6 +68,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       vsync: this,
       duration: const Duration(milliseconds: 1200),
     )..repeat(reverse: true);
+    _loadDeliveryOptions();
   }
 
   @override
@@ -71,7 +83,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     final lines = provider.lines;
     final hasDiscount = provider.globalDiscountPct > 0;
     final margin = provider.porcentajeMargen;
-    final total = hasDiscount ? provider.totalConDescuento : provider.totalImporte;
+    final total =
+        hasDiscount ? provider.totalConDescuento : provider.totalImporte;
 
     return Dialog(
       backgroundColor: AppTheme.darkBase,
@@ -95,10 +108,14 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 children: [
                   _buildClientCard(provider),
                   const SizedBox(height: 16),
+                  _buildDeliveryCard(),
+                  const SizedBox(height: 16),
                   _buildSectionLabel('PRODUCTOS (${lines.length})'),
                   const SizedBox(height: 8),
-                  ...lines.asMap().entries.map((entry) =>
-                      _buildLineItem(entry.key, entry.value, hasDiscount, provider),),
+                  ...lines.asMap().entries.map(
+                        (entry) => _buildLineItem(
+                            entry.key, entry.value, hasDiscount, provider),
+                      ),
                   const SizedBox(height: 16),
                   _buildTotalsCard(provider, hasDiscount, total, margin),
                   const SizedBox(height: 16),
@@ -119,30 +136,47 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
 
   Widget _buildHeader(PedidosProvider provider) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+      padding: const EdgeInsets.fromLTRB(20, 18, 12, 18),
       decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.neonBlue.withOpacity(0.18),
+            AppTheme.darkSurface,
+            AppTheme.neonGreen.withOpacity(0.08),
+          ],
+        ),
         border: Border(
           bottom: BorderSide(
-            color: AppTheme.neonBlue.withOpacity(0.15),
+            color: Colors.white.withOpacity(0.08),
           ),
         ),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            width: 46,
+            height: 46,
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  AppTheme.neonBlue.withOpacity(0.2),
-                  AppTheme.neonPurple.withOpacity(0.1),
+                  AppTheme.neonBlue.withOpacity(0.95),
+                  AppTheme.neonCyan.withOpacity(0.82),
                 ],
               ),
               borderRadius: BorderRadius.circular(14),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.neonBlue.withOpacity(0.24),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
             ),
             child: const Icon(
-              Icons.receipt_long,
-              color: AppTheme.neonBlue,
+              Icons.task_alt_rounded,
+              color: AppTheme.darkBase,
               size: 24,
             ),
           ),
@@ -151,45 +185,28 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Resumen del Pedido',
-                  style: TextStyle(
+                Text(
+                  provider.clientName ?? 'Pedido listo',
+                  style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 2),
-                Row(
+                const SizedBox(height: 6),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
                   children: [
-                    const Text(
-                      'Revisa antes de confirmar',
-                      style: TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 12,
-                      ),
+                    _buildHeaderChip(
+                      Icons.storefront_rounded,
+                      provider.clientCode ?? '-',
                     ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppTheme.neonBlue.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: AppTheme.neonBlue.withOpacity(0.3),
-                        ),
-                      ),
-                      child: Text(
-                        provider.saleTypeLabel,
-                        style: const TextStyle(
-                          color: AppTheme.neonBlue,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                    _buildHeaderChip(
+                      Icons.sell_rounded,
+                      provider.saleTypeLabel,
                     ),
                   ],
                 ),
@@ -201,6 +218,32 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             icon: const Icon(Icons.close, color: Colors.white54),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeaderChip(IconData icon, String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: AppTheme.neonCyan, size: 13),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -221,11 +264,15 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             height: 44,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [AppTheme.neonBlue.withOpacity(0.3), AppTheme.neonPurple.withOpacity(0.2)],
+                colors: [
+                  AppTheme.neonBlue.withOpacity(0.3),
+                  AppTheme.neonPurple.withOpacity(0.2)
+                ],
               ),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.storefront, color: AppTheme.neonBlue, size: 22),
+            child: const Icon(Icons.storefront,
+                color: AppTheme.neonBlue, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -235,14 +282,18 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 Text(
                   provider.clientName ?? 'Sin cliente',
                   style: const TextStyle(
-                      color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600,),
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text(
                   'Código: ${provider.clientCode ?? '-'}',
-                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                  style: const TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 12),
                 ),
               ],
             ),
@@ -257,17 +308,354 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               ),
               child: Column(
                 children: [
-                  const Text('Saldo Pdte', style: TextStyle(color: AppTheme.warning, fontSize: 9)),
+                  const Text('Saldo Pdte',
+                      style: TextStyle(color: AppTheme.warning, fontSize: 9)),
                   Text(
                     PedidosFormatters.money(provider.clientSaldoPendiente),
                     style: const TextStyle(
-                        color: AppTheme.warning, fontSize: 13, fontWeight: FontWeight.w700,),
+                      color: AppTheme.warning,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDeliveryCard() {
+    final options = _deliveryOptions;
+    final dateLabel = _selectedDeliveryDate != null
+        ? _formatDateDisplay(_selectedDeliveryDate!)
+        : options?.deliveryLabel ?? 'Calculando...';
+    final weekdayLabel = _selectedDeliveryDate == null
+        ? ''
+        : _weekdayLabel(_selectedDeliveryDate!);
+    final truckLabel = options?.truckLabel ?? 'Calculando camion...';
+    final truckSub = options == null
+        ? ''
+        : [
+            if (options.vehicleDescription.isNotEmpty)
+              options.vehicleDescription,
+            if (options.routeCode.isNotEmpty) 'Ruta ${options.routeCode}',
+          ].join(' - ');
+    final isValidated = options?.validated == true;
+    final ruleLabel = options == null
+        ? 'Cargando reparto'
+        : isValidated
+            ? 'Dias de reparto cliente'
+            : 'Sin regla cerrada en DB';
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.neonGreen.withOpacity(0.13),
+            AppTheme.darkCard.withOpacity(0.88),
+            AppTheme.neonBlue.withOpacity(0.08),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppTheme.neonGreen.withOpacity(0.22)),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.neonGreen.withOpacity(0.10),
+            blurRadius: 22,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppTheme.neonGreen.withOpacity(0.16),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.route_rounded,
+                  color: AppTheme.neonGreen,
+                  size: 21,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Reparto',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      ruleLabel,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              _buildStatusPill(
+                isValidated ? 'Validado' : 'Flexible',
+                isValidated ? AppTheme.neonGreen : AppTheme.warning,
+              ),
+              const SizedBox(width: 8),
+              if (_isLoadingDeliveryOptions)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppTheme.neonGreen,
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.18),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Fecha reparto',
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              dateLabel,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 24,
+                                fontWeight: FontWeight.w900,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (weekdayLabel.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 3),
+                              child: Text(
+                                weekdayLabel,
+                                style: const TextStyle(
+                                  color: AppTheme.neonGreen,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  tooltip: 'Cambiar fecha',
+                  onPressed: _isLoadingDeliveryOptions || _isConfirming
+                      ? null
+                      : _pickDeliveryDate,
+                  icon: const Icon(Icons.edit_calendar_rounded),
+                  color: AppTheme.neonGreen,
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppTheme.neonGreen.withOpacity(0.12),
+                    disabledBackgroundColor: Colors.white.withOpacity(0.04),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildDayChips(options),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(13),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.055),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withOpacity(0.08)),
+            ),
+            child: _buildDeliveryInfo(
+              icon: Icons.local_shipping_rounded,
+              label: 'Camion asignado',
+              value: truckLabel,
+              subtitle: truckSub,
+            ),
+          ),
+          if (_deliveryError != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.error.withOpacity(0.24)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(
+                    Icons.error_outline_rounded,
+                    color: AppTheme.error,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _deliveryError!,
+                      style: const TextStyle(
+                        color: AppTheme.error,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusPill(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withOpacity(0.26)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDayChips(OrderDeliveryOptions? options) {
+    final days = options?.allowedDeliveryDays ?? const <String>[];
+    if (days.isEmpty) {
+      return _buildStatusPill('Sin regla de reparto en DB', AppTheme.warning);
+    }
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: days
+          .map(
+            (day) => Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+              decoration: BoxDecoration(
+                color: AppTheme.neonGreen.withOpacity(0.10),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: AppTheme.neonGreen.withOpacity(0.22),
+                ),
+              ),
+              child: Text(
+                _capitalize(day),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  Widget _buildDeliveryInfo({
+    required IconData icon,
+    required String label,
+    required String value,
+    String subtitle = '',
+  }) {
+    return Row(
+      children: [
+        Icon(icon, color: AppTheme.textSecondary, size: 18),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (subtitle.isNotEmpty)
+                Text(
+                  subtitle,
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 11,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -299,7 +687,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     );
   }
 
-  Widget _buildLineItem(int index, OrderLine line, bool hasDiscount, PedidosProvider provider) {
+  Widget _buildLineItem(
+      int index, OrderLine line, bool hasDiscount, PedidosProvider provider) {
     final effectivePrice = hasDiscount
         ? line.precioVenta * (1 - provider.globalDiscountPct / 100)
         : line.precioVenta;
@@ -332,7 +721,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             child: Text(
               '${index + 1}',
               style: const TextStyle(
-                  color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.w600,),
+                color: AppTheme.neonBlue,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -343,14 +735,18 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               children: [
                 Text(
                   line.descripcion,
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text(
                   '$qty × ${PedidosFormatters.money(effectivePrice, decimals: 3)}',
-                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                  style: const TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 11),
                 ),
               ],
             ),
@@ -358,7 +754,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           // Line total
           Text(
             PedidosFormatters.money(lineTotal),
-            style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+                color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -366,7 +763,11 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
   }
 
   Widget _buildTotalsCard(
-      PedidosProvider provider, bool hasDiscount, double total, double margin,) {
+    PedidosProvider provider,
+    bool hasDiscount,
+    double total,
+    double margin,
+  ) {
     final marginColor = margin >= 15
         ? AppTheme.neonGreen
         : margin >= 5
@@ -382,8 +783,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       child: Column(
         children: [
           // Subtotal
-          _buildTotalRow('Subtotal (${provider.lineCount} líneas)',
-              PedidosFormatters.money(provider.totalImporte),),
+          _buildTotalRow(
+            'Subtotal (${provider.lineCount} líneas)',
+            PedidosFormatters.money(provider.totalImporte),
+          ),
 
           // Discount
           if (hasDiscount) ...[
@@ -400,7 +803,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           const SizedBox(height: 8),
 
           // Base
-          _buildTotalRow('Base Imponible', PedidosFormatters.money(provider.totalBase)),
+          _buildTotalRow(
+              'Base Imponible', PedidosFormatters.money(provider.totalBase)),
 
           // IVA
           const SizedBox(height: 4),
@@ -414,15 +818,21 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('TOTAL',
-                  style: TextStyle(
-                      color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700,),),
+              const Text(
+                'TOTAL',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
               Text(
                 PedidosFormatters.money(total),
                 style: const TextStyle(
-                    color: AppTheme.neonGreen,
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,),
+                  color: AppTheme.neonGreen,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ],
           ),
@@ -445,7 +855,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               ),
               const SizedBox(width: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: marginColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
@@ -454,7 +865,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 child: Text(
                   'Margen ${margin.toStringAsFixed(1)}%',
                   style: TextStyle(
-                      color: marginColor, fontSize: 12, fontWeight: FontWeight.w600,),
+                    color: marginColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
@@ -468,13 +882,18 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label,
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),),
-        Text(value,
-            style: TextStyle(
-                color: valueColor ?? Colors.white,
-                fontSize: 14,
-                fontWeight: FontWeight.w500,),),
+        Text(
+          label,
+          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            color: valueColor ?? Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
       ],
     );
   }
@@ -500,10 +919,15 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('IVA $pct%',
-                      style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),),
-                  Text(PedidosFormatters.money(e.value),
-                      style: const TextStyle(color: Colors.white70, fontSize: 12),),
+                  Text(
+                    'IVA $pct%',
+                    style: const TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 12),
+                  ),
+                  Text(
+                    PedidosFormatters.money(e.value),
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
                 ],
               ),
             );
@@ -518,7 +942,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
-        border: Border(top: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2))),
+        border:
+            Border(top: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2))),
         boxShadow: [
           BoxShadow(
             color: AppTheme.neonBlue.withOpacity(0.1),
@@ -536,12 +961,18 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('Total a confirmar',
-                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),),
+                  const Text(
+                    'Total a confirmar',
+                    style:
+                        TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                  ),
                   Text(
                     PedidosFormatters.money(total),
                     style: const TextStyle(
-                        color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800,),
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
                 ],
               ),
@@ -569,26 +1000,36 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               child: SizedBox(
                 height: 52,
                 child: ElevatedButton.icon(
-                  onPressed: _isConfirming ? null : _handleConfirm,
+                  onPressed: _isConfirming || _isLoadingDeliveryOptions
+                      ? null
+                      : _handleConfirm,
                   icon: _isConfirming
                       ? const SizedBox(
                           width: 18,
                           height: 18,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: AppTheme.darkBase,),)
+                            strokeWidth: 2,
+                            color: AppTheme.darkBase,
+                          ),
+                        )
                       : const Icon(Icons.check_circle_outline, size: 20),
                   label: Text(
                     _isConfirming ? 'Confirmando...' : 'CONFIRMAR PEDIDO',
                     style: const TextStyle(
-                        fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5,),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.neonGreen,
                     foregroundColor: AppTheme.darkBase,
-                    disabledBackgroundColor: AppTheme.neonGreen.withOpacity(0.4),
+                    disabledBackgroundColor:
+                        AppTheme.neonGreen.withOpacity(0.4),
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
                     elevation: 0,
                   ),
                 ),
@@ -600,12 +1041,120 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     );
   }
 
+  Future<void> _loadDeliveryOptions({String? deliveryDate}) async {
+    final clientCode = widget.provider.clientCode;
+    if (clientCode == null || clientCode.trim().isEmpty) return;
+
+    setState(() {
+      _isLoadingDeliveryOptions = true;
+      _deliveryError = null;
+    });
+
+    try {
+      final options = await PedidosService.getDeliveryOptions(
+        clientCode: clientCode.trim(),
+        vendedorCode: widget.vendedorCode,
+        deliveryDate: deliveryDate,
+      );
+      final selected = _parseIsoDate(
+        options.selectedDeliveryDate.isNotEmpty
+            ? options.selectedDeliveryDate
+            : options.suggestedDeliveryDate,
+      );
+      if (!mounted) return;
+      setState(() {
+        _deliveryOptions = options;
+        _selectedDeliveryDate = selected ?? _selectedDeliveryDate;
+        _isLoadingDeliveryOptions = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _deliveryError = _cleanError(e);
+        _isLoadingDeliveryOptions = false;
+      });
+    }
+  }
+
+  Future<void> _pickDeliveryDate() async {
+    final now = DateTime.now();
+    final initial = _selectedDeliveryDate ?? now;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial.isBefore(now) ? now : initial,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: now.add(const Duration(days: 60)),
+      helpText: 'Fecha reparto',
+      confirmText: 'Aceptar',
+      cancelText: 'Cancelar',
+    );
+
+    if (picked == null) return;
+    await _loadDeliveryOptions(deliveryDate: _formatIsoDate(picked));
+  }
+
+  DateTime? _parseIsoDate(String value) {
+    final parts = value.split('-');
+    if (parts.length != 3) return null;
+    final year = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final day = int.tryParse(parts[2]);
+    if (year == null || month == null || day == null) return null;
+    return DateTime(year, month, day);
+  }
+
+  String _formatIsoDate(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}-$month-$day';
+  }
+
+  String _formatDateDisplay(DateTime date) {
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '$day/$month/${date.year}';
+  }
+
+  String _weekdayLabel(DateTime date) {
+    const labels = [
+      'Lunes',
+      'Martes',
+      'Miercoles',
+      'Jueves',
+      'Viernes',
+      'Sabado',
+      'Domingo',
+    ];
+    return labels[date.weekday - 1];
+  }
+
+  String _capitalize(String value) {
+    final clean = value.trim();
+    if (clean.isEmpty) return clean;
+    return clean[0].toUpperCase() + clean.substring(1);
+  }
+
+  String _cleanError(Object error) {
+    final raw = error.toString();
+    return raw
+        .replaceFirst('ApiException: ', '')
+        .replaceFirst('Exception: ', '');
+  }
+
   Future<void> _handleConfirm() async {
     HapticFeedback.heavyImpact();
     setState(() => _isConfirming = true);
 
     try {
-      final result = await widget.onConfirm('');
+      final result = await widget.onConfirm(
+        '',
+        deliveryDate: _selectedDeliveryDate == null
+            ? null
+            : _formatIsoDate(_selectedDeliveryDate!),
+        vehicleCode: _deliveryOptions?.vehicleCode,
+        driverCode: _deliveryOptions?.driverCode,
+        routeCode: _deliveryOptions?.routeCode,
+      );
       if (result != null && mounted) {
         HapticFeedback.mediumImpact();
         Navigator.of(context).pop(true);
