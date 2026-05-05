@@ -68,8 +68,8 @@ function resolveHistoricalCommissionMonth({
     }
 
     return {
-        actual: 0,
-        target: 0,
+        actual: toNumber(live.actual),
+        target: toNumber(live.target),
         commission: 0,
         isHistoricalSnapshot: true,
         snapshotSource: SNAPSHOT_SOURCE,
