@@ -6,6 +6,7 @@ const logger = require('../middleware/logger');
 const { auditDataAccess } = require('../middleware/audit');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
 const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, SNAPSHOT_UNTIL_MONTH, getVendorColumn, getVendorColumnExpr, buildVendedorFilterLACLAE, buildColumnaVendedorFilter, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL, handleRouteError } = require('../utils/common');
+const { resolveHistoricalCommissionMonth } = require('../utils/commission-snapshot');
 const { verifyToken } = require('../middleware/auth');
 const { redisCache, TTL, invalidateCachePattern } = require('../services/redis-cache');
 
@@ -358,6 +359,7 @@ async function getVendorSalesSnapshot(vendorCodes, year) {
         const monthPlaceholders = monthList.map(() => '?').join(',');
 
         let rows;
+        let coverageRows;
         if (!vendorCodes || vendorCodes.length === 0) {
             // Fetch all vendors (ALL mode) — no vendor filter
             rows = await queryWithParams(`
@@ -367,8 +369,15 @@ async function getVendorSalesSnapshot(vendorCodes, year) {
                 WHERE ANIO = ?
                   AND MES IN (${monthPlaceholders})
             `, [year, ...monthList], false, false);
+            coverageRows = rows;
         } else {
-            const safeCodes = vendorCodes.map(c => c.replace(/[^a-zA-Z0-9]/g, '')).filter(Boolean);
+            const safeCodes = [...new Set(vendorCodes.flatMap(c => {
+                const safe = String(c || '').replace(/[^a-zA-Z0-9]/g, '');
+                if (!safe) return [];
+                const unpadded = safe.replace(/^0+/, '') || safe;
+                const padded = /^\d{1,2}$/.test(unpadded) ? unpadded.padStart(2, '0') : unpadded;
+                return [safe, unpadded, padded];
+            }).filter(Boolean))];
             if (safeCodes.length === 0) return { snapshotMap: {}, monthsWithData: new Set() };
             const codePlaceholders = safeCodes.map(() => '?').join(',');
             rows = await queryWithParams(`
@@ -379,6 +388,12 @@ async function getVendorSalesSnapshot(vendorCodes, year) {
                   AND MES IN (${monthPlaceholders})
                   AND VENDEDOR_CODIGO IN (${codePlaceholders})
             `, [year, ...monthList, ...safeCodes], false, false);
+            coverageRows = await queryWithParams(`
+                SELECT DISTINCT MES
+                FROM JAVIER.COMMISSION_SNAPSHOT_2026_0102
+                WHERE ANIO = ?
+                  AND MES IN (${monthPlaceholders})
+            `, [year, ...monthList], false, false);
         }
 
         // Track which months have at least one row — used to distinguish
@@ -386,14 +401,17 @@ async function getVendorSalesSnapshot(vendorCodes, year) {
         const monthsWithData = new Set();
         const snapshotMap = {};
 
+        (coverageRows || rows).forEach(r => {
+            const mes = parseInt(r.MES);
+            if (!Number.isNaN(mes)) monthsWithData.add(mes);
+        });
+
         rows.forEach(r => {
             const rawCode = (r.VENDEDOR_CODIGO || '').trim();
             // Normalize: strip leading zeros so '02' === '2'. Keep both forms as keys
             // to handle whatever format the rest of the code uses.
             const normalizedCode = rawCode.replace(/^0+/, '') || rawCode;
             const mes = parseInt(r.MES);
-
-            monthsWithData.add(mes);
 
             const entry = {
                 ventasTotales: parseFloat(r.VENTAS_REAL) || 0,
@@ -839,43 +857,51 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         }
 
         // Commission for this month (live calculation as baseline)
-        const result = calculateCommission(currentSales, target, config);
+        let result = calculateCommission(currentSales, target, config);
         let commValue = isExcluded ? 0 : result.commission;
 
         // =====================================================================
-        // AUTHORITATIVE SNAPSHOT: For months 1..SNAPSHOT_UNTIL_MONTH of 2026,
-        // use JAVIER.COMMISSION_SNAPSHOT_2026_0102 values instead of live recalc.
-        //
-        // monthsWithData tells us which months the table actually covers.
-        // If a month is covered but the vendor has no row → vendor had no commission
-        // that month → force commValue = 0 (snapshotApplied = true so UI shows FOTO badge).
-        // If the month has no rows at all in the table → fall back to live calc.
-        // =====================================================================
-        const isSnapshotMonth = (selectedYear === 2026 && m <= SNAPSHOT_UNTIL_MONTH && SNAPSHOT_UNTIL_MONTH > 0);
-        const monthHasSnapshotData = isSnapshotMonth && snapshotMonthsWithData.has(m);
+        // Jan/Feb 2026 are closed commission months. The historical table only
+        // stores vendors that generated commission; absence means zero generated
+        // commission and no live sales should be mixed into this screen.
         const snap = snapshotForVendor[m] || null;
-        let snapshotApplied = false;
-        let snapshotSource = null;
+        const historicalMonth = resolveHistoricalCommissionMonth({
+            year: selectedYear,
+            month: m,
+            snapshotUntilMonth: SNAPSHOT_UNTIL_MONTH,
+            monthsWithSnapshotData: snapshotMonthsWithData,
+            snapshotEntry: snap,
+            liveMetrics: {
+                actual: currentSales,
+                target,
+                commission: result.commission,
+            },
+            isExcluded,
+        });
 
-        if (monthHasSnapshotData) {
-            if (snap) {
+        const isSnapshotMonth = (selectedYear === 2026 && m <= SNAPSHOT_UNTIL_MONTH && SNAPSHOT_UNTIL_MONTH > 0);
+        let snapshotApplied = historicalMonth.isHistoricalSnapshot;
+        let snapshotSource = historicalMonth.snapshotSource;
+
+        if (snapshotApplied) {
+            if (historicalMonth.status === 'recorded') {
                 // Vendor present in snapshot → authoritative values
-                currentSales = snap.ventasTotales;
-                target = snap.objetivo > 0 ? snap.objetivo : target;
-                commValue = isExcluded ? 0 : snap.comisionGenerada;
-                snapshotApplied = true;
-                snapshotSource = 'JAVIER.COMMISSION_SNAPSHOT_2026_0102';
+                currentSales = historicalMonth.actual;
+                target = historicalMonth.target;
+                commValue = historicalMonth.commission;
+                snapshotSource = historicalMonth.snapshotSource;
                 logger.debug(`[COMMISSIONS] SNAPSHOT month ${m}/2026 for ${vendedorCode}: total=${snap.ventasTotales.toFixed(2)} obj=${snap.objetivo.toFixed(2)} comm=${snap.comisionGenerada.toFixed(2)} (live was ${result.commission.toFixed(2)})`);
             } else {
                 // Month has snapshot data globally but this vendor has NO row →
                 // vendor was not commissioning that month → force commission = 0.
-                // Keep currentSales/target from live calc so UI has some context,
-                // but mark snapshotApplied so the FOTO badge is shown.
-                commValue = 0;
-                snapshotApplied = true;
-                snapshotSource = 'JAVIER.COMMISSION_SNAPSHOT_2026_0102';
+                // Do not keep live sales here; this month is closed historically.
+                currentSales = historicalMonth.actual;
+                target = historicalMonth.target;
+                commValue = historicalMonth.commission;
+                snapshotSource = historicalMonth.snapshotSource;
                 logger.debug(`[COMMISSIONS] SNAPSHOT month ${m}/2026: vendor ${vendedorCode} not in snapshot → commission forced to 0`);
             }
+            result = calculateCommission(currentSales, target, config);
         } else if (isSnapshotMonth) {
             // Snapshot month but table has NO rows for this month at all → fall back to live.
             logger.warn(`[COMMISSIONS] No snapshot data found for month ${m}/2026 — using live calc (table may be empty for this month).`);
@@ -1070,13 +1096,13 @@ async function discoverVendorCodesForYear(year) {
         return cachedCodes;
     }
 
-    const col = getVendorColumn(safeYr);
+    const colExpr = getVendorColumnExpr('L');
     const vendorRows = await queryWithParams(`
-        SELECT DISTINCT RTRIM(L.${col}) as VENDOR_CODE
+        SELECT DISTINCT RTRIM(${colExpr}) as VENDOR_CODE
         FROM DSED.LACLAE L
         WHERE L.LCAADC IN (?, ?)
-          AND L.${col} IS NOT NULL
-          AND L.${col} <> ''
+          AND ${colExpr} IS NOT NULL
+          AND ${colExpr} <> ''
     `, [safeYr, safeYr - 1], false);
 
     const codes = vendorRows

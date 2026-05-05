@@ -3,7 +3,7 @@
  * COMMISSIONS PDF REPORT SERVICE
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * Generates PDF report with per-vendor monthly breakdown:
- *   Mes | Objetivo | Ventas LAC | Ventas CONDOR | Total | % | Generada | Pagada | Origen | Obs
+ *   Mes | Objetivo | Ventas LAC | Ventas CONDOR | Total | % | Generada | Pagada | Obs
  * Format: landscape A4, DIEGO-only.
  */
 
@@ -36,8 +36,6 @@ const COLORS = {
     totalText: '#FFFFFF',
     text: '#000000',
     lightBg: '#E8F4FD',
-    snapshotBadge: '#cc7700',
-    snapshotBadgeText: '#FFFFFF',
     condorBg: '#FFF8E1',
 };
 
@@ -330,7 +328,7 @@ async function getVendorPaymentsForPdf(year) {
 /**
  * Generates a landscape A4 PDF report for DIEGO.
  * One section per comercial, with a table:
- *   Mes | Objetivo | Ventas LAC | Ventas CONDOR | Total | % | Gen. | Pagado | Origen | Obs.
+ *   Mes | Objetivo | Ventas LAC | Ventas CONDOR | Total | % | Gen. | Pagado | Obs.
  * Footer per vendor: totales anuales + flag "Tiene CONDOR".
  */
 async function generateCommissionsPdf(vendorData, condorDataMap, year, startMonth, endMonth) {
@@ -373,8 +371,7 @@ async function generateCommissionsPdf(vendorData, condorDataMap, year, startMont
                 { key: 'pct',     label: '%Cumpl.',     width: 55  },
                 { key: 'gen',     label: 'Com.Gen.',    width: 72  },
                 { key: 'pag',     label: 'Com.Pag.',    width: 72  },
-                { key: 'origen',  label: 'Origen',      width: 48  },
-                { key: 'obs',     label: 'Observaciones', width: 95 },
+                { key: 'obs',     label: 'Observaciones', width: 143 },
             ];
             const tableWidth = cols.reduce((s, c) => s + c.width, 0);
 
@@ -449,7 +446,6 @@ async function generateCommissionsPdf(vendorData, condorDataMap, year, startMont
                     const lacAmt = monthLacData.lac || 0;
                     const condorAmt = condorData.condor || 0;
                     const totalAmt = lacAmt + condorAmt;
-                    const isSnapshotRow = monthLacData.isSnapshot || (targData && targData.isSnapshot);
 
                     // Objective: from snapshot → targData.objetivo, otherwise 0 (live months don't have it here)
                     const objAmt = targData ? targData.objetivo : 0;
@@ -460,8 +456,6 @@ async function generateCommissionsPdf(vendorData, condorDataMap, year, startMont
                         : (payData ? payData.comisionGenerada : 0);
                     const pagAmt = payData ? payData.importePagado : 0;
                     const obs = payData ? payData.observaciones.join('; ') : '';
-                    const origen = isSnapshotRow ? 'FOTO' : 'LIVE';
-
                     if (condorAmt > 0) tieneCondorAnual = true;
                     totalLac += lacAmt;
                     totalCondor += condorAmt;
@@ -470,9 +464,7 @@ async function generateCommissionsPdf(vendorData, condorDataMap, year, startMont
                     totalPag += pagAmt;
 
                     // Row background
-                    const rowBg = isSnapshotRow
-                        ? '#FFF3CD' // warm tint for snapshot rows
-                        : (rowIdx % 2 === 0 ? COLORS.lightBg : '#FFFFFF');
+                    const rowBg = rowIdx % 2 === 0 ? COLORS.lightBg : '#FFFFFF';
                     doc.rect(margin, yPos, tableWidth, ROW_H).fill(rowBg);
 
                     xPos = margin;
@@ -486,19 +478,11 @@ async function generateCommissionsPdf(vendorData, condorDataMap, year, startMont
                         switch (col.key) {
                             case 'mes':
                                 align = 'left';
-                                // Month name + FOTO badge inline
                                 doc.fillColor(COLORS.text).text(
                                     getMonthName(m).substring(0, 3).toUpperCase(),
                                     xPos + 2, yPos + 3,
-                                    { width: 28, align: 'left' }
+                                    { width: col.width - 4, align: 'left' }
                                 );
-                                if (isSnapshotRow) {
-                                    // Small FOTO badge
-                                    doc.rect(xPos + 32, yPos + 2, 24, 10).fill(COLORS.snapshotBadge);
-                                    doc.fillColor(COLORS.snapshotBadgeText).fontSize(6)
-                                        .text('FOTO', xPos + 33, yPos + 3, { width: 22, align: 'center' });
-                                    doc.fontSize(7);
-                                }
                                 xPos += col.width;
                                 return; // handled manually
                             case 'obj':
@@ -526,10 +510,6 @@ async function generateCommissionsPdf(vendorData, condorDataMap, year, startMont
                             case 'pag':
                                 cellText = pagAmt > 0 ? formatCurrency(pagAmt) : '-';
                                 cellColor = pagAmt > 0 ? '#003d7a' : '#888888';
-                                break;
-                            case 'origen':
-                                cellText = origen;
-                                cellColor = isSnapshotRow ? COLORS.snapshotBadge : '#555555';
                                 break;
                             case 'obs':
                                 align = 'left';
@@ -577,7 +557,6 @@ async function generateCommissionsPdf(vendorData, condorDataMap, year, startMont
                     pct: totalObj > 0 ? formatPct(((totalLac + totalCondor) / totalObj) * 100) : '-',
                     gen: formatCurrency(totalGen),
                     pag: formatCurrency(totalPag),
-                    origen: tieneCondorAnual ? 'CONDOR' : '',
                     obs: tieneCondorAnual ? 'Tiene ventas CONDOR' : '',
                 };
                 cols.forEach(col => {
@@ -605,15 +584,6 @@ async function generateCommissionsPdf(vendorData, condorDataMap, year, startMont
                     margin, pageHeight - 30,
                     { width: contentWidth, align: 'left' }
                 );
-            // Snapshot note when applicable
-            if (year === 2026 && SNAPSHOT_UNTIL_MONTH > 0) {
-                doc.fontSize(6).fillColor('#8B6914')
-                    .text(
-                        `(*) Filas con badge FOTO: datos de COMMISSION_SNAPSHOT_2026_0102. La columna "Venta LAC" contiene el total Ventas Real (LAC + CONDOR combinados; sin desglose disponible en el snapshot histórico).`,
-                        margin, pageHeight - 20,
-                        { width: contentWidth, align: 'left' }
-                    );
-            }
             doc.fontSize(7).fillColor('#555555')
                 .text(
                     'GMP App Movilidad',
@@ -628,10 +598,7 @@ async function generateCommissionsPdf(vendorData, condorDataMap, year, startMont
     });
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // MAIN EXPORT
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 module.exports = {
     isAuthorized,
     getLacSalesData,

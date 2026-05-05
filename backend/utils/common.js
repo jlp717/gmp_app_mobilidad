@@ -360,12 +360,12 @@ function buildColumnaVendedorFilter(vendedorCodes, years = [], tableAlias = 'L',
         return `AND ${prefix}LCCDVD IN (${validCodes})`;
     }
 
-    // Month-based transition: meses < TRANSITION_MONTH use old column,
-    // meses >= TRANSITION_MONTH use new column
-    const oldFilter = `(${prefix}LCMMDC < ${TRANSITION_MONTH} AND ${prefix}LCCDVD IN (${validCodes}))`;
-    const newFilter = `(${prefix}LCMMDC >= ${TRANSITION_MONTH} AND ${prefix}${VENDOR_COLUMN} IN (${validCodes}))`;
+    const previousYearsFilter = `(${prefix}LCAADC < ${TRANSITION_YEAR} AND ${prefix}LCCDVD IN (${validCodes}))`;
+    const transitionOldFilter = `(${prefix}LCAADC = ${TRANSITION_YEAR} AND ${prefix}LCMMDC < ${TRANSITION_MONTH} AND ${prefix}LCCDVD IN (${validCodes}))`;
+    const transitionNewFilter = `(${prefix}LCAADC = ${TRANSITION_YEAR} AND ${prefix}LCMMDC >= ${TRANSITION_MONTH} AND ${prefix}${VENDOR_COLUMN} IN (${validCodes}))`;
+    const futureYearsFilter = `(${prefix}LCAADC > ${TRANSITION_YEAR} AND ${prefix}${VENDOR_COLUMN} IN (${validCodes}))`;
 
-    return `AND (${oldFilter} OR ${newFilter})`;
+    return `AND (${previousYearsFilter} OR ${transitionOldFilter} OR ${transitionNewFilter} OR ${futureYearsFilter})`;
 }
 
 const { query, queryWithParams } = require('../config/db');
