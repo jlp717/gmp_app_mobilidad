@@ -62,7 +62,7 @@ const DEFAULT_CONFIG_2026 = {
         { min: 110.01, max: 999.99, pct: 2.0 }
     ]
 };
-const COMMISSIONS_CACHE_VERSION = 'v20260505-snapshot';
+const COMMISSIONS_CACHE_VERSION = 'v20260505-codefmt';
 
 // =============================================================================
 // DATABASE INITIALIZATION (JAVIER Schema)
@@ -491,20 +491,22 @@ async function batchFetchAllVendorData(vendorCodes, year) {
         `, [year, ...codeVariants], false),
 
         // 4. Fixed targets for ALL vendors
+        // Use codeVariants (both '05' and '5') because COMMERCIAL_TARGETS may store
+        // vendor codes in a different format than the LACLAE CASE expression returns.
         queryWithParams(`
             SELECT CODIGOVENDEDOR as VENDOR_CODE, IMPORTE_BASE_COMISION, MES
             FROM JAVIER.COMMERCIAL_TARGETS
             WHERE ANIO = ?
-              AND CODIGOVENDEDOR IN (${placeholders})
+              AND CODIGOVENDEDOR IN (${variantPlaceholders})
               AND ACTIVO = 1
-        `, [year, ...safeCodes], false),
+        `, [year, ...codeVariants], false),
 
-        // 5. Vendor names for ALL vendors
+        // 5. Vendor names for ALL vendors (also use variants for code format tolerance)
         queryWithParams(`
             SELECT TRIM(CODIGOVENDEDOR) as VENDOR_CODE, TRIM(NOMBREVENDEDOR) as VENDOR_NAME
             FROM DSEDAC.VDD
-            WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})
-        `, [...safeCodes], false),
+            WHERE TRIM(CODIGOVENDEDOR) IN (${variantPlaceholders})
+        `, [...codeVariants], false),
     ]);
 
     // Partition data by vendor in memory
@@ -572,18 +574,23 @@ async function batchFetchAllVendorData(vendorCodes, year) {
             payments.details[m].totalPaid += parseFloat(r.IMPORTE_PAGADO) || 0;
         });
 
-        // Build fixed target
-        const currentMonth = new Date().getMonth() + 1;
-        const sortedFixed = fixedRows.sort((a, b) => (b.MES || 0) - (a.MES || 0));
-        const bestFixed = sortedFixed.find(r => !r.MES || r.MES <= currentMonth);
-        const fixedCommissionBase = bestFixed ? parseFloat(bestFixed.IMPORTE_BASE_COMISION) || null : null;
+        // Build fixed target map: keep ALL rows so the month loop can pick the
+        // most appropriate entry per month (month-specific > annual > most recent past).
+        // Sorting by MES desc (treating null as 0 so annual entries sort last).
+        const sortedFixed = fixedRows
+            .map(r => ({
+                mes: r.MES != null ? parseInt(r.MES, 10) : null,
+                importe: parseFloat(r.IMPORTE_BASE_COMISION) || 0,
+            }))
+            .filter(r => r.importe > 0)
+            .sort((a, b) => (b.mes ?? 0) - (a.mes ?? 0));
 
         dataByVendor[code] = {
             salesRows,
             bSalesCurr,
             bSalesPrev,
             payments,
-            fixedCommissionBase,
+            fixedTargets: sortedFixed,   // per-month lookup (replaces fixedCommissionBase)
             vendorName: vendorName?.VENDOR_NAME || '',
         };
     }
@@ -715,7 +722,8 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         salesRows = preloadedData.salesRows;
         bSalesCurrYear = preloadedData.bSalesCurr;
         bSalesPrevYear = preloadedData.bSalesPrev;
-        fixedCommissionBase = preloadedData.fixedCommissionBase;
+        // fixedCommissionBase is resolved per-month inside the month loop (see below)
+        fixedCommissionBase = null; // Will be overridden per-month
         payments = preloadedData.payments;
     } else {
         // Original per-vendor queries (single vendor mode)
@@ -755,16 +763,19 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
                     const fixedTargetCacheKey = `commissions:fixedTarget:${safeVendor}:${safeYear}`;
                     let rows = await redisCache.get('route', fixedTargetCacheKey);
                     if (!rows) {
+                        // Query with both padded ('05') and unpadded ('5') vendor codes
+                        // to tolerate code format differences between LACLAE and COMMERCIAL_TARGETS.
+                        const safeUnpadded = safeVendor.replace(/^0+/, '') || safeVendor;
                         rows = await queryWithParams(`
                             SELECT IMPORTE_BASE_COMISION
                             FROM JAVIER.COMMERCIAL_TARGETS
-                            WHERE CODIGOVENDEDOR = ?
+                            WHERE (CODIGOVENDEDOR = ? OR CODIGOVENDEDOR = ?)
                               AND ANIO = ?
                               AND (MES = ? OR MES IS NULL)
                               AND ACTIVO = 1
                             ORDER BY MES DESC
                             FETCH FIRST 1 ROWS ONLY
-                        `, [safeVendor, safeYear, currentMonth], false);
+                        `, [safeVendor, safeUnpadded, safeYear, currentMonth], false);
                         if (rows.length > 0) {
                             redisCache.set('route', fixedTargetCacheKey, rows, TTL.MEDIUM).catch(() => {});
                         }
@@ -859,12 +870,28 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             prevSales = inheritedMonthlySales[m];
         }
 
+        // Resolve fixed target for THIS specific month.
+        // In batch mode (preloadedData), fixedTargets[] contains all COMMERCIAL_TARGETS
+        // rows for this vendor. Pick the best entry for month m:
+        //   1. Exact month match (MES = m)
+        //   2. Annual entry (MES IS NULL)
+        //   3. Most recent past entry (MES < m, already sorted desc)
+        // In single-vendor mode, fixedCommissionBase was already resolved from DB.
+        let resolvedFixedBase = fixedCommissionBase; // single-vendor: already set
+        if (preloadedData && preloadedData.fixedTargets) {
+            const ft = preloadedData.fixedTargets;
+            const exact = ft.find(r => r.mes === m);
+            const annual = ft.find(r => r.mes === null);
+            const pastRecent = ft.find(r => r.mes !== null && r.mes < m);
+            resolvedFixedBase = exact?.importe || annual?.importe || pastRecent?.importe || null;
+        }
+
         // Target 2026:
         // - If vendor has FIXED commission base from COMMERCIAL_TARGETS, use that
         // - Otherwise: prevSales * (1 + IPC)
         let target;
-        if (fixedCommissionBase && fixedCommissionBase > 0) {
-            target = fixedCommissionBase;
+        if (resolvedFixedBase && resolvedFixedBase > 0) {
+            target = resolvedFixedBase;
         } else {
             target = prevSales * (1 + (config.ipc / 100));
         }
@@ -1119,9 +1146,20 @@ async function discoverVendorCodesForYear(year) {
           AND ${colExpr} <> ''
     `, [safeYr, safeYr - 1], false);
 
+    // Deduplicate by normalizing leading zeros: '05' and '5' are the same vendor.
+    // When VENDOR_COLUMN=R1_T8CDVD, the CASE expression returns LCCDVD for Jan/Feb
+    // and R1_T8CDVD for March+, so the same vendor can appear under two different
+    // codes (e.g. '05' from LCCDVD and '5' from R1_T8CDVD). Keep the first seen.
+    const seenNormalized = new Set();
     const codes = vendorRows
-        .map(r => r.VENDOR_CODE)
-        .filter(code => code && code !== '0');
+        .map(r => (r.VENDOR_CODE || '').trim())
+        .filter(code => {
+            if (!code || code === '0') return false;
+            const normalized = code.replace(/^0+/, '') || code;
+            if (seenNormalized.has(normalized)) return false;
+            seenNormalized.add(normalized);
+            return true;
+        });
 
     await redisCache.set('route', cacheKey, codes, TTL.LONG);
     return codes;
