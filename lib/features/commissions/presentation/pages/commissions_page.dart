@@ -879,8 +879,15 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
     // PDF dialog
     void showPdfDialog() {
-      final currentVendor =
-          (_data?['vendor'] as String?) ?? widget.employeeCode.split(',').first;
+      final selectedVendor = ref.read(selectedVendorProvider);
+      final currentVendor = widget.isJefeVentas &&
+              (selectedVendor == null ||
+                  selectedVendor.isEmpty ||
+                  selectedVendor == 'ALL')
+          ? 'ALL'
+          : (selectedVendor ??
+              (_data?['vendor'] as String?) ??
+              widget.employeeCode.split(',').first);
       showDialog(
         context: context,
         builder: (ctx) => PdfRangeDialog(vendorCode: currentVendor),
