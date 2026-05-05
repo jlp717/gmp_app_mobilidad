@@ -446,6 +446,16 @@ async function batchFetchAllVendorData(vendorCodes, year) {
     const safeCodes = vendorCodes.map(c => c.replace(/[^a-zA-Z0-9]/g, '')).filter(Boolean);
     const placeholders = safeCodes.map(() => '?').join(',');
 
+    // Build code variants (both padded "05" and unpadded "5") for VENTAS_B and COMMISSION_PAYMENTS.
+    // These tables may store vendor codes in a different format than LACLAE.
+    // getBSales (single-vendor mode) uses OR clause for both formats — replicate that here.
+    const codeVariants = [...new Set(safeCodes.flatMap(c => {
+        const unpadded = c.replace(/^0+/, '') || c;
+        const padded = /^\d{1,2}$/.test(unpadded) ? unpadded.padStart(2, '0') : unpadded;
+        return [c, unpadded, padded];
+    }))];
+    const variantPlaceholders = codeVariants.map(() => '?').join(',');
+
     const [allSalesRows, allBSalesRows, allPaymentsRows, allFixedTargets, allVendorNames] = await Promise.all([
         // 1. LACLAE sales for ALL vendors (current + prev year)
         // NOTE: GROUP BY must use the same CASE expression as SELECT.
@@ -461,22 +471,24 @@ async function batchFetchAllVendorData(vendorCodes, year) {
         `, [year, year - 1, ...safeCodes], false),
 
         // 2. B-Sales for ALL vendors (current + prev year) from JAVIER.VENTAS_B
+        // Use codeVariants (both padded + unpadded) to match however codes are stored in VENTAS_B.
         queryWithParams(`
             SELECT TRIM(CODIGOVENDEDOR) as VENDOR_CODE, MES, IMPORTE as SALES, EJERCICIO as YEAR
             FROM JAVIER.VENTAS_B
             WHERE EJERCICIO IN (?, ?)
-              AND TRIM(CODIGOVENDEDOR) IN (${placeholders})
-        `, [year, year - 1, ...safeCodes], false),
+              AND TRIM(CODIGOVENDEDOR) IN (${variantPlaceholders})
+        `, [year, year - 1, ...codeVariants], false),
 
         // 3. Payments for ALL vendors
+        // Use codeVariants (both padded + unpadded) to match however codes are stored in COMMISSION_PAYMENTS.
         queryWithParams(`
             SELECT VENDEDOR_CODIGO as VENDOR_CODE, MES, IMPORTE_PAGADO, COMISION_GENERADA,
                    VENTAS_REAL, OBJETIVO_MES, OBSERVACIONES, FECHA_PAGO
             FROM JAVIER.COMMISSION_PAYMENTS
             WHERE ANIO = ?
-              AND VENDEDOR_CODIGO IN (${placeholders})
+              AND VENDEDOR_CODIGO IN (${variantPlaceholders})
             ORDER BY VENDEDOR_CODIGO, MES, FECHA_PAGO
-        `, [year, ...safeCodes], false),
+        `, [year, ...codeVariants], false),
 
         // 4. Fixed targets for ALL vendors
         queryWithParams(`
