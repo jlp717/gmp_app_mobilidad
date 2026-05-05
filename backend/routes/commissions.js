@@ -62,7 +62,7 @@ const DEFAULT_CONFIG_2026 = {
         { min: 110.01, max: 999.99, pct: 2.0 }
     ]
 };
-const COMMISSIONS_CACHE_VERSION = 'v20260505-codefmt';
+const COMMISSIONS_CACHE_VERSION = 'v20260506-casefix';
 
 // =============================================================================
 // DATABASE INITIALIZATION (JAVIER Schema)
@@ -859,10 +859,10 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
 
         // Base sales from LACLAE
         let prevSales = prevRow ? parseFloat(prevRow.SALES) : 0;
+        prevSales += (bSalesPrevYear[m] || 0); // Include prev-year B-channel sales in objective baseline
         let currentSales = currRow ? parseFloat(currRow.SALES) : 0;
 
-        // ADD B-SALES to current sales. Objective base stays on previous LAC
-        // sales, matching the commissions screen and historical objectives.
+        // ADD B-SALES to current sales.
         currentSales += (bSalesCurrYear[m] || 0);
 
         // INHERITED OBJECTIVES: Use inherited sales when vendor has no own sales for this month
