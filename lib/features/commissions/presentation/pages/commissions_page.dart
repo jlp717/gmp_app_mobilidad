@@ -646,7 +646,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
-                  'Este pago se guardara como un nuevo registro historico (snapshot). '
+                  'Este pago se guardara como un nuevo registro historico. '
                   'No se puede modificar despues.',
                   style: TextStyle(color: Colors.lightBlue, fontSize: 11),
                 ),
@@ -660,8 +660,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
-                  'Los valores de ventas/objetivo/comision son una foto del momento '
-                  'y pueden diferir de datos futuros.',
+                  'Los valores de ventas/objetivo/comision quedan registrados '
+                  'en el momento del pago y pueden diferir de datos futuros.',
                   style: TextStyle(color: Colors.lightBlue, fontSize: 11),
                 ),
               ),
@@ -2333,11 +2333,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
     final actual = (m['actual'] as num?)?.toDouble() ?? 0;
     final isFuture = (m['isFuture'] as bool?) ?? false;
 
-    // Snapshot flag: check both top-level and nested in complianceCtx
     final ctx = m['complianceCtx'] ?? {};
-    final snapshotApplied = (m['snapshotApplied'] as bool?)
-        ?? (ctx['snapshotApplied'] as bool?)
-        ?? false;
     final pct = (ctx['pct'] as num?)?.toDouble() ?? 0;
     final tier = (ctx['tier'] as num?)?.toInt() ?? 0;
     final commission = (ctx['commission'] as num?)?.toDouble() ?? 0;
@@ -2384,21 +2380,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                   style: TextStyle(
                       color: Colors.white.withOpacity(textOpacity),
                       fontSize: 11)),
-              if (snapshotApplied) ...[
-                const SizedBox(width: 4),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                  decoration: BoxDecoration(
-                      color: AppTheme.warning,
-                      borderRadius: BorderRadius.circular(3)),
-                  child: const Text('FOTO',
-                      style: TextStyle(
-                          fontSize: 7,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold)),
-                ),
-              ] else if (isFuture) ...[
+              if (isFuture) ...[
                 const SizedBox(width: 4),
                 Container(
                   padding:
