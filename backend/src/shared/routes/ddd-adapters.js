@@ -1462,26 +1462,27 @@ function createCommissionsRoutes() {
       const { vendedorCode, year } = req.query;
       if (!vendedorCode) return res.status(400).json({ success: false, error: 'vendedorCode required' });
 
-      const selectedYear = year || new Date().getFullYear().toString();
-      const prevYear = (parseInt(selectedYear) - 1).toString();
-      const cacheKey = `ddd:commissions:v1:${vendedorCode}:${selectedYear}`;
-      const role = req?.user?.role || 'COMERCIAL';
-      const ttlSec = performanceCache.getTTL(role, vendedorCode === 'ALL');
+      const safeVendedorCode = String(vendedorCode).replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
+      if (!safeVendedorCode) return res.status(400).json({ success: false, error: 'vendedorCode inválido' });
+
+      const selectedYear = parseInt(year) || new Date().getFullYear();
+      const prevYear = selectedYear - 1;
+      const cacheKey = `ddd:commissions:v2:${safeVendedorCode}:${selectedYear}`;
 
       const result = await performanceCache.getOrFetch(cacheKey, async () => {
-        const salesQuery = `
+        const { queryWithParams: qp } = require('../../../config/db');
+        const salesRows = await qp(`
           SELECT L.LCAADC as YEAR, LCMMDC as MONTH, SUM(L.LCIMVT) as SALES
           FROM DSED.LACLAE L
-          WHERE L.LCAADC IN (${selectedYear}, ${prevYear})
+          WHERE L.LCAADC IN (?, ?)
             AND LCTPVT IN ('CC', 'VC') AND LCCLLN IN ('AB', 'VT')
             AND LCSRAB NOT IN ('N', 'Z') AND TPDC = 'LAC'
-            AND R1_T8CDVD = '${vendedorCode.replace(/[^a-zA-Z0-9]/g, '')}'
+            AND R1_T8CDVD = ?
           GROUP BY L.LCAADC, LCMMDC
           ORDER BY YEAR, MONTH
-        `;
-        const salesRows = await cachedQuery(query, salesQuery, `${cacheKey}:sales`, RedisTTL.SHORT);
+        `, [selectedYear, prevYear, safeVendedorCode], false);
 
-        return { success: true, salesRows, year: selectedYear, vendorCode: vendedorCode };
+        return { success: true, salesRows, year: selectedYear, vendorCode: safeVendedorCode };
       }, { role: req?.user?.role || 'COMERCIAL', isAllQuery: vendedorCode === 'ALL' });
 
       res.set('X-Cache-Source', result.source);
