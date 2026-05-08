@@ -13,13 +13,20 @@ const MIN_YEAR = getCurrentYear() - 2; // Dynamic: always 3 years of data
 //   LCCDVD    = "Quién vendió" (lógica actual de producción)
 //   R1_T8CDVD = "Quién tiene el cliente asignado" (nueva lógica 2026)
 //
-// Set via environment variable. Default: LCCDVD (backward compatible)
+// Set via environment variable. Default: R1_T8CDVD because the current sales
+// objective and commission rules are assignment-based from March onward.
 //
 // TRANSITION: From March 2026, use R1_T8CDVD. Jan/Feb 2026 and prior
 // always use LCCDVD so historical data remains unchanged.
-const VENDOR_COLUMN = process.env.VENDOR_COLUMN || 'LCCDVD';
+const VENDOR_COLUMN = process.env.VENDOR_COLUMN || 'R1_T8CDVD';
 const TRANSITION_YEAR = 2026;
 const TRANSITION_MONTH = 3; // March 2026: new logic starts here
+
+// Scoped commercial visibility. These users keep their normal commercial role,
+// but the app receives the complete vendor list they are allowed to inspect.
+const VENDOR_VISIBILITY_SCOPES = {
+    '80': ['80', '72', '73', '81', '83']
+};
 
 /**
  * Get the vendor column to use based on the target date.
@@ -173,6 +180,13 @@ function sanitizeCodeListForParams(codeString, maxLen = 2) {
         .split(',')
         .map(c => c.trim())
         .filter(c => /^[a-zA-Z0-9]+$/.test(c) && c.length <= maxLen);
+}
+
+function getVendorVisibilityScope(vendorCode) {
+    const normalized = String(vendorCode || '').trim().replace(/^0+/, '') || String(vendorCode || '').trim();
+    const scope = VENDOR_VISIBILITY_SCOPES[normalized];
+    if (!scope) return [String(vendorCode || '').trim()].filter(Boolean);
+    return [...new Set(scope)];
 }
 
 /**
@@ -356,21 +370,8 @@ function buildColumnaVendedorFilter(vendedorCodes, years = [], tableAlias = 'L',
         return `AND ${prefix}LCCDVD IN (${validCodes})`;
     }
 
-    // Check if any requested years involve the transition period
-    const involvesTransition = (!Array.isArray(years) || years.length === 0)
-        ? true
-        : years.some(y => y >= (TRANSITION_YEAR - 1));
-
-    if (!involvesTransition) {
-        return `AND ${prefix}LCCDVD IN (${validCodes})`;
-    }
-
-    const previousYearsFilter = `(${prefix}LCAADC < ${TRANSITION_YEAR} AND ${prefix}LCCDVD IN (${validCodes}))`;
-    const transitionOldFilter = `(${prefix}LCAADC = ${TRANSITION_YEAR} AND ${prefix}LCMMDC < ${TRANSITION_MONTH} AND ${prefix}LCCDVD IN (${validCodes}))`;
-    const transitionNewFilter = `(${prefix}LCAADC = ${TRANSITION_YEAR} AND ${prefix}LCMMDC >= ${TRANSITION_MONTH} AND ${prefix}${VENDOR_COLUMN} IN (${validCodes}))`;
-    const futureYearsFilter = `(${prefix}LCAADC > ${TRANSITION_YEAR} AND ${prefix}${VENDOR_COLUMN} IN (${validCodes}))`;
-
-    return `AND (${previousYearsFilter} OR ${transitionOldFilter} OR ${transitionNewFilter} OR ${futureYearsFilter})`;
+    const vendorColumnExpr = getVendorColumnExpr(tableAlias);
+    return `AND TRIM(${vendorColumnExpr}) IN (${validCodes})`;
 }
 
 const { query, queryWithParams } = require('../config/db');
@@ -468,6 +469,7 @@ module.exports = {
     buildColumnaVendedorFilter,
     buildDateFilter,
     getVendorName,
+    getVendorVisibilityScope,
     getBSales,
     sanitizeForSQL,
     sanitizeCodeList,

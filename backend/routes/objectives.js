@@ -6,9 +6,7 @@ const { query, queryWithParams } = require('../config/db');
 const {
     getCurrentDate,
     buildVendedorFilter,
-    buildVendedorFilterLACLAE,
     buildColumnaVendedorFilter,
-    VENDOR_COLUMN,
     getVendorColumn,
     MIN_YEAR,
     LAC_SALES_FILTER,
@@ -30,6 +28,7 @@ const {
     isCacheReady: isMetadataCacheReady
 } = require('../services/metadataCache');
 
+const OBJECTIVES_CACHE_VERSION = 'v20260508-r2-r1default';
 
 // =============================================================================
 // INHERITED OBJECTIVES LOGIC
@@ -122,20 +121,285 @@ async function getVendorTargetConfig(vendorCode) {
     if (!vendorCode || vendorCode === 'ALL') return 10.0;
     try {
         const code = vendorCode.split(',')[0].trim();
-        const rows = await queryWithParams(`
-            SELECT TARGET_PERCENTAGE 
-            FROM JAVIER.OBJ_CONFIG 
-            WHERE CODIGOVENDEDOR = ?
-        `, [code], false);
+        const codeVariants = getVendorCodeVariants(code);
+        if (codeVariants.length === 0) return 10.0;
+        const placeholders = codeVariants.map(() => '?').join(',');
 
-        if (rows.length > 0) {
-            return parseFloat(rows[0].TARGET_PERCENTAGE) || 10.0;
+        const explicitRows = await queryWithParams(`
+            SELECT TARGET_PERCENTAGE
+            FROM JAVIER.OBJ_CONFIG
+            WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})
+              AND CODIGOCLIENTE = '*'
+            FETCH FIRST 1 ROWS ONLY
+        `, codeVariants, false);
+
+        if (explicitRows.length > 0) {
+            return parseFloat(explicitRows[0].TARGET_PERCENTAGE) || 10.0;
+        }
+
+        const vendorRows = await queryWithParams(`
+            SELECT TARGET_PERCENTAGE, COUNT(*) as CNT
+            FROM JAVIER.OBJ_CONFIG
+            WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})
+            GROUP BY TARGET_PERCENTAGE
+            ORDER BY CNT DESC, TARGET_PERCENTAGE DESC
+            FETCH FIRST 1 ROWS ONLY
+        `, codeVariants, false);
+
+        if (vendorRows.length > 0) {
+            return parseFloat(vendorRows[0].TARGET_PERCENTAGE) || 10.0;
+        }
+
+        const globalRows = await queryWithParams(`
+            SELECT TARGET_PERCENTAGE
+            FROM JAVIER.OBJ_CONFIG
+            WHERE CODIGOVENDEDOR = '*'
+              AND CODIGOCLIENTE = '*'
+            FETCH FIRST 1 ROWS ONLY
+        `, [], false);
+
+        if (globalRows.length > 0) {
+            return parseFloat(globalRows[0].TARGET_PERCENTAGE) || 10.0;
         }
         return 10.0;
     } catch (e) {
         logger.warn(`Could not fetch OBJ_CONFIG: ${e.message}`);
         return 10.0;
     }
+}
+
+function getVendorCodeVariants(vendorCode) {
+    const raw = String(vendorCode || '').trim();
+    if (!raw) return [];
+    const unpadded = raw.replace(/^0+/, '') || raw;
+    const padded = /^[0-9]+$/.test(unpadded) ? unpadded.padStart(2, '0') : raw;
+    return [...new Set([raw, unpadded, padded])];
+}
+
+function parseVendorCodes(vendedorCodes) {
+    if (!vendedorCodes || vendedorCodes === 'ALL') return [];
+    return vendedorCodes
+        .split(',')
+        .map(v => v.replace(/[^a-zA-Z0-9]/g, '').trim())
+        .filter(Boolean);
+}
+
+async function addBSalesToRows(rows, vendorCodesArray, uniqueYears) {
+    if (!vendorCodesArray || vendorCodesArray.length === 0) return;
+
+    for (const code of vendorCodesArray) {
+        for (const yr of uniqueYears) {
+            const bSalesMap = await getBSales(code, yr);
+            for (const [month, amount] of Object.entries(bSalesMap)) {
+                const value = parseFloat(amount) || 0;
+                if (value <= 0) continue;
+
+                const m = parseInt(month);
+                const existingRow = rows.find(r => r.YEAR == yr && r.MONTH == m);
+                if (existingRow) {
+                    existingRow.SALES = (parseFloat(existingRow.SALES) || 0) + value;
+                } else {
+                    rows.push({ YEAR: yr, MONTH: m, SALES: value, COST: 0, CLIENTS: 0 });
+                }
+            }
+        }
+    }
+}
+
+async function getFixedMonthlyObjectiveTarget(vendorCode, year, month) {
+    const codeVariants = getVendorCodeVariants(vendorCode);
+    if (codeVariants.length === 0) return null;
+
+    try {
+        const placeholders = codeVariants.map(() => '?').join(',');
+        const fixedRows = await queryWithParams(`
+            SELECT IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION, MES
+            FROM JAVIER.COMMERCIAL_TARGETS
+            WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})
+              AND ANIO = ?
+              AND (MES <= ? OR MES IS NULL)
+              AND ACTIVO = 1
+            ORDER BY
+              CASE WHEN MES = ? THEN 3 WHEN MES IS NULL THEN 1 ELSE 2 END DESC,
+              MES DESC
+            FETCH FIRST 1 ROWS ONLY
+        `, [...codeVariants, year, month, month], false);
+
+        if (!fixedRows || fixedRows.length === 0) return null;
+        const fixedMonthlyTarget = parseFloat(fixedRows[0].IMPORTE_OBJETIVO) || null;
+        return fixedMonthlyTarget && fixedMonthlyTarget > 0 ? fixedMonthlyTarget : null;
+    } catch (err) {
+        logger.debug(`[OBJECTIVES] COMMERCIAL_TARGETS: ${err.message}`);
+        return null;
+    }
+}
+
+async function getFixedMonthlyObjectiveTargets(vendorCode, year) {
+    const codeVariants = getVendorCodeVariants(vendorCode);
+    if (codeVariants.length === 0) return {};
+
+    try {
+        const placeholders = codeVariants.map(() => '?').join(',');
+        const rows = await queryWithParams(`
+            SELECT IMPORTE_OBJETIVO, MES
+            FROM JAVIER.COMMERCIAL_TARGETS
+            WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})
+              AND ANIO = ?
+              AND ACTIVO = 1
+            ORDER BY MES DESC
+        `, [...codeVariants, year], false);
+
+        const fixedRows = (rows || [])
+            .map(row => ({
+                mes: row.MES != null ? parseInt(row.MES, 10) : null,
+                importe: parseFloat(row.IMPORTE_OBJETIVO) || 0,
+            }))
+            .filter(row => row.importe > 0)
+            .sort((a, b) => (b.mes ?? 0) - (a.mes ?? 0));
+
+        const targets = {};
+        for (let m = 1; m <= 12; m++) {
+            const exact = fixedRows.find(row => row.mes === m);
+            const annual = fixedRows.find(row => row.mes === null);
+            const pastRecent = fixedRows.find(row => row.mes !== null && row.mes < m);
+            const resolved = exact?.importe || annual?.importe || pastRecent?.importe || 0;
+            if (resolved > 0) targets[m] = resolved;
+        }
+        return targets;
+    } catch (err) {
+        logger.debug(`[OBJECTIVES] COMMERCIAL_TARGETS monthly lookup: ${err.message}`);
+        return {};
+    }
+}
+
+async function buildVendorObjectiveTargets(vendorCode, yearsArray, now) {
+    const currentYear = Math.max(...yearsArray);
+    const uniqueYears = [...new Set([...yearsArray, ...yearsArray.map(y => y - 1)])];
+    const vendedorFilter = buildColumnaVendedorFilter(vendorCode, uniqueYears, 'L');
+
+    const rows = await queryWithParams(`
+        SELECT
+            L.LCAADC as YEAR,
+            L.LCMMDC as MONTH,
+            SUM(L.LCIMVT) as SALES,
+            SUM(L.LCIMCT) as COST,
+            COUNT(DISTINCT L.LCCDCL) as CLIENTS
+        FROM DSED.LACLAE L
+        WHERE L.LCAADC IN (${uniqueYears.map(() => '?').join(',')})
+          AND ${LACLAE_SALES_FILTER}
+          ${vendedorFilter}
+        GROUP BY L.LCAADC, L.LCMMDC
+    `, uniqueYears, false);
+
+    await addBSalesToRows(rows, [vendorCode], uniqueYears);
+
+    let inheritedMonthlySales = {};
+    const prevYear = currentYear - 1;
+    const monthsWithData = rows.filter(r => r.YEAR == prevYear).map(r => r.MONTH);
+    const missingMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(m => !monthsWithData.includes(m));
+
+    if (missingMonths.length > 0) {
+        const currentClients = await getVendorCurrentClients(vendorCode, currentYear);
+        if (currentClients.length > 0) {
+            inheritedMonthlySales = await getClientsMonthlySales(currentClients, prevYear);
+        }
+    }
+
+    const targetPct = await getVendorTargetConfig(vendorCode);
+    const monthlyObjectiveByYear = {};
+    const annualObjectiveByYear = {};
+
+    for (const year of yearsArray) {
+        let prevYearTotal = 0;
+        let inheritedTotal = 0;
+        let currentYearTotalSoFar = 0;
+        const prevYearMonthlySales = {};
+
+        for (let m = 1; m <= 12; m++) {
+            const row = rows.find(r => r.YEAR == year && r.MONTH == m);
+            const prevRow = rows.find(r => r.YEAR == (year - 1) && r.MONTH == m);
+            const ownPrevSales = prevRow ? parseFloat(prevRow.SALES) || 0 : 0;
+
+            if (ownPrevSales === 0 && inheritedMonthlySales[m]) {
+                inheritedTotal += inheritedMonthlySales[m].sales;
+                prevYearMonthlySales[m] = inheritedMonthlySales[m].sales;
+            } else {
+                prevYearTotal += ownPrevSales;
+                prevYearMonthlySales[m] = ownPrevSales;
+            }
+
+            if (row) currentYearTotalSoFar += parseFloat(row.SALES) || 0;
+        }
+
+        const combinedPrevTotal = prevYearTotal + inheritedTotal;
+        const fixedTargetsByMonth = await getFixedMonthlyObjectiveTargets(vendorCode, year);
+        const hasFixedTargets = Object.keys(fixedTargetsByMonth).length > 0;
+
+        let annualObjective;
+        const seasonalTargets = {};
+
+        if (hasFixedTargets) {
+            annualObjective = 0;
+            for (let m = 1; m <= 12; m++) {
+                seasonalTargets[m] = fixedTargetsByMonth[m] || 0;
+                annualObjective += seasonalTargets[m];
+            }
+        } else {
+            const growthFactor = 1 + (targetPct / 100);
+            annualObjective = combinedPrevTotal > 0
+                ? combinedPrevTotal * growthFactor
+                : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * growthFactor : 0);
+
+            if (combinedPrevTotal > 0) {
+                const avgMonthly = combinedPrevTotal / 12;
+                let rawSum = 0;
+                const tempTargets = {};
+
+                for (let m = 1; m <= 12; m++) {
+                    const sale = prevYearMonthlySales[m] || 0;
+                    const deviationRatio = avgMonthly > 0 ? (sale - avgMonthly) / avgMonthly : 0;
+                    const variableGrowthPct = (targetPct / 100) * (1 + (SEASONAL_AGGRESSIVENESS * deviationRatio));
+                    const rawTarget = sale * (1 + variableGrowthPct);
+                    tempTargets[m] = rawTarget;
+                    rawSum += rawTarget;
+                }
+
+                const correctionFactor = rawSum > 0 ? annualObjective / rawSum : 1;
+                for (let m = 1; m <= 12; m++) {
+                    seasonalTargets[m] = tempTargets[m] * correctionFactor;
+                }
+            } else {
+                for (let m = 1; m <= 12; m++) seasonalTargets[m] = annualObjective / 12;
+            }
+        }
+
+        monthlyObjectiveByYear[year] = seasonalTargets;
+        annualObjectiveByYear[year] = annualObjective;
+    }
+
+    return { monthlyObjectiveByYear, annualObjectiveByYear };
+}
+
+function mergeVendorObjectiveTargets(targetSets, yearsArray) {
+    const monthlyObjectiveByYear = {};
+    const annualObjectiveByYear = {};
+
+    for (const year of yearsArray) {
+        monthlyObjectiveByYear[year] = {};
+        annualObjectiveByYear[year] = 0;
+
+        for (let m = 1; m <= 12; m++) {
+            monthlyObjectiveByYear[year][m] = targetSets.reduce((sum, set) => (
+                sum + (set.monthlyObjectiveByYear[year]?.[m] || 0)
+            ), 0);
+        }
+
+        annualObjectiveByYear[year] = targetSets.reduce((sum, set) => (
+            sum + (set.annualObjectiveByYear[year] || 0)
+        ), 0);
+    }
+
+    return { monthlyObjectiveByYear, annualObjectiveByYear };
 }
 
 // =============================================================================
@@ -344,7 +608,7 @@ router.get('/evolution', verifyToken, async (req, res) => {
         const { getVendorActiveDaysFromCache } = require('../services/laclae');
 
         // PERF: Route-level cache for evolution data
-        const cacheKey = `obj:evolution:${vendedorCodes || 'ALL'}:${years || 'default'}`;
+        const cacheKey = `obj:evolution:${OBJECTIVES_CACHE_VERSION}:${vendedorCodes || 'ALL'}:${years || 'default'}`;
         const cachedResult = await redisCache.get('route', cacheKey);
         if (cachedResult) {
             logger.info(`[OBJECTIVES] ⚡ Cache HIT for evolution (${cacheKey})`);
@@ -360,6 +624,7 @@ router.get('/evolution', verifyToken, async (req, res) => {
         const allYears = [...yearsArray, ...yearsArray.map(y => y - 1)];
         const uniqueYears = [...new Set(allYears)];
         const yearsFilter = uniqueYears.join(',');
+        const vendorCodesArray = parseVendorCodes(vendedorCodes);
 
         // Use Date-Aware filter (handles LCCDVD for <March 2026 and R1_T8CDVD for >=March 2026)
         const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, uniqueYears, 'L');
@@ -369,8 +634,8 @@ router.get('/evolution', verifyToken, async (req, res) => {
         // User is usually viewing ONE vendor or ALL. 
         // If ALL, standard days. If specific, specific days.
         let activeWeekDays = [];
-        if (vendedorCodes && vendedorCodes !== 'ALL') {
-            const firstCode = vendedorCodes.split(',')[0].trim();
+        if (vendorCodesArray.length === 1) {
+            const firstCode = vendorCodesArray[0];
             const rawDays = getVendorActiveDaysFromCache(firstCode);
             if (rawDays) {
                 const dayMap = {
@@ -403,20 +668,8 @@ router.get('/evolution', verifyToken, async (req, res) => {
         // B-SALES: Add secondary channel sales from JAVIER.VENTAS_B
         // Ensures consistency with commissions endpoint
         // =====================================================================
-        if (vendedorCodes && vendedorCodes !== 'ALL') {
-            const firstCode = vendedorCodes.split(',')[0].trim();
-            for (const yr of uniqueYears) {
-                const bSalesMap = await getBSales(firstCode, yr);
-                for (const [month, amount] of Object.entries(bSalesMap)) {
-                    const m = parseInt(month);
-                    const existingRow = rows.find(r => r.YEAR == yr && r.MONTH == m);
-                    if (existingRow) {
-                        existingRow.SALES = (parseFloat(existingRow.SALES) || 0) + amount;
-                    } else if (amount > 0) {
-                        rows.push({ YEAR: yr, MONTH: m, SALES: amount, COST: 0, CLIENTS: 0 });
-                    }
-                }
-            }
+        if (vendorCodesArray.length > 0) {
+            await addBSalesToRows(rows, vendorCodesArray, uniqueYears);
         }
 
         // Organize by year
@@ -431,9 +684,17 @@ router.get('/evolution', verifyToken, async (req, res) => {
         let inheritedMonthlySales = {};
         const isAll = !vendedorCodes || vendedorCodes === 'ALL';
 
-        if (!isAll) {
+        let multiVendorTargets = null;
+        if (vendorCodesArray.length > 1) {
+            const targetSets = await Promise.all(
+                vendorCodesArray.map(code => buildVendorObjectiveTargets(code, yearsArray, now))
+            );
+            multiVendorTargets = mergeVendorObjectiveTargets(targetSets, yearsArray);
+        }
+
+        if (!isAll && vendorCodesArray.length === 1) {
             // Check if vendor has any months without data in previous year (for current year objectives)
-            const currentYear = yearsArray[0] || getCurrentDate().getFullYear();
+            const currentYear = Math.max(...yearsArray);
             const prevYear = currentYear - 1;
 
             const monthsWithData = rows.filter(r => r.YEAR == prevYear).map(r => r.MONTH);
@@ -443,7 +704,7 @@ router.get('/evolution', verifyToken, async (req, res) => {
                 // Vendor is "new" or has incomplete history - load inherited sales
                 logger.info(`[OBJECTIVES] Vendor ${vendedorCodes} has ${missingMonths.length} months without data: [${missingMonths.join(',')}]. Loading inherited targets...`);
 
-                const firstCode = vendedorCodes.split(',')[0].trim();
+                const firstCode = vendorCodesArray[0];
                 const currentClients = await getVendorCurrentClients(firstCode, currentYear);
                 if (currentClients.length > 0) {
                     inheritedMonthlySales = await getClientsMonthlySales(currentClients, prevYear);
@@ -455,33 +716,14 @@ router.get('/evolution', verifyToken, async (req, res) => {
         // ==========================================================================
         // FIXED TARGETS: Check if vendor has fixed monthly targets from COMMERCIAL_TARGETS
         // ==========================================================================
-        let fixedMonthlyTarget = null;
-        if (vendedorCodes && vendedorCodes !== 'ALL') {
-            const firstCode = vendedorCodes.split(',')[0].trim();
-            const currentYear = yearsArray[0] || getCurrentDate().getFullYear();
-            const currentMonth = now.getMonth() + 1;
-
-            try {
-                const fixedRows = await queryWithParams(`
-                    SELECT IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION
-                    FROM JAVIER.COMMERCIAL_TARGETS
-                    WHERE CODIGOVENDEDOR = ?
-                      AND ANIO = ?
-                      AND (MES = ? OR MES IS NULL)
-                      AND ACTIVO = 1
-                    ORDER BY MES DESC
-                    FETCH FIRST 1 ROWS ONLY
-                `, [firstCode, currentYear, currentMonth], false);
-
-                if (fixedRows && fixedRows.length > 0) {
-                    fixedMonthlyTarget = parseFloat(fixedRows[0].IMPORTE_OBJETIVO) || null;
-                    if (fixedMonthlyTarget) {
-                        logger.info(`[OBJECTIVES] Vendor ${firstCode} has FIXED monthly target: ${fixedMonthlyTarget}€`);
-                    }
-                }
-            } catch (err) {
-                // Table might not exist - continue with percentage-based
-                logger.debug(`[OBJECTIVES] COMMERCIAL_TARGETS: ${err.message}`);
+        const fixedTargetsByYear = {};
+        if (vendorCodesArray.length === 1) {
+            const firstCode = vendorCodesArray[0];
+            for (const year of yearsArray) {
+                fixedTargetsByYear[year] = await getFixedMonthlyObjectiveTargets(firstCode, year);
+            }
+            if (Object.values(fixedTargetsByYear).some(targets => Object.keys(targets).length > 0)) {
+                logger.info(`[OBJECTIVES] Vendor ${firstCode} has fixed monthly targets in COMMERCIAL_TARGETS`);
             }
         }
 
@@ -521,9 +763,15 @@ router.get('/evolution', verifyToken, async (req, res) => {
             // FIXED TARGET OVERRIDE: Use fixed target if available, otherwise calculate from previous year
             let annualObjective, monthlyObjective;
 
-            if (fixedMonthlyTarget && fixedMonthlyTarget > 0) {
-                monthlyObjective = fixedMonthlyTarget;
-                annualObjective = fixedMonthlyTarget * 12;
+            const fixedTargetsForYear = fixedTargetsByYear[year] || {};
+            const hasFixedTargetsForYear = Object.keys(fixedTargetsForYear).length > 0;
+
+            if (multiVendorTargets) {
+                annualObjective = multiVendorTargets.annualObjectiveByYear[year] || 0;
+                monthlyObjective = annualObjective / 12;
+            } else if (hasFixedTargetsForYear) {
+                annualObjective = Object.values(fixedTargetsForYear).reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
+                monthlyObjective = annualObjective / 12;
             } else {
                 // Standard calculation: previous year * (1 + targetPct)
                 // Fallback to 10% if 0 (though normally handled by getVendorTargetConfig)
@@ -536,7 +784,7 @@ router.get('/evolution', verifyToken, async (req, res) => {
             // CALCULATE SEASONAL FACTORS
             // ===================================
             const seasonalTargets = {};
-            if (!fixedMonthlyTarget && combinedPrevTotal > 0) {
+            if (!multiVendorTargets && !hasFixedTargetsForYear && combinedPrevTotal > 0) {
                 const avgMonthly = combinedPrevTotal / 12;
                 let rawSum = 0;
 
@@ -573,9 +821,11 @@ router.get('/evolution', verifyToken, async (req, res) => {
                 // SEASONAL OBJECTIVE with INHERITED support:
                 let seasonalObjective = 0;
 
-                // FIXED TARGET OVERRIDE: If fixedMonthlyTarget is set, use it for all months
-                if (fixedMonthlyTarget && fixedMonthlyTarget > 0) {
-                    seasonalObjective = fixedMonthlyTarget;
+                // FIXED TARGET OVERRIDE: If fixed targets exist, use each month exactly.
+                if (multiVendorTargets) {
+                    seasonalObjective = multiVendorTargets.monthlyObjectiveByYear[year]?.[m] || 0;
+                } else if (hasFixedTargetsForYear) {
+                    seasonalObjective = fixedTargetsForYear[m] || 0;
                 } else if (combinedPrevTotal > 0) {
                     // Use calculated seasonal target (Dynamic)
                     seasonalObjective = seasonalTargets[m] || (prevYearMonthlySales[m] * 1.10);
@@ -1670,7 +1920,7 @@ router.get('/by-client', async (req, res) => {
 
         // PERF: Route-level cache for by-client (only when no search filters)
         const hasFilters = city || code || nif || name;
-        const cacheKey = `obj:byclient:${vendedorCodes || 'ALL'}:${years || 'default'}:${months || 'all'}:${limit || '1000'}`;
+        const cacheKey = `obj:byclient:${OBJECTIVES_CACHE_VERSION}:${vendedorCodes || 'ALL'}:${years || 'default'}:${months || 'all'}:${limit || '1000'}`;
         if (!hasFilters) {
             const cachedResult = await redisCache.get('route', cacheKey);
             if (cachedResult) {
@@ -1688,7 +1938,7 @@ router.get('/by-client', async (req, res) => {
         const monthsFilter = monthsArray.join(',');
 
         // Use LACLAE with R1_T8CDVD (route vendor) for consistency with client list and rutero
-        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes, 'L');
+        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, yearsArray, 'L');
 
         let extraFilters = '';
         const extraFilterParams = [];
@@ -1843,7 +2093,7 @@ router.get('/by-client', async (req, res) => {
             }
         } else {
             // Fallback: Use original query with vendedor filter if cache not available
-            const vendedorFilterSales = buildVendedorFilterLACLAE(vendedorCodes, 'L');
+            const vendedorFilterSales = buildColumnaVendedorFilter(vendedorCodes, yearsArray, 'L');
 
             currentRows = await queryWithParams(`
                 SELECT 

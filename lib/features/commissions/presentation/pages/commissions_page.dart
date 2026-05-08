@@ -13,9 +13,15 @@ import 'package:gmp_app_mobilidad/features/commissions/presentation/widgets/pdf_
 
 class CommissionsPage extends ConsumerStatefulWidget {
   const CommissionsPage(
-      {required this.employeeCode, super.key, this.isJefeVentas = false});
+      {required this.employeeCode,
+      super.key,
+      this.isJefeVentas = false,
+      this.vendorSelectorCodes,
+      this.includeAllVendorOption = true});
   final String employeeCode;
   final bool isJefeVentas;
+  final List<String>? vendorSelectorCodes;
+  final bool includeAllVendorOption;
 
   @override
   ConsumerState<CommissionsPage> createState() => _CommissionsPageState();
@@ -70,11 +76,16 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
       // For jefe de ventas: if no specific filter or 'ALL', request ALL vendors
       String code;
+      final selectedCode =
+          filterCode != null && filterCode.isNotEmpty && filterCode != 'ALL'
+              ? filterCode
+              : null;
       if (widget.isJefeVentas &&
+          widget.includeAllVendorOption &&
           (filterCode == null || filterCode == '' || filterCode == 'ALL')) {
         code = 'ALL';
       } else {
-        code = filterCode ?? defaultCode;
+        code = selectedCode ?? defaultCode;
       }
 
       final res = await CommissionsService.getSummary(
@@ -709,6 +720,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           adminCode: adminCode,
                           observaciones: observaciones,
                           objetivoMes: objetivoMes,
+                          ventaActual: ventaActual,
                           ventasSobreObjetivo: ventasSobreObjetivo,
                         );
 
@@ -881,6 +893,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     void showPdfDialog() {
       final selectedVendor = ref.read(selectedVendorProvider);
       final currentVendor = widget.isJefeVentas &&
+              widget.includeAllVendorOption &&
               (selectedVendor == null ||
                   selectedVendor.isEmpty ||
                   selectedVendor == 'ALL')
@@ -1362,6 +1375,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       if (widget.isJefeVentas) ...[
                         GlobalVendorSelector(
                           isJefeVentas: true,
+                          allowedVendorCodes: widget.vendorSelectorCodes,
+                          includeAllOption: widget.includeAllVendorOption,
+                          defaultVendorCode: widget.employeeCode,
                         ),
                       ] else
                         const Text('Comisiones 2026',

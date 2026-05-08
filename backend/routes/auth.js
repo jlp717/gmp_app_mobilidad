@@ -22,6 +22,7 @@ const { auditLogin, getClientIP } = require('../middleware/audit');
 const bcrypt = require('bcrypt');
 const fs = require('fs');
 const path = require('path');
+const { getVendorVisibilityScope } = require('../utils/common');
 
 // =============================================================================
 // CONFIGURATION
@@ -324,6 +325,8 @@ router.post('/login',
                 const existingCodes = new Set(allVendedores.map(v => v.CODE));
                 orphans.forEach(o => existingCodes.add(o));
                 vendedorCodes = Array.from(existingCodes);
+            } else {
+                vendedorCodes = getVendorVisibilityScope(vendedorCode);
             }
 
             const accessToken = signAccessToken({

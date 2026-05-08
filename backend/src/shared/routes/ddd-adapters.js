@@ -28,7 +28,7 @@ const { performanceCache } = require('../../core/infrastructure/cache/performanc
 const { cachedQuery } = require('../../../services/query-optimizer');
 const { query } = require('../../../config/db');
 const { TTL: RedisTTL } = require('../../../services/redis-cache');
-const { buildVendedorFilterLACLAE, sanitizeForSQL, MIN_YEAR } = require('../../../utils/common');
+const { buildVendedorFilterLACLAE, sanitizeForSQL, MIN_YEAR, getVendorVisibilityScope } = require('../../../utils/common');
 const { getClientCodesFromCache } = require('../../../services/laclae');
 
 // TTL constants (milliseconds)
@@ -168,6 +168,8 @@ function createAuthRoutes() {
         } catch (e) {
           logger.warn(`[DDD-AUTH] Could not expand vendedorCodes for JEFE_VENTAS: ${e.message}`);
         }
+      } else {
+        vendedorCodes = getVendorVisibilityScope(user.code);
       }
 
       // Response format must match legacy auth routes (Flutter expects 'token', not 'accessToken')

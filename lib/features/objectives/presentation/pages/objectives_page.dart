@@ -17,9 +17,15 @@ import 'package:url_launcher/url_launcher.dart';
 /// Objectives Page - Track sales goals with multi-select filters
 class ObjectivesPage extends ConsumerStatefulWidget {
   const ObjectivesPage(
-      {required this.employeeCode, super.key, this.isJefeVentas = false});
+      {required this.employeeCode,
+      super.key,
+      this.isJefeVentas = false,
+      this.vendorSelectorCodes,
+      this.includeAllVendorOption = true});
   final String employeeCode;
   final bool isJefeVentas;
+  final List<String>? vendorSelectorCodes;
+  final bool includeAllVendorOption;
 
   @override
   ConsumerState<ObjectivesPage> createState() => _ObjectivesPageState();
@@ -141,8 +147,12 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
   String get _activeVendedorCode {
     if (!mounted) return widget.employeeCode;
     final filterCode = ref.read(filterProvider).selectedVendor;
-    if (filterCode != null && filterCode.isNotEmpty) return filterCode;
-    if (widget.isJefeVentas) return 'ALL';
+    if (filterCode != null &&
+        filterCode.isNotEmpty &&
+        (widget.includeAllVendorOption || filterCode != 'ALL')) {
+      return filterCode;
+    }
+    if (widget.isJefeVentas && widget.includeAllVendorOption) return 'ALL';
     return _selectedVendedor ?? widget.employeeCode;
   }
 
@@ -326,6 +336,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
             // If viewing all agents (no specific filter), calculate standard Mon-Sat working days
             // This avoids issues where aggregated data might have incorrect average days (e.g. 20 vs 24)
             final isAllAgentsView = widget.isJefeVentas &&
+                widget.includeAllVendorOption &&
                 ((ref.read(selectedVendorProvider) ?? '').isEmpty);
 
             if (isAllAgentsView) {
@@ -936,6 +947,9 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
   Widget _buildVendedorSelector() {
     return GlobalVendorSelector(
       isJefeVentas: widget.isJefeVentas,
+      allowedVendorCodes: widget.vendorSelectorCodes,
+      includeAllOption: widget.includeAllVendorOption,
+      defaultVendorCode: widget.employeeCode,
     );
   }
 

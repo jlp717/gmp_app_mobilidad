@@ -6,13 +6,19 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 class GlobalVendorSelector extends ConsumerStatefulWidget {
-
   const GlobalVendorSelector({
-    required this.isJefeVentas, super.key,
+    required this.isJefeVentas,
+    super.key,
     this.onChanged,
+    this.allowedVendorCodes,
+    this.includeAllOption = true,
+    this.defaultVendorCode,
   });
   final bool isJefeVentas;
   final VoidCallback? onChanged;
+  final List<String>? allowedVendorCodes;
+  final bool includeAllOption;
+  final String? defaultVendorCode;
 
   @override
   ConsumerState<GlobalVendorSelector> createState() =>
@@ -47,13 +53,18 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
           _vendedores = (rawList as List)
               .map((item) => Map<String, dynamic>.from(item as Map))
               .where((v) {
-                final code = v['code']?.toString() ?? '';
-                final name = v['name']?.toString() ?? '';
-                if (code.isEmpty) return false;
-                if (name.toUpperCase().startsWith('ZZ')) return false;
-                return true;
-              })
-              .toList();
+            final code = v['code']?.toString() ?? '';
+            final name = v['name']?.toString() ?? '';
+            if (code.isEmpty) return false;
+            if (name.toUpperCase().startsWith('ZZ')) return false;
+            final allowedCodes = widget.allowedVendorCodes;
+            if (allowedCodes != null &&
+                allowedCodes.isNotEmpty &&
+                !allowedCodes.contains(code)) {
+              return false;
+            }
+            return true;
+          }).toList();
           _vendedores.sort((a, b) {
             final codeA = a['code']?.toString() ?? '';
             final codeB = b['code']?.toString() ?? '';
@@ -61,10 +72,32 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
           });
           _isLoading = false;
         });
+        _ensureValidSelection();
       }
     } catch (e) {
       debugPrint('Error loading vendedores: $e');
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _ensureValidSelection() {
+    if (widget.includeAllOption) return;
+    if (_vendedores.isEmpty) return;
+
+    final selectedVendor = ref.read(filterProvider).selectedVendor;
+    final hasValidSelection = selectedVendor != null &&
+        _vendedores.any((v) => v['code']?.toString() == selectedVendor);
+    if (hasValidSelection) return;
+
+    final defaultCode = widget.defaultVendorCode;
+    final fallback = defaultCode != null &&
+            _vendedores.any((v) => v['code']?.toString() == defaultCode)
+        ? defaultCode
+        : _vendedores.first['code']?.toString();
+
+    if (fallback != null && fallback.isNotEmpty) {
+      ref.read(filterProvider.notifier).setVendor(fallback);
+      if (widget.onChanged != null) widget.onChanged!();
     }
   }
 
@@ -83,14 +116,18 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
 
     return Container(
       padding: EdgeInsets.symmetric(
-          horizontal: 12, vertical: isCompact ? 2 : 8,),
+        horizontal: 12,
+        vertical: isCompact ? 2 : 8,
+      ),
       color: AppTheme.surfaceColor,
       child: Row(
         children: [
           const Icon(Icons.visibility, color: AppTheme.neonBlue, size: 18),
           const SizedBox(width: 8),
-          const Text('Ver como:',
-              style: TextStyle(fontSize: 12, color: Colors.white70),),
+          const Text(
+            'Ver como:',
+            style: TextStyle(fontSize: 12, color: Colors.white70),
+          ),
           const SizedBox(width: 8),
           Expanded(
             child: Container(
@@ -100,37 +137,56 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                 color: AppTheme.darkSurface,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                    color: AppTheme.neonBlue.withOpacity(0.3),),
+                  color: AppTheme.neonBlue.withOpacity(0.3),
+                ),
               ),
               child: _isLoading
                   ? const Center(
                       child: SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: AppTheme.neonBlue,),),)
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppTheme.neonBlue,
+                        ),
+                      ),
+                    )
                   : DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
                         value: currentValue,
                         isExpanded: true,
                         isDense: true,
                         dropdownColor: AppTheme.darkCard,
-                        icon: const Icon(Icons.arrow_drop_down,
-                            color: AppTheme.neonBlue, size: 20,),
+                        icon: const Icon(
+                          Icons.arrow_drop_down,
+                          color: AppTheme.neonBlue,
+                          size: 20,
+                        ),
                         style: const TextStyle(
-                            color: Colors.white, fontSize: 13,),
-                        hint: const Text('Todos los comerciales',
-                            style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,),),
-                        items: [
-                          const DropdownMenuItem<String>(
-                            child: Text('Todos los comerciales',
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,),),
+                          color: Colors.white,
+                          fontSize: 13,
+                        ),
+                        hint: Text(
+                          widget.includeAllOption
+                              ? 'Todos los comerciales'
+                              : 'Selecciona comercial',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
                           ),
+                        ),
+                        items: [
+                          if (widget.includeAllOption)
+                            const DropdownMenuItem<String>(
+                              child: Text(
+                                'Todos los comerciales',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
                           ..._vendedores.map((v) {
                             final code = v['code']?.toString() ?? '';
                             final name = v['name']?.toString() ?? '';
@@ -139,9 +195,13 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                                 : 'Vendedor $code';
                             return DropdownMenuItem<String>(
                               value: code,
-                              child: Text(displayName,
-                                  style: const TextStyle(
-                                      color: Colors.white, fontSize: 12,),),
+                              child: Text(
+                                displayName,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
                             );
                           }),
                         ],
