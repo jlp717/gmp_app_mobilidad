@@ -11,8 +11,8 @@ class CommissionsService {
     bool forceRefresh = false,
   }) async {
     try {
-      // v3 busts commission target cache after Jan/Feb 2026 snapshot alignment.
-      final cacheKey = 'commissions_v3_${vendedorCode}_$year';
+      // v5 busts cache after making assignment-based R1 the backend default.
+      final cacheKey = 'commissions_v5_r1_${vendedorCode}_$year';
 
       final response = await ApiClient.get(
         '/commissions/summary',
@@ -68,6 +68,7 @@ class CommissionsService {
     String? concept,
     String? observaciones,
     double? objetivoMes,
+    double? ventaActual,
     double? ventasSobreObjetivo,
   }) async {
     try {
@@ -84,11 +85,14 @@ class CommissionsService {
           'adminCode': adminCode,
           'observaciones': observaciones,
           'objetivoMes': objetivoMes ?? 0,
+          'ventaActual': ventaActual ?? 0,
           'ventasSobreObjetivo': ventasSobreObjetivo ?? 0,
         },
       );
 
       // Force cache clear for this vendor AND the ALL view after payment
+      CacheService.invalidate('commissions_v5_r1_${vendedorCode}_$year');
+      CacheService.invalidate('commissions_v4_r1_${vendedorCode}_$year');
       CacheService.invalidate('commissions_v3_${vendedorCode}_$year');
       CacheService.invalidate('commissions_v2_${vendedorCode}_$year');
       CacheService.invalidateByPrefix('comm:summary:ALL');

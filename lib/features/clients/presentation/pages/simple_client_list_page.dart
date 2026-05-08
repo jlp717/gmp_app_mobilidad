@@ -19,9 +19,15 @@ import 'package:url_launcher/url_launcher.dart';
 /// Simple Clients List Page with debounced search
 class SimpleClientListPage extends ConsumerStatefulWidget {
   const SimpleClientListPage(
-      {required this.employeeCode, super.key, this.isJefeVentas = false});
+      {required this.employeeCode,
+      super.key,
+      this.isJefeVentas = false,
+      this.vendorSelectorCodes,
+      this.includeAllVendorOption = true});
   final String employeeCode;
   final bool isJefeVentas;
+  final List<String>? vendorSelectorCodes;
+  final bool includeAllVendorOption;
 
   @override
   ConsumerState<SimpleClientListPage> createState() =>
@@ -102,6 +108,12 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
       if (widget.isJefeVentas) {
         // Use FilterProvider
         codesToPass = ref.read(selectedVendorProvider);
+        if (!widget.includeAllVendorOption &&
+            (codesToPass == null ||
+                codesToPass.isEmpty ||
+                codesToPass == 'ALL')) {
+          codesToPass = widget.employeeCode;
+        }
       } else {
         codesToPass = widget.employeeCode;
       }
@@ -347,6 +359,9 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
                 const SizedBox(height: 12),
                 GlobalVendorSelector(
                   isJefeVentas: true,
+                  allowedVendorCodes: widget.vendorSelectorCodes,
+                  includeAllOption: widget.includeAllVendorOption,
+                  defaultVendorCode: widget.employeeCode,
                 ),
               ],
             ],

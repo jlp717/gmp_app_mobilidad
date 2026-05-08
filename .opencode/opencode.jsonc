@@ -1,4 +1,4 @@
-// gmp_app_mobilidad — Flutter + Riverpod + Node.js + IBM DB2
+﻿// gmp_app_mobilidad â€” Flutter + Riverpod + Node.js + IBM DB2
 // Override del proyecto sobre la config global ~/.config/opencode/opencode.jsonc
 {
   "$schema": "https://opencode.ai/config.json",
@@ -24,12 +24,12 @@
     "github":              { "enabled": true },
     "firecrawl":           { "enabled": true },
 
-    // Especificos Flutter — paquetes no verificados, off por defecto. Activar tras confirmar disponibilidad.
+    // Especificos Flutter â€” paquetes no verificados, off por defecto. Activar tras confirmar disponibilidad.
     "dart-flutter-mcp":    { "enabled": false },
     "pub-mcp":             { "enabled": false },
     "iflow-flutter":       { "enabled": false },
 
-    // IBM DB2: requiere ODBC + Mapepire — off
+    // IBM DB2: requiere ODBC + Mapepire â€” off
     "ibm-db2-mcp":         { "enabled": false },
 
     // Sin credencial -> off

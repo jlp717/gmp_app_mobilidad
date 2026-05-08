@@ -62,7 +62,7 @@ const DEFAULT_CONFIG_2026 = {
         { min: 110.01, max: 999.99, pct: 2.0 }
     ]
 };
-const COMMISSIONS_CACHE_VERSION = 'v20260506-casefix';
+const COMMISSIONS_CACHE_VERSION = 'v20260508-r2-r1default';
 
 // =============================================================================
 // DATABASE INITIALIZATION (JAVIER Schema)
@@ -304,28 +304,31 @@ async function getVendorPayments(vendorCode, year) {
         rows.forEach(r => {
             const amount = parseFloat(r.IMPORTE_PAGADO) || 0;
             const mes = r.MES;
+            const rowDate = r.FECHA_PAGO ? new Date(r.FECHA_PAGO) : null;
 
             payments.total += amount;
 
             if (mes > 0) {
                 payments.monthly[mes] = (payments.monthly[mes] || 0) + amount;
 
-            if (!payments.details[mes]) {
-                payments.details[mes] = {
-                    totalPaid: 0,
-                    comisionGenerada: 0,
-                    ventaComision: parseFloat(r.VENTAS_REAL) || 0,
-                    objetivoReal: parseFloat(r.OBJETIVO_MES) || 0,
-                    observaciones: [],
-                    ultimaFecha: r.FECHA_PAGO
-                };
-            }
-            payments.details[mes].totalPaid += amount;
-            payments.details[mes].comisionGenerada += parseFloat(r.COMISION_GENERADA) || 0;
+                if (!payments.details[mes]) {
+                    payments.details[mes] = {
+                        totalPaid: 0,
+                        comisionGenerada: 0,
+                        ventaComision: 0,
+                        objetivoReal: 0,
+                        observaciones: [],
+                        ultimaFecha: null
+                    };
+                }
+                payments.details[mes].totalPaid += amount;
+                payments.details[mes].comisionGenerada += parseFloat(r.COMISION_GENERADA) || 0;
                 if (r.OBSERVACIONES && r.OBSERVACIONES.trim()) {
                     payments.details[mes].observaciones.push(r.OBSERVACIONES.trim());
                 }
-                if (r.FECHA_PAGO && new Date(r.FECHA_PAGO) > new Date(payments.details[mes].ultimaFecha || 0)) {
+                if (!payments.details[mes].ultimaFecha || (rowDate && rowDate >= new Date(payments.details[mes].ultimaFecha || 0))) {
+                    payments.details[mes].ventaComision = parseFloat(r.VENTAS_REAL) || 0;
+                    payments.details[mes].objetivoReal = parseFloat(r.OBJETIVO_MES) || 0;
                     payments.details[mes].ultimaFecha = r.FECHA_PAGO;
                 }
             }
@@ -458,16 +461,16 @@ async function batchFetchAllVendorData(vendorCodes, year) {
 
     const [allSalesRows, allBSalesRows, allPaymentsRows, allFixedTargets, allVendorNames] = await Promise.all([
         // 1. LACLAE sales for ALL vendors (current + prev year)
-        // NOTE: GROUP BY must use the same CASE expression as SELECT.
-        // For prev year, LCCDVD is always correct (transition only affects 2026+).
-        // The CASE expr naturally handles this: rows with LCAADC < 2026 always return LCCDVD.
+        // NOTE: GROUP BY must use the same month-based CASE expression as SELECT.
+        // Jan/Feb use LCCDVD and Mar+ use R1_T8CDVD for both current sales and
+        // prior-year commission baselines.
         queryWithParams(`
-            SELECT (${vendorColExpr}) as VENDOR_CODE, L.LCAADC as YEAR, LCMMDC as MONTH, SUM(L.LCIMVT) as SALES
+            SELECT TRIM(${vendorColExpr}) as VENDOR_CODE, L.LCAADC as YEAR, LCMMDC as MONTH, SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L
             WHERE L.LCAADC IN (?, ?)
               AND ${LACLAE_SALES_FILTER}
-              AND (${vendorColExpr}) IN (${placeholders})
-            GROUP BY (${vendorColExpr}), L.LCAADC, LCMMDC
+              AND TRIM(${vendorColExpr}) IN (${placeholders})
+            GROUP BY TRIM(${vendorColExpr}), L.LCAADC, LCMMDC
         `, [year, year - 1, ...safeCodes], false),
 
         // 2. B-Sales for ALL vendors (current + prev year) from JAVIER.VENTAS_B
@@ -552,21 +555,24 @@ async function batchFetchAllVendorData(vendorCodes, year) {
         const payments = { monthly: {}, quarterly: {}, total: 0, details: {} };
         paymentRows.forEach(r => {
             const m = r.MES;
+            const rowDate = r.FECHA_PAGO ? new Date(r.FECHA_PAGO) : null;
             if (!payments.details[m]) {
                 payments.details[m] = {
                     totalPaid: 0,
                     comisionGenerada: 0,
                     observaciones: [],
-                    ventaComision: parseFloat(r.VENTAS_REAL) || 0,
-                    objetivoReal: parseFloat(r.OBJETIVO_MES) || 0,
-                    ultimaFecha: r.FECHA_PAGO
+                    ventaComision: 0,
+                    objetivoReal: 0,
+                    ultimaFecha: null
                 };
             }
             payments.details[m].comisionGenerada += parseFloat(r.COMISION_GENERADA) || 0;
             if (r.OBSERVACIONES && r.OBSERVACIONES.trim()) {
                 payments.details[m].observaciones.push(r.OBSERVACIONES.trim());
             }
-            if (r.FECHA_PAGO && new Date(r.FECHA_PAGO) > new Date(payments.details[m].ultimaFecha || 0)) {
+            if (!payments.details[m].ultimaFecha || (rowDate && rowDate >= new Date(payments.details[m].ultimaFecha || 0))) {
+                payments.details[m].ventaComision = parseFloat(r.VENTAS_REAL) || 0;
+                payments.details[m].objetivoReal = parseFloat(r.OBJETIVO_MES) || 0;
                 payments.details[m].ultimaFecha = r.FECHA_PAGO;
             }
             payments.monthly[m] = (payments.monthly[m] || 0) + (parseFloat(r.IMPORTE_PAGADO) || 0);
@@ -690,6 +696,46 @@ function calculateCommission(actual, target, config) {
     };
 }
 
+function roundMoney(value) {
+    const parsed = parseFloat(value);
+    if (!Number.isFinite(parsed)) return 0;
+    return Math.round(parsed * 100) / 100;
+}
+
+async function loadCommissionConfig(year) {
+    try {
+        const dbConfig = await queryWithParams(
+            `SELECT * FROM JAVIER.COMM_CONFIG WHERE YEAR = ? FETCH FIRST 1 ROWS ONLY`,
+            [parseInt(year)],
+            false,
+            false
+        );
+        if (dbConfig && dbConfig.length > 0) {
+            const row = dbConfig[0];
+            return {
+                ipc: parseFloat(row.IPC_PCT),
+                TIER1_MAX: parseFloat(row.TIER1_MAX),
+                TIER1_PCT: parseFloat(row.TIER1_PCT),
+                TIER2_MAX: parseFloat(row.TIER2_MAX),
+                TIER2_PCT: parseFloat(row.TIER2_PCT),
+                TIER3_MAX: parseFloat(row.TIER3_MAX),
+                TIER3_PCT: parseFloat(row.TIER3_PCT),
+                TIER4_PCT: parseFloat(row.TIER4_PCT)
+            };
+        }
+    } catch (e) {
+        logger.warn(`[COMMISSIONS] COMM_CONFIG lookup failed for ${year}: ${e.message}. Using defaults.`);
+    }
+
+    return {
+        ipc: 3.0,
+        TIER1_MAX: 103.00, TIER1_PCT: 1.0,
+        TIER2_MAX: 106.00, TIER2_PCT: 1.3,
+        TIER3_MAX: 110.00, TIER3_PCT: 1.6,
+        TIER4_PCT: 2.0
+    };
+}
+
 /**
  * Core Logic to Calculate Metrics for ONE Vendor
  */
@@ -715,7 +761,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
     }
 
     // D. Fetch Sales Data — use preloaded or query DB
-    let salesRows, bSalesCurrYear, bSalesPrevYear, fixedCommissionBase, payments;
+    let salesRows, bSalesCurrYear, bSalesPrevYear, fixedCommissionBase, fixedTargets, payments;
 
     if (preloadedData) {
         // Use batch-fetched data (no DB queries)
@@ -724,6 +770,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         bSalesPrevYear = preloadedData.bSalesPrev;
         // fixedCommissionBase is resolved per-month inside the month loop (see below)
         fixedCommissionBase = null; // Will be overridden per-month
+        fixedTargets = preloadedData.fixedTargets || [];
         payments = preloadedData.payments;
     } else {
         // Original per-vendor queries (single vendor mode)
@@ -757,25 +804,22 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             (async () => {
                 try {
                     if (!vendedorCode || vendedorCode.indexOf(',') !== -1) return [];
-                    const currentMonth = new Date().getMonth() + 1;
                     const safeVendor = vendedorCode.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
                     if (!safeVendor) return [];
-                    const fixedTargetCacheKey = `commissions:fixedTarget:${safeVendor}:${safeYear}`;
+                    const fixedTargetCacheKey = `commissions:${COMMISSIONS_CACHE_VERSION}:fixedTarget:${safeVendor}:${safeYear}`;
                     let rows = await redisCache.get('route', fixedTargetCacheKey);
                     if (!rows) {
                         // Query with both padded ('05') and unpadded ('5') vendor codes
                         // to tolerate code format differences between LACLAE and COMMERCIAL_TARGETS.
                         const safeUnpadded = safeVendor.replace(/^0+/, '') || safeVendor;
                         rows = await queryWithParams(`
-                            SELECT IMPORTE_BASE_COMISION
+                            SELECT IMPORTE_BASE_COMISION, MES
                             FROM JAVIER.COMMERCIAL_TARGETS
                             WHERE (CODIGOVENDEDOR = ? OR CODIGOVENDEDOR = ?)
                               AND ANIO = ?
-                              AND (MES = ? OR MES IS NULL)
                               AND ACTIVO = 1
                             ORDER BY MES DESC
-                            FETCH FIRST 1 ROWS ONLY
-                        `, [safeVendor, safeUnpadded, safeYear, currentMonth], false);
+                        `, [safeVendor, safeUnpadded, safeYear], false);
                         if (rows.length > 0) {
                             redisCache.set('route', fixedTargetCacheKey, rows, TTL.MEDIUM).catch(() => {});
                         }
@@ -792,9 +836,14 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
 
         bSalesCurrYear = bSalesCurr;
         bSalesPrevYear = bSalesPrev;
-        fixedCommissionBase = fixedCommissionRows && fixedCommissionRows.length > 0
-            ? parseFloat(fixedCommissionRows[0].IMPORTE_BASE_COMISION) || null
-            : null;
+        fixedTargets = (fixedCommissionRows || [])
+            .map(r => ({
+                mes: r.MES != null ? parseInt(r.MES, 10) : null,
+                importe: parseFloat(r.IMPORTE_BASE_COMISION) || 0,
+            }))
+            .filter(r => r.importe > 0)
+            .sort((a, b) => (b.mes ?? 0) - (a.mes ?? 0));
+        fixedCommissionBase = null;
         payments = await getVendorPayments(vendedorCode, selectedYear);
     }
 
@@ -871,15 +920,14 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         }
 
         // Resolve fixed target for THIS specific month.
-        // In batch mode (preloadedData), fixedTargets[] contains all COMMERCIAL_TARGETS
-        // rows for this vendor. Pick the best entry for month m:
+        // fixedTargets[] contains all COMMERCIAL_TARGETS rows for this vendor.
+        // Pick the best entry for month m:
         //   1. Exact month match (MES = m)
         //   2. Annual entry (MES IS NULL)
         //   3. Most recent past entry (MES < m, already sorted desc)
-        // In single-vendor mode, fixedCommissionBase was already resolved from DB.
-        let resolvedFixedBase = fixedCommissionBase; // single-vendor: already set
-        if (preloadedData && preloadedData.fixedTargets) {
-            const ft = preloadedData.fixedTargets;
+        let resolvedFixedBase = fixedCommissionBase;
+        if (fixedTargets && fixedTargets.length > 0) {
+            const ft = fixedTargets;
             const exact = ft.find(r => r.mes === m);
             const annual = ft.find(r => r.mes === null);
             const pastRecent = ft.find(r => r.mes !== null && r.mes < m);
@@ -1060,6 +1108,31 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         grandTotalCommission,
         isExcluded,
         payments
+    };
+}
+
+async function getCurrentPaymentSnapshot(vendedorCode, year, month) {
+    const safeYear = parseInt(year);
+    const safeMonth = parseInt(month);
+    if (!vendedorCode || !safeYear || !safeMonth || safeMonth < 1 || safeMonth > 12) {
+        return null;
+    }
+
+    const config = await loadCommissionConfig(safeYear);
+    await ensureExcludedVendorsLoaded();
+    const data = await calculateVendorData(vendedorCode, safeYear, config);
+    const monthData = data.months.find(item => parseInt(item.month) === safeMonth);
+    if (!monthData) return null;
+
+    const actual = roundMoney(monthData.actual);
+    const target = roundMoney(monthData.target);
+    const generated = roundMoney(monthData.complianceCtx?.commission || 0);
+
+    return {
+        ventaComision: actual,
+        objetivoMes: target,
+        ventasSobreObjetivo: roundMoney(actual - target),
+        generatedAmount: generated
     };
 }
 
@@ -1583,7 +1656,7 @@ router.get('/summary', verifyToken, async (req, res) => {
 // NEW: Validates observaciones requirement and captures venta_comision snapshot
 // Pagos son solo INSERT – no UPDATE. Snapshot histórico intencional.
 router.post('/pay', verifyToken, async (req, res) => {
-    const { vendedorCode, year, month, quarter, amount, generatedAmount, concept, adminCode, observaciones, objetivoMes, ventasSobreObjetivo } = req.body;
+    const { vendedorCode, year, month, quarter, amount, generatedAmount, concept, adminCode, observaciones, objetivoMes, ventaActual, ventasSobreObjetivo } = req.body;
 
     // Security check: Verify that the user has TIPOVENDEDOR = 'ADMIN' or is specifically authorized (code 98 = DIEGO)
     try {
@@ -1617,27 +1690,33 @@ router.post('/pay', verifyToken, async (req, res) => {
         return res.status(400).json({ success: false, error: 'Faltan datos obligatorios (Comercial, Año, Importe)' });
     }
 
-    // Validate observaciones if paying less than generated amount
-    // FIX: Use epsilon tolerance (0.01€ = 1 cent) to avoid floating-point false positives
-    // e.g. 165.88 < 165.88000000000001 would wrongly trigger mandatory observaciones
-    const amountNum = parseFloat(amount);
-    const generatedNum = parseFloat(generatedAmount) || 0;
-    if ((generatedNum - amountNum) > 0.01 && (!observaciones || observaciones.trim() === '')) {
-        logger.warn(`[COMMISSIONS] Payment validation failed: Missing observaciones for partial payment ${vendedorCode}`);
-        return res.status(400).json({
-            success: false,
-            error: 'Debes indicar una observación explicando por qué se paga menos de lo correspondiente'
-        });
-    }
-
     try {
-        // NEW: Get venta_comision (snapshot of sales for the specific month)
-        let ventaComision = 0;
-        if (month && month > 0) {
+        const amountNum = parseFloat(amount);
+        const safeYearNum = parseInt(year);
+        const safeMonthNum = parseInt(month) || 0;
+        let generatedNum = parseFloat(generatedAmount) || 0;
+        let ventaComision = parseFloat(ventaActual) || 0;
+        let objetivoMesNum = parseFloat(objetivoMes) || 0;
+        let ventasSobreObjetivoNum = parseFloat(ventasSobreObjetivo) || 0;
+
+        // Prefer the same backend calculation path as /summary for payment snapshots.
+        // This keeps the blue columns aligned with snapshots, B-sales, fixed targets,
+        // and the LCC/R1 monthly transition.
+        if (safeMonthNum > 0) {
+            const currentSnapshot = await getCurrentPaymentSnapshot(vendedorCode, safeYearNum, safeMonthNum);
+            if (currentSnapshot) {
+                ventaComision = currentSnapshot.ventaComision;
+                objetivoMesNum = currentSnapshot.objetivoMes;
+                ventasSobreObjetivoNum = currentSnapshot.ventasSobreObjetivo;
+                generatedNum = currentSnapshot.generatedAmount;
+                logger.info(`[COMMISSIONS] Captured backend payment snapshot for ${vendedorCode} ${safeYearNum}/${safeMonthNum}: venta=${ventaComision.toFixed(2)} obj=${objetivoMesNum.toFixed(2)} comm=${generatedNum.toFixed(2)}`);
+            }
+        }
+
+        // Fallback only if the full summary path could not provide sales.
+        if (safeMonthNum > 0 && ventaComision === 0) {
             try {
-                const safeYearNum = parseInt(year);
-                const safeMonthNum = parseInt(month);
-                const vendedorFilter = buildVendedorFilterLACLAE(vendedorCode, 'L');
+                const vendedorFilter = buildVendedorFilterLACLAE(vendedorCode, 'L', safeYearNum, safeMonthNum);
                 const salesQuery = `
                     SELECT SUM(L.LCIMVT) as SALES
                     FROM DSED.LACLAE L
@@ -1653,7 +1732,8 @@ router.post('/pay', verifyToken, async (req, res) => {
 
                 // Add B-Sales if exist
                 const bSales = await getBSales(vendedorCode, year);
-                ventaComision += (bSales[month] || 0);
+                ventaComision += (bSales[safeMonthNum] || 0);
+                ventasSobreObjetivoNum = roundMoney(ventaComision - objetivoMesNum);
 
                 logger.info(`[COMMISSIONS] Captured venta_comision for ${vendedorCode} ${year}/${month}: ${ventaComision.toFixed(2)}€`);
             } catch (salesErr) {
@@ -1661,9 +1741,15 @@ router.post('/pay', verifyToken, async (req, res) => {
             }
         }
 
-        // Snapshot fields from request
-        const objetivoMesNum = parseFloat(objetivoMes) || 0;
-        const ventasSobreObjetivoNum = parseFloat(ventasSobreObjetivo) || 0;
+        // Validate observaciones if paying less than generated amount.
+        // Use epsilon tolerance (0.01 EUR = 1 cent) to avoid floating-point false positives.
+        if ((generatedNum - amountNum) > 0.01 && (!observaciones || observaciones.trim() === '')) {
+            logger.warn(`[COMMISSIONS] Payment validation failed: Missing observaciones for partial payment ${vendedorCode}`);
+            return res.status(400).json({
+                success: false,
+                error: 'Debes indicar una observación explicando por qué se paga menos de lo correspondiente'
+            });
+        }
 
         // Pagos son solo INSERT – no UPDATE. Snapshot histórico intencional.
         const safePayVendor = sanitizeForSQL(vendedorCode.trim());
@@ -1673,7 +1759,7 @@ router.post('/pay', verifyToken, async (req, res) => {
             INSERT INTO JAVIER.COMMISSION_PAYMENTS
             (VENDEDOR_CODIGO, ANIO, MES, VENTAS_REAL, OBJETIVO_MES, VENTAS_SOBRE_OBJETIVO, COMISION_GENERADA, IMPORTE_PAGADO, FECHA_PAGO, OBSERVACIONES, CREADO_POR)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
-        `, [safePayVendor, parseInt(year), parseInt(month) || 0, parseFloat(ventaComision) || 0, parseFloat(objetivoMesNum) || 0, parseFloat(ventasSobreObjetivoNum) || 0, parseFloat(generatedNum) || 0, parseFloat(amountNum) || 0, safePayObs, safePayAdmin]);
+        `, [safePayVendor, safeYearNum, safeMonthNum, roundMoney(ventaComision), roundMoney(objetivoMesNum), roundMoney(ventasSobreObjetivoNum), roundMoney(generatedNum), roundMoney(amountNum), safePayObs, safePayAdmin]);
 
         // INVALIDATE CACHE: Clear summary cache for this vendor/year so next request fetches fresh data
         try {
@@ -1918,6 +2004,9 @@ module.exports = {
     router,
     initCommissionTables,
     _private: {
+        calculateVendorData,
+        getCurrentPaymentSnapshot,
+        loadCommissionConfig,
         buildPdfSummaryVendors,
         loadCommissionConfigForPdf,
     },

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/models/user_model.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/services/navigation_config_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -89,6 +90,28 @@ class _MainShellState extends ConsumerState<MainShell> {
   bool get _isAlmacenEffective {
     if (_forceAlmacenMode) return true;
     return false;
+  }
+
+  bool _hasScopedVendorAccess(UserModel user, List<String> vendorCodes) {
+    return !user.isJefeVentas && vendorCodes.length > 1;
+  }
+
+  String _defaultScopedVendor(UserModel user, List<String> vendorCodes) {
+    final ownCode = user.vendedorCode ?? user.code;
+    if (vendorCodes.contains(ownCode)) return ownCode;
+    return vendorCodes.isNotEmpty ? vendorCodes.first : ownCode;
+  }
+
+  void _ensureScopedVendorSelection(UserModel user, List<String> vendorCodes) {
+    if (!_hasScopedVendorAccess(user, vendorCodes)) return;
+    final selected = ref.read(selectedVendorProvider);
+    if (selected != null && vendorCodes.contains(selected)) return;
+
+    final defaultCode = _defaultScopedVendor(user, vendorCodes);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(filterProvider.notifier).setVendor(defaultCode);
+    });
   }
 
   @override
@@ -329,6 +352,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     final vendedorCodes = ref.watch(
       authProvider.select((state) => state.value?.vendedorCodes ?? []),
     );
+    _ensureScopedVendorSelection(user, vendedorCodes);
     final navItems = _getNavItems(isJefeVentas, vendedorCodes);
     final safeIndex = _currentIndex.clamp(0, navItems.length - 1);
     final useBottomNav = Responsive.useBottomNav(context);
@@ -1313,7 +1337,20 @@ class _MainShellState extends ConsumerState<MainShell> {
     // ===============================================
     // COMERCIAL MODE
     // ===============================================
-    final empCode = vendedorCodes.join(',');
+    final hasScopedVendorAccess =
+        user != null && _hasScopedVendorAccess(user, vendedorCodes);
+    final scopedDefaultCode = hasScopedVendorAccess && user != null
+        ? _defaultScopedVendor(user, vendedorCodes)
+        : '';
+    final selectedScopedVendor =
+        hasScopedVendorAccess ? ref.watch(selectedVendorProvider) : null;
+    final scopedEmployeeCode = hasScopedVendorAccess
+        ? (selectedScopedVendor != null &&
+                vendedorCodes.contains(selectedScopedVendor)
+            ? selectedScopedVendor
+            : scopedDefaultCode)
+        : null;
+    final empCode = scopedEmployeeCode ?? vendedorCodes.join(',');
     final comercialNav = _getNavItems(false, vendedorCodes);
 
     Widget comercialPageForIndex(int idx) {
@@ -1322,13 +1359,26 @@ class _MainShellState extends ConsumerState<MainShell> {
         case 'Clientes':
           return SimpleClientListPage(
             employeeCode: empCode,
+            isJefeVentas: hasScopedVendorAccess,
+            vendorSelectorCodes: hasScopedVendorAccess ? vendedorCodes : null,
+            includeAllVendorOption: !hasScopedVendorAccess,
           );
         case 'Ruta':
           return RuteroPage(employeeCode: empCode);
         case 'Objetivos':
-          return ObjectivesPage(employeeCode: empCode);
+          return ObjectivesPage(
+            employeeCode: empCode,
+            isJefeVentas: hasScopedVendorAccess,
+            vendorSelectorCodes: hasScopedVendorAccess ? vendedorCodes : null,
+            includeAllVendorOption: !hasScopedVendorAccess,
+          );
         case 'Comisiones':
-          return CommissionsPage(employeeCode: empCode);
+          return CommissionsPage(
+            employeeCode: empCode,
+            isJefeVentas: hasScopedVendorAccess,
+            vendorSelectorCodes: hasScopedVendorAccess ? vendedorCodes : null,
+            includeAllVendorOption: !hasScopedVendorAccess,
+          );
         case 'Facturas':
           return const FacturasPage();
         case 'Pedidos':

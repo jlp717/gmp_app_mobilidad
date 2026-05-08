@@ -6,7 +6,10 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 
+/// API facade for objectives screens.
 class ObjectivesService {
+  static const _cacheVersion = 'v20260508_r2_r1default';
+
   /// Fetch list of distinct populations/cities
   static Future<List<String>> getPopulations() async {
     final res = await ApiClient.getList(
@@ -23,13 +26,20 @@ class ObjectivesService {
     required List<int> years,
   }) async {
     final yearsKey = years.toList()..sort();
+    final cacheKey = [
+      'objectives_evolution',
+      _cacheVersion,
+      vendedorCodes,
+      yearsKey.join('-'),
+    ].join('_');
+
     return ApiClient.get(
       ApiConfig.objectivesEvolution,
       queryParameters: {
         'vendedorCodes': vendedorCodes,
         'years': years.join(','),
       },
-      cacheKey: 'objectives_evolution_${vendedorCodes}_${yearsKey.join('-')}',
+      cacheKey: cacheKey,
       cacheTTL: const Duration(minutes: 10),
     );
   }
@@ -68,12 +78,23 @@ class ObjectivesService {
     final normalizedCode = code ?? '';
     final normalizedNif = nif ?? '';
     final normalizedName = name ?? '';
+    final cacheKey = [
+      'objectives_by_client',
+      _cacheVersion,
+      vendedorCodes,
+      yearsKey.join('-'),
+      monthsKey.join('-'),
+      normalizedCity,
+      normalizedCode,
+      normalizedNif,
+      normalizedName,
+      limit ?? 'all',
+    ].join('_');
 
     return ApiClient.get(
       ApiConfig.objectivesByClient,
       queryParameters: params,
-      cacheKey:
-          'objectives_by_client_${vendedorCodes}_${yearsKey.join('-')}_${monthsKey.join('-')}_${normalizedCity}_${normalizedCode}_${normalizedNif}_${normalizedName}_${limit ?? 'all'}',
+      cacheKey: cacheKey,
       cacheTTL: const Duration(minutes: 5),
     );
   }

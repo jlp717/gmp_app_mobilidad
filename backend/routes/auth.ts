@@ -31,6 +31,7 @@ import { auditLogin, getClientIP } from '../middleware/audit';
 import bcrypt from 'bcrypt';
 import fs from 'fs';
 import path from 'path';
+const { getVendorVisibilityScope } = require('../utils/common');
 
 const router = express.Router();
 
@@ -368,6 +369,8 @@ router.post('/login',
                 const existingCodes = new Set(allVendedores.map((v: any) => v.CODE));
                 orphans.forEach(o => existingCodes.add(o));
                 vendedorCodes = Array.from(existingCodes);
+            } else {
+                vendedorCodes = getVendorVisibilityScope(vendedorCode);
             }
 
             // Generate secure tokens
