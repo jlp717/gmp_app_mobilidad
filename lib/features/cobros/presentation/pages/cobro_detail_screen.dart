@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -25,6 +27,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   String _formaPago = 'CONTADO';
   final Map<String, String> _itemStates = {};
   final Map<String, double> _partialAmounts = {};
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -51,6 +54,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   }
 
   Future<void> _submitCobro(double totalACobrar) async {
+    if (_isSubmitting) return;
     if (totalACobrar <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Selecciona algún documento para cobrar')),
@@ -60,11 +64,13 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
 
     var fallos = 0;
 
-    showDialog(
+    setState(() => _isSubmitting = true);
+
+    unawaited(showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
+    ));
 
     for (final entry in _itemStates.entries) {
       if (entry.value == 'NONE') continue;
@@ -85,6 +91,11 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           ? (_partialAmounts[entry.key] ?? 0.0)
           : cobro.importePendiente;
 
+      if (importe <= 0 || importe > cobro.importePendiente) {
+        fallos++;
+        continue;
+      }
+
       final tipoVenta =
           _formaPago == 'CONTADO' ? TipoVenta.contado : TipoVenta.credito;
       final tipoModo = _formaPago == 'CONTADO'
@@ -102,7 +113,9 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       if (!success) fallos++;
     }
 
+    if (!mounted) return;
     Navigator.of(context).pop();
+    setState(() => _isSubmitting = false);
 
     if (fallos == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -385,7 +398,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           ),
           const SizedBox(width: 16),
           ElevatedButton(
-            onPressed: total > 0 ? () => _submitCobro(total) : null,
+            onPressed:
+                total > 0 && !_isSubmitting ? () => _submitCobro(total) : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.neonBlue,
               foregroundColor: Colors.white,
@@ -394,10 +408,17 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: Text(
-              'Cobrar ${_currencyFormat.format(total)}',
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
+            child: _isSubmitting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(
+                    'Cobrar ${_currencyFormat.format(total)}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
           ),
         ],
       ),

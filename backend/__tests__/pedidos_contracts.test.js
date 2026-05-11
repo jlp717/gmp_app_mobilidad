@@ -124,3 +124,47 @@ describe('pedidos line amount contract', () => {
     expect(amount).toBe(22.5);
   });
 });
+
+describe('pedidos state machine contract', () => {
+  test('allows only explicit lifecycle transitions', () => {
+    expect(pedidosService.isOrderTransitionAllowed('BORRADOR', 'CONFIRMADO')).toBe(true);
+    expect(pedidosService.isOrderTransitionAllowed('BORRADOR', 'PENDIENTE_APROBACION')).toBe(true);
+    expect(pedidosService.isOrderTransitionAllowed('PENDIENTE_APROBACION', 'CONFIRMADO')).toBe(true);
+    expect(pedidosService.isOrderTransitionAllowed('CONFIRMADO', 'ENVIADO')).toBe(true);
+    expect(pedidosService.isOrderTransitionAllowed('CONFIRMADO', 'BORRADOR')).toBe(false);
+    expect(pedidosService.isOrderTransitionAllowed('ENVIADO', 'ANULADO')).toBe(false);
+    expect(pedidosService.isOrderTransitionAllowed('ANULADO', 'CONFIRMADO')).toBe(false);
+  });
+
+  test('addOrderLine rejects orders outside BORRADOR before insert', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/SELECT\s+TRIM\(ESTADO\)\s+AS\s+ESTADO\s+FROM\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) {
+        return [{ ESTADO: 'CONFIRMADO' }];
+      }
+      return [];
+    });
+
+    await expect(pedidosService.addOrderLine(42, {
+      codigoArticulo: 'ART001',
+      cantidadEnvases: 1,
+      precioVenta: 10,
+    })).rejects.toMatchObject({ code: 'ORDER_NOT_EDITABLE' });
+
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT\s+INTO\s+JAVIER\.PEDIDOS_LIN/i.test(sql))).toBe(false);
+  });
+
+  test('updateOrderStatus rejects forbidden transitions', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/SELECT\s+TRIM\(ESTADO\)\s+AS\s+ESTADO\s+FROM\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) {
+        return [{ ESTADO: 'CONFIRMADO' }];
+      }
+      return [];
+    });
+
+    await expect(
+      pedidosService.updateOrderStatus(42, 'BORRADOR', { userId: '01' }),
+    ).rejects.toMatchObject({ code: 'INVALID_ORDER_TRANSITION' });
+
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO/i.test(sql))).toBe(false);
+  });
+});

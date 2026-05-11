@@ -1082,12 +1082,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     );
 
     if (result != null && context.mounted) {
-      // Check if order was blocked due to stock issues
-      if (result['blocked'] == true) {
-        // Show stock alternatives sheet
-        _showStockAlternatives(context, result);
-        return;
-      }
+      if (_handleBlockedOrUnconfirmedResult(context, result)) return;
 
       // Success - clear forms and show success message
       _obsCtrl.clear();
@@ -1111,6 +1106,31 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
         ),
       );
     }
+  }
+
+  bool _handleBlockedOrUnconfirmedResult(
+    BuildContext context,
+    Map<String, dynamic> result,
+  ) {
+    if (result['blocked'] == true) {
+      _showStockAlternatives(context, result);
+      return true;
+    }
+
+    if (!isConfirmedOrderResultForProvider(result)) {
+      final status = orderConfirmationStatusForProvider(result);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Pedido no confirmado. Estado actual: ${status.isEmpty ? 'DESCONOCIDO' : status}',
+          ),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return true;
+    }
+
+    return false;
   }
 
   // Show stock alternatives when order is blocked
@@ -1215,6 +1235,8 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           routeCode: routeCode,
         );
         if (result != null && context.mounted) {
+          if (_handleBlockedOrUnconfirmedResult(context, result)) return result;
+
           _obsCtrl.clear();
           _discountCtrl.clear();
           await provider.loadPromotions();

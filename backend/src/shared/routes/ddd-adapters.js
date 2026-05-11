@@ -99,6 +99,34 @@ function normalizeOrderResponse(result) {
   };
 }
 
+function normalizeNumericCode(value) {
+  const raw = String(value || '').trim();
+  if (!/^\d+$/.test(raw)) return null;
+  return raw.replace(/^0+/, '') || '0';
+}
+
+function salesCodesMatch(left, right) {
+  const leftCode = String(left || '').trim();
+  const rightCode = String(right || '').trim();
+  if (leftCode === rightCode) return true;
+  const leftNumeric = normalizeNumericCode(leftCode);
+  const rightNumeric = normalizeNumericCode(rightCode);
+  return leftNumeric !== null && rightNumeric !== null && leftNumeric === rightNumeric;
+}
+
+function isPrivilegedSalesUser(req) {
+  return req.user?.isJefeVentas === true || req.user?.role === 'JEFE_VENTAS' || req.user?.role === 'ADMIN';
+}
+
+function canAccessVendedorCodes(req, vendedorCodes) {
+  if (isPrivilegedSalesUser(req)) return true;
+  const userCode = req.user?.code || req.user?.id;
+  const requested = String(vendedorCodes || userCode || '').trim();
+  if (!requested || requested.toUpperCase() === 'ALL') return false;
+  return requested.split(',').map((code) => code.trim()).filter(Boolean)
+    .every((code) => salesCodesMatch(code, userCode));
+}
+
 // =============================================================================
 // AUTH ROUTES (DDD)
 // =============================================================================
@@ -632,12 +660,16 @@ function createPedidosRoutes() {
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
       const { limit, offset, estado, status, vendedorCodes, dateFrom, dateTo, search, minAmount, maxAmount, sortBy, sortOrder } = req.query;
+      const requestedVendedorCodes = vendedorCodes || userId;
+      if (!canAccessVendedorCodes(req, requestedVendedorCodes)) {
+        return res.status(403).json({ success: false, error: 'No autorizado para consultar esos vendedores', code: 'FORBIDDEN_VENDOR' });
+      }
       const requestedStatus = status || estado;
       const cacheKey = `ddd:orders-list:${userId}:${limit || 20}:${offset || 0}:${requestedStatus || 'all'}:${search || ''}:${dateFrom || ''}:${dateTo || ''}`;
       await withCache(cache, cacheKey, TTL_MS.ORDER_HISTORY, async () => {
         const pedidosService = require('../../../services/pedidos.service');
         const result = await pedidosService.getOrders({
-          vendedorCodes: vendedorCodes || userId,
+          vendedorCodes: requestedVendedorCodes,
           limit: parseInt(limit) || 50,
           offset: parseInt(offset) || 0,
           status: requestedStatus ? String(requestedStatus).trim() : undefined,
@@ -702,6 +734,10 @@ function createPedidosRoutes() {
       const { clientCode, clientName, vendedorCode, lines, observations, observaciones, tipoventa, almacen, tarifa } = req.body;
       // Use explicit vendedorCode from body, fallback to userId (the logged-in user)
       const actualVendedor = vendedorCode || userId;
+
+      if (!canAccessVendedorCodes(req, actualVendedor)) {
+        return res.status(403).json({ success: false, error: 'No autorizado para crear pedidos de otro vendedor', code: 'FORBIDDEN_VENDOR' });
+      }
 
       if (!clientCode || !lines || !Array.isArray(lines) || lines.length === 0) {
         return res.status(400).json({ success: false, error: 'clientCode and lines are required' });
@@ -782,7 +818,7 @@ function createPedidosRoutes() {
       res.json({ success: true, line: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/lines: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.code === 'ORDER_NOT_EDITABLE' ? 409 : 500).json({ success: false, error: error.message, code: error.code });
     }
   });
 
@@ -795,7 +831,7 @@ function createPedidosRoutes() {
       res.json({ success: true, line: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/lines/:lineId: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.code === 'ORDER_NOT_EDITABLE' ? 409 : 500).json({ success: false, error: error.message, code: error.code });
     }
   });
 
@@ -808,7 +844,7 @@ function createPedidosRoutes() {
       res.json({ success: true, line: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/lines/:lineId/delete: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(error.code === 'ORDER_NOT_EDITABLE' ? 409 : 500).json({ success: false, error: error.message, code: error.code });
     }
   });
 
@@ -825,7 +861,11 @@ function createPedidosRoutes() {
       res.json({ success: true, ...normalized });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/status: ${error.message}`);
-      res.status(error.message.includes('not found') ? 404 : 500).json({ success: false, error: error.message });
+      const statusCode = error.code === 'ORDER_NOT_FOUND' ? 404
+        : error.code === 'INVALID_ORDER_STATUS' ? 400
+          : error.code === 'INVALID_ORDER_TRANSITION' ? 409
+            : 500;
+      res.status(statusCode).json({ success: false, error: error.message, code: error.code });
     }
   });
 
@@ -907,6 +947,30 @@ function createCobrosRoutes() {
   const repo = new Db2CobrosRepository(getDbPool());
   const cache = getCache();
 
+  const cobrosContext = (req) => ({
+    userId: req.user?.code || req.user?.id,
+    userRole: req.user?.role || 'COMERCIAL',
+    isJefeVentas: req.user?.isJefeVentas === true || req.user?.role === 'JEFE_VENTAS' || req.user?.role === 'ADMIN',
+  });
+
+  const sendCobrosError = (res, error) => {
+    const status = Number(error.status) ||
+      (error.code === 'INVALID_IDEMPOTENCY_TOKEN' ? 400 :
+        error.code === 'INVALID_PAYMENT_PAYLOAD' ? 400 :
+          error.code === 'OVERRIDE_REASON_REQUIRED' ? 400 :
+            error.code === 'FORBIDDEN_VENDOR' ? 403 :
+              error.code === 'FORBIDDEN_CLIENT_VENDOR' ? 403 :
+                error.code === 'ORDER_NOT_FOUND_FOR_PAYMENT' ? 404 :
+                  error.code === 'IDEMPOTENCY_CONFLICT' ? 409 :
+                    error.code === 'OVERPAY_NOT_ALLOWED' ? 409 :
+                      error.code === 'PAYMENT_ALREADY_REGISTERED' ? 409 : 500);
+    return res.status(status).json({
+      success: false,
+      error: error.message,
+      code: error.code || 'COBROS_ERROR',
+    });
+  };
+
   router.get('/:codigoCliente/pendientes', async (req, res) => {
     try {
       const { codigoCliente } = req.params;
@@ -914,7 +978,7 @@ function createCobrosRoutes() {
 
       const cacheKey = `ddd:cobros:pendientes:${codigoCliente}`;
       await withCache(cache, cacheKey, TTL_MS.PENDIENTES, async () => {
-        const pendientes = await repo.getPendientes(String(codigoCliente).trim());
+        const pendientes = await repo.getPendientes(String(codigoCliente).trim(), cobrosContext(req));
         return {
           success: true,
           cobros: pendientes.cobros || [],
@@ -933,7 +997,7 @@ function createCobrosRoutes() {
       const { codigoCliente } = req.params;
       if (!codigoCliente) return res.status(400).json({ success: false, error: 'codigoCliente required' });
 
-      const pendientes = await repo.getPendientes(String(codigoCliente).trim());
+      const pendientes = await repo.getPendientes(String(codigoCliente).trim(), cobrosContext(req));
       const totalPendiente = parseFloat(pendientes?.resumen?.totalPendiente) || 0;
       res.json({
         success: true,
@@ -956,10 +1020,10 @@ function createCobrosRoutes() {
   router.post('/:codigoCliente/registrar', async (req, res) => {
     try {
       const { codigoCliente } = req.params;
-      const userId = req.body?.codigoUsuario || req.user?.code || req.user?.id;
+      const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const { referencia, importe, formaPago, observaciones } = req.body;
+      const { referencia, importe, formaPago, observaciones, idempotencyToken, allowOverpay, overrideReason } = req.body;
       if (!codigoCliente || importe == null || !formaPago) {
         return res.status(400).json({ success: false, error: 'codigoCliente, importe, and formaPago required' });
       }
@@ -970,7 +1034,12 @@ function createCobrosRoutes() {
         paymentMethod: formaPago,
         reference: referencia || '',
         observations: observaciones || '',
-        userId
+        userId,
+        userRole: req.user?.role || 'COMERCIAL',
+        isJefeVentas: req.user?.isJefeVentas === true,
+        idempotencyToken,
+        allowOverpay: allowOverpay === true,
+        overrideReason: overrideReason || '',
       });
 
       cache.invalidatePattern(`ddd:cobros:pendientes:${codigoCliente}`);
@@ -979,7 +1048,7 @@ function createCobrosRoutes() {
       res.json({ success: true, mensaje: 'Cobro registrado correctamente', payment: result });
     } catch (error) {
       logger.error(`[DDD-COBROS] Error in POST /:codigoCliente/registrar: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendCobrosError(res, error);
     }
   });
 
@@ -988,12 +1057,24 @@ function createCobrosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const { clientCode, amount, paymentMethod, reference, observations } = req.body;
+      const { clientCode, amount, paymentMethod, reference, observations, idempotencyToken, allowOverpay, overrideReason } = req.body;
       if (!clientCode || !amount || !paymentMethod) {
         return res.status(400).json({ success: false, error: 'clientCode, amount, and paymentMethod required' });
       }
 
-      const result = await repo.registerPayment({ clientCode, amount, paymentMethod, reference, observations, userId });
+      const result = await repo.registerPayment({
+        clientCode,
+        amount,
+        paymentMethod,
+        reference,
+        observations,
+        userId,
+        userRole: req.user?.role || 'COMERCIAL',
+        isJefeVentas: req.user?.isJefeVentas === true,
+        idempotencyToken,
+        allowOverpay: allowOverpay === true,
+        overrideReason: overrideReason || '',
+      });
 
       // Invalidate cobros caches
       cache.invalidatePattern(`ddd:cobros:pendientes:${clientCode}`);
@@ -1002,7 +1083,7 @@ function createCobrosRoutes() {
       res.json({ success: true, payment: result });
     } catch (error) {
       logger.error(`[DDD-COBROS] Error in POST /register: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendCobrosError(res, error);
     }
   });
 
@@ -1012,95 +1093,11 @@ function createCobrosRoutes() {
     try {
       const vendedorCodeParam = req.params.vendedorCode;
       logger.info(`[COBROS] Pending summary for vendor: ${vendedorCodeParam}`);
-
-      const isAll = vendedorCodeParam.toUpperCase() === 'ALL';
-      const vendorCodes = isAll
-        ? []
-        : vendedorCodeParam.split(',').map(v => v.trim()).filter(v => v.length > 0);
-
-      // For many vendor codes, embed directly in SQL to avoid ODBC parameter limit (CWB0111)
-      const MAX_PARAMS = 50;
-      const useParamBinding = vendorCodes.length <= MAX_PARAMS;
-
-      let vendorFilter = '';
-      let vendorParams = [];
-
-      if (!isAll) {
-        if (useParamBinding) {
-          vendorFilter = `AND TRIM(PC.CODIGOVENDEDOR) IN (${vendorCodes.map(() => '?').join(',')})`;
-          vendorParams = vendorCodes;
-        } else {
-          const sanitized = vendorCodes.map(v => `'${v.replace(/[^a-zA-Z0-9_-]/g, '')}'`).join(',');
-          vendorFilter = `AND TRIM(PC.CODIGOVENDEDOR) IN (${sanitized})`;
-        }
-      }
-
-      // Check if COBROS table exists
-      let cobrosTableExists = false;
-      try {
-        await query(`SELECT 1 FROM JAVIER.COBROS FETCH FIRST 1 ROW ONLY`);
-        cobrosTableExists = true;
-      } catch(e) { /* table doesn't exist yet */ }
-
-      // Check ORIGEN column using IBM i compatible catalog
-      let origenExists = false;
-      try {
-        const colCheck = await query(`
-          SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS2
-          WHERE TABLE_SCHEMA = 'JAVIER'
-            AND TABLE_NAME = 'PEDIDOS_CAB'
-            AND COLUMN_NAME = 'ORIGEN'
-          FETCH FIRST 1 ROW ONLY
-        `);
-        origenExists = colCheck && colCheck.length > 0;
-      } catch(e) {
-        origenExists = true;
-      }
-
-      let sql = `
-        SELECT
-          TRIM(PC.CODIGOCLIENTE) AS CLIENTE,
-          SUM(PC.IMPORTETOTAL) AS TOTAL_PENDIENTE,
-          COUNT(*) AS NUM_PEDIDOS
-        FROM JAVIER.PEDIDOS_CAB PC
-        WHERE PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
-          AND PC.IMPORTETOTAL > 0
-          ${vendorFilter}
-          ${origenExists ? "AND PC.ORIGEN = 'A'" : ''}`;
-
-      // Exclude already paid
-      if (cobrosTableExists) {
-        sql += ` AND NOT EXISTS (
-          SELECT 1 FROM JAVIER.COBROS JC
-          WHERE JC.CODIGO_CLIENTE = TRIM(PC.CODIGOCLIENTE)
-            AND JC.REFERENCIA LIKE '%' || TRIM(PC.SERIEPEDIDO) || '-' || CAST(PC.NUMEROPEDIDO AS VARCHAR(20)) || '%'
-        )`;
-      }
-
-      sql += ` GROUP BY TRIM(PC.CODIGOCLIENTE) ORDER BY TOTAL_PENDIENTE DESC`;
-
-      const { queryWithParams } = require('../../../config/db');
-      const rows = await queryWithParams(sql, vendorParams);
-
-      const summary = {};
-      let grandTotal = 0;
-      (rows || []).forEach(r => {
-        const code = (r.CLIENTE || '').trim();
-        const total = parseFloat(r.TOTAL_PENDIENTE) || 0;
-        const count = parseInt(r.NUM_PEDIDOS) || 0;
-        summary[code] = { total, count };
-        grandTotal += total;
-      });
-
-      res.json({
-        success: true,
-        summary,
-        grandTotal,
-        clientCount: Object.keys(summary).length,
-      });
+      const result = await repo.getPendingSummary(vendedorCodeParam, cobrosContext(req));
+      res.json({ success: true, ...result });
     } catch (error) {
       logger.error(`[COBROS] Error pending-summary: ${error.message}`);
-      res.status(500).json({ success: false, error: 'Error obteniendo resumen' });
+      sendCobrosError(res, error);
     }
   });
 

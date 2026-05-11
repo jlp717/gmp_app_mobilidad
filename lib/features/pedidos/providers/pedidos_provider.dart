@@ -10,6 +10,48 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 
+/// Chooses the provider-facing result from create + confirm API responses.
+Map<String, dynamic> normalizeConfirmOrderResultForProvider({
+  required Map<String, dynamic> createResult,
+  required Map<String, dynamic> confirmedResult,
+}) {
+  if (confirmedResult['blocked'] == true) {
+    return Map<String, dynamic>.from(confirmedResult);
+  }
+
+  final header = confirmedResult['header'];
+  if (header is Map) {
+    return Map<String, dynamic>.from(header);
+  }
+
+  return Map<String, dynamic>.from(createResult);
+}
+
+/// Returns true when the cart may be cleared after confirmation.
+bool shouldClearCartAfterConfirmation(Map<String, dynamic>? result) {
+  return isConfirmedOrderResultForProvider(result);
+}
+
+/// Extracts backend order status from a normalized header or wrapper.
+String orderConfirmationStatusForProvider(Map<String, dynamic>? result) {
+  if (result == null) return '';
+
+  final header = result['header'];
+  final rawStatus = result['estado'] ??
+      result['estadoPedido'] ??
+      (header is Map ? header['estado'] ?? header['estadoPedido'] : null);
+
+  return rawStatus?.toString().trim().toUpperCase() ?? '';
+}
+
+/// Returns true only after the backend leaves the order confirmed or shipped.
+bool isConfirmedOrderResultForProvider(Map<String, dynamic>? result) {
+  if (result == null || result['blocked'] == true) return false;
+
+  final status = orderConfirmationStatusForProvider(result);
+  return status == 'CONFIRMADO' || status == 'ENVIADO';
+}
+
 final pedidosProvider =
     ChangeNotifierProvider<PedidosProvider>((ref) => PedidosProvider());
 
@@ -739,23 +781,28 @@ class PedidosProvider with ChangeNotifier {
         routeCode: routeCode,
       );
 
-      // Clear cart after successful creation
-      _lines.clear();
-      _clientCode = null;
-      _clientName = null;
-      _saleType = 'CC';
-      _globalDiscountPct = 0;
-      _complementaryProducts = [];
-      _clientBalance = {};
+      final result = normalizeConfirmOrderResultForProvider(
+        createResult: Map<String, dynamic>.from(createResult),
+        confirmedResult: Map<String, dynamic>.from(confirmedResult),
+      );
 
-      // Refresh orders list + stats in background
-      refreshOrdersAndStats();
+      if (shouldClearCartAfterConfirmation(result)) {
+        // Clear cart only after a real confirmation. Stock-blocked confirmations
+        // keep the cart intact so the user can fix quantities instead of seeing
+        // an intermediate BORRADOR reported as confirmed.
+        _lines.clear();
+        _clientCode = null;
+        _clientName = null;
+        _saleType = 'CC';
+        _globalDiscountPct = 0;
+        _complementaryProducts = [];
+        _clientBalance = {};
 
-      // Return the confirmed order result
-      if (confirmedResult != null && confirmedResult['header'] != null) {
-        return confirmedResult['header'] as Map<String, dynamic>;
+        // Refresh orders list + stats in background
+        refreshOrdersAndStats();
       }
-      return createResult as Map<String, dynamic>;
+
+      return result;
     } catch (e) {
       _error = e.toString();
       return null;
@@ -873,8 +920,27 @@ class PedidosProvider with ChangeNotifier {
     refreshOrdersAndStats();
   }
 
-  Future<void> confirmExistingOrder(int orderId, String saleType) async {
-    await PedidosService.confirmOrder(orderId, saleType);
+  Future<Map<String, dynamic>> confirmExistingOrder(
+    int orderId,
+    String saleType,
+  ) async {
+    final confirmedResult =
+        await PedidosService.confirmOrder(orderId, saleType);
+    final result = normalizeConfirmOrderResultForProvider(
+      createResult: {'id': orderId},
+      confirmedResult: Map<String, dynamic>.from(confirmedResult),
+    );
+
+    if (!isConfirmedOrderResultForProvider(result)) {
+      final message = result['message']?.toString().trim();
+      final status = orderConfirmationStatusForProvider(result);
+      throw Exception(
+        message != null && message.isNotEmpty
+            ? message
+            : 'Pedido no confirmado. Estado actual: '
+                '${status.isEmpty ? 'DESCONOCIDO' : status}',
+      );
+    }
 
     // Update local state instantly
     final idx = _orders.indexWhere((o) => o.id == orderId);
@@ -887,7 +953,7 @@ class PedidosProvider with ChangeNotifier {
         clienteName: o.clienteName,
         vendedorCode: o.vendedorCode,
         fecha: o.fecha,
-        estado: 'CONFIRMADO',
+        estado: orderConfirmationStatusForProvider(result),
         tipoVenta: saleType,
         total: o.total,
         margen: o.margen,
@@ -897,6 +963,7 @@ class PedidosProvider with ChangeNotifier {
     }
     // Refresh stats + full list in background
     refreshOrdersAndStats();
+    return result;
   }
 
   Future<void> setOrderPendingApproval(int orderId) async {

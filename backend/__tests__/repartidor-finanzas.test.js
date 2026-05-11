@@ -456,9 +456,97 @@ describe('Repartidor finanzas routes', () => {
     )).toBe(false);
   });
 
+  test('POST /cobros rejects a second payment for the same document with a different token', async () => {
+    mockQueryWithParams.mockResolvedValue(alignedSchemaRows);
+    mockConnQuery.mockImplementation(async (sql) => {
+      if (/FROM DSEDAC\.CVC/i.test(sql)) return [{ OK: 1 }];
+      if (/WHERE IDEMPOTENCY_TOKEN = \?/i.test(sql)) return [];
+      if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql) && /NUMERODOCUMENTO/i.test(sql)) {
+        return [{ ID: 901, IDEMPOTENCY_TOKEN: 'previous-token-404' }];
+      }
+      return [];
+    });
+
+    const res = await request(app).post('/finanzas/cobros').send({
+      entregaId: '2026-S-10-404-4300009479',
+      codigoCliente: '4300009479',
+      nombreCliente: 'PEREZ DIAZ ALFONSO',
+      codigoRepartidor: '94',
+      tipoDocumento: 'CAC',
+      origenDocumento: 'B',
+      subempresaDocumento: 'GMP',
+      ejercicioDocumento: 2026,
+      serieDocumento: 'S',
+      terminalDocumento: 10,
+      numeroDocumento: 404,
+      xdeDocumento: 1,
+      importeCobrado: 189.60,
+      importePendiente: 0,
+      formaPago: 'EFECTIVO',
+      pantallaOrigen: 'RUTERO',
+      idempotencyToken: 'second-token-404',
+    });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 'PAYMENT_ALREADY_REGISTERED',
+    });
+
+    const statements = mockConnQuery.mock.calls.map(([sql]) => sql);
+    const lockIndex = statements.findIndex((sql) => /LOCK TABLE JAVIER\.REPARTIDOR_COBROS IN EXCLUSIVE MODE/i.test(sql));
+    const insertIndex = statements.findIndex((sql) => /INSERT INTO JAVIER\.REPARTIDOR_COBROS/i.test(sql));
+
+    expect(lockIndex).toBeGreaterThanOrEqual(0);
+    expect(insertIndex).toBe(-1);
+  });
+
+  test('POST /cobros rejects altered document discriminator fields for the same ERP document', async () => {
+    mockQueryWithParams.mockResolvedValue(alignedSchemaRows);
+    mockConnQuery.mockImplementation(async (sql) => {
+      if (/FROM DSEDAC\.CVC/i.test(sql)) return [];
+      if (/FROM DSEDAC\.CPC/i.test(sql)) return [{ OK: 1 }];
+      if (/WHERE IDEMPOTENCY_TOKEN = \?/i.test(sql)) return [];
+      if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql) && /NUMERODOCUMENTO/i.test(sql)) {
+        return [];
+      }
+      return [];
+    });
+
+    const res = await request(app).post('/finanzas/cobros').send({
+      entregaId: '2026-S-10-404-4300009479',
+      codigoCliente: '4300009479',
+      nombreCliente: 'PEREZ DIAZ ALFONSO',
+      codigoRepartidor: '94',
+      tipoDocumento: 'COC',
+      origenDocumento: 'C',
+      subempresaDocumento: 'XXX',
+      ejercicioDocumento: 2026,
+      serieDocumento: 'S',
+      terminalDocumento: 10,
+      numeroDocumento: 404,
+      xdeDocumento: 2,
+      dexDocumento: 9,
+      importeCobrado: 189.60,
+      importePendiente: 0,
+      formaPago: 'EFECTIVO',
+      pantallaOrigen: 'RUTERO',
+      idempotencyToken: 'altered-token-404',
+    });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 'DOCUMENT_NOT_ASSIGNED',
+    });
+    expect(
+      mockConnQuery.mock.calls.some(([sql]) => /INSERT INTO JAVIER\.REPARTIDOR_COBROS/i.test(sql)),
+    ).toBe(false);
+  });
+
   test('POST /rutero/confirm-delivery-cobro inserts delivery status and cobro in one transaction', async () => {
     mockConnQuery.mockImplementation(async (sql) => {
-      if (/FROM DSEDAC\.CPC/i.test(sql)) return [{ OK: 1 }];
+      if (/FROM DSEDAC\.CVC/i.test(sql)) return [{ OK: 1 }];
       return [];
     });
 
@@ -513,7 +601,7 @@ describe('Repartidor finanzas routes', () => {
 
   test('POST /rutero/confirm-delivery-cobro rolls back delivery if cobro insert fails', async () => {
     mockConnQuery.mockImplementation(async (sql) => {
-      if (/FROM DSEDAC\.CPC/i.test(sql)) {
+      if (/FROM DSEDAC\.CVC/i.test(sql)) {
         return [{ OK: 1 }];
       }
       if (/INSERT INTO JAVIER\.REPARTIDOR_COBROS/i.test(sql)) {

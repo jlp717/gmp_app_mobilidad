@@ -58,3 +58,39 @@ cd backend && npx jest
 - `@flutter-test-dev` → Tests widget, unit tests, integration
 - `@backend-architect` → Diseño APIs Node.js (solo diseño, nunca implementar)
 - `@security-sentinel` → Revisión de seguridad queries DB2, auth flows
+
+## Prevención de Alucinaciones (Proyecto-Específico)
+
+- Antes de usar cualquier widget Flutter, verifica en `context7` que existe en la versión del SDK del proyecto (`flutter --version`).
+- Antes de añadir dependencias a `pubspec.yaml`, verifica versión en pub.dev con `pub-mcp` o `context7`.
+- Los schemas DB2 accesibles son: JAVIER, DSEDAC, DSEMAC, DSEO, CLI, LINDTO, ART, CVC, VDC, RUT, APPUSUARIOS. Si necesitas otro, verifica con `ibm-db2-mcp` antes de citarlo.
+- Riverpod 2.5: verifica sintaxis con `context7` si usas `riverpod_generator` — el API cambia entre versiones.
+
+## Protocolo de Fallback para Este Proyecto
+
+Si una tarea Flutter falla (build error, analyzer error):
+1. Ejecuta `flutter analyze` y reporta el output completo.
+2. Si hay errores de codegen: `dart run build_runner build --delete-conflicting-outputs`.
+3. Si persiste tras 2 intentos → escala al @orchestrator con el error exacto.
+
+Si una query DB2 falla:
+1. Verifica que el schema está cualificado (`SCHEMA.TABLA`).
+2. Verifica que la query usa parámetros, no string concat.
+3. Si persiste → escala al @ibm-i-db2-specialist.
+
+## Registro de Decisiones (Formato Requerido)
+
+Para decisiones que afecten arquitectura Flutter, DB2 o contratos de API en este proyecto:
+
+```
+DECISIÓN: [qué se decide]
+POR QUÉ: [razonamiento técnico concreto]
+ALTERNATIVAS DESCARTADAS: [opción B — por qué no]
+RIESGOS: [qué puede salir mal y cómo se mitiga]
+```
+
+Ejemplos de decisiones que requieren este formato:
+- Nuevo provider o cambio en jerarquía de providers Riverpod
+- Nuevo endpoint o cambio en contrato de API existente
+- Query DB2 que toca tablas de producción (DSEDAC, DSEMAC, etc.)
+- Cambio en estrategia de caché (14 archivos detectados — deuda técnica activa)

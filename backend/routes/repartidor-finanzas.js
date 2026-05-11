@@ -369,6 +369,13 @@ router.post('/cobros', verifyToken, requireRepartidorAccess((req) => req.body.co
         code: error.code,
       });
     }
+    if (error && error.code === 'PAYMENT_ALREADY_REGISTERED') {
+      return res.status(409).json({
+        success: false,
+        error: error.message,
+        code: error.code,
+      });
+    }
     return sendError(res, error, { action: 'POST /cobros', body: req.body });
   }
 });
@@ -402,7 +409,8 @@ router.post('/rutero/confirm-delivery-cobro', verifyToken, requireRepartidorAcce
     if (error && (
       error.code === 'IDEMPOTENCY_CONFLICT' ||
       error.code === 'INCONSISTENT_IDEMPOTENCY' ||
-      error.code === 'DOCUMENT_NOT_ASSIGNED'
+      error.code === 'DOCUMENT_NOT_ASSIGNED' ||
+      error.code === 'PAYMENT_ALREADY_REGISTERED'
     )) {
       return res.status(error.code === 'DOCUMENT_NOT_ASSIGNED' ? 403 : 409).json({
         success: false,

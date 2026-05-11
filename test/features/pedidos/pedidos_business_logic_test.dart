@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
 void main() {
   group('OrderLine recalculation', () {
@@ -80,6 +81,75 @@ void main() {
       expect(options.truckLabel, '11 - 0883HFF - Rep. 57');
       expect(options.hasTruck, true);
       expect(options.validated, true);
+    });
+  });
+
+  group('Order confirmation result handling', () {
+    test('preserves blocked confirmation instead of falling back to draft', () {
+      final result = normalizeConfirmOrderResultForProvider(
+        createResult: {
+          'id': 42,
+          'estado': 'BORRADOR',
+        },
+        confirmedResult: {
+          'blocked': true,
+          'reason': 'STOCK_INSUFICIENTE',
+          'message': 'Stock insuficiente',
+          'stockWarnings': [
+            {'product': 'P001'},
+          ],
+        },
+      );
+
+      expect(result['blocked'], isTrue);
+      expect(result['reason'], 'STOCK_INSUFICIENTE');
+      expect(result['estado'], isNull);
+    });
+
+    test('does not clear cart when confirmation is blocked', () {
+      expect(
+        shouldClearCartAfterConfirmation({'blocked': true}),
+        isFalse,
+      );
+      expect(
+        shouldClearCartAfterConfirmation({'estado': 'CONFIRMADO'}),
+        isTrue,
+      );
+    });
+
+    test('does not clear cart when confirmation header remains draft', () {
+      final result = normalizeConfirmOrderResultForProvider(
+        createResult: {'id': 42, 'estado': 'BORRADOR'},
+        confirmedResult: {
+          'header': {'id': 42, 'estado': 'BORRADOR'},
+        },
+      );
+
+      expect(result['estado'], 'BORRADOR');
+      expect(shouldClearCartAfterConfirmation(result), isFalse);
+    });
+
+    test('treats only confirmed or sent states as successful confirmation', () {
+      expect(
+        isConfirmedOrderResultForProvider({'estado': 'CONFIRMADO'}),
+        isTrue,
+      );
+      expect(
+        isConfirmedOrderResultForProvider({'estado': 'ENVIADO'}),
+        isTrue,
+      );
+      expect(
+        isConfirmedOrderResultForProvider({'estado': 'BORRADOR'}),
+        isFalse,
+      );
+      expect(
+        isConfirmedOrderResultForProvider({'estado': 'PENDIENTE'}),
+        isFalse,
+      );
+      expect(
+        isConfirmedOrderResultForProvider({'blocked': true}),
+        isFalse,
+      );
     });
   });
 }
