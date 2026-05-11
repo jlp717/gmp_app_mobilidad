@@ -10,6 +10,25 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart';
 
+/// Builds a backend-safe idempotency token for one commercial payment attempt.
+String buildCobroIdempotencyToken({
+  required String employeeCode,
+  required String codigoCliente,
+  required String referencia,
+  DateTime? now,
+}) {
+  String clean(String value, {int max = 32}) {
+    final sanitized = value.trim().replaceAll(RegExp('[^A-Za-z0-9_.:-]'), '-');
+    if (sanitized.length <= max) return sanitized;
+    return sanitized.substring(0, max);
+  }
+
+  final timestamp = (now ?? DateTime.now()).microsecondsSinceEpoch;
+  return 'cobro:${clean(employeeCode, max: 12)}:'
+      '${clean(codigoCliente, max: 24)}:'
+      '${clean(referencia)}:$timestamp';
+}
+
 class CobrosProvider extends ChangeNotifier {
   CobrosProvider({
     required this.employeeCode,
@@ -328,6 +347,11 @@ class CobrosProvider extends ChangeNotifier {
         'tipoUsuario': isRepartidor ? 'REPARTIDOR' : 'COMERCIAL',
         'codigoUsuario': codigoUsuario ?? employeeCode,
         'observaciones': observaciones,
+        'idempotencyToken': buildCobroIdempotencyToken(
+          employeeCode: codigoUsuario ?? employeeCode,
+          codigoCliente: codigoCliente,
+          referencia: referencia,
+        ),
       });
       if (response['success'] == true) {
         await cargarCobrosPendientes(codigoCliente);

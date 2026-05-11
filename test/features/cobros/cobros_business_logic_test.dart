@@ -27,5 +27,19 @@ void main() {
       expect(a.hashCode, b.hashCode);
       expect(a == c, isFalse);
     });
+
+    test('builds backend-safe idempotency tokens for commercial payments', () {
+      final token = buildCobroIdempotencyToken(
+        employeeCode: '01',
+        codigoCliente: '4300030041',
+        referencia: 'M-1',
+      );
+
+      expect(token.length, greaterThanOrEqualTo(8));
+      expect(token.length, lessThanOrEqualTo(128));
+      expect(RegExp(r'^[A-Za-z0-9_.:-]+$').hasMatch(token), isTrue);
+      expect(token, contains('01'));
+      expect(token, contains('4300030041'));
+    });
   });
 }

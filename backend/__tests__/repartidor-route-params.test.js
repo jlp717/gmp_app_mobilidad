@@ -125,6 +125,20 @@ describe('Repartidor route parameter binding', () => {
     expect(params).not.toContain("'08'");
   });
 
+  test('GET /collections/daily binds repartidor codes without embedded quotes', async () => {
+    const res = await request(app)
+      .get('/collections/daily/05,08')
+      .query({ year: 2025, month: 4 });
+
+    expect(res.status).toBe(200);
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
+
+    const [, params] = mockQueryWithParams.mock.calls[0];
+    expect(params).toEqual([2025, 4, '05', '08']);
+    expect(params).not.toContain("'05'");
+    expect(params).not.toContain("'08'");
+  });
+
   test('GET /history/documents binds repartidor codes before client code', async () => {
     const res = await request(app)
       .get('/history/documents/4300030041')

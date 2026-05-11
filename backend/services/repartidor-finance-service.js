@@ -584,6 +584,14 @@ class IdempotencyConflictError extends Error {
   }
 }
 
+class PaymentAlreadyRegisteredError extends Error {
+  constructor(message = 'El documento ya tiene un cobro registrado') {
+    super(message);
+    this.name = 'PaymentAlreadyRegisteredError';
+    this.code = 'PAYMENT_ALREADY_REGISTERED';
+  }
+}
+
 class DuplicateLiquidacionError extends Error {
   constructor(message = 'Ya existe una liquidacion para este repartidor y fecha') {
     super(message);
@@ -711,6 +719,74 @@ function assertCobroPayloadMatchesInput(row, expected) {
 
 function assertCobroMatchesInput(row, delivery, cobro) {
   assertCobroPayloadMatchesInput(row, expectedCobroPayload(delivery, cobro));
+}
+
+function cobroDocumentCriteria(info, input) {
+  const tipoDocumento = normalizeTipoDocumento(input.tipoDocumento);
+  const commonParams = [
+    input.codigoRepartidor,
+    input.codigoCliente,
+    tipoDocumento,
+    input.origenDocumento || 'B',
+    input.subempresaDocumento || 'GMP',
+    input.ejercicioDocumento,
+    input.serieDocumento,
+    input.terminalDocumento,
+    input.numeroDocumento,
+    input.xdeDocumento || 1,
+    input.dexDocumento || 1,
+  ];
+
+  if (info.cobrosAligned) {
+    return {
+      sql: `TRIM(CODIGOVENDEDOR) = ?
+        AND TRIM(CODIGOCLIENTEALBARAN) = ?
+        AND TRIM(TIPODOCUMENTO) = ?
+        AND TRIM(ORIGENDOCUMENTO) = ?
+        AND TRIM(SUBEMPRESADOCUMENTO) = ?
+        AND EJERCICIODOCUMENTO = ?
+        AND TRIM(SERIEDOCUMENTO) = ?
+        AND TERMINALDOCUMENTO = ?
+        AND NUMERODOCUMENTO = ?
+        AND COALESCE(XDEDOCUMENTO, 1) = ?
+        AND COALESCE(DEXDOCUMENTO, 1) = ?`,
+      params: commonParams,
+    };
+  }
+
+  return {
+    sql: `TRIM(CODIGO_REPARTIDOR) = ?
+      AND TRIM(CODIGO_CLIENTE) = ?
+      AND TRIM(TIPO_DOCUMENTO) = ?
+      AND TRIM(ORIGEN_DOCUMENTO) = ?
+      AND TRIM(SUBEMPRESA_DOCUMENTO) = ?
+      AND EJERCICIO_DOCUMENTO = ?
+      AND TRIM(SERIE_DOCUMENTO) = ?
+      AND TERMINAL_DOCUMENTO = ?
+      AND NUMERO_DOCUMENTO = ?
+      AND COALESCE(XDE_DOCUMENTO, 1) = ?
+      AND COALESCE(DEX_DOCUMENTO, 1) = ?`,
+    params: commonParams,
+  };
+}
+
+async function lockCobrosForPayment(conn) {
+  await conn.query('LOCK TABLE JAVIER.REPARTIDOR_COBROS IN EXCLUSIVE MODE');
+}
+
+async function assertDocumentNotAlreadyCollected(conn, info, input) {
+  const criteria = cobroDocumentCriteria(info, input);
+  const rows = await conn.query(`
+    SELECT ID, IDEMPOTENCY_TOKEN
+    FROM JAVIER.REPARTIDOR_COBROS
+    WHERE ${criteria.sql}
+      AND COALESCE(TRIM(IDEMPOTENCY_TOKEN), '') <> ?
+    FETCH FIRST 1 ROW ONLY
+  `, [...criteria.params, input.idempotencyToken]);
+
+  if (Array.isArray(rows) && rows.length > 0) {
+    throw new PaymentAlreadyRegisteredError();
+  }
 }
 
 function assertLiquidacionMatchesInput(row, input) {
@@ -1173,8 +1249,8 @@ async function registerCobro(input) {
   };
 
   try {
-    return await withTransaction(async (conn) => {
-      await validateCobroDocument(input, conn);
+    const result = await withTransaction(async (conn) => {
+      await lockCobrosForPayment(conn);
 
       const existingRows = await conn.query(`
         SELECT *
@@ -1189,7 +1265,9 @@ async function registerCobro(input) {
         return { created: false, id: String(value(existing, 'ID')) };
       }
 
+      await validateCobroDocument(input, conn);
       const info = await getFinanceSchemaInfo();
+      await assertDocumentNotAlreadyCollected(conn, info, input);
       const insert = cobroInsertStatement(info, input);
       await conn.query(insert.sql, insert.params);
 
@@ -1201,6 +1279,12 @@ async function registerCobro(input) {
 
       return { created: true, id: String(value(row, 'ID', '')) };
     });
+
+    if (result.created) {
+      logger.info(`[AUDIT] PAYMENT_REGISTERED | Doc:${normalizeTipoDocumento(input.tipoDocumento)}-${input.ejercicioDocumento}-${input.serieDocumento}-${input.terminalDocumento}-${input.numeroDocumento} | Rep:${input.codigoRepartidor} | Amount:${roundMoney(input.importeCobrado)} | Token:${input.idempotencyToken}`);
+    }
+
+    return result;
   } catch (error) {
     if (isDuplicateKeyError(error)) {
       return replayExisting();
@@ -1212,22 +1296,38 @@ async function registerCobro(input) {
 async function validateCobroDocument(input, conn = null) {
   const sql = `
     SELECT 1 AS OK
-    FROM DSEDAC.CPC CPC
+    FROM DSEDAC.CVC CVC
+    INNER JOIN DSEDAC.CPC CPC
+      ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
+      AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
+      AND TRIM(CVC.SERIEDOCUMENTO) = TRIM(CPC.SERIEALBARAN)
+      AND CVC.TERMINALDOCUMENTO = CPC.TERMINALALBARAN
+      AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
     INNER JOIN DSEDAC.OPP OPP
       ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-    WHERE CPC.EJERCICIOALBARAN = ?
-      AND TRIM(CPC.SERIEALBARAN) = ?
-      AND CPC.TERMINALALBARAN = ?
-      AND CPC.NUMEROALBARAN = ?
-      AND TRIM(CPC.CODIGOCLIENTEALBARAN) = ?
+    WHERE TRIM(CVC.TIPODOCUMENTO) = ?
+      AND TRIM(CVC.ORIGENDOCUMENTO) = ?
+      AND TRIM(CVC.SUBEMPRESADOCUMENTO) = ?
+      AND CVC.EJERCICIODOCUMENTO = ?
+      AND TRIM(CVC.SERIEDOCUMENTO) = ?
+      AND CVC.TERMINALDOCUMENTO = ?
+      AND CVC.NUMERODOCUMENTO = ?
+      AND COALESCE(CVC.XDEDOCUMENTO, 1) = ?
+      AND COALESCE(CVC.DEXDOCUMENTO, 1) = ?
+      AND TRIM(CVC.CODIGOCLIENTEALBARAN) = ?
       AND TRIM(OPP.CODIGOREPARTIDOR) = ?
     FETCH FIRST 1 ROW ONLY
   `;
   const params = [
+    normalizeTipoDocumento(input.tipoDocumento),
+    input.origenDocumento || 'B',
+    input.subempresaDocumento || 'GMP',
     input.ejercicioDocumento,
     input.serieDocumento,
     input.terminalDocumento,
     input.numeroDocumento,
+    input.xdeDocumento || 1,
+    input.dexDocumento || 1,
     input.codigoCliente,
     input.codigoRepartidor,
   ];
@@ -1274,123 +1374,135 @@ async function confirmRuteroDeliveryWithCobro({ delivery, cobro }) {
 
   try {
     return await withTransaction(async (conn) => {
-    const tokenRows = await conn.query(`
-      SELECT *
-      FROM JAVIER.REPARTIDOR_COBROS
-      WHERE IDEMPOTENCY_TOKEN = ?
-      FETCH FIRST 1 ROW ONLY
-    `, [cobro.idempotencyToken]);
-
-    const dsNew = isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
-    const dsLookupCol = dsNew ? 'IDEMPOTENCY_TOKEN' : 'ID';
-    const dsLookupVal = dsNew ? delivery.idempotencyToken : delivery.itemId;
-    const dsStatusCol = dsNew ? 'STATUS' : 'CONFORMADOSN';
-    const dsRepCol = dsNew ? 'OPERADOR' : 'REPARTIDOR_ID';
-
-    const deliveryRows = await conn.query(`
-      SELECT ${dsStatusCol}, UPDATED_AT, ${dsRepCol}
-      FROM JAVIER.DELIVERY_STATUS
-      WHERE ${dsLookupCol} = ?
-      FETCH FIRST 1 ROW ONLY
-    `, [dsLookupVal]);
-    const existingDelivery = firstRow(deliveryRows);
-    const isDelivered =
-      String(value(existingDelivery, dsStatusCol, '') || '').trim() === 'ENTREGADO';
-
-    if (tokenRows.length > 0) {
-      assertCobroMatchesInput(tokenRows[0], delivery, cobro);
-      if (isDelivered) {
-        return {
-          created: false,
-          idempotent: true,
-          deliveryStatus: 'ENTREGADO',
-          cobroId: String(value(tokenRows[0], 'ID', '')),
-        };
+      await lockCobrosForPayment(conn);
+      if (isDeliveryStatusAvailable()) {
+        await conn.query('LOCK TABLE JAVIER.DELIVERY_STATUS IN EXCLUSIVE MODE');
       }
 
-      const error = new Error(
-        'Token de cobro existente sin entrega confirmada; requiere revision manual',
-      );
-      error.code = 'INCONSISTENT_IDEMPOTENCY';
-      throw error;
-    }
+      const tokenRows = await conn.query(`
+        SELECT *
+        FROM JAVIER.REPARTIDOR_COBROS
+        WHERE IDEMPOTENCY_TOKEN = ?
+        FETCH FIRST 1 ROW ONLY
+      `, [cobro.idempotencyToken]);
 
-    if (isDelivered && !delivery.forceUpdate) {
-      throw new AlreadyDeliveredError(existingDelivery);
-    }
+      const dsNew = isDeliveryStatusAvailable() && isDeliveryStatusNewSchema();
+      const dsLookupCol = dsNew ? 'IDEMPOTENCY_TOKEN' : 'ID';
+      const dsLookupVal = dsNew ? delivery.idempotencyToken : delivery.itemId;
+      const dsStatusCol = dsNew ? 'STATUS' : 'CONFORMADOSN';
+      const dsRepCol = dsNew ? 'OPERADOR' : 'REPARTIDOR_ID';
 
-    await validateCobroDocument({
-      ...cobro,
-      codigoRepartidor: cobro.codigoRepartidor || delivery.repartidorId,
-    }, conn);
+      const deliveryRows = await conn.query(`
+        SELECT ${dsStatusCol}, UPDATED_AT, ${dsRepCol}
+        FROM JAVIER.DELIVERY_STATUS
+        WHERE ${dsLookupCol} = ?
+        FETCH FIRST 1 ROW ONLY
+      `, [dsLookupVal]);
+      const existingDelivery = firstRow(deliveryRows);
+      const isDelivered =
+        String(value(existingDelivery, dsStatusCol, '') || '').trim() === 'ENTREGADO';
 
-    const lat = toNumber(delivery.latitud);
-    const lon = toNumber(delivery.longitud);
-    let repartidorId = String(delivery.repartidorId || '').trim();
-    if (repartidorId.length > 20) repartidorId = repartidorId.substring(0, 20);
+      if (tokenRows.length > 0) {
+        assertCobroMatchesInput(tokenRows[0], delivery, cobro);
+        if (isDelivered) {
+          return {
+            created: false,
+            idempotent: true,
+            deliveryStatus: 'ENTREGADO',
+            cobroId: String(value(tokenRows[0], 'ID', '')),
+          };
+        }
 
-    await conn.query(`
-      DELETE FROM JAVIER.DELIVERY_STATUS
-      WHERE ${dsLookupCol} = ?
-    `, [dsLookupVal]);
+        const error = new Error(
+          'Token de cobro existente sin entrega confirmada; requiere revision manual',
+        );
+        error.code = 'INCONSISTENT_IDEMPOTENCY';
+        throw error;
+      }
 
-    if (dsNew) {
+      if (isDelivered && !delivery.forceUpdate) {
+        throw new AlreadyDeliveredError(existingDelivery);
+      }
+
+      await validateCobroDocument({
+        ...cobro,
+        codigoRepartidor: cobro.codigoRepartidor || delivery.repartidorId,
+      }, conn);
+
+      const info = await getFinanceSchemaInfo();
+      await assertDocumentNotAlreadyCollected(conn, info, {
+        ...cobro,
+        codigoRepartidor: cobro.codigoRepartidor || delivery.repartidorId,
+      });
+
+      const lat = toNumber(delivery.latitud);
+      const lon = toNumber(delivery.longitud);
+      let repartidorId = String(delivery.repartidorId || '').trim();
+      if (repartidorId.length > 20) repartidorId = repartidorId.substring(0, 20);
+
       await conn.query(`
-        INSERT INTO JAVIER.DELIVERY_STATUS (
-          STATUS,
-          LATITUD,
-          LONGITUD,
-          OPERADOR,
-          PANTALLA_ORIGEN,
-          IDEMPOTENCY_TOKEN,
-          UPDATED_AT
-        ) VALUES (?, ?, ?, ?, 'COBROS', ?, CURRENT TIMESTAMP)
-      `, [
-        delivery.status || 'ENTREGADO',
-        lat,
-        lon,
-        repartidorId,
-        delivery.idempotencyToken,
-      ]);
-    } else {
-      await conn.query(`
-        INSERT INTO JAVIER.DELIVERY_STATUS (
-          ID,
-          CONFORMADOSN,
-          OBSERVACIONES,
-          FIRMA_PATH,
-          LATITUD,
-          LONGITUD,
-          REPARTIDOR_ID,
-          UPDATED_AT
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP)
-      `, [
-        delivery.itemId,
-        delivery.status || 'ENTREGADO',
-        delivery.observaciones || '',
-        delivery.firma || '',
-        lat,
-        lon,
-        repartidorId,
-      ]);
-    }
+        DELETE FROM JAVIER.DELIVERY_STATUS
+        WHERE ${dsLookupCol} = ?
+      `, [dsLookupVal]);
 
-    const info = await getFinanceSchemaInfo();
-    const insert = cobroInsertStatement(info, {
-      ...cobro,
-      entregaId: cobro.entregaId || delivery.itemId,
-      codigoRepartidor: cobro.codigoRepartidor || repartidorId,
-      pantallaOrigen: cobro.pantallaOrigen || 'RUTERO',
-      operador: cobro.operador || 'unknown',
+      if (dsNew) {
+        await conn.query(`
+          INSERT INTO JAVIER.DELIVERY_STATUS (
+            STATUS,
+            LATITUD,
+            LONGITUD,
+            OPERADOR,
+            PANTALLA_ORIGEN,
+            IDEMPOTENCY_TOKEN,
+            UPDATED_AT
+          ) VALUES (?, ?, ?, ?, 'COBROS', ?, CURRENT TIMESTAMP)
+        `, [
+          delivery.status || 'ENTREGADO',
+          lat,
+          lon,
+          repartidorId,
+          delivery.idempotencyToken,
+        ]);
+      } else {
+        await conn.query(`
+          INSERT INTO JAVIER.DELIVERY_STATUS (
+            ID,
+            CONFORMADOSN,
+            OBSERVACIONES,
+            FIRMA_PATH,
+            LATITUD,
+            LONGITUD,
+            REPARTIDOR_ID,
+            UPDATED_AT
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT TIMESTAMP)
+        `, [
+          delivery.itemId,
+          delivery.status || 'ENTREGADO',
+          delivery.observaciones || '',
+          delivery.firma || '',
+          lat,
+          lon,
+          repartidorId,
+        ]);
+      }
+
+      const insert = cobroInsertStatement(info, {
+        ...cobro,
+        entregaId: cobro.entregaId || delivery.itemId,
+        codigoRepartidor: cobro.codigoRepartidor || repartidorId,
+        pantallaOrigen: cobro.pantallaOrigen || 'RUTERO',
+        operador: cobro.operador || 'unknown',
+      });
+      await conn.query(insert.sql, insert.params);
+
+      logger.info(`[AUDIT] RUTERO_DELIVERY_PAYMENT_REGISTERED | Delivery:${delivery.itemId} | Rep:${cobro.codigoRepartidor || repartidorId} | Amount:${roundMoney(cobro.importeCobrado)} | Token:${cobro.idempotencyToken}`);
+
+      return {
+        created: true,
+        idempotent: false,
+        deliveryStatus: delivery.status || 'ENTREGADO',
+      };
     });
-    await conn.query(insert.sql, insert.params);
-
-    return {
-      created: true,
-      idempotent: false,
-      deliveryStatus: delivery.status || 'ENTREGADO',
-    };
-  });
   } catch (error) {
     if (isDuplicateKeyError(error)) {
       return replayExisting();

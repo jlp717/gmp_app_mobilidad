@@ -22,6 +22,7 @@ const mockPedidosRepo = {
 const mockCobrosRepo = {
   getPendientes: jest.fn(),
   registerPayment: jest.fn(),
+  getPendingSummary: jest.fn(),
   getHistorico: jest.fn(),
 };
 const mockCache = {
@@ -157,6 +158,28 @@ describe('DDD pedidos route contracts', () => {
     expect(res.body.lines).toEqual([{ id: 1 }]);
   });
 
+  test('POST /create rejects commercial creating orders for another vendor', async () => {
+    const res = await request(makeApp(createPedidosRoutes()))
+      .post('/create')
+      .send({
+        clientCode: 'C001',
+        vendedorCode: '99',
+        lines: [{ codigoArticulo: 'P001', cantidadEnvases: 1 }],
+      });
+
+    expect(res.status).toBe(403);
+    expect(mockPedidosService.createOrder).not.toHaveBeenCalled();
+  });
+
+  test('GET / rejects ALL vendor query for commercial users', async () => {
+    const res = await request(makeApp(createPedidosRoutes()))
+      .get('/')
+      .query({ vendedorCodes: 'ALL' });
+
+    expect(res.status).toBe(403);
+    expect(mockPedidosService.getOrders).not.toHaveBeenCalled();
+  });
+
   test('PUT /:id/confirm returns stock blocks as 409 and confirmed header at top level', async () => {
     mockPedidosService.confirmOrder.mockResolvedValueOnce({
       blocked: true,
@@ -201,6 +224,10 @@ describe('DDD cobros route contracts', () => {
     const res = await request(makeApp(createCobrosRoutes())).get('/C001/pendientes');
 
     expect(res.status).toBe(200);
+    expect(mockCobrosRepo.getPendientes).toHaveBeenCalledWith(
+      'C001',
+      expect.objectContaining({ userId: '01', userRole: 'COMERCIAL' }),
+    );
     expect(res.body.cobros).toEqual([{ id: 'c1', referencia: 'M-1' }]);
     expect(res.body.resumen.totalPendiente).toBe(42);
   });
@@ -214,7 +241,8 @@ describe('DDD cobros route contracts', () => {
         referencia: 'M-1',
         importe: 42,
         formaPago: 'CONTADO',
-        codigoUsuario: '01',
+        codigoUsuario: '99',
+        idempotencyToken: 'cobro-token-route-001',
       });
 
     expect(res.status).toBe(200);
@@ -225,9 +253,47 @@ describe('DDD cobros route contracts', () => {
         paymentMethod: 'CONTADO',
         reference: 'M-1',
         userId: '01',
+        userRole: 'COMERCIAL',
+        idempotencyToken: 'cobro-token-route-001',
       }),
     );
     expect(res.body.success).toBe(true);
+  });
+
+  test('POST /:codigoCliente/registrar maps idempotency conflicts to 409', async () => {
+    const error = new Error('Token de idempotencia reutilizado con otro payload');
+    error.code = 'IDEMPOTENCY_CONFLICT';
+    error.status = 409;
+    mockCobrosRepo.registerPayment.mockRejectedValue(error);
+
+    const res = await request(makeApp(createCobrosRoutes()))
+      .post('/C001/registrar')
+      .send({
+        referencia: 'M-1',
+        importe: 42,
+        formaPago: 'CONTADO',
+        idempotencyToken: 'cobro-token-route-002',
+      });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('IDEMPOTENCY_CONFLICT');
+  });
+
+  test('GET /pending-summary/:vendedorCode delegates authorization to repository', async () => {
+    mockCobrosRepo.getPendingSummary.mockResolvedValue({
+      summary: { C001: { total: 42, count: 1 } },
+      grandTotal: 42,
+      clientCount: 1,
+    });
+
+    const res = await request(makeApp(createCobrosRoutes())).get('/pending-summary/01');
+
+    expect(res.status).toBe(200);
+    expect(mockCobrosRepo.getPendingSummary).toHaveBeenCalledWith(
+      '01',
+      expect.objectContaining({ userId: '01', userRole: 'COMERCIAL' }),
+    );
+    expect(res.body.grandTotal).toBe(42);
   });
 });
 

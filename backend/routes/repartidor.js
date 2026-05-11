@@ -100,13 +100,13 @@ router.get('/collections/summary/:repartidorId', verifyToken, async (req, res) =
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
             WHERE OPP.MESREPARTO = ?
               AND OPP.ANOREPARTO = ?
-              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorParams.map(c => `'${c}'`).join(',')})
+              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorParams.map(() => '?').join(',')})
             GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), CPC.CODIGOFORMAPAGO
             ORDER BY TOTAL_COBRABLE DESC
             FETCH FIRST 100 ROWS ONLY
         `;
 
-        const sqlParams = [selectedMonth, selectedYear];
+        const sqlParams = [selectedMonth, selectedYear, ...repartidorParams];
 
         let rows = [];
         try {
@@ -206,10 +206,15 @@ router.get('/collections/daily/:repartidorId', verifyToken, async (req, res) => 
         const selectedYear = parseInt(year) || new Date().getFullYear();
         const selectedMonth = parseInt(month) || new Date().getMonth() + 1;
 
-        logger.info(`[REPARTIDOR] Getting daily collections for ${repartidorId}`);
+        const repartidorIdList = sanitizeCodeListForParams(repartidorId);
+        if (repartidorIdList.length === 0) {
+            return res.status(400).json({ error: 'Invalid repartidor ID format' });
+        }
 
-        const cleanRepartidorId = repartidorId.toString().trim();
-        const cacheKey = `repartidor:collections:daily:${cleanRepartidorId}:${selectedYear}:${selectedMonth}`;
+        const repartidorKey = repartidorIdList.join(',');
+        logger.info(`[REPARTIDOR] Getting daily collections for ${repartidorKey}`);
+
+        const cacheKey = `repartidor:collections:daily:${repartidorKey}:${selectedYear}:${selectedMonth}`;
 
         // CORRECTO: Usar OPP → CPC para repartidores
         const sql = `
@@ -231,14 +236,14 @@ router.get('/collections/daily/:repartidorId', verifyToken, async (req, res) => 
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
             WHERE OPP.ANOREPARTO = ?
               AND OPP.MESREPARTO = ?
-              AND TRIM(OPP.CODIGOREPARTIDOR) = ?
+              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
             GROUP BY OPP.DIAREPARTO
             ORDER BY OPP.DIAREPARTO
         `;
 
         let rows = [];
         try {
-            rows = await cachedQuery(queryWithParams, sql, cacheKey, TTL.MEDIUM, [selectedYear, selectedMonth, cleanRepartidorId]) || [];
+            rows = await cachedQuery(queryWithParams, sql, cacheKey, TTL.MEDIUM, [selectedYear, selectedMonth, ...repartidorIdList]) || [];
         } catch (queryError) {
             logger.warn(`[REPARTIDOR] Query error in collections/daily: ${queryError.message}`);
             return res.json({ success: true, daily: [] });
@@ -289,7 +294,7 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
             repartidorJoin = `
                 INNER JOIN DSEDAC.OPP OPP
                     ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-                    AND TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(c => `'${c}'`).join(',')})`;
+                    AND TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(() => '?').join(',')})`;
         }
 
         // Date range filter (YYYY-MM-DD format)
@@ -371,7 +376,7 @@ router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
             ORDER BY CPC.EJERCICIOALBARAN DESC, CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC, CPC.NUMEROALBARAN DESC
         `;
 
-        const allParams = [clientCode, ...yearFilterParams, ...dateParams];
+        const allParams = [...repartidorParams, clientCode, ...yearFilterParams, ...dateParams];
         const rows = await queryWithParams(sql, allParams);
 
         // --- DEDUPLICATION PASS 1: Eliminate duplicate CPC rows per albaran ---

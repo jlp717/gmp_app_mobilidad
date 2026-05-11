@@ -54,7 +54,7 @@ CREATE TABLE JAVIER.PEDIDOS_CAB (
     CODIGOTARIFA NUMERIC(2) DEFAULT 1,
     CODIGOALMACEN NUMERIC(4) DEFAULT 1,
     TIPOVENTA CHAR(2) DEFAULT 'CC',
-    ESTADO VARCHAR(12) DEFAULT 'BORRADOR',
+    ESTADO VARCHAR(24) DEFAULT 'BORRADOR',
     IMPORTETOTAL NUMERIC(11,2) DEFAULT 0,
     IMPORTEBASE NUMERIC(11,2) DEFAULT 0,
     IMPORTEIVA NUMERIC(11,2) DEFAULT 0,
@@ -155,6 +155,70 @@ function sanitize(val) {
 
 function trimString(value) {
     return value == null ? '' : String(value).trim();
+}
+
+class OrderStateError extends Error {
+    constructor(code, message, status = 409) {
+        super(message);
+        this.name = 'OrderStateError';
+        this.code = code;
+        this.status = status;
+    }
+}
+
+const ORDER_STATUS_ALIASES = {
+    PENDIENTE: 'PENDIENTE_APROBACION',
+};
+
+const STORED_ORDER_STATUS = {
+    PENDIENTE_APROBACION: 'PENDIENTE',
+};
+
+const ORDER_TRANSITIONS = {
+    BORRADOR: new Set(['PENDIENTE_APROBACION', 'CONFIRMADO', 'ANULADO']),
+    PENDIENTE_APROBACION: new Set(['CONFIRMADO', 'ANULADO']),
+    CONFIRMADO: new Set(['ENVIADO', 'ANULADO']),
+    ENVIADO: new Set(),
+    ANULADO: new Set(),
+};
+
+function canonicalOrderStatus(status) {
+    const normalized = trimString(status).toUpperCase();
+    return ORDER_STATUS_ALIASES[normalized] || normalized;
+}
+
+function storedOrderStatus(status) {
+    const canonical = canonicalOrderStatus(status);
+    return STORED_ORDER_STATUS[canonical] || canonical;
+}
+
+function isOrderTransitionAllowed(fromStatus, toStatus) {
+    const from = canonicalOrderStatus(fromStatus);
+    const to = canonicalOrderStatus(toStatus);
+    return ORDER_TRANSITIONS[from]?.has(to) === true;
+}
+
+async function getOrderStatusForUpdate(orderId) {
+    const rows = await queryWithParams(
+        `SELECT TRIM(ESTADO) AS ESTADO FROM JAVIER.PEDIDOS_CAB WHERE ID = ?`,
+        [orderId],
+    );
+    if (!rows || rows.length === 0) {
+        throw new OrderStateError('ORDER_NOT_FOUND', 'Pedido no encontrado', 404);
+    }
+    return canonicalOrderStatus(rows[0].ESTADO);
+}
+
+async function assertOrderEditable(orderId) {
+    const status = await getOrderStatusForUpdate(orderId);
+    if (status !== 'BORRADOR') {
+        throw new OrderStateError(
+            'ORDER_NOT_EDITABLE',
+            `Solo se pueden editar lineas en estado BORRADOR (estado actual: ${status})`,
+            409,
+        );
+    }
+    return status;
 }
 
 function pedidosSchemaName(raw) {
@@ -1982,6 +2046,8 @@ async function addOrderLine(pedidoId, lineData) {
     const id = parseInt(pedidoId);
     if (isNaN(id)) throw new Error('Invalid pedidoId');
 
+    await assertOrderEditable(id);
+
     // Get next secuencia
     const seqRows = await queryWithParams(
         `SELECT COALESCE(MAX(SECUENCIA), 0) + 1 AS NEXT_SEQ FROM JAVIER.PEDIDOS_LIN WHERE PEDIDO_ID = ?`,
@@ -2031,7 +2097,16 @@ async function addOrderLine(pedidoId, lineData) {
     return getOrderDetail(id);
 }
 
-async function updateOrderLine(lineId, { cantidad, precio, unidadMedida, precioCosto, claseLinea }) {
+async function updateOrderLine(lineId, {
+    cantidad,
+    cantidadEnvases,
+    cantidadUnidades,
+    precio,
+    precioVenta,
+    unidadMedida,
+    precioCosto,
+    claseLinea,
+}) {
     const id = parseInt(lineId);
     if (isNaN(id)) throw new Error('Invalid lineId');
 
@@ -2041,7 +2116,7 @@ async function updateOrderLine(lineId, { cantidad, precio, unidadMedida, precioC
 
     // Fetch current line to get pedidoId and defaults
     const currentRows = await queryWithParams(
-        `SELECT PEDIDO_ID, CANTIDADUNIDADES, PRECIOVENTA, PRECIOCOSTO, UNIDADMEDIDA, CLASELINEA FROM JAVIER.PEDIDOS_LIN WHERE ID = ?`,
+        `SELECT PEDIDO_ID, CANTIDADENVASES, CANTIDADUNIDADES, PRECIOVENTA, PRECIOCOSTO, UNIDADMEDIDA, UNIDADESCAJA, CLASELINEA FROM JAVIER.PEDIDOS_LIN WHERE ID = ?`,
         [id]
     );
     if (!currentRows || currentRows.length === 0) throw new Error('Line not found');
@@ -2049,26 +2124,39 @@ async function updateOrderLine(lineId, { cantidad, precio, unidadMedida, precioC
     const current = currentRows[0];
     const pedidoId = current.PEDIDO_ID;
 
+    await assertOrderEditable(pedidoId);
+
     const newClase = claseLinea !== undefined ? claseLinea : (current.CLASELINEA || 'VT');
-    const newCantidad = cantidad != null ? parseFloat(cantidad) : parseFloat(current.CANTIDADUNIDADES) || 0;
+    const newEnvases = cantidadEnvases != null ? parseFloat(cantidadEnvases) : parseFloat(current.CANTIDADENVASES) || 0;
+    const newUnidades = cantidadUnidades != null
+        ? parseFloat(cantidadUnidades)
+        : (cantidad != null ? parseFloat(cantidad) : parseFloat(current.CANTIDADUNIDADES) || 0);
     // SC lines always have 0 price and importe
     const newPrecio = newClase === 'SC' ? 0
-        : (precio != null ? parseFloat(precio) : parseFloat(current.PRECIOVENTA) || 0);
+        : (precioVenta != null ? parseFloat(precioVenta) : (precio != null ? parseFloat(precio) : parseFloat(current.PRECIOVENTA) || 0));
     const newCosto = precioCosto != null ? parseFloat(precioCosto) : parseFloat(current.PRECIOCOSTO) || 0;
     const newUM = unidadMedida || current.UNIDADMEDIDA;
+    const unidadesCaja = parseFloat(current.UNIDADESCAJA) || 1;
 
-    const importeVenta = newClase === 'SC' ? 0 : newCantidad * newPrecio;
-    const importeCosto = newCantidad * newCosto;
+    const importeVenta = newClase === 'SC' ? 0 : calculateLineImporte({
+        unidadMedida: newUM,
+        cantidadEnvases: newEnvases,
+        cantidadUnidades: newUnidades,
+        unidadesCaja,
+        precioVenta: newPrecio,
+    });
+    const billingQty = newUM === 'CAJAS' ? newEnvases : newUnidades;
+    const importeCosto = billingQty * newCosto;
     const importeMargen = importeVenta - importeCosto;
     const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
 
     await queryWithParams(
         `UPDATE JAVIER.PEDIDOS_LIN SET
-            CANTIDADUNIDADES = ?, PRECIOVENTA = ?, PRECIOCOSTO = ?, UNIDADMEDIDA = ?,
+            CANTIDADENVASES = ?, CANTIDADUNIDADES = ?, PRECIOVENTA = ?, PRECIOCOSTO = ?, UNIDADMEDIDA = ?,
             IMPORTEVENTA = ?, IMPORTECOSTO = ?, IMPORTEMARGEN = ?, PORCENTAJEMARGEN = ?,
             CLASELINEA = ?
         WHERE ID = ?`,
-        [newCantidad, newPrecio, newCosto, newUM, importeVenta, importeCosto, importeMargen,
+        [newEnvases, newUnidades, newPrecio, newCosto, newUM, importeVenta, importeCosto, importeMargen,
             Math.round(pctMargen * 100) / 100, newClase, id],
         false
     );
@@ -2081,6 +2169,8 @@ async function deleteOrderLine(lineId, pedidoId) {
     const lid = parseInt(lineId);
     const pid = parseInt(pedidoId);
     if (isNaN(lid) || isNaN(pid)) throw new Error('Invalid lineId or pedidoId');
+
+    await assertOrderEditable(pid);
 
     await queryWithParams(
         `DELETE FROM JAVIER.PEDIDOS_LIN WHERE ID = ? AND PEDIDO_ID = ?`,
@@ -2439,17 +2529,29 @@ async function cancelOrder(orderId, options = {}) {
 async function updateOrderStatus(orderId, newStatus, options = {}) {
     const id = parseInt(orderId);
     if (isNaN(id)) throw new Error('Invalid orderId');
-    
-    const allowedStatuses = ['BORRADOR', 'PENDIENTE', 'CONFIRMADO', 'ENVIADO', 'ANULADO'];
-    const status = (newStatus || '').toUpperCase().trim();
-    
-    if (!allowedStatuses.includes(status)) {
-        throw new Error(`Estado no válido: ${status}. Estados permitidos: ${allowedStatuses.join(', ')}`);
+
+    const requestedStatus = canonicalOrderStatus(newStatus);
+    if (!ORDER_TRANSITIONS[requestedStatus]) {
+        throw new OrderStateError(
+            'INVALID_ORDER_STATUS',
+            `Estado no válido: ${newStatus}`,
+            400,
+        );
     }
 
+    const currentStatus = await getOrderStatusForUpdate(id);
+    if (!isOrderTransitionAllowed(currentStatus, requestedStatus)) {
+        throw new OrderStateError(
+            'INVALID_ORDER_TRANSITION',
+            `Transicion no permitida: ${currentStatus} -> ${requestedStatus}`,
+            409,
+        );
+    }
+
+    const status = storedOrderStatus(requestedStatus);
+
     // Get order info for audit before updating
-    let orderBefore;
-    try { orderBefore = await getOrderDetail(id); } catch (e) { /* ok */ }
+    const orderBefore = { header: { estado: currentStatus } };
 
     await queryWithParams(
         `UPDATE JAVIER.PEDIDOS_CAB SET ESTADO = ?, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`,
@@ -4045,6 +4147,8 @@ module.exports = {
     getSimilarProducts,
     searchProductsWithStock,
     calculateLineImporte,
+    isOrderTransitionAllowed,
+    assertOrderEditable,
     getOrderStats,
     getOrderAlbaran,
     getProductHistory,
