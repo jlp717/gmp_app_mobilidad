@@ -1,5 +1,5 @@
-/// ALBARAN CARD WIDGET
-/// Tarjeta premium para mostrar un albarán/entrega
+﻿/// ALBARAN CARD WIDGET
+/// Tarjeta premium para mostrar un albarÃ¡n/entrega
 library;
 
 import 'package:flutter/material.dart';
@@ -21,7 +21,7 @@ class AlbaranCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: '€');
+    final currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: 'â‚¬');
     
     return GestureDetector(
       onTap: onTap,
@@ -34,25 +34,25 @@ class AlbaranCard extends StatelessWidget {
             end: Alignment.bottomRight,
             colors: [
               AppTheme.surfaceColor,
-              AppTheme.surfaceColor.withOpacity(0.8),
+              AppTheme.surfaceColor.withValues(alpha: 0.8),
             ],
           ),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: albaran.esCTR
-                ? Colors.red.withOpacity(0.4)
-                : albaran.estado.color.withOpacity(0.3),
+                ? Colors.red.withValues(alpha: 0.4)
+                : albaran.estado.color.withValues(alpha: 0.3),
             width: albaran.esCTR ? 2 : 1,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.2),
+              color: Colors.black.withValues(alpha: 0.2),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
             if (albaran.esCTR)
               BoxShadow(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 blurRadius: 20,
               ),
           ],
@@ -60,14 +60,14 @@ class AlbaranCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header: Número, Estado, CTR badge
+            // Header: NÃºmero, Estado, CTR badge
             Row(
               children: [
-                // Número de albarán
+                // NÃºmero de albarÃ¡n
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppTheme.neonBlue.withOpacity(0.15),
+                    color: AppTheme.neonBlue.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
@@ -86,10 +86,10 @@ class AlbaranCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: albaran.estado.color.withOpacity(0.15),
+                    color: albaran.estado.color.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: albaran.estado.color.withOpacity(0.3),
+                      color: albaran.estado.color.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Row(
@@ -125,7 +125,7 @@ class AlbaranCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(8),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.red.withOpacity(0.4),
+                          color: Colors.red.withValues(alpha: 0.4),
                           blurRadius: 8,
                         ),
                       ],
@@ -166,7 +166,7 @@ class AlbaranCard extends StatelessWidget {
                       Text(
                         albaran.formaPago!,
                         style: TextStyle(
-                          color: AppTheme.textSecondary.withOpacity(0.7),
+                          color: AppTheme.textSecondary.withValues(alpha: 0.7),
                           fontSize: 10,
                         ),
                       ),
@@ -183,7 +183,7 @@ class AlbaranCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppTheme.neonGreen.withOpacity(0.1),
+                    color: AppTheme.neonGreen.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: const Icon(
@@ -212,7 +212,7 @@ class AlbaranCard extends StatelessWidget {
                         children: [
                           Icon(
                             Icons.location_on,
-                            color: AppTheme.textSecondary.withOpacity(0.5),
+                            color: AppTheme.textSecondary.withValues(alpha: 0.5),
                             size: 12,
                           ),
                           const SizedBox(width: 4),
@@ -220,7 +220,7 @@ class AlbaranCard extends StatelessWidget {
                             child: Text(
                               albaran.direccion,
                               style: TextStyle(
-                                color: AppTheme.textSecondary.withOpacity(0.7),
+                                color: AppTheme.textSecondary.withValues(alpha: 0.7),
                                 fontSize: 12,
                               ),
                               maxLines: 1,
@@ -251,7 +251,7 @@ class AlbaranCard extends StatelessWidget {
                             Text(
                               '${albaran.itemsEntregados}/${albaran.totalItems} productos',
                               style: TextStyle(
-                                color: AppTheme.textSecondary.withOpacity(0.8),
+                                color: AppTheme.textSecondary.withValues(alpha: 0.8),
                                 fontSize: 11,
                               ),
                             ),
@@ -270,7 +270,7 @@ class AlbaranCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(4),
                           child: LinearProgressIndicator(
                             value: albaran.porcentajeCompletado,
-                            backgroundColor: Colors.white.withOpacity(0.1),
+                            backgroundColor: Colors.white.withValues(alpha: 0.1),
                             valueColor: AlwaysStoppedAnimation(
                               albaran.completo ? Colors.green : AppTheme.neonBlue,
                             ),
@@ -283,7 +283,7 @@ class AlbaranCard extends StatelessWidget {
                   
                   if (!albaran.completo && onQuickComplete != null) ...[
                     const SizedBox(width: 16),
-                    // Botón de completar rápido
+                    // BotÃ³n de completar rÃ¡pido
                     Material(
                       color: Colors.transparent,
                       child: InkWell(
@@ -298,7 +298,7 @@ class AlbaranCard extends StatelessWidget {
                             borderRadius: BorderRadius.circular(12),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.green.withOpacity(0.3),
+                                color: Colors.green.withValues(alpha: 0.3),
                                 blurRadius: 8,
                                 offset: const Offset(0, 2),
                               ),
@@ -325,7 +325,7 @@ class AlbaranCard extends StatelessWidget {
                 ],
               ),
             ] else ...[
-              // Sin items, mostrar botón de ver detalles
+              // Sin items, mostrar botÃ³n de ver detalles
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [

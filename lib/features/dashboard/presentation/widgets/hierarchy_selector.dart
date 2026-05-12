@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class HierarchySelector extends StatefulWidget {
@@ -60,7 +60,7 @@ class _HierarchySelectorState extends State<HierarchySelector> {
               const Icon(Icons.layers, color: AppTheme.neonBlue, size: 18),
               const SizedBox(width: 8),
               Text(
-                'Jerarquía de Agrupación',
+                'JerarquÃ­a de AgrupaciÃ³n',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.white70),
               ),
               const Spacer(),
@@ -132,9 +132,9 @@ class _HierarchySelectorState extends State<HierarchySelector> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: isActive ? AppTheme.neonBlue.withOpacity(0.15) : Colors.white10,
+              color: isActive ? AppTheme.neonBlue.withValues(alpha: 0.15) : Colors.white10,
               border: Border.all(
-                color: isActive ? AppTheme.neonBlue.withOpacity(0.5) : Colors.white10,
+                color: isActive ? AppTheme.neonBlue.withValues(alpha: 0.5) : Colors.white10,
               ),
               borderRadius: BorderRadius.circular(20),
             ),

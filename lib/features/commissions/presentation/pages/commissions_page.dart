@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
@@ -118,7 +118,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           children: [
             Icon(Icons.info_outline, color: AppTheme.neonBlue, size: 24),
             SizedBox(width: 8),
-            Text('Cómo funcionan las comisiones',
+            Text('CÃ³mo funcionan las comisiones',
                 style: TextStyle(color: AppTheme.neonBlue, fontSize: 16)),
           ],
         ),
@@ -130,9 +130,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
+                    color: Colors.blue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8)),
-                child: const Text('⚠️ Todas las cifras son SIN IVA',
+                child: const Text('âš ï¸ Todas las cifras son SIN IVA',
                     style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -140,31 +140,31 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               ),
               const SizedBox(height: 16),
               _buildStep(
-                '📊 Objetivo Anual',
-                'Tu objetivo se calcula en base a las ventas del año anterior más un pequeño porcentaje de incremento.',
+                'ðŸ“Š Objetivo Anual',
+                'Tu objetivo se calcula en base a las ventas del aÃ±o anterior mÃ¡s un pequeÃ±o porcentaje de incremento.',
               ),
               const SizedBox(height: 12),
               _buildStep(
-                '✅ Estado Mensual',
-                '• VERDE ✓ = Superas el objetivo del mes\n• ROJO ✗ = Por debajo del objetivo\n• Solo comisionas si superas el 100%',
+                'âœ… Estado Mensual',
+                'â€¢ VERDE âœ“ = Superas el objetivo del mes\nâ€¢ ROJO âœ— = Por debajo del objetivo\nâ€¢ Solo comisionas si superas el 100%',
               ),
               const SizedBox(height: 12),
               _buildStep(
-                  '💰 Franjas de Comisión',
+                  'ðŸ’° Franjas de ComisiÃ³n',
                   'El % se aplica SOLO al exceso sobre el objetivo:\n\n'
-                      '• Franja 1 (100-103%): 1.0%\n'
-                      '• Franja 2 (103-106%): 1.3%\n'
-                      '• Franja 3 (106-110%): 1.6%\n'
-                      '• Franja 4 (>110%):    2.0%'),
+                      'â€¢ Franja 1 (100-103%): 1.0%\n'
+                      'â€¢ Franja 2 (103-106%): 1.3%\n'
+                      'â€¢ Franja 3 (106-110%): 1.6%\n'
+                      'â€¢ Franja 4 (>110%):    2.0%'),
               const SizedBox(height: 12),
               _buildStep(
-                  '📅 Ritmo Diario',
-                  r'Compara tus ventas actuales vs. lo esperado al día de hoy:\n'
-                      r'• ✓ Verde (Adelantado/En ritmo) = Vas por buen camino\n'
-                      '• ⚠ Naranja (Rezagado) = Necesitas acelerar'),
+                  'ðŸ“… Ritmo Diario',
+                  r'Compara tus ventas actuales vs. lo esperado al dÃ­a de hoy:\n'
+                      r'â€¢ âœ“ Verde (Adelantado/En ritmo) = Vas por buen camino\n'
+                      'â€¢ âš  Naranja (Rezagado) = Necesitas acelerar'),
               const SizedBox(height: 12),
               _buildStep(
-                '🔒 Meses Pendientes',
+                'ðŸ”’ Meses Pendientes',
                 'Los meses futuros aparecen sombreados.\nSe "desbloquean" cuando llegue su fecha.',
               ),
             ],
@@ -293,7 +293,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateDialog) {
           final currentAmount = double.tryParse(amountController.text) ?? 0;
-          // FIX: Use epsilon tolerance (0.01€) to avoid floating-point false positives
+          // FIX: Use epsilon tolerance (0.01â‚¬) to avoid floating-point false positives
           // e.g. 165.88 < 165.88000000000001 would wrongly mark observations as mandatory
           final observacionesRequired =
               (monthCommission - currentAmount) > 0.01 && currentAmount > 0;
@@ -319,7 +319,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       final isPaid = paidMonths.contains(m);
                       final isFuture = m > now.month;
                       var label = _getMonthName(m);
-                      if (isPaid) label += '  ✓ PAGADO';
+                      if (isPaid) label += '  âœ“ PAGADO';
                       if (isFuture) label += '  (Futuro)';
                       return DropdownMenuItem(
                         value: m,
@@ -358,10 +358,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       padding: const EdgeInsets.all(10),
                       margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.15),
+                        color: Colors.orange.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
                         border:
-                            Border.all(color: Colors.orange.withOpacity(0.4)),
+                            Border.all(color: Colors.orange.withValues(alpha: 0.4)),
                       ),
                       child: Row(
                         children: [
@@ -386,9 +386,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       padding: const EdgeInsets.all(10),
                       margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.1),
+                        color: Colors.blue.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
                       ),
                       child: const Row(
                         children: [
@@ -397,7 +397,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Este mes aún no ha terminado. La comisión puede cambiar.',
+                              'Este mes aÃºn no ha terminado. La comisiÃ³n puede cambiar.',
                               style: TextStyle(
                                   color: Colors.lightBlue, fontSize: 11),
                             ),
@@ -415,7 +415,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       labelText: 'Importe (\u20ac) *',
                       labelStyle: const TextStyle(color: Colors.white60),
                       helperText:
-                          'Comisión ${_getMonthName(selectedMonth)}: ${monthCommission.toStringAsFixed(2)} \u20ac',
+                          'ComisiÃ³n ${_getMonthName(selectedMonth)}: ${monthCommission.toStringAsFixed(2)} \u20ac',
                       helperStyle: const TextStyle(
                           color: AppTheme.neonGreen, fontSize: 11),
                       enabledBorder: UnderlineInputBorder(
@@ -551,7 +551,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
   }
 
   /// Step 2: Confirmation modal with full details and safety warnings.
-  /// Pagos son solo INSERT – no UPDATE. Snapshot historico intencional.
+  /// Pagos son solo INSERT â€“ no UPDATE. Snapshot historico intencional.
   Future<void> _showPayConfirmation({
     required String vendorCode,
     required String vendorName,
@@ -628,9 +628,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   width: double.infinity,
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.15),
+                    color: Colors.red.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.withOpacity(0.4)),
+                    border: Border.all(color: Colors.red.withValues(alpha: 0.4)),
                   ),
                   child: const Row(
                     children: [
@@ -653,7 +653,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
+                  color: Colors.blue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
@@ -667,7 +667,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.1),
+                  color: Colors.blue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
@@ -978,14 +978,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   Text(monthName,
                       style: TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.white.withOpacity(textOpacity))),
+                          color: Colors.white.withValues(alpha: textOpacity))),
                   if (isFuture) ...[
                     const SizedBox(width: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 4, vertical: 2),
                       decoration: BoxDecoration(
-                          color: Colors.grey.withOpacity(0.3),
+                          color: Colors.grey.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(4)),
                       child: const Text('PENDIENTE',
                           style: TextStyle(fontSize: 8, color: Colors.grey)),
@@ -997,7 +997,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             // OBJ. MES
             DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(target),
                 style:
-                    TextStyle(color: Colors.white.withOpacity(textOpacity)))),
+                    TextStyle(color: Colors.white.withValues(alpha: textOpacity)))),
             // VENTA REAL (acumulada del mes)
             DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(actual),
                 style: TextStyle(color: color, fontWeight: FontWeight.bold))),
@@ -1015,7 +1015,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 4, vertical: 2),
                             decoration: BoxDecoration(
-                                color: AppTheme.neonBlue.withOpacity(0.2),
+                                color: AppTheme.neonBlue.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(4)),
                             child: Text('F$tier',
                                 style: const TextStyle(
@@ -1029,7 +1029,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             DataCell(Text(pctText,
                 style: TextStyle(
                     color: isFuture ? Colors.grey : color, fontSize: 11))),
-            // COMISIÓN MES
+            // COMISIÃ“N MES
             DataCell(
               Text(
                 isFuture
@@ -1045,18 +1045,18 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               ),
             ),
 
-            // === SECCIÓN RITMO DIARIO ===
-            // DÍAS (transcurridos / totales)
+            // === SECCIÃ“N RITMO DIARIO ===
+            // DÃAS (transcurridos / totales)
             DataCell(Text(isFuture ? '-' : '$daysPassed/$workingDays',
                 style: TextStyle(
-                    color: Colors.white.withOpacity(textOpacity * 0.7),
+                    color: Colors.white.withValues(alpha: textOpacity * 0.7),
                     fontSize: 11))),
             // OBJ. ACUM. (pro-rated target)
             DataCell(Text(
                 isFuture ? '-' : CurrencyFormatter.format(proRatedTarget),
                 style: TextStyle(
                     fontSize: 11,
-                    color: Colors.white.withOpacity(textOpacity)))),
+                    color: Colors.white.withValues(alpha: textOpacity)))),
             // ESTADO RITMO + % SOBRE
             DataCell(
               isFuture
@@ -1108,7 +1108,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       ),
                     ),
             ),
-            // COMISIÓN PROVISIONAL
+            // COMISIÃ“N PROVISIONAL
             DataCell(
               isFuture || isInformative
                   ? const Text('-', style: TextStyle(color: Colors.grey))
@@ -1271,7 +1271,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       final bgColor = isPast
           ? Colors.black26
           : (isCurrent
-              ? AppTheme.neonPurple.withOpacity(0.15)
+              ? AppTheme.neonPurple.withValues(alpha: 0.15)
               : Colors.transparent);
       final textColor = isPast
           ? Colors.grey
@@ -1309,7 +1309,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       ],
                     ),
             ),
-            const DataCell(SizedBox()), // DÍAS
+            const DataCell(SizedBox()), // DÃAS
             const DataCell(SizedBox()), // OBJ. ACUM.
             const DataCell(SizedBox()), // RITMO
             const DataCell(SizedBox()), // DIFF
@@ -1435,7 +1435,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   icon:
                       const Icon(Icons.info_outline, color: AppTheme.neonBlue),
                   onPressed: _showExplanationModal,
-                  tooltip: 'Explicación cálculo',
+                  tooltip: 'ExplicaciÃ³n cÃ¡lculo',
                 ),
               ],
             ),
@@ -1448,9 +1448,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               margin: const EdgeInsets.all(12),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
+                color: Colors.orange.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
               ),
               child: const Row(
                 children: [
@@ -1485,13 +1485,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            AppTheme.neonBlue.withOpacity(0.2),
-                            AppTheme.neonPurple.withOpacity(0.1)
+                            AppTheme.neonBlue.withValues(alpha: 0.2),
+                            AppTheme.neonPurple.withValues(alpha: 0.1)
                           ],
                         ),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                            color: AppTheme.neonBlue.withOpacity(0.3)),
+                            color: AppTheme.neonBlue.withValues(alpha: 0.3)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1529,7 +1529,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                               'de ${CurrencyFormatter.format((currentMonthData!['target'] as num?)?.toDouble() ?? 0)}',
                               style: TextStyle(
                                   fontSize: Responsive.isSmall(context) ? 8 : 9,
-                                  color: Colors.white.withOpacity(0.6)),
+                                  color: Colors.white.withValues(alpha: 0.6)),
                             ),
                             const SizedBox(height: 6),
                             // Mini progress bar
@@ -1543,7 +1543,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                                 ?.toDouble() ??
                                             1)
                                         .clamp(0.01, double.infinity),
-                                backgroundColor: Colors.white.withOpacity(0.1),
+                                backgroundColor: Colors.white.withValues(alpha: 0.1),
                                 valueColor: AlwaysStoppedAnimation<Color>(
                                   ((currentMonthData!['actual'] as num?)
                                                   ?.toDouble() ??
@@ -1572,13 +1572,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            AppTheme.neonGreen.withOpacity(0.2),
-                            AppTheme.success.withOpacity(0.1)
+                            AppTheme.neonGreen.withValues(alpha: 0.2),
+                            AppTheme.success.withValues(alpha: 0.1)
                           ],
                         ),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
-                            color: AppTheme.neonGreen.withOpacity(0.3)),
+                            color: AppTheme.neonGreen.withValues(alpha: 0.3)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1588,7 +1588,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                               const Icon(Icons.trending_up,
                                   color: AppTheme.neonGreen, size: 16),
                               const SizedBox(width: 6),
-                              Text('COMISIÓN PROV.',
+                              Text('COMISIÃ“N PROV.',
                                   style: TextStyle(
                                       fontSize:
                                           Responsive.isSmall(context) ? 9 : 11,
@@ -1610,7 +1610,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             'Confirmado: ${CurrencyFormatter.format(grandTotal)}',
                             style: TextStyle(
                                 fontSize: Responsive.isSmall(context) ? 8 : 10,
-                                color: Colors.white.withOpacity(0.7)),
+                                color: Colors.white.withValues(alpha: 0.7)),
                           ),
                         ],
                       ),
@@ -1623,13 +1623,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: isOnRhythm
-                            ? AppTheme.success.withOpacity(0.15)
-                            : Colors.orange.withOpacity(0.15),
+                            ? AppTheme.success.withValues(alpha: 0.15)
+                            : Colors.orange.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(12),
                         border: Border.all(
                           color: isOnRhythm
-                              ? AppTheme.success.withOpacity(0.3)
-                              : Colors.orange.withOpacity(0.3),
+                              ? AppTheme.success.withValues(alpha: 0.3)
+                              : Colors.orange.withValues(alpha: 0.3),
                         ),
                       ),
                       child: Column(
@@ -1659,10 +1659,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             ],
                           ),
                           Text(
-                            '(a día ${DateTime.now().day})',
+                            '(a dÃ­a ${DateTime.now().day})',
                             style: TextStyle(
                                 fontSize: 9,
-                                color: Colors.white.withOpacity(0.5)),
+                                color: Colors.white.withValues(alpha: 0.5)),
                           ),
                           const SizedBox(height: 6),
 
@@ -1793,7 +1793,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                   child: DataTable(
                                     columnSpacing: 20,
                                     headingRowColor: WidgetStateProperty.all(
-                                        AppTheme.surfaceColor.withOpacity(0.8)),
+                                        AppTheme.surfaceColor.withValues(alpha: 0.8)),
                                     columns: const [
                                       // === DATOS DEL MES ===
                                       DataColumn(
@@ -1827,13 +1827,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                                   color:
                                                       AppTheme.textSecondary))),
                                       DataColumn(
-                                          label: Text('COMISIÓN',
+                                          label: Text('COMISIÃ“N',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   color: AppTheme.neonGreen))),
                                       // === RITMO DIARIO (acumulado) ===
                                       DataColumn(
-                                          label: Text('DÍAS',
+                                          label: Text('DÃAS',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   color: AppTheme.neonPurple))),
@@ -1913,9 +1913,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       margin: const EdgeInsets.symmetric(horizontal: 4),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: AppTheme.neonBlue.withOpacity(0.1),
+        color: AppTheme.neonBlue.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1923,7 +1923,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
             decoration: BoxDecoration(
-              color: AppTheme.neonBlue.withOpacity(0.3),
+              color: AppTheme.neonBlue.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(tier,
@@ -1933,9 +1933,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     color: AppTheme.neonBlue)),
           ),
           const SizedBox(width: 4),
-          Text('$range → $rate',
+          Text('$range â†’ $rate',
               style:
-                  TextStyle(fontSize: 9, color: Colors.white.withOpacity(0.7))),
+                  TextStyle(fontSize: 9, color: Colors.white.withValues(alpha: 0.7))),
         ],
       ),
     );
@@ -1983,7 +1983,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               debugPrint('Error rendering vendor card index $index: $itemErr');
               return Container(
                 padding: const EdgeInsets.all(8),
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 child: Text(
                     'Error mostrando vendedor: ${sorted[index]['vendedorCode'] ?? '?'}',
                     style: const TextStyle(color: Colors.red)),
@@ -2057,7 +2057,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
             color: _isExpanded
-                ? AppTheme.neonBlue.withOpacity(0.5)
+                ? AppTheme.neonBlue.withValues(alpha: 0.5)
                 : Colors.white12),
       ),
       child: Column(
@@ -2070,7 +2070,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: _isExpanded
-                    ? AppTheme.neonBlue.withOpacity(0.1)
+                    ? AppTheme.neonBlue.withValues(alpha: 0.1)
                     : Colors.transparent,
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(8)),
@@ -2081,8 +2081,8 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                   CircleAvatar(
                     radius: Responsive.isSmall(context) ? 10 : 12,
                     backgroundColor: isExcluded
-                        ? Colors.grey.withOpacity(0.2)
-                        : AppTheme.neonBlue.withOpacity(0.1),
+                        ? Colors.grey.withValues(alpha: 0.2)
+                        : AppTheme.neonBlue.withValues(alpha: 0.1),
                     child: Text(vendorCode,
                         style: TextStyle(
                             fontWeight: FontWeight.bold,
@@ -2107,7 +2107,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.2),
+                          color: Colors.orange.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4)),
                       child: const Text('NO COMISIONA',
                           style: TextStyle(
@@ -2185,7 +2185,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                         ),
                       ),
                   ] else
-                    const Text('0,00 €',
+                    const Text('0,00 â‚¬',
                         style: TextStyle(color: Colors.grey, fontSize: 12)),
                 ],
               ),
@@ -2286,13 +2286,13 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                     color: AppTheme.textSecondary,
                     fontSize: 10))),
         DataColumn(
-            label: Text('COMISIÓN',
+            label: Text('COMISIÃ“N',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: AppTheme.neonGreen,
                     fontSize: 10))),
         DataColumn(
-            label: Text('DÍAS',
+            label: Text('DÃAS',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: AppTheme.neonPurple,
@@ -2401,7 +2401,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
             children: [
               Text(widget.getMonthName(monthNum),
                   style: TextStyle(
-                      color: Colors.white.withOpacity(textOpacity),
+                      color: Colors.white.withValues(alpha: textOpacity),
                       fontSize: 11)),
               if (isFuture) ...[
                 const SizedBox(width: 4),
@@ -2409,7 +2409,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                   decoration: BoxDecoration(
-                      color: Colors.grey.withOpacity(0.3),
+                      color: Colors.grey.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(3)),
                   child: const Text('PEND',
                       style: TextStyle(fontSize: 7, color: Colors.grey)),
@@ -2420,7 +2420,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         ),
         DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(target),
             style: TextStyle(
-                color: Colors.white.withOpacity(textOpacity), fontSize: 10))),
+                color: Colors.white.withValues(alpha: textOpacity), fontSize: 10))),
         DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(actual),
             style: TextStyle(
                 color: color, fontWeight: FontWeight.bold, fontSize: 10))),
@@ -2448,11 +2448,11 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                 fontSize: 10))),
         DataCell(Text(isFuture ? '-' : '$daysPassed/$workingDays',
             style: TextStyle(
-                color: Colors.white.withOpacity(textOpacity * 0.7),
+                color: Colors.white.withValues(alpha: textOpacity * 0.7),
                 fontSize: 9))),
         DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(proRatedTarget),
             style: TextStyle(
-                fontSize: 9, color: Colors.white.withOpacity(textOpacity)))),
+                fontSize: 9, color: Colors.white.withValues(alpha: textOpacity)))),
         DataCell(
           isFuture
               ? const Text('-',
@@ -2630,7 +2630,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
     }
 
     return DataRow(
-      color: WidgetStateProperty.all(AppTheme.neonPurple.withOpacity(0.1)),
+      color: WidgetStateProperty.all(AppTheme.neonPurple.withValues(alpha: 0.1)),
       cells: [
         DataCell(
           Row(
@@ -2647,7 +2647,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
               const SizedBox(width: 4),
               Text('($label)',
                   style: TextStyle(
-                      color: Colors.white.withOpacity(0.5), fontSize: 9)),
+                      color: Colors.white.withValues(alpha: 0.5), fontSize: 9)),
             ],
           ),
         ),

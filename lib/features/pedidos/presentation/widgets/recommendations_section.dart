@@ -1,4 +1,4 @@
-/// Recommendations Section
+﻿/// Recommendations Section
 /// =======================
 /// Collapsible horizontal scrollable sections for "Productos habituales" and "Otros clientes compran"
 library;
@@ -52,13 +52,13 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        AppTheme.neonBlue.withOpacity(0.15),
-                        Colors.deepPurple.withOpacity(0.15),
+                        AppTheme.neonBlue.withValues(alpha: 0.15),
+                        Colors.deepPurple.withValues(alpha: 0.15),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(8),
                     border:
-                        Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+                        Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -170,7 +170,7 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
         decoration: BoxDecoration(
           color: AppTheme.darkCard,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppTheme.borderColor.withOpacity(0.3)),
+          border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.3)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -192,7 +192,7 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
               padding:
                   const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withOpacity(0.12),
+                color: AppTheme.neonBlue.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(

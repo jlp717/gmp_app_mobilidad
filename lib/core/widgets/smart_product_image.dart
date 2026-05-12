@@ -1,4 +1,4 @@
-import 'dart:math';
+﻿import 'dart:math';
 
 import 'package:flutter/material.dart';
 
@@ -130,8 +130,8 @@ class SmartProductImage extends StatelessWidget {
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: [
-                accent.withOpacity(0.15),
-                accent.withOpacity(0.05),
+                accent.withValues(alpha: 0.15),
+                accent.withValues(alpha: 0.05),
               ],
             ),
           ),
@@ -141,14 +141,14 @@ class SmartProductImage extends StatelessWidget {
               children: [
                 Icon(
                   Icons.image_not_supported_rounded,
-                  color: accent.withOpacity(0.35),
+                  color: accent.withValues(alpha: 0.35),
                   size: (width < height ? width : height) * 0.35,
                 ),
                 const SizedBox(height: 4),
                 Text(
                   displayString,
                   style: TextStyle(
-                    color: accent.withOpacity(0.5),
+                    color: accent.withValues(alpha: 0.5),
                     fontWeight: FontWeight.w600,
                     fontSize: 10,
                     letterSpacing: 1,

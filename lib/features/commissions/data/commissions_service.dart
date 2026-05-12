@@ -1,3 +1,4 @@
+import 'dart:developer' as developer;
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
@@ -50,7 +51,7 @@ class CommissionsService {
       }
       return [];
     } catch (e) {
-      print('Error loading vendors: $e');
+      developer.log('Error loading vendors: $e', name: 'commissions');
       return [];
     }
   }

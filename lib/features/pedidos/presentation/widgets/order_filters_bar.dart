@@ -1,4 +1,4 @@
-/// Order Filters Bar
+﻿/// Order Filters Bar
 /// =================
 /// Complete filter bar: search, status chips, date range, presets, advanced filters.
 library;
@@ -65,7 +65,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
             controller: _searchCtrl,
             style: const TextStyle(color: Colors.white, fontSize: 13),
             decoration: InputDecoration(
-              hintText: 'Buscar por pedido, cliente o código...',
+              hintText: 'Buscar por pedido, cliente o cÃ³digo...',
               hintStyle: const TextStyle(color: Colors.white38, fontSize: 12),
               prefixIcon:
                   const Icon(Icons.search, color: AppTheme.neonBlue, size: 18),
@@ -144,11 +144,11 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                 const SizedBox(width: 4),
                 _presetChip('Mes', () => _setPreset('Mes')),
                 const SizedBox(width: 4),
-                _presetChip('Año', () => _setPreset('Año')),
+                _presetChip('AÃ±o', () => _setPreset('AÃ±o')),
                 const SizedBox(width: 4),
-                _presetChip('7 días', () => _setPreset('7d')),
+                _presetChip('7 dÃ­as', () => _setPreset('7d')),
                 const SizedBox(width: 4),
-                _presetChip('30 días', () => _setPreset('30d')),
+                _presetChip('30 dÃ­as', () => _setPreset('30d')),
                 const SizedBox(width: 4),
                 _presetChip('Mes ant.', () => _setPreset('MesAnt')),
               ],
@@ -167,7 +167,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                 ),
                 const SizedBox(width: 4),
                 const Text(
-                  'Más filtros',
+                  'MÃ¡s filtros',
                   style: TextStyle(
                     color: AppTheme.neonBlue,
                     fontSize: 12,
@@ -181,7 +181,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                     child: Text(
                       'Limpiar',
                       style: TextStyle(
-                        color: AppTheme.error.withOpacity(0.8),
+                        color: AppTheme.error.withValues(alpha: 0.8),
                         fontSize: 11,
                       ),
                     ),
@@ -204,7 +204,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                     children: [
                       Expanded(
                         child: _amountField(
-                          'Importe mín.',
+                          'Importe mÃ­n.',
                           widget.minAmount,
                           (v) => widget.onMinAmountChanged(v),
                         ),
@@ -212,7 +212,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: _amountField(
-                          'Importe máx.',
+                          'Importe mÃ¡x.',
                           widget.maxAmount,
                           (v) => widget.onMaxAmountChanged(v),
                         ),
@@ -249,7 +249,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                             DropdownMenuItem(
                                 value: 'cliente', child: Text('Cliente'),),
                             DropdownMenuItem(
-                                value: 'numero', child: Text('Nº Pedido'),),
+                                value: 'numero', child: Text('NÂº Pedido'),),
                           ],
                           onChanged: (v) {
                             if (v != null) widget.onSortByChanged(v);
@@ -326,12 +326,12 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: isSelected
-              ? (color ?? AppTheme.neonBlue).withOpacity(0.2)
+              ? (color ?? AppTheme.neonBlue).withValues(alpha: 0.2)
               : AppTheme.darkCard,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected
-                ? (color ?? AppTheme.neonBlue).withOpacity(0.5)
+                ? (color ?? AppTheme.neonBlue).withValues(alpha: 0.5)
                 : AppTheme.borderColor,
           ),
         ),
@@ -360,7 +360,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
         child: Row(
           children: [
             Icon(Icons.calendar_today,
-                color: AppTheme.neonBlue.withOpacity(0.7), size: 14,),
+                color: AppTheme.neonBlue.withValues(alpha: 0.7), size: 14,),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
@@ -488,7 +488,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
       case '30d':
         from = now.subtract(const Duration(days: 29));
         from = DateTime(from.year, from.month, from.day);
-      case 'Año':
+      case 'AÃ±o':
         from = DateTime(now.year);
     }
 

@@ -1,11 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/services/network_service.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
-/// Pantalla de configuración de red
+/// Pantalla de configuraciÃ³n de red
 /// Permite ver y cambiar el servidor activo manualmente
 class NetworkSettingsPage extends StatefulWidget {
   const NetworkSettingsPage({super.key});
@@ -54,7 +54,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ Servidor detectado: ${NetworkService.activeServer?.name ?? 'N/A'}'),
+            content: Text('âœ… Servidor detectado: ${NetworkService.activeServer?.name ?? 'N/A'}'),
             backgroundColor: Colors.green,
           ),
         );
@@ -63,7 +63,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ Error: $e'),
+            content: Text('âŒ Error: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -83,7 +83,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('✅ Servidor configurado correctamente'),
+              content: Text('âœ… Servidor configurado correctamente'),
               backgroundColor: Colors.green,
             ),
           );
@@ -92,7 +92,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('❌ No se pudo conectar al servidor'),
+              content: Text('âŒ No se pudo conectar al servidor'),
               backgroundColor: Colors.red,
             ),
           );
@@ -125,12 +125,12 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E293B),
-        title: const Text('Configuración de Red'),
+        title: const Text('ConfiguraciÃ³n de Red'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _isLoading ? null : _loadDiagnostics,
-            tooltip: 'Actualizar diagnóstico',
+            tooltip: 'Actualizar diagnÃ³stico',
           ),
         ],
       ),
@@ -175,7 +175,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: (activeServer != null ? Colors.green : Colors.red).withOpacity(0.5),
+                        color: (activeServer != null ? Colors.green : Colors.red).withValues(alpha: 0.5),
                         blurRadius: 8,
                       ),
                     ],
@@ -257,7 +257,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 const Icon(Icons.auto_fix_high, color: Color(0xFF22D3EE)),
                 const SizedBox(width: 12),
                 Text(
-                  'Detección Automática',
+                  'DetecciÃ³n AutomÃ¡tica',
                   style: TextStyle(
                     fontSize: Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
@@ -328,7 +328,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(
-                  color: isActive ? const Color(0xFF22D3EE).withOpacity(0.1) : Colors.transparent,
+                  color: isActive ? const Color(0xFF22D3EE).withValues(alpha: 0.1) : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: isActive ? const Color(0xFF22D3EE) : Colors.grey[700]!,
@@ -457,7 +457,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     const Icon(Icons.bug_report, color: Color(0xFF4ADE80)),
                     const SizedBox(width: 12),
                     Text(
-                      'Diagnóstico de Red',
+                      'DiagnÃ³stico de Red',
                       style: TextStyle(
                         fontSize: Responsive.fontSize(context, small: 16, large: 20),
                         fontWeight: FontWeight.bold,
@@ -472,7 +472,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: _diagnostics.toString()));
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Diagnóstico copiado')),
+                      const SnackBar(content: Text('DiagnÃ³stico copiado')),
                     );
                   },
                 ),

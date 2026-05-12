@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -67,18 +67,18 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                 width: 240,
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  color: AppTheme.darkCard.withOpacity(0.6),
+                  color: AppTheme.darkCard.withValues(alpha: 0.6),
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: AppTheme.neonBlue.withOpacity(0.25),
+                    color: AppTheme.neonBlue.withValues(alpha: 0.25),
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: AppTheme.neonBlue.withOpacity(0.1),
+                      color: AppTheme.neonBlue.withValues(alpha: 0.1),
                       blurRadius: 20,
                     ),
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -94,7 +94,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                         Container(
                           padding: const EdgeInsets.all(5),
                           decoration: BoxDecoration(
-                            color: AppTheme.neonBlue.withOpacity(0.12),
+                            color: AppTheme.neonBlue.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(7),
                           ),
                           child: const Icon(
@@ -124,7 +124,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                           child: Container(
                             padding: const EdgeInsets.all(4),
                             decoration: BoxDecoration(
-                              color: AppTheme.darkCard.withOpacity(0.5),
+                              color: AppTheme.darkCard.withValues(alpha: 0.5),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: const Icon(
@@ -145,7 +145,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                         gradient: LinearGradient(
                           colors: [
                             Colors.transparent,
-                            AppTheme.neonBlue.withOpacity(0.2),
+                            AppTheme.neonBlue.withValues(alpha: 0.2),
                             Colors.transparent,
                           ],
                         ),
@@ -156,7 +156,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                     // Details
                     _InfoRow(
                       icon: Icons.tag_rounded,
-                      label: 'Artículo',
+                      label: 'ArtÃ­culo',
                       value: widget.box.articleCode,
                     ),
                     _InfoRow(
@@ -184,13 +184,13 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                       icon: Icons.straighten_rounded,
                       label: 'Dims',
                       value:
-                          '${widget.box.w.toStringAsFixed(0)}×${widget.box.d.toStringAsFixed(0)}×${widget.box.h.toStringAsFixed(0)} cm',
+                          '${widget.box.w.toStringAsFixed(0)}Ã—${widget.box.d.toStringAsFixed(0)}Ã—${widget.box.h.toStringAsFixed(0)} cm',
                     ),
 
                     // Position
                     _InfoRow(
                       icon: Icons.place_rounded,
-                      label: 'Posición',
+                      label: 'PosiciÃ³n',
                       value:
                           'X:${widget.box.x.toStringAsFixed(0)} Y:${widget.box.y.toStringAsFixed(0)} Z:${widget.box.z.toStringAsFixed(0)}',
                       valueColor: AppTheme.neonBlue,
@@ -216,7 +216,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
 }
 
 // =============================================================================
-// INFO ROW — icon + label + value with subtle styling
+// INFO ROW â€” icon + label + value with subtle styling
 // =============================================================================
 
 class _InfoRow extends StatelessWidget {
@@ -238,12 +238,12 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 5),
       child: Row(
         children: [
-          Icon(icon, size: 12, color: AppTheme.textTertiary.withOpacity(0.6)),
+          Icon(icon, size: 12, color: AppTheme.textTertiary.withValues(alpha: 0.6)),
           const SizedBox(width: 6),
           Text(
             label,
             style: TextStyle(
-              color: AppTheme.textTertiary.withOpacity(0.8),
+              color: AppTheme.textTertiary.withValues(alpha: 0.8),
               fontSize: 11,
             ),
           ),
@@ -264,7 +264,7 @@ class _InfoRow extends StatelessWidget {
 }
 
 // =============================================================================
-// DIMENSION BARS — compact W/D/H visualization
+// DIMENSION BARS â€” compact W/D/H visualization
 // =============================================================================
 
 class _DimensionBars extends StatelessWidget {
@@ -317,7 +317,7 @@ class _DimBar extends StatelessWidget {
           Text(
             label,
             style: TextStyle(
-              color: color.withOpacity(0.6),
+              color: color.withValues(alpha: 0.6),
               fontSize: 8,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.5,
@@ -333,8 +333,8 @@ class _DimBar extends StatelessWidget {
               builder: (_, v, __) => LinearProgressIndicator(
                 value: v,
                 minHeight: 3,
-                backgroundColor: AppTheme.darkCard.withOpacity(0.4),
-                valueColor: AlwaysStoppedAnimation(color.withOpacity(0.6)),
+                backgroundColor: AppTheme.darkCard.withValues(alpha: 0.4),
+                valueColor: AlwaysStoppedAnimation(color.withValues(alpha: 0.6)),
               ),
             ),
           ),
@@ -342,7 +342,7 @@ class _DimBar extends StatelessWidget {
           Text(
             value.toStringAsFixed(0),
             style: TextStyle(
-              color: AppTheme.textTertiary.withOpacity(0.6),
+              color: AppTheme.textTertiary.withValues(alpha: 0.6),
               fontSize: 8,
             ),
           ),

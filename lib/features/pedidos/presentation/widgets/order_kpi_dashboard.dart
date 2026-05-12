@@ -1,4 +1,4 @@
-/// Order KPI Dashboard
+﻿/// Order KPI Dashboard
 /// ===================
 /// Shows 4 KPI cards, status counters, 7-day trend chart, and top clients.
 library;
@@ -93,14 +93,14 @@ class OrderKpiDashboard extends ConsumerWidget {
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.15)),
+        border: Border.all(color: color.withValues(alpha: 0.15)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, color: color.withOpacity(0.6), size: 12),
+              Icon(icon, color: color.withValues(alpha: 0.6), size: 12),
               const Spacer(),
               if (trendIcon != null) trendIcon,
               if (trendText != null) ...[

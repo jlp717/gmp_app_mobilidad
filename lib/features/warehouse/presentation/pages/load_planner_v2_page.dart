@@ -1,4 +1,4 @@
-import 'dart:ui';
+﻿import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,9 +12,9 @@ import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/metric
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/orders_panel_v2.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/planner_toolbar.dart';
 
-/// Load Planner V2 — Premium redesign.
+/// Load Planner V2 â€” Premium redesign.
 ///
-/// Layout: Header → Toolbar → MetricsBar → [Canvas (70%) | Panel (30%)]
+/// Layout: Header â†’ Toolbar â†’ MetricsBar â†’ [Canvas (70%) | Panel (30%)]
 /// Responsive: tablet = side-by-side, phone = canvas + bottom sheet.
 class LoadPlannerV2Page extends ConsumerStatefulWidget {
 
@@ -122,9 +122,9 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PREMIUM HEADER — gradient bg, glassmorphism back button, glow accents
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // PREMIUM HEADER â€” gradient bg, glassmorphism back button, glow accents
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   Widget _buildHeader(BuildContext context) {
     return Container(
@@ -140,17 +140,17 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
           end: Alignment.bottomRight,
           colors: [
             AppTheme.darkSurface,
-            AppTheme.darkBase.withOpacity(0.95),
+            AppTheme.darkBase.withValues(alpha: 0.95),
           ],
         ),
         border: Border(
           bottom: BorderSide(
-            color: AppTheme.neonBlue.withOpacity(0.2),
+            color: AppTheme.neonBlue.withValues(alpha: 0.2),
           ),
         ),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.neonBlue.withOpacity(0.05),
+            color: AppTheme.neonBlue.withValues(alpha: 0.05),
             blurRadius: 12,
             offset: const Offset(0, 2),
           ),
@@ -192,13 +192,13 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                     Icon(
                       Icons.local_shipping_outlined,
                       size: 12,
-                      color: AppTheme.neonBlue.withOpacity(0.6),
+                      color: AppTheme.neonBlue.withValues(alpha: 0.6),
                     ),
                     const SizedBox(width: 4),
                     Text(
                       widget.vehicleCode,
                       style: TextStyle(
-                        color: AppTheme.neonBlue.withOpacity(0.8),
+                        color: AppTheme.neonBlue.withValues(alpha: 0.8),
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                         letterSpacing: 0.5,
@@ -210,7 +210,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                         width: 3,
                         height: 3,
                         decoration: BoxDecoration(
-                          color: AppTheme.textTertiary.withOpacity(0.5),
+                          color: AppTheme.textTertiary.withValues(alpha: 0.5),
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -218,7 +218,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                     Icon(
                       Icons.calendar_today_outlined,
                       size: 11,
-                      color: AppTheme.textTertiary.withOpacity(0.6),
+                      color: AppTheme.textTertiary.withValues(alpha: 0.6),
                     ),
                     const SizedBox(width: 4),
                     Text(
@@ -248,9 +248,9 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SHIMMER LOADING — premium skeleton
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // SHIMMER LOADING â€” premium skeleton
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   Widget _buildShimmerLoading() {
     return AnimatedBuilder(
@@ -265,9 +265,9 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                 shaderCallback: (bounds) {
                   return LinearGradient(
                     colors: [
-                      AppTheme.neonBlue.withOpacity(0.3),
+                      AppTheme.neonBlue.withValues(alpha: 0.3),
                       AppTheme.neonBlue,
-                      AppTheme.neonBlue.withOpacity(0.3),
+                      AppTheme.neonBlue.withValues(alpha: 0.3),
                     ],
                     stops: [
                       (_shimmerCtrl.value - 0.3).clamp(0.0, 1.0),
@@ -287,7 +287,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
               Text(
                 'Calculando carga...',
                 style: TextStyle(
-                  color: AppTheme.textSecondary.withOpacity(
+                  color: AppTheme.textSecondary.withValues(alpha: 
                     0.5 + (_shimmerCtrl.value * 0.5),
                   ),
                   fontSize: 14,
@@ -302,7 +302,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
-                    backgroundColor: AppTheme.darkCard.withOpacity(0.5),
+                    backgroundColor: AppTheme.darkCard.withValues(alpha: 0.5),
                     color: AppTheme.neonBlue,
                     minHeight: 2,
                   ),
@@ -315,9 +315,9 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // TABLET LAYOUT — side by side with animated panel
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // TABLET LAYOUT â€” side by side with animated panel
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   Widget _buildTabletLayout(LoadPlannerProvider provider) {
     return Row(
@@ -356,14 +356,14 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                               vertical: 10,
                             ),
                             decoration: BoxDecoration(
-                              color: AppTheme.error.withOpacity(0.15),
+                              color: AppTheme.error.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(12),
                               border: Border.all(
-                                color: AppTheme.error.withOpacity(0.6),
+                                color: AppTheme.error.withValues(alpha: 0.6),
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: AppTheme.error.withOpacity(0.2),
+                                  color: AppTheme.error.withValues(alpha: 0.2),
                                   blurRadius: 16,
                                 ),
                               ],
@@ -378,7 +378,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                                 ),
                                 SizedBox(width: 8),
                                 Text(
-                                  'Colisión detectada',
+                                  'ColisiÃ³n detectada',
                                   style: TextStyle(
                                     color: AppTheme.error,
                                     fontSize: 12,
@@ -413,9 +413,9 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PHONE LAYOUT — canvas + bottom sheet
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // PHONE LAYOUT â€” canvas + bottom sheet
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   Widget _buildPhoneLayout(LoadPlannerProvider provider) {
     return Stack(
@@ -441,7 +441,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: AppTheme.neonBlue.withOpacity(0.3),
+                  color: AppTheme.neonBlue.withValues(alpha: 0.3),
                   blurRadius: 16,
                   spreadRadius: 1,
                 ),
@@ -478,12 +478,12 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                   const BorderRadius.vertical(top: Radius.circular(20)),
               border: Border(
                 top: BorderSide(
-                  color: AppTheme.neonBlue.withOpacity(0.2),
+                  color: AppTheme.neonBlue.withValues(alpha: 0.2),
                 ),
               ),
               boxShadow: [
                 BoxShadow(
-                  color: AppTheme.neonBlue.withOpacity(0.08),
+                  color: AppTheme.neonBlue.withValues(alpha: 0.08),
                   blurRadius: 24,
                   offset: const Offset(0, -4),
                 ),
@@ -497,7 +497,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                   width: 36,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: AppTheme.neonBlue.withOpacity(0.3),
+                    color: AppTheme.neonBlue.withValues(alpha: 0.3),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -510,9 +510,9 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ERROR STATE — premium design
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ERROR STATE â€” premium design
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   Widget _buildError(String error) {
     return Center(
@@ -525,15 +525,15 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppTheme.error.withOpacity(0.1),
+                color: AppTheme.error.withValues(alpha: 0.1),
                 border: Border.all(
-                  color: AppTheme.error.withOpacity(0.3),
+                  color: AppTheme.error.withValues(alpha: 0.3),
                 ),
               ),
               child: Icon(
                 Icons.error_outline_rounded,
                 size: 40,
-                color: AppTheme.error.withOpacity(0.8),
+                color: AppTheme.error.withValues(alpha: 0.8),
               ),
             ),
             const SizedBox(height: 20),
@@ -560,7 +560,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.neonBlue.withOpacity(0.2),
+                    color: AppTheme.neonBlue.withValues(alpha: 0.2),
                     blurRadius: 12,
                   ),
                 ],
@@ -585,7 +585,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
 }
 
 // =============================================================================
-// GLASS ICON BUTTON — shared glassmorphism button used in header
+// GLASS ICON BUTTON â€” shared glassmorphism button used in header
 // =============================================================================
 
 class _GlassIconButton extends StatelessWidget {
@@ -611,18 +611,18 @@ class _GlassIconButton extends StatelessWidget {
         height: 36,
         decoration: BoxDecoration(
           color: isActive
-              ? AppTheme.neonBlue.withOpacity(0.15)
-              : AppTheme.darkCard.withOpacity(0.4),
+              ? AppTheme.neonBlue.withValues(alpha: 0.15)
+              : AppTheme.darkCard.withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isActive
-                ? AppTheme.neonBlue.withOpacity(0.4)
-                : AppTheme.borderColor.withOpacity(0.3),
+                ? AppTheme.neonBlue.withValues(alpha: 0.4)
+                : AppTheme.borderColor.withValues(alpha: 0.3),
           ),
           boxShadow: isActive
               ? [
                   BoxShadow(
-                    color: AppTheme.neonBlue.withOpacity(0.15),
+                    color: AppTheme.neonBlue.withValues(alpha: 0.15),
                     blurRadius: 8,
                   ),
                 ]

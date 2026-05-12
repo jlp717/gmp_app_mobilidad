@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
@@ -32,11 +32,11 @@ class ModernLoading extends StatelessWidget {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     border: Border.all(
-                      color: AppTheme.neonBlue.withOpacity(0.1),
+                      color: AppTheme.neonBlue.withValues(alpha: 0.1),
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: AppTheme.neonBlue.withOpacity(0.1),
+                        color: AppTheme.neonBlue.withValues(alpha: 0.1),
                         blurRadius: 20,
                         spreadRadius: 2,
                       ),
@@ -52,7 +52,7 @@ class ModernLoading extends StatelessWidget {
                   child: CircularProgressIndicator(
                     color: AppTheme.neonBlue,
                     strokeWidth: 3,
-                    backgroundColor: AppTheme.neonBlue.withOpacity(0.1),
+                    backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.1),
                   ),
                 ),
                 
@@ -62,7 +62,7 @@ class ModernLoading extends StatelessWidget {
                   height: size * 0.3,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppTheme.neonBlue.withOpacity(0.2),
+                    color: AppTheme.neonBlue.withValues(alpha: 0.2),
                   ),
                 ).animate(onPlay: (c) => c.repeat(reverse: true))
                  .fade(begin: 0.2, end: 0.8, duration: 1.seconds),
@@ -82,7 +82,7 @@ class ModernLoading extends StatelessWidget {
               ),
             ).animate()
              .fadeIn(duration: 500.ms)
-             .shimmer(duration: 2.seconds, color: Colors.white.withOpacity(0.5)),
+             .shimmer(duration: 2.seconds, color: Colors.white.withValues(alpha: 0.5)),
           ],
         ],
       ),

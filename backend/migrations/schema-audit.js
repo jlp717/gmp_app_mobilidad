@@ -1,6 +1,6 @@
 'use strict';
 
-const { query } = require('../config/db');
+const { queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
 
 /**
@@ -29,12 +29,14 @@ async function runSchemaAudit() {
             const tableParity = {};
             
             for (const schema of schemasToVerify) {
-                const result = await query(`
-                    SELECT COLUMN_NAME, DATA_TYPE, LENGTH, NUMERIC_SCALE 
-                    FROM QSYS2.SYSCOLUMNS 
-                    WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${table}'
-                    ORDER BY ORDINAL_POSITION
-                `);
+                const result = await queryWithParams(
+                    `SELECT COLUMN_NAME, DATA_TYPE, LENGTH, NUMERIC_SCALE 
+                     FROM QSYS2.SYSCOLUMNS 
+                     WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+                     ORDER BY ORDINAL_POSITION`,
+                    [schema, table],
+                    false, false
+                );
                 
                 tableParity[schema] = Array.isArray(result) && result.length > 0 ? result : null;
             }

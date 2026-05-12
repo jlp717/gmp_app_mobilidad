@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
@@ -63,19 +63,19 @@ class RuteroDetailCompleted extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            AppTheme.success.withOpacity(0.15),
-            AppTheme.success.withOpacity(0.05),
+            AppTheme.success.withValues(alpha: 0.15),
+            AppTheme.success.withValues(alpha: 0.05),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.success.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.success.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: AppTheme.success.withOpacity(0.2),
+              color: AppTheme.success.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -102,7 +102,7 @@ class RuteroDetailCompleted extends StatelessWidget {
                 Text(
                   _isFactura
                       ? 'Factura ${albaran.numeroFactura}'
-                      : 'Albarán ${albaran.numeroAlbaran}',
+                      : 'AlbarÃ¡n ${albaran.numeroAlbaran}',
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13,
@@ -134,7 +134,7 @@ class RuteroDetailCompleted extends StatelessWidget {
           const Divider(color: AppTheme.borderColor, height: 20),
           _InfoRow(
             icon: Icons.location_on,
-            label: 'Dirección',
+            label: 'DirecciÃ³n',
             value: '${albaran.direccion}, ${albaran.poblacion}',
           ),
           const Divider(color: AppTheme.borderColor, height: 20),
@@ -142,7 +142,7 @@ class RuteroDetailCompleted extends StatelessWidget {
             _InfoRow(
               icon: Icons.euro,
               label: 'Importe Neto',
-              value: '${albaran.importeNeto.toStringAsFixed(2)} €',
+              value: '${albaran.importeNeto.toStringAsFixed(2)} â‚¬',
             ),
             for (final iva in albaran.ivaBreakdown)
               Padding(
@@ -150,20 +150,20 @@ class RuteroDetailCompleted extends StatelessWidget {
                 child: _InfoRow(
                   icon: Icons.percent,
                   label: 'IVA ${iva.pct.toStringAsFixed(0)}%',
-                  value: '${iva.iva.toStringAsFixed(2)} €',
+                  value: '${iva.iva.toStringAsFixed(2)} â‚¬',
                 ),
               ),
             const Divider(color: AppTheme.borderColor, height: 20),
             _InfoRow(
               icon: Icons.euro,
               label: 'Total',
-              value: '${albaran.importeTotal.toStringAsFixed(2)} €',
+              value: '${albaran.importeTotal.toStringAsFixed(2)} â‚¬',
             ),
           ] else ...[
             _InfoRow(
               icon: Icons.euro,
               label: 'Importe',
-              value: '${albaran.importeTotal.toStringAsFixed(2)} €',
+              value: '${albaran.importeTotal.toStringAsFixed(2)} â‚¬',
             ),
           ],
           const Divider(color: AppTheme.borderColor, height: 20),
@@ -283,7 +283,7 @@ class _ShareButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: color.withOpacity(0.15),
+      color: color.withValues(alpha: 0.15),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -299,7 +299,7 @@ class _ShareButton extends StatelessWidget {
                 style: TextStyle(color: color, fontWeight: FontWeight.w600),
               ),
               const Spacer(),
-              Icon(Icons.chevron_right, color: color.withOpacity(0.6)),
+              Icon(Icons.chevron_right, color: color.withValues(alpha: 0.6)),
             ],
           ),
         ),

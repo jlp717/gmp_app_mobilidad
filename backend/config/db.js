@@ -523,16 +523,11 @@ async function closePool() {
     dbPool = null;
 }
 
-function getPoolMetrics() {
-    return pool.getMetrics();
-}
-
 module.exports = {
     getPoolMetrics,
     initDb,
     query,
     queryWithParams,
     getPool,
-    getPoolMetrics,
     closePool
 };

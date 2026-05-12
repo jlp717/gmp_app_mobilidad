@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/api/api_config.dart';
@@ -55,10 +55,24 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         if (data['success'] == true) {
-          final monthlyData = (data['monthlySales'] as List?)?.map((e) => Map<String, dynamic>.from(e)).toList() ?? [];
-          final topProductsData = (data['topProducts'] as List?)?.map((e) => Map<String, dynamic>.from(e)).toList() ?? [];
-          
-                    final returnsData = (data['returns'] as List?)?.map((e) => Map<String, dynamic>.from(e)).toList() ?? [];
+          // The monthly endpoint returns: { monthly, summary }
+          // The client-evolution endpoint returns: { monthlySales, topProducts, returns }
+          // Map fields flexibly to support both response shapes
+          final monthlyData = (data['monthly'] ?? data['monthlySales'] ?? []) is List
+              ? ((data['monthly'] ?? data['monthlySales'] ?? []) as List)
+                  .map((e) => Map<String, dynamic>.from(e as Map))
+                  .toList()
+              : [];
+          final topProductsData = (data['products'] ?? data['topProducts'] ?? []) is List
+              ? ((data['products'] ?? data['topProducts'] ?? []) as List)
+                  .map((e) => Map<String, dynamic>.from(e as Map))
+                  .toList()
+              : [];
+          final returnsData = (data['returns'] is List)
+              ? (data['returns'] as List)
+                  .map((e) => Map<String, dynamic>.from(e as Map))
+                  .toList()
+              : [];
           
           setState(() {
             _monthlySales = monthlyData;
@@ -80,30 +94,10 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
     }
   }
 
-  Future<void> _loadProductsData(String baseUrl, String token) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/evolution/products?clientCode=${widget.clientCode}&vendedorCodes=${widget.vendedorCodes}'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data['success'] == true && mounted) {
-          setState(() {
-            _topProducts = (data['products'] as List?)?.map((e) => Map<String, dynamic>.from(e)).toList() ?? [];
-          });
-        }
-      }
-    } catch (e) {
-      debugPrint('Error loading top products: $e');
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(child: ModernLoading(message: 'Cargando evoluciÃƒÆ’Ã‚Â³n...'));
+      return const Center(child: ModernLoading(message: 'Cargando evoluciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n...'));
     }
 
     if (_error != null) {
@@ -126,7 +120,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('EvoluciÃƒÆ’Ã‚Â³n Mensual (3 AÃƒÆ’Ã‚Â±os)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          Text('EvoluciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n Mensual (3 AÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±os)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           if (_monthlySales.isNotEmpty)
             Container(
@@ -136,11 +130,11 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
               child: _buildEvolutionChart(),
             )
           else
-            const Center(child: Text('No hay datos de evoluciÃƒÆ’Ã‚Â³n mensual')),
+            const Center(child: Text('No hay datos de evoluciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n mensual')),
             
           const SizedBox(height: 24),
           
-          Text('Productos MÃƒÆ’Ã‚Â¡s Comprados', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          Text('Productos MÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡s Comprados', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           if (_topProducts.isNotEmpty)
             _buildTopProductsList()
@@ -198,7 +192,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
-                colors: [AppTheme.neonBlue.withOpacity(0.3), AppTheme.neonBlue.withOpacity(0)],
+                colors: [AppTheme.neonBlue.withValues(alpha: 0.3), AppTheme.neonBlue.withValues(alpha: 0)],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -227,17 +221,18 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
           child: ListTile(
             dense: true,
             leading: CircleAvatar(
-              backgroundColor: AppTheme.neonBlue.withOpacity(0.2),
+              backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.2),
               child: Text('${index + 1}', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
             ),
             title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-            subtitle: Text('CÃƒÆ’Ã‚Â³d: $code ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ $units uds', style: const TextStyle(fontSize: 11)),
+            subtitle: Text('CÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³d: $code ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ $units uds', style: const TextStyle(fontSize: 11)),
             trailing: Text(CurrencyFormatter.formatWhole(sales), style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.success, fontSize: 13)),
           ),
         );
       },
     );
-  
+  }
+
   Widget _buildReturnsList() {
     return ListView.builder(
       shrinkWrap: true,
@@ -254,16 +249,16 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
         
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
-          color: AppTheme.error.withOpacity(0.1),
+          color: AppTheme.error.withValues(alpha: 0.1),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(8),
-            side: BorderSide(color: AppTheme.error.withOpacity(0.3)),
+            side: BorderSide(color: AppTheme.error.withValues(alpha: 0.3)),
           ),
           child: ListTile(
             dense: true,
             leading: const Icon(Icons.assignment_return, color: AppTheme.error),
             title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-            subtitle: Text('Cód:  •  uds • -', style: const TextStyle(fontSize: 11)),
+            subtitle: Text('C\u00f3d: $code \u2022 $units uds \u2022 ${CurrencyFormatter.formatWhole(amount)}', style: const TextStyle(fontSize: 11)),
             trailing: Text(CurrencyFormatter.formatWhole(amount), style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.error, fontSize: 13)),
           ),
         );

@@ -1,7 +1,7 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
-import 'package:gmp_app_mobilidad/core/widgets/responsive.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -50,7 +50,7 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Colors.transparent,
-        body: Center(child: ModernLoading(message: 'Analizando evolución...')),
+        body: Center(child: ModernLoading(message: 'Analizando evoluciÃ³n...')),
       );
     }
 
@@ -78,7 +78,7 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
-        padding: EdgeInsets.all(Responsive.padding(context)),
+        padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -149,7 +149,7 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Evolución Mensual', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const Text('EvoluciÃ³n Mensual', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 20),
           Expanded(
             child: LineChart(
@@ -183,7 +183,7 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
                     belowBarData: BarAreaData(
                       show: true,
                       gradient: LinearGradient(
-                        colors: [AppTheme.neonBlue.withOpacity(0.3), AppTheme.neonBlue.withOpacity(0)],
+                        colors: [AppTheme.neonBlue.withValues(alpha: 0.3), AppTheme.neonBlue.withValues(alpha: 0)],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       ),
@@ -254,7 +254,7 @@ class _SummaryCard extends StatelessWidget {
 }
 
 class _ProductTile extends StatelessWidget {
-  final dynamic product;
+  final Map<String, dynamic> product;
 
   const _ProductTile({required this.product});
 
@@ -268,7 +268,7 @@ class _ProductTile extends StatelessWidget {
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            color: AppTheme.neonPurple.withOpacity(0.1),
+            color: AppTheme.neonPurple.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
           child: const Icon(Icons.inventory_2, color: AppTheme.neonPurple, size: 20),
@@ -276,7 +276,7 @@ class _ProductTile extends StatelessWidget {
         title: Text(product['name'] ?? 'Producto', 
                    maxLines: 1, overflow: TextOverflow.ellipsis,
                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-        subtitle: Text('Cód: ${product['code']} • ${product['totalUnits']} uds', 
+        subtitle: Text('CÃ³d: ${product['code']} â€¢ ${product['totalUnits']} uds', 
                        style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
         trailing: Text(CurrencyFormatter.formatWhole((product['totalSales'] as num).toDouble()),
                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),

@@ -1,4 +1,4 @@
-import 'package:fl_chart/fl_chart.dart';
+﻿import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -110,7 +110,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     }
 
     if (_clientData == null) {
-      return const Center(child: Text('No se encontrÃƒÂ³ informaciÃƒÂ³n del cliente'));
+      return const Center(child: Text('No se encontrÃƒÆ’Ã‚Â³ informaciÃƒÆ’Ã‚Â³n del cliente'));
     }
 
     final client = _clientData!['client'] as Map<String, dynamic>? ?? {};
@@ -185,9 +185,9 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppTheme.warning.withOpacity(0.15),
+                  color: AppTheme.warning.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.warning.withOpacity(0.5)),
+                  border: Border.all(color: AppTheme.warning.withValues(alpha: 0.5)),
                 ),
                 child: Row(
                   children: [
@@ -229,16 +229,16 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppTheme.neonBlue.withOpacity(0.1),
+                    color: AppTheme.neonBlue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+                    border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
                   ),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.note_add, size: 16, color: AppTheme.neonBlue),
                       SizedBox(width: 6),
-                      Text('AÃƒÂ±adir observaciones', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
+                      Text('AÃƒÆ’Ã‚Â±adir observaciones', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
                     ],
                   ),
                 ),
@@ -250,7 +250,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
             children: [
               CircleAvatar(
                 radius: Responsive.value(context, phone: 16, desktop: 20),
-                backgroundColor: AppTheme.neonGreen.withOpacity(0.2),
+                backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.2),
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : 'C',
                   style: TextStyle(color: AppTheme.neonGreen, fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.bold),
@@ -270,11 +270,11 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                     const SizedBox(height: 2),
                     if (!Responsive.isLandscapeCompact(context))
                       Text(
-                        'CÃƒÂ³d: $code ${nif.isNotEmpty ? ' Ã¢â‚¬Â¢ NIF: $nif' : ''}', 
+                        'CÃƒÆ’Ã‚Â³d: $code ${nif.isNotEmpty ? ' ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ NIF: $nif' : ''}', 
                         style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                       )
                     else
-                      Text('CÃƒÂ³d: $code', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                      Text('CÃƒÆ’Ã‚Â³d: $code', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
                   ],
                 ),
               ),
@@ -339,7 +339,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AppTheme.neonPurple.withOpacity(0.15),
+              color: AppTheme.neonPurple.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
@@ -361,7 +361,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AppTheme.neonBlue.withOpacity(0.15),
+              color: AppTheme.neonBlue.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
@@ -383,7 +383,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AppTheme.neonGreen.withOpacity(0.15),
+              color: AppTheme.neonGreen.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
@@ -464,12 +464,12 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
           children: [
             const Text('Enviar WhatsApp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 8),
-            const Text('Selecciona el nÃƒÂºmero:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const Text('Selecciona el nÃƒÆ’Ã‚Âºmero:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
             const SizedBox(height: 12),
             ...phones.map((p) => ListTile(
               leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
               title: Text((p['number'] as String?) ?? ''),
-              subtitle: Text((p['type'] as String?) ?? 'TelÃƒÂ©fono'),
+              subtitle: Text((p['type'] as String?) ?? 'TelÃƒÆ’Ã‚Â©fono'),
               onTap: () {
                 Navigator.pop(ctx);
                 _openWhatsApp((p['number'] as String?) ?? '');
@@ -495,8 +495,8 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     // Build personalized message
     final message = Uri.encodeComponent(
       'Hola, soy tu comercial de Mari Pepa. '
-      'Me gustarÃƒÂ­a saber cÃƒÂ³mo va todo y recordarte que maÃƒÂ±ana es dÃƒÂ­a de visita. '
-      'Ã‚Â¿EstÃƒÂ¡ todo en orden? Ã‚Â¿Necesitas algo en particular?'
+      'Me gustarÃƒÆ’Ã‚Â­a saber cÃƒÆ’Ã‚Â³mo va todo y recordarte que maÃƒÆ’Ã‚Â±ana es dÃƒÆ’Ã‚Â­a de visita. '
+      'Ãƒâ€šÃ‚Â¿EstÃƒÆ’Ã‚Â¡ todo en orden? Ãƒâ€šÃ‚Â¿Necesitas algo en particular?'
     );
     
     final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
@@ -579,7 +579,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                         ],
                       ),
                     ),
-                    Container(width: 1, height: 40, color: AppTheme.textSecondary.withOpacity(0.3)),
+                    Container(width: 1, height: 40, color: AppTheme.textSecondary.withValues(alpha: 0.3)),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
@@ -598,7 +598,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
 
           // Monthly Trend Chart
           if (monthlyTrend.isNotEmpty) ...[
-            Text('EvoluciÃƒÂ³n Ventas (12 meses)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text('EvoluciÃƒÆ’Ã‚Â³n Ventas (12 meses)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Container(
               height: Responsive.value(context, phone: 150, desktop: 200),
@@ -649,7 +649,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
-                colors: [AppTheme.neonBlue.withOpacity(0.3), AppTheme.neonBlue.withOpacity(0)],
+                colors: [AppTheme.neonBlue.withValues(alpha: 0.3), AppTheme.neonBlue.withValues(alpha: 0)],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -684,7 +684,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: AppTheme.neonPurple.withOpacity(0.2),
+                color: AppTheme.neonPurple.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Center(
@@ -692,7 +692,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
               ),
             ),
             title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14)),
-            subtitle: Text('CÃƒÂ³d: $code Ã¢â‚¬Â¢ $timesOrdered ped. Ã¢â‚¬Â¢ $totalBoxes cj', style: const TextStyle(fontSize: 11)),
+            subtitle: Text('CÃƒÆ’Ã‚Â³d: $code ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ $timesOrdered ped. ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ $totalBoxes cj', style: const TextStyle(fontSize: 11)),
             trailing: Text(CurrencyFormatter.formatWhole(totalSales), style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen, fontSize: 13)),
           ),
         );
@@ -714,7 +714,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                   icon: const Icon(Icons.manage_search),
                   label: const Text('Explorador Avanzado'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.neonBlue.withOpacity(0.2),
+                    backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.2),
                     foregroundColor: AppTheme.neonBlue,
                     minimumSize: const Size(double.infinity, 45),
                   ),

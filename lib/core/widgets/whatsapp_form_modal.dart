@@ -1,14 +1,14 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-/// 📱 WHATSAPP FORM MODAL
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/// â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+/// ðŸ“± WHATSAPP FORM MODAL
+/// â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 ///
 /// Modal con formulario para compartir por WhatsApp.
-/// Campos: teléfono (validado +34), mensaje personalizado.
+/// Campos: telÃ©fono (validado +34), mensaje personalizado.
 ///
 /// Usa Share nativo (gratis) para adjuntar el PDF al compartir.
 ///
@@ -21,7 +21,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 ///     // result.phone, result.message
 ///     // -> use Share.shareXFiles with the PDF
 ///   }
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/// â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
 class WhatsAppFormResult {
 
@@ -77,13 +77,13 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
 
   String? _validatePhone(String? value) {
     if (value == null || value.trim().isEmpty) {
-      return 'El teléfono es obligatorio';
+      return 'El telÃ©fono es obligatorio';
     }
     // Remove spaces, dashes, parentheses
     final cleaned = value.replaceAll(RegExp(r'[\s\-\(\)]'), '');
     // Must start with + and have at least 9 digits
     if (!RegExp(r'^\+?\d{9,15}$').hasMatch(cleaned)) {
-      return 'Formato inválido. Ej: +34612345678';
+      return 'Formato invÃ¡lido. Ej: +34612345678';
     }
     return null;
   }
@@ -113,10 +113,10 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
         decoration: BoxDecoration(
           color: AppTheme.darkSurface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: whatsAppGreen.withOpacity(0.3)),
+          border: Border.all(color: whatsAppGreen.withValues(alpha: 0.3)),
           boxShadow: [
             BoxShadow(
-              color: whatsAppGreen.withOpacity(0.15),
+              color: whatsAppGreen.withValues(alpha: 0.15),
               blurRadius: 30,
               spreadRadius: 2,
             ),
@@ -134,7 +134,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: whatsAppGreen.withOpacity(0.15),
+                      color: whatsAppGreen.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(Icons.chat, color: whatsAppGreen, size: 22),
@@ -160,14 +160,14 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
               const Padding(
                 padding: EdgeInsets.only(left: 2),
                 child: Text(
-                  'Se compartirá el PDF automáticamente. Seleccione WhatsApp en el menú que aparece.',
+                  'Se compartirÃ¡ el PDF automÃ¡ticamente. Seleccione WhatsApp en el menÃº que aparece.',
                   style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
                 ),
               ),
               const SizedBox(height: 20),
 
               // Phone field
-              _buildLabel('Teléfono *'),
+              _buildLabel('TelÃ©fono *'),
               const SizedBox(height: 6),
               TextFormField(
                 controller: _phoneController,
@@ -255,18 +255,18 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
   }) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5), fontSize: 13),
+      hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5), fontSize: 13),
       prefixIcon: Icon(icon, color: AppTheme.textSecondary, size: 18),
       filled: true,
       fillColor: AppTheme.darkBase,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppTheme.borderColor.withOpacity(0.5)),
+        borderSide: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.5)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppTheme.borderColor.withOpacity(0.3)),
+        borderSide: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.3)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),

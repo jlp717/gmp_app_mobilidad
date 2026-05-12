@@ -1,4 +1,4 @@
-/// Shimmer Loading Skeleton Widget
+﻿/// Shimmer Loading Skeleton Widget
 /// ================================
 /// Premium loading placeholder for perceived instant performance
 /// Uses shimmer animation to indicate loading state
@@ -114,7 +114,7 @@ class SkeletonCard extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                 ),
@@ -128,7 +128,7 @@ class SkeletonCard extends StatelessWidget {
                         height: 16,
                         width: double.infinity,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
+                          color: Colors.white.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
@@ -137,7 +137,7 @@ class SkeletonCard extends StatelessWidget {
                         height: 12,
                         width: 150,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.08),
+                          color: Colors.white.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(4),
                         ),
                       ),
@@ -149,7 +149,7 @@ class SkeletonCard extends StatelessWidget {
                   height: 20,
                   width: 80,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(4),
                   ),
                 ),
@@ -164,7 +164,7 @@ class SkeletonCard extends StatelessWidget {
                   height: 32,
                   width: 90,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.08),
+                    color: Colors.white.withValues(alpha: 0.08),
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
@@ -173,7 +173,7 @@ class SkeletonCard extends StatelessWidget {
                   height: 32,
                   width: 100,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
+                    color: Colors.white.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
@@ -255,7 +255,7 @@ class SkeletonSummary extends StatelessWidget {
           height: 32,
           width: 80,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.white.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
         ),
@@ -264,7 +264,7 @@ class SkeletonSummary extends StatelessWidget {
           height: 14,
           width: 60,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
+            color: Colors.white.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(4),
           ),
         ),

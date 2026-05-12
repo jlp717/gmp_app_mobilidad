@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,7 +42,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   // Data state
   Map<String, int> _weekData = {};
   int _totalUniqueClients =
-      0; // Total de clientes únicos (no suma duplicada por días)
+      0; // Total de clientes Ãºnicos (no suma duplicada por dÃ­as)
   int _completedWeeks = 0; // NEW: Track completed weeks for YoY label
   String _periodLabel = ''; // NEW: Period label like "1 Ene - 12 Ene"
   List<Map<String, dynamic>> _dayClients = [];
@@ -122,20 +122,20 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   static const Map<String, String> _weekdayLabels = {
     'lunes': 'LUN',
     'martes': 'MAR',
-    'miercoles': 'MIÉ',
+    'miercoles': 'MIÃ‰',
     'jueves': 'JUE',
     'viernes': 'VIE',
-    'sabado': 'SÁB',
+    'sabado': 'SÃB',
     'domingo': 'DOM',
   };
 
   static const Map<String, String> _weekdayFullLabels = {
     'lunes': 'Lunes',
     'martes': 'Martes',
-    'miercoles': 'Miércoles',
+    'miercoles': 'MiÃ©rcoles',
     'jueves': 'Jueves',
     'viernes': 'Viernes',
-    'sabado': 'Sábado',
+    'sabado': 'SÃ¡bado',
     'domingo': 'Domingo',
   };
 
@@ -217,11 +217,11 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     final lastOfMonth = DateTime(year, month + 1, 0);
     final firstWeekday = firstOfMonth.weekday; // 1=Lunes
 
-    // Calcular día de inicio de la semana (Lunes de esa semana)
+    // Calcular dÃ­a de inicio de la semana (Lunes de esa semana)
     var startDay = 1 + (weekNum - 1) * 7 - (firstWeekday - 1);
     if (startDay < 1) startDay = 1;
 
-    // Día fin (Domingo o último día del mes)
+    // DÃ­a fin (Domingo o Ãºltimo dÃ­a del mes)
     var endDay = startDay + 6;
     if (endDay > lastOfMonth.day) endDay = lastOfMonth.day;
 
@@ -265,7 +265,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     }
   }
 
-  /// Obtiene el código del vendedor a usar (seleccionado o el propio)
+  /// Obtiene el cÃ³digo del vendedor a usar (seleccionado o el propio)
   /// Para GETs: puede ser una lista comma-separated (todos los vendedores)
   String get _activeVendedorCode {
     if (!mounted) return widget.employeeCode;
@@ -273,15 +273,15 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     return filterCode ?? widget.employeeCode;
   }
 
-  /// Para operaciones de escritura (POST): devuelve un ÚNICO código de vendedor.
-  /// Retorna null si hay múltiples vendedores y no se ha seleccionado uno específico.
+  /// Para operaciones de escritura (POST): devuelve un ÃšNICO cÃ³digo de vendedor.
+  /// Retorna null si hay mÃºltiples vendedores y no se ha seleccionado uno especÃ­fico.
   String? get _singleVendedorCode {
     if (!mounted) return null;
     final filterCode = ref.read(filterProvider).selectedVendor;
     if (filterCode != null) return filterCode;
     // Si employeeCode no contiene comas, es un solo vendedor
     if (!widget.employeeCode.contains(',')) return widget.employeeCode;
-    // Jefe de ventas sin selección específica → no se puede escribir
+    // Jefe de ventas sin selecciÃ³n especÃ­fica â†’ no se puede escribir
     return null;
   }
 
@@ -517,14 +517,14 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
   // Currency formatting WITHOUT rounding
   String _formatCurrency(double value) {
-    if (value.isNaN || value.isInfinite) return '0,00 €';
-    return '${NumberFormat('#,##0.00', 'es_ES').format(value)} €';
+    if (value.isNaN || value.isInfinite) return '0,00 â‚¬';
+    return '${NumberFormat('#,##0.00', 'es_ES').format(value)} â‚¬';
   }
 
   String _formatVariation(double variation) {
-    if (variation.isNaN || variation.isInfinite) return '+0,00 €';
+    if (variation.isNaN || variation.isInfinite) return '+0,00 â‚¬';
     final sign = variation >= 0 ? '+' : '';
-    return '$sign${NumberFormat('#,##0.00', 'es_ES').format(variation)} €';
+    return '$sign${NumberFormat('#,##0.00', 'es_ES').format(variation)} â‚¬';
   }
 
   @override
@@ -541,7 +541,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               title: 'Rutero Comercial',
               subtitle: _periodLabel.isNotEmpty
                   ? _periodLabel
-                  : 'Planificación Semanal',
+                  : 'PlanificaciÃ³n Semanal',
               lastSync: _lastFetchTime,
               isLoading: _isLoadingWeek || _isLoadingClients,
               onSync: _refreshData,
@@ -603,7 +603,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
-      color: AppTheme.neonBlue.withOpacity(0.15),
+      color: AppTheme.neonBlue.withValues(alpha: 0.15),
       child: Row(
         children: [
           const SizedBox(
@@ -616,9 +616,9 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           ),
           const SizedBox(width: 8),
           Text(
-            'Preparando datos… se actualizará automáticamente',
+            'Preparando datosâ€¦ se actualizarÃ¡ automÃ¡ticamente',
             style: TextStyle(
-              color: AppTheme.neonBlue.withOpacity(0.9),
+              color: AppTheme.neonBlue.withValues(alpha: 0.9),
               fontSize: 11,
             ),
           ),
@@ -666,7 +666,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                   ? Icons.shopping_bag_outlined
                   : Icons.local_shipping_outlined,
               size: 64,
-              color: AppTheme.neonPink.withOpacity(0.3),
+              color: AppTheme.neonPink.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 16),
             Text(
@@ -675,7 +675,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             ),
             const SizedBox(height: 8),
             Text(
-              'Prueba a cambiar de día o sincronizar',
+              'Prueba a cambiar de dÃ­a o sincronizar',
               style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
             ),
           ],
@@ -761,21 +761,21 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             Icon(
               Icons.notifications_off_outlined,
               size: 60,
-              color: AppTheme.neonPink.withOpacity(0.3),
+              color: AppTheme.neonPink.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 16),
             Text(
               'Sin clientes con alertas',
               style: TextStyle(
                 fontSize: 18,
-                color: Colors.white.withOpacity(0.9),
+                color: Colors.white.withValues(alpha: 0.9),
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 8),
             Text(
               _selectedAlertType == 'ALL'
-                  ? 'Este día no tiene alertas detectadas'
+                  ? 'Este dÃ­a no tiene alertas detectadas'
                   : 'No hay alertas de tipo\n"${KpiAlertsService.instance.getKpiAlertTypeName(_selectedAlertType)}"',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
@@ -808,7 +808,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             ),
             const SizedBox(height: 16),
             Text(
-              'No se encontró ningún cliente para "$_searchQuery"',
+              'No se encontrÃ³ ningÃºn cliente para "$_searchQuery"',
               style: TextStyle(color: Colors.grey.shade400),
             ),
             const SizedBox(height: 8),
@@ -818,7 +818,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                 _searchQuery = '';
               }),
               child: const Text(
-                'Limpiar búsqueda',
+                'Limpiar bÃºsqueda',
                 style: TextStyle(color: AppTheme.neonPink),
               ),
             ),
@@ -903,7 +903,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
     if (searchQuery.trim().length < 3) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No hay dirección disponible')),
+        const SnackBar(content: Text('No hay direcciÃ³n disponible')),
       );
       return;
     }
@@ -951,7 +951,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             ),
             const SizedBox(height: 8),
             const Text(
-              'Selecciona el número:',
+              'Selecciona el nÃºmero:',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 12),
@@ -959,7 +959,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text(
-                  'No hay teléfonos guardados',
+                  'No hay telÃ©fonos guardados',
                   style: TextStyle(color: AppTheme.textSecondary),
                 ),
               ),
@@ -967,7 +967,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               (p) => ListTile(
                 leading: const Icon(Icons.phone, color: AppTheme.neonBlue),
                 title: Text((p['number'] as String?) ?? ''),
-                subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
+                subtitle: Text((p['type'] as String?) ?? 'TelÃ©fono'),
                 onTap: () {
                   Navigator.pop(ctx);
                   _launchPhoneCall((p['number'] as String?) ?? '');
@@ -977,8 +977,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             const Divider(),
             ListTile(
               leading: const Icon(Icons.dialpad, color: AppTheme.neonPink),
-              title: const Text('Introducir número manualmente'),
-              subtitle: const Text('Escribe un número personalizado'),
+              title: const Text('Introducir nÃºmero manualmente'),
+              subtitle: const Text('Escribe un nÃºmero personalizado'),
               onTap: () {
                 Navigator.pop(ctx);
                 _showCustomPhoneDialog(isWhatsApp: false);
@@ -1011,7 +1011,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           controller: controller,
           keyboardType: TextInputType.phone,
           decoration: InputDecoration(
-            labelText: 'Número de teléfono',
+            labelText: 'NÃºmero de telÃ©fono',
             hintText: 'Ej: 600 123 456',
             prefixIcon: Icon(isWhatsApp ? Icons.chat : Icons.phone),
             border: const OutlineInputBorder(),
@@ -1059,7 +1059,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           controller: ctrl,
           maxLines: 5,
           decoration: const InputDecoration(
-            hintText: 'Escribe aquí las observaciones...',
+            hintText: 'Escribe aquÃ­ las observaciones...',
             border: OutlineInputBorder(),
           ),
         ),
@@ -1148,7 +1148,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             ),
             const SizedBox(height: 8),
             const Text(
-              'Selecciona el número:',
+              'Selecciona el nÃºmero:',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 12),
@@ -1156,7 +1156,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
                 child: Text(
-                  'No hay teléfonos guardados',
+                  'No hay telÃ©fonos guardados',
                   style: TextStyle(color: AppTheme.textSecondary),
                 ),
               ),
@@ -1165,7 +1165,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                 leading:
                     const Icon(Icons.phone_android, color: Color(0xFF25D366)),
                 title: Text((p['number'] as String?) ?? ''),
-                subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
+                subtitle: Text((p['type'] as String?) ?? 'TelÃ©fono'),
                 onTap: () {
                   Navigator.pop(ctx);
                   _launchWhatsApp((p['number'] as String?) ?? '');
@@ -1175,8 +1175,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
             const Divider(),
             ListTile(
               leading: const Icon(Icons.dialpad, color: AppTheme.neonPink),
-              title: const Text('Introducir número manualmente'),
-              subtitle: const Text('Escribe un número personalizado'),
+              title: const Text('Introducir nÃºmero manualmente'),
+              subtitle: const Text('Escribe un nÃºmero personalizado'),
               onTap: () {
                 Navigator.pop(ctx);
                 _showCustomPhoneDialog(isWhatsApp: true);
@@ -1210,8 +1210,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     // Professional message
     final message =
         Uri.encodeComponent('Hola, soy $nombreComercial de Mari Pepa. '
-            'Mañana día $fecha tenemos visita. '
-            '¿Necesitas cualquier cosilla?');
+            'MaÃ±ana dÃ­a $fecha tenemos visita. '
+            'Â¿Necesitas cualquier cosilla?');
 
     final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
     if (await canLaunchUrl(uri)) {
@@ -1225,7 +1225,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Selecciona un vendedor específico para reordenar'),
+            content: Text('Selecciona un vendedor especÃ­fico para reordenar'),
             backgroundColor: AppTheme.error,
           ),
         );
@@ -1250,11 +1250,11 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       await _saveNewOrder(result);
     }
 
-    // SIEMPRE refrescar después de cerrar el diálogo
+    // SIEMPRE refrescar despuÃ©s de cerrar el diÃ¡logo
     await _refreshDataAndCounts();
   }
 
-  /// Refresca datos y contadores después de cambios
+  /// Refresca datos y contadores despuÃ©s de cambios
   Future<void> _refreshDataAndCounts() async {
     // Primero refrescar contadores desde el backend
     try {
@@ -1283,7 +1283,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       return;
     }
 
-    // Luego refrescar la lista del día actual
+    // Luego refrescar la lista del dÃ­a actual
     await _loadDayClients();
 
     if (mounted) {
@@ -1323,7 +1323,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         setState(() => _isLoadingWeek = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('✅ Orden actualizado correctamente'),
+            content: Text('âœ… Orden actualizado correctamente'),
             backgroundColor: AppTheme.success,
           ),
         );
@@ -1424,13 +1424,13 @@ class _ReorderDialogState extends State<ReorderDialog> {
     }
   }
 
-  /// NUEVO FLUJO: Mover cliente a otro día con confirmación completa
+  /// NUEVO FLUJO: Mover cliente a otro dÃ­a con confirmaciÃ³n completa
   Future<void> _moveClientToDay(int index) async {
     final client = _items[index];
     final clientName = (client['name'] as String?) ?? 'Cliente';
     final clientCode = (client['code'] as String?) ?? '';
 
-    // PASO 1: Selector de día destino (excluye Domingo)
+    // PASO 1: Selector de dÃ­a destino (excluye Domingo)
     final selectedDay = await showDialog<String>(
       context: context,
       builder: (ctx) => DaySelectorDialog(
@@ -1440,9 +1440,9 @@ class _ReorderDialogState extends State<ReorderDialog> {
       ),
     );
 
-    if (selectedDay == null) return; // Usuario canceló
+    if (selectedDay == null) return; // Usuario cancelÃ³
 
-    // PASO 2: Selector de posición en día destino
+    // PASO 2: Selector de posiciÃ³n en dÃ­a destino
     final selectedPosition = await showDialog<String>(
       context: context,
       builder: (ctx) => PositionSelectorDialog(
@@ -1453,9 +1453,9 @@ class _ReorderDialogState extends State<ReorderDialog> {
       ),
     );
 
-    if (selectedPosition == null) return; // Usuario canceló
+    if (selectedPosition == null) return; // Usuario cancelÃ³
 
-    // PASO 3: Confirmación final con resumen
+    // PASO 3: ConfirmaciÃ³n final con resumen
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => MoveConfirmationDialog(
@@ -1467,7 +1467,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
       ),
     );
 
-    if (confirmed != true) return; // Usuario canceló
+    if (confirmed != true) return; // Usuario cancelÃ³
 
     // PASO 4: Ejecutar el movimiento
     await _executeMove(client, selectedDay, selectedPosition, index);
@@ -1496,7 +1496,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
     );
 
     try {
-      // Determinar la posición numérica
+      // Determinar la posiciÃ³n numÃ©rica
       dynamic targetPosition;
       if (position == 'start') {
         targetPosition = 'start';
@@ -1554,7 +1554,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
     }
   }
 
-  /// Confirmación antes de guardar el nuevo orden
+  /// ConfirmaciÃ³n antes de guardar el nuevo orden
   Future<void> _confirmSave() async {
     if (!_hasChanges && _items.length == widget.clients.length) {
       // No hay cambios de orden
@@ -1571,7 +1571,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
     );
 
     if (confirmed ?? false) {
-      // Añadir posición original a cada item antes de retornar
+      // AÃ±adir posiciÃ³n original a cada item antes de retornar
       final itemsWithOriginalPos = _items.map((item) {
         final code = item['code'] as String;
         return {
@@ -1582,7 +1582,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
       Navigator.pop(
         context,
         itemsWithOriginalPos,
-      ); // Retornar items con posición original
+      ); // Retornar items con posiciÃ³n original
     }
   }
 
@@ -1598,11 +1598,11 @@ class _ReorderDialogState extends State<ReorderDialog> {
           children: [
             Icon(Icons.warning_amber_rounded, color: AppTheme.warning),
             SizedBox(width: 8),
-            Text('¿Descartar cambios?'),
+            Text('Â¿Descartar cambios?'),
           ],
         ),
         content: const Text(
-          'Has modificado el orden de la ruta. ¿Quieres descartar los cambios sin guardar?',
+          'Has modificado el orden de la ruta. Â¿Quieres descartar los cambios sin guardar?',
         ),
         actions: [
           TextButton(
@@ -1659,7 +1659,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: AppTheme.warning.withOpacity(0.2),
+                        color: AppTheme.warning.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Text(
@@ -1687,8 +1687,8 @@ class _ReorderDialogState extends State<ReorderDialog> {
               color: AppTheme.surfaceColor,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: const Text(
-                'Arrastra para ordenar o usa las flechas. Usa el icono 📅 para mover a otro día.\n'
-                '⚠️ Los cambios solo se aplican al pulsar GUARDAR CAMBIOS.',
+                'Arrastra para ordenar o usa las flechas. Usa el icono ðŸ“… para mover a otro dÃ­a.\n'
+                'âš ï¸ Los cambios solo se aplican al pulsar GUARDAR CAMBIOS.',
                 style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
               ),
             ),
@@ -1706,7 +1706,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
                             color: Colors.grey.shade600,
                           ),
                           const SizedBox(height: 8),
-                          const Text('No hay clientes en este día'),
+                          const Text('No hay clientes en este dÃ­a'),
                         ],
                       ),
                     )
@@ -1803,7 +1803,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
                                     Icons.calendar_month,
                                     color: AppTheme.neonBlue,
                                   ),
-                                  tooltip: 'Mover a otro día',
+                                  tooltip: 'Mover a otro dÃ­a',
                                   onPressed: () => _moveClientToDay(index),
                                 ),
                               ],

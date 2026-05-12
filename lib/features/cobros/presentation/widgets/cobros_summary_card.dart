@@ -1,4 +1,4 @@
-/// COBROS SUMMARY CARD
+﻿/// COBROS SUMMARY CARD
 /// Tarjeta de resumen diario de entregas
 library;
 
@@ -19,7 +19,7 @@ class CobrosSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: '€');
+    final currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: 'â‚¬');
     final total = totalPendientes + totalCompletadas;
     final progreso = total > 0 ? totalCompletadas / total : 0.0;
 
@@ -31,16 +31,16 @@ class CobrosSummaryCard extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: [
             AppTheme.surfaceColor,
-            AppTheme.surfaceColor.withOpacity(0.7),
+            AppTheme.surfaceColor.withValues(alpha: 0.7),
           ],
         ),
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: Colors.white.withOpacity(0.05),
+          color: Colors.white.withValues(alpha: 0.05),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 10,
           ),
         ],
@@ -48,13 +48,13 @@ class CobrosSummaryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Título
+          // TÃ­tulo
           Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withOpacity(0.15),
+                  color: AppTheme.neonBlue.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(
@@ -65,7 +65,7 @@ class CobrosSummaryCard extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               const Text(
-                'Resumen del día',
+                'Resumen del dÃ­a',
                 style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontWeight: FontWeight.w600,
@@ -90,7 +90,7 @@ class CobrosSummaryCard extends StatelessWidget {
                       child: CircularProgressIndicator(
                         value: progreso,
                         strokeWidth: 8,
-                        backgroundColor: Colors.white.withOpacity(0.1),
+                        backgroundColor: Colors.white.withValues(alpha: 0.1),
                         valueColor: AlwaysStoppedAnimation(
                           progreso >= 1 ? Colors.green : AppTheme.neonBlue,
                         ),
@@ -111,7 +111,7 @@ class CobrosSummaryCard extends StatelessWidget {
                           Text(
                             '$totalCompletadas/$total',
                             style: TextStyle(
-                              color: AppTheme.textSecondary.withOpacity(0.7),
+                              color: AppTheme.textSecondary.withValues(alpha: 0.7),
                               fontSize: 10,
                             ),
                           ),
@@ -159,9 +159,9 @@ class CobrosSummaryCard extends StatelessWidget {
               margin: const EdgeInsets.only(bottom: 12),
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.red.withOpacity(0.3)),
+                border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -182,7 +182,7 @@ class CobrosSummaryCard extends StatelessWidget {
                         Text(
                           '$totalCTR entregas requieren cobro',
                           style: TextStyle(
-                            color: Colors.red.withOpacity(0.7),
+                            color: Colors.red.withValues(alpha: 0.7),
                             fontSize: 10,
                           ),
                         ),
@@ -199,8 +199,8 @@ class CobrosSummaryCard extends StatelessWidget {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  AppTheme.neonBlue.withOpacity(0.1),
-                  AppTheme.neonPurple.withOpacity(0.1),
+                  AppTheme.neonBlue.withValues(alpha: 0.1),
+                  AppTheme.neonPurple.withValues(alpha: 0.1),
                 ],
               ),
               borderRadius: BorderRadius.circular(14),
@@ -242,7 +242,7 @@ class CobrosSummaryCard extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.15),
+            color: color.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Icon(icon, color: color, size: 14),
@@ -251,7 +251,7 @@ class CobrosSummaryCard extends StatelessWidget {
         Text(
           label,
           style: TextStyle(
-            color: AppTheme.textSecondary.withOpacity(0.8),
+            color: AppTheme.textSecondary.withValues(alpha: 0.8),
             fontSize: 12,
           ),
         ),

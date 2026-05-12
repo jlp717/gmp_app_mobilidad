@@ -1,4 +1,4 @@
-/// Order Detail Sheet
+﻿/// Order Detail Sheet
 /// ==================
 /// Bottom sheet showing full order details: header info, lines, totals, and actions
 library;
@@ -103,7 +103,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           ],
         ),
         content: const Text(
-          'Esta accion no se puede deshacer. ¿Deseas anular este pedido?',
+          'Esta accion no se puede deshacer. Â¿Deseas anular este pedido?',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -153,7 +153,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           ],
         ),
         content: Text(
-          '¿Deseas confirmar el pedido #${header.numeroPedido} para el cliente ${header.clienteName}?',
+          'Â¿Deseas confirmar el pedido #${header.numeroPedido} para el cliente ${header.clienteName}?',
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -164,7 +164,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonGreen.withOpacity(0.2),
+              backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.2),
               foregroundColor: AppTheme.neonGreen,
             ),
             child: const Text('Confirmar'),
@@ -286,9 +286,9 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.15),
+                  color: statusColor.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: statusColor.withOpacity(0.5)),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.5)),
                 ),
                 child: Text(
                   header.estado,
@@ -367,7 +367,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                   width: 24,
                   height: 24,
                   decoration: BoxDecoration(
-                    color: AppTheme.neonBlue.withOpacity(0.15),
+                    color: AppTheme.neonBlue.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Center(
@@ -469,7 +469,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: AppTheme.darkBase.withOpacity(0.5),
+        color: AppTheme.darkBase.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
@@ -504,7 +504,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [

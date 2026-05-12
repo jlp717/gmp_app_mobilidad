@@ -1,6 +1,11 @@
-const odbc = require('odbc');
+/**
+ * FINAL OBJECTIVES — One-shot script to set Sep-Dec 2026 targets.
+ * Uses the central db module for secure, parametrized queries.
+ */
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
-const connStr = `DSN=${process.env.ODBC_DSN || 'GMP'};UID=${process.env.ODBC_UID || 'JAVIER'};PWD=${process.env.ODBC_PWD || 'JAVIER'};NAM=1;CCSID=1208;CMPTDM=1;`;
+const { queryWithParams } = require('../config/db');
+const logger = require('../middleware/logger');
+
 function r2(v) { return Math.round(v * 100) / 100; }
 
 // SOLO los 11 que comisionan (02,05,10,15,16,33,35,72,73,81,83)
@@ -18,38 +23,47 @@ const V = {
 };
 
 async function main() {
-  const conn = await odbc.connect(connStr);
-  console.log('=== FIJANDO objetivos Sep-Dic (11 comerciales) ===\n');
+  logger.info('=== FIJANDO objetivos Sep-Dic (11 comerciales) ===');
 
   // Borrar SOLO los 10 (excluyendo vendor 15 que ya está bien)
-  await conn.query(`DELETE FROM JAVIER.COMMERCIAL_TARGETS WHERE ANIO=2026 AND ACTIVO=1 AND MES>=9 AND CODIGOVENDEDOR NOT IN ('15','80','03','13','93')`);
-  // También limpiar los 4 excluidos por si acaso
-  await conn.query(`DELETE FROM JAVIER.COMMERCIAL_TARGETS WHERE ANIO=2026 AND ACTIVO=1 AND MES>=9 AND CODIGOVENDEDOR IN ('80','03','13','93')`);
-  console.log('Registros antiguos eliminados\n');
+  await queryWithParams(
+    `DELETE FROM JAVIER.COMMERCIAL_TARGETS WHERE ANIO = ? AND ACTIVO = 1 AND MES >= ? AND CODIGOVENDEDOR NOT IN (?, ?, ?, ?, ?)`,
+    [2026, 9, '15', '80', '03', '13', '93']
+  );
+  // También limpiar los 4 excluidos
+  await queryWithParams(
+    `DELETE FROM JAVIER.COMMERCIAL_TARGETS WHERE ANIO = ? AND ACTIVO = 1 AND MES >= ? AND CODIGOVENDEDOR IN (?, ?, ?, ?)`,
+    [2026, 9, '80', '03', '13', '93']
+  );
+  logger.info('Registros antiguos eliminados');
 
   let ok = 0;
   for (const [c, v] of Object.entries(V)) {
-    for (const [m,k,lb] of [[9,'s','Sep'],[10,'o','Oct'],[11,'n','Nov'],[12,'d','Dic']]) {
-      const dyn = r2(v[k] * (1 + v.pct/100));
+    for (const [m, k] of [[9, 's'], [10, 'o'], [11, 'n'], [12, 'd']]) {
+      const dyn = r2(v[k] * (1 + v.pct / 100));
       const obj = r2(dyn + v.em);
       const base = r2(obj / 1.10);
-      const c2 = await odbc.connect(connStr);
-      await c2.query(`INSERT INTO JAVIER.COMMERCIAL_TARGETS (CODIGOVENDEDOR,ANIO,MES,IMPORTE_OBJETIVO,IMPORTE_BASE_COMISION,PORCENTAJE_MEJORA,DESCRIPCION,ACTIVO,VIGENTE_DESDE,CREATED_AT,CREATED_BY) VALUES ('${c}',2026,${m},${obj},${base},10.00,'Obj ajustado - subida global 1.410.000€',1,CURRENT DATE,CURRENT TIMESTAMP,'SYSTEM')`);
-      await c2.close();
+      await queryWithParams(
+        `INSERT INTO JAVIER.COMMERCIAL_TARGETS (CODIGOVENDEDOR, ANIO, MES, IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION, PORCENTAJE_MEJORA, DESCRIPCION, ACTIVO, VIGENTE_DESDE, CREATED_AT, CREATED_BY) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT DATE, CURRENT TIMESTAMP, ?)`,
+        [c, 2026, m, obj, base, 10.00, 'Obj ajustado - subida global 1.410.000€', 1, 'SYSTEM']
+      );
       ok++;
     }
   }
-  console.log(`${ok} registros insertados\n`);
+  logger.info(`${ok} registros insertados`);
 
   // Verificar solo los 11
-  const rows = await conn.query(`SELECT CODIGOVENDEDOR, MES, IMPORTE_OBJETIVO FROM JAVIER.COMMERCIAL_TARGETS WHERE ANIO=2026 AND ACTIVO=1 AND MES>=9 AND CODIGOVENDEDOR NOT IN ('80','03','13','93') ORDER BY CODIGOVENDEDOR, MES`);
-  const t = {9:0,10:0,11:0,12:0};
+  const rows = await queryWithParams(
+    `SELECT CODIGOVENDEDOR, MES, IMPORTE_OBJETIVO FROM JAVIER.COMMERCIAL_TARGETS WHERE ANIO = ? AND ACTIVO = 1 AND MES >= ? AND CODIGOVENDEDOR NOT IN (?, ?, ?, ?, ?) ORDER BY CODIGOVENDEDOR, MES`,
+    [2026, 9, '80', '03', '13', '93']
+  );
+  const t = { 9: 0, 10: 0, 11: 0, 12: 0 };
   for (const r of rows) t[r.MES] += parseFloat(r.IMPORTE_OBJETIVO) || 0;
 
-  console.log('Totales por mes (11 comerciales + 15):');
-  const lbs = {9:'Sep',10:'Oct',11:'Nov',12:'Dic'};
+  const lbs = { 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic' };
   let grand = 0;
-  for (const [m,val] of Object.entries(t)) {
+  console.log('Totales por mes (11 comerciales + 15):');
+  for (const [m, val] of Object.entries(t)) {
     console.log(`  ${lbs[m]}: ${val.toFixed(2)}€`);
     grand += val;
   }
@@ -58,9 +72,7 @@ async function main() {
   console.log(`Extra distribuido por mes: 97.171€ (388.684€ / 4)`);
   console.log(`\n✅ Los 4 excluidos (80,03,13,93) siguen con cálculo dinámico LACLAE.`);
 
-  await conn.close();
-  const fs = require('fs');
-  try { fs.unlinkSync(__filename); } catch(e) {}
+  logger.info('Script final-objectives completed successfully');
 }
 
 main().catch(e => { console.error('FATAL:', e.message); process.exit(1); });

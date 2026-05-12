@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -276,7 +276,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         });
       }
     } catch (e) {
-      print('Error loading signers: $e');
+      debugPrint('Error loading signers: $e');
     }
   }
 
@@ -329,8 +329,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           border: Border.all(
             color: _isCompleted
-                ? AppTheme.success.withOpacity(0.3)
-                : AppTheme.neonBlue.withOpacity(0.2),
+                ? AppTheme.success.withValues(alpha: 0.3)
+                : AppTheme.neonBlue.withValues(alpha: 0.2),
           ),
         ),
         child: Column(
@@ -481,7 +481,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             style: const TextStyle(color: AppTheme.textPrimary),
             decoration: InputDecoration(
               labelText: 'Observaciones',
-              hintText: 'Añadir nota sobre la entrega...',
+              hintText: 'AÃ±adir nota sobre la entrega...',
               alignLabelWithHint: true,
               errorText: _observacionesError,
               filled: true,
@@ -678,15 +678,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.15),
+        color: Colors.orange.withValues(alpha: 0.15),
         border: Border.all(color: Colors.orange),
         borderRadius: BorderRadius.circular(8),
       ),
       child: const Text(
-        'ATENCIÓN: Si marca en verde sin modificar cantidades, '
-        'la entrega está OK. Si modifica o quita cantidades, la '
-        'entrega NO coincide — debe añadir observaciones en la '
-        "pestaña 'Observaciones' antes de confirmar.",
+        'ATENCIÃ“N: Si marca en verde sin modificar cantidades, '
+        'la entrega estÃ¡ OK. Si modifica o quita cantidades, la '
+        'entrega NO coincide â€” debe aÃ±adir observaciones en la '
+        "pestaÃ±a 'Observaciones' antes de confirmar.",
         style: TextStyle(
           color: Colors.orange,
           fontSize: 13,
@@ -768,7 +768,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.neonBlue.withOpacity(0.3),
+            color: AppTheme.neonBlue.withValues(alpha: 0.3),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -1000,7 +1000,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
             ),
             const SizedBox(width: 16),
             Text(
-              'Descargando ficha técnica...',
+              'Descargando ficha tÃ©cnica...',
               style: TextStyle(color: Colors.grey[300]),
             ),
           ],
@@ -1016,7 +1016,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       if (!File(filePath).existsSync()) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('No se encontró la ficha técnica'),
+            content: Text('No se encontrÃ³ la ficha tÃ©cnica'),
           ),
         );
         return;
@@ -1048,7 +1048,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     } catch (e) {
       if (navigator.canPop()) navigator.pop();
       final msg = e.toString().contains('404')
-          ? 'No hay ficha técnica para este producto'
+          ? 'No hay ficha tÃ©cnica para este producto'
           : 'Error al descargar: $e';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(msg)),
@@ -1061,9 +1061,9 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     if (code == '01' || code == 'CNT' || code.contains('CONTADO')) {
       return 'CONTADO';
     }
-    if (code.contains('REP')) return 'REPOSICIÓN';
+    if (code.contains('REP')) return 'REPOSICIÃ“N';
     if (code.contains('MEN')) return 'MENSUAL';
-    if (code.contains('CRE') || code == 'CR') return 'CRÉDITO';
+    if (code.contains('CRE') || code == 'CR') return 'CRÃ‰DITO';
     if (code.contains('TAR')) return 'TARJETA';
     if (code.contains('TRA')) return 'TRANSFERENCIA';
     return code;
@@ -1258,7 +1258,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       _dniError = 'El DNI/NIF es obligatorio';
       isValid = false;
     } else if (!_isValidDniNie(dniText)) {
-      _dniError = 'Formato no válido (ej: 12345678A o X1234567B)';
+      _dniError = 'Formato no vÃ¡lido (ej: 12345678A o X1234567B)';
       isValid = false;
     }
 
@@ -1286,7 +1286,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
 
     if (_isUrgent && !_isPaid) {
-      _pagoError = '⚠️ COBRO OBLIGATORIO';
+      _pagoError = 'âš ï¸ COBRO OBLIGATORIO';
       _tabController.animateTo(1);
       isValid = false;
     }
@@ -1337,7 +1337,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              '¿Está seguro de confirmar esta entrega?',
+              'Â¿EstÃ¡ seguro de confirmar esta entrega?',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
             ),
             const SizedBox(height: 16),
@@ -1359,7 +1359,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       Text(
                         _isFactura
                             ? 'Factura ${widget.albaran.numeroFactura}'
-                            : 'Albarán ${widget.albaran.numeroAlbaran}',
+                            : 'AlbarÃ¡n ${widget.albaran.numeroAlbaran}',
                         style: const TextStyle(
                             color: AppTheme.textPrimary,
                             fontWeight: FontWeight.w500),
@@ -1668,7 +1668,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                           Text(
                             widget.albaran.numeroFactura > 0
                                 ? 'Factura: ${widget.albaran.serieFactura}/${widget.albaran.numeroFactura}'
-                                : 'Albarán: ${widget.albaran.serie}/${widget.albaran.numeroAlbaran}',
+                                : 'AlbarÃ¡n: ${widget.albaran.serie}/${widget.albaran.numeroAlbaran}',
                             style: const TextStyle(
                                 color: AppTheme.neonCyan, fontSize: 14),
                           ),
@@ -1693,7 +1693,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                                           overflow: TextOverflow.ellipsis),
                                     ),
                                     Text(
-                                      'x${item.cantidadPedida.toStringAsFixed(0)}  ${(item.cantidadPedida * item.precioUnitario).toStringAsFixed(2)}€',
+                                      'x${item.cantidadPedida.toStringAsFixed(0)}  ${(item.cantidadPedida * item.precioUnitario).toStringAsFixed(2)}â‚¬',
                                       style: const TextStyle(
                                           color: AppTheme.textSecondary,
                                           fontSize: 12),
@@ -1702,13 +1702,13 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                                 ),
                               ))),
                           if (_items.length > 5)
-                            Text('... +${_items.length - 5} más',
+                            Text('... +${_items.length - 5} mÃ¡s',
                                 style: const TextStyle(
                                     color: AppTheme.textTertiary,
                                     fontSize: 11)),
                           const Divider(color: AppTheme.textTertiary),
                           Text(
-                              'TOTAL: ${widget.albaran.importeTotal.toStringAsFixed(2)} €',
+                              'TOTAL: ${widget.albaran.importeTotal.toStringAsFixed(2)} â‚¬',
                               style: const TextStyle(
                                   color: AppTheme.textPrimary,
                                   fontWeight: FontWeight.bold,
@@ -1725,7 +1725,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                       controller: obsController,
                       maxLines: 3,
                       decoration: InputDecoration(
-                        hintText: 'Añadir observaciones para el ticket...',
+                        hintText: 'AÃ±adir observaciones para el ticket...',
                         hintStyle:
                             const TextStyle(color: AppTheme.textTertiary),
                         filled: true,
@@ -1779,7 +1779,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                                 SizedBox(width: 12),
                                 Expanded(
                                     child: Text(
-                                        'Error al imprimir. Verifica que la Zebra está encendida y vinculada.')),
+                                        'Error al imprimir. Verifica que la Zebra estÃ¡ encendida y vinculada.')),
                               ]),
                               backgroundColor: AppTheme.error,
                             ),
@@ -1828,7 +1828,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              '¿Desea enviar la nota de entrega al cliente?',
+              'Â¿Desea enviar la nota de entrega al cliente?',
               style: TextStyle(color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 20),
@@ -1891,7 +1891,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     required VoidCallback onTap,
   }) {
     return Material(
-      color: color.withOpacity(0.15),
+      color: color.withValues(alpha: 0.15),
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: onTap,
@@ -1905,7 +1905,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
               Text(label,
                   style: TextStyle(color: color, fontWeight: FontWeight.w600)),
               const Spacer(),
-              Icon(Icons.chevron_right, color: color.withOpacity(0.6)),
+              Icon(Icons.chevron_right, color: color.withValues(alpha: 0.6)),
             ],
           ),
         ),
@@ -1927,7 +1927,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final pdfBytes = base64Decode(pdfData);
       final docLabel = widget.albaran.numeroFactura > 0
           ? 'Factura ${widget.albaran.numeroFactura}'
-          : 'Albarán ${widget.albaran.numeroAlbaran}';
+          : 'AlbarÃ¡n ${widget.albaran.numeroAlbaran}';
       final fileName =
           'Nota_Entrega_${widget.albaran.numeroFactura > 0 ? "F${widget.albaran.numeroFactura}" : "A${widget.albaran.numeroAlbaran}"}.pdf';
 
@@ -2008,7 +2008,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     final result = await WhatsAppFormModal.show(
       context,
       defaultMessage:
-          'Nota de entrega - Albarán ${widget.albaran.numeroFactura > 0 ? 'Factura ${widget.albaran.numeroFactura}' : widget.albaran.numeroAlbaran}',
+          'Nota de entrega - AlbarÃ¡n ${widget.albaran.numeroFactura > 0 ? 'Factura ${widget.albaran.numeroFactura}' : widget.albaran.numeroAlbaran}',
     );
     if (result == null || !mounted) return;
 

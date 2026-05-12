@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/promotion_detail_page.dart';
@@ -79,7 +79,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
             onChanged: (value) => setState(() => _search = value.trim()),
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
-              hintText: 'Buscar promoción o artículo...',
+              hintText: 'Buscar promociÃ³n o artÃ­culo...',
               hintStyle: const TextStyle(color: Colors.white38),
               prefixIcon:
                   const Icon(Icons.search, color: AppTheme.neonBlue, size: 18),
@@ -108,7 +108,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                 FilterChip(
                   label: const Text('Solo con stock'),
                   selected: _onlyWithStock,
-                  selectedColor: AppTheme.neonGreen.withOpacity(0.2),
+                  selectedColor: AppTheme.neonGreen.withValues(alpha: 0.2),
                   backgroundColor: AppTheme.darkCard,
                   labelStyle: TextStyle(
                     color: _onlyWithStock ? AppTheme.neonGreen : Colors.white70,
@@ -138,7 +138,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
     return FilterChip(
       label: Text(label),
       selected: selected,
-      selectedColor: AppTheme.neonBlue.withOpacity(0.2),
+      selectedColor: AppTheme.neonBlue.withValues(alpha: 0.2),
       backgroundColor: AppTheme.darkCard,
       labelStyle: TextStyle(
         color: selected ? AppTheme.neonBlue : Colors.white70,
@@ -163,7 +163,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: accentColor.withOpacity(0.35)),
+        side: BorderSide(color: accentColor.withValues(alpha: 0.35)),
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
@@ -206,7 +206,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                     child: Text(
                       group.promoDesc.isNotEmpty
                           ? group.promoDesc
-                          : (isGift ? 'Promoción regalo' : 'Promoción precio'),
+                          : (isGift ? 'PromociÃ³n regalo' : 'PromociÃ³n precio'),
                       style: TextStyle(
                         color: accentColor,
                         fontWeight: FontWeight.w700,
@@ -218,7 +218,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: accentColor.withOpacity(0.15),
+                      color: accentColor.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
@@ -285,7 +285,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
               if (group.dateTo.isNotEmpty && group.dateTo != '0/0/0') ...[
                 const SizedBox(height: 2),
                 Text(
-                  'Válida hasta ${group.dateTo}',
+                  'VÃ¡lida hasta ${group.dateTo}',
                   style: const TextStyle(color: Colors.white38, fontSize: 11),
                 ),
               ],
@@ -296,10 +296,10 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.04),
+                    color: Colors.white.withValues(alpha: 0.04),
                     borderRadius: BorderRadius.circular(999),
                     border: Border.all(
-                        color: AppTheme.borderColor.withOpacity(0.5),),
+                        color: AppTheme.borderColor.withValues(alpha: 0.5),),
                   ),
                   child: const Text(
                     'Ver detalle',
@@ -329,7 +329,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                       onPressed: () =>
                           widget.onProductTap(item.code, item.name),
                       backgroundColor: AppTheme.darkSurface,
-                      side: BorderSide(color: stockColor.withOpacity(0.45)),
+                      side: BorderSide(color: stockColor.withValues(alpha: 0.45)),
                       avatar: Icon(
                         hasStock == true
                             ? Icons.inventory_2_outlined
@@ -338,7 +338,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                         color: stockColor,
                       ),
                       label: Text(
-                        '${item.code} · ${item.name}',
+                        '${item.code} Â· ${item.name}',
                         style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 11,
@@ -352,7 +352,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                       backgroundColor: AppTheme.darkSurface,
                       side: const BorderSide(color: AppTheme.borderColor),
                       label: Text(
-                        '+${group.items.length - 8} más',
+                        '+${group.items.length - 8} mÃ¡s',
                         style: const TextStyle(
                             color: Colors.white54, fontSize: 11,),
                       ),

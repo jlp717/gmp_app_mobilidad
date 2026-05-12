@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -25,13 +25,13 @@ class PlannerToolbar extends StatelessWidget {
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
               colors: [
-                AppTheme.darkSurface.withOpacity(0.95),
-                AppTheme.darkBase.withOpacity(0.9),
+                AppTheme.darkSurface.withValues(alpha: 0.95),
+                AppTheme.darkBase.withValues(alpha: 0.9),
               ],
             ),
             border: Border(
               bottom: BorderSide(
-                color: AppTheme.neonBlue.withOpacity(0.1),
+                color: AppTheme.neonBlue.withValues(alpha: 0.1),
               ),
             ),
           ),
@@ -69,7 +69,7 @@ class PlannerToolbar extends StatelessWidget {
 
               const Spacer(),
 
-              // Profit optimizer — glow on hover
+              // Profit optimizer â€” glow on hover
               _GlowToolButton(
                 icon: Icons.auto_awesome_rounded,
                 tooltip: 'Optimizar carga (max beneficio)',
@@ -129,7 +129,7 @@ class PlannerToolbar extends StatelessWidget {
               ),
               const SizedBox(width: 6),
 
-              // Reset — warning glow
+              // Reset â€” warning glow
               _GlowToolButton(
                 icon: Icons.refresh_rounded,
                 tooltip: 'Recalcular (descartar cambios)',
@@ -153,7 +153,7 @@ class PlannerToolbar extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
           side: BorderSide(
-            color: AppTheme.warning.withOpacity(0.3),
+            color: AppTheme.warning.withValues(alpha: 0.3),
           ),
         ),
         title: const Row(
@@ -165,7 +165,7 @@ class PlannerToolbar extends StatelessWidget {
           ],
         ),
         content: const Text(
-          'Se descartarán los cambios manuales y se recalculará la carga desde el algoritmo. Esta acción no se puede deshacer.',
+          'Se descartarÃ¡n los cambios manuales y se recalcularÃ¡ la carga desde el algoritmo. Esta acciÃ³n no se puede deshacer.',
         ),
         actions: [
           TextButton(
@@ -189,7 +189,7 @@ class PlannerToolbar extends StatelessWidget {
 }
 
 // =============================================================================
-// PILL SEGMENTED CONTROL — floating pill with animated highlight
+// PILL SEGMENTED CONTROL â€” floating pill with animated highlight
 // =============================================================================
 
 class _PillSegmented<T> extends StatelessWidget {
@@ -208,10 +208,10 @@ class _PillSegmented<T> extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard.withOpacity(0.3),
+        color: AppTheme.darkCard.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: AppTheme.borderColor.withOpacity(0.2),
+          color: AppTheme.borderColor.withValues(alpha: 0.2),
         ),
       ),
       child: Row(
@@ -226,18 +226,18 @@ class _PillSegmented<T> extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: isActive
-                    ? AppTheme.neonBlue.withOpacity(0.15)
+                    ? AppTheme.neonBlue.withValues(alpha: 0.15)
                     : Colors.transparent,
                 borderRadius: BorderRadius.circular(7),
                 border: isActive
                     ? Border.all(
-                        color: AppTheme.neonBlue.withOpacity(0.3),
+                        color: AppTheme.neonBlue.withValues(alpha: 0.3),
                       )
                     : null,
                 boxShadow: isActive
                     ? [
                         BoxShadow(
-                          color: AppTheme.neonBlue.withOpacity(0.1),
+                          color: AppTheme.neonBlue.withValues(alpha: 0.1),
                           blurRadius: 8,
                         ),
                       ]
@@ -251,7 +251,7 @@ class _PillSegmented<T> extends StatelessWidget {
                     size: 13,
                     color: isActive
                         ? AppTheme.neonBlue
-                        : AppTheme.textTertiary.withOpacity(0.7),
+                        : AppTheme.textTertiary.withValues(alpha: 0.7),
                   ),
                   const SizedBox(width: 4),
                   AnimatedDefaultTextStyle(
@@ -262,7 +262,7 @@ class _PillSegmented<T> extends StatelessWidget {
                           isActive ? FontWeight.w600 : FontWeight.w400,
                       color: isActive
                           ? AppTheme.neonBlue
-                          : AppTheme.textTertiary.withOpacity(0.7),
+                          : AppTheme.textTertiary.withValues(alpha: 0.7),
                       letterSpacing: isActive ? 0.2 : 0.0,
                     ),
                     child: Text(opt.$3),
@@ -278,7 +278,7 @@ class _PillSegmented<T> extends StatelessWidget {
 }
 
 // =============================================================================
-// GLOW TOOL BUTTON — icon button with subtle glow when active/hovered
+// GLOW TOOL BUTTON â€” icon button with subtle glow when active/hovered
 // =============================================================================
 
 class _GlowToolButton extends StatefulWidget {
@@ -306,7 +306,7 @@ class _GlowToolButtonState extends State<_GlowToolButton> {
   Widget build(BuildContext context) {
     final baseColor = widget.enabled
         ? (widget.color ?? AppTheme.textSecondary)
-        : AppTheme.textTertiary.withOpacity(0.3);
+        : AppTheme.textTertiary.withValues(alpha: 0.3);
 
     return Tooltip(
       message: widget.tooltip,
@@ -324,13 +324,13 @@ class _GlowToolButtonState extends State<_GlowToolButton> {
           padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
             color: _pressed
-                ? baseColor.withOpacity(0.1)
+                ? baseColor.withValues(alpha: 0.1)
                 : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             boxShadow: _pressed && widget.enabled
                 ? [
                     BoxShadow(
-                      color: baseColor.withOpacity(0.15),
+                      color: baseColor.withValues(alpha: 0.15),
                       blurRadius: 8,
                     ),
                   ]

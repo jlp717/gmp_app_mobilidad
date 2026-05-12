@@ -1,4 +1,4 @@
-/// Order Preview Sheet (Amazon-style)
+﻿/// Order Preview Sheet (Amazon-style)
 /// ====================================
 /// Premium DraggableScrollableSheet showing full order details
 /// before confirmation. Includes IVA breakdown, margin info,
@@ -98,10 +98,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ── Header ──
+            // â”€â”€ Header â”€â”€
             _buildHeader(provider),
 
-            // ── Scrollable Content ──
+            // â”€â”€ Scrollable Content â”€â”€
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -126,7 +126,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               ),
             ),
 
-            // ── Confirm Footer ──
+            // â”€â”€ Confirm Footer â”€â”€
             _buildConfirmFooter(total, margin),
           ],
         ),
@@ -142,14 +142,14 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppTheme.neonBlue.withOpacity(0.18),
+            AppTheme.neonBlue.withValues(alpha: 0.18),
             AppTheme.darkSurface,
-            AppTheme.neonGreen.withOpacity(0.08),
+            AppTheme.neonGreen.withValues(alpha: 0.08),
           ],
         ),
         border: Border(
           bottom: BorderSide(
-            color: Colors.white.withOpacity(0.08),
+            color: Colors.white.withValues(alpha: 0.08),
           ),
         ),
       ),
@@ -161,14 +161,14 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  AppTheme.neonBlue.withOpacity(0.95),
-                  AppTheme.neonCyan.withOpacity(0.82),
+                  AppTheme.neonBlue.withValues(alpha: 0.95),
+                  AppTheme.neonCyan.withValues(alpha: 0.82),
                 ],
               ),
               borderRadius: BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                  color: AppTheme.neonBlue.withOpacity(0.24),
+                  color: AppTheme.neonBlue.withValues(alpha: 0.24),
                   blurRadius: 18,
                   offset: const Offset(0, 8),
                 ),
@@ -228,9 +228,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: Colors.white.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -265,8 +265,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  AppTheme.neonBlue.withOpacity(0.3),
-                  AppTheme.neonPurple.withOpacity(0.2)
+                  AppTheme.neonBlue.withValues(alpha: 0.3),
+                  AppTheme.neonPurple.withValues(alpha: 0.2)
                 ],
               ),
               borderRadius: BorderRadius.circular(12),
@@ -291,7 +291,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'Código: ${provider.clientCode ?? '-'}',
+                  'CÃ³digo: ${provider.clientCode ?? '-'}',
                   style: const TextStyle(
                       color: AppTheme.textSecondary, fontSize: 12),
                 ),
@@ -302,9 +302,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: AppTheme.warning.withOpacity(0.1),
+                color: AppTheme.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.warning.withOpacity(0.3)),
+                border: Border.all(color: AppTheme.warning.withValues(alpha: 0.3)),
               ),
               child: Column(
                 children: [
@@ -356,16 +356,16 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppTheme.neonGreen.withOpacity(0.13),
-            AppTheme.darkCard.withOpacity(0.88),
-            AppTheme.neonBlue.withOpacity(0.08),
+            AppTheme.neonGreen.withValues(alpha: 0.13),
+            AppTheme.darkCard.withValues(alpha: 0.88),
+            AppTheme.neonBlue.withValues(alpha: 0.08),
           ],
         ),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: AppTheme.neonGreen.withOpacity(0.22)),
+        border: Border.all(color: AppTheme.neonGreen.withValues(alpha: 0.22)),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.neonGreen.withOpacity(0.10),
+            color: AppTheme.neonGreen.withValues(alpha: 0.10),
             blurRadius: 22,
             offset: const Offset(0, 10),
           ),
@@ -380,7 +380,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  color: AppTheme.neonGreen.withOpacity(0.16),
+                  color: AppTheme.neonGreen.withValues(alpha: 0.16),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -433,9 +433,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.18),
+              color: Colors.black.withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
             ),
             child: Row(
               children: [
@@ -494,8 +494,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                   icon: const Icon(Icons.edit_calendar_rounded),
                   color: AppTheme.neonGreen,
                   style: IconButton.styleFrom(
-                    backgroundColor: AppTheme.neonGreen.withOpacity(0.12),
-                    disabledBackgroundColor: Colors.white.withOpacity(0.04),
+                    backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.12),
+                    disabledBackgroundColor: Colors.white.withValues(alpha: 0.04),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -510,9 +510,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           Container(
             padding: const EdgeInsets.all(13),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.055),
+              color: Colors.white.withValues(alpha: 0.055),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
             ),
             child: _buildDeliveryInfo(
               icon: Icons.local_shipping_rounded,
@@ -527,9 +527,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               width: double.infinity,
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: AppTheme.error.withOpacity(0.10),
+                color: AppTheme.error.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.error.withOpacity(0.24)),
+                border: Border.all(color: AppTheme.error.withValues(alpha: 0.24)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -563,9 +563,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withOpacity(0.26)),
+        border: Border.all(color: color.withValues(alpha: 0.26)),
       ),
       child: Text(
         label,
@@ -591,10 +591,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             (day) => Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
               decoration: BoxDecoration(
-                color: AppTheme.neonGreen.withOpacity(0.10),
+                color: AppTheme.neonGreen.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(999),
                 border: Border.all(
-                  color: AppTheme.neonGreen.withOpacity(0.22),
+                  color: AppTheme.neonGreen.withValues(alpha: 0.22),
                 ),
               ),
               child: Text(
@@ -703,9 +703,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface.withOpacity(0.6),
+        color: AppTheme.darkSurface.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderColor.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -715,7 +715,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             height: 28,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              color: AppTheme.neonBlue.withOpacity(0.1),
+              color: AppTheme.neonBlue.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Text(
@@ -744,7 +744,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$qty × ${PedidosFormatters.money(effectivePrice, decimals: 3)}',
+                  '$qty Ã— ${PedidosFormatters.money(effectivePrice, decimals: 3)}',
                   style: const TextStyle(
                       color: AppTheme.textSecondary, fontSize: 11),
                 ),
@@ -784,7 +784,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         children: [
           // Subtotal
           _buildTotalRow(
-            'Subtotal (${provider.lineCount} líneas)',
+            'Subtotal (${provider.lineCount} lÃ­neas)',
             PedidosFormatters.money(provider.totalImporte),
           ),
 
@@ -858,9 +858,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: marginColor.withOpacity(0.1),
+                  color: marginColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: marginColor.withOpacity(0.3)),
+                  border: Border.all(color: marginColor.withValues(alpha: 0.3)),
                 ),
                 child: Text(
                   'Margen ${margin.toStringAsFixed(1)}%',
@@ -903,9 +903,9 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface.withOpacity(0.4),
+        color: AppTheme.darkSurface.withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.borderColor.withOpacity(0.2)),
+        border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -943,10 +943,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
         border:
-            Border(top: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2))),
+            Border(top: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.2))),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.neonBlue.withOpacity(0.1),
+            color: AppTheme.neonBlue.withValues(alpha: 0.1),
             blurRadius: 20,
             offset: const Offset(0, -4),
           ),
@@ -988,7 +988,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                     borderRadius: BorderRadius.circular(16),
                     boxShadow: [
                       BoxShadow(
-                        color: AppTheme.neonGreen.withOpacity(0.2 + glow),
+                        color: AppTheme.neonGreen.withValues(alpha: 0.2 + glow),
                         blurRadius: 16 + (glow * 20),
                         spreadRadius: glow * 4,
                       ),
@@ -1025,7 +1025,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                     backgroundColor: AppTheme.neonGreen,
                     foregroundColor: AppTheme.darkBase,
                     disabledBackgroundColor:
-                        AppTheme.neonGreen.withOpacity(0.4),
+                        AppTheme.neonGreen.withValues(alpha: 0.4),
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),

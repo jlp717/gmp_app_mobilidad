@@ -284,7 +284,7 @@ class FacturasService {
         } 
         // Scenario B: Year Filter (Strict)
         else if (year != null) {
-           print('[FACTURAS_SERVICE] Filtering by Year: $year. Input Items: ${facturas.length}');
+           debugPrint('[FACTURAS_SERVICE] Filtering by Year: $year. Input Items: ${facturas.length}');
            final originalCount = facturas.length;
            
            facturas = facturas.where((f) {
@@ -327,7 +327,7 @@ class FacturasService {
                }
            }).toList();
            
-           print('[FACTURAS_SERVICE] After Year Filter: ${facturas.length} (Filtered out ${originalCount - facturas.length})');
+           debugPrint('[FACTURAS_SERVICE] After Year Filter: ${facturas.length} (Filtered out ${originalCount - facturas.length})');
         }
 
         return facturas;

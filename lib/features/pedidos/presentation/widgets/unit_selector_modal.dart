@@ -1,4 +1,4 @@
-/// Unit Selector Modal (Premium Dialog)
+﻿/// Unit Selector Modal (Premium Dialog)
 /// ======================================
 /// Centered dialog for selecting unit of measure and quantity.
 /// Shows equivalences, stock per unit, and price per unit.
@@ -137,7 +137,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
       parts.add(
           'U/R: ${p.unitsRetractil.toStringAsFixed(p.unitsRetractil == p.unitsRetractil.roundToDouble() ? 0 : 1)}',);
     }
-    return parts.isEmpty ? null : parts.join('  ·  ');
+    return parts.isEmpty ? null : parts.join('  Â·  ');
   }
 
   /// Get stock for the selected unit
@@ -176,11 +176,11 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
       price = p.priceForUnit(unit);
     }
     if (price <= 0) return '';
-    return '${price.toStringAsFixed(3)} €/${_unitAbbr(unit)}';
+    return '${price.toStringAsFixed(3)} â‚¬/${_unitAbbr(unit)}';
   }
 
   /// Content description per unit button.
-  /// CAJAS: "1 cj = 10 band" — non-CAJAS: "1 band = 0.1 cj"
+  /// CAJAS: "1 cj = 10 band" â€” non-CAJAS: "1 band = 0.1 cj"
   String? _subtitleForUnit(String unit) {
     final p = widget.product;
     if (p == null || p.unitsPerBox <= 1) return null;
@@ -207,7 +207,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     final bestPrice = p.bestPrice;
     if (bestPrice <= 0) return null;
     final netoUr = bestPrice / p.unitsRetractil;
-    return 'Neto U/R: ${netoUr.toStringAsFixed(3)} €';
+    return 'Neto U/R: ${netoUr.toStringAsFixed(3)} â‚¬';
   }
 
   String _fmtNum(double v, {int decimals = 0}) {
@@ -275,9 +275,9 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withOpacity(0.08),
+                  color: AppTheme.neonBlue.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.neonBlue.withOpacity(0.2)),
+                  border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   children: [

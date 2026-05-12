@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -78,11 +78,11 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
     }
     
     return BoxDecoration(
-      color: baseColor.withOpacity(0.08), // Light background tint
+      color: baseColor.withValues(alpha: 0.08), // Light background tint
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: baseColor.withOpacity(0.6), width: 1.5),
+      border: Border.all(color: baseColor.withValues(alpha: 0.6), width: 1.5),
       boxShadow: [
-        BoxShadow(color: baseColor.withOpacity(0.1), blurRadius: 8),
+        BoxShadow(color: baseColor.withValues(alpha: 0.1), blurRadius: 8),
       ],
     );
   }
@@ -145,18 +145,18 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
             gradient: LinearGradient(
               colors: _isFactura
                   ? [
-                      AppTheme.neonPurple.withOpacity(0.3),
-                      AppTheme.neonPurple.withOpacity(0.1),
+                      AppTheme.neonPurple.withValues(alpha: 0.3),
+                      AppTheme.neonPurple.withValues(alpha: 0.1),
                     ]
                   : [
-                      AppTheme.darkBase.withOpacity(0.8),
-                      AppTheme.darkBase.withOpacity(0.5),
+                      AppTheme.darkBase.withValues(alpha: 0.8),
+                      AppTheme.darkBase.withValues(alpha: 0.5),
                     ],
             ),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: _isFactura
-                  ? AppTheme.neonPurple.withOpacity(0.5)
+                  ? AppTheme.neonPurple.withValues(alpha: 0.5)
                   : AppTheme.borderColor,
             ),
           ),
@@ -190,7 +190,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: AppTheme.success.withOpacity(0.2),
+              color: AppTheme.success.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -207,7 +207,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              NumberFormat.currency(symbol: '€', locale: 'es_ES')
+              NumberFormat.currency(symbol: 'â‚¬', locale: 'es_ES')
                   .format(widget.albaran.importeTotal),
               style: TextStyle(
                 color: _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
@@ -221,10 +221,10 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               margin: const EdgeInsets.only(top: 4),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: _getPaymentColor().withOpacity(0.15),
+                color: _getPaymentColor().withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: _getPaymentColor().withOpacity(0.4),
+                  color: _getPaymentColor().withValues(alpha: 0.4),
                 ),
               ),
               child: Row(
@@ -265,7 +265,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withOpacity(0.15),
+                color: AppTheme.neonBlue.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
@@ -298,13 +298,13 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.2),
+                  color: Colors.orange.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                  border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
                 ),
                 child: Text(
                   widget.repartidorNames != null && widget.repartidorNames!.containsKey(widget.albaran.codigoRepartidor)
-                      ? 'R ${widget.albaran.codigoRepartidor} — ${widget.repartidorNames![widget.albaran.codigoRepartidor]}'
+                      ? 'R ${widget.albaran.codigoRepartidor} â€” ${widget.repartidorNames![widget.albaran.codigoRepartidor]}'
                       : 'R ${widget.albaran.codigoRepartidor}',
                   style: TextStyle(
                     color: Colors.orange.shade700,
@@ -388,10 +388,10 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: buttonColor.withOpacity(0.1),
+            color: buttonColor.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: buttonColor.withOpacity(0.3),
+              color: buttonColor.withValues(alpha: 0.3),
             ),
           ),
           child: Row(
@@ -424,9 +424,9 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
   String _getPaymentLabel() {
     final code = widget.albaran.tipoPago.toUpperCase().trim();
     if (code == '01' || code == 'CNT' || code.contains('CONTADO')) return 'CONTADO';
-    if (code.contains('REP')) return 'REPOSICIÓN';
+    if (code.contains('REP')) return 'REPOSICIÃ“N';
     if (code.contains('MEN')) return 'MENSUAL';
-    if (code.contains('CRE') || code == 'CR') return 'CRÉDITO';
+    if (code.contains('CRE') || code == 'CR') return 'CRÃ‰DITO';
     if (code.contains('TAR')) return 'TARJETA';
     if (code.contains('TRA')) return 'TRANSFER';
     return code.length > 8 ? code.substring(0, 8) : code;

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -136,7 +136,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
             end: Alignment.bottomCenter,
             colors: [
               AppTheme.darkSurface,
-              AppTheme.darkBase.withOpacity(0.95),
+              AppTheme.darkBase.withValues(alpha: 0.95),
             ],
           ),
         ),
@@ -189,13 +189,13 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            AppTheme.neonBlue.withOpacity(0.2),
-                            AppTheme.neonCyan.withOpacity(0.1),
+                            AppTheme.neonBlue.withValues(alpha: 0.2),
+                            AppTheme.neonCyan.withValues(alpha: 0.1),
                           ],
                         ),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: AppTheme.neonBlue.withOpacity(0.3),
+                          color: AppTheme.neonBlue.withValues(alpha: 0.3),
                         ),
                       ),
                       child: Row(
@@ -264,7 +264,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(
-              color: AppTheme.neonBlue.withOpacity(0.2),
+              color: AppTheme.neonBlue.withValues(alpha: 0.2),
             ),
           ),
           child: Icon(
@@ -286,17 +286,17 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                AppTheme.neonBlue.withOpacity(0.15 + _pulseAnimation.value * 0.05),
-                AppTheme.neonCyan.withOpacity(0.1 + _pulseAnimation.value * 0.05),
+                AppTheme.neonBlue.withValues(alpha: 0.15 + _pulseAnimation.value * 0.05),
+                AppTheme.neonCyan.withValues(alpha: 0.1 + _pulseAnimation.value * 0.05),
               ],
             ),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: AppTheme.neonBlue.withOpacity(0.4),
+              color: AppTheme.neonBlue.withValues(alpha: 0.4),
             ),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.neonBlue.withOpacity(0.1 + _pulseAnimation.value * 0.1),
+                color: AppTheme.neonBlue.withValues(alpha: 0.1 + _pulseAnimation.value * 0.1),
                 blurRadius: 8,
                 spreadRadius: 1,
               ),
@@ -401,26 +401,26 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                       end: Alignment.bottomCenter,
                       colors: [
                         AppTheme.neonBlue,
-                        AppTheme.neonCyan.withOpacity(0.8),
+                        AppTheme.neonCyan.withValues(alpha: 0.8),
                       ],
                     )
                   : null,
               color: isSelected
                   ? null
-                  : (count > 0 ? AppTheme.darkCard : AppTheme.darkBase.withOpacity(0.5)),
+                  : (count > 0 ? AppTheme.darkCard : AppTheme.darkBase.withValues(alpha: 0.5)),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isSelected
                     ? AppTheme.neonCyan
                     : isToday
-                        ? AppTheme.neonBlue.withOpacity(0.5)
-                        : (count > 0 ? statusColor.withOpacity(0.3) : Colors.transparent),
+                        ? AppTheme.neonBlue.withValues(alpha: 0.5)
+                        : (count > 0 ? statusColor.withValues(alpha: 0.3) : Colors.transparent),
                 width: isSelected || isToday ? 2 : 1,
               ),
               boxShadow: isSelected
                   ? [
                       BoxShadow(
-                        color: AppTheme.neonBlue.withOpacity(0.4 + glowIntensity),
+                        color: AppTheme.neonBlue.withValues(alpha: 0.4 + glowIntensity),
                         blurRadius: 12,
                         spreadRadius: 2,
                       ),
@@ -464,7 +464,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: statusColor.withOpacity(0.5),
+                          color: statusColor.withValues(alpha: 0.5),
                           blurRadius: 4,
                         ),
                       ],
@@ -476,7 +476,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                     margin: const EdgeInsets.only(top: 2),
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                     decoration: BoxDecoration(
-                      color: AppTheme.neonBlue.withOpacity(0.2),
+                      color: AppTheme.neonBlue.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: const Text(
@@ -583,11 +583,11 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     
     if (count > 0) {
       if (status == 'good') {
-        statusText = '✓ Todas las entregas completadas';
+        statusText = 'âœ“ Todas las entregas completadas';
         statusIcon = Icons.check_circle;
         statusColor = AppTheme.success;
       } else if (status == 'bad') {
-        statusText = '⚠ Entregas pendientes o con incidencias';
+        statusText = 'âš  Entregas pendientes o con incidencias';
         statusIcon = Icons.warning;
         statusColor = AppTheme.error;
       } else {
@@ -629,7 +629,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
               widget.onDaySelected(date);
             },
             child: const Text(
-              'IR A ESTE DÍA',
+              'IR A ESTE DÃA',
               style: TextStyle(color: AppTheme.neonBlue),
             ),
           ),

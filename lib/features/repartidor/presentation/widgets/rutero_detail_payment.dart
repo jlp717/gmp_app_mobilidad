@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -70,7 +70,7 @@ class RuteroDetailPayment extends StatelessWidget {
           colors: [
             AppTheme.darkCard,
             if (_isUrgent)
-              AppTheme.obligatorio.withOpacity(0.1)
+              AppTheme.obligatorio.withValues(alpha: 0.1)
             else
               AppTheme.darkSurface,
           ],
@@ -78,14 +78,14 @@ class RuteroDetailPayment extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
           color: _isUrgent
-              ? AppTheme.obligatorio.withOpacity(0.4)
-              : AppTheme.neonBlue.withOpacity(0.2),
+              ? AppTheme.obligatorio.withValues(alpha: 0.4)
+              : AppTheme.neonBlue.withValues(alpha: 0.2),
           width: 2,
         ),
         boxShadow: [
           if (_isUrgent)
             BoxShadow(
-              color: AppTheme.obligatorio.withOpacity(0.15),
+              color: AppTheme.obligatorio.withValues(alpha: 0.15),
               blurRadius: 20,
             ),
         ],
@@ -102,7 +102,7 @@ class RuteroDetailPayment extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            NumberFormat.currency(symbol: '€', locale: 'es_ES')
+            NumberFormat.currency(symbol: 'â‚¬', locale: 'es_ES')
                 .format(albaran.importeTotal),
             style: TextStyle(
               color: _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
@@ -115,7 +115,7 @@ class RuteroDetailPayment extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
               color: (_isUrgent ? AppTheme.obligatorio : AppTheme.success)
-                  .withOpacity(0.15),
+                  .withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Row(
@@ -150,7 +150,7 @@ class RuteroDetailPayment extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'MÉTODO DE PAGO',
+          'MÃ‰TODO DE PAGO',
           style: TextStyle(
             color: AppTheme.textSecondary,
             fontSize: 12,
@@ -199,8 +199,8 @@ class RuteroDetailPayment extends StatelessWidget {
           gradient: isSelected
               ? LinearGradient(
                   colors: [
-                    AppTheme.neonBlue.withOpacity(0.2),
-                    AppTheme.neonCyan.withOpacity(0.1),
+                    AppTheme.neonBlue.withValues(alpha: 0.2),
+                    AppTheme.neonCyan.withValues(alpha: 0.1),
                   ],
                 )
               : null,
@@ -213,7 +213,7 @@ class RuteroDetailPayment extends StatelessWidget {
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: AppTheme.neonBlue.withOpacity(0.2),
+                    color: AppTheme.neonBlue.withValues(alpha: 0.2),
                     blurRadius: 10,
                   ),
                 ]
@@ -255,8 +255,8 @@ class RuteroDetailPayment extends StatelessWidget {
           gradient: isPaid
               ? LinearGradient(
                   colors: [
-                    AppTheme.success.withOpacity(0.2),
-                    AppTheme.success.withOpacity(0.1),
+                    AppTheme.success.withValues(alpha: 0.2),
+                    AppTheme.success.withValues(alpha: 0.1),
                   ],
                 )
               : null,
@@ -301,7 +301,7 @@ class RuteroDetailPayment extends StatelessWidget {
                   Text(
                     isPaid
                         ? 'Cobro registrado con $selectedPaymentMethod'
-                        : 'Confirmar recepción del pago',
+                        : 'Confirmar recepciÃ³n del pago',
                     style: const TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 11,
@@ -314,7 +314,7 @@ class RuteroDetailPayment extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.success.withOpacity(0.2),
+                  color: AppTheme.success.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -367,9 +367,9 @@ class RuteroDetailPayment extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppTheme.error.withOpacity(0.1),
+        color: AppTheme.error.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppTheme.error.withOpacity(0.5)),
+        border: Border.all(color: AppTheme.error.withValues(alpha: 0.5)),
       ),
       child: Row(
         children: [

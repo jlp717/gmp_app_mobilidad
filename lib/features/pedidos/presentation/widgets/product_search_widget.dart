@@ -1,4 +1,4 @@
-/// Product Search Widget
+﻿/// Product Search Widget
 /// =====================
 /// Search field with debounce + family filter chips for product catalog
 library;
@@ -130,7 +130,7 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                     ),
                     label: const Text('Solo con stock'),
                     selected: provider.onlyWithStock,
-                    selectedColor: AppTheme.neonGreen.withOpacity(0.2),
+                    selectedColor: AppTheme.neonGreen.withValues(alpha: 0.2),
                     backgroundColor: AppTheme.darkCard,
                     labelStyle: TextStyle(
                       color: provider.onlyWithStock ? AppTheme.neonGreen : Colors.white70,
@@ -159,7 +159,7 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                     child: FilterChip(
                       label: Text(family),
                       selected: selected,
-                      selectedColor: AppTheme.neonBlue.withOpacity(0.2),
+                      selectedColor: AppTheme.neonBlue.withValues(alpha: 0.2),
                       backgroundColor: AppTheme.darkCard,
                       labelStyle: TextStyle(
                         color: selected ? AppTheme.neonBlue : Colors.white70,

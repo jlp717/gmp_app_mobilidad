@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -25,13 +25,13 @@ class MetricsBar extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            AppTheme.darkBase.withOpacity(0.9),
-            AppTheme.darkSurface.withOpacity(0.6),
+            AppTheme.darkBase.withValues(alpha: 0.9),
+            AppTheme.darkSurface.withValues(alpha: 0.6),
           ],
         ),
         border: Border(
           bottom: BorderSide(
-            color: AppTheme.neonBlue.withOpacity(0.1),
+            color: AppTheme.neonBlue.withValues(alpha: 0.1),
           ),
         ),
       ),
@@ -83,7 +83,7 @@ class MetricsBar extends StatelessWidget {
 }
 
 // =============================================================================
-// CIRCULAR GAUGE CARD — arc progress + value inside
+// CIRCULAR GAUGE CARD â€” arc progress + value inside
 // =============================================================================
 
 class _CircularGaugeCard extends StatelessWidget {
@@ -109,7 +109,7 @@ class _CircularGaugeCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: AppTheme.gradientCard(
         startColor: color,
-        endColor: color.withOpacity(0.3),
+        endColor: color.withValues(alpha: 0.3),
         borderRadius: 10,
         borderOpacity: 0.15,
       ),
@@ -128,7 +128,7 @@ class _CircularGaugeCard extends StatelessWidget {
                 painter: _ArcPainter(
                   progress: v,
                   color: color,
-                  bgColor: AppTheme.darkCard.withOpacity(0.5),
+                  bgColor: AppTheme.darkCard.withValues(alpha: 0.5),
                 ),
                 child: Center(
                   child: Text(
@@ -186,7 +186,7 @@ class _CircularGaugeCard extends StatelessWidget {
                 ],
               ),
               Text(
-                '$label · $max',
+                '$label Â· $max',
                 style: AppTheme.captionText.copyWith(fontSize: 9),
               ),
             ],
@@ -198,7 +198,7 @@ class _CircularGaugeCard extends StatelessWidget {
 }
 
 // =============================================================================
-// ARC PAINTER — draws circular progress arc
+// ARC PAINTER â€” draws circular progress arc
 // =============================================================================
 
 class _ArcPainter extends CustomPainter {
@@ -257,7 +257,7 @@ class _ArcPainter extends CustomPainter {
 }
 
 // =============================================================================
-// PREMIUM STATUS BADGE — with pulse animation for EXCESO
+// PREMIUM STATUS BADGE â€” with pulse animation for EXCESO
 // =============================================================================
 
 class _PremiumStatusBadge extends StatefulWidget {
@@ -322,14 +322,14 @@ class _PremiumStatusBadgeState extends State<_PremiumStatusBadge>
         return Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: color.withOpacity(pulseOpacity),
+            color: color.withValues(alpha: pulseOpacity),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: color.withOpacity(0.4),
+              color: color.withValues(alpha: 0.4),
             ),
             boxShadow: [
               BoxShadow(
-                color: color.withOpacity(0.15),
+                color: color.withValues(alpha: 0.15),
                 blurRadius: glowBlur,
               ),
             ],
@@ -357,7 +357,7 @@ class _PremiumStatusBadgeState extends State<_PremiumStatusBadge>
 }
 
 // =============================================================================
-// BOX COUNT CARD — placed + overflow with tiny gradient card
+// BOX COUNT CARD â€” placed + overflow with tiny gradient card
 // =============================================================================
 
 class _BoxCountCard extends StatelessWidget {
@@ -370,10 +370,10 @@ class _BoxCountCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppTheme.darkCard.withOpacity(0.3),
+        color: AppTheme.darkCard.withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: AppTheme.borderColor.withOpacity(0.15),
+          color: AppTheme.borderColor.withValues(alpha: 0.15),
         ),
       ),
       child: Column(
@@ -408,7 +408,7 @@ class _BoxCountCard extends StatelessWidget {
 }
 
 // =============================================================================
-// PREMIUM SAVE INDICATOR — with subtle animations
+// PREMIUM SAVE INDICATOR â€” with subtle animations
 // =============================================================================
 
 class _PremiumSaveIndicator extends StatelessWidget {
@@ -432,10 +432,10 @@ class _PremiumSaveIndicator extends StatelessWidget {
           key: ValueKey(state),
           padding: const EdgeInsets.all(6),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.08),
+            color: color.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: Icon(icon, size: 18, color: color.withOpacity(0.8)),
+          child: Icon(icon, size: 18, color: color.withValues(alpha: 0.8)),
         ),
       ),
     );

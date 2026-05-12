@@ -1,4 +1,4 @@
-/// Analytics Dashboard Widget
+﻿/// Analytics Dashboard Widget
 /// ==========================
 /// Mini-dashboard showing order KPIs, trends, and top products
 library;
@@ -192,7 +192,7 @@ class AnalyticsDashboard extends StatelessWidget {
                   return BarChartGroupData(x: e.key, barRods: [
                     BarChartRodData(
                       toY: val,
-                      color: AppTheme.neonBlue.withOpacity(0.8),
+                      color: AppTheme.neonBlue.withValues(alpha: 0.8),
                       width: 16,
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
                     ),
@@ -223,9 +223,9 @@ class AnalyticsDashboard extends StatelessWidget {
             margin: const EdgeInsets.symmetric(horizontal: 3),
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 6),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: color.withOpacity(0.3), width: 0.5),
+              border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
             ),
             child: Column(
               children: [
@@ -233,7 +233,7 @@ class AnalyticsDashboard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text('$count', style: TextStyle(color: color, fontWeight: FontWeight.bold,
                     fontSize: Responsive.fontSize(context, small: 14, large: 16),),),
-                Text(entry.key.substring(0, 4), style: TextStyle(color: color.withOpacity(0.7),
+                Text(entry.key.substring(0, 4), style: TextStyle(color: color.withValues(alpha: 0.7),
                     fontSize: 9, fontWeight: FontWeight.w500,),),
               ],
             ),

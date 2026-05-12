@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
@@ -137,7 +137,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                 color: AppTheme.darkSurface,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: AppTheme.neonBlue.withOpacity(0.3),
+                  color: AppTheme.neonBlue.withValues(alpha: 0.3),
                 ),
               ),
               child: _isLoading

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 
@@ -71,13 +71,13 @@ class RuteroHeader extends StatelessWidget {
                       color: (selectedRole == 'comercial'
                               ? AppTheme.neonPink
                               : AppTheme.neonBlue)
-                          .withOpacity(0.2),
+                          .withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
                         color: (selectedRole == 'comercial'
                                 ? AppTheme.neonPink
                                 : AppTheme.neonBlue)
-                            .withOpacity(0.5),
+                            .withValues(alpha: 0.5),
                       ),
                     ),
                     child: Row(

@@ -1,4 +1,4 @@
-/// Order Summary Widget
+﻿/// Order Summary Widget
 /// ====================
 /// Cart/current order panel showing client header, line items, totals, and confirm button
 library;
@@ -125,7 +125,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withOpacity(0.15),
+                color: AppTheme.neonBlue.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Text(
@@ -169,7 +169,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                       ],
                     ),
                     content: const Text(
-                      '¿Seguro que quieres eliminar todas las líneas del pedido?',
+                      'Â¿Seguro que quieres eliminar todas las lÃ­neas del pedido?',
                       style: TextStyle(color: Colors.white70),
                     ),
                     actions: [
@@ -335,7 +335,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withValues(alpha: 0.3),
             blurRadius: 8,
             offset: const Offset(0, -2),
           ),
@@ -349,7 +349,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
             controller: _obsCtrl,
             style: const TextStyle(color: Colors.white, fontSize: 13),
             decoration: InputDecoration(
-              hintText: 'Añadir observaciones al pedido...',
+              hintText: 'AÃ±adir observaciones al pedido...',
               hintStyle: const TextStyle(color: Colors.white38),
               prefixIcon: const Icon(
                 Icons.comment_outlined,
@@ -366,7 +366,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
             ),
           ),
           const SizedBox(height: 12),
-          // C5 — Global discount
+          // C5 â€” Global discount
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: Row(
@@ -477,7 +477,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
               ),
             ],
           ),
-          // C3 — IVA breakdown
+          // C3 â€” IVA breakdown
           if (provider.ivaBreakdown.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 6),
@@ -530,14 +530,14 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                     style: TextStyle(
                       color: provider.isDirty
                           ? Colors.white38
-                          : AppTheme.neonGreen.withOpacity(0.7),
+                          : AppTheme.neonGreen.withValues(alpha: 0.7),
                       fontSize: 10,
                     ),
                   ),
                 ],
               ),
             ),
-          // E1 — Preview before confirm
+          // E1 â€” Preview before confirm
           SizedBox(
             width: double.infinity,
             height: 48,
@@ -565,7 +565,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.neonGreen,
                 foregroundColor: AppTheme.darkBase,
-                disabledBackgroundColor: AppTheme.neonGreen.withOpacity(0.5),
+                disabledBackgroundColor: AppTheme.neonGreen.withValues(alpha: 0.5),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -735,11 +735,11 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppTheme.neonBlue.withOpacity(0.08),
+                      color: AppTheme.neonBlue.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      '$equivText  ·  $unitLabel',
+                      '$equivText  Â·  $unitLabel',
                       style: const TextStyle(
                         color: AppTheme.neonBlue,
                         fontSize: 11,
@@ -1182,7 +1182,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           } else if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('✅ ${product.name} añadido al carrito'),
+                content: Text('âœ… ${product.name} aÃ±adido al carrito'),
                 backgroundColor: AppTheme.neonGreen,
                 duration: const Duration(seconds: 2),
               ),
@@ -1192,7 +1192,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Error al añadir producto: $e'),
+                content: Text('Error al aÃ±adir producto: $e'),
                 backgroundColor: AppTheme.error,
               ),
             );
@@ -1202,7 +1202,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     });
   }
 
-  // E1 — Preview sheet before confirm (Amazon-style DraggableScrollableSheet)
+  // E1 â€” Preview sheet before confirm (Amazon-style DraggableScrollableSheet)
   void _showOrderPreview(BuildContext context, PedidosProvider provider) {
     if (!provider.hasClient) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1360,10 +1360,10 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                           margin: const EdgeInsets.only(bottom: 8),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: AppTheme.error.withOpacity(0.1),
+                            color: AppTheme.error.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(
-                                color: AppTheme.error.withOpacity(0.3)),
+                                color: AppTheme.error.withValues(alpha: 0.3)),
                           ),
                           child: Row(
                             children: [
@@ -1437,7 +1437,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: isSelected
-                                    ? AppTheme.neonGreen.withOpacity(0.15)
+                                    ? AppTheme.neonGreen.withValues(alpha: 0.15)
                                     : AppTheme.darkCard,
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
@@ -1485,7 +1485,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                                         ),
                                         decoration: BoxDecoration(
                                           color: AppTheme.neonBlue
-                                              .withOpacity(0.15),
+                                              .withValues(alpha: 0.15),
                                           borderRadius:
                                               BorderRadius.circular(6),
                                         ),
@@ -1506,7 +1506,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                                       padding: const EdgeInsets.only(
                                           top: 6, left: 28),
                                       child: Text(
-                                        '${(prod['precio'] as num).toDouble().toStringAsFixed(2)} €/caja',
+                                        '${(prod['precio'] as num).toDouble().toStringAsFixed(2)} â‚¬/caja',
                                         style: const TextStyle(
                                           color: Colors.white54,
                                           fontSize: 11,
@@ -1525,7 +1525,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                         const Divider(color: AppTheme.borderColor),
                         const SizedBox(height: 12),
                         const Text(
-                          'Cantidad a añadir:',
+                          'Cantidad a aÃ±adir:',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
@@ -1648,7 +1648,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                             : null,
                         icon: const Icon(Icons.add_shopping_cart, size: 18),
                         label: const Text(
-                          'AÑADIR AL CARRITO',
+                          'AÃ‘ADIR AL CARRITO',
                           style: TextStyle(
                               fontSize: 13, fontWeight: FontWeight.bold),
                         ),
@@ -1656,7 +1656,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                           backgroundColor: AppTheme.neonGreen,
                           foregroundColor: AppTheme.darkBase,
                           disabledBackgroundColor:
-                              AppTheme.neonGreen.withOpacity(0.3),
+                              AppTheme.neonGreen.withValues(alpha: 0.3),
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(10),

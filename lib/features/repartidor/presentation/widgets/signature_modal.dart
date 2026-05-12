@@ -1,4 +1,4 @@
-/// SIGNATURE MODAL WIDGET
+﻿/// SIGNATURE MODAL WIDGET
 /// Pantalla completa para captura de firma digital del cliente
 /// Utiliza el paquete 'signature' para canvas-based drawing
 library;
@@ -128,7 +128,7 @@ class _SignatureModalState extends State<SignatureModal> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.3),
+              color: Colors.white.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(2),
             ),
           ),
@@ -143,7 +143,7 @@ class _SignatureModalState extends State<SignatureModal> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppTheme.neonBlue.withOpacity(0.1),
+                        color: AppTheme.neonBlue.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: const Icon(
@@ -170,7 +170,7 @@ class _SignatureModalState extends State<SignatureModal> {
                             widget.subtitle,
                             style: TextStyle(
                               fontSize: 13,
-                              color: AppTheme.textSecondary.withOpacity(0.8),
+                              color: AppTheme.textSecondary.withValues(alpha: 0.8),
                             ),
                           ),
                         ],
@@ -198,13 +198,13 @@ class _SignatureModalState extends State<SignatureModal> {
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
                   color: _isEmpty 
-                    ? Colors.grey.withOpacity(0.3) 
-                    : AppTheme.neonGreen.withOpacity(0.5),
+                    ? Colors.grey.withValues(alpha: 0.3) 
+                    : AppTheme.neonGreen.withValues(alpha: 0.5),
                   width: 2,
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
+                    color: Colors.black.withValues(alpha: 0.1),
                     blurRadius: 10,
                     offset: const Offset(0, 4),
                   ),
@@ -229,14 +229,14 @@ class _SignatureModalState extends State<SignatureModal> {
                             Icon(
                               Icons.gesture,
                               size: 48,
-                              color: Colors.grey.withOpacity(0.3),
+                              color: Colors.grey.withValues(alpha: 0.3),
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'Firme aquí',
+                              'Firme aquÃ­',
                               style: TextStyle(
                                 fontSize: 16,
-                                color: Colors.grey.withOpacity(0.5),
+                                color: Colors.grey.withValues(alpha: 0.5),
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -265,7 +265,7 @@ class _SignatureModalState extends State<SignatureModal> {
                     label: const Text('Cancelar'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.textSecondary,
-                      side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                      side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),

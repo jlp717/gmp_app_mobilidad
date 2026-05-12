@@ -1,11 +1,11 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
-/// [ClientConditionsWidget] - Widget que muestra información de condiciones del cliente
+/// [ClientConditionsWidget] - Widget que muestra informaciÃ³n de condiciones del cliente
 ///
-/// CARACTERÍSTICAS:
-/// - Sección "Diversos" con medios de pago y congeladores
-/// - Sección "Condiciones" con tarifa y concepto de facturación
-/// - Diseño mejorado según imagen de referencia
+/// CARACTERÃSTICAS:
+/// - SecciÃ³n "Diversos" con medios de pago y congeladores
+/// - SecciÃ³n "Condiciones" con tarifa y concepto de facturaciÃ³n
+/// - DiseÃ±o mejorado segÃºn imagen de referencia
 /// - Mejor visibilidad y contraste
 class ClientConditionsWidget extends StatelessWidget {
   const ClientConditionsWidget({
@@ -27,12 +27,12 @@ class ClientConditionsWidget extends StatelessWidget {
     
     return Column(
       children: [
-        // Sección Diversos
+        // SecciÃ³n Diversos
         _buildDiversosSection(context, isDark),
 
         const SizedBox(height: 16),
 
-        // Sección Condiciones
+        // SecciÃ³n Condiciones
         _buildCondicionesSection(context, isDark),
       ],
     );
@@ -47,7 +47,7 @@ class ClientConditionsWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
+            color: Colors.black.withValues(alpha: 0.15),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -111,7 +111,7 @@ class ClientConditionsWidget extends StatelessWidget {
                   icon: Icons.ac_unit_rounded,
                   iconColor: const Color(0xFF3B82F6),
                   title: 'Congeladores',
-                  subtitle: '$congeladoresCount máquinas',
+                  subtitle: '$congeladoresCount mÃ¡quinas',
                   isDark: isDark,
                   onTap: () {
                     // TODO: Navegar a detalle de congeladores
@@ -143,12 +143,12 @@ class ClientConditionsWidget extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: isDark 
-                ? const Color(0xFF1E293B).withOpacity(0.5)
+                ? const Color(0xFF1E293B).withValues(alpha: 0.5)
                 : Colors.grey.shade50,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: isDark 
-                  ? Colors.white.withOpacity(0.1)
+                  ? Colors.white.withValues(alpha: 0.1)
                   : Colors.grey.shade200,
             ),
           ),
@@ -158,7 +158,7 @@ class ClientConditionsWidget extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.1),
+                  color: iconColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -199,7 +199,7 @@ class ClientConditionsWidget extends StatelessWidget {
               Icon(
                 Icons.chevron_right_rounded,
                 color: isDark 
-                    ? Colors.white.withOpacity(0.4)
+                    ? Colors.white.withValues(alpha: 0.4)
                     : Colors.grey.shade400,
                 size: 20,
               ),
@@ -219,7 +219,7 @@ class ClientConditionsWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
+            color: Colors.black.withValues(alpha: 0.15),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -273,10 +273,10 @@ class ClientConditionsWidget extends StatelessWidget {
                 
                 const SizedBox(height: 12),
                 
-                // Concepto Facturación
+                // Concepto FacturaciÃ³n
                 _buildConditionItem(
                   context: context,
-                  label: 'Concepto Facturación',
+                  label: 'Concepto FacturaciÃ³n',
                   value: conceptoFacturacion,
                   isDark: isDark,
                 ),
@@ -298,12 +298,12 @@ class ClientConditionsWidget extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isDark 
-            ? const Color(0xFF1E293B).withOpacity(0.5)
+            ? const Color(0xFF1E293B).withValues(alpha: 0.5)
             : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isDark 
-              ? Colors.white.withOpacity(0.1)
+              ? Colors.white.withValues(alpha: 0.1)
               : Colors.grey.shade200,
         ),
       ),
@@ -319,7 +319,7 @@ class ClientConditionsWidget extends StatelessWidget {
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: isDark 
-                        ? Colors.white.withOpacity(0.6)
+                        ? Colors.white.withValues(alpha: 0.6)
                         : Colors.grey.shade600,
                   ),
                 ),

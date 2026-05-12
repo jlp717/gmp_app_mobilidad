@@ -60,7 +60,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                 TTL.MEDIUM
             );
         } catch (cvcErr) {
-            logger.warn(`[COBROS] CVC query failed, falling back to PEDIDOS_CAB: ${cvcErr.message}`);
+            logger.warn(`[COBROS] CVC query failed (will use PEDIDOS_CAB fallback): ${cvcErr.message}`);
             // Fallback to PEDIDOS_CAB for environments without CVC
             const fallbackSql = `
                 SELECT PC.ID, PC.EJERCICIO, PC.NUMEROPEDIDO, PC.SERIEPEDIDO,
@@ -253,44 +253,52 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
         const MAX_PARAMS = 50;
         const useParamBinding = vendorCodes.length <= MAX_PARAMS;
         
-                let vendorFilter = '';
+        let vendorClause = '';
         let vendorParams = [];
         
         if (!isAll) {
             if (useParamBinding) {
-                vendorFilter = AND TRIM(CLP.VENDEDORCOMERCIAL) IN ();
+                const placeholders = vendorCodes.map(() => '?').join(',');
+                vendorClause = ` AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${placeholders})`;
                 vendorParams = vendorCodes;
             } else {
-                const sanitized = vendorCodes.map(v => '').join(',');
-                vendorFilter = AND TRIM(CLP.VENDEDORCOMERCIAL) IN ();
+                // For >50 vendor codes, embed safely (codes are 2-char alphanumeric)
+                const safeCodes = vendorCodes
+                    .filter(v => /^[a-zA-Z0-9]{1,10}$/.test(v))
+                    .map(v => `'${v.replace(/'/g, "''")}'`)
+                    .join(',');
+                vendorClause = ` AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${safeCodes})`;
             }
         }
 
-        const sql = \
+        const sql = `
           SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
                  SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
                  COUNT(*) AS NUM_DOCS,
-                 SUM(CASE WHEN (CVC.ANOVENCIMIENTO*10000+CVC.MESVENCIMIENTO*100+CVC.DIAVENCIMIENTO) 
-                     < (YEAR(CURRENT_DATE)*10000+MONTH(CURRENT_DATE)*100+DAY(CURRENT_DATE))
+                 SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
+                     < (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
                      THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
-          FROM DSEDAC.CVC CVC
-          LEFT JOIN DSEDAC.CLP CLP ON TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
-          WHERE CVC.IMPORTEPENDIENTE <> 0
-            AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
-            \
-          GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN)
-          ORDER BY TOTAL_PENDIENTE DESC
-        \;
+           FROM DSEDAC.CVC CVC
+           LEFT JOIN DSEDAC.CLP CLP ON TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+           WHERE CVC.IMPORTEPENDIENTE <> 0
+             AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+             ${vendorClause}
+           GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN)
+           ORDER BY TOTAL_PENDIENTE DESC
+        `;
 
         const cacheKeyVendedor = `cobros:pending-summary:${vendedorCodeParam}`;
-        const rows = await cachedQuery(query, sql, cacheKeyVendedor, TTL.SHORT);
+        const queryFn = vendorParams.length > 0
+            ? () => queryWithParams(sql, vendorParams)
+            : () => query(sql, false);
+        const rows = await cachedQuery(queryFn, sql, cacheKeyVendedor, TTL.SHORT);
 
         const summary = {};
         let grandTotal = 0;
         (rows || []).forEach(r => {
             const code = (r.CLIENTE || '').trim();
             const total = parseFloat(r.TOTAL_PENDIENTE) || 0;
-            const count = parseInt(r.NUM_PEDIDOS) || 0;
+            const count = parseInt(r.NUM_DOCS) || 0;
             summary[code] = { total, count };
             grandTotal += total;
         });

@@ -349,19 +349,19 @@ router.get('/product-history/:productCode/:clientCode', async (req, res) => {
                 AVG(L.LCPRT1) AS AVG_TARIFF,
                 AVG(CASE WHEN L.LCPJDT <> 0 THEN L.LCPJDT ELSE NULL END) AS AVG_DISCOUNT_PCT,
                 COUNT(*) AS LINE_COUNT
-            FROM DSED.LACLAE L
-            WHERE L.LCCDCL = ?
-              AND L.LCCDRF = ?
-              AND L.LCAADC >= ?
-              AND L.TPDC = 'LAC'
-              AND L.LCTPVT IN ('CC', 'VC')
-              AND L.LCCLLN IN ('AB', 'VT')
-              AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
-            GROUP BY L.LCAADC, L.LCMMDC
-            ORDER BY L.LCAADC DESC, L.LCMMDC ASC
-        `;
+        FROM DSED.LACLAE L
+        WHERE L.LCCDCL = ?
+          AND L.LCCDRF = ?
+          AND L.LCAADC >= ?
+          AND L.TPDC = 'LAC'
+          AND L.LCTPVT IN (?, ?)
+          AND L.LCCLLN IN (?, ?)
+          AND L.LCSRAB NOT IN (?, ?, ?, ?)
+        GROUP BY L.LCAADC, L.LCMMDC
+        ORDER BY L.LCAADC DESC, L.LCMMDC ASC
+    `;
 
-        const rows = await queryWithParams(sql, [clientCode, productCode, startYear]);
+        const rows = await queryWithParams(sql, [clientCode, productCode, startYear, 'CC', 'VC', 'AB', 'VT', 'N', 'Z', 'G', 'D']);
 
         // Build years structure
         const years = {};
@@ -1071,11 +1071,11 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
             FROM DSED.LACLAE L
             WHERE TRIM(L.LCCDCL) = ? 
               AND L.LCAADC >= ?
-              AND L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('AB','VT')
+              AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
             GROUP BY L.LCAADC, L.LCMMDC
             ORDER BY L.LCAADC ASC, L.LCMMDC ASC
         ;
-        const monthlyData = await queryWithParams(monthlyQuery, [clientCode, startYear]);
+        const monthlyData = await queryWithParams(monthlyQuery, [clientCode, startYear, 'CC', 'VC', 'AB', 'VT']);
 
         // 2. Top Products (this year)
         const topProductsQuery = 
@@ -1086,12 +1086,12 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
             LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
             WHERE TRIM(L.LCCDCL) = ? 
               AND L.LCAADC >= ?
-              AND L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('AB','VT')
+              AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
             GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
             ORDER BY TOTAL_SALES DESC
             FETCH FIRST 20 ROWS ONLY
         ;
-        const topProductsData = await queryWithParams(topProductsQuery, [clientCode, currentYear - 1]);
+        const topProductsData = await queryWithParams(topProductsQuery, [clientCode, currentYear - 1, 'CC', 'VC', 'AB', 'VT']);
 
         // 3. Returns (Devoluciones)
         const returnsQuery = 

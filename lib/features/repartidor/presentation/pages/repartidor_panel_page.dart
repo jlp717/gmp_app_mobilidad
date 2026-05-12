@@ -1,5 +1,5 @@
-/// REPARTIDOR PANEL PAGE v1.0
-/// Dashboard adaptado para reparto con métricas de entregas, cobros y resumen diario
+﻿/// REPARTIDOR PANEL PAGE v1.0
+/// Dashboard adaptado para reparto con mÃ©tricas de entregas, cobros y resumen diario
 /// Equivalente al Panel de Ventas pero enfocado a operativa de reparto
 library;
 
@@ -134,9 +134,9 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
       padding: EdgeInsets.fromLTRB(Responsive.padding(context, small: 12, large: 20), 20, Responsive.padding(context, small: 12, large: 20), 16),
       decoration: BoxDecoration(
         color: AppTheme.darkCard,
-        border: Border(bottom: BorderSide(color: AppTheme.neonBlue.withOpacity(0.1))),
+        border: Border(bottom: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.1))),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 5)),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 10, offset: const Offset(0, 5)),
         ],
       ),
       child: Row(
@@ -152,7 +152,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
               ),
               shape: BoxShape.circle,
               boxShadow: [
-                BoxShadow(color: AppTheme.neonBlue.withOpacity(0.3), blurRadius: 8, spreadRadius: 1),
+                BoxShadow(color: AppTheme.neonBlue.withValues(alpha: 0.3), blurRadius: 8, spreadRadius: 1),
               ],
             ),
             child: Center(
@@ -174,7 +174,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
               ],
             ),
           ),
-          // Sector de filtros dinámicos (mes/año)
+          // Sector de filtros dinÃ¡micos (mes/aÃ±o)
           _buildMonthSelector(),
         ],
       ),
@@ -190,9 +190,9 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: AppTheme.neonBlue.withOpacity(0.1),
+            color: AppTheme.neonBlue.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+            border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<int>(
@@ -218,9 +218,9 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: Colors.orange.withOpacity(0.1),
+            color: Colors.orange.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.orange.withOpacity(0.3)),
+            border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
           ),
           child: DropdownButtonHideUnderline(
             child: DropdownButton<int>(
@@ -270,8 +270,8 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
   Widget _kpiWidget(String label, String value, IconData icon, Color color) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // En móviles pequeños, queremos 2 columnas (ancho ~ 150-180)
-        // En pantallas más anchas podemos dejarlo fluir
+        // En mÃ³viles pequeÃ±os, queremos 2 columnas (ancho ~ 150-180)
+        // En pantallas mÃ¡s anchas podemos dejarlo fluir
         final width = (MediaQuery.of(context).size.width - 44) / 2; // - padding(32) - spacing(12)
         
         return Container(
@@ -280,7 +280,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
           decoration: BoxDecoration(
             color: AppTheme.surfaceColor,
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: color.withOpacity(0.2)),
+            border: Border.all(color: color.withValues(alpha: 0.2)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -313,7 +313,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppTheme.neonGreen.withOpacity(0.2)),
+        border: Border.all(color: AppTheme.neonGreen.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,7 +327,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: cs.thresholdMet ? AppTheme.neonGreen.withOpacity(0.2) : Colors.orange.withOpacity(0.2),
+                  color: cs.thresholdMet ? AppTheme.neonGreen.withValues(alpha: 0.2) : Colors.orange.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -348,7 +348,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             child: LinearProgressIndicator(
               value: (cs.overallPercentage / 100).clamp(0.0, 1.0),
               minHeight: 10,
-              backgroundColor: Colors.white.withOpacity(0.05),
+              backgroundColor: Colors.white.withValues(alpha: 0.05),
               valueColor: AlwaysStoppedAnimation(cs.thresholdMet ? AppTheme.neonGreen : Colors.orange),
             ),
           ),
@@ -357,7 +357,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             children: [
               _miniStat('Cobrable', CurrencyFormatter.format(cs.totalCollectable)),
               _miniStat('Cobrado', CurrencyFormatter.format(cs.totalCollected)),
-              _miniStat('Comisión', CurrencyFormatter.format(cs.totalCommission)),
+              _miniStat('ComisiÃ³n', CurrencyFormatter.format(cs.totalCommission)),
               _miniStat('Clientes', '${cs.clientCount}'),
             ],
           ),
@@ -387,7 +387,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
           borderRadius: BorderRadius.circular(14),
         ),
         child: const Center(
-          child: Text('Sin datos de entregas para este período', style: TextStyle(color: AppTheme.textSecondary)),
+          child: Text('Sin datos de entregas para este perÃ­odo', style: TextStyle(color: AppTheme.textSecondary)),
         ),
       );
     }
@@ -441,14 +441,14 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
                             Container(
                               height: height.clamp(2.0, 100.0),
                               decoration: BoxDecoration(
-                                color: AppTheme.neonBlue.withOpacity(0.2),
+                                color: AppTheme.neonBlue.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(3),
                               ),
                             ),
                             Container(
                               height: deliveredHeight.clamp(0.0, 100.0),
                               decoration: BoxDecoration(
-                                color: AppTheme.neonGreen.withOpacity(0.7),
+                                color: AppTheme.neonGreen.withValues(alpha: 0.7),
                                 borderRadius: BorderRadius.circular(3),
                               ),
                             ),
@@ -469,11 +469,11 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(width: 10, height: 10, decoration: BoxDecoration(color: AppTheme.neonBlue.withOpacity(0.2), borderRadius: BorderRadius.circular(2))),
+              Container(width: 10, height: 10, decoration: BoxDecoration(color: AppTheme.neonBlue.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(2))),
               const SizedBox(width: 4),
               const Text('Total', style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
               const SizedBox(width: 16),
-              Container(width: 10, height: 10, decoration: BoxDecoration(color: AppTheme.neonGreen.withOpacity(0.7), borderRadius: BorderRadius.circular(2))),
+              Container(width: 10, height: 10, decoration: BoxDecoration(color: AppTheme.neonGreen.withValues(alpha: 0.7), borderRadius: BorderRadius.circular(2))),
               const SizedBox(width: 4),
               const Text('Entregados', style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
             ],
@@ -508,11 +508,11 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
+              color: Colors.white.withValues(alpha: 0.03),
             ),
             child: const Row(
               children: [
-                SizedBox(width: 50, child: Text('Día', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
+                SizedBox(width: 50, child: Text('DÃ­a', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
                 Expanded(child: Text('Total', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
                 Expanded(child: Text('Entreg.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.neonGreen))),
                 Expanded(child: Text('No Ent.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFE53935)))),
@@ -532,7 +532,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             return Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.03))),
+                border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.03))),
               ),
               child: Row(
                 children: [

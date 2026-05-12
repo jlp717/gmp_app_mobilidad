@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 /// Swipeable action card for client/delivery items
@@ -108,7 +108,7 @@ class _SwipeActionCardState extends State<SwipeActionCard>
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
-                color: actionColor.withOpacity(0.15),
+                color: actionColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               alignment: isLeftSwipe ? Alignment.centerRight : Alignment.centerLeft,
@@ -208,16 +208,16 @@ class WeeklyMiniChart extends StatelessWidget {
                       begin: Alignment.bottomCenter,
                       end: Alignment.topCenter,
                       colors: isSelected
-                          ? [AppTheme.neonBlue, AppTheme.neonBlue.withOpacity(0.6)]
+                          ? [AppTheme.neonBlue, AppTheme.neonBlue.withValues(alpha: 0.6)]
                           : count > 0
-                              ? [AppTheme.neonBlue.withOpacity(0.5), AppTheme.neonBlue.withOpacity(0.2)]
-                              : [AppTheme.borderColor, AppTheme.borderColor.withOpacity(0.5)],
+                              ? [AppTheme.neonBlue.withValues(alpha: 0.5), AppTheme.neonBlue.withValues(alpha: 0.2)]
+                              : [AppTheme.borderColor, AppTheme.borderColor.withValues(alpha: 0.5)],
                     ),
                     borderRadius: BorderRadius.circular(4),
                     boxShadow: isSelected
                         ? [
                             BoxShadow(
-                              color: AppTheme.neonBlue.withOpacity(0.4),
+                              color: AppTheme.neonBlue.withValues(alpha: 0.4),
                               blurRadius: 8,
                               spreadRadius: 1,
                             ),

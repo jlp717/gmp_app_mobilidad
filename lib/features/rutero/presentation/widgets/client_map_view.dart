@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:latlong2/latlong.dart';
@@ -40,7 +40,7 @@ class _ClientMapViewState extends State<ClientMapView> {
   LatLng get _center {
     if (widget.initialCenter != null) return widget.initialCenter!;
     
-    // Default to Almería, Spain (assuming GMP is in this region)
+    // Default to AlmerÃ­a, Spain (assuming GMP is in this region)
     if (widget.clients.isEmpty) return const LatLng(36.8340, -2.4637);
     
     // Calculate center from clients
@@ -145,7 +145,7 @@ class _ClientMapViewState extends State<ClientMapView> {
           child: Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppTheme.darkBase.withOpacity(0.9),
+              color: AppTheme.darkBase.withValues(alpha: 0.9),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Row(
@@ -181,7 +181,7 @@ class _ClientMapViewState extends State<ClientMapView> {
             border: Border.all(color: Colors.white, width: 2),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.3),
+                color: Colors.black.withValues(alpha: 0.3),
                 blurRadius: 4,
                 offset: const Offset(0, 2),
               ),
@@ -248,7 +248,7 @@ class _ClientInfoCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: AppTheme.neonGreen.withOpacity(0.2),
+                  color: AppTheme.neonGreen.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Icon(Icons.store, color: AppTheme.neonGreen),
@@ -272,7 +272,7 @@ class _ClientInfoCard extends StatelessWidget {
                       ),
                     if (client.lastSale != null)
                       Text(
-                        'Última venta: €${client.lastSale!.toStringAsFixed(0)}',
+                        'Ãšltima venta: â‚¬${client.lastSale!.toStringAsFixed(0)}',
                         style: const TextStyle(color: AppTheme.success, fontSize: 11),
                       ),
                   ],

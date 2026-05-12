@@ -1,14 +1,14 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
-/// [MetricsCards] - Tarjetas de métricas principales del dashboard
+/// [MetricsCards] - Tarjetas de mÃ©tricas principales del dashboard
 ///
 /// MUESTRA:
-/// - Vencimientos (398 pendientes, 156,591.09 €)
+/// - Vencimientos (398 pendientes, 156,591.09 â‚¬)
 /// - Cobros (0 realizados)
-/// - Pedidos (33 pendientes, 2,613.77 €)
+/// - Pedidos (33 pendientes, 2,613.77 â‚¬)
 class MetricsCards extends StatelessWidget {
   const MetricsCards({
     required this.vencimientos, required this.cobros, required this.pedidos, super.key,
@@ -69,7 +69,7 @@ class MetricsCards extends StatelessWidget {
   }
 }
 
-/// [_MetricCard] - Tarjeta individual de métrica
+/// [_MetricCard] - Tarjeta individual de mÃ©trica
 class _MetricCard extends StatelessWidget {
   const _MetricCard({
     required this.icon,
@@ -106,7 +106,7 @@ class _MetricCard extends StatelessWidget {
               Container(
                 padding: EdgeInsets.all(Responsive.padding(context, small: 8, large: 12)),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
@@ -118,7 +118,7 @@ class _MetricCard extends StatelessWidget {
 
               SizedBox(width: Responsive.padding(context, small: 10, large: 16)),
 
-              // Información
+              // InformaciÃ³n
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

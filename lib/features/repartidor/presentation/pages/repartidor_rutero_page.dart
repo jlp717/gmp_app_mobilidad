@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -218,9 +218,9 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               margin: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
-                color: AppTheme.error.withOpacity(0.1),
+                color: AppTheme.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.error.withOpacity(0.3)),
+                border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [
@@ -307,7 +307,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               ),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                color: AppTheme.neonBlue.withOpacity(0.3),
+                color: AppTheme.neonBlue.withValues(alpha: 0.3),
               ),
             ),
             child: Row(
@@ -510,7 +510,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                         color: AppTheme.textPrimary,
                       ),
                       decoration: const InputDecoration(
-                        hintText: 'Nº Alb/Fac...',
+                        hintText: 'NÂº Alb/Fac...',
                         hintStyle: TextStyle(
                           fontSize: 11,
                           color: AppTheme.textSecondary,
@@ -560,7 +560,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
           const SizedBox(width: 6),
 
           _buildQuickFilterChip(
-            label: 'Crédito',
+            label: 'CrÃ©dito',
             isSelected: filterTipoPago == 'CREDITO',
             color: AppTheme.credito,
             icon: Icons.credit_card,
@@ -596,7 +596,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                   DropdownMenuItem(
                     value: 'default',
                     child: Text(
-                      '↕ Orden',
+                      'â†• Orden',
                       style:
                           TextStyle(color: AppTheme.textPrimary, fontSize: 11),
                     ),
@@ -604,7 +604,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                   DropdownMenuItem(
                     value: 'importe_desc',
                     child: Text(
-                      '↓ Mayor €',
+                      'â†“ Mayor â‚¬',
                       style:
                           TextStyle(color: AppTheme.textPrimary, fontSize: 11),
                     ),
@@ -612,7 +612,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                   DropdownMenuItem(
                     value: 'importe_asc',
                     child: Text(
-                      '↑ Menor €',
+                      'â†‘ Menor â‚¬',
                       style:
                           TextStyle(color: AppTheme.textPrimary, fontSize: 11),
                     ),
@@ -645,7 +645,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
         duration: AppTheme.animFast,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.2) : AppTheme.darkCard,
+          color: isSelected ? color.withValues(alpha: 0.2) : AppTheme.darkCard,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isSelected ? color : AppTheme.borderColor,
@@ -749,7 +749,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                         Divider(
                           height: 1,
                           thickness: 1,
-                          color: AppTheme.borderColor.withOpacity(0.3),
+                          color: AppTheme.borderColor.withValues(alpha: 0.3),
                           indent: 12,
                           endIndent: 12,
                         ),
@@ -774,25 +774,25 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  AppTheme.neonBlue.withOpacity(0.1),
-                  AppTheme.neonCyan.withOpacity(0.05),
+                  AppTheme.neonBlue.withValues(alpha: 0.1),
+                  AppTheme.neonCyan.withValues(alpha: 0.05),
                 ],
               ),
               shape: BoxShape.circle,
               border: Border.all(
-                color: AppTheme.neonBlue.withOpacity(0.2),
+                color: AppTheme.neonBlue.withValues(alpha: 0.2),
                 width: 2,
               ),
             ),
             child: Icon(
               Icons.inventory_2_outlined,
               size: 56,
-              color: AppTheme.textSecondary.withOpacity(0.5),
+              color: AppTheme.textSecondary.withValues(alpha: 0.5),
             ),
           ),
           const SizedBox(height: 24),
           const Text(
-            'No hay entregas para este día',
+            'No hay entregas para este dÃ­a',
             style: TextStyle(
               color: AppTheme.textSecondary,
               fontSize: 18,
@@ -801,7 +801,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
           ),
           const SizedBox(height: 8),
           const Text(
-            'Selecciona otro día en el calendario\no usa el buscador',
+            'Selecciona otro dÃ­a en el calendario\no usa el buscador',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: AppTheme.textTertiary,
@@ -818,7 +818,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             label: const Text('Ir a hoy'),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppTheme.neonBlue,
-              side: BorderSide(color: AppTheme.neonBlue.withOpacity(0.5)),
+              side: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.5)),
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             ),
           ),
@@ -840,7 +840,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             Icon(Icons.auto_awesome, color: AppTheme.neonPurple),
             SizedBox(width: 10),
             Text(
-              'Análisis Inteligente',
+              'AnÃ¡lisis Inteligente',
               style: TextStyle(color: AppTheme.neonPurple),
             ),
           ],
@@ -938,7 +938,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     provider
         .marcarEntregado(
       albaranId: albaran.id,
-      observaciones: 'Completado rápido (Swipe)',
+      observaciones: 'Completado rÃ¡pido (Swipe)',
       // No signature/photos for quick swipe
     )
         .then((success) {
@@ -985,7 +985,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withOpacity(0.1),
+                color: AppTheme.neonBlue.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -1011,9 +1011,9 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
           autofocus: true,
           style: const TextStyle(color: AppTheme.textPrimary),
           decoration: InputDecoration(
-            hintText: 'Añadir nota...',
+            hintText: 'AÃ±adir nota...',
             hintStyle:
-                TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
+                TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5)),
             filled: true,
             fillColor: AppTheme.darkBase,
             border: OutlineInputBorder(
@@ -1075,8 +1075,8 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        AppTheme.neonPurple.withOpacity(0.3),
-                        AppTheme.neonBlue.withOpacity(0.2),
+                        AppTheme.neonPurple.withValues(alpha: 0.3),
+                        AppTheme.neonBlue.withValues(alpha: 0.2),
                       ],
                     ),
                     shape: BoxShape.circle,
@@ -1102,12 +1102,12 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             _buildAiSuggestionTile(
               icon: Icons.route,
               title: 'Ruta optimizada',
-              subtitle: 'Ahorra 15 min evitando C/ Gran Vía (tráfico)',
+              subtitle: 'Ahorra 15 min evitando C/ Gran VÃ­a (trÃ¡fico)',
               onTap: () {
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Función próximamente disponible'),
+                    content: Text('FunciÃ³n prÃ³ximamente disponible'),
                   ),
                 );
               },
@@ -1116,7 +1116,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             _buildAiSuggestionTile(
               icon: Icons.priority_high,
               title: 'Cobros prioritarios',
-              subtitle: '2 clientes con cobros vencidos hace +5 días',
+              subtitle: '2 clientes con cobros vencidos hace +5 dÃ­as',
               color: AppTheme.obligatorio,
               onTap: () {
                 Navigator.pop(ctx);
@@ -1127,7 +1127,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             _buildAiSuggestionTile(
               icon: Icons.trending_up,
               title: 'Oportunidad de venta',
-              subtitle: 'Bar La Esquina suele pedir más en esta época',
+              subtitle: 'Bar La Esquina suele pedir mÃ¡s en esta Ã©poca',
               color: AppTheme.success,
               onTap: () => Navigator.pop(ctx),
             ),
@@ -1155,9 +1155,9 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
-            color: tileColor.withOpacity(0.08),
+            color: tileColor.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: tileColor.withOpacity(0.2)),
+            border: Border.all(color: tileColor.withValues(alpha: 0.2)),
           ),
           child: Row(
             children: [
