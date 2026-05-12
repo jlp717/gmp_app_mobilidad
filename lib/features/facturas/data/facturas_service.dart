@@ -9,6 +9,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 

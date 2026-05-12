@@ -958,6 +958,39 @@ async function getDailySummaryLegacyUnused({ repartidorId, date }) {
 }
 
 async function getDailySummary({ repartidorId, date }) {
+  // Try schema-detected query first; on 42S22 (column not found), invalidate
+  // the schema cache and retry with fresh detection.
+  for (let retry = 0; retry < 2; retry++) {
+    try {
+      return await _getDailySummaryInternal({ repartidorId, date });
+    } catch (error) {
+      const isColumnMissing = String(error?.message || '')
+        .includes('42S22') || String(error?.odbcErrors?.[0]?.state || '') === '42S22';
+      if (isColumnMissing && retry === 0) {
+        logger.warn(`[REPARTIDOR_COBROS] getDailySummary: 42S22 detected, refreshing schema cache`);
+        _financeSchemaInfo = null; // Invalidate cache
+        continue; // Retry with fresh schema
+      }
+      // Schema-aware retry failed — run legacy query as last resort
+      if (retry === 1) {
+        logger.warn(`[REPARTIDOR_COBROS] getDailySummary: schema mismatch, returning empty`);
+        return {
+          repartidorId,
+          date,
+          summary: {
+            totalEfectivo: 0, totalCheques: 0, totalTarjeta: 0, totalPostdatados: 0,
+            saldoActual: 0, totalCobrosDia: 0, gastos: 0, totalAIngresar: 0,
+            ingresoBanco: 0, totalEfectivo2: 0, entregado: 0, cobrosCount: 0,
+          },
+          cobros: [],
+        };
+      }
+      throw error; // Non-column error, propagate
+    }
+  }
+}
+
+async function _getDailySummaryInternal({ repartidorId, date }) {
   const info = await getFinanceSchemaInfo();
   const ids = codeList(repartidorId);
 
@@ -1815,7 +1848,7 @@ async function closeLiquidacion(input) {
         VALUES (V.${info.balanceCodeColumn}, V.SALDO_PENDIENTE, V.UPDATED_BY)
     `, [input.repartidorId, saldoResultante, input.createdBy || 'unknown']);
 
-    if (cobroRows.length > 0) {
+    if (Array.isArray(cobroRows) && cobroRows.length > 0) {
       const placeholders = cobroRows.map(() => '?').join(', ');
       const setParts = [];
       const updateParams = [];

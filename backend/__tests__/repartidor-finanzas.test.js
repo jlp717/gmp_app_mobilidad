@@ -86,11 +86,16 @@ describe('Repartidor finanzas routes', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    delete process.env.REPARTIDOR_FINANCE_ENABLE_TEST_CLEANUP;
-    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
-    mockConnQuery.mockResolvedValue([]);
-    mockConnClose.mockResolvedValue();
+    app = makeApp();
+  });
+
+  afterEach(() => {
+    // Restore process.env after each test
+    if (originalCleanupFlag === undefined) {
+      delete process.env.REPARTIDOR_FINANCE_ENABLE_TEST_CLEANUP;
+    } else {
+      process.env.REPARTIDOR_FINANCE_ENABLE_TEST_CLEANUP = originalCleanupFlag;
+    }
   });
 
   afterAll(() => {
@@ -182,6 +187,7 @@ describe('Repartidor finanzas routes', () => {
   });
 
   test('GET /daily-summary blocks repartidor access to another repartidor', async () => {
+    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
     const res = await request(app)
       .get('/finanzas/daily-summary/95')
       .query({ date: '2026-04-23' });
@@ -296,13 +302,16 @@ describe('Repartidor finanzas routes', () => {
       REVISADOSN: 'S',
     };
 
+    // closeLiquidacion flow:
+    // Query #1: findLiquidacionRowByToken — no existing row
+    // Query #2: getFinanceSchemaInfo() calls QSYS2.SYSCOLUMNS
+    // Query #3: after transaction — SELECT from OPS to confirm insert
+    // Query #4: REPLAY — findLiquidacionRowByToken returns existing row
     mockQueryWithParams
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{
-        NEXT_NUMERO: 2,
-      }])
-      .mockResolvedValueOnce([existingRow])
-      .mockResolvedValueOnce([existingRow]);
+      .mockResolvedValueOnce([])              // #1: findLiquidacionRowByToken
+      .mockResolvedValueOnce(alignedSchemaRows) // #2: getFinanceSchemaInfo
+      .mockResolvedValueOnce([existingRow])   // #3: confirm insert
+      .mockResolvedValueOnce([existingRow]);  // #4: replay findLiquidacionRowByToken
 
     const payload = {
       repartidorId: '94',
@@ -332,14 +341,14 @@ describe('Repartidor finanzas routes', () => {
     expect(replay.body.created).toBe(false);
 
     const lqdInsert = mockConnQuery.mock.calls.find(([sql]) =>
-      /INSERT INTO JAVIER\.LQD/i.test(sql)
+      /INSERT INTO (JAVIER|DSEDAC)\.LQD/i.test(sql)
     );
     expect(lqdInsert).toBeDefined();
     expect(lqdInsert[0]).toContain('IDMARCALIQUIDACION');
     expect(lqdInsert[1]).toContain('liq-20260423-94');
 
     const lqdInserts = mockConnQuery.mock.calls.filter(([sql]) =>
-      /INSERT INTO JAVIER\.LQD/i.test(sql)
+      /INSERT INTO (JAVIER|DSEDAC)\.LQD/i.test(sql)
     );
     expect(lqdInserts).toHaveLength(1);
 
@@ -349,7 +358,12 @@ describe('Repartidor finanzas routes', () => {
   });
 
    test('POST /liquidaciones rejects idempotency token replay with different payload', async () => {
-    mockQueryWithParams.mockResolvedValueOnce([{
+    // closeLiquidacion flow:
+    // Query #1: findLiquidacionRowByToken returns existing row (for replay detection)
+    // Query #2: getFinanceSchemaInfo (not reached if replay is detected)
+    mockQueryWithParams
+      // #1: findLiquidacionRowByToken returns existing → immediate replay path
+      .mockResolvedValueOnce([{
       ID: '501',
       IDEMPOTENCY_TOKEN: 'liq-20260423-94',
       CODIGOVENDEDOR: '94',

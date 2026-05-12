@@ -257,6 +257,9 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
         return false;
       }
 
+      // Ensure Dio is ready with correct timeouts for current network
+      await ApiClient.ensureDioReady();
+
       final response = await ApiClient.post(
         ApiConfig.login,
         {'username': username, 'password': password},

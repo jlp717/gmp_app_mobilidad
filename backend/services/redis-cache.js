@@ -5,7 +5,12 @@
  * Includes pub/sub for cache invalidation
  */
 
-const Redis = require('redis');
+let Redis;
+try {
+    Redis = require('redis');
+} catch (_) {
+    Redis = null;
+}
 const logger = require('../middleware/logger');
 
 // Configuration from environment - Redis connection settings
@@ -40,8 +45,10 @@ const TTL = {
 
 // L1 In-Memory Cache (OPTIMIZED v3 - Maximum Performance)
 const L1_CACHE = new Map();
-const L1_MAX_SIZE = 5000; // Increased from 2000 for JEFE_VENTAS workloads
+const L1_STALE_CACHE = new Map(); // Stale-while-revalidate: serve expired data while refreshing
+const L1_MAX_SIZE = 10000; // Doubled for JEFE_VENTAS + COMMERCIAL workloads
 const L1_TTL_MS = 180000; // 3 minutes (increased for better cache utilization)
+const L1_STALE_TTL_MS = 3600000; // 1 hour — serve stale data for up to 1h while background refresh runs
 
 // Pre-warm cache with frequently accessed keys
 const FREQUENTLY_ACCESSED_KEYS = new Set([
@@ -71,6 +78,11 @@ class RedisCacheService {
      * Initialize Redis connection with OPTIMIZED pool settings
      */
     async init() {
+        // Silently skip Redis init if the package failed to load
+        if (!Redis) {
+            logger.warn('[RedisCache] ⚠️ Redis package not available, using L1 cache only');
+            return true;
+        }
         try {
             // Optimized Redis config for high throughput
             const optimizedConfig = {
@@ -83,15 +95,6 @@ class RedisCacheService {
                 keepAliveInitialDelay: 10000,
                 // Retry strategy for resilience
                 max_retries_per_request: 3,
-                retry_strategy: (options) => {
-                    if (options.error && options.error.code === 'ECONNREFUSED') {
-                        return new Error('Redis connection refused');
-                    }
-                    // Exponential backoff
-                    const delay = Math.min(options.attempt * 100, 3000);
-                    return delay;
-                },
-                // Enable ready check for faster recovery
                 enable_ready_check: true,
                 enable_offline_queue: true,
             };
@@ -216,8 +219,22 @@ class RedisCacheService {
             return entry.value;
         }
         if (entry) {
-            L1_CACHE.delete(key); // Expired
+            // Expired — move to stale cache for stale-while-revalidate
+            L1_STALE_CACHE.set(key, {
+                value: entry.value,
+                expiry: Date.now() + L1_STALE_TTL_MS,
+            });
+            L1_CACHE.delete(key);
         }
+        return null;
+    }
+
+    _getStale(key) {
+        const stale = L1_STALE_CACHE.get(key);
+        if (stale && Date.now() < stale.expiry) {
+            return stale.value;
+        }
+        if (stale) L1_STALE_CACHE.delete(key);
         return null;
     }
 
@@ -253,31 +270,31 @@ class RedisCacheService {
         }
 
         // Try L2 (Redis)
-        if (!this.isConnected) {
-            this.stats.misses++;
-            return null;
-        }
-
-        try {
-            const l2Value = await this.client.get(fullKey);
-
-            if (l2Value !== null) {
-                const parsed = JSON.parse(l2Value);
-                this.stats.hits.l2++;
-
-                // Promote to L1
-                this._setL1(fullKey, parsed);
-
-                return parsed;
+        if (this.isConnected) {
+            try {
+                const l2Value = await this.client.get(fullKey);
+                if (l2Value !== null) {
+                    const parsed = JSON.parse(l2Value);
+                    this.stats.hits.l2++;
+                    // Promote to L1 with full TTL
+                    this._setL1(fullKey, parsed, L1_TTL_MS);
+                    return parsed;
+                }
+            } catch (error) {
+                logger.warn(`[RedisCache] Get error: ${error.message}`);
             }
-
-            this.stats.misses++;
-            return null;
-        } catch (error) {
-            logger.warn(`[RedisCache] Get error: ${error.message}`);
-            this.stats.misses++;
-            return null;
         }
+
+        // Stale-while-revalidate: serve expired data when fresh unavailable
+        const staleValue = this._getStale(fullKey);
+        if (staleValue !== null) {
+            this.stats.hits.l1++; // Count as hit (better than nothing)
+            logger.debug(`[RedisCache] Serving stale data for: ${fullKey}`);
+            return staleValue;
+        }
+
+        this.stats.misses++;
+        return null;
     }
 
     /**
@@ -365,7 +382,7 @@ class RedisCacheService {
      * @param {number} ttl - TTL in seconds
      */
     async getOrSet(namespace, key, fetchFn, ttl = TTL.DEFAULT) {
-        // Try cache first
+        // Try cache first (includes stale-while-revalidate via get())
         const cached = await this.get(namespace, key);
         if (cached !== null) {
             return cached;
@@ -374,7 +391,7 @@ class RedisCacheService {
         // Fetch fresh data
         const freshData = await fetchFn();
 
-        // Cache it
+        // Cache the result (L1 + L2)
         await this.set(namespace, key, freshData, ttl);
 
         return freshData;

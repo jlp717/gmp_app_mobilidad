@@ -5,6 +5,7 @@ library;
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 
 /// API facade for objectives screens.
 class ObjectivesService {
@@ -12,12 +13,12 @@ class ObjectivesService {
 
   /// Fetch list of distinct populations/cities
   static Future<List<String>> getPopulations() async {
-    final res = await ApiClient.getList(
+    final res = await OfflineAwareApi.getList(
       '/objectives/populations',
       cacheKey: 'objectives_populations',
       cacheTTL: CacheService.longTTL,
     );
-    return res.map((e) => e.toString()).toList();
+    return res.data.map((e) => e.toString()).toList();
   }
 
   /// Fetch evolution data for given vendor and years
@@ -33,7 +34,7 @@ class ObjectivesService {
       yearsKey.join('-'),
     ].join('_');
 
-    return ApiClient.get(
+    final result = await OfflineAwareApi.get(
       ApiConfig.objectivesEvolution,
       queryParameters: {
         'vendedorCodes': vendedorCodes,
@@ -42,6 +43,7 @@ class ObjectivesService {
       cacheKey: cacheKey,
       cacheTTL: const Duration(minutes: 10),
     );
+    return result.data;
   }
 
   /// Fetch by-client objectives for given vendor and periods
@@ -91,11 +93,12 @@ class ObjectivesService {
       limit ?? 'all',
     ].join('_');
 
-    return ApiClient.get(
+    final result = await OfflineAwareApi.get(
       ApiConfig.objectivesByClient,
       queryParameters: params,
       cacheKey: cacheKey,
       cacheTTL: const Duration(minutes: 5),
     );
+    return result.data;
   }
 }

@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'dart:io';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
@@ -35,6 +37,55 @@ class ApiClient {
   /// Prevents stale 401 responses from clearing the new token mid-login.
   static bool _isLoggingIn = false;
 
+  // ── Connectivity Monitoring ──────────────────────────────────────────
+  static StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
+  static ConnectivityResult _lastConnectivity = ConnectivityResult.wifi;
+  static bool _connectivityMonitoring = false;
+
+  /// Start monitoring network changes (WiFi ↔ mobile data).
+  /// Reconnects with appropriate settings on network type change.
+  static void startConnectivityMonitoring() {
+    if (_connectivityMonitoring) return;
+    _connectivityMonitoring = true;
+    _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
+      final result = results.isNotEmpty ? results.first : ConnectivityResult.none;
+      if (result == ConnectivityResult.none) return; // offline, keep last
+      if (result != _lastConnectivity) {
+        _lastConnectivity = result;
+        debugPrint('[ApiClient] 🔄 Network changed to: $result');
+        // Reset Dio so new connections use optimal settings for current network
+        final token = _savedAuthToken;
+        _dio = null;
+        if (token != null) _savedAuthToken = token;
+        debugPrint('[ApiClient] ✅ Dio reinitialized for network: $result');
+      }
+    });
+  }
+
+  /// Stop connectivity monitoring.
+  static void stopConnectivityMonitoring() {
+    _connectivitySub?.cancel();
+    _connectivitySub = null;
+    _connectivityMonitoring = false;
+  }
+
+  /// Force re-check current connectivity and reconnect if needed.
+  static Future<void> checkConnectivity() async {
+    try {
+      final results = await Connectivity().checkConnectivity();
+      final result = results.isNotEmpty ? results.first : ConnectivityResult.none;
+      if (result != _lastConnectivity && result != ConnectivityResult.none) {
+        _lastConnectivity = result;
+        final token = _savedAuthToken;
+        _dio = null;
+        if (token != null) _savedAuthToken = token;
+        debugPrint('[ApiClient] 🔄 Reconnected for network: $result');
+      }
+    } catch (_) {}
+  }
+
+  // ── End Connectivity Monitoring ──────────────────────────────────────
+
   /// Call before sending login credentials to block concurrent 401→logout.
   static void startLogin() => _isLoggingIn = true;
 
@@ -63,22 +114,47 @@ class ApiClient {
 
   /// Initialize or get Dio instance
   static Dio get dio {
-    _dio ??= _createDio();
+    if (_dio == null) {
+      _dio = _createDio();
+    }
     return _dio!;
+  }
+
+  /// Awaitable connectivity check before first Dio use.
+  /// Fix: login failing on mobile data because checkConnectivity was
+  /// fire-and-forget, so Dio used WiFi timeouts on mobile networks.
+  static Future<void> ensureDioReady() async {
+    if (_dio == null) {
+      await checkConnectivity();
+      _dio = _createDio();
+    }
   }
 
   /// Create Dio instance with OPTIMIZED settings
   /// - Gzip compression for faster transfers
   /// - Connection Keep-Alive for connection reuse
-  /// - Optimized timeouts for mobile networks
+  /// - Adaptive timeouts: mobile data gets +50% to handle carrier latency
   /// - Certificate pinning for production
   static Dio _createDio() {
+    // Adaptive timeouts: mobile data has higher latency
+    final isMobileData = _lastConnectivity == ConnectivityResult.mobile ||
+        _lastConnectivity == ConnectivityResult.vpn;
+    final connectTimeout = isMobileData
+        ? const Duration(seconds: 20)
+        : ApiConfig.connectTimeout;
+    final receiveTimeout = isMobileData
+        ? const Duration(seconds: 45)
+        : ApiConfig.receiveTimeout;
+    debugPrint('[ApiClient] 📡 Timeouts: connect=${connectTimeout.inSeconds}s, '
+        'receive=${receiveTimeout.inSeconds}s (network=$_lastConnectivity)');
     final dio = Dio(
       BaseOptions(
         baseUrl: ApiConfig.baseUrl,
-        connectTimeout: ApiConfig.connectTimeout,
-        receiveTimeout: ApiConfig.receiveTimeout,
-        sendTimeout: const Duration(seconds: 15),
+        connectTimeout: connectTimeout,
+        receiveTimeout: receiveTimeout,
+        sendTimeout: isMobileData
+            ? const Duration(seconds: 25)
+            : const Duration(seconds: 15),
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',

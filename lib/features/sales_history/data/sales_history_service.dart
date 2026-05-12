@@ -6,6 +6,7 @@ library;
 
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 import 'package:gmp_app_mobilidad/features/sales_history/domain/product_history_item.dart';
 
 class SalesHistoryService {

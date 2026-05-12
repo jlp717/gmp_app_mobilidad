@@ -167,10 +167,11 @@ class OrderStateError extends Error {
     }
 }
 
-const VALID_ORDER_STATES = ['BORRADOR', 'CONFIRMADO', 'ENVIADO', 'ANULADO'];
+const VALID_ORDER_STATES = ['BORRADOR', 'PENDIENTE_APROBACION', 'CONFIRMADO', 'ENVIADO', 'ANULADO'];
 
 const ORDER_TRANSITIONS = {
-    BORRADOR: new Set(['CONFIRMADO', 'ANULADO']),
+    BORRADOR: new Set(['PENDIENTE_APROBACION', 'CONFIRMADO', 'ANULADO']),
+    PENDIENTE_APROBACION: new Set(['CONFIRMADO', 'BORRADOR', 'ANULADO']),
     CONFIRMADO: new Set(['ENVIADO', 'ANULADO']),
     ENVIADO: new Set(),
     ANULADO: new Set(),
@@ -178,8 +179,8 @@ const ORDER_TRANSITIONS = {
 
 function canonicalOrderStatus(status) {
     const normalized = trimString(status).toUpperCase();
-    // Map any legacy PENDIENTE states to BORRADOR
-    if (normalized === 'PENDIENTE' || normalized === 'PENDIENTE_APROBACION') return 'BORRADOR';
+    // Map legacy PENDIENTE (w/o _APROBACION) to BORRADOR; PENDIENTE_APROBACION is its own state
+    if (normalized === 'PENDIENTE') return 'BORRADOR';
     return VALID_ORDER_STATES.includes(normalized) ? normalized : 'BORRADOR';
 }
 

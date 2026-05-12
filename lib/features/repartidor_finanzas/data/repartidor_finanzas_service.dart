@@ -2,6 +2,7 @@
 
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 
 class RepartidorFinanzasService {
@@ -96,16 +97,17 @@ class RepartidorFinanzasService {
       if (year != null) 'year': year.toString(),
       if (month != null) 'month': month.toString(),
     };
+    final cacheKey = collectionSummaryCacheKey(repartidorId, year, month);
 
-    final response = await ApiClient.get(
+    final result = await OfflineAwareApi.get(
       '/repartidor/collections/summary/$repartidorId',
       queryParameters: queryParams,
-      cacheKey: collectionSummaryCacheKey(repartidorId, year, month),
+      cacheKey: cacheKey,
       cacheTTL: CacheService.shortTTL,
       forceRefresh: forceRefresh,
     );
 
-    return RepartidorCollectionSummary.fromJson(response);
+    return RepartidorCollectionSummary.fromJson(result.data);
   }
 
   Future<RepartidorDailySummary> getDailySummary({
@@ -114,15 +116,19 @@ class RepartidorFinanzasService {
     bool forceRefresh = false,
   }) async {
     final isoDate = _isoDate(date);
-    final response = await ApiClient.get(
+    final cacheKey = dailyLiquidacionCacheKey(repartidorId, isoDate);
+
+    // Offline-first: try cache first, then network, fall back to stale
+    final result = await OfflineAwareApi.get(
       '/repartidor-finanzas/daily-summary/$repartidorId',
       queryParameters: {'date': isoDate},
-      cacheKey: dailyLiquidacionCacheKey(repartidorId, isoDate),
+      cacheKey: cacheKey,
       cacheTTL: const Duration(minutes: 2),
       forceRefresh: forceRefresh,
     );
 
-    return RepartidorDailySummary.fromJson(response);
+    final summary = RepartidorDailySummary.fromJson(result.data);
+    return summary;
   }
 
   Future<RepartidorLiquidacionResult> closeLiquidacion({

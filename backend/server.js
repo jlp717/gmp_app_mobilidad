@@ -489,7 +489,15 @@ async function startServer() {
   const { getPool } = require('./config/db');
   try {
     const { initAllTables } = require('./migrations/init-tables');
-    await initAllTables((sql) => query(sql));
+    // CRITICAL FIX: init-tables.js ensureColumn() passes (sql, params).
+    // query(sql, logQuery, logError) interprets params[] as logQuery=true,
+    // causing state=07002 (wrong param count) cascade errors → pool recreate → SQL5051.
+    await initAllTables((sql, ...args) => {
+      if (args.length > 0 && Array.isArray(args[0])) {
+        return queryWithParams(sql, args[0], false, false);
+      }
+      return query(sql, false, false);
+    });
     logger.info('✅ App-specific tables initialized via init-tables.js');
     setDeliveryStatusAvailable(true);
 
