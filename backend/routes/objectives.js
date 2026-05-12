@@ -715,7 +715,8 @@ router.get('/evolution', verifyToken, async (req, res) => {
 
         // ==========================================================================
         // FIXED TARGETS: Check if vendor has fixed monthly targets from COMMERCIAL_TARGETS.
-        // Only applies to single-vendor view (multi-vendor view always uses dynamic).
+        // Single-vendor: uses exact matches with fallback to dynamic for missing months.
+        // Multi-vendor: aggregates only months that have override entries (vendor != 15).
         // ==========================================================================
         const fixedTargetsByYear = {};
         if (vendorCodesArray.length === 1) {
@@ -725,6 +726,35 @@ router.get('/evolution', verifyToken, async (req, res) => {
             }
             if (Object.values(fixedTargetsByYear).some(targets => Object.keys(targets).length > 0)) {
                 logger.info(`[OBJECTIVES] Vendor ${firstCode} has fixed monthly targets in COMMERCIAL_TARGETS`);
+            }
+        } else if (isAll || vendorCodesArray.length > 1) {
+            // Aggregate fixed targets for months where MULTIPLE vendors have entries.
+            // This automatically detects override months (May + Sep-Dec) without
+            // hardcoding vendor IDs or months. Months with only vendor 15 (or any
+            // single vendor) are excluded, so they fall back to dynamic calculation.
+            try {
+                for (const year of yearsArray) {
+                    const aggregated = await queryWithParams(`
+                        SELECT MES, SUM(IMPORTE_OBJETIVO) as TOTAL
+                        FROM JAVIER.COMMERCIAL_TARGETS
+                        WHERE ANIO = ? AND ACTIVO = 1
+                        GROUP BY MES
+                        HAVING COUNT(DISTINCT CODIGOVENDEDOR) > 1
+                    `, [year], false);
+                    if (aggregated && aggregated.length > 0) {
+                        const targets = {};
+                        aggregated.forEach(r => {
+                            const mes = parseInt(r.MES);
+                            const val = parseFloat(r.TOTAL) || 0;
+                            if (mes && val > 0) targets[mes] = val;
+                        });
+                        if (Object.keys(targets).length > 0) {
+                            fixedTargetsByYear[year] = targets;
+                        }
+                    }
+                }
+            } catch (e) {
+                logger.debug(`[OBJECTIVES] ALL vendors fixed targets aggregation error: ${e.message}`);
             }
         }
 
