@@ -56,13 +56,13 @@ final pedidosProvider =
     ChangeNotifierProvider<PedidosProvider>((ref) => PedidosProvider());
 
 class PedidosProvider with ChangeNotifier {
-  // ── Cart State (current order being built) ──
+  // â”€â”€ Cart State (current order being built) â”€â”€
   final List<OrderLine> _lines = [];
   String? _clientCode;
   String? _clientName;
   String _saleType = 'CC'; // CC=Venta, VC=Sin Nombre, NV=No Venta
 
-  // ── Product Catalog State ──
+  // â”€â”€ Product Catalog State â”€â”€
   List<Product> _products = [];
   bool _isLoadingProducts = false;
   String? _productSearch;
@@ -73,52 +73,52 @@ class PedidosProvider with ChangeNotifier {
   int _productOffset = 0;
   bool _hasMoreProducts = true;
 
-  // ── Orders List State ──
+  // â”€â”€ Orders List State â”€â”€
   List<OrderSummary> _orders = [];
   bool _isLoadingOrders = false;
   String? _orderStatusFilter;
   String _vendedorCodes = 'ALL';
 
-  // ── Order Stats ──
+  // â”€â”€ Order Stats â”€â”€
   OrderStats? _orderStats;
   bool _isLoadingStats = false;
 
-  // ── Recommendations ──
+  // â”€â”€ Recommendations â”€â”€
   List<Recommendation> _clientHistory = [];
   List<Recommendation> _similarClients = [];
 
-  // ── General ──
+  // â”€â”€ General â”€â”€
   bool _isSaving = false;
   String? _error;
 
-  // ── Client Balance ──
+  // â”€â”€ Client Balance â”€â”€
   Map<String, dynamic> _clientBalance = {};
 
-  // ── Favorites (Hive-based, local) ──
+  // â”€â”€ Favorites (Hive-based, local) â”€â”€
   final Set<String> _favoriteProductCodes = {};
 
-  // ── Auto-save ──
+  // â”€â”€ Auto-save â”€â”€
   DateTime? _lastAutoSaved;
   bool _isDirty = false;
 
-  // ── Stock Filter ──
+  // â”€â”€ Stock Filter â”€â”€
   bool _onlyWithStock = false;
 
-  // ── Last Qty per Product (B3) ──
+  // â”€â”€ Last Qty per Product (B3) â”€â”€
   final Map<String, double> _lastQtyByProduct = {};
   final Map<String, String> _lastUnitByProduct = {};
-  // ── Last selected tariff price per product (override from TarifaSelectorModal) ──
+  // â”€â”€ Last selected tariff price per product (override from TarifaSelectorModal) â”€â”€
   final Map<String, double> _lastPriceByProduct = {};
 
-  // ── Global Discount (C5) ──
+  // â”€â”€ Global Discount (C5) â”€â”€
   double _globalDiscountPct = 0;
 
-  // ── Complementary Products & Promotions ──
+  // â”€â”€ Complementary Products & Promotions â”€â”€
   List<Map<String, dynamic>> _complementaryProducts = [];
   final List<PromotionItem> _activePromotionsList = [];
   final Map<String, PromotionItem> _activePromotions = {};
 
-  // ── Analytics ──
+  // â”€â”€ Analytics â”€â”€
   Map<String, dynamic> _analytics = {};
   bool _isLoadingAnalytics = false;
 
@@ -130,7 +130,7 @@ class PedidosProvider with ChangeNotifier {
 
   double get _discountFactor => 1 - (_globalDiscountPct / 100);
 
-  // ── Getters ──
+  // â”€â”€ Getters â”€â”€
   List<OrderLine> get lines => List.unmodifiable(_lines);
   String? get clientCode => _clientCode;
   String? get clientName => _clientName;
@@ -242,7 +242,7 @@ class PedidosProvider with ChangeNotifier {
     }
   }
 
-  // ── Client ──
+  // â”€â”€ Client â”€â”€
 
   void setClient(String code, String name, {bool clearCart = false}) {
     if (clearCart) {
@@ -304,7 +304,7 @@ class PedidosProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Product Catalog ──
+  // â”€â”€ Product Catalog â”€â”€
 
   Future<void> loadProducts({
     required String vendedorCodes,
@@ -389,7 +389,7 @@ class PedidosProvider with ChangeNotifier {
     }
   }
 
-  // ── Stock Refresh ──
+  // â”€â”€ Stock Refresh â”€â”€
 
   Future<void> refreshStock(String productCode) async {
     try {
@@ -420,7 +420,7 @@ class PedidosProvider with ChangeNotifier {
     }
   }
 
-  // ── Cart Operations ──
+  // â”€â”€ Cart Operations â”€â”€
 
   String? addLine(
     Product product,
@@ -718,7 +718,7 @@ class PedidosProvider with ChangeNotifier {
     }).toList();
   }
 
-  // ── Active Promotions ──
+  // â”€â”€ Active Promotions â”€â”€
 
   void markAsSaved() {
     _isDirty = false;
@@ -726,7 +726,7 @@ class PedidosProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Order Persistence ──
+  // â”€â”€ Order Persistence â”€â”€
 
   Future<Map<String, dynamic>?> confirmOrder(
     String vendedorCode, {
@@ -737,7 +737,7 @@ class PedidosProvider with ChangeNotifier {
     String? routeCode,
   }) async {
     if (!hasClient || !hasLines) {
-      _error = 'Seleccione un cliente y añada al menos un producto';
+      _error = 'Seleccione un cliente y aÃ±ada al menos un producto';
       notifyListeners();
       return null;
     }
@@ -812,7 +812,7 @@ class PedidosProvider with ChangeNotifier {
     }
   }
 
-  // ── Orders List ──
+  // â”€â”€ Orders List â”€â”€
 
   Future<void> loadOrders({
     required String vendedorCodes,
@@ -1014,7 +1014,7 @@ class PedidosProvider with ChangeNotifier {
     refreshOrdersAndStats();
   }
 
-  // ── Recommendations ──
+  // â”€â”€ Recommendations â”€â”€
 
   Future<void> loadRecommendations({
     required String clientCode,
@@ -1033,7 +1033,7 @@ class PedidosProvider with ChangeNotifier {
     }
   }
 
-  // ── Offline Support ──
+  // â”€â”€ Offline Support â”€â”€
 
   Future<void> saveDraft(String vendedorCode, {bool isAutoSave = false}) async {
     if (!hasClient || (!hasLines && !isAutoSave)) return;
@@ -1097,7 +1097,7 @@ class PedidosProvider with ChangeNotifier {
     }
   }
 
-  // ── Client Balance ──
+  // â”€â”€ Client Balance â”€â”€
   Future<void> loadClientBalance(String clientCode) async {
     try {
       _clientBalance = await PedidosService.getClientBalance(clientCode);
@@ -1107,7 +1107,7 @@ class PedidosProvider with ChangeNotifier {
     }
   }
 
-  // ── Favorites (Hive-based) ──
+  // â”€â”€ Favorites (Hive-based) â”€â”€
   void initFavorites(List<String> savedCodes) {
     _favoriteProductCodes.clear();
     _favoriteProductCodes.addAll(savedCodes);
@@ -1125,7 +1125,7 @@ class PedidosProvider with ChangeNotifier {
   bool isFavorite(String productCode) =>
       _favoriteProductCodes.contains(productCode);
 
-  // ── Complementary Products & Promotions ──
+  // â”€â”€ Complementary Products & Promotions â”€â”€
   Future<void> loadComplementaryProducts() async {
     if (_lines.isEmpty) {
       _complementaryProducts = [];
@@ -1184,7 +1184,7 @@ class PedidosProvider with ChangeNotifier {
     }
   }
 
-  // ── Analytics ──
+  // â”€â”€ Analytics â”€â”€
   Future<void> loadAnalytics(String vendedorCodes) async {
     _isLoadingAnalytics = true;
     notifyListeners();
@@ -1198,7 +1198,7 @@ class PedidosProvider with ChangeNotifier {
     }
   }
 
-  // ── Clone Order into Cart ──
+  // â”€â”€ Clone Order into Cart â”€â”€
   Future<void> cloneOrderIntoCart(int orderId) async {
     try {
       final data = await PedidosService.cloneOrder(orderId);
@@ -1227,7 +1227,7 @@ class PedidosProvider with ChangeNotifier {
     }
   }
 
-  // ── Batch Add from Recommendations ──
+  // â”€â”€ Batch Add from Recommendations â”€â”€
   void addMultipleProducts(List<Product> products, double defaultQty) {
     for (final product in products) {
       final existingIdx =
@@ -1265,7 +1265,7 @@ class PedidosProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  // ── Stock Auto-Refresh for Cart Lines (Parallel) ──
+  // â”€â”€ Stock Auto-Refresh for Cart Lines (Parallel) â”€â”€
   Future<void> refreshCartStock() async {
     if (_lines.isEmpty) return;
 

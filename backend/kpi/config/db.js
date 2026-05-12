@@ -1,4 +1,5 @@
-// db.js: Capa de acceso DB2/ODBC para el módulo KPI — reutiliza el pool principal
+const SCHEMA = process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER';
+// db.js: Capa de acceso DB2/ODBC para el mÃ³dulo KPI â€” reutiliza el pool principal
 'use strict';
 
 const { query, queryWithParams, getPool } = require('../../config/db');
@@ -47,7 +48,7 @@ async function kpiHealthCheck() {
 }
 
 async function kpiEndPool() {
-  // No cerrar — el pool principal se encarga del ciclo de vida
+  // No cerrar â€” el pool principal se encarga del ciclo de vida
 }
 
 /**
@@ -57,7 +58,7 @@ async function kpiEndPool() {
 async function initKpiTables() {
   const pool = getPool();
   if (!pool) {
-    logger.warn('[kpi:db] Pool no disponible, omitiendo creación de tablas KPI');
+    logger.warn('[kpi:db] Pool no disponible, omitiendo creaciÃ³n de tablas KPI');
     return;
   }
 
@@ -65,7 +66,7 @@ async function initKpiTables() {
   try {
     // Verificar si KPI_LOADS ya existe
     try {
-      await conn.query('SELECT COUNT(*) AS CNT FROM JAVIER.KPI_LOADS');
+      await conn.query('SELECT COUNT(*) AS CNT FROM `${SCHEMA}.KPI_LOADS');
       logger.info('[kpi:db] Tablas KPI ya existen');
       return;
     } catch (_) {
@@ -77,7 +78,7 @@ async function initKpiTables() {
     // KPI_LOADS
     try {
       await conn.query(`
-        CREATE TABLE JAVIER.KPI_LOADS (
+        CREATE TABLE `${SCHEMA}.KPI_LOADS (
           ID              INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
           LOAD_ID         VARCHAR(32) NOT NULL,
           STATUS          VARCHAR(20) NOT NULL DEFAULT 'IN_PROGRESS',
@@ -91,10 +92,10 @@ async function initKpiTables() {
           CONSTRAINT UQ_KPI_LOADS_LOADID UNIQUE (LOAD_ID)
         )
       `);
-      logger.info('[kpi:db] Tabla JAVIER.KPI_LOADS creada');
+      logger.info('[kpi:db] Tabla `${SCHEMA}.KPI_LOADS creada');
     } catch (e) {
       if (e.message && e.message.includes('SQL0601')) {
-        logger.info('[kpi:db] JAVIER.KPI_LOADS ya existe');
+        logger.info('[kpi:db] `${SCHEMA}.KPI_LOADS ya existe');
       } else {
         throw e;
       }
@@ -103,7 +104,7 @@ async function initKpiTables() {
     // KPI_ALERTS
     try {
       await conn.query(`
-        CREATE TABLE JAVIER.KPI_ALERTS (
+        CREATE TABLE `${SCHEMA}.KPI_ALERTS (
           ID              INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
           LOAD_ID         VARCHAR(32) NOT NULL,
           CLIENT_CODE     VARCHAR(20) NOT NULL,
@@ -117,15 +118,15 @@ async function initKpiTables() {
           CREATED_AT      TIMESTAMP DEFAULT CURRENT TIMESTAMP
         )
       `);
-      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_CLIENT', 'JAVIER.KPI_ALERTS (CLIENT_CODE)');
-      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_LOAD', 'JAVIER.KPI_ALERTS (LOAD_ID)');
-      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_TYPE', 'JAVIER.KPI_ALERTS (ALERT_TYPE)');
-      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_ACTIVE', 'JAVIER.KPI_ALERTS (IS_ACTIVE, CLIENT_CODE)');
-      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_MAIN', 'JAVIER.KPI_ALERTS (CLIENT_CODE, IS_ACTIVE, SEVERITY, CREATED_AT DESC)');
-      logger.info('[kpi:db] Tabla JAVIER.KPI_ALERTS creada con índices');
+      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_CLIENT', '`${SCHEMA}.KPI_ALERTS (CLIENT_CODE)');
+      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_LOAD', '`${SCHEMA}.KPI_ALERTS (LOAD_ID)');
+      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_TYPE', '`${SCHEMA}.KPI_ALERTS (ALERT_TYPE)');
+      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_ACTIVE', '`${SCHEMA}.KPI_ALERTS (IS_ACTIVE, CLIENT_CODE)');
+      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_MAIN', '`${SCHEMA}.KPI_ALERTS (CLIENT_CODE, IS_ACTIVE, SEVERITY, CREATED_AT DESC)');
+      logger.info('[kpi:db] Tabla `${SCHEMA}.KPI_ALERTS creada con Ã­ndices');
     } catch (e) {
       if (e.message && e.message.includes('SQL0601')) {
-        logger.info('[kpi:db] JAVIER.KPI_ALERTS ya existe');
+        logger.info('[kpi:db] `${SCHEMA}.KPI_ALERTS ya existe');
       } else {
         throw e;
       }
@@ -134,7 +135,7 @@ async function initKpiTables() {
     // KPI_FILE_AUDIT
     try {
       await conn.query(`
-        CREATE TABLE JAVIER.KPI_FILE_AUDIT (
+        CREATE TABLE `${SCHEMA}.KPI_FILE_AUDIT (
           ID              INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
           LOAD_ID         VARCHAR(32) NOT NULL,
           FILENAME        VARCHAR(100) NOT NULL,
@@ -148,11 +149,11 @@ async function initKpiTables() {
           PROCESSED_AT    TIMESTAMP DEFAULT CURRENT TIMESTAMP
         )
       `);
-      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_FA_LOAD', 'JAVIER.KPI_FILE_AUDIT (LOAD_ID)');
-      logger.info('[kpi:db] Tabla JAVIER.KPI_FILE_AUDIT creada');
+      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_FA_LOAD', '`${SCHEMA}.KPI_FILE_AUDIT (LOAD_ID)');
+      logger.info('[kpi:db] Tabla `${SCHEMA}.KPI_FILE_AUDIT creada');
     } catch (e) {
       if (e.message && e.message.includes('SQL0601')) {
-        logger.info('[kpi:db] JAVIER.KPI_FILE_AUDIT ya existe');
+        logger.info('[kpi:db] `${SCHEMA}.KPI_FILE_AUDIT ya existe');
       } else {
         throw e;
       }
@@ -165,14 +166,14 @@ async function initKpiTables() {
 }
 
 /**
- * Crea un índice ignorando el error si ya existe (SQL0601).
+ * Crea un Ã­ndice ignorando el error si ya existe (SQL0601).
  */
 async function safeCreateIndex(conn, indexName, definition) {
   try {
     await conn.query(`CREATE INDEX ${indexName} ON ${definition}`);
   } catch (e) {
     if (e.message && e.message.includes('SQL0601')) {
-      // Index already exists — ignore
+      // Index already exists â€” ignore
     } else {
       throw e;
     }

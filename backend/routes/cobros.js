@@ -15,7 +15,7 @@ const router = express.Router();
 // Helper to sanitize code (kept for non-SQL uses)
 function sanitizeCode(val) {
     if (val == null) return '';
-    return String(val).replace(/'/g, "''").trim();
+    return String(val).trim();
 }
 
 /**
@@ -27,135 +27,101 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         const codigoCliente = sanitizeCode(req.params.codigoCliente);
         logger.info(`[COBROS] Obteniendo pendientes para cliente: ${codigoCliente}`);
 
-        // Ensure COBROS table exists for tracking payments
-        let cobrosTableExists = false;
-        try {
-            await query(`SELECT 1 FROM JAVIER.COBROS FETCH FIRST 1 ROW ONLY`);
-            cobrosTableExists = true;
-        } catch(e) {
-            try {
-                await query(`
-                    CREATE TABLE JAVIER.COBROS (
-                        ID VARCHAR(64) PRIMARY KEY,
-                        CODIGO_CLIENTE VARCHAR(20),
-                        REFERENCIA VARCHAR(100),
-                        IMPORTE DECIMAL(10,2),
-                        FORMA_PAGO VARCHAR(50),
-                        TIPO_VENTA VARCHAR(20),
-                        TIPO_MODO VARCHAR(20),
-                        TIPO_USUARIO VARCHAR(20),
-                        CODIGO_USUARIO VARCHAR(20),
-                        OBSERVACIONES VARCHAR(500),
-                        FECHA TIMESTAMP DEFAULT CURRENT TIMESTAMP
-                    )
-                `);
-                cobrosTableExists = true;
-                logger.info('[COBROS] Tabla JAVIER.COBROS creada correctamente');
-            } catch(createErr) {
-                logger.error('[COBROS] Error creando tabla: ' + createErr.message);
-            }
-        }
-
-        // Check if ORIGEN column exists in PEDIDOS_CAB
-        let origenExists = false;
-        try {
-            const colCheck = await query(`
-                SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS2 
-                WHERE TABLE_SCHEMA = 'JAVIER'
-                  AND TABLE_NAME = 'PEDIDOS_CAB' 
-                  AND COLUMN_NAME = 'ORIGEN'
-                FETCH FIRST 1 ROW ONLY
-            `);
-            origenExists = colCheck && colCheck.length > 0;
-            if (!origenExists) {
-                logger.warn('[COBROS] Columna ORIGEN no existe en PEDIDOS_CAB, usando todos los pedidos');
-            }
-        } catch(e) {
-            logger.warn('[COBROS] Columna ORIGEN no existe en PEDIDOS_CAB, usando todos los pedidos');
-        }
-
-        // Build query based on whether ORIGEN column exists
-        let sql;
-        if (origenExists) {
-            sql = `
+        // Req #15: Read real debt from DSEDAC.CVC (ERP unpaid invoices)
+        // CVC = Cabeceras Vencimientos Cobros (real document-level debt from ERP)
+        const sql = `
             SELECT
-                PC.ID, PC.EJERCICIO, PC.NUMEROPEDIDO, PC.SERIEPEDIDO,
-                PC.DIADOCUMENTO, PC.MESDOCUMENTO, PC.ANODOCUMENTO,
-                PC.IMPORTETOTAL, PC.TIPOVENTA, PC.ESTADO
-            FROM JAVIER.PEDIDOS_CAB PC
-            WHERE TRIM(PC.CODIGOCLIENTE) = ?
-              AND PC.ORIGEN = 'A'
-              AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
-              AND PC.IMPORTETOTAL > 0`;
-        } else {
-            sql = `
-            SELECT
-                PC.ID, PC.EJERCICIO, PC.NUMEROPEDIDO, PC.SERIEPEDIDO,
-                PC.DIADOCUMENTO, PC.MESDOCUMENTO, PC.ANODOCUMENTO,
-                PC.IMPORTETOTAL, PC.TIPOVENTA, PC.ESTADO
-            FROM JAVIER.PEDIDOS_CAB PC
-            WHERE TRIM(PC.CODIGOCLIENTE) = ?
-              AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
-              AND PC.IMPORTETOTAL > 0`;
+                TRIM(C.CVCDRF) AS SERIE_DOCUMENTO,
+                C.CVNUDC AS NUMERO_DOCUMENTO,
+                C.CVXDDC AS XDE,
+                TRIM(C.CVCDCL) AS CODIGO_CLIENTE,
+                C.CVIMVT AS IMPORTE_TOTAL,
+                C.CVIMCO AS IMPORTE_COBRADO,
+                (C.CVIMVT - C.CVIMCO) AS IMPORTE_PENDIENTE,
+                C.CVAADC AS ANO_DOCUMENTO,
+                C.CVMMDC AS MES_DOCUMENTO,
+                C.CVDDDC AS DIA_DOCUMENTO,
+                C.CVFCVC AS FECHA_VENCIMIENTO,
+                TRIM(C.CVSEEM) AS SUBEMPRESA,
+                TRIM(C.CVCDTD) AS TIPO_DOCUMENTO
+            FROM DSEDAC.CVC C
+            WHERE TRIM(C.CVCDCL) = ?
+              AND (C.CVIMVT - C.CVIMCO) > 0.01
+            ORDER BY C.CVFCVC ASC
+            FETCH FIRST 100 ROWS ONLY`;
+
+        const cacheKey = `cobros:pendientes:cvc:${codigoCliente}`;
+        let resultado;
+        try {
+            resultado = await cachedQuery(
+                (sql) => queryWithParams(sql, [codigoCliente]),
+                sql,
+                cacheKey,
+                TTL.MEDIUM
+            );
+        } catch (cvcErr) {
+            logger.warn(`[COBROS] CVC query failed, falling back to PEDIDOS_CAB: ${cvcErr.message}`);
+            // Fallback to PEDIDOS_CAB for environments without CVC
+            const fallbackSql = `
+                SELECT PC.ID, PC.EJERCICIO, PC.NUMEROPEDIDO, PC.SERIEPEDIDO,
+                    PC.DIADOCUMENTO, PC.MESDOCUMENTO, PC.ANODOCUMENTO,
+                    PC.IMPORTETOTAL, PC.TIPOVENTA, PC.ESTADO
+                FROM JAVIER.PEDIDOS_CAB PC
+                WHERE TRIM(PC.CODIGOCLIENTE) = ?
+                  AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
+                  AND PC.IMPORTETOTAL > 0
+                ORDER BY PC.ANODOCUMENTO DESC, PC.MESDOCUMENTO DESC
+                FETCH FIRST 100 ROWS ONLY`;
+            resultado = await queryWithParams(fallbackSql, [codigoCliente]);
         }
-
-        if (cobrosTableExists) {
-            sql += ` AND NOT EXISTS (
-                SELECT 1 FROM JAVIER.COBROS JC
-                WHERE JC.CODIGO_CLIENTE = TRIM(PC.CODIGOCLIENTE)
-                  AND JC.REFERENCIA LIKE '%' || TRIM(PC.SERIEPEDIDO) || '-' || CAST(PC.NUMEROPEDIDO AS VARCHAR(20)) || '%'
-            )`;
-        }
-
-sql += ` ORDER BY PC.ANODOCUMENTO DESC, PC.MESDOCUMENTO DESC, PC.DIADOCUMENTO DESC FETCH FIRST 100 ROWS ONLY`;
-
-        const cacheKey = `cobros:pendientes:${codigoCliente}`;
-        const resultado = await cachedQuery(query, sql, cacheKey, TTL.MEDIUM);
-
-        const ahora = new Date();
-        const mesActual = ahora.getMonth() + 1;
-        const anoActual = ahora.getFullYear();
 
         const format2 = (n) => String(n).padStart(2, '0');
-        
-        const cobros = (resultado && resultado.length > 0 ? resultado : []).map(row => {
-            const mes = Number(row.MESDOCUMENTO);
-            const ano = Number(row.ANODOCUMENTO);
-            const esDelMesActual = ano === anoActual && mes === mesActual;
 
-            const referencia = `${row.SERIEPEDIDO}-${row.NUMEROPEDIDO}`;
-
-            const dia = format2(row.DIADOCUMENTO);
-            const mm = format2(row.MESDOCUMENTO);
-            const fechaStr = `${ano}-${mm}-${dia}T00:00:00.000Z`;
-
+        const cobros = (resultado || []).map(row => {
+            // CVC format
+            if (row.IMPORTE_PENDIENTE !== undefined) {
+                const dia = format2(row.DIA_DOCUMENTO || 1);
+                const mm = format2(row.MES_DOCUMENTO || 1);
+                const ano = row.ANO_DOCUMENTO || 2024;
+                const serie = (row.SERIE_DOCUMENTO || '').trim();
+                const numero = row.NUMERO_DOCUMENTO || 0;
+                const tipoDoc = (row.TIPO_DOCUMENTO || 'FAC').trim();
+                return {
+                    id: `cvc_${serie}_${numero}_${row.XDE || 1}`,
+                    tipo: tipoDoc === 'CAC' ? 'albaran' : 'factura',
+                    referencia: `${serie}-${numero}`,
+                    fecha: `${ano}-${mm}-${dia}T00:00:00.000Z`,
+                    fechaVencimiento: row.FECHA_VENCIMIENTO || null,
+                    importeTotal: parseFloat(row.IMPORTE_TOTAL) || 0,
+                    importePendiente: parseFloat(row.IMPORTE_PENDIENTE) || 0,
+                    importeCobrado: parseFloat(row.IMPORTE_COBRADO) || 0,
+                    descripcion: `${tipoDoc} ${serie}-${numero}`
+                };
+            }
+            // Fallback PEDIDOS_CAB format
             return {
-                id: uuidv4(),
+                id: `ped_${row.ID}`,
                 tipo: 'pedido_app',
-                referencia,
-                fecha: fechaStr,
+                referencia: `${row.SERIEPEDIDO}-${row.NUMEROPEDIDO}`,
+                fecha: `${row.ANODOCUMENTO}-${format2(row.MESDOCUMENTO)}-${format2(row.DIADOCUMENTO)}T00:00:00.000Z`,
                 importeTotal: parseFloat(row.IMPORTETOTAL) || 0,
                 importePendiente: parseFloat(row.IMPORTETOTAL) || 0,
                 descripcion: `Pedido ${row.SERIEPEDIDO}-${row.NUMEROPEDIDO}`
             };
         });
 
-        // Sum up total
         let total = 0;
-        
-        cobros.forEach(c => {
-            total += c.importePendiente;
-        });
+        cobros.forEach(c => { total += c.importePendiente; });
 
         res.json({
             success: true,
             cobros,
             resumen: {
                 totalPendiente: total,
-                pedidos: { cantidad: cobros.length, total: total }
+                documentos: { cantidad: cobros.length, total },
+                source: resultado?.[0]?.IMPORTE_PENDIENTE !== undefined ? 'CVC' : 'PEDIDOS_CAB'
             }
         });
-
     } catch (error) {
         logger.error('[COBROS] Error: ' + error.message);
         res.status(500).json({ success: false, error: 'Error interno del servidor' });
@@ -171,20 +137,45 @@ router.get('/:codigoCliente/estado', async (req, res) => {
         let totalPendiente = 0;
         let numPedidos = 0;
 
+        // Req #15: Read real debt from CVC
         try {
             const rows = await queryWithParams(`
-                SELECT COALESCE(SUM(PC.IMPORTETOTAL), 0) AS TOTAL_PENDIENTE,
-                       COUNT(*) AS NUM_PEDIDOS
-                FROM JAVIER.PEDIDOS_CAB PC
-                WHERE TRIM(PC.CODIGOCLIENTE) = ?
-                  AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
-                  AND PC.IMPORTETOTAL > 0
+                SELECT COALESCE(SUM(C.CVIMVT - C.CVIMCO), 0) AS TOTAL_PENDIENTE,
+                       COUNT(*) AS NUM_DOCS
+                FROM DSEDAC.CVC C
+                WHERE TRIM(C.CVCDCL) = ?
+                  AND (C.CVIMVT - C.CVIMCO) > 0.01
             `, [codigoCliente], []);
             totalPendiente = parseFloat(rows?.[0]?.TOTAL_PENDIENTE) || 0;
-            numPedidos = parseInt(rows?.[0]?.NUM_PEDIDOS) || 0;
-        } catch (e) {
-            logger.warn('[COBROS] Error calculando estado cliente: ' + e.message);
+            numPedidos = parseInt(rows?.[0]?.NUM_DOCS) || 0;
+        } catch (cvcErr) {
+            // Fallback to PEDIDOS_CAB
+            try {
+                const rows = await queryWithParams(`
+                    SELECT COALESCE(SUM(PC.IMPORTETOTAL), 0) AS TOTAL_PENDIENTE,
+                           COUNT(*) AS NUM_PEDIDOS
+                    FROM JAVIER.PEDIDOS_CAB PC
+                    WHERE TRIM(PC.CODIGOCLIENTE) = ?
+                      AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
+                      AND PC.IMPORTETOTAL > 0
+                `, [codigoCliente], []);
+                totalPendiente = parseFloat(rows?.[0]?.TOTAL_PENDIENTE) || 0;
+                numPedidos = parseInt(rows?.[0]?.NUM_PEDIDOS) || 0;
+            } catch (e) {
+                logger.warn('[COBROS] Error calculando estado: ' + e.message);
+            }
         }
+
+        // Get credit limit from CLI
+        let limiteCredito = 0;
+        try {
+            const cliRows = await queryWithParams(`
+                SELECT LIMITECREDITO FROM DSEDAC.CLI
+                WHERE TRIM(CODIGOCLIENTE) = ?
+                FETCH FIRST 1 ROW ONLY
+            `, [codigoCliente], []);
+            limiteCredito = parseFloat(cliRows?.[0]?.LIMITECREDITO) || 0;
+        } catch (_) { /* no credit limit data */ }
 
         res.json({
             success: true,
@@ -215,29 +206,9 @@ router.post('/:codigoCliente/registrar', async (req, res) => {
             tipoVenta, tipoModo, tipoUsuario, codigoUsuario
         } = req.body;
 
-        logger.info(`[COBROS] Registrando cobro para ${codigoCliente}: ${importe}€`);
+        logger.info(`[COBROS] Registrando cobro para ${codigoCliente}: ${importe}ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬`);
 
-        // Create table dynamically if it doesn't exist
-        try {
-            await query(`SELECT 1 FROM JAVIER.COBROS FETCH FIRST 1 ROW ONLY`);
-        } catch(e) {
-            await query(`
-                CREATE TABLE JAVIER.COBROS (
-                    ID VARCHAR(64) PRIMARY KEY,
-                    CODIGO_CLIENTE VARCHAR(20),
-                    REFERENCIA VARCHAR(100),
-                    IMPORTE DECIMAL(10,2),
-                    FORMA_PAGO VARCHAR(50),
-                    TIPO_VENTA VARCHAR(20),
-                    TIPO_MODO VARCHAR(20),
-                    TIPO_USUARIO VARCHAR(20),
-                    CODIGO_USUARIO VARCHAR(20),
-                    OBSERVACIONES VARCHAR(500),
-                    FECHA TIMESTAMP DEFAULT CURRENT TIMESTAMP
-                )
-            `);
-            logger.info('[COBROS] Tabla JAVIER.COBROS creada correctamente');
-        }
+        // COBROS table created at startup by init-tables.js
 
         await queryWithParams(
             `INSERT INTO JAVIER.COBROS (
@@ -282,64 +253,34 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
         const MAX_PARAMS = 50;
         const useParamBinding = vendorCodes.length <= MAX_PARAMS;
         
-        let vendorFilter = '';
+                let vendorFilter = '';
         let vendorParams = [];
         
         if (!isAll) {
             if (useParamBinding) {
-                vendorFilter = `AND TRIM(PC.CODIGOVENDEDOR) IN (${vendorCodes.map(() => '?').join(',')})`;
+                vendorFilter = AND TRIM(CLP.VENDEDORCOMERCIAL) IN ();
                 vendorParams = vendorCodes;
             } else {
-                // Sanitize and embed directly - vendor codes are short alphanumeric strings
-                const sanitized = vendorCodes.map(v => `'${v.replace(/[^a-zA-Z0-9_-]/g, '')}'`).join(',');
-                vendorFilter = `AND TRIM(PC.CODIGOVENDEDOR) IN (${sanitized})`;
+                const sanitized = vendorCodes.map(v => '').join(',');
+                vendorFilter = AND TRIM(CLP.VENDEDORCOMERCIAL) IN ();
             }
         }
 
-        // Check if COBROS table exists
-        let cobrosTableExists = false;
-        try {
-            await query(`SELECT 1 FROM JAVIER.COBROS FETCH FIRST 1 ROW ONLY`);
-            cobrosTableExists = true;
-        } catch(e) { /* table doesn't exist yet */ }
-
-        // Check ORIGEN column using IBM i compatible catalog
-        let origenExists = false;
-        try {
-            const colCheck = await query(`
-                SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS2
-                WHERE TABLE_SCHEMA = 'JAVIER'
-                  AND TABLE_NAME = 'PEDIDOS_CAB'
-                  AND COLUMN_NAME = 'ORIGEN'
-                FETCH FIRST 1 ROW ONLY
-            `);
-            origenExists = colCheck && colCheck.length > 0;
-        } catch(e) {
-            // Fallback: assume column exists if query fails
-            origenExists = true;
-        }
-
-        let sql = `
-            SELECT
-                TRIM(PC.CODIGOCLIENTE) AS CLIENTE,
-                SUM(PC.IMPORTETOTAL) AS TOTAL_PENDIENTE,
-                COUNT(*) AS NUM_PEDIDOS
-            FROM JAVIER.PEDIDOS_CAB PC
-            WHERE PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
-              AND PC.IMPORTETOTAL > 0
-              ${vendorFilter}
-              ${origenExists ? "AND PC.ORIGEN = 'A'" : ''}`;
-
-        // Exclude already paid
-        if (cobrosTableExists) {
-            sql += ` AND NOT EXISTS (
-                SELECT 1 FROM JAVIER.COBROS JC
-                WHERE JC.CODIGO_CLIENTE = TRIM(PC.CODIGOCLIENTE)
-                  AND JC.REFERENCIA LIKE '%' || TRIM(PC.SERIEPEDIDO) || '-' || CAST(PC.NUMEROPEDIDO AS VARCHAR(20)) || '%'
-            )`;
-        }
-
-        sql += ` GROUP BY TRIM(PC.CODIGOCLIENTE) ORDER BY TOTAL_PENDIENTE DESC`;
+        const sql = \
+          SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
+                 SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
+                 COUNT(*) AS NUM_DOCS,
+                 SUM(CASE WHEN (CVC.ANOVENCIMIENTO*10000+CVC.MESVENCIMIENTO*100+CVC.DIAVENCIMIENTO) 
+                     < (YEAR(CURRENT_DATE)*10000+MONTH(CURRENT_DATE)*100+DAY(CURRENT_DATE))
+                     THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
+          FROM DSEDAC.CVC CVC
+          LEFT JOIN DSEDAC.CLP CLP ON TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+          WHERE CVC.IMPORTEPENDIENTE <> 0
+            AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+            \
+          GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN)
+          ORDER BY TOTAL_PENDIENTE DESC
+        \;
 
         const cacheKeyVendedor = `cobros:pending-summary:${vendedorCodeParam}`;
         const rows = await cachedQuery(query, sql, cacheKeyVendedor, TTL.SHORT);

@@ -34,7 +34,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadClientDetail();
     _loadSalesSummary();
   }
@@ -110,7 +110,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     }
 
     if (_clientData == null) {
-      return const Center(child: Text('No se encontró información del cliente'));
+      return const Center(child: Text('No se encontrÃƒÂ³ informaciÃƒÂ³n del cliente'));
     }
 
     final client = _clientData!['client'] as Map<String, dynamic>? ?? {};
@@ -238,7 +238,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                     children: [
                       Icon(Icons.note_add, size: 16, color: AppTheme.neonBlue),
                       SizedBox(width: 6),
-                      Text('Añadir observaciones', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
+                      Text('AÃƒÂ±adir observaciones', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
                     ],
                   ),
                 ),
@@ -270,11 +270,11 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                     const SizedBox(height: 2),
                     if (!Responsive.isLandscapeCompact(context))
                       Text(
-                        'Cód: $code ${nif.isNotEmpty ? ' • NIF: $nif' : ''}', 
+                        'CÃƒÂ³d: $code ${nif.isNotEmpty ? ' Ã¢â‚¬Â¢ NIF: $nif' : ''}', 
                         style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                       )
                     else
-                      Text('Cód: $code', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                      Text('CÃƒÂ³d: $code', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
                   ],
                 ),
               ),
@@ -464,12 +464,12 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
           children: [
             const Text('Enviar WhatsApp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 8),
-            const Text('Selecciona el número:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const Text('Selecciona el nÃƒÂºmero:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
             const SizedBox(height: 12),
             ...phones.map((p) => ListTile(
               leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
               title: Text((p['number'] as String?) ?? ''),
-              subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
+              subtitle: Text((p['type'] as String?) ?? 'TelÃƒÂ©fono'),
               onTap: () {
                 Navigator.pop(ctx);
                 _openWhatsApp((p['number'] as String?) ?? '');
@@ -495,8 +495,8 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     // Build personalized message
     final message = Uri.encodeComponent(
       'Hola, soy tu comercial de Mari Pepa. '
-      'Me gustaría saber cómo va todo y recordarte que mañana es día de visita. '
-      '¿Está todo en orden? ¿Necesitas algo en particular?'
+      'Me gustarÃƒÂ­a saber cÃƒÂ³mo va todo y recordarte que maÃƒÂ±ana es dÃƒÂ­a de visita. '
+      'Ã‚Â¿EstÃƒÂ¡ todo en orden? Ã‚Â¿Necesitas algo en particular?'
     );
     
     final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
@@ -598,7 +598,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
 
           // Monthly Trend Chart
           if (monthlyTrend.isNotEmpty) ...[
-            Text('Evolución Ventas (12 meses)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text('EvoluciÃƒÂ³n Ventas (12 meses)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Container(
               height: Responsive.value(context, phone: 150, desktop: 200),
@@ -692,7 +692,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
               ),
             ),
             title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14)),
-            subtitle: Text('Cód: $code • $timesOrdered ped. • $totalBoxes cj', style: const TextStyle(fontSize: 11)),
+            subtitle: Text('CÃƒÂ³d: $code Ã¢â‚¬Â¢ $timesOrdered ped. Ã¢â‚¬Â¢ $totalBoxes cj', style: const TextStyle(fontSize: 11)),
             trailing: Text(CurrencyFormatter.formatWhole(totalSales), style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen, fontSize: 13)),
           ),
         );

@@ -1,4 +1,5 @@
-// routes.js: API REST para alertas KPI — consulta, ETL manual, health y métricas (DB2/ODBC)
+const SCHEMA = process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER';
+// routes.js: API REST para alertas KPI â€” consulta, ETL manual, health y mÃ©tricas (DB2/ODBC)
 'use strict';
 
 const { Router } = require('express');
@@ -12,7 +13,7 @@ const logger = require('../middleware/logger');
 
 const router = Router();
 
-// Métricas middleware en todas las rutas KPI
+// MÃ©tricas middleware en todas las rutas KPI
 router.use(metricsMiddleware);
 
 // ============================================================
@@ -38,7 +39,7 @@ router.get('/alerts', async (req, res) => {
       }
     }
 
-    // Construir query dinámica con placeholders ? (DB2)
+    // Construir query dinÃ¡mica con placeholders ? (DB2)
     const conditions = ['a.IS_ACTIVE = 1'];
     const params = [];
 
@@ -71,7 +72,7 @@ router.get('/alerts', async (req, res) => {
 
     // Count total
     const countResult = await kpiQuery(
-      `SELECT COUNT(*) AS TOTAL FROM JAVIER.KPI_ALERTS a WHERE ${whereClause}`,
+      `SELECT COUNT(*) AS TOTAL FROM `${SCHEMA}.KPI_ALERTS a WHERE ${whereClause}`,
       params
     );
     const total = parseInt(countResult.rows[0]?.TOTAL || 0);
@@ -80,7 +81,7 @@ router.get('/alerts', async (req, res) => {
     const dataResult = await kpiQuery(
       `SELECT a.ID, a.CLIENT_CODE, a.ALERT_TYPE, a.SEVERITY, a.MESSAGE,
               a.RAW_DATA, a.SOURCE_FILE, a.CREATED_AT
-       FROM JAVIER.KPI_ALERTS a
+       FROM `${SCHEMA}.KPI_ALERTS a
        WHERE ${whereClause}
        ORDER BY
          CASE a.SEVERITY WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 WHEN 'info' THEN 3 END,
@@ -107,20 +108,20 @@ router.get('/alerts', async (req, res) => {
 // ============================================================
 // GET /api/kpi/alerts/client/:clientId
 // Endpoint optimizado para la ficha de cliente en la app
-// Busca tanto con código GMP completo (4300XXXXXX) como con código corto Glacius
+// Busca tanto con cÃ³digo GMP completo (4300XXXXXX) como con cÃ³digo corto Glacius
 // ============================================================
 router.get('/alerts/client/:clientId', async (req, res) => {
   try {
     const { clientId } = req.params;
 
-    // Construir variantes de código: completo GMP + corto numérico
+    // Construir variantes de cÃ³digo: completo GMP + corto numÃ©rico
     const codesToTry = [clientId];
-    // Si es código GMP 4300XXXXXX, añadir variante corta (quitar 4300 y ceros iniciales)
+    // Si es cÃ³digo GMP 4300XXXXXX, aÃ±adir variante corta (quitar 4300 y ceros iniciales)
     if (/^4300\d{6}$/.test(clientId)) {
       const shortCode = clientId.slice(4).replace(/^0+/, '') || '0';
       codesToTry.push(shortCode);
     }
-    // Si es código corto, añadir variante GMP
+    // Si es cÃ³digo corto, aÃ±adir variante GMP
     if (/^\d{1,6}$/.test(clientId) && !clientId.startsWith('4300')) {
       codesToTry.push('4300' + clientId.padStart(6, '0'));
     }
@@ -137,7 +138,7 @@ router.get('/alerts/client/:clientId', async (req, res) => {
     const placeholders = codesToTry.map(() => 'CLIENT_CODE = ?').join(' OR ');
     const result = await kpiQuery(
       `SELECT ID, ALERT_TYPE, SEVERITY, MESSAGE, RAW_DATA, SOURCE_FILE, CREATED_AT
-       FROM JAVIER.KPI_ALERTS
+       FROM `${SCHEMA}.KPI_ALERTS
        WHERE (${placeholders}) AND IS_ACTIVE = 1
        ORDER BY
          CASE SEVERITY WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 WHEN 'info' THEN 3 END,
@@ -147,7 +148,7 @@ router.get('/alerts/client/:clientId', async (req, res) => {
 
     const alerts = result.rows.map(formatAlert);
 
-    // Log para diagnóstico
+    // Log para diagnÃ³stico
     if (alerts.length === 0) {
       logger.info(`[kpi:api] 0 alertas para ${clientId} (variantes: ${codesToTry.join(', ')})`);
     }
@@ -167,7 +168,7 @@ router.get('/alerts/summary', async (req, res) => {
   try {
     const result = await kpiQuery(`
       SELECT ALERT_TYPE, SEVERITY, COUNT(*) AS COUNT
-      FROM JAVIER.KPI_ALERTS
+      FROM `${SCHEMA}.KPI_ALERTS
       WHERE IS_ACTIVE = 1
       GROUP BY ALERT_TYPE, SEVERITY
       ORDER BY ALERT_TYPE, SEVERITY
@@ -176,7 +177,7 @@ router.get('/alerts/summary', async (req, res) => {
     const totalResult = await kpiQuery(`
       SELECT COUNT(DISTINCT CLIENT_CODE) AS TOTAL_CLIENTS,
              COUNT(*) AS TOTAL_ALERTS
-      FROM JAVIER.KPI_ALERTS WHERE IS_ACTIVE = 1
+      FROM `${SCHEMA}.KPI_ALERTS WHERE IS_ACTIVE = 1
     `);
 
     res.json({
@@ -193,7 +194,7 @@ router.get('/alerts/summary', async (req, res) => {
 
 // ============================================================
 // GET /api/kpi/alerts/clients
-// Retorna códigos de clientes con alertas activas,
+// Retorna cÃ³digos de clientes con alertas activas,
 // filtrable por vendedor(es), tipo y severidad.
 // Usado por Flutter para filtros en Rutero/Clientes.
 // ============================================================
@@ -204,7 +205,7 @@ router.get('/alerts/clients', async (req, res) => {
 
     let queryStr = `
       SELECT DISTINCT CLIENT_CODE
-      FROM JAVIER.KPI_ALERTS
+      FROM `${SCHEMA}.KPI_ALERTS
       WHERE IS_ACTIVE = 1
     `;
     const params = [];
@@ -223,7 +224,7 @@ router.get('/alerts/clients', async (req, res) => {
     let clientCodes = result.rows.map(r => (r.CLIENT_CODE || '').trim());
 
     // Vendor filter: only apply for a small set of codes (1 comercial or a few)
-    // If > 15 codes, it's a jefe seeing "all" → skip the expensive LACLAE query
+    // If > 15 codes, it's a jefe seeing "all" â†’ skip the expensive LACLAE query
     if (vendorCodesStr && vendorCodesStr !== 'ALL') {
       const codes = vendorCodesStr.split(',').map(c => c.trim()).filter(Boolean);
       if (codes.length > 0 && codes.length <= 15) {
@@ -279,13 +280,13 @@ router.post('/etl/run', async (req, res) => {
 
 // ============================================================
 // GET /api/kpi/etl/status
-// Estado de la última carga ETL
+// Estado de la Ãºltima carga ETL
 // ============================================================
 router.get('/etl/status', async (req, res) => {
   try {
     const loadResult = await kpiQuery(
       `SELECT LOAD_ID, STATUS, FILES_PROCESSED, TOTAL_ALERTS, ERRORS, STARTED_AT, COMPLETED_AT
-       FROM JAVIER.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 5 ROWS ONLY`
+       FROM `${SCHEMA}.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 5 ROWS ONLY`
     );
 
     const scheduler = getSchedulerStatus();
@@ -307,7 +308,7 @@ router.get('/etl/status', async (req, res) => {
 
 // ============================================================
 // GET /api/kpi/health
-// Health check del módulo KPI
+// Health check del mÃ³dulo KPI
 // ============================================================
 router.get('/health', async (req, res) => {
   const dbHealth = await kpiHealthCheck();
@@ -319,7 +320,7 @@ router.get('/health', async (req, res) => {
   try {
     const statsResult = await kpiQuery(
       `SELECT COUNT(*) AS TOTAL_ALERTS, COUNT(DISTINCT CLIENT_CODE) AS TOTAL_CLIENTS
-       FROM JAVIER.KPI_ALERTS WHERE IS_ACTIVE = 1`
+       FROM `${SCHEMA}.KPI_ALERTS WHERE IS_ACTIVE = 1`
     );
     if (statsResult.rows[0]) {
       alertStats.activeAlerts = parseInt(statsResult.rows[0].TOTAL_ALERTS || 0);
@@ -342,7 +343,7 @@ router.get('/health', async (req, res) => {
 
 // ============================================================
 // GET /api/kpi/metrics
-// Métricas en formato Prometheus
+// MÃ©tricas en formato Prometheus
 // ============================================================
 router.get('/metrics', (req, res) => {
   res.set('Content-Type', 'text/plain; charset=utf-8');
@@ -351,21 +352,21 @@ router.get('/metrics', (req, res) => {
 
 // ============================================================
 // GET /api/kpi/loads/:loadId/audit
-// Auditoría detallada de una carga específica
+// AuditorÃ­a detallada de una carga especÃ­fica
 // ============================================================
 router.get('/loads/:loadId/audit', async (req, res) => {
   try {
     const { loadId } = req.params;
 
     const loadResult = await kpiQuery(
-      'SELECT * FROM JAVIER.KPI_LOADS WHERE LOAD_ID = ?', [loadId]
+      'SELECT * FROM `${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?', [loadId]
     );
     if (loadResult.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Carga no encontrada' });
     }
 
     const filesResult = await kpiQuery(
-      'SELECT * FROM JAVIER.KPI_FILE_AUDIT WHERE LOAD_ID = ? ORDER BY PROCESSED_AT', [loadId]
+      'SELECT * FROM `${SCHEMA}.KPI_FILE_AUDIT WHERE LOAD_ID = ? ORDER BY PROCESSED_AT', [loadId]
     );
 
     res.json({
@@ -401,7 +402,7 @@ function formatAlert(row) {
     typeExplanation: getTypeExplanation(type),
   };
 
-  // Campos compactos (nuevos — para UI colapsable)
+  // Campos compactos (nuevos â€” para UI colapsable)
   try {
     const compact = transformAlert({ alertType: type, severity, message: base.message, rawData });
     base.title = compact.title;
@@ -418,7 +419,7 @@ function formatAlert(row) {
 }
 
 /**
- * Devuelve una explicación breve de cada tipo de alerta para la UI.
+ * Devuelve una explicaciÃ³n breve de cada tipo de alerta para la UI.
  */
 function getTypeExplanation(type) {
   const explanations = {
@@ -448,25 +449,25 @@ function parseRawData(val) {
 
 // ============================================================
 // GET /api/kpi/debug/db-status
-// Diagnóstico: muestra contenido real de la tabla KPI_ALERTS
+// DiagnÃ³stico: muestra contenido real de la tabla KPI_ALERTS
 // ============================================================
 router.get('/debug/db-status', async (req, res) => {
   try {
     const countResult = await kpiQuery(
       `SELECT COUNT(*) AS TOTAL, SUM(CASE WHEN IS_ACTIVE = 1 THEN 1 ELSE 0 END) AS ACTIVE
-       FROM JAVIER.KPI_ALERTS`
+       FROM `${SCHEMA}.KPI_ALERTS`
     );
 
     const sampleCodes = await kpiQuery(
-      `SELECT DISTINCT CLIENT_CODE FROM JAVIER.KPI_ALERTS WHERE IS_ACTIVE = 1 FETCH FIRST 20 ROWS ONLY`
+      `SELECT DISTINCT CLIENT_CODE FROM `${SCHEMA}.KPI_ALERTS WHERE IS_ACTIVE = 1 FETCH FIRST 20 ROWS ONLY`
     );
 
     const lastLoad = await kpiQuery(
-      `SELECT LOAD_ID, STATUS, TOTAL_ALERTS, STARTED_AT, COMPLETED_AT FROM JAVIER.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 3 ROWS ONLY`
+      `SELECT LOAD_ID, STATUS, TOTAL_ALERTS, STARTED_AT, COMPLETED_AT FROM `${SCHEMA}.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 3 ROWS ONLY`
     );
 
     const byType = await kpiQuery(
-      `SELECT ALERT_TYPE, COUNT(*) AS CNT FROM JAVIER.KPI_ALERTS WHERE IS_ACTIVE = 1 GROUP BY ALERT_TYPE`
+      `SELECT ALERT_TYPE, COUNT(*) AS CNT FROM `${SCHEMA}.KPI_ALERTS WHERE IS_ACTIVE = 1 GROUP BY ALERT_TYPE`
     );
 
     res.json({
@@ -495,7 +496,7 @@ router.get('/dashboard', async (req, res) => {
     // 1. Fetch ALL active alerts with type (single query, filter in Node)
     const allAlertsResult = await kpiQuery(`
       SELECT CLIENT_CODE, ALERT_TYPE, SEVERITY
-      FROM JAVIER.KPI_ALERTS WHERE IS_ACTIVE = 1
+      FROM `${SCHEMA}.KPI_ALERTS WHERE IS_ACTIVE = 1
     `);
 
     let filteredAlerts = allAlertsResult.rows;
@@ -522,7 +523,7 @@ router.get('/dashboard', async (req, res) => {
       logger.info(`[kpi:dashboard] After vendor filter: ${filteredAlerts.length} alerts`);
     }
 
-    // 3. Compute totals, byType, and clientsMap — all from the SAME filtered data
+    // 3. Compute totals, byType, and clientsMap â€” all from the SAME filtered data
     const calcTotals = { TOTAL_ALERTS: 0, TOTAL_CLIENTS: new Set(), CRITICAL: 0, WARNING: 0, INFO: 0 };
     const byTypeMap = {}; // { DESVIACION_VENTAS: { critical: 3, warning: 5, info: 2 } }
     const clientsMap = {};
@@ -560,7 +561,7 @@ router.get('/dashboard', async (req, res) => {
 
     // 4. Fetch client info from DSEDAC.CLI (name, address, city)
     const clientCodes = sortedClients.map(c => c.code);
-    const clientInfo = {}; // code → { name, address, city }
+    const clientInfo = {}; // code â†’ { name, address, city }
     if (clientCodes.length > 0) {
       try {
         const placeholders = clientCodes.map(() => '?').join(',');
@@ -585,7 +586,7 @@ router.get('/dashboard', async (req, res) => {
         try {
           const placeholders = clientCodes.map(() => '?').join(',');
           const namesResult = await kpiQuery(
-            `SELECT CLIENT_CODE, RAW_DATA FROM JAVIER.KPI_ALERTS
+            `SELECT CLIENT_CODE, RAW_DATA FROM `${SCHEMA}.KPI_ALERTS
              WHERE CLIENT_CODE IN (${placeholders}) AND IS_ACTIVE = 1
              FETCH FIRST ${clientCodes.length} ROWS ONLY`, clientCodes);
           for (const row of namesResult.rows) {
@@ -600,13 +601,13 @@ router.get('/dashboard', async (req, res) => {
     }
 
     // 5. Fetch detailed alerts per client (with transformation for compact UI)
-    const clientAlerts = {}; // code → [{ type, severity, title, summary, detail, actions, ui_hint }]
+    const clientAlerts = {}; // code â†’ [{ type, severity, title, summary, detail, actions, ui_hint }]
     if (clientCodes.length > 0) {
       try {
         const placeholders = clientCodes.map(() => '?').join(',');
         const alertsResult = await kpiQuery(
           `SELECT CLIENT_CODE, ALERT_TYPE, SEVERITY, MESSAGE, RAW_DATA
-           FROM JAVIER.KPI_ALERTS
+           FROM `${SCHEMA}.KPI_ALERTS
            WHERE CLIENT_CODE IN (${placeholders}) AND IS_ACTIVE = 1
            ORDER BY CASE SEVERITY WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END`,
           clientCodes
@@ -637,7 +638,7 @@ router.get('/dashboard', async (req, res) => {
     // 6. Last load info
     const lastLoadResult = await kpiQuery(
       `SELECT LOAD_ID, STATUS, TOTAL_ALERTS, COMPLETED_AT
-       FROM JAVIER.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 1 ROWS ONLY`
+       FROM `${SCHEMA}.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 1 ROWS ONLY`
     );
     const lastLoad = lastLoadResult.rows[0] || null;
 

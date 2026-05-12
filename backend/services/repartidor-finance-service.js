@@ -76,6 +76,7 @@ async function getFinanceSchemaInfo() {
     return _financeSchemaInfo;
   }
 
+  const APP_SCHEMA = process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER';
   const tables = [
     'REPARTIDOR_COBROS',
     'REPARTIDOR_FINANCIAL_BALANCES',
@@ -89,11 +90,11 @@ async function getFinanceSchemaInfo() {
     rows = await queryWithParams(`
       SELECT TABLE_NAME, COLUMN_NAME
       FROM QSYS2.SYSCOLUMNS
-      WHERE TABLE_SCHEMA = 'JAVIER'
+      WHERE TABLE_SCHEMA = ?
         AND TABLE_NAME IN (${tables.map(() => '?').join(', ')})
-    `, tables, false, false);
+    `, [APP_SCHEMA, ...tables], false, false);
   } catch (error) {
-    logger.warn(`[REPARTIDOR_FINANZAS] Schema detection failed: ${error.message}`);
+    logger.warn(`[REPARTIDOR_FINANZAS] Schema detection failed in ${APP_SCHEMA}: ${error.message}`);
   }
   const detectedRows = Array.isArray(rows)
     ? rows.filter((row) =>
@@ -361,20 +362,18 @@ const INTERNAL_LIQUIDATION_RECIPIENTS = [
   'diegocorbalan@mari-pepa.com',
 ];
 
-function erpSchemaName(raw) {
-  const schema = String(raw || 'JAVIER').trim().toUpperCase();
-  if (!['JAVIER', 'DSEDAC'].includes(schema)) {
-    throw new Error(
-      `REPARTIDOR_FINANCE_ERP_SCHEMA invalido: ${schema}. Use JAVIER o DSEDAC.`,
-    );
-  }
-  return schema;
+function getErpDataSchema() {
+  const schema = String(process.env.REPARTIDOR_FINANCE_ERP_SCHEMA || process.env.FINANCE_ERP_SCHEMA || process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'DSEDAC').trim().toUpperCase();
+  return schema === 'JAVIER' ? 'JAVIER' : 'DSEDAC';
 }
 
-const ERP_FINANCE_SCHEMA = erpSchemaName(
-  process.env.REPARTIDOR_FINANCE_ERP_SCHEMA || process.env.FINANCE_ERP_SCHEMA,
-);
-const LQD_TABLE = `${ERP_FINANCE_SCHEMA}.LQD`;
+function getAppSchema() {
+  return String(process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER').trim().toUpperCase();
+}
+
+const ERP_DATA_SCHEMA = getErpDataSchema();
+const ERP_FINANCE_SCHEMA = getAppSchema();
+const LQD_TABLE = `${ERP_DATA_SCHEMA}.LQD`;
 
 function value(row, key, fallback = undefined) {
   if (!row) return fallback;
@@ -925,7 +924,7 @@ async function getDailySummaryLegacyUnused({ repartidorId, date }) {
       RC.IMPORTEVENCIMIENTO,
       RC.IMPORTEPENDIENTE
     FROM JAVIER.REPARTIDOR_COBROS RC
-    LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(RC.CODIGOCLIENTEALBARAN)
+    LEFT JOIN .CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(RC.CODIGOCLIENTEALBARAN)
     WHERE TRIM(RC.CODIGOVENDEDOR) = ?
       AND ${dateCol} = ?
       AND COALESCE(RC.LIQUIDADO_SN, 'N') <> 'S'
@@ -1028,7 +1027,7 @@ async function getDailySummary({ repartidorId, date }) {
       ${cobrosAmountColumn(info, 'RC')} AS IMPORTEVENCIMIENTO,
       ${cobrosPendingColumn(info, 'RC')} AS IMPORTEPENDIENTE
     FROM JAVIER.REPARTIDOR_COBROS RC
-    LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(${info.cobrosAligned ? 'RC.CODIGOCLIENTEALBARAN' : 'RC.CODIGO_CLIENTE'})
+    LEFT JOIN .CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(${info.cobrosAligned ? 'RC.CODIGOCLIENTEALBARAN' : 'RC.CODIGO_CLIENTE'})
     WHERE ${repFilterRc.sql}
       AND ${aliasedDateCol} = ?
       AND ${notLiquidatedRc}
@@ -1072,14 +1071,14 @@ async function getSummary({ repartidorId, year, month }) {
         THEN CVC.IMPORTEPENDIENTE ELSE 0 END), 0) AS TOTAL_VENCIDO,
       COUNT(*) AS DOCUMENTOS_PENDIENTES,
       COUNT(DISTINCT TRIM(CVC.CODIGOCLIENTEALBARAN)) AS CLIENTES_PENDIENTES
-    FROM DSEDAC.CVC CVC
-    INNER JOIN DSEDAC.CPC CPC
+    FROM .CVC CVC
+    INNER JOIN .CPC CPC
       ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
       AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
       AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
       AND CVC.TERMINALDOCUMENTO = CPC.TERMINALALBARAN
       AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-    INNER JOIN DSEDAC.OPP OPP
+    INNER JOIN .OPP OPP
       ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
     WHERE TRIM(OPP.CODIGOREPARTIDOR) = ?
       AND CVC.ANOEMISION = ?
@@ -1155,18 +1154,18 @@ async function getVencimientos({ repartidorId, from, to, limit, clientCode, esta
         ROW_NUMBER() OVER (
           ORDER BY CVC.ANOVENCIMIENTO, CVC.MESVENCIMIENTO, CVC.DIAVENCIMIENTO, CVC.NUMERODOCUMENTO
         ) AS RN
-      FROM DSEDAC.CVC CVC
-      INNER JOIN DSEDAC.CPC CPC
+      FROM .CVC CVC
+      INNER JOIN .CPC CPC
         ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
         AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
         AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
         AND CVC.TERMINALDOCUMENTO = CPC.TERMINALALBARAN
         AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-      INNER JOIN DSEDAC.OPP OPP
+      INNER JOIN .OPP OPP
         ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-      LEFT JOIN DSEDAC.CLI CLI
+      LEFT JOIN .CLI CLI
         ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
-      LEFT JOIN DSEDAC.CLCL1 CLCL1
+      LEFT JOIN .CLCL1 CLCL1
         ON TRIM(CLCL1.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
       LEFT JOIN (
         SELECT
@@ -1296,14 +1295,14 @@ async function registerCobro(input) {
 async function validateCobroDocument(input, conn = null) {
   const sql = `
     SELECT 1 AS OK
-    FROM DSEDAC.CVC CVC
-    INNER JOIN DSEDAC.CPC CPC
+    FROM .CVC CVC
+    INNER JOIN .CPC CPC
       ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
       AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
       AND TRIM(CVC.SERIEDOCUMENTO) = TRIM(CPC.SERIEALBARAN)
       AND CVC.TERMINALDOCUMENTO = CPC.TERMINALALBARAN
       AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-    INNER JOIN DSEDAC.OPP OPP
+    INNER JOIN .OPP OPP
       ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
     WHERE TRIM(CVC.TIPODOCUMENTO) = ?
       AND TRIM(CVC.ORIGENDOCUMENTO) = ?
@@ -1899,8 +1898,8 @@ async function getCommissionSummaryLegacyUnused({ repartidorId, from, to }) {
 
   const deliveredRows = await queryWithParams(`
     SELECT COALESCE(SUM(CPC.IMPORTETOTAL), 0) AS TOTAL_REPARTIDO
-    FROM DSEDAC.OPP OPP
-    INNER JOIN DSEDAC.CPC CPC
+    FROM .OPP OPP
+    INNER JOIN .CPC CPC
       ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
     WHERE TRIM(OPP.CODIGOREPARTIDOR) = ?
       AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ? AND ?
@@ -1938,8 +1937,8 @@ async function getCommissionSummary({ repartidorId, from, to }) {
 
   const deliveredRows = await queryWithParams(`
     SELECT COALESCE(SUM(CPC.IMPORTETOTAL), 0) AS TOTAL_REPARTIDO
-    FROM DSEDAC.OPP OPP
-    INNER JOIN DSEDAC.CPC CPC
+    FROM .OPP OPP
+    INNER JOIN .CPC CPC
       ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
     WHERE ${repFilter.sql}
       AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ? AND ?
@@ -1951,10 +1950,10 @@ async function getCommissionSummary({ repartidorId, from, to }) {
       THEN CPC.IMPORTETOTAL
       ELSE CPC.IMPORTETOTAL - COALESCE(CVC.IMPORTEPENDIENTE, 0)
     END), 0) AS TOTAL_COBRADO
-    FROM DSEDAC.OPP OPP
-    INNER JOIN DSEDAC.CPC CPC
+    FROM .OPP OPP
+    INNER JOIN .CPC CPC
       ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-    LEFT JOIN DSEDAC.CVC CVC
+    LEFT JOIN .CVC CVC
       ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
       AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
       AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN

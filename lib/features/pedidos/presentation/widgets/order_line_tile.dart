@@ -26,6 +26,7 @@ class OrderLineTile extends StatelessWidget {
   final VoidCallback onDecrement;
   // Called with the new claseLinea value ('VT' or 'SC') when badge is tapped
   final void Function(String)? onClaseLineaToggle;
+  final void Function(double)? onDiscountChanged;
 
   String _getQtyLabel() {
     final unit = line.unidadMedida.toUpperCase().trim();
@@ -70,7 +71,7 @@ class OrderLineTile extends StatelessWidget {
   String _priceLabel() {
     if (line.precioVenta <= 0) return '';
     final abbr = _unitAbbr(line.unidadMedida);
-    return '@ ${PedidosFormatters.money(line.precioVenta, decimals: 3)} €/$abbr';
+    return '@ ${PedidosFormatters.money(line.precioVenta, decimals: 3)} â‚¬/$abbr';
   }
 
   static String _unitAbbr(String unit) {
@@ -292,7 +293,7 @@ class OrderLineTile extends StatelessWidget {
                               color: AppTheme.warning, size: 13,),
                           const SizedBox(width: 3),
                           Text(
-                            '0,00 €',
+                            '0,00 â‚¬',
                             style: TextStyle(
                               color: AppTheme.error,
                               fontWeight: FontWeight.bold,

@@ -26,6 +26,7 @@ import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/reparti
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/comisiones_page.dart'
     as repartidor_finanzas;
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/liquidacion_diaria_page.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/repartidor_evolution_page.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/vencimientos_page.dart';
 import 'package:gmp_app_mobilidad/features/rutero/presentation/pages/rutero_page.dart';
 import 'package:gmp_app_mobilidad/features/settings/presentation/pages/network_settings_page.dart';
@@ -1255,6 +1256,11 @@ class _MainShellState extends ConsumerState<MainShell> {
         }
         if (label == 'Vencimientos') {
           return RepartidorVencimientosPage(
+            repartidorId: effectiveRepartidorId,
+          );
+        }
+        if (label == 'Evolución') {
+          return RepartidorEvolutionPage(
             repartidorId: effectiveRepartidorId,
           );
         }
