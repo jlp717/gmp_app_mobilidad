@@ -116,7 +116,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
     return Scaffold(
       backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
-        title: const Text('HistÃ³rico de Ventas'),
+        title: const Text('Histórico de Ventas'),
         backgroundColor: AppColors.cardColor,
         elevation: 0,
         actions: [
@@ -143,7 +143,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                         controller: _clientController,
                         style: const TextStyle(color: Colors.white),
                         decoration: InputDecoration(
-                          hintText: 'CÃ³d. Cliente (Opcional)',
+                          hintText: 'Cód. Cliente (Opcional)',
                           hintStyle: const TextStyle(color: Colors.white54),
                           filled: true,
                           fillColor: AppColors.backgroundColor,
@@ -308,12 +308,12 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                 productName: item.productName,
                 size: 40,
               ),),
-              // Ficha tÃ©cnica button
+              // Ficha técnica button
               DataCell(
                 IconButton(
                   icon: const Icon(Icons.description_outlined,
                       color: AppColors.primary, size: 20,),
-                  tooltip: 'Ficha TÃ©cnica',
+                  tooltip: 'Ficha Técnica',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _openFichaTecnica(context, item, baseUrl),
@@ -356,7 +356,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
   }
 
   // ===========================================================================
-  // FICHA TÃ‰CNICA â€” Download PDF and open viewer
+  // FICHA TÉCNICA â€” Download PDF and open viewer
   // ===========================================================================
   Future<void> _openFichaTecnica(
       BuildContext ctx, ProductHistoryItem item, String baseUrl,) async {
@@ -382,7 +382,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
             ),
             const SizedBox(width: 16),
             Text(
-              'Descargando ficha tÃ©cnica...',
+              'Descargando ficha técnica...',
               style: TextStyle(color: Colors.grey[300]),
             ),
           ],
@@ -397,7 +397,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
 
       if (!File(filePath).existsSync()) {
         ScaffoldMessenger.of(ctx).showSnackBar(
-          const SnackBar(content: Text('No se encontrÃ³ la ficha tÃ©cnica')),
+          const SnackBar(content: Text('No se encontró la ficha técnica')),
         );
         return;
       }
@@ -405,13 +405,13 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
       navigator.push(MaterialPageRoute(
         builder: (_) => _PdfViewerPage(
           filePath: filePath,
-          title: 'Ficha TÃ©cnica - ${item.productCode.trim()}',
+          title: 'Ficha Técnica - ${item.productCode.trim()}',
         ),
       ),);
     } catch (e) {
       if (navigator.canPop()) navigator.pop();
       final msg = e.toString().contains('404')
-          ? 'No hay ficha tÃ©cnica para este producto'
+          ? 'No hay ficha técnica para este producto'
           : 'Error al descargar: $e';
       ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(msg)));
     }
@@ -462,7 +462,7 @@ class _ProductCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'CÃ³d: ${item.productCode}',
+                    'Cód: ${item.productCode}',
                     style: const TextStyle(color: Colors.white38, fontSize: 11),
                   ),
                   const SizedBox(height: 6),
@@ -510,7 +510,7 @@ class _ProductCard extends StatelessWidget {
                           color: Colors.white,
                           bold: true,),
                       const Spacer(),
-                      // Ficha TÃ©cnica button
+                      // Ficha Técnica button
                       Material(
                         color: Colors.transparent,
                         child: InkWell(
@@ -682,7 +682,7 @@ class _FullscreenImageViewer extends StatelessWidget {
 }
 
 // =============================================================================
-// PDF VIEWER PAGE â€” In-app PDF viewer for fichas tÃ©cnicas
+// PDF VIEWER PAGE â€” In-app PDF viewer for fichas técnicas
 // =============================================================================
 class _PdfViewerPage extends StatelessWidget {
 

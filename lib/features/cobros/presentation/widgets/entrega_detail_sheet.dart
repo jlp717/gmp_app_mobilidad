@@ -1,5 +1,5 @@
 /// ENTREGA DETAIL SHEET
-/// Bottom sheet con detalle del albarÃ¡n y acciones
+/// Bottom sheet con detalle del albarán y acciones
 library;
 
 import 'package:flutter/material.dart';
@@ -19,7 +19,7 @@ class EntregaDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: 'â‚¬');
+    final currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: '€');
     
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
@@ -45,7 +45,7 @@ class EntregaDetailSheet extends StatelessWidget {
             padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
             child: Row(
               children: [
-                // NÃºmero albarÃ¡n
+                // Número albarán
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
@@ -61,7 +61,7 @@ class EntregaDetailSheet extends StatelessWidget {
                     ],
                   ),
                   child: Text(
-                    'AlbarÃ¡n #${albaran.numeroAlbaran}',
+                    'Albarán #${albaran.numeroAlbaran}',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
@@ -200,7 +200,7 @@ class EntregaDetailSheet extends StatelessWidget {
                     ],
                   ),
                 ),
-                // Botones de navegaciÃ³n/llamada
+                // Botones de navegación/llamada
                 IconButton(
                   onPressed: () {},
                   icon: Container(
@@ -264,7 +264,7 @@ class EntregaDetailSheet extends StatelessWidget {
             ),
             child: Row(
               children: [
-                // BotÃ³n aÃ±adir foto
+                // Botón añadir foto
                 _buildActionButton(
                   icon: Icons.camera_alt,
                   label: 'Foto',
@@ -274,7 +274,7 @@ class EntregaDetailSheet extends StatelessWidget {
                 
                 const SizedBox(width: 12),
                 
-                // BotÃ³n firma
+                // Botón firma
                 _buildActionButton(
                   icon: Icons.draw,
                   label: 'Firma',
@@ -284,7 +284,7 @@ class EntregaDetailSheet extends StatelessWidget {
                 
                 const SizedBox(width: 12),
                 
-                // BotÃ³n incidencia
+                // Botón incidencia
                 _buildActionButton(
                   icon: Icons.report_problem,
                   label: 'Incidencia',
@@ -294,7 +294,7 @@ class EntregaDetailSheet extends StatelessWidget {
                 
                 const Spacer(),
                 
-                // BotÃ³n completar entrega
+                // Botón completar entrega
                 if (!albaran.completo && onComplete != null)
                   Material(
                     color: Colors.transparent,

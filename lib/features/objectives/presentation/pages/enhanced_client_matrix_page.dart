@@ -162,9 +162,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         // Solo FI1 y FI5 precargadas, FI2/FI3/FI4 se cargan en cascada desde API
         _fiOptions = FiFilterOptions(
           fi1: _parseFiOptions(_availableFilters['fi1']),
-          fi2: [], // Se cargan dinÃ¡micamente al seleccionar FI1
-          fi3: [], // Se cargan dinÃ¡micamente al seleccionar FI1/FI2
-          fi4: [], // Se cargan dinÃ¡micamente al seleccionar FI1/FI2/FI3
+          fi2: [], // Se cargan dinámicamente al seleccionar FI1
+          fi3: [], // Se cargan dinámicamente al seleccionar FI1/FI2
+          fi4: [], // Se cargan dinámicamente al seleccionar FI1/FI2/FI3
           fi5: _parseFiOptions(_availableFilters['fi5']),
         );
 
@@ -289,7 +289,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   }
 
   String _formatCurrency(double value) {
-    // Always show full number with proper formatting (2.900 â‚¬ not 2.9K)
+    // Always show full number with proper formatting (2.900 € not 2.9K)
     return CurrencyFormatter.format(value);
   }
 
@@ -306,7 +306,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           controller: ctrl,
           maxLines: 5,
           decoration: const InputDecoration(
-            hintText: 'Escribe aquÃ­ las observaciones...',
+            hintText: 'Escribe aquí las observaciones...',
             border: OutlineInputBorder(),
           ),
         ),
@@ -464,7 +464,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       _buildSummaryRow(),
                       _buildMonthlyRow(),
                       _buildGroupingBar(),
-                      // Solo jerarquÃ­a FI de 5 niveles
+                      // Solo jerarquía FI de 5 niveles
                       Expanded(
                         child: _maxDepthLevel == 0
                             ? _buildProductsList()
@@ -501,7 +501,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             Row(
               children: [
                 const Text(
-                  'AÃ±os: ',
+                  'Años: ',
                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
                 ),
                 ...List.generate(
@@ -610,7 +610,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             Row(
               children: [
                 Expanded(
-                  child: _buildTextField(_codeCtrl, 'CÃ³digo', (v) {
+                  child: _buildTextField(_codeCtrl, 'Código', (v) {
                     _productCodeSearch = v;
                     _filtersDirty = true;
                     setState(() {});
@@ -618,7 +618,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                 ),
                 const SizedBox(width: 6),
                 Expanded(
-                  child: _buildTextField(_nameCtrl, 'DescripciÃ³n', (v) {
+                  child: _buildTextField(_nameCtrl, 'Descripción', (v) {
                     _productNameSearch = v;
                     _filtersDirty = true;
                     setState(() {});
@@ -1139,7 +1139,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      // Name - "CÃ³digo - DescripciÃ³n"
+                      // Name - "Código - Descripción"
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1154,7 +1154,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
-                              '$childCount subcategorÃ­as',
+                              '$childCount subcategorías',
                               style: const TextStyle(
                                 fontSize: 9,
                                 color: AppTheme.textSecondary,
@@ -1428,7 +1428,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                               overflow: TextOverflow.ellipsis,
                             ),
                             Text(
-                              '$childCount lÃ­neas',
+                              '$childCount líneas',
                               style: const TextStyle(
                                 fontSize: 7,
                                 color: AppTheme.textSecondary,
@@ -1696,7 +1696,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              'Monto este aÃ±o:',
+              'Monto este año:',
               style: TextStyle(
                 fontSize: compact ? 7 : 8,
                 color: AppTheme.textSecondary,
@@ -1719,7 +1719,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              'VariaciÃ³n:',
+              'Variación:',
               style: TextStyle(
                 fontSize: compact ? 7 : 8,
                 color: AppTheme.textSecondary,
@@ -1749,7 +1749,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               )
             else
               Text(
-                'SIN HISTÃ“RICO',
+                'SIN HISTÓRICO',
                 style: TextStyle(fontSize: compact ? 7 : 8, color: Colors.grey),
               ),
           ],
@@ -1820,7 +1820,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     );
   }
 
-  /// Monthly breakdown row - vertical cards with ENE / 820â‚¬ / -73% format
+  /// Monthly breakdown row - vertical cards with ENE / 820€ / -73% format
   Widget _buildMonthlyBreakdownRow(
     Map<String, dynamic>? monthlyData, {
     bool compact = false,
@@ -1844,7 +1844,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           final sales = (mData?['sales'] as num?)?.toDouble() ?? 0;
           final prevSales = (mData?['prevSales'] as num?)?.toDouble() ?? 0;
 
-          // Sin ventas ni este aÃ±o ni el anterior - gris
+          // Sin ventas ni este año ni el anterior - gris
           if (sales == 0 && prevSales == 0) {
             return Container(
               width: compact ? 50 : 58,
@@ -1884,24 +1884,24 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           Color yoyColor;
           Color bgColor;
           var isNew = false;
-          var isLost = false; // VendiÃ³ el aÃ±o pasado pero no este aÃ±o
+          var isLost = false; // Vendió el año pasado pero no este año
 
           final prevIsZero = prevSales.abs() < 0.01;
           final currIsZero = sales.abs() < 0.01;
 
-          // Si el cliente es NUEVO (sin ventas en todo el aÃ±o anterior), todos los meses con ventas son NUEVO
+          // Si el cliente es NUEVO (sin ventas en todo el año anterior), todos los meses con ventas son NUEVO
           if (isClientNew && !currIsZero) {
             isNew = true;
             yoyColor = const Color(0xFF2979FF); // Distinct Blue
             bgColor = const Color(0xFF2979FF).withValues(alpha: 0.20);
           } else if (currIsZero && !prevIsZero) {
-            // PerdiÃ³ ventas - este aÃ±o 0, aÃ±o pasado vendiÃ³
+            // Perdió ventas - este año 0, año pasado vendió
             isLost = true;
             yoyPct = -100;
             yoyColor = AppTheme.error;
             bgColor = AppTheme.error.withValues(alpha: 0.15);
           } else if (!currIsZero && prevIsZero) {
-            // Venta este mes, pero 0 el aÃ±o pasado -> NUEVO (Blue)
+            // Venta este mes, pero 0 el año pasado -> NUEVO (Blue)
             isNew = true;
             yoyColor = const Color(0xFF2979FF); // Distinct Blue
             bgColor = const Color(0xFF2979FF).withValues(alpha: 0.20);
@@ -1937,11 +1937,11 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   ),
                 ),
                 const SizedBox(height: 2),
-                // Sales amount (- si es 0 pero habÃ­a ventas antes)
+                // Sales amount (- si es 0 pero había ventas antes)
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   child: Text(
-                    isLost ? '-' : '${_formatCompact(sales)} â‚¬',
+                    isLost ? '-' : '${_formatCompact(sales)} €',
                     style: TextStyle(
                       fontSize: compact ? 9 : 10,
                       fontWeight: FontWeight.bold,
@@ -2158,7 +2158,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           ),
                         ],
                         const Spacer(),
-                        // Ficha TÃ©cnica button
+                        // Ficha Técnica button
                         Material(
                           color: Colors.transparent,
                           child: InkWell(
@@ -2219,7 +2219,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           ),
           const SizedBox(height: 6),
 
-          // === COMERCIAL: PVP, UDS, VENTAS con aÃ±o pasado ===
+          // === COMERCIAL: PVP, UDS, VENTAS con año pasado ===
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
             decoration: BoxDecoration(
@@ -2228,7 +2228,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             ),
             child: Row(
               children: [
-                // PVP por unidad (actual + aÃ±o pasado)
+                // PVP por unidad (actual + año pasado)
                 Expanded(
                   child: Column(
                     children: [
@@ -2258,7 +2258,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     ],
                   ),
                 ),
-                // Unidades (actual + aÃ±o pasado)
+                // Unidades (actual + año pasado)
                 Expanded(
                   child: Column(
                     children: [
@@ -2290,7 +2290,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     ],
                   ),
                 ),
-                // Ventas totales (actual + aÃ±o pasado entre parÃ©ntesis)
+                // Ventas totales (actual + año pasado entre paréntesis)
                 Expanded(
                   flex: 2,
                   child: Column(
@@ -2355,7 +2355,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             ),
           ),
 
-          // === JEFE VENTAS: Coste, Margen (con aÃ±o anterior) ===
+          // === JEFE VENTAS: Coste, Margen (con año anterior) ===
           if (widget.isJefeVentas) ...[
             const SizedBox(height: 4),
             Container(
@@ -2473,9 +2473,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     );
   }
 
-  /// Format number with Spanish locale: 8.120,30 (no â‚¬ symbol, use _formatCurrency for that)
+  /// Format number with Spanish locale: 8.120,30 (no € symbol, use _formatCurrency for that)
   String _formatCompact(double v) {
-    // Formato espaÃ±ol: miles con punto, decimales con coma
+    // Formato español: miles con punto, decimales con coma
     final parts = v.toStringAsFixed(2).split('.');
     final intPart = parts[0];
     final decPart = parts.length > 1 ? parts[1] : '00';
@@ -2797,7 +2797,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           ),
                         ),
                         const Spacer(),
-                        // Ficha TÃ©cnica button
+                        // Ficha Técnica button
                         Material(
                           color: Colors.transparent,
                           child: InkWell(
@@ -3316,7 +3316,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   }
 
   // ===========================================================================
-  // FICHA TÃ‰CNICA â€” Download PDF and open viewer
+  // FICHA TÉCNICA â€” Download PDF and open viewer
   // ===========================================================================
   Future<void> _openFichaTecnica(
     BuildContext ctx,
@@ -3344,7 +3344,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             ),
             const SizedBox(width: 16),
             Text(
-              'Descargando ficha tÃ©cnica...',
+              'Descargando ficha técnica...',
               style: TextStyle(color: Colors.grey[300]),
             ),
           ],
@@ -3359,7 +3359,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
 
       if (!File(filePath).existsSync()) {
         ScaffoldMessenger.of(ctx).showSnackBar(
-          const SnackBar(content: Text('No se encontrÃ³ la ficha tÃ©cnica')),
+          const SnackBar(content: Text('No se encontró la ficha técnica')),
         );
         return;
       }
@@ -3370,7 +3370,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             backgroundColor: Colors.white,
             appBar: AppBar(
               title: Text(
-                'Ficha TÃ©cnica - $productCode',
+                'Ficha Técnica - $productCode',
                 style: const TextStyle(fontSize: 14),
               ),
               backgroundColor: AppTheme.surfaceColor,
@@ -3390,7 +3390,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     } catch (e) {
       if (navigator.canPop()) navigator.pop();
       final msg = e.toString().contains('404')
-          ? 'No hay ficha tÃ©cnica para este producto'
+          ? 'No hay ficha técnica para este producto'
           : 'Error al descargar: $e';
       ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(msg)));
     }

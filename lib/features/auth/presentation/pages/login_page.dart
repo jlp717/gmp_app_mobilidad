@@ -9,7 +9,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/auth/presentation/widgets/role_selection_dialog.dart';
 import 'package:go_router/go_router.dart';
 
-/// PÃ¡gina de login espectacular con diseÃ±o glassmorphism y feedback intuitivo
+/// Página de login espectacular con diseño glassmorphism y feedback intuitivo
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -168,7 +168,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           ),
           content: Text(
             _errorMessage ??
-                'Credenciales incorrectas. Por favor, intÃ©ntalo de nuevo.',
+                'Credenciales incorrectas. Por favor, inténtalo de nuevo.',
             style: const TextStyle(color: Colors.white),
           ),
           actions: [
@@ -491,7 +491,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             ),
             const SizedBox(height: 4),
             Text(
-              'Inicia sesiÃ³n para continuar',
+              'Inicia sesión para continuar',
               style: TextStyle(
                 fontSize: 15,
                 color: Colors.white.withValues(alpha: 0.5),
@@ -562,7 +562,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               focusNode: _usernameFocus,
               isFocused: _isUsernameFocused,
               label: 'Usuario',
-              hint: 'Tu cÃ³digo de acceso',
+              hint: 'Tu código de acceso',
               icon: Icons.person_rounded,
               textInputAction: TextInputAction.next,
               onChanged: (_) => _clearError(),
@@ -577,7 +577,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               controller: _passwordController,
               focusNode: _passwordFocus,
               isFocused: _isPasswordFocused,
-              label: 'ContraseÃ±a',
+              label: 'Contraseña',
               hint: 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢',
               icon: Icons.lock_rounded,
               obscure: _obscurePassword,
@@ -585,7 +585,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               onChanged: (_) => _clearError(),
               onSubmit: (_) => _handleLogin(),
               validator: (v) =>
-                  v?.isEmpty ?? false ? 'Ingresa tu contraseÃ±a' : null,
+                  v?.isEmpty ?? false ? 'Ingresa tu contraseña' : null,
               suffix: IconButton(
                 icon: Icon(
                   _obscurePassword
@@ -650,7 +650,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                  'Iniciar SesiÃ³n',
+                                  'Iniciar Sesión',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
@@ -685,7 +685,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'ConexiÃ³n segura â€¢ GMP 2026',
+                  'Conexión segura â€¢ GMP 2026',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.white.withValues(alpha: 0.35),

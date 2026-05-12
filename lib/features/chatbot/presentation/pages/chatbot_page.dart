@@ -378,7 +378,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
           const SizedBox(height: 12),
           
           Text(
-            'Consulta precios, mÃ¡rgenes, deudas,\nstock y estrategias comerciales.',
+            'Consulta precios, márgenes, deudas,\nstock y estrategias comerciales.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
@@ -402,8 +402,8 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
 
   Widget _buildCapabilityGrid() {
     final capabilities = [
-      (Icons.attach_money, 'MÃ¡rgenes', 'AnÃ¡lisis por cliente o global'),
-      (Icons.local_offer, 'Precios', 'MÃ­nimos y sugeridos'),
+      (Icons.attach_money, 'Márgenes', 'Análisis por cliente o global'),
+      (Icons.local_offer, 'Precios', 'Mínimos y sugeridos'),
       (Icons.account_balance_wallet, 'Deudas', 'Estado de cobro'),
       (Icons.trending_up, 'Ventas', 'YoY y tendencias'),
     ];
@@ -459,9 +459,9 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
 
   Widget _buildExampleQueries() {
     final examples = [
-      'Â¿CuÃ¡l es mi margen global este mes?',
-      'Â¿A quÃ© precio puedo vender el producto ABC?',
-      'Â¿CuÃ¡nto debe el cliente 12345?',
+      'Â¿Cuál es mi margen global este mes?',
+      'Â¿A qué precio puedo vender el producto ABC?',
+      'Â¿Cuánto debe el cliente 12345?',
       'Comparar ventas 2024 vs 2023',
     ];
 

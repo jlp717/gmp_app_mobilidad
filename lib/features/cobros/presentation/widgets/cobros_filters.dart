@@ -50,7 +50,7 @@ class _CobrosFiltersState extends State<CobrosFilters> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // TÃ­tulo
+          // Título
           const Row(
             children: [
               Icon(

@@ -19,7 +19,7 @@ class CobrosSummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: 'â‚¬');
+    final currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: '€');
     final total = totalPendientes + totalCompletadas;
     final progreso = total > 0 ? totalCompletadas / total : 0.0;
 
@@ -48,7 +48,7 @@ class CobrosSummaryCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // TÃ­tulo
+          // Título
           Row(
             children: [
               Container(
@@ -65,7 +65,7 @@ class CobrosSummaryCard extends StatelessWidget {
               ),
               const SizedBox(width: 12),
               const Text(
-                'Resumen del dÃ­a',
+                'Resumen del día',
                 style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontWeight: FontWeight.w600,

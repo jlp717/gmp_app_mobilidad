@@ -217,7 +217,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
           onChanged: (v) => setState(() => _searchQuery = v.toLowerCase().trim()),
           style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
           decoration: InputDecoration(
-            hintText: 'Buscar artÃ­culo, cliente, pedido...',
+            hintText: 'Buscar artículo, cliente, pedido...',
             hintStyle: TextStyle(
               color: AppTheme.textTertiary.withValues(alpha: 0.4),
               fontSize: 12,
@@ -282,7 +282,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
           Expanded(
             child: _MiniActionButton(
               icon: Icons.add_circle_outline,
-              label: 'AÃ±adir todo',
+              label: 'Añadir todo',
               color: AppTheme.neonGreen,
               onPressed: planner.overflowBoxes.isNotEmpty
                   ? () => ref.read(loadPlannerProvider.notifier).includeAllOrders()

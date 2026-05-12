@@ -79,7 +79,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
             onChanged: (value) => setState(() => _search = value.trim()),
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
-              hintText: 'Buscar promociÃ³n o artÃ­culo...',
+              hintText: 'Buscar promoción o artículo...',
               hintStyle: const TextStyle(color: Colors.white38),
               prefixIcon:
                   const Icon(Icons.search, color: AppTheme.neonBlue, size: 18),
@@ -206,7 +206,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                     child: Text(
                       group.promoDesc.isNotEmpty
                           ? group.promoDesc
-                          : (isGift ? 'PromociÃ³n regalo' : 'PromociÃ³n precio'),
+                          : (isGift ? 'Promoción regalo' : 'Promoción precio'),
                       style: TextStyle(
                         color: accentColor,
                         fontWeight: FontWeight.w700,
@@ -285,7 +285,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
               if (group.dateTo.isNotEmpty && group.dateTo != '0/0/0') ...[
                 const SizedBox(height: 2),
                 Text(
-                  'VÃ¡lida hasta ${group.dateTo}',
+                  'Válida hasta ${group.dateTo}',
                   style: const TextStyle(color: Colors.white38, fontSize: 11),
                 ),
               ],
@@ -352,7 +352,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                       backgroundColor: AppTheme.darkSurface,
                       side: const BorderSide(color: AppTheme.borderColor),
                       label: Text(
-                        '+${group.items.length - 8} mÃ¡s',
+                        '+${group.items.length - 8} más',
                         style: const TextStyle(
                             color: Colors.white54, fontSize: 11,),
                       ),

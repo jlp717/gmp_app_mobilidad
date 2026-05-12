@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
-/// [VentasCards] - Tarjetas de mÃ©tricas de ventas del vendedor
+/// [VentasCards] - Tarjetas de métricas de ventas del vendedor
 ///
 /// MUESTRA DATOS REALES:
 /// - Ventas de Hoy (total, cantidad de operaciones, margen)
 /// - Ventas del Mes (total, cantidad, comparativa mes anterior)
-/// - Ventas del AÃ±o (total acumulado)
+/// - Ventas del Año (total acumulado)
 /// - Clientes Atendidos (hoy, mes)
 class VentasCards extends StatelessWidget {
   const VentasCards({
@@ -54,12 +54,12 @@ class VentasCards extends StatelessWidget {
 
         const SizedBox(height: 12),
 
-        // Fila inferior: Ventas AÃ±o y Clientes
+        // Fila inferior: Ventas Año y Clientes
         Row(
           children: [
             Expanded(
               child: _VentaCardCompact(
-                title: 'Ventas AÃ±o',
+                title: 'Ventas Año',
                 total: ventasAnio.total,
                 subtitle: '${ventasAnio.cantidad} operaciones',
                 margen: ventasAnio.margen,
@@ -113,7 +113,7 @@ class _VentaCardCompact extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Cabecera con icono y tÃ­tulo
+            // Cabecera con icono y título
             Row(
               children: [
                 Container(
@@ -154,7 +154,7 @@ class _VentaCardCompact extends StatelessWidget {
 
             const SizedBox(height: 4),
 
-            // SubtÃ­tulo con cantidad de operaciones
+            // Subtítulo con cantidad de operaciones
             Text(
               subtitle,
               style: theme.textTheme.bodySmall?.copyWith(
@@ -164,7 +164,7 @@ class _VentaCardCompact extends StatelessWidget {
 
             const SizedBox(height: 8),
 
-            // Margen y variaciÃ³n
+            // Margen y variación
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [

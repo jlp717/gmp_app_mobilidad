@@ -75,9 +75,9 @@ class SalesSummaryHeader extends StatelessWidget {
     final useMonthly = monthlyData != null && monthlyData.isNotEmpty;
     
     final dataToShow = useMonthly ? monthlyData : breakdownJson;
-    final title = useMonthly ? 'EVOLUCIÃ“N MENSUAL (Mes Actual vs AÃ±o Anterior)' : 'HISTÃ“RICO ANUAL';
+    final title = useMonthly ? 'EVOLUCIÓN MENSUAL (Mes Actual vs Año Anterior)' : 'HISTÓRICO ANUAL';
 
-    final fmt = NumberFormat.currency(locale: 'es_ES', symbol: 'â‚¬', decimalDigits: 0);
+    final fmt = NumberFormat.currency(locale: 'es_ES', symbol: '€', decimalDigits: 0);
     
     return Padding(
       padding: EdgeInsets.symmetric(
@@ -264,7 +264,7 @@ class SalesSummaryHeader extends StatelessWidget {
           // Header con VENTAS principal
           _buildMainSalesSection(context, sales, prevSales, salesGrowth, isNewClient),
           
-          // Separator y UDS muestran si no estÃ¡ en compacto
+          // Separator y UDS muestran si no está en compacto
           if (!Responsive.isLandscapeCompact(context)) ...[
             // Separator
             Container(
@@ -277,7 +277,7 @@ class SalesSummaryHeader extends StatelessWidget {
               ),
             ),
             
-            // Secondary metrics row - MÃS COMPACTO
+            // Secondary metrics row - MÁS COMPACTO
             Padding(
               padding: EdgeInsets.symmetric(
                   horizontal: 12, 
@@ -372,7 +372,7 @@ class SalesSummaryHeader extends StatelessWidget {
               ],
             ),
           ),
-          // Badge de estado o comparaciÃ³n
+          // Badge de estado o comparación
           if (isNewClient)
             _buildStatusBadge('NUEVO', AppColors.neonBlue)
           else
@@ -384,7 +384,7 @@ class SalesSummaryHeader extends StatelessWidget {
 
   Widget _buildPreviousYearComparison(double prevSales, double growth, bool isPositive) {
     if (isJefeVentas) {
-      // Jefe de ventas: muestra "-96% vs 1.655,82 â‚¬"
+      // Jefe de ventas: muestra "-96% vs 1.655,82 €"
       final growthText = '${isPositive ? '+' : ''}${growth.toStringAsFixed(1)}%';
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -416,12 +416,12 @@ class SalesSummaryHeader extends StatelessWidget {
         ),
       );
     } else {
-      // Comercial: muestra aÃ±o anterior y este aÃ±o
+      // Comercial: muestra año anterior y este año
       return Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           const Text(
-            'AÃ±o anterior',
+            'Año anterior',
             style: TextStyle(color: Colors.white38, fontSize: 10),
           ),
           const SizedBox(height: 2),
@@ -510,12 +510,12 @@ class SalesSummaryHeader extends StatelessWidget {
     final isPositive = growth >= 0;
     final prevText = isInteger ? prevValue.toInt().toString() : _formatCompact(prevValue);
     
-    // Si el cliente es nuevo, mostrar NUEVO en azul para todas las mÃ©tricas
+    // Si el cliente es nuevo, mostrar NUEVO en azul para todas las métricas
     final showNuevo = isClientNew || isNew;
     
     return Container(
       padding: EdgeInsets.all(8 * Responsive.landscapeScale(context)),
-      constraints: BoxConstraints(minHeight: 70 * Responsive.landscapeScale(context)), // Altura mÃ­nima uniforme y responsive
+      constraints: BoxConstraints(minHeight: 70 * Responsive.landscapeScale(context)), // Altura mínima uniforme y responsive
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(10),
@@ -556,7 +556,7 @@ class SalesSummaryHeader extends StatelessWidget {
     
     return Container(
       padding: EdgeInsets.all(8 * Responsive.landscapeScale(context)),
-      constraints: BoxConstraints(minHeight: 70 * Responsive.landscapeScale(context)), // Altura mÃ­nima uniforme y responsive
+      constraints: BoxConstraints(minHeight: 70 * Responsive.landscapeScale(context)), // Altura mínima uniforme y responsive
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(10),
@@ -749,15 +749,15 @@ class SalesSummaryHeader extends StatelessWidget {
   }
 
   String _formatCurrency(double value) {
-    return NumberFormat.currency(locale: 'es_ES', symbol: 'â‚¬', decimalDigits: 0).format(value);
+    return NumberFormat.currency(locale: 'es_ES', symbol: '€', decimalDigits: 0).format(value);
   }
 
   String _formatCurrencyDecimals(double value) {
-    return NumberFormat.currency(locale: 'es_ES', symbol: 'â‚¬', decimalDigits: 2).format(value);
+    return NumberFormat.currency(locale: 'es_ES', symbol: '€', decimalDigits: 2).format(value);
   }
 
   String _formatCompact(double value) {
-    // Formato espaÃ±ol completo: 2.345,67 (sin K/M)
+    // Formato español completo: 2.345,67 (sin K/M)
     final parts = value.toStringAsFixed(2).split('.');
     final intPart = parts[0];
     final decPart = parts.length > 1 ? parts[1] : '00';

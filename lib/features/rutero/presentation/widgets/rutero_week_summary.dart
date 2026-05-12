@@ -41,10 +41,10 @@ class RuteroWeekSummary extends StatelessWidget {
   static const Map<String, String> weekdayLabels = {
     'lunes': 'LUN',
     'martes': 'MAR',
-    'miercoles': 'MIÃ‰',
+    'miercoles': 'MIÉ',
     'jueves': 'JUE',
     'viernes': 'VIE',
-    'sabado': 'SÃB',
+    'sabado': 'SÁB',
     'domingo': 'DOM',
   };
 

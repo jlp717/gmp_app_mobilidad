@@ -208,7 +208,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
           ),
           const SizedBox(width: 12),
           Text(
-            'GestiÃ³n de Cobros',
+            'Gestión de Cobros',
             style: TextStyle(
               fontSize: Responsive.fontSize(context, small: 18, large: 22),
               fontWeight: FontWeight.bold,
@@ -230,7 +230,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             onChanged: _onSearchChanged,
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
-              hintText: 'Buscar por nombre, cÃ³digo, NIF...',
+              hintText: 'Buscar por nombre, código, NIF...',
               hintStyle:
                   TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6)),
               prefixIcon:
@@ -290,7 +290,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                'Total pendiente: ${grandTotal.toStringAsFixed(2)} â‚¬',
+                'Total pendiente: ${grandTotal.toStringAsFixed(2)} €',
                 style: TextStyle(
                   fontSize: Responsive.fontSize(context, small: 12, large: 14),
                   color: AppTheme.warning,
@@ -371,7 +371,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'CÃ³digo: $code',
+                      'Código: $code',
                       style: TextStyle(
                         fontSize:
                             Responsive.fontSize(context, small: 11, large: 13),
@@ -392,7 +392,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                         Border.all(color: AppTheme.warning.withValues(alpha: 0.4)),
                   ),
                   child: Text(
-                    '${pending.toStringAsFixed(2)} â‚¬',
+                    '${pending.toStringAsFixed(2)} €',
                     style: TextStyle(
                       color: AppTheme.warning,
                       fontWeight: FontWeight.bold,

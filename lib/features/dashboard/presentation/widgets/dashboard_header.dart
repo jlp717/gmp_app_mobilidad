@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/features/authentication/domain/entities/user.dart';
 
-/// [DashboardHeader] - Header del dashboard con saludo y Ãºltimo acceso
+/// [DashboardHeader] - Header del dashboard con saludo y último acceso
 ///
-/// CARACTERÃSTICAS:
-/// - Saludo personalizado segÃºn hora del dÃ­a
-/// - InformaciÃ³n del usuario
+/// CARACTERÍSTICAS:
+/// - Saludo personalizado según hora del día
+/// - Información del usuario
 /// - Ãšltimo acceso (elemento requerido en specs)
 class DashboardHeader extends StatelessWidget {
   const DashboardHeader({
@@ -44,7 +44,7 @@ class DashboardHeader extends StatelessWidget {
 
             const SizedBox(width: 16),
 
-            // InformaciÃ³n del usuario
+            // Información del usuario
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -108,7 +108,7 @@ class DashboardHeader extends StatelessWidget {
 
   String _getGreeting(int hour) {
     if (hour < 12) {
-      return 'Buenos dÃ­as';
+      return 'Buenos días';
     } else if (hour < 19) {
       return 'Buenas tardes';
     } else {

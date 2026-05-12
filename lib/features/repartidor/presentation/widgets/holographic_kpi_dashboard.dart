@@ -321,7 +321,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
                   final displayAmount = amount * _progressController.value;
                   return FittedBox(
                     child: Text(
-                      '${displayAmount.toStringAsFixed(0)}â‚¬',
+                      '${displayAmount.toStringAsFixed(0)}€',
                       style: TextStyle(
                         color: color,
                         fontWeight: FontWeight.bold,

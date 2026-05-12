@@ -1,5 +1,5 @@
 /// REPARTIDOR PANEL PAGE v1.0
-/// Dashboard adaptado para reparto con mÃ©tricas de entregas, cobros y resumen diario
+/// Dashboard adaptado para reparto con métricas de entregas, cobros y resumen diario
 /// Equivalente al Panel de Ventas pero enfocado a operativa de reparto
 library;
 
@@ -174,7 +174,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
               ],
             ),
           ),
-          // Sector de filtros dinÃ¡micos (mes/aÃ±o)
+          // Sector de filtros dinámicos (mes/año)
           _buildMonthSelector(),
         ],
       ),
@@ -270,8 +270,8 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
   Widget _kpiWidget(String label, String value, IconData icon, Color color) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // En mÃ³viles pequeÃ±os, queremos 2 columnas (ancho ~ 150-180)
-        // En pantallas mÃ¡s anchas podemos dejarlo fluir
+        // En móviles pequeños, queremos 2 columnas (ancho ~ 150-180)
+        // En pantallas más anchas podemos dejarlo fluir
         final width = (MediaQuery.of(context).size.width - 44) / 2; // - padding(32) - spacing(12)
         
         return Container(
@@ -357,7 +357,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             children: [
               _miniStat('Cobrable', CurrencyFormatter.format(cs.totalCollectable)),
               _miniStat('Cobrado', CurrencyFormatter.format(cs.totalCollected)),
-              _miniStat('ComisiÃ³n', CurrencyFormatter.format(cs.totalCommission)),
+              _miniStat('Comisión', CurrencyFormatter.format(cs.totalCommission)),
               _miniStat('Clientes', '${cs.clientCount}'),
             ],
           ),
@@ -387,7 +387,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
           borderRadius: BorderRadius.circular(14),
         ),
         child: const Center(
-          child: Text('Sin datos de entregas para este perÃ­odo', style: TextStyle(color: AppTheme.textSecondary)),
+          child: Text('Sin datos de entregas para este período', style: TextStyle(color: AppTheme.textSecondary)),
         ),
       );
     }
@@ -512,7 +512,7 @@ class _RepartidorPanelPageState extends State<RepartidorPanelPage> {
             ),
             child: const Row(
               children: [
-                SizedBox(width: 50, child: Text('DÃ­a', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
+                SizedBox(width: 50, child: Text('Día', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
                 Expanded(child: Text('Total', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.textSecondary))),
                 Expanded(child: Text('Entreg.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.neonGreen))),
                 Expanded(child: Text('No Ent.', textAlign: TextAlign.center, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFE53935)))),

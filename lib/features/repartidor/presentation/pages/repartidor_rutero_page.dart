@@ -560,7 +560,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
           const SizedBox(width: 6),
 
           _buildQuickFilterChip(
-            label: 'CrÃ©dito',
+            label: 'Crédito',
             isSelected: filterTipoPago == 'CREDITO',
             color: AppTheme.credito,
             icon: Icons.credit_card,
@@ -604,7 +604,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                   DropdownMenuItem(
                     value: 'importe_desc',
                     child: Text(
-                      'â†“ Mayor â‚¬',
+                      'â†“ Mayor €',
                       style:
                           TextStyle(color: AppTheme.textPrimary, fontSize: 11),
                     ),
@@ -612,7 +612,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                   DropdownMenuItem(
                     value: 'importe_asc',
                     child: Text(
-                      'â†‘ Menor â‚¬',
+                      'â†‘ Menor €',
                       style:
                           TextStyle(color: AppTheme.textPrimary, fontSize: 11),
                     ),
@@ -792,7 +792,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
           ),
           const SizedBox(height: 24),
           const Text(
-            'No hay entregas para este dÃ­a',
+            'No hay entregas para este día',
             style: TextStyle(
               color: AppTheme.textSecondary,
               fontSize: 18,
@@ -801,7 +801,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
           ),
           const SizedBox(height: 8),
           const Text(
-            'Selecciona otro dÃ­a en el calendario\no usa el buscador',
+            'Selecciona otro día en el calendario\no usa el buscador',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: AppTheme.textTertiary,
@@ -840,7 +840,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             Icon(Icons.auto_awesome, color: AppTheme.neonPurple),
             SizedBox(width: 10),
             Text(
-              'AnÃ¡lisis Inteligente',
+              'Análisis Inteligente',
               style: TextStyle(color: AppTheme.neonPurple),
             ),
           ],
@@ -938,7 +938,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
     provider
         .marcarEntregado(
       albaranId: albaran.id,
-      observaciones: 'Completado rÃ¡pido (Swipe)',
+      observaciones: 'Completado rápido (Swipe)',
       // No signature/photos for quick swipe
     )
         .then((success) {
@@ -1011,7 +1011,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
           autofocus: true,
           style: const TextStyle(color: AppTheme.textPrimary),
           decoration: InputDecoration(
-            hintText: 'AÃ±adir nota...',
+            hintText: 'Añadir nota...',
             hintStyle:
                 TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5)),
             filled: true,
@@ -1102,12 +1102,12 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             _buildAiSuggestionTile(
               icon: Icons.route,
               title: 'Ruta optimizada',
-              subtitle: 'Ahorra 15 min evitando C/ Gran VÃ­a (trÃ¡fico)',
+              subtitle: 'Ahorra 15 min evitando C/ Gran Vía (tráfico)',
               onTap: () {
                 Navigator.pop(ctx);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('FunciÃ³n prÃ³ximamente disponible'),
+                    content: Text('Función próximamente disponible'),
                   ),
                 );
               },
@@ -1116,7 +1116,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             _buildAiSuggestionTile(
               icon: Icons.priority_high,
               title: 'Cobros prioritarios',
-              subtitle: '2 clientes con cobros vencidos hace +5 dÃ­as',
+              subtitle: '2 clientes con cobros vencidos hace +5 días',
               color: AppTheme.obligatorio,
               onTap: () {
                 Navigator.pop(ctx);
@@ -1127,7 +1127,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
             _buildAiSuggestionTile(
               icon: Icons.trending_up,
               title: 'Oportunidad de venta',
-              subtitle: 'Bar La Esquina suele pedir mÃ¡s en esta Ã©poca',
+              subtitle: 'Bar La Esquina suele pedir más en esta época',
               color: AppTheme.success,
               onTap: () => Navigator.pop(ctx),
             ),

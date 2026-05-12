@@ -1,24 +1,24 @@
 import 'package:flutter/material.dart';
 
-/// ðŸš€ FUTURISTIC THEME - Tema ultra-moderno con glassmorphism
+/// 🚀 FUTURISTIC THEME - Tema ultra-moderno con glassmorphism
 ///
-/// CARACTERÃSTICAS:
-/// - ðŸŽ¨ Paleta de colores neÃ³n cyberpunk
+/// CARACTERÍSTICAS:
+/// - ðŸŽ¨ Paleta de colores neón cyberpunk
 /// - ðŸ’Ž Glassmorphism effects en todos los elementos
 /// - ðŸŒ™ Modo oscuro perfecto para TODA la app
 /// - âœ¨ Gradientes vibrantes y animados
 /// - ðŸ”® Efectos de blur y transparencias
 ///
 /// PALETA DE COLORES:
-/// - Primary: Cyan neÃ³n (#00F5FF)
-/// - Secondary: Magenta neÃ³n (#FF00FF)
-/// - Accent: Amarillo elÃ©ctrico (#FFE600)
-/// - Success: Verde neÃ³n (#00FF41)
-/// - Error: Rojo neÃ³n (#FF073A)
-/// - Warning: Naranja neÃ³n (#FF6B00)
+/// - Primary: Cyan neón (#00F5FF)
+/// - Secondary: Magenta neón (#FF00FF)
+/// - Accent: Amarillo eléctrico (#FFE600)
+/// - Success: Verde neón (#00FF41)
+/// - Error: Rojo neón (#FF073A)
+/// - Warning: Naranja neón (#FF6B00)
 class FuturisticTheme {
   // ============================================================================
-  // COLORES NEÃ“N PRINCIPALES
+  // COLORES NEÓN PRINCIPALES
   // ============================================================================
   
   static const Color cyanNeon = Color(0xFF00F5FF);
@@ -103,7 +103,7 @@ class FuturisticTheme {
   );
 
   // ============================================================================
-  // SOMBRAS NEÃ“N
+  // SOMBRAS NEÓN
   // ============================================================================
   
   static List<BoxShadow> get neonShadowCyan => [
@@ -529,7 +529,7 @@ class FuturisticTheme {
             if (states.contains(WidgetState.disabled)) {
               return surfaceLighter.withValues(alpha: 0.3);
             }
-            return null; // UsarÃ¡ gradiente
+            return null; // Usará gradiente
           }),
         ),
       ),

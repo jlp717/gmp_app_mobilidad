@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 
-/// Header con resumen de entregas del dÃ­a
+/// Header con resumen de entregas del día
 class EntregasHeader extends ConsumerWidget {
   const EntregasHeader({super.key});
 
@@ -29,7 +29,7 @@ class EntregasHeader extends ConsumerWidget {
       ),
       child: Column(
         children: [
-          // TÃ­tulo con Selector de Fecha
+          // Título con Selector de Fecha
           Row(
             children: [
               Icon(Icons.local_shipping,
@@ -40,7 +40,7 @@ class EntregasHeader extends ConsumerWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Entregas del DÃ­a',
+                      'Entregas del Día',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
@@ -91,7 +91,7 @@ class EntregasHeader extends ConsumerWidget {
             ],
           ),
 
-          // Muestra estadÃ­sticas y progreso solo si NO estamos en vista horizontal compacta
+          // Muestra estadísticas y progreso solo si NO estamos en vista horizontal compacta
           if (!Responsive.isLandscapeCompact(context)) ...[
             SizedBox(height: 20 * Responsive.landscapeScale(context)),
 
@@ -118,7 +118,7 @@ class EntregasHeader extends ConsumerWidget {
                   context,
                   icon: Icons.euro,
                   label: 'CTR',
-                  value: '${importeCTR.toStringAsFixed(0)}â‚¬',
+                  value: '${importeCTR.toStringAsFixed(0)}€',
                   color: Colors.amber,
                 ),
               ],
@@ -134,7 +134,7 @@ class EntregasHeader extends ConsumerWidget {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'Progreso del dÃ­a',
+                      'Progreso del día',
                       style: TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                     Text(
@@ -203,7 +203,7 @@ class EntregasHeader extends ConsumerWidget {
   }
 
   String _formatFecha(DateTime fecha) {
-    final dias = ['Lunes', 'Martes', 'MiÃ©rcoles', 'Jueves', 'Viernes', 'SÃ¡bado', 'Domingo'];
+    final dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
     final meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
     return '${dias[fecha.weekday - 1]}, ${fecha.day} ${meses[fecha.month - 1]} ${fecha.year}';
   }

@@ -59,21 +59,21 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
               _buildRoleOption(
                 'COMERCIAL',
                 Icons.shopping_bag_outlined,
-                'GestiÃ³n de Ventas',
+                'Gestión de Ventas',
                 AppTheme.neonBlue,
               ),
               const SizedBox(height: 12),
               _buildRoleOption(
                 'REPARTIDOR',
                 Icons.local_shipping_outlined,
-                'GestiÃ³n de Reparto',
+                'Gestión de Reparto',
                 AppTheme.neonPurple,
               ),
               const SizedBox(height: 12),
               _buildRoleOption(
                 'ALMACEN',
                 Icons.inventory_2_outlined,
-                'GestiÃ³n de AlmacÃ©n',
+                'Gestión de Almacén',
                 AppTheme.neonPink,
               ),
 

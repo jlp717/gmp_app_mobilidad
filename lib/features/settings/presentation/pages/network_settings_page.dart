@@ -5,7 +5,7 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/services/network_service.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
-/// Pantalla de configuraciÃ³n de red
+/// Pantalla de configuración de red
 /// Permite ver y cambiar el servidor activo manualmente
 class NetworkSettingsPage extends StatefulWidget {
   const NetworkSettingsPage({super.key});
@@ -54,7 +54,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('âœ… Servidor detectado: ${NetworkService.activeServer?.name ?? 'N/A'}'),
+            content: Text('✅ Servidor detectado: ${NetworkService.activeServer?.name ?? 'N/A'}'),
             backgroundColor: Colors.green,
           ),
         );
@@ -63,7 +63,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('âŒ Error: $e'),
+            content: Text('❌ Error: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -83,7 +83,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('âœ… Servidor configurado correctamente'),
+              content: Text('✅ Servidor configurado correctamente'),
               backgroundColor: Colors.green,
             ),
           );
@@ -92,7 +92,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('âŒ No se pudo conectar al servidor'),
+              content: Text('❌ No se pudo conectar al servidor'),
               backgroundColor: Colors.red,
             ),
           );
@@ -125,12 +125,12 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E293B),
-        title: const Text('ConfiguraciÃ³n de Red'),
+        title: const Text('Configuración de Red'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _isLoading ? null : _loadDiagnostics,
-            tooltip: 'Actualizar diagnÃ³stico',
+            tooltip: 'Actualizar diagnóstico',
           ),
         ],
       ),
@@ -257,7 +257,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 const Icon(Icons.auto_fix_high, color: Color(0xFF22D3EE)),
                 const SizedBox(width: 12),
                 Text(
-                  'DetecciÃ³n AutomÃ¡tica',
+                  'Detección Automática',
                   style: TextStyle(
                     fontSize: Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
@@ -457,7 +457,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     const Icon(Icons.bug_report, color: Color(0xFF4ADE80)),
                     const SizedBox(width: 12),
                     Text(
-                      'DiagnÃ³stico de Red',
+                      'Diagnóstico de Red',
                       style: TextStyle(
                         fontSize: Responsive.fontSize(context, small: 16, large: 20),
                         fontWeight: FontWeight.bold,
@@ -472,7 +472,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                   onPressed: () {
                     Clipboard.setData(ClipboardData(text: _diagnostics.toString()));
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('DiagnÃ³stico copiado')),
+                      const SnackBar(content: Text('Diagnóstico copiado')),
                     );
                   },
                 ),

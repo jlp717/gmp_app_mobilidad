@@ -148,7 +148,7 @@ class OrderCard extends StatelessWidget {
                     children: [
                       _statItem(
                         Icons.format_list_numbered,
-                        '${order.lineCount} lÃ­neas',
+                        '${order.lineCount} líneas',
                         Colors.white70,
                       ),
                       _statItem(
@@ -202,7 +202,7 @@ class OrderCard extends StatelessWidget {
                           _actionChip(
                             context,
                             Icons.description_outlined,
-                            'AlbarÃ¡n',
+                            'Albarán',
                             AppTheme.neonPurple,
                             onViewAlbaran!,
                           ),

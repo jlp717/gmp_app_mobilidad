@@ -176,7 +176,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
       price = p.priceForUnit(unit);
     }
     if (price <= 0) return '';
-    return '${price.toStringAsFixed(3)} â‚¬/${_unitAbbr(unit)}';
+    return '${price.toStringAsFixed(3)} €/${_unitAbbr(unit)}';
   }
 
   /// Content description per unit button.
@@ -207,7 +207,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     final bestPrice = p.bestPrice;
     if (bestPrice <= 0) return null;
     final netoUr = bestPrice / p.unitsRetractil;
-    return 'Neto U/R: ${netoUr.toStringAsFixed(3)} â‚¬';
+    return 'Neto U/R: ${netoUr.toStringAsFixed(3)} €';
   }
 
   String _fmtNum(double v, {int decimals = 0}) {

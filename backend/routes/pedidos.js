@@ -47,7 +47,7 @@ const { TTL } = require('../services/redis-cache');
 
 router.use(verifyToken);
 
-// Req #2: Margin visibility ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â only JEFE_VENTAS / ADMIN see cost/margin data
+// Req #2: Margin visibility  only JEFE_VENTAS / ADMIN see cost/margin data
 const MARGIN_VISIBLE_ROLES = ['JEFE_VENTAS', 'ADMIN'];
 function canSeeMargin(user) {
     const role = (user?.role || '').toUpperCase();
@@ -458,7 +458,7 @@ router.get('/promotions', async (req, res) => {
 });
 
 // =============================================================================
-// ORDERS ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â CRUD
+// ORDERS  CRUD
 // =============================================================================
 
 /**

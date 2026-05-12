@@ -91,7 +91,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
         case ItemDeliveryStatus.delivered:
           item.status = ItemDeliveryStatus.notDelivered;
           item.quantityDelivered = 0;
-          // Mostrar diÃ¡logo para observaciones
+          // Mostrar diálogo para observaciones
           _showObservationsDialog(item);
         case ItemDeliveryStatus.notDelivered:
           item.status = ItemDeliveryStatus.pending;

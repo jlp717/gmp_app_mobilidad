@@ -169,7 +169,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                       ],
                     ),
                     content: const Text(
-                      'Â¿Seguro que quieres eliminar todas las lÃ­neas del pedido?',
+                      'Â¿Seguro que quieres eliminar todas las líneas del pedido?',
                       style: TextStyle(color: Colors.white70),
                     ),
                     actions: [
@@ -349,7 +349,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
             controller: _obsCtrl,
             style: const TextStyle(color: Colors.white, fontSize: 13),
             decoration: InputDecoration(
-              hintText: 'AÃ±adir observaciones al pedido...',
+              hintText: 'Añadir observaciones al pedido...',
               hintStyle: const TextStyle(color: Colors.white38),
               prefixIcon: const Icon(
                 Icons.comment_outlined,
@@ -1182,7 +1182,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           } else if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('âœ… ${product.name} aÃ±adido al carrito'),
+                content: Text('✅ ${product.name} añadido al carrito'),
                 backgroundColor: AppTheme.neonGreen,
                 duration: const Duration(seconds: 2),
               ),
@@ -1192,7 +1192,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('Error al aÃ±adir producto: $e'),
+                content: Text('Error al añadir producto: $e'),
                 backgroundColor: AppTheme.error,
               ),
             );
@@ -1506,7 +1506,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                                       padding: const EdgeInsets.only(
                                           top: 6, left: 28),
                                       child: Text(
-                                        '${(prod['precio'] as num).toDouble().toStringAsFixed(2)} â‚¬/caja',
+                                        '${(prod['precio'] as num).toDouble().toStringAsFixed(2)} €/caja',
                                         style: const TextStyle(
                                           color: Colors.white54,
                                           fontSize: 11,
@@ -1525,7 +1525,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                         const Divider(color: AppTheme.borderColor),
                         const SizedBox(height: 12),
                         const Text(
-                          'Cantidad a aÃ±adir:',
+                          'Cantidad a añadir:',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 13,
@@ -1648,7 +1648,7 @@ class _AlternativesDialogState extends State<_AlternativesDialog> {
                             : null,
                         icon: const Icon(Icons.add_shopping_cart, size: 18),
                         label: const Text(
-                          'AÃ‘ADIR AL CARRITO',
+                          'AÑADIR AL CARRITO',
                           style: TextStyle(
                               fontSize: 13, fontWeight: FontWeight.bold),
                         ),

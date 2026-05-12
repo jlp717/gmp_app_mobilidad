@@ -199,7 +199,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
             ),
             if (_isReady && _totalPages > 0)
               Text(
-                'PÃ¡gina ${_currentPage + 1} de $_totalPages',
+                'Página ${_currentPage + 1} de $_totalPages',
                 style: const TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 12,
@@ -301,7 +301,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
       onPageError: (page, error) {
         if (mounted) {
           setState(
-              () => _errorMessage = 'Error en pÃ¡gina ${page ?? 0}: $error',);
+              () => _errorMessage = 'Error en página ${page ?? 0}: $error',);
         }
       },
     );

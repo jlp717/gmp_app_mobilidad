@@ -82,7 +82,7 @@ let authRoutes, dashboardRoutes, analyticsRoutes, masterRoutes, clientsRoutes,
 
 if (USE_TS_ROUTES) {
   // ==================== COMPILED TYPESCRIPT ROUTES ====================
-  logger.info('ðŸš€ Loading COMPILED TypeScript routes from dist/');
+  logger.info('🚀 Loading COMPILED TypeScript routes from dist/');
   try {
     const tsApp = require('./dist/index').default;
     // We don't mount individual routes - the TS app is self-contained
@@ -142,7 +142,7 @@ if (process.env.USE_TS_ROUTES !== 'true') {
   evolutionRoutes = require('./routes/evolution');
   pedidosRoutes = require('./routes/pedidos');
   cobrosRoutes = require('./routes/cobros');
-  // MÃ³dulo KPI Glacius (DB2/ODBC + Redis)
+  // Módulo KPI Glacius (DB2/ODBC + Redis)
   try {
     kpiModule = require('./kpi');
   } catch (err) {
@@ -729,14 +729,14 @@ app.use((err, req, res, next) => {
 
 // Prevent crashes from unhandled exceptions (like header errors)
 process.on('uncaughtException', (err) => {
-  console.error(`ðŸ”¥ UNCAUGHT EXCEPTION: ${err.message}`, err.stack);
+  console.error(`🔥 UNCAUGHT EXCEPTION: ${err.message}`, err.stack);
   if (err.code !== 'ERR_HTTP_HEADERS_SENT') {
     process.exit(1); // Let PM2 restart for critical state corruption
   }
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  console.error(`ðŸ”¥ UNHANDLED REJECTION: ${reason}`);
+  console.error(`🔥 UNHANDLED REJECTION: ${reason}`);
   process.exit(1);
 });
 
@@ -747,17 +747,17 @@ const gracefulShutdown = async (signal) => {
   if (isShuttingDown) return;
   isShuttingDown = true;
   
-  logger.info(`ðŸ“´ Received ${signal}. Starting graceful shutdown...`);
+  logger.info(`📴 Received ${signal}. Starting graceful shutdown...`);
   
   // 1. Close HTTP server if available
   try {
     if (global.__httpServer && typeof global.__httpServer.close === 'function') {
       global.__httpServer.close(() => {
-        logger.info('ðŸ“´ HTTP server closed');
+        logger.info('📴 HTTP server closed');
       });
     }
   } catch (e) {
-    logger.warn(`ðŸ“´ HTTP server close error (non-fatal): ${e.message}`);
+    logger.warn(`📴 HTTP server close error (non-fatal): ${e.message}`);
   }
   
   // 2. Close DB pool
@@ -766,10 +766,10 @@ const gracefulShutdown = async (signal) => {
     const pool = getPool();
     if (pool && typeof pool.close === 'function') {
       await pool.close();
-      logger.info('ðŸ“´ Database pool closed');
+      logger.info('📴 Database pool closed');
     }
   } catch (e) {
-    logger.warn(`ðŸ“´ DB close error: ${e.message}`);
+    logger.warn(`📴 DB close error: ${e.message}`);
   }
   
   // 3. Close Redis cache
@@ -777,10 +777,10 @@ const gracefulShutdown = async (signal) => {
     const { redisCache } = require('./services/redis-cache');
     if (redisCache && typeof redisCache.close === 'function') {
       await redisCache.close();
-      logger.info('ðŸ“´ Redis cache closed');
+      logger.info('📴 Redis cache closed');
     }
   } catch (e) {
-    logger.warn(`ðŸ“´ Redis close error: ${e.message}`);
+    logger.warn(`📴 Redis close error: ${e.message}`);
   }
   
   // 4. Clear LACLAE memory cache
@@ -788,10 +788,10 @@ const gracefulShutdown = async (signal) => {
     const { clearLaclaeCache } = require('./services/laclae');
     if (typeof clearLaclaeCache === 'function') {
       clearLaclaeCache();
-      logger.info('ðŸ“´ LACLAE memory cache cleared');
+      logger.info('📴 LACLAE memory cache cleared');
     }
   } catch (e) {
-    logger.warn(`ðŸ“´ LACLAE cache clear error: ${e.message}`);
+    logger.warn(`📴 LACLAE cache clear error: ${e.message}`);
   }
   
   // 5. Stop auth session cleanup interval
@@ -799,15 +799,15 @@ const gracefulShutdown = async (signal) => {
     const auth = require('./middleware/auth');
     if (auth && typeof auth.stopSessionCleanup === 'function') {
       auth.stopSessionCleanup();
-      logger.info('ðŸ“´ Auth session cleanup stopped');
+      logger.info('📴 Auth session cleanup stopped');
     }
   } catch (e) {
-    logger.warn(`ðŸ“´ Auth cleanup error: ${e.message}`);
+    logger.warn(`📴 Auth cleanup error: ${e.message}`);
   }
   
   // 6. Rate limiter (security.js globalLimiter is express-rate-limit, no stopCleanup needed)
   
-  logger.info('ðŸ“´ Graceful shutdown complete');
+  logger.info('📴 Graceful shutdown complete');
   process.exit(0);
 };
 
@@ -824,7 +824,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 startServer().catch((err) => {
-  logger.error(`ðŸ”¥ Failed to start server: ${err.message}`);
+  logger.error(`🔥 Failed to start server: ${err.message}`);
   process.exit(1);
 });
 

@@ -4,13 +4,13 @@ import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
-/// [SalesChartCard] - Tarjeta con grÃ¡fica de ventas y unidades
+/// [SalesChartCard] - Tarjeta con gráfica de ventas y unidades
 ///
-/// CARACTERÃSTICAS:
-/// - Muestra datos de Ãºltimos 7 dÃ­as
-/// - ComparaciÃ³n con perÃ­odo anterior
+/// CARACTERÍSTICAS:
+/// - Muestra datos de últimos 7 días
+/// - Comparación con período anterior
 /// - Indicador de crecimiento
-/// - GrÃ¡fica de barras con fl_chart
+/// - Gráfica de barras con fl_chart
 class SalesChartCard extends StatelessWidget {
   const SalesChartCard({
     required this.salesSummary, super.key,
@@ -30,7 +30,7 @@ class SalesChartCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header con tÃ­tulo y crecimiento
+            // Header con título y crecimiento
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -45,7 +45,7 @@ class SalesChartCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Ãšltimos 7 dÃ­as',
+                      'Ãšltimos 7 días',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -86,7 +86,7 @@ class SalesChartCard extends StatelessWidget {
 
             const SizedBox(height: 24),
 
-            // GrÃ¡fica
+            // Gráfica
             if (hasData) ...[
               SizedBox(
                 height: Responsive.scale(context, 200),
@@ -202,7 +202,7 @@ class SalesChartCard extends StatelessWidget {
     final theme = Theme.of(context);
     final data = salesSummary.dailyData;
 
-    // Calcular valor mÃ¡ximo para escala
+    // Calcular valor máximo para escala
     final maxSales = data.map((d) => d.sales).reduce((a, b) => a > b ? a : b);
     final maxY = (maxSales * 1.2).ceilToDouble();
 

@@ -97,7 +97,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(child: ModernLoading(message: 'Cargando evoluciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n...'));
+      return const Center(child: ModernLoading(message: 'Cargando evoluci³n...'));
     }
 
     if (_error != null) {
@@ -120,7 +120,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('EvoluciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n Mensual (3 AÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â±os)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          Text('Evoluci³n Mensual (3 A±os)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           if (_monthlySales.isNotEmpty)
             Container(
@@ -130,11 +130,11 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
               child: _buildEvolutionChart(),
             )
           else
-            const Center(child: Text('No hay datos de evoluciÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³n mensual')),
+            const Center(child: Text('No hay datos de evoluci³n mensual')),
             
           const SizedBox(height: 24),
           
-          Text('Productos MÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¡s Comprados', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          Text('Productos M¡s Comprados', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           if (_topProducts.isNotEmpty)
             _buildTopProductsList()
@@ -225,7 +225,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
               child: Text('${index + 1}', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
             ),
             title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-            subtitle: Text('CÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â³d: $code ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¢ $units uds', style: const TextStyle(fontSize: 11)),
+            subtitle: Text('C³d: $code Å¡ $units uds', style: const TextStyle(fontSize: 11)),
             trailing: Text(CurrencyFormatter.formatWhole(sales), style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.success, fontSize: 13)),
           ),
         );

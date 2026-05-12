@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
-/// [UltimasVentasWidget] - Lista de las Ãºltimas ventas realizadas
+/// [UltimasVentasWidget] - Lista de las últimas ventas realizadas
 ///
-/// Muestra las ventas mÃ¡s recientes del vendedor con:
+/// Muestra las ventas más recientes del vendedor con:
 /// - Fecha de la venta
 /// - Nombre del cliente
 /// - Importe
-/// - NÃºmero de albarÃ¡n
+/// - Número de albarán
 class UltimasVentasWidget extends StatelessWidget {
   const UltimasVentasWidget({
     required this.ultimasVentas, super.key,
@@ -149,7 +149,7 @@ class _VentaItem extends StatelessWidget {
 
           const SizedBox(width: 12),
 
-          // Cliente y albarÃ¡n
+          // Cliente y albarán
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

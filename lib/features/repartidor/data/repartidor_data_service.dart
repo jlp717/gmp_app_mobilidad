@@ -679,7 +679,7 @@ class RepartidorDataService {
     }
   }
 
-  /// Obtener evoluciÃ³n de ventas y productos top
+  /// Obtener evolución de ventas y productos top
   static Future<Map<String, dynamic>> getEvolution(String repartidorId) async {
     try {
       final response = await ApiClient.get(
@@ -688,7 +688,7 @@ class RepartidorDataService {
       );
       return response;
     } catch (e) {
-      throw Exception('Error cargando evoluciÃ³n: $e');
+      throw Exception('Error cargando evolución: $e');
     }
   }
 }

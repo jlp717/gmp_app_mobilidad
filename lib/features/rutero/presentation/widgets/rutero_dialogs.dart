@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
-/// Widget de selecciÃ³n de dÃ­a destino para mover cliente
+/// Widget de selección de día destino para mover cliente
 /// Excluye Domingo de las opciones
 class DaySelectorDialog extends StatelessWidget {
 
@@ -16,10 +16,10 @@ class DaySelectorDialog extends StatelessWidget {
   static const Map<String, String> dayLabels = {
     'lunes': 'Lunes',
     'martes': 'Martes',
-    'miercoles': 'MiÃ©rcoles',
+    'miercoles': 'Miércoles',
     'jueves': 'Jueves',
     'viernes': 'Viernes',
-    'sabado': 'SÃ¡bado',
+    'sabado': 'Sábado',
   };
 
   static const Map<String, IconData> dayIcons = {
@@ -33,7 +33,7 @@ class DaySelectorDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // DÃ­as disponibles: todos menos Domingo y el dÃ­a actual
+    // Días disponibles: todos menos Domingo y el día actual
     final availableDays = dayLabels.keys
         .where((d) => d != currentDay.toLowerCase())
         .toList();
@@ -48,7 +48,7 @@ class DaySelectorDialog extends StatelessWidget {
             children: [
               Icon(Icons.swap_horiz, color: AppTheme.neonBlue),
               SizedBox(width: 8),
-              Text('Mover a otro dÃ­a'),
+              Text('Mover a otro día'),
             ],
           ),
           const SizedBox(height: 8),
@@ -57,7 +57,7 @@ class DaySelectorDialog extends StatelessWidget {
             style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
           ),
           Text(
-            'CÃ³digo: $clientCode',
+            'Código: $clientCode',
             style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withValues(alpha: 0.7)),
           ),
         ],
@@ -82,7 +82,7 @@ class DaySelectorDialog extends StatelessWidget {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'El Domingo no estÃ¡ disponible como dÃ­a de visita.',
+                      'El Domingo no está disponible como día de visita.',
                       style: TextStyle(fontSize: 12),
                     ),
                   ),
@@ -91,7 +91,7 @@ class DaySelectorDialog extends StatelessWidget {
             ),
             const SizedBox(height: 16),
             const Text(
-              'Selecciona el dÃ­a destino:',
+              'Selecciona el día destino:',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
             const SizedBox(height: 12),
@@ -158,7 +158,7 @@ class _DayOption extends StatelessWidget {
   }
 }
 
-/// Widget de selecciÃ³n de posiciÃ³n en el dÃ­a destino
+/// Widget de selección de posición en el día destino
 class PositionSelectorDialog extends StatefulWidget {
 
   const PositionSelectorDialog({
@@ -218,7 +218,7 @@ class _PositionSelectorDialogState extends State<PositionSelectorDialog> {
         children: [
           Icon(Icons.format_list_numbered, color: AppTheme.neonPink),
           SizedBox(width: 8),
-          Expanded(child: Text('PosiciÃ³n en la ruta')),
+          Expanded(child: Text('Posición en la ruta')),
         ],
       ),
       content: _isLoading
@@ -236,28 +236,28 @@ class _PositionSelectorDialogState extends State<PositionSelectorDialog> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Â¿DÃ³nde quieres insertar a ${''} ?',
+                  'Â¿Dónde quieres insertar a ${''} ?',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
                 _PositionOption(
                   label: 'Al inicio de la ruta',
-                  subtitle: 'SerÃ¡ el primer cliente a visitar',
+                  subtitle: 'Será el primer cliente a visitar',
                   icon: Icons.vertical_align_top,
                   isSelected: _selectedPosition == 'start',
                   onTap: () => setState(() => _selectedPosition = 'start'),
                 ),
                 _PositionOption(
                   label: 'Al final de la ruta',
-                  subtitle: 'SerÃ¡ el Ãºltimo cliente a visitar',
+                  subtitle: 'Será el último cliente a visitar',
                   icon: Icons.vertical_align_bottom,
                   isSelected: _selectedPosition == 'end',
                   onTap: () => setState(() => _selectedPosition = 'end'),
                 ),
                 if (_totalClients > 1)
                   _PositionOption(
-                    label: 'Elegir posiciÃ³n especÃ­fica',
-                    subtitle: 'Seleccionar nÃºmero del 1 al ${_totalClients + 1}',
+                    label: 'Elegir posición específica',
+                    subtitle: 'Seleccionar número del 1 al ${_totalClients + 1}',
                     icon: Icons.pin_drop,
                     isSelected: _selectedPosition != 'start' && _selectedPosition != 'end',
                     onTap: _showPositionPicker,
@@ -282,10 +282,10 @@ class _PositionSelectorDialogState extends State<PositionSelectorDialog> {
     const labels = {
       'lunes': 'Lunes',
       'martes': 'Martes',
-      'miercoles': 'MiÃ©rcoles',
+      'miercoles': 'Miércoles',
       'jueves': 'Jueves',
       'viernes': 'Viernes',
-      'sabado': 'SÃ¡bado',
+      'sabado': 'Sábado',
     };
     return labels[day.toLowerCase()] ?? day;
   }
@@ -403,11 +403,11 @@ class _NumberPickerDialogState extends State<_NumberPickerDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       backgroundColor: AppTheme.surfaceColor,
-      title: const Text('Seleccionar posiciÃ³n'),
+      title: const Text('Seleccionar posición'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('Elige una posiciÃ³n del 1 al ${widget.max}'),
+          Text('Elige una posición del 1 al ${widget.max}'),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -465,7 +465,7 @@ class _NumberPickerDialogState extends State<_NumberPickerDialog> {
   }
 }
 
-/// Modal de confirmaciÃ³n final para mover cliente
+/// Modal de confirmación final para mover cliente
 class MoveConfirmationDialog extends StatelessWidget {
 
   const MoveConfirmationDialog({
@@ -481,10 +481,10 @@ class MoveConfirmationDialog extends StatelessWidget {
     const labels = {
       'lunes': 'LUNES',
       'martes': 'MARTES',
-      'miercoles': 'MIÃ‰RCOLES',
+      'miercoles': 'MIÉRCOLES',
       'jueves': 'JUEVES',
       'viernes': 'VIERNES',
-      'sabado': 'SÃBADO',
+      'sabado': 'SÁBADO',
     };
     return labels[day.toLowerCase()] ?? day.toUpperCase();
   }
@@ -492,7 +492,7 @@ class MoveConfirmationDialog extends StatelessWidget {
   String _getPositionLabel(String pos) {
     if (pos == 'start') return 'al inicio';
     if (pos == 'end') return 'al final';
-    return 'en posiciÃ³n $pos';
+    return 'en posición $pos';
   }
 
   @override
@@ -603,7 +603,7 @@ class MoveConfirmationDialog extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Se insertarÃ¡ ${_getPositionLabel(position)}',
+                  'Se insertará ${_getPositionLabel(position)}',
                   style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                   textAlign: TextAlign.center,
                 ),
@@ -612,7 +612,7 @@ class MoveConfirmationDialog extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           const Text(
-            'âš ï¸ Este cambio se aplicarÃ¡ de forma permanente.',
+            'âš ï¸ Este cambio se aplicará de forma permanente.',
             style: TextStyle(
               fontSize: 12,
               color: AppTheme.warning,
@@ -637,7 +637,7 @@ class MoveConfirmationDialog extends StatelessWidget {
   }
 }
 
-/// Modal de confirmaciÃ³n para guardar el nuevo orden (reordenamiento)
+/// Modal de confirmación para guardar el nuevo orden (reordenamiento)
 class ReorderConfirmationDialog extends StatelessWidget {
 
   const ReorderConfirmationDialog({
@@ -650,10 +650,10 @@ class ReorderConfirmationDialog extends StatelessWidget {
     const labels = {
       'lunes': 'Lunes',
       'martes': 'Martes',
-      'miercoles': 'MiÃ©rcoles',
+      'miercoles': 'Miércoles',
       'jueves': 'Jueves',
       'viernes': 'Viernes',
-      'sabado': 'SÃ¡bado',
+      'sabado': 'Sábado',
     };
     return labels[day.toLowerCase()] ?? day;
   }
@@ -702,7 +702,7 @@ class ReorderConfirmationDialog extends StatelessWidget {
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    'El orden afectarÃ¡ a tus visitas programadas.',
+                    'El orden afectará a tus visitas programadas.',
                     style: TextStyle(fontSize: 12),
                   ),
                 ),
