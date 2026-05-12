@@ -3950,7 +3950,6 @@ module.exports = {
     getProductFamilies,
     getProductBrands,
     getActivePromotions,
-    checkDraftAccumulation,
     getClientBalance,
     cloneOrder,
     getComplementaryProducts,
