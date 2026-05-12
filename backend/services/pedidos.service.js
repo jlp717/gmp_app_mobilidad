@@ -2936,7 +2936,6 @@ async function getRecommendations(clientCode, vendedorCode) {
     }
 
     return { clientHistory: history, similarClients: similar };
-};
 }
 
 // ============================================================================
@@ -2982,7 +2981,7 @@ async function getActivePromotions(clientCode) {
         const day = now.getDate();
         const today = year * 10000 + month * 100 + day;
 
-        const sql = \
+        const sql = `
             SELECT P.CODIGOARTICULO, P.DESCRIPCION, P.TIPOPROMOCION,
                    P.PRECIOPROMOCIONAL, P.DIADESDE, P.MESDESDE, P.ANODESDE,
                    P.DIAHASTA, P.MESHASTA, P.ANOHASTA,
@@ -2994,7 +2993,7 @@ async function getActivePromotions(clientCode) {
             LEFT JOIN DSEDAC.STA S ON P.CODIGOARTICULO = S.CODIGOARTICULO AND S.CODIGOALMACEN = 1
             WHERE (P.ANOHASTA * 10000 + P.MESHASTA * 100 + P.DIAHASTA) >= ?
               AND (P.ANODESDE * 10000 + P.MESDESDE * 100 + P.DIADESDE) <= ?
-        \;
+        `;
         
         let rows = [];
         try {
@@ -3017,7 +3016,7 @@ async function getActivePromotions(clientCode) {
             stockUnidades: parseFloat(r.STOCK_UNIDADES) || 0
         }));
     } catch (error) {
-        logger.warn([PEDIDOS] getActivePromotions error (returning []): \);
+        logger.warn('[PEDIDOS] getActivePromotions error (returning []): ' + error.message);
         return [];
     }
 }
