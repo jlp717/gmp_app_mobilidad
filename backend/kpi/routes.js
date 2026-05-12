@@ -72,7 +72,7 @@ router.get('/alerts', async (req, res) => {
 
     // Count total
     const countResult = await kpiQuery(
-      `SELECT COUNT(*) AS TOTAL FROM `${SCHEMA}.KPI_ALERTS a WHERE ${whereClause}`,
+      `SELECT COUNT(*) AS TOTAL FROM ${SCHEMA}.KPI_ALERTS a WHERE ${whereClause}`,
       params
     );
     const total = parseInt(countResult.rows[0]?.TOTAL || 0);
@@ -81,7 +81,7 @@ router.get('/alerts', async (req, res) => {
     const dataResult = await kpiQuery(
       `SELECT a.ID, a.CLIENT_CODE, a.ALERT_TYPE, a.SEVERITY, a.MESSAGE,
               a.RAW_DATA, a.SOURCE_FILE, a.CREATED_AT
-       FROM `${SCHEMA}.KPI_ALERTS a
+       FROM ${SCHEMA}.KPI_ALERTS a
        WHERE ${whereClause}
        ORDER BY
          CASE a.SEVERITY WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 WHEN 'info' THEN 3 END,
@@ -138,7 +138,7 @@ router.get('/alerts/client/:clientId', async (req, res) => {
     const placeholders = codesToTry.map(() => 'CLIENT_CODE = ?').join(' OR ');
     const result = await kpiQuery(
       `SELECT ID, ALERT_TYPE, SEVERITY, MESSAGE, RAW_DATA, SOURCE_FILE, CREATED_AT
-       FROM `${SCHEMA}.KPI_ALERTS
+       FROM ${SCHEMA}.KPI_ALERTS
        WHERE (${placeholders}) AND IS_ACTIVE = 1
        ORDER BY
          CASE SEVERITY WHEN 'critical' THEN 1 WHEN 'warning' THEN 2 WHEN 'info' THEN 3 END,
@@ -168,7 +168,7 @@ router.get('/alerts/summary', async (req, res) => {
   try {
     const result = await kpiQuery(`
       SELECT ALERT_TYPE, SEVERITY, COUNT(*) AS COUNT
-      FROM `${SCHEMA}.KPI_ALERTS
+      FROM ${SCHEMA}.KPI_ALERTS
       WHERE IS_ACTIVE = 1
       GROUP BY ALERT_TYPE, SEVERITY
       ORDER BY ALERT_TYPE, SEVERITY
@@ -177,7 +177,7 @@ router.get('/alerts/summary', async (req, res) => {
     const totalResult = await kpiQuery(`
       SELECT COUNT(DISTINCT CLIENT_CODE) AS TOTAL_CLIENTS,
              COUNT(*) AS TOTAL_ALERTS
-      FROM `${SCHEMA}.KPI_ALERTS WHERE IS_ACTIVE = 1
+      FROM ${SCHEMA}.KPI_ALERTS WHERE IS_ACTIVE = 1
     `);
 
     res.json({
@@ -205,7 +205,7 @@ router.get('/alerts/clients', async (req, res) => {
 
     let queryStr = `
       SELECT DISTINCT CLIENT_CODE
-      FROM `${SCHEMA}.KPI_ALERTS
+      FROM ${SCHEMA}.KPI_ALERTS
       WHERE IS_ACTIVE = 1
     `;
     const params = [];
@@ -286,7 +286,7 @@ router.get('/etl/status', async (req, res) => {
   try {
     const loadResult = await kpiQuery(
       `SELECT LOAD_ID, STATUS, FILES_PROCESSED, TOTAL_ALERTS, ERRORS, STARTED_AT, COMPLETED_AT
-       FROM `${SCHEMA}.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 5 ROWS ONLY`
+       FROM ${SCHEMA}.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 5 ROWS ONLY`
     );
 
     const scheduler = getSchedulerStatus();
@@ -320,7 +320,7 @@ router.get('/health', async (req, res) => {
   try {
     const statsResult = await kpiQuery(
       `SELECT COUNT(*) AS TOTAL_ALERTS, COUNT(DISTINCT CLIENT_CODE) AS TOTAL_CLIENTS
-       FROM `${SCHEMA}.KPI_ALERTS WHERE IS_ACTIVE = 1`
+       FROM ${SCHEMA}.KPI_ALERTS WHERE IS_ACTIVE = 1`
     );
     if (statsResult.rows[0]) {
       alertStats.activeAlerts = parseInt(statsResult.rows[0].TOTAL_ALERTS || 0);
@@ -359,14 +359,14 @@ router.get('/loads/:loadId/audit', async (req, res) => {
     const { loadId } = req.params;
 
     const loadResult = await kpiQuery(
-      'SELECT * FROM `${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?', [loadId]
+      'SELECT * FROM ${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?', [loadId]
     );
     if (loadResult.rows.length === 0) {
       return res.status(404).json({ success: false, error: 'Carga no encontrada' });
     }
 
     const filesResult = await kpiQuery(
-      'SELECT * FROM `${SCHEMA}.KPI_FILE_AUDIT WHERE LOAD_ID = ? ORDER BY PROCESSED_AT', [loadId]
+      'SELECT * FROM ${SCHEMA}.KPI_FILE_AUDIT WHERE LOAD_ID = ? ORDER BY PROCESSED_AT', [loadId]
     );
 
     res.json({
@@ -455,19 +455,19 @@ router.get('/debug/db-status', async (req, res) => {
   try {
     const countResult = await kpiQuery(
       `SELECT COUNT(*) AS TOTAL, SUM(CASE WHEN IS_ACTIVE = 1 THEN 1 ELSE 0 END) AS ACTIVE
-       FROM `${SCHEMA}.KPI_ALERTS`
+       FROM ${SCHEMA}.KPI_ALERTS`
     );
 
     const sampleCodes = await kpiQuery(
-      `SELECT DISTINCT CLIENT_CODE FROM `${SCHEMA}.KPI_ALERTS WHERE IS_ACTIVE = 1 FETCH FIRST 20 ROWS ONLY`
+      `SELECT DISTINCT CLIENT_CODE FROM ${SCHEMA}.KPI_ALERTS WHERE IS_ACTIVE = 1 FETCH FIRST 20 ROWS ONLY`
     );
 
     const lastLoad = await kpiQuery(
-      `SELECT LOAD_ID, STATUS, TOTAL_ALERTS, STARTED_AT, COMPLETED_AT FROM `${SCHEMA}.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 3 ROWS ONLY`
+      `SELECT LOAD_ID, STATUS, TOTAL_ALERTS, STARTED_AT, COMPLETED_AT FROM ${SCHEMA}.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 3 ROWS ONLY`
     );
 
     const byType = await kpiQuery(
-      `SELECT ALERT_TYPE, COUNT(*) AS CNT FROM `${SCHEMA}.KPI_ALERTS WHERE IS_ACTIVE = 1 GROUP BY ALERT_TYPE`
+      `SELECT ALERT_TYPE, COUNT(*) AS CNT FROM ${SCHEMA}.KPI_ALERTS WHERE IS_ACTIVE = 1 GROUP BY ALERT_TYPE`
     );
 
     res.json({
@@ -496,7 +496,7 @@ router.get('/dashboard', async (req, res) => {
     // 1. Fetch ALL active alerts with type (single query, filter in Node)
     const allAlertsResult = await kpiQuery(`
       SELECT CLIENT_CODE, ALERT_TYPE, SEVERITY
-      FROM `${SCHEMA}.KPI_ALERTS WHERE IS_ACTIVE = 1
+      FROM ${SCHEMA}.KPI_ALERTS WHERE IS_ACTIVE = 1
     `);
 
     let filteredAlerts = allAlertsResult.rows;
@@ -586,7 +586,7 @@ router.get('/dashboard', async (req, res) => {
         try {
           const placeholders = clientCodes.map(() => '?').join(',');
           const namesResult = await kpiQuery(
-            `SELECT CLIENT_CODE, RAW_DATA FROM `${SCHEMA}.KPI_ALERTS
+            `SELECT CLIENT_CODE, RAW_DATA FROM ${SCHEMA}.KPI_ALERTS
              WHERE CLIENT_CODE IN (${placeholders}) AND IS_ACTIVE = 1
              FETCH FIRST ${clientCodes.length} ROWS ONLY`, clientCodes);
           for (const row of namesResult.rows) {
@@ -607,7 +607,7 @@ router.get('/dashboard', async (req, res) => {
         const placeholders = clientCodes.map(() => '?').join(',');
         const alertsResult = await kpiQuery(
           `SELECT CLIENT_CODE, ALERT_TYPE, SEVERITY, MESSAGE, RAW_DATA
-           FROM `${SCHEMA}.KPI_ALERTS
+           FROM ${SCHEMA}.KPI_ALERTS
            WHERE CLIENT_CODE IN (${placeholders}) AND IS_ACTIVE = 1
            ORDER BY CASE SEVERITY WHEN 'critical' THEN 0 WHEN 'warning' THEN 1 ELSE 2 END`,
           clientCodes
@@ -638,7 +638,7 @@ router.get('/dashboard', async (req, res) => {
     // 6. Last load info
     const lastLoadResult = await kpiQuery(
       `SELECT LOAD_ID, STATUS, TOTAL_ALERTS, COMPLETED_AT
-       FROM `${SCHEMA}.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 1 ROWS ONLY`
+       FROM ${SCHEMA}.KPI_LOADS ORDER BY STARTED_AT DESC FETCH FIRST 1 ROWS ONLY`
     );
     const lastLoad = lastLoadResult.rows[0] || null;
 

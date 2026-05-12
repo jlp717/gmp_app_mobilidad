@@ -66,7 +66,7 @@ async function initKpiTables() {
   try {
     // Verificar si KPI_LOADS ya existe
     try {
-      await conn.query('SELECT COUNT(*) AS CNT FROM `${SCHEMA}.KPI_LOADS');
+      await conn.query('SELECT COUNT(*) AS CNT FROM ${SCHEMA}.KPI_LOADS');
       logger.info('[kpi:db] Tablas KPI ya existen');
       return;
     } catch (_) {
@@ -78,7 +78,7 @@ async function initKpiTables() {
     // KPI_LOADS
     try {
       await conn.query(`
-        CREATE TABLE `${SCHEMA}.KPI_LOADS (
+        CREATE TABLE ${SCHEMA}.KPI_LOADS (
           ID              INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
           LOAD_ID         VARCHAR(32) NOT NULL,
           STATUS          VARCHAR(20) NOT NULL DEFAULT 'IN_PROGRESS',
@@ -92,10 +92,10 @@ async function initKpiTables() {
           CONSTRAINT UQ_KPI_LOADS_LOADID UNIQUE (LOAD_ID)
         )
       `);
-      logger.info('[kpi:db] Tabla `${SCHEMA}.KPI_LOADS creada');
+      logger.info('[kpi:db] Tabla ${SCHEMA}.KPI_LOADS creada');
     } catch (e) {
       if (e.message && e.message.includes('SQL0601')) {
-        logger.info('[kpi:db] `${SCHEMA}.KPI_LOADS ya existe');
+        logger.info('[kpi:db] ${SCHEMA}.KPI_LOADS ya existe');
       } else {
         throw e;
       }
@@ -104,7 +104,7 @@ async function initKpiTables() {
     // KPI_ALERTS
     try {
       await conn.query(`
-        CREATE TABLE `${SCHEMA}.KPI_ALERTS (
+        CREATE TABLE ${SCHEMA}.KPI_ALERTS (
           ID              INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
           LOAD_ID         VARCHAR(32) NOT NULL,
           CLIENT_CODE     VARCHAR(20) NOT NULL,
@@ -118,15 +118,15 @@ async function initKpiTables() {
           CREATED_AT      TIMESTAMP DEFAULT CURRENT TIMESTAMP
         )
       `);
-      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_CLIENT', '`${SCHEMA}.KPI_ALERTS (CLIENT_CODE)');
-      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_LOAD', '`${SCHEMA}.KPI_ALERTS (LOAD_ID)');
-      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_TYPE', '`${SCHEMA}.KPI_ALERTS (ALERT_TYPE)');
-      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_ACTIVE', '`${SCHEMA}.KPI_ALERTS (IS_ACTIVE, CLIENT_CODE)');
-      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_MAIN', '`${SCHEMA}.KPI_ALERTS (CLIENT_CODE, IS_ACTIVE, SEVERITY, CREATED_AT DESC)');
-      logger.info('[kpi:db] Tabla `${SCHEMA}.KPI_ALERTS creada con Ã­ndices');
+      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_CLIENT', '${SCHEMA}.KPI_ALERTS (CLIENT_CODE)');
+      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_LOAD', '${SCHEMA}.KPI_ALERTS (LOAD_ID)');
+      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_TYPE', '${SCHEMA}.KPI_ALERTS (ALERT_TYPE)');
+      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_ACTIVE', '${SCHEMA}.KPI_ALERTS (IS_ACTIVE, CLIENT_CODE)');
+      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_MAIN', '${SCHEMA}.KPI_ALERTS (CLIENT_CODE, IS_ACTIVE, SEVERITY, CREATED_AT DESC)');
+      logger.info('[kpi:db] Tabla ${SCHEMA}.KPI_ALERTS creada con Ã­ndices');
     } catch (e) {
       if (e.message && e.message.includes('SQL0601')) {
-        logger.info('[kpi:db] `${SCHEMA}.KPI_ALERTS ya existe');
+        logger.info('[kpi:db] ${SCHEMA}.KPI_ALERTS ya existe');
       } else {
         throw e;
       }
@@ -135,7 +135,7 @@ async function initKpiTables() {
     // KPI_FILE_AUDIT
     try {
       await conn.query(`
-        CREATE TABLE `${SCHEMA}.KPI_FILE_AUDIT (
+        CREATE TABLE ${SCHEMA}.KPI_FILE_AUDIT (
           ID              INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
           LOAD_ID         VARCHAR(32) NOT NULL,
           FILENAME        VARCHAR(100) NOT NULL,
@@ -149,11 +149,11 @@ async function initKpiTables() {
           PROCESSED_AT    TIMESTAMP DEFAULT CURRENT TIMESTAMP
         )
       `);
-      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_FA_LOAD', '`${SCHEMA}.KPI_FILE_AUDIT (LOAD_ID)');
-      logger.info('[kpi:db] Tabla `${SCHEMA}.KPI_FILE_AUDIT creada');
+      await safeCreateIndex(conn, 'JAVIER.IDX_KPI_FA_LOAD', '${SCHEMA}.KPI_FILE_AUDIT (LOAD_ID)');
+      logger.info('[kpi:db] Tabla ${SCHEMA}.KPI_FILE_AUDIT creada');
     } catch (e) {
       if (e.message && e.message.includes('SQL0601')) {
-        logger.info('[kpi:db] `${SCHEMA}.KPI_FILE_AUDIT ya existe');
+        logger.info('[kpi:db] ${SCHEMA}.KPI_FILE_AUDIT ya existe');
       } else {
         throw e;
       }

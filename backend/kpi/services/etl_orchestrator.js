@@ -44,7 +44,7 @@ async function runETL({ localDir, loadId, force = false } = {}) {
   // 1. Idempotencia: comprobar si ya se procesÃ³ esta semana
   if (!force) {
     const existing = await kpiQuery(
-      'SELECT ID, STATUS, TOTAL_ALERTS FROM `${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?',
+      'SELECT ID, STATUS, TOTAL_ALERTS FROM ${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?',
       [currentLoadId]
     );
     if (existing.rows.length > 0 && existing.rows[0].STATUS === 'COMPLETED') {
@@ -58,15 +58,15 @@ async function runETL({ localDir, loadId, force = false } = {}) {
     }
     // Si estÃ¡ IN_PROGRESS o FAILED, lo reprocesamos â€” borrar alertas y auditorÃ­a hijas
     if (existing.rows.length > 0) {
-      await kpiQuery('DELETE FROM `${SCHEMA}.KPI_FILE_AUDIT WHERE LOAD_ID = ?', [currentLoadId]);
-      await kpiQuery('DELETE FROM `${SCHEMA}.KPI_ALERTS WHERE LOAD_ID = ?', [currentLoadId]);
-      await kpiQuery('DELETE FROM `${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?', [currentLoadId]);
+      await kpiQuery('DELETE FROM ${SCHEMA}.KPI_FILE_AUDIT WHERE LOAD_ID = ?', [currentLoadId]);
+      await kpiQuery('DELETE FROM ${SCHEMA}.KPI_ALERTS WHERE LOAD_ID = ?', [currentLoadId]);
+      await kpiQuery('DELETE FROM ${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?', [currentLoadId]);
     }
   } else {
     // Force: limpiar todo de esta carga
-    await kpiQuery('DELETE FROM `${SCHEMA}.KPI_FILE_AUDIT WHERE LOAD_ID = ?', [currentLoadId]);
-    await kpiQuery('DELETE FROM `${SCHEMA}.KPI_ALERTS WHERE LOAD_ID = ?', [currentLoadId]);
-    await kpiQuery('DELETE FROM `${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?', [currentLoadId]);
+    await kpiQuery('DELETE FROM ${SCHEMA}.KPI_FILE_AUDIT WHERE LOAD_ID = ?', [currentLoadId]);
+    await kpiQuery('DELETE FROM ${SCHEMA}.KPI_ALERTS WHERE LOAD_ID = ?', [currentLoadId]);
+    await kpiQuery('DELETE FROM ${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?', [currentLoadId]);
   }
 
   // 2. Obtener archivos CSV (SFTP o local)
@@ -92,14 +92,14 @@ async function runETL({ localDir, loadId, force = false } = {}) {
   // 4. Crear registro de carga
   const filesList = csvResult.files.map((f) => f.name).join(',');
   await kpiQuery(
-    `INSERT INTO `${SCHEMA}.KPI_LOADS (LOAD_ID, STATUS, FILES_PROCESSED, CHECKSUM)
+    `INSERT INTO ${SCHEMA}.KPI_LOADS (LOAD_ID, STATUS, FILES_PROCESSED, CHECKSUM)
      VALUES (?, 'IN_PROGRESS', ?, ?)`,
     [currentLoadId, filesList, globalHash]
   );
 
   // 5. Desactivar alertas anteriores y limpiar alertas expiradas
-  await kpiQuery('UPDATE `${SCHEMA}.KPI_ALERTS SET IS_ACTIVE = 0 WHERE IS_ACTIVE = 1');
-  await kpiQuery('DELETE FROM `${SCHEMA}.KPI_ALERTS WHERE EXPIRES_AT IS NOT NULL AND EXPIRES_AT < CURRENT TIMESTAMP');
+  await kpiQuery('UPDATE ${SCHEMA}.KPI_ALERTS SET IS_ACTIVE = 0 WHERE IS_ACTIVE = 1');
+  await kpiQuery('DELETE FROM ${SCHEMA}.KPI_ALERTS WHERE EXPIRES_AT IS NOT NULL AND EXPIRES_AT < CURRENT TIMESTAMP');
 
   // 6. Procesar cada CSV
   const fileResults = [];
@@ -161,7 +161,7 @@ async function runETL({ localDir, loadId, force = false } = {}) {
 
     // AuditorÃ­a del archivo
     await kpiQuery(
-      `INSERT INTO `${SCHEMA}.KPI_FILE_AUDIT
+      `INSERT INTO ${SCHEMA}.KPI_FILE_AUDIT
        (LOAD_ID, FILENAME, FILE_SIZE, FILE_HASH, ROWS_TOTAL, ROWS_PARSED, ROWS_SKIPPED, ALERTS_GENERATED, PARSE_ERRORS)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [currentLoadId, file.name, file.size, file.hash,
@@ -183,7 +183,7 @@ async function runETL({ localDir, loadId, force = false } = {}) {
 
   // 7. Marcar carga como completada
   await kpiQuery(
-    `UPDATE `${SCHEMA}.KPI_LOADS SET STATUS = 'COMPLETED', TOTAL_ALERTS = ?, COMPLETED_AT = CURRENT TIMESTAMP, ERRORS = ?
+    `UPDATE ${SCHEMA}.KPI_LOADS SET STATUS = 'COMPLETED', TOTAL_ALERTS = ?, COMPLETED_AT = CURRENT TIMESTAMP, ERRORS = ?
      WHERE LOAD_ID = ?`,
     [totalAlerts, sanitizeForDb2(JSON.stringify(errors)), currentLoadId]
   );
@@ -214,7 +214,7 @@ async function runETL({ localDir, loadId, force = false } = {}) {
   if (emailRecipients.length > 0) {
     try {
       const summaryResult = await kpiQuery(
-        `SELECT ALERT_TYPE, SEVERITY, COUNT(*) AS CNT FROM `${SCHEMA}.KPI_ALERTS
+        `SELECT ALERT_TYPE, SEVERITY, COUNT(*) AS CNT FROM ${SCHEMA}.KPI_ALERTS
          WHERE IS_ACTIVE = 1 GROUP BY ALERT_TYPE, SEVERITY ORDER BY ALERT_TYPE`
       );
       await sendKpiDigest(emailRecipients, { loadId: currentLoadId, totalAlerts, fileResults }, summaryResult.rows);
@@ -281,7 +281,7 @@ function sanitizeForDb2(str) {
 async function insertAlertsBatch(loadId, alerts) {
   // CAST(? AS CLOB(64K)) es necesario porque DB2 ODBC no soporta
   // bindear parÃ¡metros string directamente a columnas CLOB
-  const sql = `INSERT INTO `${SCHEMA}.KPI_ALERTS
+  const sql = `INSERT INTO ${SCHEMA}.KPI_ALERTS
     (LOAD_ID, CLIENT_CODE, ALERT_TYPE, SEVERITY, MESSAGE, RAW_DATA, SOURCE_FILE, EXPIRES_AT)
     VALUES (?, ?, ?, ?, ?, CAST(? AS CLOB(64K)), ?, CURRENT TIMESTAMP + 7 DAYS)`;
 
