@@ -165,7 +165,7 @@ class PlannerToolbar extends StatelessWidget {
           ],
         ),
         content: const Text(
-          'Se descartarÃ¡n los cambios manuales y se recalcularÃ¡ la carga desde el algoritmo. Esta acciÃ³n no se puede deshacer.',
+          'Se descartarán los cambios manuales y se recalculará la carga desde el algoritmo. Esta acción no se puede deshacer.',
         ),
         actions: [
           TextButton(

@@ -102,7 +102,7 @@ class RuteroDetailPayment extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            NumberFormat.currency(symbol: 'â‚¬', locale: 'es_ES')
+            NumberFormat.currency(symbol: '€', locale: 'es_ES')
                 .format(albaran.importeTotal),
             style: TextStyle(
               color: _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
@@ -150,7 +150,7 @@ class RuteroDetailPayment extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'MÃ‰TODO DE PAGO',
+          'MÉTODO DE PAGO',
           style: TextStyle(
             color: AppTheme.textSecondary,
             fontSize: 12,
@@ -301,7 +301,7 @@ class RuteroDetailPayment extends StatelessWidget {
                   Text(
                     isPaid
                         ? 'Cobro registrado con $selectedPaymentMethod'
-                        : 'Confirmar recepciÃ³n del pago',
+                        : 'Confirmar recepción del pago',
                     style: const TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 11,

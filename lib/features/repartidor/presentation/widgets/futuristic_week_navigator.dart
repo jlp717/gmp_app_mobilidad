@@ -629,7 +629,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
               widget.onDaySelected(date);
             },
             child: const Text(
-              'IR A ESTE DÃA',
+              'IR A ESTE DÍA',
               style: TextStyle(color: AppTheme.neonBlue),
             ),
           ),

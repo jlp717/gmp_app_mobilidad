@@ -378,7 +378,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
                                 ),
                                 SizedBox(width: 8),
                                 Text(
-                                  'ColisiÃ³n detectada',
+                                  'Colisión detectada',
                                   style: TextStyle(
                                     color: AppTheme.error,
                                     fontSize: 12,

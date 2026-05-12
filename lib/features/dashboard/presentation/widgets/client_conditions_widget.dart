@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-/// [ClientConditionsWidget] - Widget que muestra informaciÃ³n de condiciones del cliente
+/// [ClientConditionsWidget] - Widget que muestra información de condiciones del cliente
 ///
-/// CARACTERÃSTICAS:
-/// - SecciÃ³n "Diversos" con medios de pago y congeladores
-/// - SecciÃ³n "Condiciones" con tarifa y concepto de facturaciÃ³n
-/// - DiseÃ±o mejorado segÃºn imagen de referencia
+/// CARACTERÍSTICAS:
+/// - Sección "Diversos" con medios de pago y congeladores
+/// - Sección "Condiciones" con tarifa y concepto de facturación
+/// - Diseño mejorado según imagen de referencia
 /// - Mejor visibilidad y contraste
 class ClientConditionsWidget extends StatelessWidget {
   const ClientConditionsWidget({
@@ -27,12 +27,12 @@ class ClientConditionsWidget extends StatelessWidget {
     
     return Column(
       children: [
-        // SecciÃ³n Diversos
+        // Sección Diversos
         _buildDiversosSection(context, isDark),
 
         const SizedBox(height: 16),
 
-        // SecciÃ³n Condiciones
+        // Sección Condiciones
         _buildCondicionesSection(context, isDark),
       ],
     );
@@ -111,7 +111,7 @@ class ClientConditionsWidget extends StatelessWidget {
                   icon: Icons.ac_unit_rounded,
                   iconColor: const Color(0xFF3B82F6),
                   title: 'Congeladores',
-                  subtitle: '$congeladoresCount mÃ¡quinas',
+                  subtitle: '$congeladoresCount máquinas',
                   isDark: isDark,
                   onTap: () {
                     // TODO: Navegar a detalle de congeladores
@@ -273,10 +273,10 @@ class ClientConditionsWidget extends StatelessWidget {
                 
                 const SizedBox(height: 12),
                 
-                // Concepto FacturaciÃ³n
+                // Concepto Facturación
                 _buildConditionItem(
                   context: context,
-                  label: 'Concepto FacturaciÃ³n',
+                  label: 'Concepto Facturación',
                   value: conceptoFacturacion,
                   isDark: isDark,
                 ),

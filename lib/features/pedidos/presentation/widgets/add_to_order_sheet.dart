@@ -1388,7 +1388,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Se ha aÃ±adido el stock disponible. Faltan ${missingQty.toStringAsFixed(missingQty.truncateToDouble() == missingQty ? 0 : 2)} de $pName',
+              'Se ha añadido el stock disponible. Faltan ${missingQty.toStringAsFixed(missingQty.truncateToDouble() == missingQty ? 0 : 2)} de $pName',
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 color: Colors.white,

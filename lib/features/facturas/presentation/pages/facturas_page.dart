@@ -408,7 +408,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                               FittedBox(
                                 fit: BoxFit.scaleDown,
                                 child: Text(
-                                  '${factura.total.toStringAsFixed(2)} â‚¬',
+                                  '${factura.total.toStringAsFixed(2)} €',
                                   style: TextStyle(
                                     fontWeight: FontWeight.w900,
                                     fontSize:
@@ -604,7 +604,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
   Future<void> _previewFactura(Factura factura) async {
     final modal =
-        AsyncOperationModal.show(context, text: 'Cargando previsualizaciÃ³n...');
+        AsyncOperationModal.show(context, text: 'Cargando previsualización...');
     try {
       final bytes = await FacturasService.downloadFacturaPdfBytes(
         factura.serie,
@@ -621,7 +621,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Error: PDF vacÃ­o o corrupto (${bytes.length} bytes). Intenta de nuevo.',
+              'Error: PDF vacío o corrupto (${bytes.length} bytes). Intenta de nuevo.',
             ),
             backgroundColor: Colors.red,
           ),
@@ -707,7 +707,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
       if (!mounted) return;
 
       final text = 'Adjunto: Factura ${factura.numeroFormateado} - '
-          '${factura.total.toStringAsFixed(2)} â‚¬ - Granja Mari Pepa';
+          '${factura.total.toStringAsFixed(2)} € - Granja Mari Pepa';
 
       final renderBox = context.findRenderObject()! as RenderBox;
       final size = renderBox.size;
@@ -825,7 +825,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           'Factura ${factura.numeroFormateado} - ${factura.clienteNombre}',
       defaultBody: 'Hola ${factura.clienteNombre},\n\n'
           'Adjunto le remitimos su factura ${factura.numeroFormateado} '
-          'por importe de ${factura.total.toStringAsFixed(2)} â‚¬.\n\n'
+          'por importe de ${factura.total.toStringAsFixed(2)} €.\n\n'
           'Muchas gracias por su confianza.\n\n'
           'Atentamente,\n'
           'El equipo de Granja Mari Pepa',
@@ -857,7 +857,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     final result = await WhatsAppFormModal.show(
       context,
       defaultMessage: 'Hola ${factura.clienteNombre}, le adjunto su factura '
-          '${factura.numeroFormateado} (${factura.total.toStringAsFixed(2)} â‚¬). ðŸ“„\n\n'
+          '${factura.numeroFormateado} (${factura.total.toStringAsFixed(2)} €). ðŸ“„\n\n'
           'Gracias por su confianza - Granja Mari Pepa',
     );
 
@@ -1076,14 +1076,14 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               _buildSummaryItem(
                 icon: Icons.euro,
                 label: 'Total',
-                value: '${_summary!.totalImporte.toStringAsFixed(0)}â‚¬',
+                value: '${_summary!.totalImporte.toStringAsFixed(0)}€',
                 color: Colors.green,
                 width: itemWidth,
               ),
               _buildSummaryItem(
                 icon: Icons.percent,
                 label: 'IVA',
-                value: '${_summary!.totalIva.toStringAsFixed(0)}â‚¬',
+                value: '${_summary!.totalIva.toStringAsFixed(0)}€',
                 color: Colors.orange,
                 width: itemWidth,
               ),
@@ -1220,7 +1220,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                       .map((y) => DropdownMenuItem(value: y, child: Text('$y')))
                       .toList(),
                   onChanged: _onYearChanged,
-                  hint: 'AÃ±o',
+                  hint: 'Año',
                   icon: Icons.calendar_today,
                 ),
               ),
@@ -1425,8 +1425,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
             const SizedBox(height: 8),
             Text(
               hasFilters
-                  ? 'Prueba a seleccionar otro comercial, ampliar el rango de fechas o modificar la bÃºsqueda.'
-                  : 'Las facturas aparecerÃ¡n aquÃ­ cuando estÃ©n disponibles.',
+                  ? 'Prueba a seleccionar otro comercial, ampliar el rango de fechas o modificar la búsqueda.'
+                  : 'Las facturas aparecerán aquí cuando estén disponibles.',
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white38, fontSize: 13),
             ),

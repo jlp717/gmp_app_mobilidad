@@ -250,10 +250,10 @@ class RuteroDetailFinalize extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
       ),
       child: const Text(
-        'ATENCIÃ“N: Si marca en verde sin modificar cantidades, '
-        'la entrega estÃ¡ OK. Si modifica o quita cantidades, la '
-        'entrega NO coincide â€” debe aÃ±adir observaciones en la '
-        "pestaÃ±a 'Observaciones' antes de confirmar.",
+        'ATENCIÓN: Si marca en verde sin modificar cantidades, '
+        'la entrega está OK. Si modifica o quita cantidades, la '
+        'entrega NO coincide â€” debe añadir observaciones en la '
+        "pestaña 'Observaciones' antes de confirmar.",
         style: TextStyle(
           color: Colors.orange,
           fontSize: 13,
@@ -269,7 +269,7 @@ class RuteroDetailFinalize extends StatelessWidget {
       style: const TextStyle(color: AppTheme.textPrimary),
       decoration: InputDecoration(
         labelText: 'Observaciones',
-        hintText: 'AÃ±adir nota sobre la entrega...',
+        hintText: 'Añadir nota sobre la entrega...',
         alignLabelWithHint: true,
         errorText: observacionesError,
         filled: true,

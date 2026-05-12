@@ -40,7 +40,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
   String? _error;
   String _searchQuery = '';
   DateTime? _lastFetchTime; // Track last sync
-  // final _currencyFormat = NumberFormat.currency(symbol: 'â‚¬', decimalDigits: 0);
+  // final _currencyFormat = NumberFormat.currency(symbol: '€', decimalDigits: 0);
   Timer? _debounceTimer;
   final TextEditingController _searchController = TextEditingController();
 
@@ -165,10 +165,10 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
     // Fallback if phones array is empty but phone fields exist (legacy compat)
     if (phones.isEmpty) {
       if (client['phone'] != null && (client['phone'] as String).isNotEmpty) {
-        phones.add({'type': 'TelÃ©fono 1', 'number': client['phone']});
+        phones.add({'type': 'Teléfono 1', 'number': client['phone']});
       }
       if (client['phone2'] != null && (client['phone2'] as String).isNotEmpty) {
-        phones.add({'type': 'TelÃ©fono 2', 'number': client['phone2']});
+        phones.add({'type': 'Teléfono 2', 'number': client['phone2']});
       }
     }
 
@@ -188,13 +188,13 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
             const Text('Enviar WhatsApp',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 8),
-            const Text('Selecciona el nÃºmero:',
+            const Text('Selecciona el número:',
                 style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
             const SizedBox(height: 12),
             if (phones.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('No hay telÃ©fonos guardados',
+                child: Text('No hay teléfonos guardados',
                     style: TextStyle(color: AppTheme.textSecondary)),
               ),
             ...phones.map(
@@ -202,7 +202,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
                 leading:
                     const Icon(Icons.phone_android, color: Color(0xFF25D366)),
                 title: Text((p['number'] as String?) ?? ''),
-                subtitle: Text((p['type'] as String?) ?? 'TelÃ©fono'),
+                subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
                 onTap: () {
                   Navigator.pop(ctx);
                   _launchWhatsApp((p['number'] as String?) ?? '');
@@ -212,8 +212,8 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
             const Divider(),
             ListTile(
               leading: const Icon(Icons.dialpad, color: AppTheme.neonPink),
-              title: const Text('Introducir nÃºmero manualmente'),
-              subtitle: const Text('Escribe un nÃºmero personalizado'),
+              title: const Text('Introducir número manualmente'),
+              subtitle: const Text('Escribe un número personalizado'),
               onTap: () {
                 Navigator.pop(ctx);
                 _showCustomPhoneDialog(isWhatsApp: true);
@@ -237,7 +237,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
           controller: controller,
           keyboardType: TextInputType.phone,
           decoration: InputDecoration(
-            labelText: 'NÃºmero de telÃ©fono',
+            labelText: 'Número de teléfono',
             hintText: 'Ej: 600 123 456',
             prefixIcon: Icon(isWhatsApp ? Icons.chat : Icons.phone),
             border: const OutlineInputBorder(),
@@ -287,7 +287,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
     // Professional message
     final message =
         Uri.encodeComponent('Hola, soy $nombreComercial de Mari Pepa. '
-            'MaÃ±ana dÃ­a $fecha tenemos visita. '
+            'Mañana día $fecha tenemos visita. '
             'Â¿Necesitas cualquier cosilla?');
 
     final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
@@ -377,7 +377,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
               horizontal: Responsive.padding(context, small: 12, large: 16)),
           child: TextField(
             decoration: InputDecoration(
-              hintText: 'Buscar cliente, NIF, Ciudad, CÃ³digo...',
+              hintText: 'Buscar cliente, NIF, Ciudad, Código...',
               prefixIcon: const Icon(Icons.search),
               filled: true,
               fillColor: AppTheme.surfaceColor,

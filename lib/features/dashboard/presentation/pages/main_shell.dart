@@ -134,8 +134,8 @@ class _MainShellState extends ConsumerState<MainShell> {
         child: AlertDialog(
           title: Text(
             isMandatory
-                ? 'ActualizaciÃ³n Obligatoria'
-                : 'ActualizaciÃ³n Disponible',
+                ? 'Actualización Obligatoria'
+                : 'Actualización Disponible',
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
@@ -149,13 +149,13 @@ class _MainShellState extends ConsumerState<MainShell> {
               Text(
                 (authState?.updateMessage.isNotEmpty ?? false)
                     ? authState!.updateMessage
-                    : 'Hay una nueva versiÃ³n de la app con mejoras crÃ­ticas.',
+                    : 'Hay una nueva versión de la app con mejoras críticas.',
                 style: const TextStyle(color: Colors.white70),
               ),
               if (isMandatory) ...[
                 const SizedBox(height: 16),
                 const Text(
-                  'Esta actualizaciÃ³n es necesaria para garantizar la integridad de los datos y el correcto funcionamiento.',
+                  'Esta actualización es necesaria para garantizar la integridad de los datos y el correcto funcionamiento.',
                   style: TextStyle(
                     color: Colors.orange,
                     fontSize: 12,
@@ -171,7 +171,7 @@ class _MainShellState extends ConsumerState<MainShell> {
               TextButton(
                 onPressed: () => Navigator.pop(context),
                 child: const Text(
-                  'MÃS TARDE',
+                  'MÁS TARDE',
                   style: TextStyle(color: Colors.white54),
                 ),
               )
@@ -416,7 +416,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                       item: _NavItem(
                         icon: Icons.more_horiz,
                         selectedIcon: Icons.more_horiz,
-                        label: 'MÃ¡s',
+                        label: 'Más',
                         color: AppTheme.textSecondary,
                       ),
                       isSelected: safeIndex >= maxBottomItems - 1,
@@ -583,7 +583,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 size: 20,
               ),
               title: const Text(
-                'Cerrar SesiÃ³n',
+                'Cerrar Sesión',
                 style: TextStyle(color: AppTheme.error, fontSize: 13),
               ),
               onTap: () {
@@ -768,7 +768,7 @@ class _MainShellState extends ConsumerState<MainShell> {
               Flexible(
                 child: Text(
                   _forceAlmacenMode
-                      ? 'AlmacÃ©n'
+                      ? 'Almacén'
                       : _forceRepartidorMode
                           ? 'Reparto'
                           : 'Ventas',
@@ -818,7 +818,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 children: [
                   Icon(Icons.inventory_2, color: AppTheme.neonPink, size: 18),
                   SizedBox(width: 12),
-                  Text('Perfil AlmacÃ©n', style: TextStyle(color: Colors.white)),
+                  Text('Perfil Almacén', style: TextStyle(color: Colors.white)),
                 ],
               ),
             ),
@@ -1171,7 +1171,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     final vendedorCodes = authState?.vendedorCodes ?? [];
 
     // ===============================================
-    // ALMACÃ‰N MODE
+    // ALMACÉN MODE
     // ===============================================
     if (_isAlmacenEffective) {
       return LazyIndexedStack(
@@ -1230,7 +1230,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
         }
         if (label == 'Clientes') {
-          final histIdx = navIndexOf('HistÃ³rico');
+          final histIdx = navIndexOf('Histórico');
           return RepartidorClientesPage(
             repartidorId: effectiveRepartidorId,
             isJefeMode: isJefe,
@@ -1259,7 +1259,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             repartidorId: effectiveRepartidorId,
           );
         }
-        if (label == 'EvoluciÃ³n') {
+        if (label == 'Evolución') {
           return RepartidorEvolutionPage(
             repartidorId: effectiveRepartidorId,
           );
@@ -1269,7 +1269,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             repartidorId: effectiveRepartidorId,
           );
         }
-        if (label == 'HistÃ³rico') {
+        if (label == 'Histórico') {
           return RepartidorHistoricoPage(
             repartidorId: effectiveRepartidorId,
             initialClientId: _pendingClientId,
@@ -1285,7 +1285,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             accentColor: AppTheme.neonPink,
           );
         }
-        return const Center(child: Text('PÃ¡gina no encontrada'));
+        return const Center(child: Text('Página no encontrada'));
       }
 
       final content = LazyIndexedStack(
@@ -1332,7 +1332,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           const ComingSoonPlaceholder(
             title: 'Nexus AI â€” Asistente Comercial',
             subtitle:
-                'Tu asistente inteligente para\nconsultar mÃ¡rgenes, precios, deudas\ny mucho mÃ¡s.',
+                'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
             icon: Icons.smart_toy,
             accentColor: AppTheme.neonPink,
           ),
@@ -1397,12 +1397,12 @@ class _MainShellState extends ConsumerState<MainShell> {
           return const ComingSoonPlaceholder(
             title: 'Nexus AI â€” Asistente Comercial',
             subtitle:
-                'Tu asistente inteligente para\nconsultar mÃ¡rgenes, precios, deudas\ny mucho mÃ¡s.',
+                'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
             icon: Icons.smart_toy,
             accentColor: AppTheme.neonPink,
           );
         default:
-          return const Center(child: Text('PÃ¡gina no encontrada'));
+          return const Center(child: Text('Página no encontrada'));
       }
     }
 
@@ -1504,7 +1504,7 @@ class _LogoutConfirmationDialog extends StatelessWidget {
 
             // Title (responsive)
             Text(
-              'Â¿Cerrar SesiÃ³n?',
+              'Â¿Cerrar Sesión?',
               style: TextStyle(
                 fontSize: titleFs,
                 fontWeight: FontWeight.w600,
@@ -1516,7 +1516,7 @@ class _LogoutConfirmationDialog extends StatelessWidget {
 
             // Message
             Text(
-              'EstÃ¡s a punto de salir de tu cuenta, $userName. Â¿EstÃ¡s seguro?',
+              'Estás a punto de salir de tu cuenta, $userName. Â¿Estás seguro?',
               style: TextStyle(
                 fontSize: 14,
                 color: AppTheme.textSecondary.withValues(alpha: 0.8),

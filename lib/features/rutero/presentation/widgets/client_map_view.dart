@@ -40,7 +40,7 @@ class _ClientMapViewState extends State<ClientMapView> {
   LatLng get _center {
     if (widget.initialCenter != null) return widget.initialCenter!;
     
-    // Default to AlmerÃ­a, Spain (assuming GMP is in this region)
+    // Default to Almería, Spain (assuming GMP is in this region)
     if (widget.clients.isEmpty) return const LatLng(36.8340, -2.4637);
     
     // Calculate center from clients
@@ -272,7 +272,7 @@ class _ClientInfoCard extends StatelessWidget {
                       ),
                     if (client.lastSale != null)
                       Text(
-                        'Ãšltima venta: â‚¬${client.lastSale!.toStringAsFixed(0)}',
+                        'Ãšltima venta: €${client.lastSale!.toStringAsFixed(0)}',
                         style: const TextStyle(color: AppTheme.success, fontSize: 11),
                       ),
                   ],

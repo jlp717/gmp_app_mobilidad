@@ -8,7 +8,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 /// â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 ///
 /// Modal con formulario para compartir por WhatsApp.
-/// Campos: telÃ©fono (validado +34), mensaje personalizado.
+/// Campos: teléfono (validado +34), mensaje personalizado.
 ///
 /// Usa Share nativo (gratis) para adjuntar el PDF al compartir.
 ///
@@ -77,13 +77,13 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
 
   String? _validatePhone(String? value) {
     if (value == null || value.trim().isEmpty) {
-      return 'El telÃ©fono es obligatorio';
+      return 'El teléfono es obligatorio';
     }
     // Remove spaces, dashes, parentheses
     final cleaned = value.replaceAll(RegExp(r'[\s\-\(\)]'), '');
     // Must start with + and have at least 9 digits
     if (!RegExp(r'^\+?\d{9,15}$').hasMatch(cleaned)) {
-      return 'Formato invÃ¡lido. Ej: +34612345678';
+      return 'Formato inválido. Ej: +34612345678';
     }
     return null;
   }
@@ -160,14 +160,14 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
               const Padding(
                 padding: EdgeInsets.only(left: 2),
                 child: Text(
-                  'Se compartirÃ¡ el PDF automÃ¡ticamente. Seleccione WhatsApp en el menÃº que aparece.',
+                  'Se compartirá el PDF automáticamente. Seleccione WhatsApp en el menú que aparece.',
                   style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
                 ),
               ),
               const SizedBox(height: 20),
 
               // Phone field
-              _buildLabel('TelÃ©fono *'),
+              _buildLabel('Teléfono *'),
               const SizedBox(height: 6),
               TextFormField(
                 controller: _phoneController,

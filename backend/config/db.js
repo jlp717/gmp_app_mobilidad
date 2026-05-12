@@ -401,7 +401,7 @@ async function query(sql, logQuery = true, logError = true) {
                 logger.warn(`⚠️ Query Failed (Attempt ${attempt}/${MAX_RETRIES}): ${error.message}. Retrying...`);
             } else if (logError) {
                 const states = (error.odbcErrors || []).map(e => e.state).join(',');
-                logger.error(`ðŸš« Non-retryable error (attempt ${attempt}): ${error.message} [state=${states}]`);
+                logger.error(`🚫 Non-retryable error (attempt ${attempt}): ${error.message} [state=${states}]`);
             }
 
             if (!retryable) {
@@ -481,7 +481,7 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
                 logger.warn(`⚠️ Param Query Retry (${attempt}): ${error.message}`);
             } else if (logError) {
                 const states = (error.odbcErrors || []).map(e => e.state).join(',');
-                logger.error(`ðŸš« Non-retryable param error (attempt ${attempt}): ${error.message} [state=${states}]`);
+                logger.error(`🚫 Non-retryable param error (attempt ${attempt}): ${error.message} [state=${states}]`);
             }
 
             if (!retryable) break;

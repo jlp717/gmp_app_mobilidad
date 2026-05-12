@@ -168,7 +168,7 @@ class RuteroDetailProducts extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           const Text(
-            'No hay lÃ­neas de producto',
+            'No hay líneas de producto',
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
           ),
         ],
@@ -231,7 +231,7 @@ class RuteroDetailProducts extends StatelessWidget {
                     color: AppTheme.neonCyan, size: 18),
                 const SizedBox(width: 8),
                 Text(
-                  'Orden de PreparaciÃ³n: $ordenPreparacion',
+                  'Orden de Preparación: $ordenPreparacion',
                   style: const TextStyle(
                     color: AppTheme.neonCyan,
                     fontWeight: FontWeight.w600,

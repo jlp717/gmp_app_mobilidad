@@ -1,8 +1,8 @@
-/// REPARTIDOR HISTÃ“RICO PAGE v4.0
+/// REPARTIDOR HISTÓRICO PAGE v4.0
 /// Full redesign with advanced filters, year selector, search by number,
 /// proper deduplication, and working signatures
 ///
-/// Nivel 1: Lista de clientes con bÃºsqueda
+/// Nivel 1: Lista de clientes con búsqueda
 /// Nivel 2: Documentos del cliente con filtros avanzados
 library;
 
@@ -296,7 +296,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        'CÃ³d: $_selectedClientId',
+                        'Cód: $_selectedClientId',
                         style: TextStyle(
                             fontSize: Responsive.fontSize(context,
                                 small: 9, large: 11,),
@@ -314,7 +314,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     }
 
     return SmartSyncHeader(
-      title: 'HistÃ³rico',
+      title: 'Histórico',
       subtitle: 'Documentos repartidos por cliente',
       lastSync: DateTime.now(),
       isLoading: _isLoading,
@@ -427,7 +427,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             controller: _searchController,
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              hintText: 'Buscar cliente por cÃ³digo o nombre...',
+              hintText: 'Buscar cliente por código o nombre...',
               hintStyle:
                   TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5)),
               prefixIcon:
@@ -659,7 +659,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int?>(
                     value: _selectedYear,
-                    hint: Text('Ãšltimos 3 aÃ±os',
+                    hint: Text('Ãšltimos 3 años',
                         style: TextStyle(
                             fontSize: 12,
                             color: AppTheme.textSecondary.withValues(alpha: 0.7),),),
@@ -671,7 +671,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     isDense: true,
                     items: [
                       const DropdownMenuItem<int?>(
-                        child: Text('Ãšltimos 3 aÃ±os',
+                        child: Text('Ãšltimos 3 años',
                             style: TextStyle(fontSize: 12),),
                       ),
                       ...years.map((y) => DropdownMenuItem<int?>(
@@ -1375,7 +1375,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                         Text(
                             isFactura && doc.facturaNumber != null
                                 ? 'Factura F-${doc.facturaNumber} (Alb: ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number})'
-                                : 'AlbarÃ¡n ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}',
+                                : 'Albarán ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}',
                             style: const TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.bold,
@@ -1508,7 +1508,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   backgroundColor: Colors.grey,
                   child: Icon(Icons.share, color: Colors.white, size: 20),
                 ),
-                title: const Text('MÃ¡s opciones...',
+                title: const Text('Más opciones...',
                     style: TextStyle(color: Colors.white),),
                 onTap: () {
                   Navigator.pop(context);
@@ -1577,7 +1577,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
   Future<void> _previewDocument(_DocumentItem doc) async {
     final modal =
-        AsyncOperationModal.show(context, text: 'Cargando previsualizaciÃ³n...');
+        AsyncOperationModal.show(context, text: 'Cargando previsualización...');
     try {
       final isFactura = doc.type == _DocType.factura;
       final bytes = await RepartidorDataService.downloadDocument(
@@ -1706,7 +1706,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
   Future<void> _emailDocument(_DocumentItem doc) async {
     final isFactura = doc.type == _DocType.factura;
-    final typeLabel = isFactura ? 'Factura' : 'AlbarÃ¡n';
+    final typeLabel = isFactura ? 'Factura' : 'Albarán';
     final clientName = _selectedClientName ?? 'Cliente';
 
     final result = await EmailFormModal.show(
@@ -1754,13 +1754,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
   Future<void> _whatsAppDocument(_DocumentItem doc) async {
     final isFactura = doc.type == _DocType.factura;
-    final typeLabel = isFactura ? 'Factura' : 'AlbarÃ¡n';
+    final typeLabel = isFactura ? 'Factura' : 'Albarán';
     final clientName = _selectedClientName ?? 'Cliente';
 
     final result = await WhatsAppFormModal.show(
       context,
       defaultMessage:
-          'Hola $clientName, aquÃ­ tiene su documento $typeLabel ${doc.number}. ðŸ“„\n\n'
+          'Hola $clientName, aquí tiene su documento $typeLabel ${doc.number}. ðŸ“„\n\n'
           'Saludos - Granja Mari Pepa',
     );
 
@@ -1924,7 +1924,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         terminal: doc.terminal,
         numero: doc.albaranNumber ?? doc.number,
         docLabel:
-            '${doc.type == _DocType.factura ? "Factura" : "AlbarÃ¡n"} #${doc.number}',
+            '${doc.type == _DocType.factura ? "Factura" : "Albarán"} #${doc.number}',
         legacySignatureName: doc.legacySignatureName,
         legacyDate: doc.legacyDate,
       ),
@@ -2217,11 +2217,11 @@ class _SignatureDialogState extends State<_SignatureDialog> {
       if (widget.legacyDate != null) {
         info += '\nFecha: ${widget.legacyDate}';
       }
-      info += '\n\n(Imagen no disponible en registros histÃ³ricos)';
+      info += '\n\n(Imagen no disponible en registros históricos)';
     }
     setState(() {
       _loading = false;
-      _error = info ?? 'No se encontrÃ³ firma para este documento';
+      _error = info ?? 'No se encontró firma para este documento';
     });
   }
 
@@ -2336,7 +2336,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                             Icon(Icons.gesture,
                                 size: 48, color: Colors.grey.shade400,),
                             const SizedBox(height: 12),
-                            Text(_error ?? 'No se encontrÃ³ firma',
+                            Text(_error ?? 'No se encontró firma',
                                 style: TextStyle(
                                     color: Colors.grey.shade400, fontSize: 13,),
                                 textAlign: TextAlign.center,),

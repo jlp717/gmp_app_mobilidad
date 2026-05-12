@@ -8,7 +8,7 @@ class ComingSoonPlaceholder extends StatelessWidget {
 
   const ComingSoonPlaceholder({
     required this.title, super.key,
-    this.subtitle = 'Estamos trabajando en esta funcionalidad.\nDisponible prÃ³ximamente.',
+    this.subtitle = 'Estamos trabajando en esta funcionalidad.\nDisponible próximamente.',
     this.icon = Icons.rocket_launch,
     this.accentColor = AppTheme.neonPurple,
   });

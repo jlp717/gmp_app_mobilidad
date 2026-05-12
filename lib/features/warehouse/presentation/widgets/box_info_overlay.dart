@@ -156,7 +156,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                     // Details
                     _InfoRow(
                       icon: Icons.tag_rounded,
-                      label: 'ArtÃ­culo',
+                      label: 'Artículo',
                       value: widget.box.articleCode,
                     ),
                     _InfoRow(
@@ -190,7 +190,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                     // Position
                     _InfoRow(
                       icon: Icons.place_rounded,
-                      label: 'PosiciÃ³n',
+                      label: 'Posición',
                       value:
                           'X:${widget.box.x.toStringAsFixed(0)} Y:${widget.box.y.toStringAsFixed(0)} Z:${widget.box.z.toStringAsFixed(0)}',
                       valueColor: AppTheme.neonBlue,

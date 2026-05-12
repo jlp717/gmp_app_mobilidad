@@ -7,12 +7,12 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 /// â³ ASYNC OPERATION MODAL
 /// â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 /// 
-/// Modal centrado y bloqueante para operaciones asÃ­ncronas.
+/// Modal centrado y bloqueante para operaciones asíncronas.
 /// Estados: loading â†’ success (auto-cierre) | error (reintentar/cerrar)
 /// 
 /// Incluye:
 /// - Timeout de seguridad configurable (default 45s)
-/// - BotÃ³n cancelar visible tras 5s en estado loading
+/// - Botón cancelar visible tras 5s en estado loading
 ///
 /// Uso:
 ///   final controller = AsyncOperationModal.show(context, text: 'Generando PDF...');
@@ -37,7 +37,7 @@ class AsyncOperationModalController {
     // Safety timeout: auto-error if operation takes too long
     _timeoutTimer = Timer(timeout, () {
       if (!_closed && _stateNotifier.value == _ModalState.loading) {
-        error('La operaciÃ³n ha tardado demasiado. IntÃ©ntalo de nuevo.');
+        error('La operación ha tardado demasiado. Inténtalo de nuevo.');
       }
     });
 

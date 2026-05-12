@@ -99,7 +99,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
     if (errors.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Regalos aÃ±adidos al pedido como lineas SC'),
+          content: Text('Regalos añadidos al pedido como lineas SC'),
           backgroundColor: AppTheme.neonGreen,
         ),
       );
@@ -212,7 +212,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Por cada ${widget.minQty.toStringAsFixed(0)} uds que compres de los productos de esta promocion, llÃ©vate ${widget.giftQty.toStringAsFixed(0)} gratis.${widget.cumulative ? ' (Se acumula: si compras ${(widget.minQty * 2).toStringAsFixed(0)} uds, llÃ©vate ${(widget.giftQty * 2).toStringAsFixed(0)} gratis)' : ''}',
+                          'Por cada ${widget.minQty.toStringAsFixed(0)} uds que compres de los productos de esta promocion, llévate ${widget.giftQty.toStringAsFixed(0)} gratis.${widget.cumulative ? ' (Se acumula: si compras ${(widget.minQty * 2).toStringAsFixed(0)} uds, llévate ${(widget.giftQty * 2).toStringAsFixed(0)} gratis)' : ''}',
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 11,
@@ -227,7 +227,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                     _buildProgressSection(),
                   ] else ...[
                     Text(
-                      'AÃ±ade al menos ${widget.minQty.toStringAsFixed(0)} uds de los productos de esta promocion para poder elegir tus regalos.',
+                      'Añade al menos ${widget.minQty.toStringAsFixed(0)} uds de los productos de esta promocion para poder elegir tus regalos.',
                       style: const TextStyle(
                         color: Colors.white54,
                         fontSize: 11,
@@ -447,7 +447,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                   label: Text(
                     _submittingGifts
                         ? 'Aplicando regalos...'
-                        : 'AÃ±adir regalos seleccionados',
+                        : 'Añadir regalos seleccionados',
                     style: const TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 14,),
                   ),

@@ -3,16 +3,16 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
-/// [SummaryStatsWidget] - Widget de resumen estadÃ­stico premium
+/// [SummaryStatsWidget] - Widget de resumen estadístico premium
 ///
-/// CARACTERÃSTICAS:
-/// - DiseÃ±o profesional con cards modernos
-/// - InformaciÃ³n estadÃ­stica clave del negocio
+/// CARACTERÍSTICAS:
+/// - Diseño profesional con cards modernos
+/// - Información estadística clave del negocio
 /// - Indicadores visuales de rendimiento
 /// - Comparativas y tendencias
 /// - Animaciones sutiles
 ///
-/// UBICACIÃ“N: Entre grÃ¡ficas y Accesos RÃ¡pidos
+/// UBICACIÓN: Entre gráficas y Accesos Rápidos
 class SummaryStatsWidget extends StatelessWidget {
   const SummaryStatsWidget({
     required this.metrics, super.key,
@@ -22,7 +22,7 @@ class SummaryStatsWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Calcular estadÃ­sticas derivadas
+    // Calcular estadísticas derivadas
     final totalRevenue = metrics.vencimientos.totalAmount + 
                         metrics.cobros.totalAmount + 
                         metrics.pedidos.totalAmount;
@@ -49,7 +49,7 @@ class SummaryStatsWidget extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header con tÃ­tulo e Ã­cono
+            // Header con título e ícono
             Row(
               children: [
                 Container(
@@ -76,7 +76,7 @@ class SummaryStatsWidget extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        'VisiÃ³n general del perÃ­odo',
+                        'Visión general del período',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: AppTheme.textSecondary,
                         ),
@@ -118,14 +118,14 @@ class SummaryStatsWidget extends StatelessWidget {
 
             const SizedBox(height: 24),
 
-            // Grid de estadÃ­sticas principales
+            // Grid de estadísticas principales
             Row(
               children: [
                 Expanded(
                   child: _buildStatCard(
                     context,
                     icon: Icons.payments_outlined,
-                    label: 'FacturaciÃ³n Total',
+                    label: 'Facturación Total',
                     value: Formatters.currency(totalRevenue),
                     gradient: AppTheme.primaryGradient,
                     subtitle: '$totalDocuments documentos',
@@ -139,7 +139,7 @@ class SummaryStatsWidget extends StatelessWidget {
                     label: 'Venta Promedio Diaria',
                     value: Formatters.currency(avgDailySales),
                     gradient: AppTheme.successGradient,
-                    subtitle: 'Ãšltimos ${dailyData.length} dÃ­as',
+                    subtitle: 'Ãšltimos ${dailyData.length} días',
                   ),
                 ),
               ],
@@ -147,7 +147,7 @@ class SummaryStatsWidget extends StatelessWidget {
 
             const SizedBox(height: 12),
 
-            // EstadÃ­sticas secundarias
+            // Estadísticas secundarias
             Row(
               children: [
                 Expanded(
@@ -164,7 +164,7 @@ class SummaryStatsWidget extends StatelessWidget {
                   child: _buildMiniStatCard(
                     context,
                     icon: Icons.percent,
-                    label: 'Tasa de RealizaciÃ³n',
+                    label: 'Tasa de Realización',
                     value: _calculateCompletionRate(metrics),
                     color: AppTheme.warningColor,
                   ),
@@ -188,7 +188,7 @@ class SummaryStatsWidget extends StatelessWidget {
     );
   }
 
-  /// Construye una tarjeta de estadÃ­stica principal
+  /// Construye una tarjeta de estadística principal
   Widget _buildStatCard(
     BuildContext context, {
     required IconData icon,
@@ -224,7 +224,7 @@ class SummaryStatsWidget extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Ãcono
+          // Ícono
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
@@ -269,7 +269,7 @@ class SummaryStatsWidget extends StatelessWidget {
     );
   }
 
-  /// Construye una mini tarjeta de estadÃ­stica
+  /// Construye una mini tarjeta de estadística
   Widget _buildMiniStatCard(
     BuildContext context, {
     required IconData icon,
@@ -317,7 +317,7 @@ class SummaryStatsWidget extends StatelessWidget {
     );
   }
 
-  /// Calcula la tasa de realizaciÃ³n de tareas
+  /// Calcula la tasa de realización de tareas
   String _calculateCompletionRate(DashboardMetrics metrics) {
     final completed = metrics.cobros.realizedCount;
     final total = completed + 

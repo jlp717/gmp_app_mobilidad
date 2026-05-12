@@ -254,7 +254,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            '${_fmt(ct.price)} â‚¬/cj',
+                            '${_fmt(ct.price)} €/cj',
                             style: const TextStyle(color: orange, fontSize: 12),
                           ),
                         ],
@@ -262,7 +262,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                     ),
                     if (p.unitsPerBox > 1)
                       Text(
-                        '(${_fmt(ct.precioUnitario)} â‚¬/$unitAbbr)',
+                        '(${_fmt(ct.precioUnitario)} €/$unitAbbr)',
                         style: TextStyle(color: orange.withValues(alpha: 0.75), fontSize: 11),
                       ),
                   ],
@@ -290,7 +290,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                       ),
                     ),
                     Text(
-                      '${_fmt(ct.precioUnitario)} â‚¬/$unitAbbr',
+                      '${_fmt(ct.precioUnitario)} €/$unitAbbr',
                       style: TextStyle(
                         color: _selected == _kPU ? orange : Colors.white54,
                         fontSize: 12,
@@ -329,7 +329,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            '${_fmt(t.price)} â‚¬/cj',
+                            '${_fmt(t.price)} €/cj',
                             style: const TextStyle(color: Colors.white54, fontSize: 11),
                           ),
                         ],
@@ -337,7 +337,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                     ),
                     if (p.unitsPerBox > 1)
                       Text(
-                        '(${_fmt(t.precioUnitario)} â‚¬/$unitAbbr)',
+                        '(${_fmt(t.precioUnitario)} €/$unitAbbr)',
                         style: const TextStyle(color: Colors.white38, fontSize: 11),
                       ),
                   ],
@@ -371,7 +371,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                   onPressed: () => Navigator.pop(context, _priceForSelection(_selected)),
                   icon: const Icon(Icons.check, size: 18),
                   label: Text(
-                    'ACEPTAR  ${_fmt(_priceForSelection(_selected))} â‚¬/${_unitAbbr(p.displayUnit)}',
+                    'ACEPTAR  ${_fmt(_priceForSelection(_selected))} €/${_unitAbbr(p.displayUnit)}',
                     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(

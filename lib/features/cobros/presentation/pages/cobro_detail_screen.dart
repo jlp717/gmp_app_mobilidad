@@ -23,7 +23,7 @@ class CobroDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
-  final _currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: 'â‚¬');
+  final _currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: '€');
   String _formaPago = 'CONTADO';
   final Map<String, String> _itemStates = {};
   final Map<String, double> _partialAmounts = {};
@@ -57,7 +57,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     if (_isSubmitting) return;
     if (totalACobrar <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona algÃºn documento para cobrar')),
+        const SnackBar(content: Text('Selecciona algún documento para cobrar')),
       );
       return;
     }
@@ -155,7 +155,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             Text(
-              'CÃ³digo: ${widget.codigoCliente}',
+              'Código: ${widget.codigoCliente}',
               style: const TextStyle(fontSize: 12, color: Colors.white70),
             ),
           ],

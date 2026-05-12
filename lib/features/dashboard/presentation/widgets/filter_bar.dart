@@ -82,7 +82,7 @@ class _FilterBarState extends State<FilterBar> {
               const Icon(Icons.search, color: AppTheme.neonBlue, size: 20),
               const SizedBox(width: 8),
               const Text(
-                'Filtros de BÃºsqueda',
+                'Filtros de Búsqueda',
                 style: TextStyle(color: AppTheme.neonBlue, fontSize: 14, fontWeight: FontWeight.bold),
               ),
               const Spacer(),
@@ -100,7 +100,7 @@ class _FilterBarState extends State<FilterBar> {
               Expanded(
                 child: _buildSearchField(
                   controller: _productCodeController,
-                  label: 'C cÃ³digo producto',
+                  label: 'C código producto',
                   icon: Icons.qr_code,
                   onChanged: (_) => _handleFilterChange(),
                 ),
@@ -109,7 +109,7 @@ class _FilterBarState extends State<FilterBar> {
               Expanded(
                 child: _buildSearchField(
                   controller: _productNameController,
-                  label: 'DescripciÃ³n producto',
+                  label: 'Descripción producto',
                   icon: Icons.inventory,
                   onChanged: (_) => _handleFilterChange(),
                 ),

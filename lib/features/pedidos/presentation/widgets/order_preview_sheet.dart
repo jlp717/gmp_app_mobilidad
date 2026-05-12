@@ -291,7 +291,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'CÃ³digo: ${provider.clientCode ?? '-'}',
+                  'Código: ${provider.clientCode ?? '-'}',
                   style: const TextStyle(
                       color: AppTheme.textSecondary, fontSize: 12),
                 ),
@@ -784,7 +784,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         children: [
           // Subtotal
           _buildTotalRow(
-            'Subtotal (${provider.lineCount} lÃ­neas)',
+            'Subtotal (${provider.lineCount} líneas)',
             PedidosFormatters.money(provider.totalImporte),
           ),
 

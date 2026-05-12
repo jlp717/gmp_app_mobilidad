@@ -233,7 +233,7 @@ class _SignatureModalState extends State<SignatureModal> {
                             ),
                             const SizedBox(height: 12),
                             Text(
-                              'Firme aquÃ­',
+                              'Firme aquí',
                               style: TextStyle(
                                 fontSize: 16,
                                 color: Colors.grey.withValues(alpha: 0.5),

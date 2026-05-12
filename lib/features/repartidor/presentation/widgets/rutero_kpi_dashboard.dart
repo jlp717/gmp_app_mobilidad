@@ -163,7 +163,7 @@ class RuteroKpiDashboard extends StatelessWidget {
         Icon(icon, color: color, size: 18), // Icon only, no box
         const SizedBox(height: 2),
         Text(
-          '${amount.toStringAsFixed(0)}â‚¬',
+          '${amount.toStringAsFixed(0)}€',
           style: TextStyle(
             color: color,
             fontWeight: FontWeight.bold,

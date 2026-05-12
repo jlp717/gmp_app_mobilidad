@@ -59,7 +59,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   Timer? _autoSaveTimer;
   ProviderSubscription<String?>? _vendorSubscription;
 
-  // Mejora 10 Ã¢â‚¬â€ Mis Pedidos search & date filter
+  // Mejora 10 Ã¢€â€ Mis Pedidos search & date filter
   String _orderSearch = '';
   DateTime? _orderDateFrom;
   DateTime? _orderDateTo;
@@ -275,7 +275,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'No se pudo cargar el artÃ­culo ${fallbackName.isNotEmpty ? fallbackName : productCode}',
+            'No se pudo cargar el artículo ${fallbackName.isNotEmpty ? fallbackName : productCode}',
           ),
           backgroundColor: AppTheme.error,
         ),
@@ -554,7 +554,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       ),
       body: Column(
         children: [
-          // "Ver como" vendor selector for JEFE_VENTAS Ã¢â‚¬â€ visible on BOTH tabs
+          // "Ver como" vendor selector for JEFE_VENTAS Ã¢€â€ visible on BOTH tabs
           if (widget.isJefeVentas)
             GlobalVendorSelector(
               isJefeVentas: true,
@@ -573,7 +573,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
   }
 
-  // Ã¢â€â‚¬Ã¢â€â‚¬ TAB 1: Nuevo Pedido Ã¢â€â‚¬Ã¢â€â‚¬
+  // Ã¢â€€Ã¢â€€ TAB 1: Nuevo Pedido Ã¢â€€Ã¢â€€
 
   Widget _buildNuevoPedidoTab() {
     final provider = ref.watch(pedidosProvider);
@@ -929,7 +929,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       );
     }
 
-    // Mejora 9 Ã¢â‚¬â€ Favoritos primero
+    // Mejora 9 Ã¢€â€ Favoritos primero
     final sortedProducts = [...provider.products]..sort((a, b) {
         final aSales = a.salesThisYear + a.salesPrevYear;
         final bSales = b.salesThisYear + b.salesPrevYear;
@@ -958,7 +958,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           );
         }
         final product = sortedProducts[i];
-        // Mejora 1 Ã¢â‚¬â€ cartQty
+        // Mejora 1 Ã¢€â€ cartQty
         OrderLine? lineInCart;
         for (final line in provider.lines) {
           if (line.codigoArticulo == product.code) {
@@ -1391,7 +1391,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           ],
         ),
         content: Text(
-          'Â¿Seguro que quieres eliminar el borrador #${order.numeroPedidoFormatted}? Esta acciÃ³n no se puede deshacer.',
+          'Â¿Seguro que quieres eliminar el borrador #${order.numeroPedidoFormatted}? Esta acción no se puede deshacer.',
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [

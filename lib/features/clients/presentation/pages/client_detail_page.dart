@@ -110,7 +110,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     }
 
     if (_clientData == null) {
-      return const Center(child: Text('No se encontrÃƒÆ’Ã‚Â³ informaciÃƒÆ’Ã‚Â³n del cliente'));
+      return const Center(child: Text('No se encontr³ informaci³n del cliente'));
     }
 
     final client = _clientData!['client'] as Map<String, dynamic>? ?? {};
@@ -238,7 +238,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                     children: [
                       Icon(Icons.note_add, size: 16, color: AppTheme.neonBlue),
                       SizedBox(width: 6),
-                      Text('AÃƒÆ’Ã‚Â±adir observaciones', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
+                      Text('A±adir observaciones', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
                     ],
                   ),
                 ),
@@ -270,11 +270,11 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                     const SizedBox(height: 2),
                     if (!Responsive.isLandscapeCompact(context))
                       Text(
-                        'CÃƒÆ’Ã‚Â³d: $code ${nif.isNotEmpty ? ' ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ NIF: $nif' : ''}', 
+                        'C³d: $code ${nif.isNotEmpty ? '  NIF: $nif' : ''}', 
                         style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                       )
                     else
-                      Text('CÃƒÆ’Ã‚Â³d: $code', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                      Text('C³d: $code', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
                   ],
                 ),
               ),
@@ -464,12 +464,12 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
           children: [
             const Text('Enviar WhatsApp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 8),
-            const Text('Selecciona el nÃƒÆ’Ã‚Âºmero:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const Text('Selecciona el nºmero:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
             const SizedBox(height: 12),
             ...phones.map((p) => ListTile(
               leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
               title: Text((p['number'] as String?) ?? ''),
-              subtitle: Text((p['type'] as String?) ?? 'TelÃƒÆ’Ã‚Â©fono'),
+              subtitle: Text((p['type'] as String?) ?? 'Tel©fono'),
               onTap: () {
                 Navigator.pop(ctx);
                 _openWhatsApp((p['number'] as String?) ?? '');
@@ -495,8 +495,8 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     // Build personalized message
     final message = Uri.encodeComponent(
       'Hola, soy tu comercial de Mari Pepa. '
-      'Me gustarÃƒÆ’Ã‚Â­a saber cÃƒÆ’Ã‚Â³mo va todo y recordarte que maÃƒÆ’Ã‚Â±ana es dÃƒÆ’Ã‚Â­a de visita. '
-      'Ãƒâ€šÃ‚Â¿EstÃƒÆ’Ã‚Â¡ todo en orden? Ãƒâ€šÃ‚Â¿Necesitas algo en particular?'
+      'Me gustar­a saber c³mo va todo y recordarte que ma±ana es d­a de visita. '
+      '¿Est¡ todo en orden? ¿Necesitas algo en particular?'
     );
     
     final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
@@ -598,7 +598,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
 
           // Monthly Trend Chart
           if (monthlyTrend.isNotEmpty) ...[
-            Text('EvoluciÃƒÆ’Ã‚Â³n Ventas (12 meses)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text('Evoluci³n Ventas (12 meses)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Container(
               height: Responsive.value(context, phone: 150, desktop: 200),
@@ -692,7 +692,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
               ),
             ),
             title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14)),
-            subtitle: Text('CÃƒÆ’Ã‚Â³d: $code ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ $timesOrdered ped. ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¢ $totalBoxes cj', style: const TextStyle(fontSize: 11)),
+            subtitle: Text('C³d: $code  $timesOrdered ped.  $totalBoxes cj', style: const TextStyle(fontSize: 11)),
             trailing: Text(CurrencyFormatter.formatWhole(totalSales), style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen, fontSize: 13)),
           ),
         );

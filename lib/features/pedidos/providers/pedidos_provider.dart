@@ -737,7 +737,7 @@ class PedidosProvider with ChangeNotifier {
     String? routeCode,
   }) async {
     if (!hasClient || !hasLines) {
-      _error = 'Seleccione un cliente y aÃ±ada al menos un producto';
+      _error = 'Seleccione un cliente y añada al menos un producto';
       notifyListeners();
       return null;
     }

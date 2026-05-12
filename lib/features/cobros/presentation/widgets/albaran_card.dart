@@ -1,5 +1,5 @@
 /// ALBARAN CARD WIDGET
-/// Tarjeta premium para mostrar un albarÃ¡n/entrega
+/// Tarjeta premium para mostrar un albarán/entrega
 library;
 
 import 'package:flutter/material.dart';
@@ -21,7 +21,7 @@ class AlbaranCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: 'â‚¬');
+    final currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: '€');
     
     return GestureDetector(
       onTap: onTap,
@@ -60,10 +60,10 @@ class AlbaranCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header: NÃºmero, Estado, CTR badge
+            // Header: Número, Estado, CTR badge
             Row(
               children: [
-                // NÃºmero de albarÃ¡n
+                // Número de albarán
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
@@ -283,7 +283,7 @@ class AlbaranCard extends StatelessWidget {
                   
                   if (!albaran.completo && onQuickComplete != null) ...[
                     const SizedBox(width: 16),
-                    // BotÃ³n de completar rÃ¡pido
+                    // Botón de completar rápido
                     Material(
                       color: Colors.transparent,
                       child: InkWell(
@@ -325,7 +325,7 @@ class AlbaranCard extends StatelessWidget {
                 ],
               ),
             ] else ...[
-              // Sin items, mostrar botÃ³n de ver detalles
+              // Sin items, mostrar botón de ver detalles
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [

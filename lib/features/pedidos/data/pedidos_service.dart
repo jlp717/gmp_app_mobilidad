@@ -390,14 +390,14 @@ class Product {
   }
 
   /// Unit price description for display.
-  /// E.g., "3,456 â‚¬/kg", "0,540 â‚¬/ud", "11,621 â‚¬/cj"
+  /// E.g., "3,456 €/kg", "0,540 €/ud", "11,621 €/cj"
   String unitPriceDesc({int decimals = 3}) {
     final norm = _normalizedUnit;
     if (norm == 'KILOGRAMOS') {
-      return '${priceForUnit('KILOGRAMOS').toStringAsFixed(decimals)} â‚¬/kg';
+      return '${priceForUnit('KILOGRAMOS').toStringAsFixed(decimals)} €/kg';
     }
     if (norm == 'LITROS') {
-      return '${priceForUnit('LITROS').toStringAsFixed(decimals)} â‚¬/L';
+      return '${priceForUnit('LITROS').toStringAsFixed(decimals)} €/L';
     }
 
     // Legacy display: If U/R > 0 and U/C = 1, show Neto U/R logic
@@ -409,13 +409,13 @@ class Product {
       } else if (dUnit == 'ESTUCHES')
         shortLabel = 'estuche';
       else if (dUnit == 'PIEZAS') shortLabel = 'pieza';
-      return 'Neto U/R: ${netoURPrice.toStringAsFixed(decimals)} â‚¬/$shortLabel';
+      return 'Neto U/R: ${netoURPrice.toStringAsFixed(decimals)} €/$shortLabel';
     }
 
     if (unitsPerBox > 1 && isDualFieldProduct) {
-      return '${priceForUnit('UNIDADES').toStringAsFixed(decimals)} â‚¬/ud';
+      return '${priceForUnit('UNIDADES').toStringAsFixed(decimals)} €/ud';
     }
-    return '${bestPrice.toStringAsFixed(decimals)} â‚¬/cj';
+    return '${bestPrice.toStringAsFixed(decimals)} €/cj';
   }
 
   /// Unit label abbreviation for display

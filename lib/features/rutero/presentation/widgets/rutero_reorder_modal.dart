@@ -191,7 +191,7 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
                   Icon(Icons.info_outline, color: AppTheme.neonBlue, size: 16),
                   SizedBox(width: 8),
                   Expanded(child: Text(
-                    'Limpia la bÃºsqueda para arrastrar y soltar.',
+                    'Limpia la búsqueda para arrastrar y soltar.',
                     style: TextStyle(color: AppTheme.neonBlue, fontSize: 12),
                   ),),
                 ],

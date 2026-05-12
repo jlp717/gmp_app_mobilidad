@@ -118,7 +118,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           children: [
             Icon(Icons.info_outline, color: AppTheme.neonBlue, size: 24),
             SizedBox(width: 8),
-            Text('CÃ³mo funcionan las comisiones',
+            Text('Cómo funcionan las comisiones',
                 style: TextStyle(color: AppTheme.neonBlue, fontSize: 16)),
           ],
         ),
@@ -140,17 +140,17 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               ),
               const SizedBox(height: 16),
               _buildStep(
-                'ðŸ“Š Objetivo Anual',
-                'Tu objetivo se calcula en base a las ventas del aÃ±o anterior mÃ¡s un pequeÃ±o porcentaje de incremento.',
+                '📊 Objetivo Anual',
+                'Tu objetivo se calcula en base a las ventas del año anterior más un pequeño porcentaje de incremento.',
               ),
               const SizedBox(height: 12),
               _buildStep(
-                'âœ… Estado Mensual',
+                '✅ Estado Mensual',
                 'â€¢ VERDE âœ“ = Superas el objetivo del mes\nâ€¢ ROJO âœ— = Por debajo del objetivo\nâ€¢ Solo comisionas si superas el 100%',
               ),
               const SizedBox(height: 12),
               _buildStep(
-                  'ðŸ’° Franjas de ComisiÃ³n',
+                  'ðŸ’° Franjas de Comisión',
                   'El % se aplica SOLO al exceso sobre el objetivo:\n\n'
                       'â€¢ Franja 1 (100-103%): 1.0%\n'
                       'â€¢ Franja 2 (103-106%): 1.3%\n'
@@ -159,12 +159,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               const SizedBox(height: 12),
               _buildStep(
                   'ðŸ“… Ritmo Diario',
-                  r'Compara tus ventas actuales vs. lo esperado al dÃ­a de hoy:\n'
+                  r'Compara tus ventas actuales vs. lo esperado al día de hoy:\n'
                       r'â€¢ âœ“ Verde (Adelantado/En ritmo) = Vas por buen camino\n'
                       'â€¢ âš  Naranja (Rezagado) = Necesitas acelerar'),
               const SizedBox(height: 12),
               _buildStep(
-                'ðŸ”’ Meses Pendientes',
+                '🔒 Meses Pendientes',
                 'Los meses futuros aparecen sombreados.\nSe "desbloquean" cuando llegue su fecha.',
               ),
             ],
@@ -293,7 +293,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (context, setStateDialog) {
           final currentAmount = double.tryParse(amountController.text) ?? 0;
-          // FIX: Use epsilon tolerance (0.01â‚¬) to avoid floating-point false positives
+          // FIX: Use epsilon tolerance (0.01€) to avoid floating-point false positives
           // e.g. 165.88 < 165.88000000000001 would wrongly mark observations as mandatory
           final observacionesRequired =
               (monthCommission - currentAmount) > 0.01 && currentAmount > 0;
@@ -397,7 +397,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Este mes aÃºn no ha terminado. La comisiÃ³n puede cambiar.',
+                              'Este mes aún no ha terminado. La comisión puede cambiar.',
                               style: TextStyle(
                                   color: Colors.lightBlue, fontSize: 11),
                             ),
@@ -415,7 +415,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       labelText: 'Importe (\u20ac) *',
                       labelStyle: const TextStyle(color: Colors.white60),
                       helperText:
-                          'ComisiÃ³n ${_getMonthName(selectedMonth)}: ${monthCommission.toStringAsFixed(2)} \u20ac',
+                          'Comisión ${_getMonthName(selectedMonth)}: ${monthCommission.toStringAsFixed(2)} \u20ac',
                       helperStyle: const TextStyle(
                           color: AppTheme.neonGreen, fontSize: 11),
                       enabledBorder: UnderlineInputBorder(
@@ -1029,7 +1029,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             DataCell(Text(pctText,
                 style: TextStyle(
                     color: isFuture ? Colors.grey : color, fontSize: 11))),
-            // COMISIÃ“N MES
+            // COMISIÓN MES
             DataCell(
               Text(
                 isFuture
@@ -1045,8 +1045,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               ),
             ),
 
-            // === SECCIÃ“N RITMO DIARIO ===
-            // DÃAS (transcurridos / totales)
+            // === SECCIÓN RITMO DIARIO ===
+            // DÍAS (transcurridos / totales)
             DataCell(Text(isFuture ? '-' : '$daysPassed/$workingDays',
                 style: TextStyle(
                     color: Colors.white.withValues(alpha: textOpacity * 0.7),
@@ -1108,7 +1108,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       ),
                     ),
             ),
-            // COMISIÃ“N PROVISIONAL
+            // COMISIÓN PROVISIONAL
             DataCell(
               isFuture || isInformative
                   ? const Text('-', style: TextStyle(color: Colors.grey))
@@ -1309,7 +1309,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       ],
                     ),
             ),
-            const DataCell(SizedBox()), // DÃAS
+            const DataCell(SizedBox()), // DÍAS
             const DataCell(SizedBox()), // OBJ. ACUM.
             const DataCell(SizedBox()), // RITMO
             const DataCell(SizedBox()), // DIFF
@@ -1435,7 +1435,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   icon:
                       const Icon(Icons.info_outline, color: AppTheme.neonBlue),
                   onPressed: _showExplanationModal,
-                  tooltip: 'ExplicaciÃ³n cÃ¡lculo',
+                  tooltip: 'Explicación cálculo',
                 ),
               ],
             ),
@@ -1588,7 +1588,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                               const Icon(Icons.trending_up,
                                   color: AppTheme.neonGreen, size: 16),
                               const SizedBox(width: 6),
-                              Text('COMISIÃ“N PROV.',
+                              Text('COMISIÓN PROV.',
                                   style: TextStyle(
                                       fontSize:
                                           Responsive.isSmall(context) ? 9 : 11,
@@ -1659,7 +1659,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                             ],
                           ),
                           Text(
-                            '(a dÃ­a ${DateTime.now().day})',
+                            '(a día ${DateTime.now().day})',
                             style: TextStyle(
                                 fontSize: 9,
                                 color: Colors.white.withValues(alpha: 0.5)),
@@ -1827,13 +1827,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                                   color:
                                                       AppTheme.textSecondary))),
                                       DataColumn(
-                                          label: Text('COMISIÃ“N',
+                                          label: Text('COMISIÓN',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   color: AppTheme.neonGreen))),
                                       // === RITMO DIARIO (acumulado) ===
                                       DataColumn(
-                                          label: Text('DÃAS',
+                                          label: Text('DÍAS',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   color: AppTheme.neonPurple))),
@@ -2185,7 +2185,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                         ),
                       ),
                   ] else
-                    const Text('0,00 â‚¬',
+                    const Text('0,00 €',
                         style: TextStyle(color: Colors.grey, fontSize: 12)),
                 ],
               ),
@@ -2286,13 +2286,13 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                     color: AppTheme.textSecondary,
                     fontSize: 10))),
         DataColumn(
-            label: Text('COMISIÃ“N',
+            label: Text('COMISIÓN',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: AppTheme.neonGreen,
                     fontSize: 10))),
         DataColumn(
-            label: Text('DÃAS',
+            label: Text('DÍAS',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: AppTheme.neonPurple,

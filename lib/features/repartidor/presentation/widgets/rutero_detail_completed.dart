@@ -102,7 +102,7 @@ class RuteroDetailCompleted extends StatelessWidget {
                 Text(
                   _isFactura
                       ? 'Factura ${albaran.numeroFactura}'
-                      : 'AlbarÃ¡n ${albaran.numeroAlbaran}',
+                      : 'Albarán ${albaran.numeroAlbaran}',
                   style: const TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 13,
@@ -134,7 +134,7 @@ class RuteroDetailCompleted extends StatelessWidget {
           const Divider(color: AppTheme.borderColor, height: 20),
           _InfoRow(
             icon: Icons.location_on,
-            label: 'DirecciÃ³n',
+            label: 'Dirección',
             value: '${albaran.direccion}, ${albaran.poblacion}',
           ),
           const Divider(color: AppTheme.borderColor, height: 20),
@@ -142,7 +142,7 @@ class RuteroDetailCompleted extends StatelessWidget {
             _InfoRow(
               icon: Icons.euro,
               label: 'Importe Neto',
-              value: '${albaran.importeNeto.toStringAsFixed(2)} â‚¬',
+              value: '${albaran.importeNeto.toStringAsFixed(2)} €',
             ),
             for (final iva in albaran.ivaBreakdown)
               Padding(
@@ -150,20 +150,20 @@ class RuteroDetailCompleted extends StatelessWidget {
                 child: _InfoRow(
                   icon: Icons.percent,
                   label: 'IVA ${iva.pct.toStringAsFixed(0)}%',
-                  value: '${iva.iva.toStringAsFixed(2)} â‚¬',
+                  value: '${iva.iva.toStringAsFixed(2)} €',
                 ),
               ),
             const Divider(color: AppTheme.borderColor, height: 20),
             _InfoRow(
               icon: Icons.euro,
               label: 'Total',
-              value: '${albaran.importeTotal.toStringAsFixed(2)} â‚¬',
+              value: '${albaran.importeTotal.toStringAsFixed(2)} €',
             ),
           ] else ...[
             _InfoRow(
               icon: Icons.euro,
               label: 'Importe',
-              value: '${albaran.importeTotal.toStringAsFixed(2)} â‚¬',
+              value: '${albaran.importeTotal.toStringAsFixed(2)} €',
             ),
           ],
           const Divider(color: AppTheme.borderColor, height: 20),

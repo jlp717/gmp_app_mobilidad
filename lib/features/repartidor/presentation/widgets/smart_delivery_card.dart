@@ -207,7 +207,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              NumberFormat.currency(symbol: 'â‚¬', locale: 'es_ES')
+              NumberFormat.currency(symbol: '€', locale: 'es_ES')
                   .format(widget.albaran.importeTotal),
               style: TextStyle(
                 color: _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
@@ -424,9 +424,9 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
   String _getPaymentLabel() {
     final code = widget.albaran.tipoPago.toUpperCase().trim();
     if (code == '01' || code == 'CNT' || code.contains('CONTADO')) return 'CONTADO';
-    if (code.contains('REP')) return 'REPOSICIÃ“N';
+    if (code.contains('REP')) return 'REPOSICIÓN';
     if (code.contains('MEN')) return 'MENSUAL';
-    if (code.contains('CRE') || code == 'CR') return 'CRÃ‰DITO';
+    if (code.contains('CRE') || code == 'CR') return 'CRÉDITO';
     if (code.contains('TAR')) return 'TARJETA';
     if (code.contains('TRA')) return 'TRANSFER';
     return code.length > 8 ? code.substring(0, 8) : code;

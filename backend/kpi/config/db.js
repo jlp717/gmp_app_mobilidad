@@ -1,5 +1,5 @@
 const SCHEMA = process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER';
-// db.js: Capa de acceso DB2/ODBC para el mÃ³dulo KPI â€” reutiliza el pool principal
+// db.js: Capa de acceso DB2/ODBC para el módulo KPI â€” reutiliza el pool principal
 'use strict';
 
 const { query, queryWithParams, getPool } = require('../../config/db');
@@ -58,7 +58,7 @@ async function kpiEndPool() {
 async function initKpiTables() {
   const pool = getPool();
   if (!pool) {
-    logger.warn('[kpi:db] Pool no disponible, omitiendo creaciÃ³n de tablas KPI');
+    logger.warn('[kpi:db] Pool no disponible, omitiendo creación de tablas KPI');
     return;
   }
 
@@ -123,7 +123,7 @@ async function initKpiTables() {
       await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_TYPE', '${SCHEMA}.KPI_ALERTS (ALERT_TYPE)');
       await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_ACTIVE', '${SCHEMA}.KPI_ALERTS (IS_ACTIVE, CLIENT_CODE)');
       await safeCreateIndex(conn, 'JAVIER.IDX_KPI_AL_MAIN', '${SCHEMA}.KPI_ALERTS (CLIENT_CODE, IS_ACTIVE, SEVERITY, CREATED_AT DESC)');
-      logger.info('[kpi:db] Tabla ${SCHEMA}.KPI_ALERTS creada con Ã­ndices');
+      logger.info('[kpi:db] Tabla ${SCHEMA}.KPI_ALERTS creada con índices');
     } catch (e) {
       if (e.message && e.message.includes('SQL0601')) {
         logger.info('[kpi:db] ${SCHEMA}.KPI_ALERTS ya existe');
@@ -166,7 +166,7 @@ async function initKpiTables() {
 }
 
 /**
- * Crea un Ã­ndice ignorando el error si ya existe (SQL0601).
+ * Crea un índice ignorando el error si ya existe (SQL0601).
  */
 async function safeCreateIndex(conn, indexName, definition) {
   try {

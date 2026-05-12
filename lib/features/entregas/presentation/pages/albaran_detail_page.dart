@@ -9,7 +9,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-/// PÃ¡gina de detalle de albarÃ¡n con acciones de entrega
+/// Página de detalle de albarán con acciones de entrega
 class AlbaranDetailPage extends ConsumerStatefulWidget {
 
   const AlbaranDetailPage({required this.albaran, super.key});
@@ -37,7 +37,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF5F7FA),
       appBar: AppBar(
-        title: Text('AlbarÃ¡n ${widget.albaran.numeroAlbaran}'),
+        title: Text('Albarán ${widget.albaran.numeroAlbaran}'),
         elevation: 0,
         actions: [
           if (widget.albaran.estado == EstadoEntrega.entregado)
@@ -94,7 +94,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
             _buildClienteCard(),
             const SizedBox(height: 16),
 
-            // Items del albarÃ¡n
+            // Items del albarán
             _buildItemsCard(),
             const SizedBox(height: 16),
 
@@ -102,7 +102,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
             _buildImporteCard(),
             const SizedBox(height: 16),
 
-            // Solo mostrar secciones editables si NO estÃ¡ entregado
+            // Solo mostrar secciones editables si NO está entregado
             if (widget.albaran.estado != EstadoEntrega.entregado) ...[
               // Fotos
               _buildFotosSection(),
@@ -117,7 +117,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
               const SizedBox(height: 24),
             ],
 
-            // Botones de acciÃ³n
+            // Botones de acción
             _buildAcciones(),
             const SizedBox(height: 40),
           ],
@@ -155,7 +155,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                         ),
                       ),
                       Text(
-                        'CÃ³digo: ${widget.albaran.codigoCliente}',
+                        'Código: ${widget.albaran.codigoCliente}',
                         style: TextStyle(
                           color: Colors.grey.shade600,
                           fontSize: 13,
@@ -323,7 +323,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
               ),
             ),
             Text(
-              '${widget.albaran.importeTotal.toStringAsFixed(2)}â‚¬',
+              '${widget.albaran.importeTotal.toStringAsFixed(2)}€',
               style: TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -358,7 +358,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                 TextButton.icon(
                   onPressed: _tomarFoto,
                   icon: const Icon(Icons.add_a_photo, size: 18),
-                  label: const Text('AÃ±adir'),
+                  label: const Text('Añadir'),
                 ),
               ],
             ),
@@ -510,7 +510,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
               controller: _observacionesController,
               maxLines: 3,
               decoration: InputDecoration(
-                hintText: 'AÃ±ade notas sobre la entrega...',
+                hintText: 'Añade notas sobre la entrega...',
                 filled: true,
                 fillColor: Colors.grey.shade100,
                 border: OutlineInputBorder(
@@ -579,7 +579,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
 
     return Column(
       children: [
-        // BotÃ³n principal: ENTREGAR
+        // Botón principal: ENTREGAR
         SizedBox(
           width: double.infinity,
           height: 56,
@@ -678,7 +678,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
     if (widget.albaran.esCTR && _firmaBase64 == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Por favor, obtÃ©n la firma del cliente'),
+          content: Text('Por favor, obtén la firma del cliente'),
           backgroundColor: Colors.orange,
         ),
       );
@@ -722,8 +722,8 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
     }
   }
 
-  /// DiÃ¡logo post-entrega con opciones de ticket
-  /// [popOnClose] controla si al cerrar el diÃ¡logo se vuelve a la lista
+  /// Diálogo post-entrega con opciones de ticket
+  /// [popOnClose] controla si al cerrar el diálogo se vuelve a la lista
   Future<void> _showPostDeliveryDialog(
       {bool popOnClose = true, bool isResend = false,}) async {
     await showDialog(
@@ -819,7 +819,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
   }
 }
 
-/// DiÃ¡logo post-entrega con opciones de descarga/envÃ­o del ticket
+/// Diálogo post-entrega con opciones de descarga/envío del ticket
 class _PostDeliveryDialog extends ConsumerStatefulWidget {
   const _PostDeliveryDialog({required this.albaran, this.isResend = false});
   final AlbaranEntrega albaran;
@@ -848,13 +848,13 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
           Text(
             widget.isResend
                 ? 'Reenviar nota de entrega'
-                : 'Entrega realizada con Ã©xito',
+                : 'Entrega realizada con éxito',
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(
-            'AlbarÃ¡n ${widget.albaran.numeroAlbaran}',
+            'Albarán ${widget.albaran.numeroAlbaran}',
             style: TextStyle(fontSize: 13, color: Colors.grey[600]),
           ),
         ],
@@ -978,7 +978,7 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
 
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
-        text: 'Nota de entrega - AlbarÃ¡n ${widget.albaran.numeroAlbaran}',
+        text: 'Nota de entrega - Albarán ${widget.albaran.numeroAlbaran}',
         sharePositionOrigin: origin,
       );
 
@@ -1045,7 +1045,7 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
       // Usar share sheet que permite seleccionar WhatsApp
       await Share.shareXFiles(
         [XFile(file.path, mimeType: 'application/pdf')],
-        text: 'Nota de entrega - AlbarÃ¡n ${widget.albaran.numeroAlbaran}\n'
+        text: 'Nota de entrega - Albarán ${widget.albaran.numeroAlbaran}\n'
             'Cliente: ${widget.albaran.nombreCliente}\n'
             'Total: ${widget.albaran.importeTotal.toStringAsFixed(2)} EUR',
         sharePositionOrigin: origin,
@@ -1098,7 +1098,7 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
               } else {
                 ScaffoldMessenger.of(ctx).showSnackBar(
                   const SnackBar(
-                      content: Text('Email no vÃ¡lido'),
+                      content: Text('Email no válido'),
                       backgroundColor: Colors.orange,),
                 );
               }

@@ -6,7 +6,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 /// ðŸ“§ EMAIL FORM MODAL
 /// â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 ///
-/// Modal con formulario de envÃ­o de email.
+/// Modal con formulario de envío de email.
 /// Campos: destinatario (validado), asunto (pre-rellenado), cuerpo (opcional).
 ///
 /// Uso:
@@ -89,7 +89,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
     }
     final regex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
     if (!regex.hasMatch(value.trim())) {
-      return 'Email invÃ¡lido';
+      return 'Email inválido';
     }
     return null;
   }

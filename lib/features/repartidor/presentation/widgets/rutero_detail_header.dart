@@ -114,7 +114,7 @@ class RuteroDetailHeader extends StatelessWidget {
           Text(
             _isFactura
                 ? 'FACTURA ${albaran.serieFactura.isNotEmpty ? "${albaran.serieFactura}-" : ""}${albaran.numeroFactura}'
-                : 'ALBARÃN ${albaran.serie.isNotEmpty ? albaran.serie : "A"}${albaran.terminal > 0 ? "-${albaran.terminal}" : ""}-${albaran.numeroAlbaran}',
+                : 'ALBARÁN ${albaran.serie.isNotEmpty ? albaran.serie : "A"}${albaran.terminal > 0 ? "-${albaran.terminal}" : ""}-${albaran.numeroAlbaran}',
             style: TextStyle(
               color: _isFactura ? AppTheme.neonPurple : AppTheme.neonBlue,
               fontWeight: FontWeight.bold,
@@ -131,7 +131,7 @@ class RuteroDetailHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         Text(
-          NumberFormat.currency(symbol: 'â‚¬', locale: 'es_ES')
+          NumberFormat.currency(symbol: '€', locale: 'es_ES')
               .format(albaran.importeTotal),
           style: TextStyle(
             color: _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,

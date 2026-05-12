@@ -60,7 +60,7 @@ class _HierarchySelectorState extends State<HierarchySelector> {
               const Icon(Icons.layers, color: AppTheme.neonBlue, size: 18),
               const SizedBox(width: 8),
               Text(
-                'JerarquÃ­a de AgrupaciÃ³n',
+                'Jerarquía de Agrupación',
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.white70),
               ),
               const Spacer(),

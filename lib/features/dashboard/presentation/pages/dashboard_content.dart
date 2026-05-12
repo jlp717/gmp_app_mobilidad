@@ -190,23 +190,23 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       final response = await ApiClient.get('/rutero/vendedores',
           cacheKey: 'vendedores_list', cacheTTL: const Duration(hours: 1));
       debugPrint(
-          'ðŸ“‹ Vendedores API response: ${response.runtimeType} - keys: ${response is Map ? response.keys : 'not a map'}');
+          '📋 Vendedores API response: ${response.runtimeType} - keys: ${response is Map ? response.keys : 'not a map'}');
       if (mounted) {
         setState(() {
           // Safe conversion - convert each item explicitly to Map<String, dynamic>
           final data = Map<String, dynamic>.from(response as Map);
           final rawList = data['vendedores'] ?? [];
           debugPrint(
-              'ðŸ“‹ Raw vendedores list length: ${rawList is List ? rawList.length : 'not a list'}');
+              '📋 Raw vendedores list length: ${rawList is List ? rawList.length : 'not a list'}');
           _vendedoresDisponibles = (rawList as List)
               .map((item) => Map<String, dynamic>.from(item as Map))
               .toList();
           debugPrint(
-              'ðŸ“‹ Vendedores disponibles loaded: ${_vendedoresDisponibles.length}');
+              '📋 Vendedores disponibles loaded: ${_vendedoresDisponibles.length}');
         });
       }
     } catch (e) {
-      debugPrint('âŒ Error loading vendedores: $e');
+      debugPrint('❌ Error loading vendedores: $e');
     }
   }
 
@@ -503,7 +503,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     if (_fiFilters.fi5 != null) parts.add('Tipo');
     if (_fiFilters.fi3 != null) parts.add('Det');
     if (_fiFilters.fi4 != null) parts.add('Esp');
-    return parts.isEmpty ? 'CategorÃ­as' : parts.join('+');
+    return parts.isEmpty ? 'Categorías' : parts.join('+');
   }
 
   @override
@@ -524,7 +524,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
               // Smart Sync Header
               SmartSyncHeader(
                 title: 'Panel de Control',
-                subtitle: 'VisiÃ³n General del Negocio',
+                subtitle: 'Visión General del Negocio',
                 lastSync: _lastFetchTime,
                 isLoading: _isLoading,
                 onSync: _fetchAllData,
@@ -754,7 +754,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                     Expanded(
                       child: Text(
                         _fiFilters.isEmpty
-                            ? 'CategorÃ­as'
+                            ? 'Categorías'
                             : _buildFiFilterSummary(),
                         style: TextStyle(
                             color: _fiFilters.isNotEmpty
@@ -866,7 +866,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
           children: [
             const Padding(
               padding: EdgeInsets.only(top: 8),
-              child: Text('AÃ±os:',
+              child: Text('Años:',
                   style: TextStyle(color: Colors.white, fontSize: 12)),
             ),
             const SizedBox(width: 12),
@@ -1037,13 +1037,13 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
               runSpacing: 12,
               children: [
                 _buildKPICard(
-                  'Ventas PerÃ­odo',
+                  'Ventas Período',
                   CurrencyFormatter.format(totalSales),
                   Icons.euro,
                   AppTheme.neonBlue,
                   width: cardWidth,
                   subtitle: growthPercent != 0
-                      ? '${growthPercent >= 0 ? "+" : ""}${growthPercent.toStringAsFixed(1)}% vs aÃ±o ant.'
+                      ? '${growthPercent >= 0 ? "+" : ""}${growthPercent.toStringAsFixed(1)}% vs año ant.'
                       : null,
                   trend: growthPercent >= 0 ? 'up' : 'down',
                 ),
@@ -1385,7 +1385,7 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
               onChanged: _onSearchChanged,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: 'Buscar por cÃ³digo o nombre...',
+                hintText: 'Buscar por código o nombre...',
                 hintStyle: const TextStyle(color: Colors.white30),
                 prefixIcon: const Icon(Icons.search, color: Colors.white54),
                 filled: true,

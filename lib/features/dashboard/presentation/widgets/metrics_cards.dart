@@ -3,12 +3,12 @@ import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
-/// [MetricsCards] - Tarjetas de mÃ©tricas principales del dashboard
+/// [MetricsCards] - Tarjetas de métricas principales del dashboard
 ///
 /// MUESTRA:
-/// - Vencimientos (398 pendientes, 156,591.09 â‚¬)
+/// - Vencimientos (398 pendientes, 156,591.09 €)
 /// - Cobros (0 realizados)
-/// - Pedidos (33 pendientes, 2,613.77 â‚¬)
+/// - Pedidos (33 pendientes, 2,613.77 €)
 class MetricsCards extends StatelessWidget {
   const MetricsCards({
     required this.vencimientos, required this.cobros, required this.pedidos, super.key,
@@ -69,7 +69,7 @@ class MetricsCards extends StatelessWidget {
   }
 }
 
-/// [_MetricCard] - Tarjeta individual de mÃ©trica
+/// [_MetricCard] - Tarjeta individual de métrica
 class _MetricCard extends StatelessWidget {
   const _MetricCard({
     required this.icon,
@@ -118,7 +118,7 @@ class _MetricCard extends StatelessWidget {
 
               SizedBox(width: Responsive.padding(context, small: 10, large: 16)),
 
-              // InformaciÃ³n
+              // Información
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,

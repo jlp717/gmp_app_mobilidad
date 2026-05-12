@@ -1,5 +1,5 @@
 const SCHEMA = process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER';
-// routes.js: API REST para alertas KPI â€” consulta, ETL manual, health y mÃ©tricas (DB2/ODBC)
+// routes.js: API REST para alertas KPI â€” consulta, ETL manual, health y métricas (DB2/ODBC)
 'use strict';
 
 const { Router } = require('express');
@@ -13,7 +13,7 @@ const logger = require('../middleware/logger');
 
 const router = Router();
 
-// MÃ©tricas middleware en todas las rutas KPI
+// Métricas middleware en todas las rutas KPI
 router.use(metricsMiddleware);
 
 // ============================================================
@@ -39,7 +39,7 @@ router.get('/alerts', async (req, res) => {
       }
     }
 
-    // Construir query dinÃ¡mica con placeholders ? (DB2)
+    // Construir query dinámica con placeholders ? (DB2)
     const conditions = ['a.IS_ACTIVE = 1'];
     const params = [];
 
@@ -108,20 +108,20 @@ router.get('/alerts', async (req, res) => {
 // ============================================================
 // GET /api/kpi/alerts/client/:clientId
 // Endpoint optimizado para la ficha de cliente en la app
-// Busca tanto con cÃ³digo GMP completo (4300XXXXXX) como con cÃ³digo corto Glacius
+// Busca tanto con código GMP completo (4300XXXXXX) como con código corto Glacius
 // ============================================================
 router.get('/alerts/client/:clientId', async (req, res) => {
   try {
     const { clientId } = req.params;
 
-    // Construir variantes de cÃ³digo: completo GMP + corto numÃ©rico
+    // Construir variantes de código: completo GMP + corto numérico
     const codesToTry = [clientId];
-    // Si es cÃ³digo GMP 4300XXXXXX, aÃ±adir variante corta (quitar 4300 y ceros iniciales)
+    // Si es código GMP 4300XXXXXX, añadir variante corta (quitar 4300 y ceros iniciales)
     if (/^4300\d{6}$/.test(clientId)) {
       const shortCode = clientId.slice(4).replace(/^0+/, '') || '0';
       codesToTry.push(shortCode);
     }
-    // Si es cÃ³digo corto, aÃ±adir variante GMP
+    // Si es código corto, añadir variante GMP
     if (/^\d{1,6}$/.test(clientId) && !clientId.startsWith('4300')) {
       codesToTry.push('4300' + clientId.padStart(6, '0'));
     }
@@ -148,7 +148,7 @@ router.get('/alerts/client/:clientId', async (req, res) => {
 
     const alerts = result.rows.map(formatAlert);
 
-    // Log para diagnÃ³stico
+    // Log para diagnóstico
     if (alerts.length === 0) {
       logger.info(`[kpi:api] 0 alertas para ${clientId} (variantes: ${codesToTry.join(', ')})`);
     }
@@ -194,7 +194,7 @@ router.get('/alerts/summary', async (req, res) => {
 
 // ============================================================
 // GET /api/kpi/alerts/clients
-// Retorna cÃ³digos de clientes con alertas activas,
+// Retorna códigos de clientes con alertas activas,
 // filtrable por vendedor(es), tipo y severidad.
 // Usado por Flutter para filtros en Rutero/Clientes.
 // ============================================================
@@ -280,7 +280,7 @@ router.post('/etl/run', async (req, res) => {
 
 // ============================================================
 // GET /api/kpi/etl/status
-// Estado de la Ãºltima carga ETL
+// Estado de la última carga ETL
 // ============================================================
 router.get('/etl/status', async (req, res) => {
   try {
@@ -308,7 +308,7 @@ router.get('/etl/status', async (req, res) => {
 
 // ============================================================
 // GET /api/kpi/health
-// Health check del mÃ³dulo KPI
+// Health check del módulo KPI
 // ============================================================
 router.get('/health', async (req, res) => {
   const dbHealth = await kpiHealthCheck();
@@ -343,7 +343,7 @@ router.get('/health', async (req, res) => {
 
 // ============================================================
 // GET /api/kpi/metrics
-// MÃ©tricas en formato Prometheus
+// Métricas en formato Prometheus
 // ============================================================
 router.get('/metrics', (req, res) => {
   res.set('Content-Type', 'text/plain; charset=utf-8');
@@ -352,7 +352,7 @@ router.get('/metrics', (req, res) => {
 
 // ============================================================
 // GET /api/kpi/loads/:loadId/audit
-// AuditorÃ­a detallada de una carga especÃ­fica
+// Auditoría detallada de una carga específica
 // ============================================================
 router.get('/loads/:loadId/audit', async (req, res) => {
   try {
@@ -419,7 +419,7 @@ function formatAlert(row) {
 }
 
 /**
- * Devuelve una explicaciÃ³n breve de cada tipo de alerta para la UI.
+ * Devuelve una explicación breve de cada tipo de alerta para la UI.
  */
 function getTypeExplanation(type) {
   const explanations = {
@@ -449,7 +449,7 @@ function parseRawData(val) {
 
 // ============================================================
 // GET /api/kpi/debug/db-status
-// DiagnÃ³stico: muestra contenido real de la tabla KPI_ALERTS
+// Diagnóstico: muestra contenido real de la tabla KPI_ALERTS
 // ============================================================
 router.get('/debug/db-status', async (req, res) => {
   try {

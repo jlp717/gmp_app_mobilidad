@@ -225,7 +225,7 @@ class RuteroClientListItem extends StatelessWidget {
               ),
             ),
             Text(
-              'Este perÃ­odo (acumulativo de semanas)',
+              'Este período (acumulativo de semanas)',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 8,
@@ -242,7 +242,7 @@ class RuteroClientListItem extends StatelessWidget {
               ),
             ),
             Text(
-              'No vendiÃ³ en ${selectedYear - 1}',
+              'No vendió en ${selectedYear - 1}',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 8,
@@ -497,7 +497,7 @@ class RuteroClientListItem extends StatelessWidget {
                   fontSize: 13,
                 ),
                 message:
-                    'El acumulado del aÃ±o anterior aparecerÃ¡ a partir de la 2Âª semana.',
+                    'El acumulado del año anterior aparecerá a partir de la 2Âª semana.',
                 child: Icon(
                   Icons.info_outline,
                   size: 14,
@@ -521,7 +521,7 @@ class RuteroClientListItem extends StatelessWidget {
             color: AppTheme.neonPink,
             size: 26,
           ),
-          tooltip: 'CÃ³mo llegar',
+          tooltip: 'Cómo llegar',
           splashRadius: 24,
           padding: const EdgeInsets.all(4),
           constraints: const BoxConstraints(minWidth: 44, minHeight: 44),

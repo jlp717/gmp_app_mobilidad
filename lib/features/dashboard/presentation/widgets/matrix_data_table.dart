@@ -67,7 +67,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
     if (widget.data.isEmpty) {
       return const Center(child: Padding(
         padding: EdgeInsets.all(32),
-        child: Text('No hay datos para esta selecciÃ³n', style: TextStyle(color: Colors.white30)),
+        child: Text('No hay datos para esta selección', style: TextStyle(color: Colors.white30)),
       ),);
     }
 
@@ -165,7 +165,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
             ),
           ),
-          // MARG column - show % not â‚¬
+          // MARG column - show % not €
           Expanded(
             flex: 2,
             child: Text(
@@ -174,8 +174,8 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
           ),
-          // M.ACUM column - FIX: show % not â‚¬ for consistency with row data
-          // Previously showed CurrencyFormatter.format(totalMargin) which displayed â‚¬
+          // M.ACUM column - FIX: show % not € for consistency with row data
+          // Previously showed CurrencyFormatter.format(totalMargin) which displayed €
           // Individual rows show accMarginPct%, so total should too
           Expanded(
             flex: 2,

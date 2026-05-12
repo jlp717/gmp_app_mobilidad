@@ -98,7 +98,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
       }
     } catch (e) {
       setState(() {
-        _error = 'Error de conexiÃ³n: $e';
+        _error = 'Error de conexión: $e';
         _isLoading = false;
       });
     }
@@ -297,7 +297,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
               Text(
                 _showSearch
                     ? 'Ver recomendaciones'
-                    : 'Buscar en todo el catÃ¡logo',
+                    : 'Buscar en todo el catálogo',
                 style: TextStyle(
                   color:
                       _showSearch ? AppTheme.neonBlue : AppTheme.textSecondary,
@@ -394,7 +394,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                 ),
                 Text(
                   widget.remainingQty != null
-                      ? 'Por favor, aÃ±ade ${widget.remainingQty!.toStringAsFixed(widget.remainingQty!.truncateToDouble() == widget.remainingQty! ? 0 : 2)} mÃ¡s de estas alternativas:'
+                      ? 'Por favor, añade ${widget.remainingQty!.toStringAsFixed(widget.remainingQty!.truncateToDouble() == widget.remainingQty! ? 0 : 2)} más de estas alternativas:'
                       : 'Te sugerimos productos similares:',
                   style: const TextStyle(
                       color: AppTheme.textSecondary, fontSize: 12,),
@@ -526,7 +526,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                     style:
                         TextStyle(color: AppTheme.textSecondary, fontSize: 14),),
                 SizedBox(height: 4),
-                Text('Encuentra productos con stock en todo el catÃ¡logo',
+                Text('Encuentra productos con stock en todo el catálogo',
                     style:
                         TextStyle(color: AppTheme.textTertiary, fontSize: 12),),
               ],
@@ -766,7 +766,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                           Icon(Icons.add_shopping_cart,
                               color: AppTheme.neonBlue, size: 16,),
                           SizedBox(width: 4),
-                          Text('AÃ±adir',
+                          Text('Añadir',
                               style: TextStyle(
                                   color: AppTheme.neonBlue,
                                   fontSize: 12,
@@ -1018,7 +1018,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                       children: [
                         Icon(Icons.add_shopping_cart, color: AppTheme.neonGreen, size: 16),
                         SizedBox(width: 4),
-                        Text('AÃ±adir',
+                        Text('Añadir',
                             style: TextStyle(
                                 color: AppTheme.neonGreen,
                                 fontSize: 12,
@@ -1105,7 +1105,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${altProduct.name} aÃ±adido al carrito'),
+          content: Text('${altProduct.name} añadido al carrito'),
           backgroundColor: AppTheme.neonGreen,
           duration: const Duration(seconds: 2),
         ),
