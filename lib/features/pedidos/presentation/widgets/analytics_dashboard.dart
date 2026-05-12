@@ -1,4 +1,4 @@
-﻿/// Analytics Dashboard Widget
+/// Analytics Dashboard Widget
 /// ==========================
 /// Mini-dashboard showing order KPIs, trends, and top products
 library;

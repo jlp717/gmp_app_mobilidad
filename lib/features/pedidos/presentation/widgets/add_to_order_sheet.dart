@@ -1,4 +1,4 @@
-﻿/// Add to Order Sheet
+/// Add to Order Sheet
 /// ==================
 /// Bottom sheet for adding products to the current order with quantity,
 /// unit, and tariff selection.

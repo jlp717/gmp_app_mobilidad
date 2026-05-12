@@ -165,7 +165,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -199,7 +199,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   _fetchAllData();
                 },
                 backgroundColor: AppTheme.darkBase,
-                selectedColor: AppTheme.neonBlue.withOpacity(0.3),
+                selectedColor: AppTheme.neonBlue.withValues(alpha: 0.3),
                 labelStyle: TextStyle(
                   color: isSelected ? AppTheme.neonBlue : Colors.white70,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -270,7 +270,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       style: ButtonStyle(
                         backgroundColor: WidgetStateProperty.resolveWith((states) {
                           if (states.contains(WidgetState.selected)) {
-                            return AppTheme.neonBlue.withOpacity(0.3);
+                            return AppTheme.neonBlue.withValues(alpha: 0.3);
                           }
                           return AppTheme.darkBase;
                         }),
@@ -399,12 +399,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
+          colors: [color.withValues(alpha: 0.1), color.withValues(alpha: 0.05)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -433,7 +433,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -532,8 +532,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           show: true,
           gradient: LinearGradient(
             colors: [
-              (yearColors[entry.key] ?? Colors.white).withOpacity(0.1),
-              (yearColors[entry.key] ?? Colors.white).withOpacity(0),
+              (yearColors[entry.key] ?? Colors.white).withValues(alpha: 0.1),
+              (yearColors[entry.key] ?? Colors.white).withValues(alpha: 0),
             ],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -642,7 +642,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -708,9 +708,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -737,7 +737,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonGreen.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -772,7 +772,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             width: 16,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
             gradient: LinearGradient(
-              colors: [AppTheme.neonGreen, AppTheme.neonGreen.withOpacity(0.5)],
+              colors: [AppTheme.neonGreen, AppTheme.neonGreen.withValues(alpha: 0.5)],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
             ),
@@ -868,7 +868,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: trendColor.withOpacity(0.3)),
+        border: Border.all(color: trendColor.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -892,7 +892,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppTheme.darkBase.withOpacity(0.3),
+              color: AppTheme.darkBase.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: Colors.white10),
             ),
@@ -960,7 +960,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 child: LinearProgressIndicator(
                   value: confidence,
                   backgroundColor: Colors.white10,
-                  color: trendColor.withOpacity(0.7),
+                  color: trendColor.withValues(alpha: 0.7),
                   minHeight: 6,
                   borderRadius: BorderRadius.circular(3),
                 ),
@@ -994,7 +994,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1022,7 +1022,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonGreen.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1058,7 +1058,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             width: 24,
             height: 24,
             decoration: BoxDecoration(
-              color: rankColor.withOpacity(0.2),
+              color: rankColor.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(

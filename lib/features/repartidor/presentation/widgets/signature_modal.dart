@@ -1,4 +1,4 @@
-﻿/// SIGNATURE MODAL WIDGET
+/// SIGNATURE MODAL WIDGET
 /// Pantalla completa para captura de firma digital del cliente
 /// Utiliza el paquete 'signature' para canvas-based drawing
 library;

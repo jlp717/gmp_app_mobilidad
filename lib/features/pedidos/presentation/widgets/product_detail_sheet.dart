@@ -488,10 +488,10 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
                     vertical: 2,
                   ),
                   decoration: BoxDecoration(
-                    color: AppTheme.neonBlue.withOpacity(0.15),
+                    color: AppTheme.neonBlue.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(6),
                     border: Border.all(
-                      color: AppTheme.neonBlue.withOpacity(0.3),
+                      color: AppTheme.neonBlue.withValues(alpha: 0.3),
                     ),
                   ),
                   child: Text(
@@ -683,12 +683,12 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         icon: const Icon(Icons.bar_chart_rounded),
         label: const Text('Historico de Ventas'),
         style: ElevatedButton.styleFrom(
-          backgroundColor: AppTheme.neonPurple.withOpacity(0.2),
+          backgroundColor: AppTheme.neonPurple.withValues(alpha: 0.2),
           foregroundColor: AppTheme.neonPurple,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
             side: BorderSide(
-              color: AppTheme.neonPurple.withOpacity(0.4),
+              color: AppTheme.neonPurple.withValues(alpha: 0.4),
             ),
           ),
           elevation: 0,
@@ -709,7 +709,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         color: AppTheme.darkCard,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: AppTheme.borderColor.withOpacity(0.3),
+          color: AppTheme.borderColor.withValues(alpha: 0.3),
         ),
       ),
       child: Column(

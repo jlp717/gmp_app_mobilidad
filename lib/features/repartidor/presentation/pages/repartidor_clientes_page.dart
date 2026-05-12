@@ -1,4 +1,4 @@
-﻿/// REPARTIDOR CLIENTES PAGE v1.0
+/// REPARTIDOR CLIENTES PAGE v1.0
 /// Lista de clientes adaptada para reparto con historial de entregas
 /// Equivalente a SimpleClientListPage de ventas pero enfocado a repartidor
 library;

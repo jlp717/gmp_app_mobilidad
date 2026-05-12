@@ -1,4 +1,4 @@
-﻿/// Client Balance Badge
+/// Client Balance Badge
 /// ====================
 /// Shows outstanding balance and risk level for selected client
 /// with info icon that opens an explanation modal.

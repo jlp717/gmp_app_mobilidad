@@ -1,4 +1,4 @@
-﻿/// Pedidos Page
+/// Pedidos Page
 /// ============
 /// Main order entry page with two tabs: Nuevo Pedido (catalog+cart) and Mis Pedidos (history)
 library;

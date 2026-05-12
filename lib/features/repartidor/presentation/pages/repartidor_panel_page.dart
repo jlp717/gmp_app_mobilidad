@@ -1,4 +1,4 @@
-﻿/// REPARTIDOR PANEL PAGE v1.0
+/// REPARTIDOR PANEL PAGE v1.0
 /// Dashboard adaptado para reparto con mÃ©tricas de entregas, cobros y resumen diario
 /// Equivalente al Panel de Ventas pero enfocado a operativa de reparto
 library;

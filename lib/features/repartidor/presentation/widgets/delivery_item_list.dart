@@ -1,4 +1,4 @@
-﻿/// DELIVERY ITEM LIST WIDGET
+/// DELIVERY ITEM LIST WIDGET
 /// Lista interactiva de items para marcar entrega individual
 /// Verde = Entregado, Rojo = No Entregado (con observaciones obligatorias)
 library;

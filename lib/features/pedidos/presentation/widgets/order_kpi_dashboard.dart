@@ -1,4 +1,4 @@
-﻿/// Order KPI Dashboard
+/// Order KPI Dashboard
 /// ===================
 /// Shows 4 KPI cards, status counters, 7-day trend chart, and top clients.
 library;

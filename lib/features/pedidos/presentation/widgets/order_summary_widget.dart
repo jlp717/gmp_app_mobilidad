@@ -1,4 +1,4 @@
-﻿/// Order Summary Widget
+/// Order Summary Widget
 /// ====================
 /// Cart/current order panel showing client header, line items, totals, and confirm button
 library;

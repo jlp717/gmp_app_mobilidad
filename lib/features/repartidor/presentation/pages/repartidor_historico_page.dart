@@ -1,4 +1,4 @@
-﻿/// REPARTIDOR HISTÃ“RICO PAGE v4.0
+/// REPARTIDOR HISTÃ“RICO PAGE v4.0
 /// Full redesign with advanced filters, year selector, search by number,
 /// proper deduplication, and working signatures
 ///

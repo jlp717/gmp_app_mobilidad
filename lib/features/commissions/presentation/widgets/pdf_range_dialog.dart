@@ -264,9 +264,9 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppTheme.success.withOpacity(0.15),
+                  color: AppTheme.success.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.success.withOpacity(0.3)),
+                  border: Border.all(color: AppTheme.success.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
@@ -306,7 +306,7 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: Colors.blue.withOpacity(0.1),
+                color: Colors.blue.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Row(
@@ -372,7 +372,7 @@ class _QuickActionButton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: AppTheme.neonBlue.withOpacity(0.15),
+          color: AppTheme.neonBlue.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(6),
         ),
         child: Text(

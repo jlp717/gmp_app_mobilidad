@@ -1,4 +1,4 @@
-﻿/// Order Preview Sheet (Amazon-style)
+/// Order Preview Sheet (Amazon-style)
 /// ====================================
 /// Premium DraggableScrollableSheet showing full order details
 /// before confirmation. Includes IVA breakdown, margin info,

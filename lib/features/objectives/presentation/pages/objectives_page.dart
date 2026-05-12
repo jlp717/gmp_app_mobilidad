@@ -564,7 +564,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         border: Border.all(color: Colors.white10),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.2),
+              color: Colors.black.withValues(alpha: 0.2),
               blurRadius: 10,
               offset: const Offset(0, 4)),
         ],
@@ -580,7 +580,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: progressColor.withOpacity(0.2),
+                  color: progressColor.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text('${progress.toStringAsFixed(1)}%',
@@ -819,7 +819,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                               }
                             });
                           },
-                          selectedColor: AppTheme.neonPurple.withOpacity(0.3),
+                          selectedColor: AppTheme.neonPurple.withValues(alpha: 0.3),
                           checkmarkColor: AppTheme.neonPurple,
                         ),
                       )
@@ -880,7 +880,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                           }
                         });
                       },
-                      selectedColor: AppTheme.neonBlue.withOpacity(0.3),
+                      selectedColor: AppTheme.neonBlue.withValues(alpha: 0.3),
                       checkmarkColor: AppTheme.neonBlue,
                       visualDensity: VisualDensity.compact,
                     ),
@@ -977,10 +977,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppTheme.neonPurple.withOpacity(0.2),
+                    color: AppTheme.neonPurple.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(20),
                     border:
-                        Border.all(color: AppTheme.neonPurple.withOpacity(0.5)),
+                        Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.5)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1322,10 +1322,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [color.withOpacity(0.2), color.withOpacity(0.05)],
+          colors: [color.withValues(alpha: 0.2), color.withValues(alpha: 0.05)],
         ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Row(
         children: [
@@ -1362,7 +1362,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.2),
+              color: color.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
@@ -1389,9 +1389,9 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
       return Container(
         margin: const EdgeInsets.symmetric(vertical: 6),
         decoration: BoxDecoration(
-          color: AppTheme.neonPurple.withOpacity(0.1),
+          color: AppTheme.neonPurple.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
+          border: Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.3)),
         ),
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
@@ -1430,7 +1430,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
             children: [
               Container(
                 height: 1,
-                color: AppTheme.neonPurple.withOpacity(0.2),
+                color: AppTheme.neonPurple.withValues(alpha: 0.2),
                 margin: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               ),
               // List monthly objectives
@@ -1547,7 +1547,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
                 color: isAchieved
-                    ? AppTheme.success.withOpacity(0.5)
+                    ? AppTheme.success.withValues(alpha: 0.5)
                     : Colors.transparent,
                 width: 2),
           ),
@@ -1579,10 +1579,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                 Container(
                   margin: const EdgeInsets.symmetric(),
                   decoration: BoxDecoration(
-                    color: AppTheme.neonPurple.withOpacity(0.1),
+                    color: AppTheme.neonPurple.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                     border:
-                        Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
+                        Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.3)),
                   ),
                   child: Theme(
                     data: Theme.of(context)
@@ -1611,7 +1611,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                       children: [
                         Container(
                           height: 1,
-                          color: AppTheme.neonPurple.withOpacity(0.2),
+                          color: AppTheme.neonPurple.withValues(alpha: 0.2),
                           margin: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 5),
                         ),
@@ -1734,7 +1734,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withOpacity(0.1),
+                  color: AppTheme.neonBlue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Row(
@@ -1790,7 +1790,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
                   value: (progress / 100).clamp(0.0, 1.0),
-                  backgroundColor: progressColor.withOpacity(0.2),
+                  backgroundColor: progressColor.withValues(alpha: 0.2),
                   valueColor: AlwaysStoppedAnimation(progressColor),
                   minHeight: 8,
                 ),
@@ -1829,9 +1829,9 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                     margin: const EdgeInsets.only(top: 16),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: paceColor.withOpacity(0.08),
+                      color: paceColor.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: paceColor.withOpacity(0.3)),
+                      border: Border.all(color: paceColor.withValues(alpha: 0.3)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1880,7 +1880,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                               child: Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.05),
+                                  color: Colors.white.withValues(alpha: 0.05),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Column(
@@ -1916,10 +1916,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                               child: Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: paceColor.withOpacity(0.15),
+                                  color: paceColor.withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(
-                                      color: paceColor.withOpacity(0.5)),
+                                      color: paceColor.withValues(alpha: 0.5)),
                                 ),
                                 child: Column(
                                   children: [
@@ -1962,7 +1962,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                           padding: const EdgeInsets.symmetric(
                               vertical: 6, horizontal: 10),
                           decoration: BoxDecoration(
-                            color: paceColor.withOpacity(0.15),
+                            color: paceColor.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Row(
@@ -2098,7 +2098,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -2109,7 +2109,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.bar_chart,
-                  size: 48, color: AppTheme.textSecondary.withOpacity(0.5)),
+                  size: 48, color: AppTheme.textSecondary.withValues(alpha: 0.5)),
               const SizedBox(height: 8),
               const Text('Sin datos para mostrar',
                   style: TextStyle(color: AppTheme.textSecondary)),
@@ -2224,7 +2224,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
-                colors: [color.withOpacity(0.2), color.withOpacity(0)],
+                colors: [color.withValues(alpha: 0.2), color.withValues(alpha: 0)],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -2267,7 +2267,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
           LineChartBarData(
             spots: objSpots,
             isCurved: true, // Curve it slightly to look natural
-            color: color.withOpacity(0.8),
+            color: color.withValues(alpha: 0.8),
             dotData: const FlDotData(show: false),
             dashArray: [5, 5],
             belowBarData: BarAreaData(),
@@ -2283,7 +2283,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4)),
         ],
@@ -2343,7 +2343,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   drawVerticalLine: false,
                   horizontalInterval: baseInterval.toDouble(),
                   getDrawingHorizontalLine: (value) => FlLine(
-                    color: Colors.grey.withOpacity(0.1),
+                    color: Colors.grey.withValues(alpha: 0.1),
                     strokeWidth: 1,
                     dashArray: [4, 4],
                   ),
@@ -2401,12 +2401,12 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                 lineTouchData: LineTouchData(
                   touchTooltipData: LineTouchTooltipData(
                     tooltipBgColor: const Color(0xFF1A1A2E)
-                        .withOpacity(0.95), // Premium dark blue
+                        .withValues(alpha: 0.95), // Premium dark blue
                     tooltipRoundedRadius: 12,
                     tooltipPadding: const EdgeInsets.symmetric(
                         horizontal: 14, vertical: 10),
                     tooltipBorder:
-                        BorderSide(color: Colors.white.withOpacity(0.15)),
+                        BorderSide(color: Colors.white.withValues(alpha: 0.15)),
                     getTooltipItems: (touchedSpots) {
                       return touchedSpots.map((spot) {
                         final monthIdx = spot.x.toInt();
@@ -2486,12 +2486,12 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         gradient: LinearGradient(
           colors: isAchieved
               ? [
-                  AppTheme.success.withOpacity(0.2),
-                  AppTheme.success.withOpacity(0.1)
+                  AppTheme.success.withValues(alpha: 0.2),
+                  AppTheme.success.withValues(alpha: 0.1)
                 ]
               : [
-                  AppTheme.neonPurple.withOpacity(0.2),
-                  AppTheme.neonPurple.withOpacity(0.1)
+                  AppTheme.neonPurple.withValues(alpha: 0.2),
+                  AppTheme.neonPurple.withValues(alpha: 0.1)
                 ],
         ),
         borderRadius: BorderRadius.circular(12),
@@ -2671,7 +2671,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.15) : AppTheme.surfaceColor,
+          color: isSelected ? color.withValues(alpha: 0.15) : AppTheme.surfaceColor,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
               color: isSelected ? color : Colors.transparent, width: 1.5),
@@ -2740,7 +2740,7 @@ class _ObjectiveCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
             color: isAchieved
-                ? AppTheme.success.withOpacity(0.5)
+                ? AppTheme.success.withValues(alpha: 0.5)
                 : Colors.transparent,
             width: 2),
       ),
@@ -2784,7 +2784,7 @@ class _ObjectiveCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(3),
             child: LinearProgressIndicator(
               value: (progress / 100).clamp(0.0, 1.0),
-              backgroundColor: progressColor.withOpacity(0.2),
+              backgroundColor: progressColor.withValues(alpha: 0.2),
               valueColor: AlwaysStoppedAnimation(progressColor),
               minHeight: compact ? 5 : 6,
             ),
@@ -2952,7 +2952,7 @@ class _ClientCard extends StatelessWidget {
       color: AppTheme.surfaceColor,
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: statusColor.withOpacity(0.3))),
+          side: BorderSide(color: statusColor.withValues(alpha: 0.3))),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
@@ -2982,7 +2982,7 @@ class _ClientCard extends StatelessWidget {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                        color: statusColor.withOpacity(0.2),
+                        color: statusColor.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(12)),
                     child: Text(statusText,
                         style: TextStyle(
@@ -2999,7 +2999,7 @@ class _ClientCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                      color: AppTheme.darkBase.withOpacity(0.5),
+                      color: AppTheme.darkBase.withValues(alpha: 0.5),
                       borderRadius: BorderRadius.circular(6)),
                   child: Row(
                     children: [
@@ -3028,7 +3028,7 @@ class _ClientCard extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                              color: AppTheme.neonPurple.withOpacity(0.2),
+                              color: AppTheme.neonPurple.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(4)),
                           child: Text('Ruta $route',
                               style: const TextStyle(
@@ -3067,8 +3067,8 @@ class _ClientCard extends StatelessWidget {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                     gradient: LinearGradient(colors: [
-                      statusColor.withOpacity(0.1),
-                      statusColor.withOpacity(0.05)
+                      statusColor.withValues(alpha: 0.1),
+                      statusColor.withValues(alpha: 0.05)
                     ]),
                     borderRadius: BorderRadius.circular(8)),
                 child: Column(
@@ -3118,7 +3118,7 @@ class _ClientCard extends StatelessWidget {
                         borderRadius: BorderRadius.circular(4),
                         child: LinearProgressIndicator(
                             value: (progress / 100).clamp(0.0, 1.0),
-                            backgroundColor: statusColor.withOpacity(0.2),
+                            backgroundColor: statusColor.withValues(alpha: 0.2),
                             valueColor: AlwaysStoppedAnimation(statusColor),
                             minHeight: 6)),
                     const SizedBox(height: 4),
