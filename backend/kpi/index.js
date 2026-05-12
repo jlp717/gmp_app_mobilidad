@@ -14,7 +14,7 @@ const logger = require('../middleware/logger');
  */
 async function initKpiModule() {
   try {
-    // 1. Crear/verificar tablas KPI en DB2 (`${SCHEMA}.KPI_LOADS, KPI_ALERTS, KPI_FILE_AUDIT)
+    // 1. Crear/verificar tablas KPI en DB2 (${SCHEMA}.KPI_LOADS, KPI_ALERTS, KPI_FILE_AUDIT)
     await initKpiTables();
 
     // 2. Conectar Redis para cache
