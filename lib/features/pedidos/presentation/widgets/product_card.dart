@@ -1,4 +1,4 @@
-﻿/// Product Card (Redesigned)
+/// Product Card (Redesigned)
 /// =========================
 /// Catalog product card with purchase history badges, unit type indicators,
 /// YoY change, IVA toggle, and dual price display

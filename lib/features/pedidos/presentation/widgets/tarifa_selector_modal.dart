@@ -1,4 +1,4 @@
-﻿/// Tarifa Selector Modal
+/// Tarifa Selector Modal
 /// ======================
 /// Orange popup to select pricing tariff per order line.
 /// Shows PT (client tariff), PU (per-unit breakdown), and all other tariffs.

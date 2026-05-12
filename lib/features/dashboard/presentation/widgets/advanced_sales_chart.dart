@@ -43,10 +43,10 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Colors.black.withValues(alpha: 0.2),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
@@ -93,9 +93,9 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
-                  color: widget.color.withOpacity(0.1),
+                  color: widget.color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: widget.color.withOpacity(0.3)),
+                  border: Border.all(color: widget.color.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
@@ -221,7 +221,7 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                 gridData: FlGridData(
                   drawVerticalLine: false,
                   getDrawingHorizontalLine: (value) => FlLine(
-                      color: Colors.white.withOpacity(0.05), strokeWidth: 1),
+                      color: Colors.white.withValues(alpha: 0.05), strokeWidth: 1),
                 ),
                 borderData: FlBorderData(show: false),
                 barGroups: topItems.asMap().entries.map((entry) {
@@ -235,7 +235,7 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                       BarChartRodData(
                         toY: node.sales,
                         gradient: LinearGradient(
-                          colors: [widget.color.withOpacity(0.7), widget.color],
+                          colors: [widget.color.withValues(alpha: 0.7), widget.color],
                           begin: Alignment.bottomCenter,
                           end: Alignment.topCenter,
                         ),
@@ -245,7 +245,7 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                         backDrawRodData: BackgroundBarChartRodData(
                           show: true,
                           toY: maxY,
-                          color: Colors.white.withOpacity(0.02),
+                          color: Colors.white.withValues(alpha: 0.02),
                         ),
                       ),
                     ],

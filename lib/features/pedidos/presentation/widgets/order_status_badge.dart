@@ -1,4 +1,4 @@
-﻿/// Order Status Badge
+/// Order Status Badge
 /// ==================
 /// Reusable badge showing order status with color, icon and animation.
 library;

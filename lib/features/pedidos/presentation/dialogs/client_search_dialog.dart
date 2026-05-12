@@ -1,4 +1,4 @@
-﻿/// Client Search Dialog for Pedidos
+/// Client Search Dialog for Pedidos
 /// =================================
 /// Bottom sheet with debounced search to select a client for the order
 library;

@@ -1,4 +1,4 @@
-﻿/// Complementary Products Widget
+/// Complementary Products Widget
 /// ==============================
 /// Shows products frequently bought together with items in cart
 library;

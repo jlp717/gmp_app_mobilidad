@@ -1,4 +1,4 @@
-﻿/// Product Search Widget
+/// Product Search Widget
 /// =====================
 /// Search field with debounce + family filter chips for product catalog
 library;

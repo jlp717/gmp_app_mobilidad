@@ -1,4 +1,4 @@
-﻿/// Order Line Tile
+/// Order Line Tile
 /// ================
 /// Single order line in the cart summary with swipe-to-delete
 library;

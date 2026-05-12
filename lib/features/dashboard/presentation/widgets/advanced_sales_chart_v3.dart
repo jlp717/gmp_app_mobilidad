@@ -56,7 +56,7 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
     super.initState();
     // Pre-calculate gradient (expensive operation)
     _barGradient = LinearGradient(
-      colors: [widget.color.withOpacity(0.7), widget.color],
+      colors: [widget.color.withValues(alpha: 0.7), widget.color],
       begin: Alignment.bottomCenter,
       end: Alignment.topCenter,
     );
@@ -73,7 +73,7 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
       _cachedBarGroups = null;
       // Update gradient if color changed
       _barGradient = LinearGradient(
-        colors: [widget.color.withOpacity(0.7), widget.color],
+        colors: [widget.color.withValues(alpha: 0.7), widget.color],
         begin: Alignment.bottomCenter,
         end: Alignment.topCenter,
       );
@@ -140,9 +140,9 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
-            color: widget.color.withOpacity(0.1),
+            color: widget.color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: widget.color.withOpacity(0.3)),
+            border: Border.all(color: widget.color.withValues(alpha: 0.3)),
           ),
           child: Row(
             children: [
@@ -188,7 +188,7 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
         gridData: FlGridData(
           drawVerticalLine: false,
           getDrawingHorizontalLine: (value) => FlLine(
-            color: Colors.white.withOpacity(0.05),
+            color: Colors.white.withValues(alpha: 0.05),
             strokeWidth: 1,
           ),
         ),
@@ -329,7 +329,7 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
             backDrawRodData: BackgroundBarChartRodData(
               show: true,
               toY: maxY,
-              color: Colors.white.withOpacity(0.02),
+              color: Colors.white.withValues(alpha: 0.02),
             ),
           ),
         ],
@@ -347,10 +347,10 @@ class _PerformanceOptimizedContainer extends StatelessWidget {
   static final _cachedDecoration = BoxDecoration(
     color: AppTheme.surfaceColor,
     borderRadius: BorderRadius.circular(16),
-    border: Border.all(color: Colors.white.withOpacity(0.05)),
+    border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
     boxShadow: [
       BoxShadow(
-        color: Colors.black.withOpacity(0.2),
+        color: Colors.black.withValues(alpha: 0.2),
         blurRadius: 20,
         offset: const Offset(0, 10),
       ),
@@ -404,7 +404,7 @@ class _PieChartV3State extends State<PieChartV3> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: Column(
         children: [
@@ -456,7 +456,7 @@ class _PieChartV3State extends State<PieChartV3> {
       final isLarge = percentage > 0.1;
 
       // Vary opacity based on index
-      final sectionColor = widget.color.withOpacity(
+      final sectionColor = widget.color.withValues(alpha: 
         1.0 - (index * 0.1).clamp(0.0, 0.8),
       );
 

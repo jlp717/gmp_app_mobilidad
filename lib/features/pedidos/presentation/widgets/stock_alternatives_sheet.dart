@@ -1,4 +1,4 @@
-﻿/// Stock Alternatives Sheet
+/// Stock Alternatives Sheet
 /// ========================
 /// Shows when a product has no stock. Displays alternatives from the same
 /// family/subfamily that have available stock using intelligent 3-level matching.

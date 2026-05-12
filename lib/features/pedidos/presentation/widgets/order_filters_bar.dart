@@ -1,4 +1,4 @@
-﻿/// Order Filters Bar
+/// Order Filters Bar
 /// =================
 /// Complete filter bar: search, status chips, date range, presets, advanced filters.
 library;

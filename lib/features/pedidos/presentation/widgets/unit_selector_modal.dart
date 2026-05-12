@@ -1,4 +1,4 @@
-﻿/// Unit Selector Modal (Premium Dialog)
+/// Unit Selector Modal (Premium Dialog)
 /// ======================================
 /// Centered dialog for selecting unit of measure and quantity.
 /// Shows equivalences, stock per unit, and price per unit.

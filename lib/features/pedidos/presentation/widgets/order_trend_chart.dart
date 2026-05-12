@@ -1,4 +1,4 @@
-﻿/// Order Trend Chart
+/// Order Trend Chart
 /// =================
 /// Custom-painted line chart showing 7-day order trend.
 /// No external dependencies â€” pure CustomPainter.

@@ -1,4 +1,4 @@
-﻿/// Order Detail Sheet
+/// Order Detail Sheet
 /// ==================
 /// Bottom sheet showing full order details: header info, lines, totals, and actions
 library;

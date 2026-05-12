@@ -1,4 +1,4 @@
-﻿/// Order Card
+/// Order Card
 /// ==========
 /// Premium card showing order info with gradient by status, swipe actions.
 library;

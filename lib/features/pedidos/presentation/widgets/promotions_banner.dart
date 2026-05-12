@@ -1,4 +1,4 @@
-﻿/// Promotions Banner Widget
+/// Promotions Banner Widget
 /// ========================
 /// Horizontal scrollable banner showing products with active promotions.
 /// Handles PRICE promos (price reduction) and GIFT promos (buy X get Y free).

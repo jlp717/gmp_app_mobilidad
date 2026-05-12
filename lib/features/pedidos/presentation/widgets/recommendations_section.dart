@@ -1,4 +1,4 @@
-﻿/// Recommendations Section
+/// Recommendations Section
 /// =======================
 /// Collapsible horizontal scrollable sections for "Productos habituales" and "Otros clientes compran"
 library;

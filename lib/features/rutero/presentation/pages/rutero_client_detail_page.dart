@@ -288,7 +288,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [accentColor.withOpacity(0.2), accentColor.withOpacity(0.1)],
+          colors: [accentColor.withValues(alpha: 0.2), accentColor.withValues(alpha: 0.1)],
         ),
         borderRadius: BorderRadius.circular(16),
       ),
@@ -429,7 +429,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
             drawVerticalLine: false,
             horizontalInterval: maxY / 4,
             getDrawingHorizontalLine: (value) => FlLine(
-              color: Colors.grey.withOpacity(0.2),
+              color: Colors.grey.withValues(alpha: 0.2),
               strokeWidth: 1,
             ),
           ),
@@ -451,7 +451,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                 ),
                 BarChartRodData(
                   toY: last,
-                  color: AppTheme.textSecondary.withOpacity(0.4),
+                  color: AppTheme.textSecondary.withValues(alpha: 0.4),
                   width: 6,
                   borderRadius: BorderRadius.circular(2),
                 ),
@@ -514,7 +514,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
             dense: true,
             leading: CircleAvatar(
               radius: 16,
-              backgroundColor: accentColor.withOpacity(0.2),
+              backgroundColor: accentColor.withValues(alpha: 0.2),
               child: Icon(accentIcon, size: 16, color: accentColor),
             ),
             title: Text(
@@ -537,7 +537,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: accentColor.withOpacity(0.15),
+                    color: accentColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -611,7 +611,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isFrequent ? AppTheme.success.withOpacity(0.3) : Colors.transparent,
+          color: isFrequent ? AppTheme.success.withValues(alpha: 0.3) : Colors.transparent,
         ),
       ),
       child: Row(
@@ -764,7 +764,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
             child: Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: AppTheme.neonPurple.withOpacity(0.2),
+                  backgroundColor: AppTheme.neonPurple.withValues(alpha: 0.2),
                   child: Text(
                     '${index + 1}',
                     style: const TextStyle(
