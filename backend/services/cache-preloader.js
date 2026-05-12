@@ -226,6 +226,11 @@ async function preloadCache(port = 3000) {
             warmUpDashboardQueries().catch(e => logger.warn(`Warmup error: ${e.message}`));
         }, 2000);
 
+        // 2b. Warm up evolution monthly for ALL (heaviest endpoint ~15s)
+        setTimeout(() => {
+            warmUpEvolutionAll().catch(e => logger.warn(`Evolution warmup error: ${e.message}`));
+        }, 4000);
+
         // 3. Clients list pre-warm DISABLED — query joins DSED.LACLAE (millions of rows)
         //    + LATERAL subquery = 30-60s execution. Not suitable for startup.
         //    The first real request will cache the result with 1hr TTL.
@@ -241,6 +246,43 @@ async function preloadCache(port = 3000) {
 
     } catch (e) {
         logger.error(`Fatal Preload Error: ${e.message}`);
+    }
+}
+
+async function warmUpEvolutionAll() {
+    try {
+        const { query } = require('../config/db');
+        const { cachedQuery } = require('./query-optimizer');
+        const logger = require('../middleware/logger');
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1;
+        const startYear = year - 2;
+
+        const evolutionSQL = `
+            SELECT L.LCAADC AS ANO, L.LCMMDC AS MES,
+                   COUNT(DISTINCT L.LCCDCL) AS NUM_CLIENTES,
+                   COUNT(*) AS NUM_LINEAS,
+                   SUM(L.LCIMVT) AS TOTAL_VENTAS,
+                   SUM(L.LCIMCO) AS TOTAL_COSTO,
+                   SUM(L.LCIMVT - L.LCIMCO) AS TOTAL_MARGEN
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC >= ? AND L.TPDC = 'LAC' AND L.LCTPVT IN ('CC', 'VC')
+              AND L.LCCLLN IN ('AB', 'VT') AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
+            GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC, L.LCMMDC
+        `;
+
+        const cacheKey = `evolution:monthly:ALL::24`;
+        const start = Date.now();
+        await cachedQuery(
+            (sql) => query(sql, [startYear]),
+            evolutionSQL,
+            cacheKey,
+            1800 // 30 min TTL
+        );
+        logger.info(`🔥 Evolution ALL warmed in ${Date.now() - start}ms (30min TTL)`);
+    } catch (e) {
+        logger.warn(`[CachePreWarmer] Evolution warmup error (non-fatal): ${e.message}`);
     }
 }
 

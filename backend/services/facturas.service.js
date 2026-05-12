@@ -10,6 +10,7 @@
 const { query, queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
 const { CircuitBreaker } = require('./circuit-breaker');
+const { redisCache, TTL } = require('./redis-cache');
 
 const facturasBreaker = new CircuitBreaker({
     name: 'facturas-db',
@@ -43,15 +44,23 @@ async function batchedVendorQuery(baseSql, vendorColumn, vendors, queryFn) {
 class FacturasService {
 
     async getFacturas(params) {
-        const cacheKey = `facturas:${JSON.stringify(params)}`;
+        const cacheKey = `facturas:list:${JSON.stringify(params)}`;
         
+        // Try Redis cache first (30s TTL for list — data changes slightly during day)
+        const cached = await redisCache.get('route', cacheKey);
+        if (cached !== null) return cached;
+
         try {
-            return await facturasBreaker.execute(
+            const result = await facturasBreaker.execute(
                 () => this.getFacturasRaw(params),
                 () => ({ facturas: [], error: 'Service temporarily unavailable' })
             );
+            await redisCache.set('route', cacheKey, result, TTL.SHORT);
+            return result;
         } catch (e) {
-            return this.getFacturasRaw(params);
+            const result = await this.getFacturasRaw(params);
+            await redisCache.set('route', cacheKey, result, TTL.SHORT);
+            return result;
         }
     }
     
@@ -262,6 +271,22 @@ class FacturasService {
     }
 
     async getSummary(params) {
+        const { vendedorCodes, year, month, dateFrom, dateTo } = params;
+
+        if (!vendedorCodes) {
+            throw new Error('vendedorCodes is required');
+        }
+
+        const cacheKey = `facturas:summary:${vendedorCodes || 'ALL'}:${year || ''}:${month || ''}:${dateFrom || ''}:${dateTo || ''}`;
+        const cached = await redisCache.get('route', cacheKey);
+        if (cached !== null) return cached;
+
+        const result = await this._getSummaryInternal(params);
+        await redisCache.set('route', cacheKey, result, TTL.MEDIUM);
+        return result;
+    }
+
+    async _getSummaryInternal(params) {
         const { vendedorCodes, year, month, dateFrom, dateTo } = params;
 
         if (!vendedorCodes) {

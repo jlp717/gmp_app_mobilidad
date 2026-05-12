@@ -195,6 +195,14 @@ async function ensureUtf8(conn) {
     } catch (e) {
         logger.debug(`[DB] CHGJOB CCSID(1208) skipped: ${e.message}`);
     }
+    // Ensure JAVIER schema is in library list to prevent SQL5051
+    // when creating tables in JAVIER schema (needed for CREATE TABLE DDL).
+    try {
+        await conn.query("CALL QSYS.QCMDEXC('ADDLIBLE JAVIER', 0000000018.00000)");
+        logger.debug('[DB] Added JAVIER to library list');
+    } catch (e) {
+        logger.debug(`[DB] ADDLIBLE JAVIER skipped (may already exist): ${e.message}`);
+    }
     _utf8Connections.add(conn);
 }
 

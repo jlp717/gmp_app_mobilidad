@@ -7,6 +7,8 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/offline/connectivity_provider.dart';
+import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -67,9 +69,15 @@ void main() async {
     await CacheService.init();
     debugPrint('[MAIN] ✅ Cache initialized');
     await ApiClient.initialize();
+    // Start monitoring WiFi ↔ mobile data changes for adaptive timeouts
+    ApiClient.startConnectivityMonitoring();
+    // Initialize offline infrastructure
+    await ConnectivityService.instance.initialize();
+    await SyncQueueService.instance.initialize();
     debugPrint(
       '[MAIN] ✅ API initialized: ${ApiClient.dio.options.baseUrl}',
     );
+    debugPrint('[MAIN] ✅ Offline infrastructure initialized');
   } catch (e, stack) {
     debugPrint('[MAIN] ❌ Initialization error: $e');
     debugPrint('[MAIN] Stack: $stack');
@@ -129,6 +137,16 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _router = _createRouter();
+    // Auto-sync pending operations when connectivity is restored
+    ConnectivityService.instance.stream.listen((status) {
+      if (status == ConnectivityStatus.online) {
+        SyncQueueService.instance.processAll().then((count) {
+          if (count > 0) {
+            debugPrint('[AutoSync] $count operations synced');
+          }
+        });
+      }
+    });
   }
 
   @override

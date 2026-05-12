@@ -4,6 +4,7 @@ library;
 
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 
 class ClientsService {
   /// Fetch client list with optional search and vendor filter
@@ -22,14 +23,14 @@ class ClientsService {
       params['search'] = search;
     }
 
-    final response = await ApiClient.get(
+    final result = await OfflineAwareApi.get(
       ApiConfig.clientsList,
       queryParameters: params,
       cacheKey: 'clients_list_${vendedorCodes ?? "ALL"}_${search ?? ''}',
       cacheTTL: const Duration(minutes: 5),
     );
 
-    final rawList = response['clients'] ?? [];
+    final rawList = result.data['clients'] ?? [];
     return (rawList as List)
         .map((item) => Map<String, dynamic>.from(item as Map))
         .toList();
@@ -52,12 +53,13 @@ class ClientsService {
     required String notes,
     required String vendorCode,
   }) async {
-    await ApiClient.put(
+    await OfflineAwareApi.put(
       '${ApiConfig.clientDetail}/$clientCode/notes',
       data: {
         'notes': notes,
         'vendorCode': vendorCode,
       },
+      syncType: 'update_client_notes',
     );
   }
 
