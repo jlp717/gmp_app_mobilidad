@@ -11,7 +11,7 @@ const DB_PWD = process.env.ODBC_PWD;
 const DB_DSN = process.env.ODBC_DSN || 'GMP';
 
 if (NODE_ENV === 'production' && (!DB_UID || !DB_PWD)) {
-    logger.warn('[DB] âš ï¸ Using default DB credentials in production');
+    logger.warn('[DB] ⚠️ Using default DB credentials in production');
 }
 
 const DB_UID_FINAL = DB_UID || 'JAVIER';
@@ -208,10 +208,10 @@ async function initDb() {
             pool._odbcPool = await odbc.pool(DB_CONFIG);
             dbPool = pool._odbcPool;
             await pool._ensureMinConnections();
-            logger.info(`âœ… Connection pool initialized: min=${pool.min}, max=${pool.max}, idleTimeoutMs=${pool.idleTimeoutMs}, acquireTimeoutMs=${pool.acquireTimeoutMs}`);
+            logger.info(`✅ Connection pool initialized: min=${pool.min}, max=${pool.max}, idleTimeoutMs=${pool.idleTimeoutMs}, acquireTimeoutMs=${pool.acquireTimeoutMs}`);
             startKeepalive();
         } catch (error) {
-            logger.error(`âŒ Database connection failed during init: ${error.message}`);
+            logger.error(`❌ Database connection failed during init: ${error.message}`);
             throw error;
         } finally {
             pool._initPromise = null;
@@ -378,7 +378,7 @@ async function query(sql, logQuery = true, logError = true) {
 
             if (logQuery) {
                 const preview = sql.replace(/\s+/g, ' ').substring(0, 100);
-                logger.info(`ðŸ“Š Query (${duration}ms): ${preview}... â†’ ${result.length} rows`);
+                logger.info(`📊 Query (${duration}ms): ${preview}... → ${result.length} rows`);
             }
 
             return normalizeRowCasing(result);
@@ -396,9 +396,9 @@ async function query(sql, logQuery = true, logError = true) {
 
             if (logError && attempt === MAX_RETRIES) {
                 const odbcDetails = error.odbcErrors ? JSON.stringify(error.odbcErrors) : '';
-                logger.error(`âŒ Query Error (Final Attempt): ${error.message} ${odbcDetails}\n  SQL: ${sql ? sql.replace(/\s+/g, ' ').substring(0, 200) : 'N/A'}`);
+                logger.error(`❌ Query Error (Final Attempt): ${error.message} ${odbcDetails}\n  SQL: ${sql ? sql.replace(/\s+/g, ' ').substring(0, 200) : 'N/A'}`);
             } else if (logError && retryable) {
-                logger.warn(`âš ï¸ Query Failed (Attempt ${attempt}/${MAX_RETRIES}): ${error.message}. Retrying...`);
+                logger.warn(`⚠️ Query Failed (Attempt ${attempt}/${MAX_RETRIES}): ${error.message}. Retrying...`);
             } else if (logError) {
                 const states = (error.odbcErrors || []).map(e => e.state).join(',');
                 logger.error(`ðŸš« Non-retryable error (attempt ${attempt}): ${error.message} [state=${states}]`);
@@ -456,7 +456,7 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
 
             if (logQuery) {
                 const preview = sql.replace(/\s+/g, ' ').substring(0, 80);
-                logger.info(`ðŸ“Š Param Query (${duration}ms): ${preview}... â†’ ${result.length} rows`);
+                logger.info(`📊 Param Query (${duration}ms): ${preview}... → ${result.length} rows`);
             }
 
             return normalizeRowCasing(result);
@@ -476,9 +476,9 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
                 const odbcDetails = error.odbcErrors ? JSON.stringify(error.odbcErrors) : '';
                 const sqlPreview = sql ? sql.replace(/\s+/g, ' ').substring(0, 300) : 'N/A';
                 const paramPreview = params ? JSON.stringify(params).substring(0, 200) : '[]';
-                logger.error(`âŒ Param Query Error (Final): ${error.message} ${odbcDetails}\n  SQL: ${sqlPreview}\n  Params: ${paramPreview}`);
+                logger.error(`❌ Param Query Error (Final): ${error.message} ${odbcDetails}\n  SQL: ${sqlPreview}\n  Params: ${paramPreview}`);
             } else if (logError && retryable) {
-                logger.warn(`âš ï¸ Param Query Retry (${attempt}): ${error.message}`);
+                logger.warn(`⚠️ Param Query Retry (${attempt}): ${error.message}`);
             } else if (logError) {
                 const states = (error.odbcErrors || []).map(e => e.state).join(',');
                 logger.error(`ðŸš« Non-retryable param error (attempt ${attempt}): ${error.message} [state=${states}]`);

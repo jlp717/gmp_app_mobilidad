@@ -681,7 +681,7 @@ router.put('/:id/lines', async (req, res) => {
             return res.status(400).json({ success: false, error: 'codigoArticulo is required' });
         }
         if (!['VT', 'SC'].includes(claseLinea)) {
-            return res.status(400).json({ success: false, error: 'claseLinea invÃƒÆ’Ã‚Â¡lida' });
+            return res.status(400).json({ success: false, error: 'claseLinea inválida' });
         }
 
         const line = await pedidosService.addOrderLine(id, {
@@ -722,7 +722,7 @@ router.put('/:id/lines/:lineId', async (req, res) => {
         const { cantidadEnvases, cantidadUnidades, precioVenta, unidadMedida, claseLinea } = req.body;
 
         if (claseLinea !== undefined && !['VT', 'SC'].includes(claseLinea)) {
-            return res.status(400).json({ success: false, error: 'claseLinea invÃƒÆ’Ã‚Â¡lida' });
+            return res.status(400).json({ success: false, error: 'claseLinea inválida' });
         }
 
         const line = await pedidosService.updateOrderLine(id, lineId, {
@@ -882,7 +882,7 @@ router.put('/:id/cancel', async (req, res) => {
 
 /**
  * PUT /api/pedidos/:id/status
- * Update order status (for Pendiente aprobaciÃƒÆ’Ã‚Â³n, Enviar, etc.)
+ * Update order status (for Pendiente aprobación, Enviar, etc.)
  */
 router.put('/:id/status', async (req, res) => {
     try {
@@ -899,7 +899,7 @@ router.put('/:id/status', async (req, res) => {
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/status: ${error.message}`);
         const status = error.message.includes('not found') ? 404
-            : error.message.includes('no vÃƒÆ’Ã‚Â¡lido') ? 400 : 500;
+            : error.message.includes('no válido') ? 400 : 500;
         res.status(status).json({ success: false, error: error.message });
     }
 });
@@ -961,19 +961,19 @@ const debugMiddleware = (req, res, next) => {
 
 /**
  * GET /api/pedidos/debug/estados
- * DocumentaciÃƒÆ’Ã‚Â³n de estados de pedidos
+ * Documentación de estados de pedidos
  */
 router.get('/debug/estados', debugMiddleware, (req, res) => {
     res.json({
         estados: {
             BORRADOR: 'Estado inicial. Pedido creado en la app pero sin confirmar.',
-            CONFIRMADO: 'Pedido confirmado por el comercial. Listo para proceso de almacÃƒÆ’Ã‚Â©n.',
-            ENVIADO: 'Pedido enviado/entregado. Se marca externamente (CPC/albarÃƒÆ’Ã‚Â¡n generado).',
+            CONFIRMADO: 'Pedido confirmado por el comercial. Listo para proceso de almacén.',
+            ENVIADO: 'Pedido enviado/entregado. Se marca externamente (CPC/albarán generado).',
             ANULADO: 'Pedido anulado/cancelado.'
         },
         transiciones: {
-            'BORRADOR -> CONFIRMADO': 'Usuario confirma en detalle del pedido (botÃƒÆ’Ã‚Â³n)',
-            'CONFIRMADO -> ENVIADO': 'Se marcaexternamente cuando se genera albarÃƒÆ’Ã‚Â¡n',
+            'BORRADOR -> CONFIRMADO': 'Usuario confirma en detalle del pedido (botón)',
+            'CONFIRMADO -> ENVIADO': 'Se marcaexternamente cuando se genera albarán',
             'BORRADOR/CONFIRMADO -> ANULADO': 'Usuario cancela el pedido'
         },
         valoresPermitidos: ['BORRADOR', 'CONFIRMADO', 'ENVIADO', 'ANULADO']
@@ -996,7 +996,7 @@ router.post('/debug/set-estado', debugMiddleware, async (req, res) => {
         if (!estado || !estadosValidos.includes(estado)) {
             return res.status(400).json({ 
                 success: false, 
-                error: `Estado invÃƒÆ’Ã‚Â¡lido. Valores: ${estadosValidos.join(', ')}` 
+                error: `Estado inválido. Valores: ${estadosValidos.join(', ')}` 
             });
         }
         

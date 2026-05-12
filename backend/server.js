@@ -110,8 +110,8 @@ if (USE_TS_ROUTES) {
     // We use a flag so startServer can mount it after middleware
     global.__TS_APP__ = tsApp;
   } catch (err) {
-    logger.error(`âŒ Failed to load TS routes: ${err.message}`);
-    logger.warn('âš ï¸ Falling back to legacy JavaScript routes');
+    logger.error(`❌ Failed to load TS routes: ${err.message}`);
+    logger.warn('⚠️ Falling back to legacy JavaScript routes');
     process.env.USE_TS_ROUTES = 'false';
     // Fall through to legacy imports below
   }
@@ -146,7 +146,7 @@ if (process.env.USE_TS_ROUTES !== 'true') {
   try {
     kpiModule = require('./kpi');
   } catch (err) {
-    logger.warn(`âš ï¸ KPI module not available: ${err.message}`);
+    logger.warn(`⚠️ KPI module not available: ${err.message}`);
   }
 }
 
@@ -161,10 +161,10 @@ if (USE_DDD_ROUTES) {
     dddCobrosRoutes = dddAdapters.createCobrosRoutes();
     dddEntregasRoutes = dddAdapters.createEntregasRoutes();
     dddRuteroRoutes = dddAdapters.createRuteroRoutes();
-    logger.info('âœ… DDD module routes loaded (src/modules/)');
+    logger.info('✅ DDD module routes loaded (src/modules/)');
   } catch (err) {
-    logger.error(`âŒ Failed to load DDD routes: ${err.message}`);
-    logger.warn('âš ï¸ Falling back to legacy JavaScript routes');
+    logger.error(`❌ Failed to load DDD routes: ${err.message}`);
+    logger.warn('⚠️ Falling back to legacy JavaScript routes');
     process.env.USE_DDD_ROUTES = 'false';
   }
 }
@@ -284,7 +284,7 @@ if (process.env.USE_DDD_ROUTES === 'true' && dddAuthRoutes) {
   // Fall-through to legacy for routes DDD doesn't implement yet
   // (/repartidores, /refresh, /logout, /switch-role, etc.)
   app.use('/api/auth', authRoutes);
-  logger.info('âœ… DDD auth routes mounted (public) + legacy fallback');
+  logger.info('✅ DDD auth routes mounted (public) + legacy fallback');
 } else {
   app.use('/api/auth', authRoutes);
 }
@@ -422,7 +422,7 @@ app.get('/api/health/version-check', (req, res) => {
 if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   // TS app handles its own auth, routes, and middleware
   app.use(global.__TS_APP__);
-  logger.info('âœ… TypeScript routes mounted (compiled from src/)');
+  logger.info('✅ TypeScript routes mounted (compiled from src/)');
 } else {
   // Legacy JavaScript routes
   app.use('/api', verifyToken);
@@ -459,9 +459,9 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
     app.use('/api/commissions', dddAdapters.createCommissionsRoutes());
     // Mount productsRoutes for image/ficha endpoints (not in masterRoutes)
     app.use('/api/products', productsRoutes);
-    logger.info('âœ… DDD routes mounted at /api/{auth,pedidos,cobros,entregas,rutero}');
-    logger.info('âœ… DDD-enhanced: clients + commissions with Redis ALL cache + performanceCache');
-    logger.info('âœ… Products image/ficha routes mounted at /api/products/:code/{image,ficha}');
+    logger.info('✅ DDD routes mounted at /api/{auth,pedidos,cobros,entregas,rutero}');
+    logger.info('✅ DDD-enhanced: clients + commissions with Redis ALL cache + performanceCache');
+    logger.info('✅ Products image/ficha routes mounted at /api/products/:code/{image,ficha}');
   } else {
     // Legacy fallback
     app.use('/api/entregas', entregasRoutes);
@@ -472,7 +472,7 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
   // KPI Glacius module (DB2/ODBC-backed alerts)
   if (kpiModule) {
     app.use('/api/kpi', kpiModule.kpiRoutes);
-    logger.info('âœ… KPI Glacius routes mounted at /api/kpi');
+    logger.info('✅ KPI Glacius routes mounted at /api/kpi');
   }
 }
 
@@ -481,16 +481,16 @@ async function startServer() {
   // Validate configuration before starting (throws if JWT secrets missing)
   const { validateConfig } = require('./config/env');
   validateConfig();
-  logger.info('âœ… Configuration validated successfully');
+  logger.info('✅ Configuration validated successfully');
 
   await initDb();
 
-  // â”€â”€â”€ PHASE 1: Centralized table initialization (init-tables.js) â”€â”€â”€â”€â”€â”€â”€
+  // ─── PHASE 1: Centralized table initialization (init-tables.js) ───────
   const { getPool } = require('./config/db');
   try {
     const { initAllTables } = require('./migrations/init-tables');
     await initAllTables((sql) => query(sql));
-    logger.info('âœ… App-specific tables initialized via init-tables.js');
+    logger.info('✅ App-specific tables initialized via init-tables.js');
     setDeliveryStatusAvailable(true);
 
     // Req #18: Schema Audit
@@ -498,16 +498,16 @@ async function startServer() {
       const { runSchemaAudit } = require('./migrations/schema-audit');
       await runSchemaAudit();
     } catch (auditErr) {
-      logger.warn('âš ï¸  Schema audit skipped: ' + auditErr.message);
+      logger.warn('⚠️  Schema audit skipped: ' + auditErr.message);
     }
   } catch (initErr) {
-    logger.warn(`âš ï¸ init-tables error (non-fatal): ${initErr.message}`);
+    logger.warn(`⚠️ init-tables error (non-fatal): ${initErr.message}`);
     // Fallback: check DELIVERY_STATUS manually
     try {
       await query('SELECT 1 FROM JAVIER.DELIVERY_STATUS FETCH FIRST 1 ROW ONLY');
       setDeliveryStatusAvailable(true);
     } catch (_) {
-      logger.warn('âš ï¸ DELIVERY_STATUS unavailable â€” using in-memory fallback.');
+      logger.warn('⚠️ DELIVERY_STATUS unavailable â€” using in-memory fallback.');
     }
   }
 
@@ -515,98 +515,98 @@ async function startServer() {
   try {
     await initSchemaCheck();
   } catch (e) {
-    logger.warn(`âš ï¸ DELIVERY_STATUS schema check skipped: ${e.message}`);
+    logger.warn(`⚠️ DELIVERY_STATUS schema check skipped: ${e.message}`);
   }
 
-  // â”€â”€â”€ PHASE 2: Create/verify DB schema (direct connections, no pool recreation) â”€â”€â”€
+  // ─── PHASE 2: Create/verify DB schema (direct connections, no pool recreation) ───
   try {
     const { initWarehouseTables } = require('./routes/warehouse');
     await initWarehouseTables();
   } catch (whErr) {
-    logger.warn(`âš ï¸ Warehouse table setup error (non-fatal): ${whErr.message}`);
+    logger.warn(`⚠️ Warehouse table setup error (non-fatal): ${whErr.message}`);
   }
 
   try {
     const { initCommissionTables } = require('./routes/commissions');
     await initCommissionTables();
   } catch (commErr) {
-    logger.warn(`âš ï¸ Commission table setup error (non-fatal): ${commErr.message}`);
+    logger.warn(`⚠️ Commission table setup error (non-fatal): ${commErr.message}`);
   }
 
-  // â”€â”€â”€ PHASE 3: Initialize caches (pool is stable, schema is ready) â”€â”€â”€â”€â”€
+  // ─── PHASE 3: Initialize caches (pool is stable, schema is ready) ─────
   initCache()
-    .then(() => logger.info('âœ… Redis cache initialized'))
-    .catch(err => logger.warn(`âš ï¸ Redis unavailable (using L1 only): ${err.message}`));
+    .then(() => logger.info('✅ Redis cache initialized'))
+    .catch(err => logger.warn(`⚠️ Redis unavailable (using L1 only): ${err.message}`));
 
-  logger.info('ðŸ“¦ Pre-loading critical caches before accepting requestsâ€¦');
+  logger.info('📦 Pre-loading critical caches before accepting requestsâ€¦');
   const cacheStart = Date.now();
 
   try {
     await preloadCache(PORT);
-    logger.info(`âœ… LACLAE cache ready (${Date.now() - cacheStart}ms)`);
+    logger.info(`✅ LACLAE cache ready (${Date.now() - cacheStart}ms)`);
   } catch (err) {
-    logger.warn(`âš ï¸ LACLAE preload error (non-fatal): ${err.message}`);
+    logger.warn(`⚠️ LACLAE preload error (non-fatal): ${err.message}`);
   }
 
   try {
     await loadMetadataCache();
-    logger.info(`âœ… Metadata cache ready (${Date.now() - cacheStart}ms total)`);
+    logger.info(`✅ Metadata cache ready (${Date.now() - cacheStart}ms total)`);
   } catch (err) {
-    logger.warn(`âš ï¸ Metadata cache error (non-fatal): ${err.message}`);
+    logger.warn(`⚠️ Metadata cache error (non-fatal): ${err.message}`);
   }
 
-  // â”€â”€â”€ PHASE 3.5: Initialize Pedidos tables â”€â”€â”€
+  // ─── PHASE 3.5: Initialize Pedidos tables ───
   try {
     const pedidosService = require('./services/pedidos.service');
     await pedidosService.initPedidosTables();
-    logger.info('âœ… Pedidos tables initialized');
+    logger.info('✅ Pedidos tables initialized');
   } catch (err) {
-    logger.warn(`âš ï¸ Pedidos table init error (non-fatal): ${err.message}`);
+    logger.warn(`⚠️ Pedidos table init error (non-fatal): ${err.message}`);
   }
 
-  // â”€â”€â”€ PHASE 3.6: Initialize KPI Glacius module (DB2/ODBC + Redis) â”€â”€â”€
+  // ─── PHASE 3.6: Initialize KPI Glacius module (DB2/ODBC + Redis) ───
   if (kpiModule) {
     try {
       await kpiModule.initKpiModule();
-      logger.info('âœ… KPI Glacius module initialized');
+      logger.info('✅ KPI Glacius module initialized');
     } catch (kpiErr) {
-      logger.warn(`âš ï¸ KPI module init error (non-fatal): ${kpiErr.message}`);
+      logger.warn(`⚠️ KPI module init error (non-fatal): ${kpiErr.message}`);
     }
   }
 
-  // â”€â”€â”€ PHASE 3.7: Initialize DDD modules (if enabled) â”€â”€â”€
+  // ─── PHASE 3.7: Initialize DDD modules (if enabled) ───
   if (process.env.USE_DDD_ROUTES === 'true') {
     try {
       const { Db2ConnectionPool } = require('./src/core/infrastructure/database/db2-connection-pool');
       const { ResponseCache } = require('./src/core/infrastructure/cache/response-cache');
       const dddDb = new Db2ConnectionPool();
       await dddDb.initialize();
-      logger.info('âœ… DDD connection pool initialized');
+      logger.info('✅ DDD connection pool initialized');
 
       const dddCache = new ResponseCache();
-      logger.info('âœ… DDD response cache initialized');
+      logger.info('✅ DDD response cache initialized');
     } catch (dddErr) {
-      logger.error(`âŒ DDD module init error: ${dddErr.message}`);
-      logger.warn('âš ï¸ Falling back to legacy routes');
+      logger.error(`❌ DDD module init error: ${dddErr.message}`);
+      logger.warn('⚠️ Falling back to legacy routes');
       process.env.USE_DDD_ROUTES = 'false';
     }
   }
 
-  // â”€â”€â”€ PHASE 4: Start server (schema ready + caches warm) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── PHASE 4: Start server (schema ready + caches warm) ───────────────
   const server = app.listen(PORT, '0.0.0.0', () => {
     // Store server reference globally for graceful shutdown
     global.__httpServer = server;
     
-    const dddStatus = process.env.USE_DDD_ROUTES === 'true' ? 'DDD Routes âœ…' : 'Legacy Routes';
-    logger.info('â•'.repeat(60));
+    const dddStatus = process.env.USE_DDD_ROUTES === 'true' ? 'DDD Routes ✅' : 'Legacy Routes';
+    logger.info('═'.repeat(60));
     logger.info(`  GMP Sales Analytics Server - Port ${PORT}`);
     logger.info(`  Listening on ALL interfaces (0.0.0.0:${PORT})`);
     logger.info(`  Connected to DB2 via ODBC - Real Data`);
-    logger.info(`  Security: HMAC TOKEN AUTH ðŸ”’`);
+    logger.info(`  Security: HMAC TOKEN AUTH 🔒`);
     logger.info(`  Route Mode: ${dddStatus}`);
     logger.info(`  Optimizations: Redis L1/L2 Cache, Network Optimizer`);
-    logger.info(`  Caches: LACLAE + Metadata pre-loaded âœ…`);
-    logger.info('â•'.repeat(60));
+    logger.info(`  Caches: LACLAE + Metadata pre-loaded ✅`);
+    logger.info('═'.repeat(60));
 
     // Signal PM2 that we are ready (caches are warm, safe to receive traffic)
     if (process.send) {
@@ -691,9 +691,9 @@ if (Sentry && typeof Sentry.setupExpressErrorHandler === 'function') {
 app.use((err, req, res, next) => {
   // Log full error with stack in development
   if (process.env.NODE_ENV !== 'production') {
-    logger.error(`âŒ Error: ${err.stack || err.message}`);
+    logger.error(`❌ Error: ${err.stack || err.message}`);
   } else {
-    logger.error(`âŒ Error: ${err.message}`);
+    logger.error(`❌ Error: ${err.message}`);
   }
   
   // Classify error type
