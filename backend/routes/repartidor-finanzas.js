@@ -560,4 +560,67 @@ router.delete('/test-cleanup/:idempotencyToken', verifyToken, requireRoles('JEFE
   }
 });
 
+router.get('/vencimientos/:repartidorId/:docId/detalle', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+  try {
+    const docId = req.params.docId; // e.g. "FAC-2024-1-0-1234-1"
+    const parts = docId.split('-');
+    if (parts.length < 6) throw new Error('Invalid docId format');
+    
+    const docKey = {
+      tipo: parts[0],
+      ejercicio: parseInt(parts[1]),
+      serie: parts[2],
+      terminal: parseInt(parts[3]),
+      numero: parseInt(parts[4]),
+      xde: parseInt(parts[5])
+    };
+    
+    const detalle = await financeService.getDetalleVencimiento(docKey);
+    if (!detalle) {
+      return res.status(404).json({ success: false, error: 'Vencimiento no encontrado' });
+    }
+    
+    res.json({ success: true, detalle });
+  } catch (error) {
+    return sendError(res, error, { action: 'GET /vencimientos/detalle', params: req.params });
+  }
+});
+
+router.get('/cuentas/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+  try {
+    const repartidorId = req.params.repartidorId;
+    const saldoActual = await financeService.getSaldoActual(repartidorId);
+    
+    // We can also try to find the last liquidation date from OPS
+    const dateYmd = new Date().toISOString().slice(0, 10);
+    const summary = await financeService.getDailySummary({
+      repartidorId,
+      date: dateYmd
+    }).catch(() => null);
+
+    res.json({ 
+      success: true, 
+      cuenta: { 
+        saldoActual, 
+        ultimoCierre: summary?.summary?.status === 'CLOSED' ? dateYmd : null 
+      } 
+    });
+  } catch (error) {
+    return sendError(res, error, { action: 'GET /cuentas', params: req.params });
+  }
+});
+
+router.get('/evolution/:repartidorId', verifyToken, requireRepartidorAccess((req) => req.params.repartidorId), async (req, res) => {
+  try {
+    const repartidorId = req.params.repartidorId;
+    const [evolution, topProducts] = await Promise.all([
+      financeService.getEvolution(repartidorId),
+      financeService.getTopProducts(repartidorId)
+    ]);
+    res.json({ success: true, evolution, topProducts });
+  } catch (error) {
+    return sendError(res, error, { action: 'GET /evolution', params: req.params });
+  }
+});
+
 module.exports = router;

@@ -8,7 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 
-// ─── MODELS ──────────────────────────────────────────────────
+// â”€â”€â”€ MODELS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /// Product in catalog list
 class Product {
@@ -210,7 +210,7 @@ class Product {
     if (um == 'SACO' || um == 'SACOS') return 'SACOS';
     if (um == 'ROLLO' || um == 'ROLLOS') return 'ROLLOS';
     if (um == 'CAJA' || um == 'CAJAS') return 'CAJAS';
-    // UM empty → detect via FORMATO='K' or productoPesado
+    // UM empty â†’ detect via FORMATO='K' or productoPesado
     if (um.isEmpty) {
       if (formato.toUpperCase().trim() == 'K' || productoPesado) {
         return 'KILOGRAMOS';
@@ -342,7 +342,7 @@ class Product {
     if (unit == 'UNIDADES' || unit == norm) {
       return unitsPerBox > 0 ? base / unitsPerBox : base;
     }
-    // PIEZAS / BANDEJAS / ESTUCHES / etc. — use unitsRetractil as content per box
+    // PIEZAS / BANDEJAS / ESTUCHES / etc. â€” use unitsRetractil as content per box
     if (unitsRetractil > 0 && unitsRetractil != unitsPerBox) {
       return base / unitsRetractil;
     }
@@ -390,14 +390,14 @@ class Product {
   }
 
   /// Unit price description for display.
-  /// E.g., "3,456 €/kg", "0,540 €/ud", "11,621 €/cj"
+  /// E.g., "3,456 â‚¬/kg", "0,540 â‚¬/ud", "11,621 â‚¬/cj"
   String unitPriceDesc({int decimals = 3}) {
     final norm = _normalizedUnit;
     if (norm == 'KILOGRAMOS') {
-      return '${priceForUnit('KILOGRAMOS').toStringAsFixed(decimals)} €/kg';
+      return '${priceForUnit('KILOGRAMOS').toStringAsFixed(decimals)} â‚¬/kg';
     }
     if (norm == 'LITROS') {
-      return '${priceForUnit('LITROS').toStringAsFixed(decimals)} €/L';
+      return '${priceForUnit('LITROS').toStringAsFixed(decimals)} â‚¬/L';
     }
 
     // Legacy display: If U/R > 0 and U/C = 1, show Neto U/R logic
@@ -409,13 +409,13 @@ class Product {
       } else if (dUnit == 'ESTUCHES')
         shortLabel = 'estuche';
       else if (dUnit == 'PIEZAS') shortLabel = 'pieza';
-      return 'Neto U/R: ${netoURPrice.toStringAsFixed(decimals)} €/$shortLabel';
+      return 'Neto U/R: ${netoURPrice.toStringAsFixed(decimals)} â‚¬/$shortLabel';
     }
 
     if (unitsPerBox > 1 && isDualFieldProduct) {
-      return '${priceForUnit('UNIDADES').toStringAsFixed(decimals)} €/ud';
+      return '${priceForUnit('UNIDADES').toStringAsFixed(decimals)} â‚¬/ud';
     }
-    return '${bestPrice.toStringAsFixed(decimals)} €/cj';
+    return '${bestPrice.toStringAsFixed(decimals)} â‚¬/cj';
   }
 
   /// Unit label abbreviation for display
@@ -484,7 +484,7 @@ class Product {
 
     if (isDualFieldProduct) return ['CAJAS', 'UNIDADES'];
 
-    // Explicit sub-unit (BANDEJAS, ESTUCHES, BOLSAS, PIEZAS…) with UC > 1 →
+    // Explicit sub-unit (BANDEJAS, ESTUCHES, BOLSAS, PIEZASâ€¦) with UC > 1 â†’
     // can sell by full box OR by individual unit
     if (dUnit != 'CAJAS' && (unitsPerBox > 1 || unitsRetractil > 0)) {
       return ['CAJAS', dUnit];
@@ -497,7 +497,7 @@ class Product {
   static String _fmtNum(double v) {
     if (v == v.truncateToDouble()) return v.toStringAsFixed(0);
     final s = v.toStringAsFixed(2);
-    // Remove trailing zeros: 2.50 → 2.5, 2.00 → 2
+    // Remove trailing zeros: 2.50 â†’ 2.5, 2.00 â†’ 2
     if (s.endsWith('0')) return s.substring(0, s.length - 1);
     return s;
   }
@@ -697,6 +697,7 @@ class OrderLine {
     this.importeCosto = 0,
     this.importeMargen = 0,
     this.porcentajeMargen = 0,
+    this.lineDiscountPct = 0,
     this.ivaRate = 0.21,
     this.unidadesFraccion = 0,
     this.claseLinea = 'VT',
@@ -758,6 +759,7 @@ class OrderLine {
   double ivaRate; // e.g. 0.21, 0.10, 0.04, 0.0
   double unidadesFraccion; // Support for dual-field unit logic
   String claseLinea;
+  double lineDiscountPct;
 
   Map<String, dynamic> toJson() => {
         'codigoArticulo': codigoArticulo,
@@ -774,6 +776,7 @@ class OrderLine {
         'precioMinimo': precioMinimo,
         'ivaRate': ivaRate,
         'claseLinea': claseLinea,
+      'lineDiscountPct': lineDiscountPct,
       };
 
   /// Recalculate amounts based on current qty and price.
@@ -788,13 +791,13 @@ class OrderLine {
         unidadesFraccion < unidadesCaja;
     // Auto-compute complementary field
     if (unit == 'CAJAS' || unit.isEmpty) {
-      // Selling by boxes → compute total units
+      // Selling by boxes â†’ compute total units
       if (!isDualField && cantidadEnvases > 0 && unidadesCaja > 0) {
         cantidadUnidades =
             double.parse((cantidadEnvases * unidadesCaja).toStringAsFixed(5));
       }
     } else {
-      // Selling by kg/litros/units → compute box equivalent
+      // Selling by kg/litros/units â†’ compute box equivalent
       if (cantidadUnidades > 0 && unidadesCaja > 0) {
         cantidadEnvases =
             double.parse((cantidadUnidades / unidadesCaja).toStringAsFixed(2));
@@ -1128,7 +1131,7 @@ class Recommendation {
   final int clientCount;
 }
 
-// ─── SERVICE ──────────────────────────────────────────────────
+// â”€â”€â”€ SERVICE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class PedidosService {
   static const _base = '/pedidos';
@@ -1150,7 +1153,7 @@ class PedidosService {
     return normalized;
   }
 
-  // ── Product Catalog ──
+  // â”€â”€ Product Catalog â”€â”€
 
   static Future<List<Product>> getProducts({
     required String vendedorCodes,
@@ -1237,7 +1240,7 @@ class PedidosService {
     }
   }
 
-  // ── Filters ──
+  // â”€â”€ Filters â”€â”€
 
   static Future<List<String>> getFamilies() async {
     try {
@@ -1271,7 +1274,7 @@ class PedidosService {
     }
   }
 
-  // ── Orders CRUD ──
+  // â”€â”€ Orders CRUD â”€â”€
 
   static Future<Map<String, dynamic>> createOrder({
     required String clientCode,
@@ -1549,7 +1552,7 @@ class PedidosService {
     }
   }
 
-  // ── Recommendations ──
+  // â”€â”€ Recommendations â”€â”€
 
   static Future<Map<String, List<Recommendation>>> getRecommendations({
     required String clientCode,
@@ -1578,7 +1581,7 @@ class PedidosService {
     }
   }
 
-  // ── Client Balance ──
+  // â”€â”€ Client Balance â”€â”€
   static Future<Map<String, dynamic>> getClientBalance(
     String clientCode,
   ) async {
@@ -1595,7 +1598,7 @@ class PedidosService {
     }
   }
 
-  // ── Clone Order ──
+  // â”€â”€ Clone Order â”€â”€
   static Future<Map<String, dynamic>> cloneOrder(int orderId) async {
     try {
       final response = await ApiClient.get(
@@ -1610,7 +1613,7 @@ class PedidosService {
     }
   }
 
-  // ── Complementary Products ──
+  // â”€â”€ Complementary Products â”€â”€
   static Future<List<Map<String, dynamic>>> getComplementaryProducts(
     List<String> productCodes, {
     String? clientCode,
@@ -1627,7 +1630,7 @@ class PedidosService {
     }
   }
 
-  // ── Analytics ──
+  // â”€â”€ Analytics â”€â”€
   static Future<Map<String, dynamic>> getAnalytics(String vendedorCodes) async {
     try {
       final response = await ApiClient.get(
@@ -1644,7 +1647,7 @@ class PedidosService {
   }
 }
 
-// ─── HELPERS ──────────────────────────────────────────────────
+// â”€â”€â”€ HELPERS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 double _toDouble(dynamic value, {double fallback = 0}) {
   if (value == null) return fallback;
@@ -1652,7 +1655,7 @@ double _toDouble(dynamic value, {double fallback = 0}) {
   return double.tryParse(value.toString()) ?? fallback;
 }
 
-/// Safe int parser — handles null, int, String, num, Map (crash-proof).
+/// Safe int parser â€” handles null, int, String, num, Map (crash-proof).
 /// If the API returns a Map or other unexpected type where an int is
 /// expected, this returns [fallback] instead of throwing a type error.
 int _toInt(dynamic value, {int fallback = 0}) {
@@ -1660,6 +1663,6 @@ int _toInt(dynamic value, {int fallback = 0}) {
   if (value is int) return value;
   if (value is num) return value.toInt();
   if (value is String) return int.tryParse(value) ?? fallback;
-  // Map / List / any other unexpected type → fallback (prevents crashes)
+  // Map / List / any other unexpected type â†’ fallback (prevents crashes)
   return fallback;
 }

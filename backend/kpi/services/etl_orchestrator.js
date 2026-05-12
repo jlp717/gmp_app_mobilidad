@@ -1,4 +1,5 @@
-// etl_orchestrator.js: Orquestador ETL — SFTP → parse CSV → reglas → DB2 → Redis cache
+const SCHEMA = process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER';
+// etl_orchestrator.js: Orquestador ETL â€” SFTP â†’ parse CSV â†’ reglas â†’ DB2 â†’ Redis cache
 'use strict';
 
 const crypto = require('crypto');
@@ -40,10 +41,10 @@ async function runETL({ localDir, loadId, force = false } = {}) {
 
   logger.info(`[kpi:etl] Iniciando ETL para load_id=${currentLoadId}`);
 
-  // 1. Idempotencia: comprobar si ya se procesó esta semana
+  // 1. Idempotencia: comprobar si ya se procesÃ³ esta semana
   if (!force) {
     const existing = await kpiQuery(
-      'SELECT ID, STATUS, TOTAL_ALERTS FROM JAVIER.KPI_LOADS WHERE LOAD_ID = ?',
+      'SELECT ID, STATUS, TOTAL_ALERTS FROM `${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?',
       [currentLoadId]
     );
     if (existing.rows.length > 0 && existing.rows[0].STATUS === 'COMPLETED') {
@@ -55,17 +56,17 @@ async function runETL({ localDir, loadId, force = false } = {}) {
         skipped: true,
       };
     }
-    // Si está IN_PROGRESS o FAILED, lo reprocesamos — borrar alertas y auditoría hijas
+    // Si estÃ¡ IN_PROGRESS o FAILED, lo reprocesamos â€” borrar alertas y auditorÃ­a hijas
     if (existing.rows.length > 0) {
-      await kpiQuery('DELETE FROM JAVIER.KPI_FILE_AUDIT WHERE LOAD_ID = ?', [currentLoadId]);
-      await kpiQuery('DELETE FROM JAVIER.KPI_ALERTS WHERE LOAD_ID = ?', [currentLoadId]);
-      await kpiQuery('DELETE FROM JAVIER.KPI_LOADS WHERE LOAD_ID = ?', [currentLoadId]);
+      await kpiQuery('DELETE FROM `${SCHEMA}.KPI_FILE_AUDIT WHERE LOAD_ID = ?', [currentLoadId]);
+      await kpiQuery('DELETE FROM `${SCHEMA}.KPI_ALERTS WHERE LOAD_ID = ?', [currentLoadId]);
+      await kpiQuery('DELETE FROM `${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?', [currentLoadId]);
     }
   } else {
     // Force: limpiar todo de esta carga
-    await kpiQuery('DELETE FROM JAVIER.KPI_FILE_AUDIT WHERE LOAD_ID = ?', [currentLoadId]);
-    await kpiQuery('DELETE FROM JAVIER.KPI_ALERTS WHERE LOAD_ID = ?', [currentLoadId]);
-    await kpiQuery('DELETE FROM JAVIER.KPI_LOADS WHERE LOAD_ID = ?', [currentLoadId]);
+    await kpiQuery('DELETE FROM `${SCHEMA}.KPI_FILE_AUDIT WHERE LOAD_ID = ?', [currentLoadId]);
+    await kpiQuery('DELETE FROM `${SCHEMA}.KPI_ALERTS WHERE LOAD_ID = ?', [currentLoadId]);
+    await kpiQuery('DELETE FROM `${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?', [currentLoadId]);
   }
 
   // 2. Obtener archivos CSV (SFTP o local)
@@ -91,14 +92,14 @@ async function runETL({ localDir, loadId, force = false } = {}) {
   // 4. Crear registro de carga
   const filesList = csvResult.files.map((f) => f.name).join(',');
   await kpiQuery(
-    `INSERT INTO JAVIER.KPI_LOADS (LOAD_ID, STATUS, FILES_PROCESSED, CHECKSUM)
+    `INSERT INTO `${SCHEMA}.KPI_LOADS (LOAD_ID, STATUS, FILES_PROCESSED, CHECKSUM)
      VALUES (?, 'IN_PROGRESS', ?, ?)`,
     [currentLoadId, filesList, globalHash]
   );
 
   // 5. Desactivar alertas anteriores y limpiar alertas expiradas
-  await kpiQuery('UPDATE JAVIER.KPI_ALERTS SET IS_ACTIVE = 0 WHERE IS_ACTIVE = 1');
-  await kpiQuery('DELETE FROM JAVIER.KPI_ALERTS WHERE EXPIRES_AT IS NOT NULL AND EXPIRES_AT < CURRENT TIMESTAMP');
+  await kpiQuery('UPDATE `${SCHEMA}.KPI_ALERTS SET IS_ACTIVE = 0 WHERE IS_ACTIVE = 1');
+  await kpiQuery('DELETE FROM `${SCHEMA}.KPI_ALERTS WHERE EXPIRES_AT IS NOT NULL AND EXPIRES_AT < CURRENT TIMESTAMP');
 
   // 6. Procesar cada CSV
   const fileResults = [];
@@ -134,9 +135,9 @@ async function runETL({ localDir, loadId, force = false } = {}) {
     // Aplicar reglas
     let alerts = processor(rows, headers);
 
-    // Deduplicar: para la mayoría de tipos, conservar solo la alerta con mayor
-    // severidad por clientCode + alertType. Excepción: CUOTA_SIN_COMPRA puede
-    // tener múltiples alertas legítimas por canal (HELADO, FROZEN FOOD, BEBIBLES).
+    // Deduplicar: para la mayorÃ­a de tipos, conservar solo la alerta con mayor
+    // severidad por clientCode + alertType. ExcepciÃ³n: CUOTA_SIN_COMPRA puede
+    // tener mÃºltiples alertas legÃ­timas por canal (HELADO, FROZEN FOOD, BEBIBLES).
     if (alerts.length > 0 && alerts[0]?.alertType !== 'CUOTA_SIN_COMPRA') {
       const sevOrder = { critical: 0, warning: 1, info: 2 };
       const deduped = new Map();
@@ -158,9 +159,9 @@ async function runETL({ localDir, loadId, force = false } = {}) {
 
     totalAlerts += alerts.length;
 
-    // Auditoría del archivo
+    // AuditorÃ­a del archivo
     await kpiQuery(
-      `INSERT INTO JAVIER.KPI_FILE_AUDIT
+      `INSERT INTO `${SCHEMA}.KPI_FILE_AUDIT
        (LOAD_ID, FILENAME, FILE_SIZE, FILE_HASH, ROWS_TOTAL, ROWS_PARSED, ROWS_SKIPPED, ALERTS_GENERATED, PARSE_ERRORS)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [currentLoadId, file.name, file.size, file.hash,
@@ -177,12 +178,12 @@ async function runETL({ localDir, loadId, force = false } = {}) {
       parseErrors,
     });
 
-    logger.info(`[kpi:etl] ${file.name}: ${rows.length} filas → ${alerts.length} alertas`);
+    logger.info(`[kpi:etl] ${file.name}: ${rows.length} filas â†’ ${alerts.length} alertas`);
   }
 
   // 7. Marcar carga como completada
   await kpiQuery(
-    `UPDATE JAVIER.KPI_LOADS SET STATUS = 'COMPLETED', TOTAL_ALERTS = ?, COMPLETED_AT = CURRENT TIMESTAMP, ERRORS = ?
+    `UPDATE `${SCHEMA}.KPI_LOADS SET STATUS = 'COMPLETED', TOTAL_ALERTS = ?, COMPLETED_AT = CURRENT TIMESTAMP, ERRORS = ?
      WHERE LOAD_ID = ?`,
     [totalAlerts, sanitizeForDb2(JSON.stringify(errors)), currentLoadId]
   );
@@ -190,7 +191,7 @@ async function runETL({ localDir, loadId, force = false } = {}) {
   // 8. Actualizar cache Redis por cliente
   await updateRedisCache(allAlerts);
 
-  // 9. Actualizar métricas Prometheus
+  // 9. Actualizar mÃ©tricas Prometheus
   const etlDuration = Date.now() - etlStart;
   recordETLRun({
     success: true,
@@ -213,7 +214,7 @@ async function runETL({ localDir, loadId, force = false } = {}) {
   if (emailRecipients.length > 0) {
     try {
       const summaryResult = await kpiQuery(
-        `SELECT ALERT_TYPE, SEVERITY, COUNT(*) AS CNT FROM JAVIER.KPI_ALERTS
+        `SELECT ALERT_TYPE, SEVERITY, COUNT(*) AS CNT FROM `${SCHEMA}.KPI_ALERTS
          WHERE IS_ACTIVE = 1 GROUP BY ALERT_TYPE, SEVERITY ORDER BY ALERT_TYPE`
       );
       await sendKpiDigest(emailRecipients, { loadId: currentLoadId, totalAlerts, fileResults }, summaryResult.rows);
@@ -226,51 +227,51 @@ async function runETL({ localDir, loadId, force = false } = {}) {
 }
 
 /**
- * Normaliza un código de cliente Glacius (corto, ej: '871') al formato GMP completo (10 dígitos, ej: '4300000871').
- * Los CSVs de Glacius/Froneri usan 'CodigoInterno' que es el código interno del distribuidor SIN el prefijo '4300'.
- * El sistema GMP usa códigos de 10 caracteres: '4300' + 6 dígitos con ceros a la izquierda.
+ * Normaliza un cÃ³digo de cliente Glacius (corto, ej: '871') al formato GMP completo (10 dÃ­gitos, ej: '4300000871').
+ * Los CSVs de Glacius/Froneri usan 'CodigoInterno' que es el cÃ³digo interno del distribuidor SIN el prefijo '4300'.
+ * El sistema GMP usa cÃ³digos de 10 caracteres: '4300' + 6 dÃ­gitos con ceros a la izquierda.
  */
 function normalizeGmpClientCode(code) {
   if (!code) return code;
   const s = String(code).trim();
 
-  // Ya está en formato completo 4300XXXXXX
+  // Ya estÃ¡ en formato completo 4300XXXXXX
   if (/^4300\d{6}$/.test(s)) return s;
 
-  // Es numérico puro → prefijar con 4300 y rellenar con ceros hasta 10 dígitos
+  // Es numÃ©rico puro â†’ prefijar con 4300 y rellenar con ceros hasta 10 dÃ­gitos
   const numeric = s.replace(/^0+/, '') || '0'; // quitar ceros iniciales del CSV
   if (/^\d+$/.test(numeric) && numeric.length <= 6) {
     return '4300' + numeric.padStart(6, '0');
   }
 
-  // Formato desconocido: devolver como está (log para debug)
-  logger.warn(`[kpi:etl] Código cliente no normalizable: '${s}' — se inserta tal cual`);
+  // Formato desconocido: devolver como estÃ¡ (log para debug)
+  logger.warn(`[kpi:etl] CÃ³digo cliente no normalizable: '${s}' â€” se inserta tal cual`);
   return s;
 }
 
 /**
  * Sanitiza texto para DB2 EBCDIC (CCSID 1234).
- * Reemplaza caracteres problemáticos que no existen en CCSID 1234:
- * - € → EUR
- * - Tildes → sin tilde (á→a, é→e, í→i, ó→o, ú→u, ñ→n, ü→u)
- * - Cualquier otro carácter fuera de ASCII imprimible → ''
+ * Reemplaza caracteres problemÃ¡ticos que no existen en CCSID 1234:
+ * - â‚¬ â†’ EUR
+ * - Tildes â†’ sin tilde (Ã¡â†’a, Ã©â†’e, Ã­â†’i, Ã³â†’o, Ãºâ†’u, Ã±â†’n, Ã¼â†’u)
+ * - Cualquier otro carÃ¡cter fuera de ASCII imprimible â†’ ''
  */
 function sanitizeForDb2(str) {
   if (!str) return str;
   return str
-    .replace(/€/g, 'EUR')
-    // Emojis usados en alertas KPI → equivalentes ASCII legibles
-    .replace(/\u{1F449}/gu, '>')           // 👉 → >
-    .replace(/\u2744\uFE0F?/g, '[F]')      // ❄️ → [F] (Freezer/Armario)
-    .replace(/\u{1F9CA}/gu, '[C]')         // 🧊 → [C] (Conservadora)
-    .replace(/\u{1F368}/gu, '[V]')         // 🍨 → [V] (Vitrina)
-    .replace(/\u{1F527}/gu, '[O]')         // 🔧 → [O] (Otros)
-    .replace(/[áàâä]/gi, (c) => c === c.toUpperCase() ? 'A' : 'a')
-    .replace(/[éèêë]/gi, (c) => c === c.toUpperCase() ? 'E' : 'e')
-    .replace(/[íìîï]/gi, (c) => c === c.toUpperCase() ? 'I' : 'i')
-    .replace(/[óòôö]/gi, (c) => c === c.toUpperCase() ? 'O' : 'o')
-    .replace(/[úùûü]/gi, (c) => c === c.toUpperCase() ? 'U' : 'u')
-    .replace(/ñ/g, 'n').replace(/Ñ/g, 'N')
+    .replace(/â‚¬/g, 'EUR')
+    // Emojis usados en alertas KPI â†’ equivalentes ASCII legibles
+    .replace(/\u{1F449}/gu, '>')           // ðŸ‘‰ â†’ >
+    .replace(/\u2744\uFE0F?/g, '[F]')      // â„ï¸ â†’ [F] (Freezer/Armario)
+    .replace(/\u{1F9CA}/gu, '[C]')         // ðŸ§Š â†’ [C] (Conservadora)
+    .replace(/\u{1F368}/gu, '[V]')         // ðŸ¨ â†’ [V] (Vitrina)
+    .replace(/\u{1F527}/gu, '[O]')         // ðŸ”§ â†’ [O] (Otros)
+    .replace(/[Ã¡Ã Ã¢Ã¤]/gi, (c) => c === c.toUpperCase() ? 'A' : 'a')
+    .replace(/[Ã©Ã¨ÃªÃ«]/gi, (c) => c === c.toUpperCase() ? 'E' : 'e')
+    .replace(/[Ã­Ã¬Ã®Ã¯]/gi, (c) => c === c.toUpperCase() ? 'I' : 'i')
+    .replace(/[Ã³Ã²Ã´Ã¶]/gi, (c) => c === c.toUpperCase() ? 'O' : 'o')
+    .replace(/[ÃºÃ¹Ã»Ã¼]/gi, (c) => c === c.toUpperCase() ? 'U' : 'u')
+    .replace(/Ã±/g, 'n').replace(/Ã‘/g, 'N')
     .replace(/[^\x20-\x7E\n\r\t]/g, '');  // Solo ASCII imprimible + whitespace
 }
 
@@ -279,8 +280,8 @@ function sanitizeForDb2(str) {
  */
 async function insertAlertsBatch(loadId, alerts) {
   // CAST(? AS CLOB(64K)) es necesario porque DB2 ODBC no soporta
-  // bindear parámetros string directamente a columnas CLOB
-  const sql = `INSERT INTO JAVIER.KPI_ALERTS
+  // bindear parÃ¡metros string directamente a columnas CLOB
+  const sql = `INSERT INTO `${SCHEMA}.KPI_ALERTS
     (LOAD_ID, CLIENT_CODE, ALERT_TYPE, SEVERITY, MESSAGE, RAW_DATA, SOURCE_FILE, EXPIRES_AT)
     VALUES (?, ?, ?, ?, ?, CAST(? AS CLOB(64K)), ?, CURRENT TIMESTAMP + 7 DAYS)`;
 
@@ -341,7 +342,7 @@ async function updateRedisCache(alerts) {
 
     logger.info(`[kpi:etl] Cache Redis actualizada para ${Object.keys(byClient).length} clientes`);
   } catch (err) {
-    logger.warn(`[kpi:etl] Error actualizando Redis (no crítico): ${err.message}`);
+    logger.warn(`[kpi:etl] Error actualizando Redis (no crÃ­tico): ${err.message}`);
   }
 }
 
@@ -358,7 +359,7 @@ function cleanupTempDir(dirPath) {
     fs.rmdirSync(dirPath);
     logger.info(`[kpi:etl] Directorio temporal limpiado: ${dirPath}`);
   } catch (err) {
-    logger.warn(`[kpi:etl] Error limpiando temp (no crítico): ${err.message}`);
+    logger.warn(`[kpi:etl] Error limpiando temp (no crÃ­tico): ${err.message}`);
   }
 }
 

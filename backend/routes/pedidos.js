@@ -5,6 +5,32 @@
  * Product catalog, pricing, stock, order CRUD, recommendations.
  */
 
+function sanitizeOrderForRole(order, role) {
+  if (role === 'JEFE_VENTAS' || role === 'ADMIN') return order;
+  // Eliminar campos sensibles para COMERCIAL/REPARTIDOR
+  if (!order) return order;
+  
+  // Create a deep copy to avoid mutating the original
+  const safe = JSON.parse(JSON.stringify(order));
+  
+  delete safe.importeCosto;
+  delete safe.importeMargen;
+  delete safe.porcentajeMargen;
+  delete safe.totalCosto;
+  delete safe.totalMargen;
+  
+  if (Array.isArray(safe.lines)) {
+    safe.lines = safe.lines.map(l => {
+      delete l.precioCosto;
+      delete l.importeCosto;
+      delete l.importeMargen;
+      delete l.porcentajeMargen;
+      return l;
+    });
+  }
+  return safe;
+}
+
 const express = require('express');
 const router = express.Router();
 const pedidosService = require('../services/pedidos.service');
@@ -20,6 +46,47 @@ const { TTL } = require('../services/redis-cache');
 // =============================================================================
 
 router.use(verifyToken);
+
+// Req #2: Margin visibility ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â only JEFE_VENTAS / ADMIN see cost/margin data
+const MARGIN_VISIBLE_ROLES = ['JEFE_VENTAS', 'ADMIN'];
+function canSeeMargin(user) {
+    const role = (user?.role || '').toUpperCase();
+    return MARGIN_VISIBLE_ROLES.includes(role) || user?.isJefeVentas === true;
+}
+function stripMarginFromOrder(order, user) {
+    if (canSeeMargin(user)) return order;
+    const clean = { ...order };
+    delete clean.costo;
+    delete clean.margen;
+    delete clean.importeCosto;
+    delete clean.importeMargen;
+    if (clean.header) {
+        clean.header = { ...clean.header };
+        delete clean.header.costo;
+        delete clean.header.margen;
+        delete clean.header.importeCosto;
+        delete clean.header.importeMargen;
+    }
+    if (Array.isArray(clean.lines)) {
+        clean.lines = clean.lines.map(l => {
+            const lc = { ...l };
+            delete lc.precioCosto;
+            delete lc.importeCosto;
+            delete lc.importeMargen;
+            delete lc.porcentajeMargen;
+            return lc;
+        });
+    }
+    return clean;
+}
+function stripMarginFromProduct(product, user) {
+    if (canSeeMargin(user)) return product;
+    const clean = { ...product };
+    delete clean.precioMinimo;
+    delete clean.precioCosto;
+    return clean;
+}
+
 
 // =============================================================================
 // INITIALIZATION (called from server.js startServer after initDb)
@@ -73,7 +140,8 @@ router.get('/products', async (req, res) => {
             offset
         });
 
-        res.json({ success: true, products: result.products, count: result.count });
+        const products = result.products.map(p => stripMarginFromProduct(p, req.user));
+        res.json({ success: true, products, count: result.count });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /products: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
@@ -390,7 +458,7 @@ router.get('/promotions', async (req, res) => {
 });
 
 // =============================================================================
-// ORDERS — CRUD
+// ORDERS ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â CRUD
 // =============================================================================
 
 /**
@@ -426,7 +494,8 @@ router.get('/', async (req, res) => {
             offset: parseIntSafe(req.query.offset, 0),
         });
 
-        res.json({ success: true, orders: result.orders, count: result.count });
+        const orders = result.orders.map(o => stripMarginFromOrder(o, req.user));
+        res.json({ success: true, orders, count: result.count });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
@@ -538,7 +607,7 @@ router.get('/:id', async (req, res) => {
             return res.status(404).json({ success: false, error: 'Order not found' });
         }
 
-        res.json({ success: true, order });
+        res.json({ success: true, order: stripMarginFromOrder(order, req.user) });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /${req.params.id}: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
@@ -554,7 +623,7 @@ router.post('/create', async (req, res) => {
         const {
             clientCode, clientName, vendedorCode,
             tipoventa, almacen, tarifa, observaciones,
-            lines
+            descuentoGlobal, lines
         } = req.body;
 
         // Validation
@@ -575,6 +644,7 @@ router.post('/create', async (req, res) => {
             tipoventa: tipoventa ? String(tipoventa).trim() : undefined,
             almacen: almacen ? String(almacen).trim() : undefined,
             tarifa: tarifa ? String(tarifa).trim() : undefined,
+            descuentoGlobal: descuentoGlobal ? parseFloat(descuentoGlobal) : 0,
             observaciones: observaciones ? String(observaciones).trim() : '',
             lines,
             userId: req.user ? req.user.vendedorCode : undefined
@@ -611,7 +681,7 @@ router.put('/:id/lines', async (req, res) => {
             return res.status(400).json({ success: false, error: 'codigoArticulo is required' });
         }
         if (!['VT', 'SC'].includes(claseLinea)) {
-            return res.status(400).json({ success: false, error: 'claseLinea inválida' });
+            return res.status(400).json({ success: false, error: 'claseLinea invÃƒÆ’Ã‚Â¡lida' });
         }
 
         const line = await pedidosService.addOrderLine(id, {
@@ -652,7 +722,7 @@ router.put('/:id/lines/:lineId', async (req, res) => {
         const { cantidadEnvases, cantidadUnidades, precioVenta, unidadMedida, claseLinea } = req.body;
 
         if (claseLinea !== undefined && !['VT', 'SC'].includes(claseLinea)) {
-            return res.status(400).json({ success: false, error: 'claseLinea inválida' });
+            return res.status(400).json({ success: false, error: 'claseLinea invÃƒÆ’Ã‚Â¡lida' });
         }
 
         const line = await pedidosService.updateOrderLine(id, lineId, {
@@ -741,7 +811,7 @@ router.put('/:id/confirm', async (req, res) => {
         }
 
         logger.info(`[PEDIDOS] Order #${id} confirmed successfully`);
-        res.json({ success: true, order });
+        res.json({ success: true, order: sanitizeOrderForRole(order, req.user?.role || req.user?.tipo || 'COMERCIAL') });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/confirm: ${error.message}`);
         const status = error.message.includes('not found') ? 404
@@ -812,7 +882,7 @@ router.put('/:id/cancel', async (req, res) => {
 
 /**
  * PUT /api/pedidos/:id/status
- * Update order status (for Pendiente aprobación, Enviar, etc.)
+ * Update order status (for Pendiente aprobaciÃƒÆ’Ã‚Â³n, Enviar, etc.)
  */
 router.put('/:id/status', async (req, res) => {
     try {
@@ -829,7 +899,7 @@ router.put('/:id/status', async (req, res) => {
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/status: ${error.message}`);
         const status = error.message.includes('not found') ? 404
-            : error.message.includes('no válido') ? 400 : 500;
+            : error.message.includes('no vÃƒÆ’Ã‚Â¡lido') ? 400 : 500;
         res.status(status).json({ success: false, error: error.message });
     }
 });
@@ -882,21 +952,28 @@ router.get('/search-products', async (req, res) => {
 // DEBUG ENDPOINTS (for testing only)
 // =============================================================================
 
+const debugMiddleware = (req, res, next) => {
+    if (process.env.NODE_ENV === 'production') {
+        return res.status(403).json({ success: false, error: 'Debug endpoints disabled in production' });
+    }
+    next();
+};
+
 /**
  * GET /api/pedidos/debug/estados
- * Documentación de estados de pedidos
+ * DocumentaciÃƒÆ’Ã‚Â³n de estados de pedidos
  */
-router.get('/debug/estados', (req, res) => {
+router.get('/debug/estados', debugMiddleware, (req, res) => {
     res.json({
         estados: {
             BORRADOR: 'Estado inicial. Pedido creado en la app pero sin confirmar.',
-            CONFIRMADO: 'Pedido confirmado por el comercial. Listo para proceso de almacén.',
-            ENVIADO: 'Pedido enviado/entregado. Se marca externamente (CPC/albarán generado).',
+            CONFIRMADO: 'Pedido confirmado por el comercial. Listo para proceso de almacÃƒÆ’Ã‚Â©n.',
+            ENVIADO: 'Pedido enviado/entregado. Se marca externamente (CPC/albarÃƒÆ’Ã‚Â¡n generado).',
             ANULADO: 'Pedido anulado/cancelado.'
         },
         transiciones: {
-            'BORRADOR -> CONFIRMADO': 'Usuario confirma en detalle del pedido (botón)',
-            'CONFIRMADO -> ENVIADO': 'Se marcaexternamente cuando se genera albarán',
+            'BORRADOR -> CONFIRMADO': 'Usuario confirma en detalle del pedido (botÃƒÆ’Ã‚Â³n)',
+            'CONFIRMADO -> ENVIADO': 'Se marcaexternamente cuando se genera albarÃƒÆ’Ã‚Â¡n',
             'BORRADOR/CONFIRMADO -> ANULADO': 'Usuario cancela el pedido'
         },
         valoresPermitidos: ['BORRADOR', 'CONFIRMADO', 'ENVIADO', 'ANULADO']
@@ -908,7 +985,7 @@ router.get('/debug/estados', (req, res) => {
  * Cambiar estado de un pedido (para pruebas)
  * Body: { orderId, estado }
  */
-router.post('/debug/set-estado', async (req, res) => {
+router.post('/debug/set-estado', debugMiddleware, async (req, res) => {
     try {
         const { orderId, estado } = req.body;
         const estadosValidos = ['BORRADOR', 'CONFIRMADO', 'ENVIADO', 'ANULADO'];
@@ -919,7 +996,7 @@ router.post('/debug/set-estado', async (req, res) => {
         if (!estado || !estadosValidos.includes(estado)) {
             return res.status(400).json({ 
                 success: false, 
-                error: `Estado inválido. Valores: ${estadosValidos.join(', ')}` 
+                error: `Estado invÃƒÆ’Ã‚Â¡lido. Valores: ${estadosValidos.join(', ')}` 
             });
         }
         
@@ -942,7 +1019,7 @@ router.post('/debug/set-estado', async (req, res) => {
  * Listar pedidos con sus estados actuales
  * Query: vendedorCode (optional), limit (default 50)
  */
-router.get('/debug/list-estados', async (req, res) => {
+router.get('/debug/list-estados', debugMiddleware, async (req, res) => {
     try {
         const limit = Math.min(parseInt(req.query.limit) || 50, 200);
         const vendedorCode = (req.query.vendedorCode || '').replace(/[^a-zA-Z0-9]/g, '').trim();
@@ -974,6 +1051,79 @@ router.get('/debug/list-estados', async (req, res) => {
     } catch (error) {
         logger.error(`[DEBUG] Error list-estados: ${error.message}`);
         res.status(500).json({ success: false, error: 'Internal server error' });
+    }
+});
+
+/**
+ * GET /api/pedidos/client-evolution/:clientCode
+ */
+router.get('/client-evolution/:clientCode', async (req, res) => {
+    try {
+        const clientCode = sanitizeCode(req.params.clientCode);
+        const currentYear = new Date().getFullYear();
+        const startYear = currentYear - 2; // 3 years of history
+
+        // 1. Monthly sales
+        const monthlyQuery = 
+            SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
+                   SUM(L.LCIMVT) AS SALES,
+                   SUM(L.LCCTUD) AS UNITS
+            FROM DSED.LACLAE L
+            WHERE TRIM(L.LCCDCL) = ? 
+              AND L.LCAADC >= ?
+              AND L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('AB','VT')
+            GROUP BY L.LCAADC, L.LCMMDC
+            ORDER BY L.LCAADC ASC, L.LCMMDC ASC
+        ;
+        const monthlyData = await queryWithParams(monthlyQuery, [clientCode, startYear]);
+
+        // 2. Top Products (this year)
+        const topProductsQuery = 
+            SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME,
+                   SUM(L.LCIMVT) AS TOTAL_SALES,
+                   SUM(L.LCCTUD) AS TOTAL_UNITS
+            FROM DSED.LACLAE L
+            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+            WHERE TRIM(L.LCCDCL) = ? 
+              AND L.LCAADC >= ?
+              AND L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('AB','VT')
+            GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
+            ORDER BY TOTAL_SALES DESC
+            FETCH FIRST 20 ROWS ONLY
+        ;
+        const topProductsData = await queryWithParams(topProductsQuery, [clientCode, currentYear - 1]);
+
+        // 3. Returns (Devoluciones)
+        const returnsQuery = 
+            SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
+                   TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME,
+                   SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT
+            FROM DSED.LACLAE L
+            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+            WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
+              AND (L.LCSRAB = 'D' OR L.LCTPVT = 'DV')
+            GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
+            ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC
+            FETCH FIRST 50 ROWS ONLY
+        ;
+        const returnsData = await queryWithParams(returnsQuery, [clientCode, startYear]);
+
+        res.json({
+            success: true,
+            monthlySales: monthlyData.map(r => ({
+                year: r.YEAR, month: r.MONTH, sales: parseFloat(r.SALES), units: parseFloat(r.UNITS)
+            })),
+            topProducts: topProductsData.map(r => ({
+                code: r.CODE, name: r.NAME, totalSales: parseFloat(r.TOTAL_SALES), totalUnits: parseFloat(r.TOTAL_UNITS)
+            })),
+            returns: returnsData.map(r => ({
+                year: r.YEAR, month: r.MONTH, productCode: r.PRODUCT_CODE, productName: r.PRODUCT_NAME,
+                units: parseFloat(r.UNITS), amount: parseFloat(r.AMOUNT)
+            }))
+        });
+    } catch (error) {
+        logger.error('[PEDIDOS] client-evolution error: ' + error.message);
+        res.status(500).json({ success: false, error: 'Error getting client evolution' });
     }
 });
 

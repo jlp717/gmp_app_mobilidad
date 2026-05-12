@@ -678,4 +678,17 @@ class RepartidorDataService {
       return null;
     }
   }
+
+  /// Obtener evoluciÃ³n de ventas y productos top
+  static Future<Map<String, dynamic>> getEvolution(String repartidorId) async {
+    try {
+      final response = await ApiClient.get(
+        '/repartidor-finanzas/evolution/$repartidorId',
+        cacheTTL: const Duration(hours: 1), // Long cache for evolution
+      );
+      return response;
+    } catch (e) {
+      throw Exception('Error cargando evoluciÃ³n: $e');
+    }
+  }
 }

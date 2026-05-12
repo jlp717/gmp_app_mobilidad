@@ -1,4 +1,5 @@
-// index.js: Punto de entrada del módulo KPI Glacius — inicialización y exports (DB2/ODBC)
+const SCHEMA = process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER';
+// index.js: Punto de entrada del mÃ³dulo KPI Glacius â€” inicializaciÃ³n y exports (DB2/ODBC)
 'use strict';
 
 const kpiRoutes = require('./routes');
@@ -8,24 +9,24 @@ const { kpiHealthCheck, kpiEndPool, initKpiTables } = require('./config/db');
 const logger = require('../middleware/logger');
 
 /**
- * Inicializa el módulo KPI: tablas DB2 + Redis + scheduler.
+ * Inicializa el mÃ³dulo KPI: tablas DB2 + Redis + scheduler.
  * Llamar desde server.js en startServer().
  */
 async function initKpiModule() {
   try {
-    // 1. Crear/verificar tablas KPI en DB2 (JAVIER.KPI_LOADS, KPI_ALERTS, KPI_FILE_AUDIT)
+    // 1. Crear/verificar tablas KPI en DB2 (`${SCHEMA}.KPI_LOADS, KPI_ALERTS, KPI_FILE_AUDIT)
     await initKpiTables();
 
     // 2. Conectar Redis para cache
     await initRedis();
     logger.info('[kpi] Redis inicializado');
 
-    // 3. Verificar conexión DB2
+    // 3. Verificar conexiÃ³n DB2
     const dbHealth = await kpiHealthCheck();
     if (dbHealth.status === 'ok') {
       logger.info('[kpi] DB2 KPI conectado');
     } else {
-      logger.warn(`[kpi] DB2 KPI no disponible: ${dbHealth.error}. Módulo en modo degradado.`);
+      logger.warn(`[kpi] DB2 KPI no disponible: ${dbHealth.error}. MÃ³dulo en modo degradado.`);
     }
 
     // 4. Iniciar scheduler ETL diario (activo por defecto, desactivar con KPI_SCHEDULER_ENABLED=false)
@@ -36,20 +37,20 @@ async function initKpiModule() {
       logger.info('[kpi] Scheduler ETL deshabilitado (KPI_SCHEDULER_ENABLED=false)');
     }
 
-    logger.info('[kpi] Módulo KPI Glacius inicializado correctamente');
+    logger.info('[kpi] MÃ³dulo KPI Glacius inicializado correctamente');
   } catch (err) {
-    logger.error(`[kpi] Error inicializando módulo KPI: ${err.message}`);
-    // No lanzar error — el módulo opera en modo degradado
+    logger.error(`[kpi] Error inicializando mÃ³dulo KPI: ${err.message}`);
+    // No lanzar error â€” el mÃ³dulo opera en modo degradado
   }
 }
 
 /**
- * Detiene el módulo KPI limpiamente.
+ * Detiene el mÃ³dulo KPI limpiamente.
  */
 async function shutdownKpiModule() {
   stopScheduler();
   await kpiEndPool();
-  logger.info('[kpi] Módulo KPI detenido');
+  logger.info('[kpi] MÃ³dulo KPI detenido');
 }
 
 module.exports = {

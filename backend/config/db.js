@@ -11,7 +11,7 @@ const DB_PWD = process.env.ODBC_PWD;
 const DB_DSN = process.env.ODBC_DSN || 'GMP';
 
 if (NODE_ENV === 'production' && (!DB_UID || !DB_PWD)) {
-    logger.warn('[DB] ⚠️ Using default DB credentials in production');
+    logger.warn('[DB] âš ï¸ Using default DB credentials in production');
 }
 
 const DB_UID_FINAL = DB_UID || 'JAVIER';
@@ -24,7 +24,7 @@ const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID_FINAL};PWD=${DB_PWD_FINAL};NAM=1;C
     COMMTIMEOUT=${parseInt(process.env.ODBC_COMM_TIMEOUT) || 90};
     DBQ=${DB_DSN};`;
 
-// Pool sizing — configurable via env for production tuning.
+// Pool sizing â€” configurable via env for production tuning.
 // Defaults raised: /commissions/summary?vendor=ALL fans out to N parallel vendor
 // queries; with max=10 the pool exhausted and requests timed out at 10s.
 // Increased to 30 for high-concurrency commission scenarios (up to ~40 vendors in parallel).
@@ -181,7 +181,7 @@ function queryWithTimeout(conn, sql, params, timeoutMs = QUERY_TIMEOUT_MS) {
 let dbPool = null;
 const MAX_RETRIES = 3;
 const RETRY_DELAY_BASE_MS = 500;
-const QUERY_TIMEOUT_MS = 30000;  // Max 30s per individual query
+const QUERY_TIMEOUT_MS = parseInt(process.env.DB_QUERY_TIMEOUT_MS, 10) || 60000;  // Max time per query, configurable for heavy queries like Evolution
 let poolRecreateInProgress = false;
 let keepaliveInterval = null;
 
@@ -208,10 +208,10 @@ async function initDb() {
             pool._odbcPool = await odbc.pool(DB_CONFIG);
             dbPool = pool._odbcPool;
             await pool._ensureMinConnections();
-            logger.info(`✅ Connection pool initialized: min=${pool.min}, max=${pool.max}, idleTimeoutMs=${pool.idleTimeoutMs}, acquireTimeoutMs=${pool.acquireTimeoutMs}`);
+            logger.info(`âœ… Connection pool initialized: min=${pool.min}, max=${pool.max}, idleTimeoutMs=${pool.idleTimeoutMs}, acquireTimeoutMs=${pool.acquireTimeoutMs}`);
             startKeepalive();
         } catch (error) {
-            logger.error(`❌ Database connection failed during init: ${error.message}`);
+            logger.error(`âŒ Database connection failed during init: ${error.message}`);
             throw error;
         } finally {
             pool._initPromise = null;
@@ -220,6 +220,8 @@ async function initDb() {
     await pool._initPromise;
     return pool._odbcPool;
 }
+
+let poolRecreateDelay = 1000;
 
 async function recreatePool() {
     if (poolRecreateInProgress) {
@@ -239,16 +241,18 @@ async function recreatePool() {
         pool.connections = [];
         pool.active = 0;
 
-        await new Promise(res => setTimeout(res, 500));
+        await new Promise(res => setTimeout(res, poolRecreateDelay));
 
         pool._odbcPool = await odbc.pool(DB_CONFIG);
         dbPool = pool._odbcPool;
         await pool._ensureMinConnections();
         logger.info('✅ Database pool recreated successfully');
         startKeepalive();
+        poolRecreateDelay = 1000; // Reset backoff
     } catch (error) {
         logger.error(`❌ Pool recreation failed: ${error.message}`);
-        dbPool = null;
+        poolRecreateDelay = Math.min(poolRecreateDelay * 2, 30000); // Exponential backoff max 30s
+        setTimeout(() => recreatePool().catch(() => {}), poolRecreateDelay);
     } finally {
         poolRecreateInProgress = false;
     }
@@ -333,7 +337,7 @@ function stopKeepalive() {
 // Normalize ODBC result rows so every column is accessible by both UPPERCASE
 // and lowercase keys. DB2/ODBC driver casing varies between environments and
 // many legacy endpoints assume UPPERCASE while newer SQL uses `as lowercase`
-// aliases — this prevents undefined/0/empty responses from casing mismatches.
+// aliases â€” this prevents undefined/0/empty responses from casing mismatches.
 function normalizeRowCasing(rows) {
     if (!Array.isArray(rows) || rows.length === 0) return rows;
     for (let i = 0; i < rows.length; i++) {
@@ -374,7 +378,7 @@ async function query(sql, logQuery = true, logError = true) {
 
             if (logQuery) {
                 const preview = sql.replace(/\s+/g, ' ').substring(0, 100);
-                logger.info(`📊 Query (${duration}ms): ${preview}... → ${result.length} rows`);
+                logger.info(`ðŸ“Š Query (${duration}ms): ${preview}... â†’ ${result.length} rows`);
             }
 
             return normalizeRowCasing(result);
@@ -392,12 +396,12 @@ async function query(sql, logQuery = true, logError = true) {
 
             if (logError && attempt === MAX_RETRIES) {
                 const odbcDetails = error.odbcErrors ? JSON.stringify(error.odbcErrors) : '';
-                logger.error(`❌ Query Error (Final Attempt): ${error.message} ${odbcDetails}\n  SQL: ${sql ? sql.replace(/\s+/g, ' ').substring(0, 200) : 'N/A'}`);
+                logger.error(`âŒ Query Error (Final Attempt): ${error.message} ${odbcDetails}\n  SQL: ${sql ? sql.replace(/\s+/g, ' ').substring(0, 200) : 'N/A'}`);
             } else if (logError && retryable) {
-                logger.warn(`⚠️ Query Failed (Attempt ${attempt}/${MAX_RETRIES}): ${error.message}. Retrying...`);
+                logger.warn(`âš ï¸ Query Failed (Attempt ${attempt}/${MAX_RETRIES}): ${error.message}. Retrying...`);
             } else if (logError) {
                 const states = (error.odbcErrors || []).map(e => e.state).join(',');
-                logger.error(`🚫 Non-retryable error (attempt ${attempt}): ${error.message} [state=${states}]`);
+                logger.error(`ðŸš« Non-retryable error (attempt ${attempt}): ${error.message} [state=${states}]`);
             }
 
             if (!retryable) {
@@ -452,7 +456,7 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
 
             if (logQuery) {
                 const preview = sql.replace(/\s+/g, ' ').substring(0, 80);
-                logger.info(`📊 Param Query (${duration}ms): ${preview}... → ${result.length} rows`);
+                logger.info(`ðŸ“Š Param Query (${duration}ms): ${preview}... â†’ ${result.length} rows`);
             }
 
             return normalizeRowCasing(result);
@@ -472,12 +476,12 @@ async function queryWithParams(sql, params = [], logQuery = true, logError = tru
                 const odbcDetails = error.odbcErrors ? JSON.stringify(error.odbcErrors) : '';
                 const sqlPreview = sql ? sql.replace(/\s+/g, ' ').substring(0, 300) : 'N/A';
                 const paramPreview = params ? JSON.stringify(params).substring(0, 200) : '[]';
-                logger.error(`❌ Param Query Error (Final): ${error.message} ${odbcDetails}\n  SQL: ${sqlPreview}\n  Params: ${paramPreview}`);
+                logger.error(`âŒ Param Query Error (Final): ${error.message} ${odbcDetails}\n  SQL: ${sqlPreview}\n  Params: ${paramPreview}`);
             } else if (logError && retryable) {
-                logger.warn(`⚠️ Param Query Retry (${attempt}): ${error.message}`);
+                logger.warn(`âš ï¸ Param Query Retry (${attempt}): ${error.message}`);
             } else if (logError) {
                 const states = (error.odbcErrors || []).map(e => e.state).join(',');
-                logger.error(`🚫 Non-retryable param error (attempt ${attempt}): ${error.message} [state=${states}]`);
+                logger.error(`ðŸš« Non-retryable param error (attempt ${attempt}): ${error.message} [state=${states}]`);
             }
 
             if (!retryable) break;
@@ -519,7 +523,12 @@ async function closePool() {
     dbPool = null;
 }
 
+function getPoolMetrics() {
+    return pool.getMetrics();
+}
+
 module.exports = {
+    getPoolMetrics,
     initDb,
     query,
     queryWithParams,

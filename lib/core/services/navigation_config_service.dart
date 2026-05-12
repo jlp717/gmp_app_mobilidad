@@ -112,6 +112,12 @@ class NavigationConfigService {
       color: Color(0xFFFFC107),
     ),
     NavItem(
+      icon: Icons.show_chart_outlined,
+      selectedIcon: Icons.show_chart,
+      label: 'Evolución',
+      color: Color(0xFF00D4FF),
+    ),
+    NavItem(
       icon: Icons.euro_outlined,
       selectedIcon: Icons.euro,
       label: 'Comisiones',
