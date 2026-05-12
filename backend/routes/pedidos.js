@@ -1064,7 +1064,7 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
         const startYear = currentYear - 2; // 3 years of history
 
         // 1. Monthly sales
-        const monthlyQuery = 
+        const monthlyQuery = `
             SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
                    SUM(L.LCIMVT) AS SALES,
                    SUM(L.LCCTUD) AS UNITS
@@ -1074,11 +1074,11 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
               AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
             GROUP BY L.LCAADC, L.LCMMDC
             ORDER BY L.LCAADC ASC, L.LCMMDC ASC
-        ;
+        `;
         const monthlyData = await queryWithParams(monthlyQuery, [clientCode, startYear, 'CC', 'VC', 'AB', 'VT']);
 
         // 2. Top Products (this year)
-        const topProductsQuery = 
+        const topProductsQuery = `
             SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME,
                    SUM(L.LCIMVT) AS TOTAL_SALES,
                    SUM(L.LCCTUD) AS TOTAL_UNITS
@@ -1090,11 +1090,11 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
             GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
             ORDER BY TOTAL_SALES DESC
             FETCH FIRST 20 ROWS ONLY
-        ;
+        `;
         const topProductsData = await queryWithParams(topProductsQuery, [clientCode, currentYear - 1, 'CC', 'VC', 'AB', 'VT']);
 
         // 3. Returns (Devoluciones)
-        const returnsQuery = 
+        const returnsQuery = `
             SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
                    TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME,
                    SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT
@@ -1105,7 +1105,7 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
             GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
             ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC
             FETCH FIRST 50 ROWS ONLY
-        ;
+        `;
         const returnsData = await queryWithParams(returnsQuery, [clientCode, startYear]);
 
         res.json({
