@@ -206,7 +206,7 @@ router.post('/:codigoCliente/registrar', async (req, res) => {
             tipoVenta, tipoModo, tipoUsuario, codigoUsuario
         } = req.body;
 
-        logger.info(`[COBROS] Registrando cobro para ${codigoCliente}: ${importe}ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬`);
+        logger.info(`[COBROS] Registrando cobro para ${codigoCliente}: ${importe}€`);
 
         // COBROS table created at startup by init-tables.js
 
