@@ -234,6 +234,39 @@ async function getFixedMonthlyObjectiveTarget(vendorCode, year, month) {
     }
 }
 
+/**
+ * Get exact monthly targets (no pastRecent fallback).
+ * Used by the hybrid override logic to only override explicitly set months.
+ */
+async function getExactMonthlyTargets(vendorCode, year) {
+    const codeVariants = getVendorCodeVariants(vendorCode);
+    if (codeVariants.length === 0) return {};
+
+    try {
+        const placeholders = codeVariants.map(() => '?').join(',');
+        const rows = await queryWithParams(`
+            SELECT MES, IMPORTE_OBJETIVO
+            FROM JAVIER.COMMERCIAL_TARGETS
+            WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})
+              AND ANIO = ?
+              AND ACTIVO = 1
+              AND MES IS NOT NULL
+            ORDER BY MES
+        `, [...codeVariants, year], false);
+
+        const targets = {};
+        (rows || []).forEach(row => {
+            const mes = parseInt(row.MES, 10);
+            const val = parseFloat(row.IMPORTE_OBJETIVO) || 0;
+            if (mes > 0 && val > 0) targets[mes] = val;
+        });
+        return targets;
+    } catch (err) {
+        logger.debug(`[OBJECTIVES] getExactMonthlyTargets error: ${err.message}`);
+        return {};
+    }
+}
+
 async function getFixedMonthlyObjectiveTargets(vendorCode, year) {
     const codeVariants = getVendorCodeVariants(vendorCode);
     if (codeVariants.length === 0) return {};
@@ -722,7 +755,9 @@ router.get('/evolution', verifyToken, async (req, res) => {
         if (vendorCodesArray.length === 1) {
             const firstCode = vendorCodesArray[0];
             for (const year of yearsArray) {
-                fixedTargetsByYear[year] = await getFixedMonthlyObjectiveTargets(firstCode, year);
+                // Use ONLY exact month matches (no pastRecent fallback) to avoid
+                // propagating override values to months that should be dynamic.
+                fixedTargetsByYear[year] = await getExactMonthlyTargets(firstCode, year);
             }
             if (Object.values(fixedTargetsByYear).some(targets => Object.keys(targets).length > 0)) {
                 logger.info(`[OBJECTIVES] Vendor ${firstCode} has fixed monthly targets in COMMERCIAL_TARGETS`);
