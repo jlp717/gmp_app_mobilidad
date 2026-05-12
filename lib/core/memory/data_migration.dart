@@ -1,5 +1,6 @@
 // ignore_for_file: argument_type_not_assignable, invalid_assignment
 import 'dart:async';
+import 'dart:developer' as developer;
 
 import 'package:gmp_app_mobilidad/core/memory/agent_database.dart';
 import 'package:gmp_app_mobilidad/core/memory/unified_memory_layer.dart';
@@ -535,7 +536,7 @@ class MigrationLogger {
     onLog?.call(entry);
 
     // Debug output
-    print('[${entry.timestamp.toIso8601String()}] $level: $message');
+    developer.log('[${entry.timestamp.toIso8601String()}] $level: $message', name: 'data_migration');
   }
 
   List<LogEntry> get logs => List.unmodifiable(_logs);

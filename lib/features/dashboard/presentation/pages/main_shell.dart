@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -78,7 +78,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Auth redirect is handled by GoRouter in main.dart — no manual navigation needed here.
+    // Auth redirect is handled by GoRouter in main.dart â€” no manual navigation needed here.
   }
 
   bool get _isRepartidorEffective {
@@ -134,8 +134,8 @@ class _MainShellState extends ConsumerState<MainShell> {
         child: AlertDialog(
           title: Text(
             isMandatory
-                ? 'Actualización Obligatoria'
-                : 'Actualización Disponible',
+                ? 'ActualizaciÃ³n Obligatoria'
+                : 'ActualizaciÃ³n Disponible',
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.bold,
@@ -149,13 +149,13 @@ class _MainShellState extends ConsumerState<MainShell> {
               Text(
                 (authState?.updateMessage.isNotEmpty ?? false)
                     ? authState!.updateMessage
-                    : 'Hay una nueva versión de la app con mejoras críticas.',
+                    : 'Hay una nueva versiÃ³n de la app con mejoras crÃ­ticas.',
                 style: const TextStyle(color: Colors.white70),
               ),
               if (isMandatory) ...[
                 const SizedBox(height: 16),
                 const Text(
-                  'Esta actualización es necesaria para garantizar la integridad de los datos y el correcto funcionamiento.',
+                  'Esta actualizaciÃ³n es necesaria para garantizar la integridad de los datos y el correcto funcionamiento.',
                   style: TextStyle(
                     color: Colors.orange,
                     fontSize: 12,
@@ -171,7 +171,7 @@ class _MainShellState extends ConsumerState<MainShell> {
               TextButton(
                 onPressed: () => Navigator.pop(context),
                 child: const Text(
-                  'MÁS TARDE',
+                  'MÃS TARDE',
                   style: TextStyle(color: Colors.white54),
                 ),
               )
@@ -388,7 +388,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
           border:
-              Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+              Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
         ),
         child: SafeArea(
           top: false,
@@ -416,7 +416,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                       item: _NavItem(
                         icon: Icons.more_horiz,
                         selectedIcon: Icons.more_horiz,
-                        label: 'Más',
+                        label: 'MÃ¡s',
                         color: AppTheme.textSecondary,
                       ),
                       isSelected: safeIndex >= maxBottomItems - 1,
@@ -583,7 +583,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 size: 20,
               ),
               title: const Text(
-                'Cerrar Sesión',
+                'Cerrar SesiÃ³n',
                 style: TextStyle(color: AppTheme.error, fontSize: 13),
               ),
               onTap: () {
@@ -624,7 +624,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                         color: AppTheme.surfaceColor,
                         border: Border(
                           right: BorderSide(
-                            color: Colors.white.withOpacity(0.05),
+                            color: Colors.white.withValues(alpha: 0.05),
                           ),
                         ),
                       ),
@@ -685,7 +685,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                     color: AppTheme.surfaceColor,
                     border: Border(
                       right: BorderSide(
-                        color: Colors.white.withOpacity(0.05),
+                        color: Colors.white.withValues(alpha: 0.05),
                       ),
                     ),
                   ),
@@ -696,7 +696,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                         horizontal: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: AppTheme.neonBlue.withOpacity(0.1),
+                        color: AppTheme.neonBlue.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: const Icon(
@@ -727,17 +727,17 @@ class _MainShellState extends ConsumerState<MainShell> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
           color: _forceAlmacenMode
-              ? AppTheme.neonPink.withOpacity(0.15)
+              ? AppTheme.neonPink.withValues(alpha: 0.15)
               : _forceRepartidorMode
-                  ? Colors.orange.withOpacity(0.15)
-                  : AppTheme.neonBlue.withOpacity(0.15),
+                  ? Colors.orange.withValues(alpha: 0.15)
+                  : AppTheme.neonBlue.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: _forceAlmacenMode
-                ? AppTheme.neonPink.withOpacity(0.5)
+                ? AppTheme.neonPink.withValues(alpha: 0.5)
                 : _forceRepartidorMode
-                    ? Colors.orange.withOpacity(0.5)
-                    : AppTheme.neonBlue.withOpacity(0.5),
+                    ? Colors.orange.withValues(alpha: 0.5)
+                    : AppTheme.neonBlue.withValues(alpha: 0.5),
           ),
         ),
         child: PopupMenuButton<String>(
@@ -746,7 +746,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           color: AppTheme.surfaceColor,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.white.withOpacity(0.1)),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -768,7 +768,7 @@ class _MainShellState extends ConsumerState<MainShell> {
               Flexible(
                 child: Text(
                   _forceAlmacenMode
-                      ? 'Almacén'
+                      ? 'AlmacÃ©n'
                       : _forceRepartidorMode
                           ? 'Reparto'
                           : 'Ventas',
@@ -818,7 +818,7 @@ class _MainShellState extends ConsumerState<MainShell> {
                 children: [
                   Icon(Icons.inventory_2, color: AppTheme.neonPink, size: 18),
                   SizedBox(width: 12),
-                  Text('Perfil Almacén', style: TextStyle(color: Colors.white)),
+                  Text('Perfil AlmacÃ©n', style: TextStyle(color: Colors.white)),
                 ],
               ),
             ),
@@ -862,7 +862,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             boxShadow: [
               BoxShadow(
                 color: (isJefeVentas ? AppTheme.neonBlue : AppTheme.neonGreen)
-                    .withOpacity(0.3),
+                    .withValues(alpha: 0.3),
                 blurRadius: 12,
                 spreadRadius: 2,
               ),
@@ -892,7 +892,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              color: AppTheme.neonBlue.withOpacity(0.2),
+              color: AppTheme.neonBlue.withValues(alpha: 0.2),
             ),
             child: const Text(
               'JEFE',
@@ -909,7 +909,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              color: Colors.orange.withOpacity(0.2),
+              color: Colors.orange.withValues(alpha: 0.2),
             ),
             child: const Text(
               'REPARTIDOR',
@@ -926,7 +926,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              color: AppTheme.neonGreen.withOpacity(0.2),
+              color: AppTheme.neonGreen.withValues(alpha: 0.2),
             ),
             child: const Text(
               'COMERCIAL',
@@ -956,9 +956,9 @@ class _MainShellState extends ConsumerState<MainShell> {
             EdgeInsets.symmetric(vertical: isSmall ? 8 : 12, horizontal: 4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
-          color: isSelected ? item.color.withOpacity(0.15) : Colors.transparent,
+          color: isSelected ? item.color.withValues(alpha: 0.15) : Colors.transparent,
           border: isSelected
-              ? Border.all(color: item.color.withOpacity(0.3))
+              ? Border.all(color: item.color.withValues(alpha: 0.3))
               : null,
         ),
         child: Column(
@@ -995,7 +995,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          color: AppTheme.error.withOpacity(0.1),
+          color: AppTheme.error.withValues(alpha: 0.1),
         ),
         child: const Column(
           children: [
@@ -1025,7 +1025,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          color: AppTheme.neonPurple.withOpacity(0.1),
+          color: AppTheme.neonPurple.withValues(alpha: 0.1),
         ),
         child: const Column(
           children: [
@@ -1053,7 +1053,7 @@ class _MainShellState extends ConsumerState<MainShell> {
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
-          color: AppTheme.neonBlue.withOpacity(0.1),
+          color: AppTheme.neonBlue.withValues(alpha: 0.1),
         ),
         child: Column(
           children: [
@@ -1086,7 +1086,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         border:
-            Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
+            Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
       ),
       child: Row(
         children: [
@@ -1109,9 +1109,9 @@ class _MainShellState extends ConsumerState<MainShell> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.05),
+                color: Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
+                border: Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.3)),
               ),
               child: _isLoadingRepartidores
                   ? const Center(
@@ -1171,7 +1171,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     final vendedorCodes = authState?.vendedorCodes ?? [];
 
     // ===============================================
-    // ALMACÉN MODE
+    // ALMACÃ‰N MODE
     // ===============================================
     if (_isAlmacenEffective) {
       return LazyIndexedStack(
@@ -1230,7 +1230,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
         }
         if (label == 'Clientes') {
-          final histIdx = navIndexOf('Histórico');
+          final histIdx = navIndexOf('HistÃ³rico');
           return RepartidorClientesPage(
             repartidorId: effectiveRepartidorId,
             isJefeMode: isJefe,
@@ -1259,7 +1259,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             repartidorId: effectiveRepartidorId,
           );
         }
-        if (label == 'Evolución') {
+        if (label == 'EvoluciÃ³n') {
           return RepartidorEvolutionPage(
             repartidorId: effectiveRepartidorId,
           );
@@ -1269,7 +1269,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             repartidorId: effectiveRepartidorId,
           );
         }
-        if (label == 'Histórico') {
+        if (label == 'HistÃ³rico') {
           return RepartidorHistoricoPage(
             repartidorId: effectiveRepartidorId,
             initialClientId: _pendingClientId,
@@ -1285,7 +1285,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             accentColor: AppTheme.neonPink,
           );
         }
-        return const Center(child: Text('Página no encontrada'));
+        return const Center(child: Text('PÃ¡gina no encontrada'));
       }
 
       final content = LazyIndexedStack(
@@ -1330,9 +1330,9 @@ class _MainShellState extends ConsumerState<MainShell> {
           KpiDashboardPage(employeeCode: employeeCode, isJefeVentas: true),
           CobrosPage(employeeCode: employeeCode, isJefeVentas: true),
           const ComingSoonPlaceholder(
-            title: 'Nexus AI — Asistente Comercial',
+            title: 'Nexus AI â€” Asistente Comercial',
             subtitle:
-                'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
+                'Tu asistente inteligente para\nconsultar mÃ¡rgenes, precios, deudas\ny mucho mÃ¡s.',
             icon: Icons.smart_toy,
             accentColor: AppTheme.neonPink,
           ),
@@ -1395,14 +1395,14 @@ class _MainShellState extends ConsumerState<MainShell> {
           return CobrosPage(employeeCode: empCode);
         case 'Chat IA':
           return const ComingSoonPlaceholder(
-            title: 'Nexus AI — Asistente Comercial',
+            title: 'Nexus AI â€” Asistente Comercial',
             subtitle:
-                'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
+                'Tu asistente inteligente para\nconsultar mÃ¡rgenes, precios, deudas\ny mucho mÃ¡s.',
             icon: Icons.smart_toy,
             accentColor: AppTheme.neonPink,
           );
         default:
-          return const Center(child: Text('Página no encontrada'));
+          return const Center(child: Text('PÃ¡gina no encontrada'));
       }
     }
 
@@ -1455,21 +1455,21 @@ class _LogoutConfirmationDialog extends StatelessWidget {
             end: Alignment.bottomRight,
             colors: [
               AppTheme.surfaceColor,
-              AppTheme.darkBase.withOpacity(0.95),
+              AppTheme.darkBase.withValues(alpha: 0.95),
             ],
           ),
           border: Border.all(
-            color: Colors.white.withOpacity(0.08),
+            color: Colors.white.withValues(alpha: 0.08),
             width: 1.5,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.5),
+              color: Colors.black.withValues(alpha: 0.5),
               blurRadius: 40,
               spreadRadius: 10,
             ),
             BoxShadow(
-              color: AppTheme.error.withOpacity(0.1),
+              color: AppTheme.error.withValues(alpha: 0.1),
               blurRadius: 30,
               spreadRadius: -5,
             ),
@@ -1484,10 +1484,10 @@ class _LogoutConfirmationDialog extends StatelessWidget {
               height: iconDim,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppTheme.error.withOpacity(0.15),
+                color: AppTheme.error.withValues(alpha: 0.15),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.error.withOpacity(0.3),
+                    color: AppTheme.error.withValues(alpha: 0.3),
                     blurRadius: 20,
                     spreadRadius: 2,
                   ),
@@ -1504,7 +1504,7 @@ class _LogoutConfirmationDialog extends StatelessWidget {
 
             // Title (responsive)
             Text(
-              '¿Cerrar Sesión?',
+              'Â¿Cerrar SesiÃ³n?',
               style: TextStyle(
                 fontSize: titleFs,
                 fontWeight: FontWeight.w600,
@@ -1516,10 +1516,10 @@ class _LogoutConfirmationDialog extends StatelessWidget {
 
             // Message
             Text(
-              'Estás a punto de salir de tu cuenta, $userName. ¿Estás seguro?',
+              'EstÃ¡s a punto de salir de tu cuenta, $userName. Â¿EstÃ¡s seguro?',
               style: TextStyle(
                 fontSize: 14,
-                color: AppTheme.textSecondary.withOpacity(0.8),
+                color: AppTheme.textSecondary.withValues(alpha: 0.8),
                 height: 1.5,
               ),
               textAlign: TextAlign.center,
@@ -1538,7 +1538,7 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
-                        side: BorderSide(color: Colors.white.withOpacity(0.1)),
+                        side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                       ),
                     ),
                     child: const Text(
@@ -1563,7 +1563,7 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: AppTheme.error.withOpacity(0.4),
+                          color: AppTheme.error.withValues(alpha: 0.4),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         ),

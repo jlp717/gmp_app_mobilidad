@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -196,7 +196,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         border: Border(
-          bottom: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2)),
+          bottom: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.2)),
         ),
       ),
       child: Row(
@@ -208,7 +208,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
           ),
           const SizedBox(width: 12),
           Text(
-            'Gestión de Cobros',
+            'GestiÃ³n de Cobros',
             style: TextStyle(
               fontSize: Responsive.fontSize(context, small: 18, large: 22),
               fontWeight: FontWeight.bold,
@@ -230,20 +230,20 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             onChanged: _onSearchChanged,
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
-              hintText: 'Buscar por nombre, código, NIF...',
+              hintText: 'Buscar por nombre, cÃ³digo, NIF...',
               hintStyle:
-                  TextStyle(color: AppTheme.textSecondary.withOpacity(0.6)),
+                  TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6)),
               prefixIcon:
-                  Icon(Icons.search, color: AppTheme.neonBlue.withOpacity(0.7)),
+                  Icon(Icons.search, color: AppTheme.neonBlue.withValues(alpha: 0.7)),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide:
-                    BorderSide(color: AppTheme.neonBlue.withOpacity(0.3)),
+                    BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
               ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide:
-                    BorderSide(color: AppTheme.neonBlue.withOpacity(0.3)),
+                    BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -279,7 +279,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
           Icon(
             Icons.person_search,
             size: 64,
-            color: AppTheme.textSecondary.withOpacity(0.2),
+            color: AppTheme.textSecondary.withValues(alpha: 0.2),
           ),
           const SizedBox(height: 16),
           const Text(
@@ -290,7 +290,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                'Total pendiente: ${grandTotal.toStringAsFixed(2)} €',
+                'Total pendiente: ${grandTotal.toStringAsFixed(2)} â‚¬',
                 style: TextStyle(
                   fontSize: Responsive.fontSize(context, small: 12, large: 14),
                   color: AppTheme.warning,
@@ -320,7 +320,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: pending > 0
-            ? BorderSide(color: AppTheme.warning.withOpacity(0.4))
+            ? BorderSide(color: AppTheme.warning.withValues(alpha: 0.4))
             : BorderSide.none,
       ),
       child: InkWell(
@@ -342,7 +342,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
           child: Row(
             children: [
               CircleAvatar(
-                backgroundColor: AppTheme.neonBlue.withOpacity(0.1),
+                backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.1),
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : '?',
                   style: TextStyle(
@@ -371,7 +371,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Código: $code',
+                      'CÃ³digo: $code',
                       style: TextStyle(
                         fontSize:
                             Responsive.fontSize(context, small: 11, large: 13),
@@ -386,13 +386,13 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: AppTheme.warning.withOpacity(0.15),
+                    color: AppTheme.warning.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
                     border:
-                        Border.all(color: AppTheme.warning.withOpacity(0.4)),
+                        Border.all(color: AppTheme.warning.withValues(alpha: 0.4)),
                   ),
                   child: Text(
-                    '${pending.toStringAsFixed(2)} €',
+                    '${pending.toStringAsFixed(2)} â‚¬',
                     style: TextStyle(
                       color: AppTheme.warning,
                       fontWeight: FontWeight.bold,
@@ -406,7 +406,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: AppTheme.success.withOpacity(0.15),
+                    color: AppTheme.success.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: const Icon(

@@ -1,4 +1,4 @@
-import 'package:fl_chart/fl_chart.dart';
+﻿import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -57,7 +57,7 @@ class DashboardChartFactory extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: Column(
         children: [
@@ -80,7 +80,7 @@ class DashboardChartFactory extends StatelessWidget {
 
                   // Vary opacity based on index
                   final sectionColor =
-                      color.withOpacity(1.0 - (index * 0.1).clamp(0.0, 0.8));
+                      color.withValues(alpha: 1.0 - (index * 0.1).clamp(0.0, 0.8));
 
                   return PieChartSectionData(
                     color: sectionColor,

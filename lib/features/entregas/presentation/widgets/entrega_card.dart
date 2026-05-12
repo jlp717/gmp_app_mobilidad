@@ -1,8 +1,8 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 
-/// Tarjeta de albarán en la lista de entregas
+/// Tarjeta de albarÃ¡n en la lista de entregas
 class EntregaCard extends StatelessWidget {
 
   const EntregaCard({
@@ -28,7 +28,7 @@ class EntregaCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header con número y estado
+              // Header con nÃºmero y estado
               Row(
                 children: [
                   // Badge CTR
@@ -58,7 +58,7 @@ class EntregaCard extends StatelessWidget {
                       ),
                     ),
                   
-                  // Número de albarán
+                  // NÃºmero de albarÃ¡n
                   Text(
                     'Alb. ${albaran.numeroAlbaran}${albaran.horaPrevista != null ? " (${albaran.horaPrevista})" : ""}',
                     style: TextStyle(
@@ -77,7 +77,7 @@ class EntregaCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: albaran.estado.color.withOpacity(0.15),
+                      color: albaran.estado.color.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
@@ -203,7 +203,7 @@ class EntregaCard extends StatelessWidget {
                   
                   // Importe
                   Text(
-                    '${albaran.importeTotal.toStringAsFixed(2)}€',
+                    '${albaran.importeTotal.toStringAsFixed(2)}â‚¬',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,

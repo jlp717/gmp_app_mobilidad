@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
@@ -8,7 +8,7 @@ class ComingSoonPlaceholder extends StatelessWidget {
 
   const ComingSoonPlaceholder({
     required this.title, super.key,
-    this.subtitle = 'Estamos trabajando en esta funcionalidad.\nDisponible próximamente.',
+    this.subtitle = 'Estamos trabajando en esta funcionalidad.\nDisponible prÃ³ximamente.',
     this.icon = Icons.rocket_launch,
     this.accentColor = AppTheme.neonPurple,
   });
@@ -39,8 +39,8 @@ class ComingSoonPlaceholder extends StatelessWidget {
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
                       colors: [
-                        accentColor.withOpacity(0.2),
-                        accentColor.withOpacity(0.05),
+                        accentColor.withValues(alpha: 0.2),
+                        accentColor.withValues(alpha: 0.05),
                         Colors.transparent,
                       ],
                       stops: const [0.3, 0.7, 1.0],
@@ -52,8 +52,8 @@ class ComingSoonPlaceholder extends StatelessWidget {
                       height: innerSize,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: accentColor.withOpacity(0.1),
-                        border: Border.all(color: accentColor.withOpacity(0.3), width: 2),
+                        color: accentColor.withValues(alpha: 0.1),
+                        border: Border.all(color: accentColor.withValues(alpha: 0.3), width: 2),
                       ),
                       child: Icon(icon, size: iconSz, color: accentColor),
                     ),
@@ -78,7 +78,7 @@ class ComingSoonPlaceholder extends StatelessWidget {
                 subtitle,
                 style: TextStyle(
                   fontSize: 14,
-                  color: AppTheme.textSecondary.withOpacity(0.8),
+                  color: AppTheme.textSecondary.withValues(alpha: 0.8),
                   height: 1.5,
                 ),
                 textAlign: TextAlign.center,
@@ -89,8 +89,8 @@ class ComingSoonPlaceholder extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(20),
-                  color: accentColor.withOpacity(0.1),
-                  border: Border.all(color: accentColor.withOpacity(0.3)),
+                  color: accentColor.withValues(alpha: 0.1),
+                  border: Border.all(color: accentColor.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,

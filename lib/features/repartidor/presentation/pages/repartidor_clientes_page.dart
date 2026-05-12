@@ -1,4 +1,4 @@
-/// REPARTIDOR CLIENTES PAGE v1.0
+﻿/// REPARTIDOR CLIENTES PAGE v1.0
 /// Lista de clientes adaptada para reparto con historial de entregas
 /// Equivalente a SimpleClientListPage de ventas pero enfocado a repartidor
 library;
@@ -151,14 +151,14 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
       padding: EdgeInsets.fromLTRB(Responsive.padding(context, small: 12, large: 20), 16, Responsive.padding(context, small: 12, large: 20), 12),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
-        border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
+        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
       ),
       child: Row(
         children: [
           Container(
             padding: EdgeInsets.all(Responsive.padding(context, small: 8, large: 10)),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [AppTheme.neonGreen.withOpacity(0.3), AppTheme.neonBlue.withOpacity(0.2)]),
+              gradient: LinearGradient(colors: [AppTheme.neonGreen.withValues(alpha: 0.3), AppTheme.neonBlue.withValues(alpha: 0.2)]),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(Icons.people, color: AppTheme.neonGreen, size: Responsive.iconSize(context, phone: 20, desktop: 24)),
@@ -192,8 +192,8 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
         controller: _searchController,
         style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
         decoration: InputDecoration(
-          hintText: 'Buscar por nombre, código o dirección...',
-          hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.6), fontSize: 13),
+          hintText: 'Buscar por nombre, cÃ³digo o direcciÃ³n...',
+          hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6), fontSize: 13),
           prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
@@ -255,9 +255,9 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: selected ? AppTheme.neonBlue.withOpacity(0.15) : Colors.transparent,
+            color: selected ? AppTheme.neonBlue.withValues(alpha: 0.15) : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: selected ? AppTheme.neonBlue.withOpacity(0.4) : Colors.white.withOpacity(0.1)),
+            border: Border.all(color: selected ? AppTheme.neonBlue.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.1)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -291,7 +291,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
                   gradient: LinearGradient(
-                    colors: [AppTheme.neonGreen.withOpacity(0.3), AppTheme.neonBlue.withOpacity(0.2)],
+                    colors: [AppTheme.neonGreen.withValues(alpha: 0.3), AppTheme.neonBlue.withValues(alpha: 0.2)],
                   ),
                 ),
                 child: Center(
@@ -315,7 +315,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${client.id} · ${client.address}',
+                      '${client.id} Â· ${client.address}',
                       style: TextStyle(fontSize: Responsive.fontSize(context, small: 9, large: 11), color: AppTheme.textSecondary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -333,7 +333,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                           _clientStat(
                             Icons.local_shipping,
                             client.repName != null && client.repName!.isNotEmpty
-                                ? 'Rep ${client.repCode!} — ${client.repName!}'
+                                ? 'Rep ${client.repCode!} â€” ${client.repName!}'
                                 : 'Rep ${client.repCode!}',
                             AppTheme.neonPurple,
                           ),

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
@@ -31,11 +31,11 @@ class RuteroKpiDashboard extends StatelessWidget {
         color: AppTheme.darkSurface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: AppTheme.neonBlue.withOpacity(0.3),
+          color: AppTheme.neonBlue.withValues(alpha: 0.3),
         ),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.neonBlue.withOpacity(0.05),
+            color: AppTheme.neonBlue.withValues(alpha: 0.05),
             blurRadius: 10,
             spreadRadius: 1,
           ),
@@ -163,7 +163,7 @@ class RuteroKpiDashboard extends StatelessWidget {
         Icon(icon, color: color, size: 18), // Icon only, no box
         const SizedBox(height: 2),
         Text(
-          '${amount.toStringAsFixed(0)}€',
+          '${amount.toStringAsFixed(0)}â‚¬',
           style: TextStyle(
             color: color,
             fontWeight: FontWeight.bold,

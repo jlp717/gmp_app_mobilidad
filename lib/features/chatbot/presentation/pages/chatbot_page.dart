@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -134,10 +134,10 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.3),
+        color: Colors.black.withValues(alpha: 0.3),
         border: Border(
           bottom: BorderSide(
-            color: AppTheme.neonBlue.withOpacity(0.2),
+            color: AppTheme.neonBlue.withValues(alpha: 0.2),
           ),
         ),
       ),
@@ -159,7 +159,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.neonBlue.withOpacity(0.3 * _pulseAnimation.value),
+                    color: AppTheme.neonBlue.withValues(alpha: 0.3 * _pulseAnimation.value),
                     blurRadius: 20,
                     spreadRadius: 2,
                   ),
@@ -276,13 +276,13 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    AppTheme.neonBlue.withOpacity(0.1),
-                    AppTheme.neonPurple.withOpacity(0.05),
+                    AppTheme.neonBlue.withValues(alpha: 0.1),
+                    AppTheme.neonPurple.withValues(alpha: 0.05),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: AppTheme.neonBlue.withOpacity(0.3),
+                  color: AppTheme.neonBlue.withValues(alpha: 0.3),
                 ),
               ),
               child: Row(
@@ -349,12 +349,12 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
             height: 100,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [AppTheme.neonBlue.withOpacity(0.2), AppTheme.neonPurple.withOpacity(0.1)],
+                colors: [AppTheme.neonBlue.withValues(alpha: 0.2), AppTheme.neonPurple.withValues(alpha: 0.1)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+              border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
             ),
             child: const Icon(Icons.psychology, size: 50, color: AppTheme.neonBlue),
           ),
@@ -378,7 +378,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
           const SizedBox(height: 12),
           
           Text(
-            'Consulta precios, márgenes, deudas,\nstock y estrategias comerciales.',
+            'Consulta precios, mÃ¡rgenes, deudas,\nstock y estrategias comerciales.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
@@ -402,8 +402,8 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
 
   Widget _buildCapabilityGrid() {
     final capabilities = [
-      (Icons.attach_money, 'Márgenes', 'Análisis por cliente o global'),
-      (Icons.local_offer, 'Precios', 'Mínimos y sugeridos'),
+      (Icons.attach_money, 'MÃ¡rgenes', 'AnÃ¡lisis por cliente o global'),
+      (Icons.local_offer, 'Precios', 'MÃ­nimos y sugeridos'),
       (Icons.account_balance_wallet, 'Deudas', 'Estado de cobro'),
       (Icons.trending_up, 'Ventas', 'YoY y tendencias'),
     ];
@@ -418,16 +418,16 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
           width: 160,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.03),
+            color: Colors.white.withValues(alpha: 0.03),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.08)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           ),
           child: Column(
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withOpacity(0.1),
+                  color: AppTheme.neonBlue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: AppTheme.neonBlue, size: 24),
@@ -459,9 +459,9 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
 
   Widget _buildExampleQueries() {
     final examples = [
-      '¿Cuál es mi margen global este mes?',
-      '¿A qué precio puedo vender el producto ABC?',
-      '¿Cuánto debe el cliente 12345?',
+      'Â¿CuÃ¡l es mi margen global este mes?',
+      'Â¿A quÃ© precio puedo vender el producto ABC?',
+      'Â¿CuÃ¡nto debe el cliente 12345?',
       'Comparar ventas 2024 vs 2023',
     ];
 
@@ -491,9 +491,9 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.02),
+                color: Colors.white.withValues(alpha: 0.02),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withOpacity(0.06)),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
               ),
               child: Row(
                 children: [
@@ -523,9 +523,9 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.4),
+        color: Colors.black.withValues(alpha: 0.4),
         border: Border(
-          top: BorderSide(color: AppTheme.neonBlue.withOpacity(0.15)),
+          top: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.15)),
         ),
       ),
       child: SafeArea(
@@ -535,9 +535,9 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
+                  color: Colors.white.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: AppTheme.neonBlue.withOpacity(0.2)),
+                  border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.2)),
                 ),
                 child: TextField(
                   controller: _messageController,
@@ -569,7 +569,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
                   borderRadius: BorderRadius.circular(27),
                   boxShadow: chatState.isLoading ? [] : [
                     BoxShadow(
-                      color: AppTheme.neonBlue.withOpacity(0.4),
+                      color: AppTheme.neonBlue.withValues(alpha: 0.4),
                       blurRadius: 16,
                       offset: const Offset(0, 4),
                     ),

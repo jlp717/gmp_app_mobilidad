@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
@@ -99,7 +99,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
     if (errors.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Regalos añadidos al pedido como lineas SC'),
+          content: Text('Regalos aÃ±adidos al pedido como lineas SC'),
           backgroundColor: AppTheme.neonGreen,
         ),
       );
@@ -154,13 +154,13 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
               borderRadius: BorderRadius.circular(14),
               gradient: LinearGradient(
                 colors: [
-                  accent.withOpacity(0.18),
+                  accent.withValues(alpha: 0.18),
                   AppTheme.darkCard,
                 ],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
-              border: Border.all(color: accent.withOpacity(0.4)),
+              border: Border.all(color: accent.withValues(alpha: 0.4)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -205,14 +205,14 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                         Text(
                           'Como funciona:',
                           style: TextStyle(
-                            color: AppTheme.neonPurple.withOpacity(0.8),
+                            color: AppTheme.neonPurple.withValues(alpha: 0.8),
                             fontSize: 10,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Por cada ${widget.minQty.toStringAsFixed(0)} uds que compres de los productos de esta promocion, llévate ${widget.giftQty.toStringAsFixed(0)} gratis.${widget.cumulative ? ' (Se acumula: si compras ${(widget.minQty * 2).toStringAsFixed(0)} uds, llévate ${(widget.giftQty * 2).toStringAsFixed(0)} gratis)' : ''}',
+                          'Por cada ${widget.minQty.toStringAsFixed(0)} uds que compres de los productos de esta promocion, llÃ©vate ${widget.giftQty.toStringAsFixed(0)} gratis.${widget.cumulative ? ' (Se acumula: si compras ${(widget.minQty * 2).toStringAsFixed(0)} uds, llÃ©vate ${(widget.giftQty * 2).toStringAsFixed(0)} gratis)' : ''}',
                           style: const TextStyle(
                             color: Colors.white70,
                             fontSize: 11,
@@ -227,7 +227,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                     _buildProgressSection(),
                   ] else ...[
                     Text(
-                      'Añade al menos ${widget.minQty.toStringAsFixed(0)} uds de los productos de esta promocion para poder elegir tus regalos.',
+                      'AÃ±ade al menos ${widget.minQty.toStringAsFixed(0)} uds de los productos de esta promocion para poder elegir tus regalos.',
                       style: const TextStyle(
                         color: Colors.white54,
                         fontSize: 11,
@@ -296,7 +296,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide(
-                              color: AppTheme.borderColor.withOpacity(0.5),),
+                              color: AppTheme.borderColor.withValues(alpha: 0.5),),
                         ),
                         child: ListTile(
                           contentPadding: const EdgeInsets.symmetric(
@@ -361,7 +361,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                                 widget.onProductTap(item.code, item.name),
                             style: ElevatedButton.styleFrom(
                               backgroundColor:
-                                  AppTheme.neonBlue.withOpacity(0.18),
+                                  AppTheme.neonBlue.withValues(alpha: 0.18),
                               foregroundColor: AppTheme.neonBlue,
                               elevation: 0,
                               shape: RoundedRectangleBorder(
@@ -447,7 +447,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                   label: Text(
                     _submittingGifts
                         ? 'Aplicando regalos...'
-                        : 'Añadir regalos seleccionados',
+                        : 'AÃ±adir regalos seleccionados',
                     style: const TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 14,),
                   ),
@@ -536,7 +536,7 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
               child: Text(
                 'Faltan ${remaining.toStringAsFixed(0)} uds para otro regalo mas',
                 style: TextStyle(
-                  color: AppTheme.neonBlue.withOpacity(0.8),
+                  color: AppTheme.neonBlue.withValues(alpha: 0.8),
                   fontSize: 10,
                 ),
               ),

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
@@ -41,10 +41,10 @@ class RuteroWeekSummary extends StatelessWidget {
   static const Map<String, String> weekdayLabels = {
     'lunes': 'LUN',
     'martes': 'MAR',
-    'miercoles': 'MIÉ',
+    'miercoles': 'MIÃ‰',
     'jueves': 'JUE',
     'viernes': 'VIE',
-    'sabado': 'SÁB',
+    'sabado': 'SÃB',
     'domingo': 'DOM',
   };
 
@@ -142,7 +142,7 @@ class RuteroWeekSummary extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: AppTheme.neonPink.withOpacity(0.2),
+              color: AppTheme.neonPink.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(

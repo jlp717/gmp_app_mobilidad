@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 /// Search filter bar with debounced input
@@ -72,7 +72,7 @@ class _FilterBarState extends State<FilterBar> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -82,7 +82,7 @@ class _FilterBarState extends State<FilterBar> {
               const Icon(Icons.search, color: AppTheme.neonBlue, size: 20),
               const SizedBox(width: 8),
               const Text(
-                'Filtros de Búsqueda',
+                'Filtros de BÃºsqueda',
                 style: TextStyle(color: AppTheme.neonBlue, fontSize: 14, fontWeight: FontWeight.bold),
               ),
               const Spacer(),
@@ -100,7 +100,7 @@ class _FilterBarState extends State<FilterBar> {
               Expanded(
                 child: _buildSearchField(
                   controller: _productCodeController,
-                  label: 'C código producto',
+                  label: 'C cÃ³digo producto',
                   icon: Icons.qr_code,
                   onChanged: (_) => _handleFilterChange(),
                 ),
@@ -109,7 +109,7 @@ class _FilterBarState extends State<FilterBar> {
               Expanded(
                 child: _buildSearchField(
                   controller: _productNameController,
-                  label: 'Descripción producto',
+                  label: 'DescripciÃ³n producto',
                   icon: Icons.inventory,
                   onChanged: (_) => _handleFilterChange(),
                 ),

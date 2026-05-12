@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
@@ -46,7 +46,7 @@ class ChatMessageBubble extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.neonBlue.withOpacity(0.3),
+                    color: AppTheme.neonBlue.withValues(alpha: 0.3),
                     blurRadius: 8,
                     spreadRadius: 1,
                   ),
@@ -68,7 +68,7 @@ class ChatMessageBubble extends StatelessWidget {
                     ? LinearGradient(
                         colors: [
                           AppTheme.neonBlue,
-                          AppTheme.neonBlue.withOpacity(0.85),
+                          AppTheme.neonBlue.withValues(alpha: 0.85),
                         ],
                       )
                     : null,
@@ -82,13 +82,13 @@ class ChatMessageBubble extends StatelessWidget {
                 border: isUser
                     ? null
                     : Border.all(
-                        color: AppTheme.neonBlue.withOpacity(0.15),
+                        color: AppTheme.neonBlue.withValues(alpha: 0.15),
                       ),
                 boxShadow: [
                   BoxShadow(
                     color: isUser
-                        ? AppTheme.neonBlue.withOpacity(0.3)
-                        : Colors.black.withOpacity(0.3),
+                        ? AppTheme.neonBlue.withValues(alpha: 0.3)
+                        : Colors.black.withValues(alpha: 0.3),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
@@ -106,7 +106,7 @@ class ChatMessageBubble extends StatelessWidget {
                             _formatTime(timestamp!),
                             style: TextStyle(
                               color: isUser 
-                                  ? Colors.white.withOpacity(0.6)
+                                  ? Colors.white.withValues(alpha: 0.6)
                                   : Colors.grey.shade600,
                               fontSize: 10,
                               letterSpacing: 0.3,
@@ -125,9 +125,9 @@ class ChatMessageBubble extends StatelessWidget {
               height: 34,
               margin: const EdgeInsets.only(left: 10),
               decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withOpacity(0.15),
+                color: AppTheme.neonBlue.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+                border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
               ),
               child: const Icon(
                 Icons.person,
@@ -149,7 +149,7 @@ class ChatMessageBubble extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: lines.map((line) {
-        if (line.startsWith('•') || line.startsWith('-')) {
+        if (line.startsWith('â€¢') || line.startsWith('-')) {
           // Bullet point
           return Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 4),

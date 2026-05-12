@@ -1,7 +1,7 @@
-/// Order Trend Chart
+﻿/// Order Trend Chart
 /// =================
 /// Custom-painted line chart showing 7-day order trend.
-/// No external dependencies — pure CustomPainter.
+/// No external dependencies â€” pure CustomPainter.
 library;
 
 import 'package:flutter/material.dart';
@@ -70,7 +70,7 @@ class _TrendChartPainter extends CustomPainter {
     final safeMax = maxOrders > 0 ? maxOrders : 1;
 
     final linePaint = Paint()
-      ..color = AppTheme.neonBlue.withOpacity(0.8)
+      ..color = AppTheme.neonBlue.withValues(alpha: 0.8)
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
@@ -80,8 +80,8 @@ class _TrendChartPainter extends CustomPainter {
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
         colors: [
-          AppTheme.neonBlue.withOpacity(0.3),
-          AppTheme.neonBlue.withOpacity(0.02),
+          AppTheme.neonBlue.withValues(alpha: 0.3),
+          AppTheme.neonBlue.withValues(alpha: 0.02),
         ],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height))
       ..style = PaintingStyle.fill;
@@ -91,7 +91,7 @@ class _TrendChartPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     final dotBorderPaint = Paint()
-      ..color = AppTheme.neonBlue.withOpacity(0.4)
+      ..color = AppTheme.neonBlue.withValues(alpha: 0.4)
       ..strokeWidth = 2
       ..style = PaintingStyle.stroke;
 

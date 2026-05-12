@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -102,12 +102,12 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
           end: Alignment.bottomRight,
           colors: [
             AppTheme.darkSurface,
-            AppTheme.darkCard.withOpacity(0.8),
+            AppTheme.darkCard.withValues(alpha: 0.8),
           ],
         ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: AppTheme.neonBlue.withOpacity(0.2),
+          color: AppTheme.neonBlue.withValues(alpha: 0.2),
         ),
       ),
       child: widget.isLoading ? _buildLoadingState() : _buildContent(),
@@ -298,9 +298,9 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
           padding: EdgeInsets.symmetric(vertical: isSmall ? 4 : 8, horizontal: 2),
           decoration: isUrgent
               ? BoxDecoration(
-                  color: color.withOpacity(glowOpacity),
+                  color: color.withValues(alpha: glowOpacity),
                   borderRadius: BorderRadius.circular(12),
-                  border: isUrgent ? Border.all(color: color.withOpacity(0.3)) : null,
+                  border: isUrgent ? Border.all(color: color.withValues(alpha: 0.3)) : null,
                 )
               : null,
           child: Column(
@@ -309,7 +309,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
               Container(
                 padding: EdgeInsets.all(isSmall ? 4 : 8),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
+                  color: color.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
                 child: Icon(icon, color: color, size: isSmall ? 12 : 18),
@@ -321,7 +321,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
                   final displayAmount = amount * _progressController.value;
                   return FittedBox(
                     child: Text(
-                      '${displayAmount.toStringAsFixed(0)}€',
+                      '${displayAmount.toStringAsFixed(0)}â‚¬',
                       style: TextStyle(
                         color: color,
                         fontWeight: FontWeight.bold,
@@ -358,10 +358,10 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: color.withOpacity(0.3),
+          color: color.withValues(alpha: 0.3),
         ),
       ),
       child: Row(
@@ -444,7 +444,7 @@ class _HoloRingPainter extends CustomPainter {
         endAngle: scannerAngle + 0.3,
         colors: [
           Colors.transparent,
-          glowColor.withOpacity(0.6),
+          glowColor.withValues(alpha: 0.6),
           Colors.transparent,
         ],
         stops: const [0.0, 0.5, 1.0],
@@ -457,7 +457,7 @@ class _HoloRingPainter extends CustomPainter {
     
     // Outer glow
     final glowPaint = Paint()
-      ..color = progressColor.withOpacity(0.2)
+      ..color = progressColor.withValues(alpha: 0.2)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 4);

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
@@ -38,11 +38,11 @@ class SmartSyncHeader extends StatelessWidget { // NEW: compact mode for smaller
           end: Alignment.bottomRight,
           colors: [
             AppTheme.surfaceColor,
-            AppTheme.surfaceColor.withOpacity(0.8),
+            AppTheme.surfaceColor.withValues(alpha: 0.8),
           ],
         ),
         border: Border(
-          bottom: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2)),
+          bottom: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.2)),
         ),
       ),
       child: Row(
@@ -53,8 +53,8 @@ class SmartSyncHeader extends StatelessWidget { // NEW: compact mode for smaller
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  AppTheme.neonBlue.withOpacity(0.2),
-                  AppTheme.neonPurple.withOpacity(0.2),
+                  AppTheme.neonBlue.withValues(alpha: 0.2),
+                  AppTheme.neonPurple.withValues(alpha: 0.2),
                 ],
               ),
               borderRadius: BorderRadius.circular(compact ? 8 : 12),
@@ -99,7 +99,7 @@ class SmartSyncHeader extends StatelessWidget { // NEW: compact mode for smaller
                       subtitle,
                       style: TextStyle(
                         fontSize: subtitleSize,
-                        color: AppTheme.textSecondary.withOpacity(0.8),
+                        color: AppTheme.textSecondary.withValues(alpha: 0.8),
                       ),
                     ),
                 ],

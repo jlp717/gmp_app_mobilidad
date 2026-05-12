@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -59,21 +59,21 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
               _buildRoleOption(
                 'COMERCIAL',
                 Icons.shopping_bag_outlined,
-                'Gestión de Ventas',
+                'GestiÃ³n de Ventas',
                 AppTheme.neonBlue,
               ),
               const SizedBox(height: 12),
               _buildRoleOption(
                 'REPARTIDOR',
                 Icons.local_shipping_outlined,
-                'Gestión de Reparto',
+                'GestiÃ³n de Reparto',
                 AppTheme.neonPurple,
               ),
               const SizedBox(height: 12),
               _buildRoleOption(
                 'ALMACEN',
                 Icons.inventory_2_outlined,
-                'Gestión de Almacén',
+                'GestiÃ³n de AlmacÃ©n',
                 AppTheme.neonPink,
               ),
 
@@ -122,7 +122,7 @@ class _RoleSelectionDialogState extends State<RoleSelectionDialog> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.15) : Colors.transparent,
+          color: isSelected ? color.withValues(alpha: 0.15) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
             color: isSelected ? color : Colors.white10,

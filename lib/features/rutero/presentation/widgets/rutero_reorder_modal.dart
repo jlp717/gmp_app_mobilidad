@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -147,7 +147,7 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
           if (_error != null)
             Container(
               padding: const EdgeInsets.all(8),
-              color: AppTheme.error.withOpacity(0.2),
+              color: AppTheme.error.withValues(alpha: 0.2),
               width: double.infinity,
               child: Text(
                 _error!,
@@ -191,7 +191,7 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
                   Icon(Icons.info_outline, color: AppTheme.neonBlue, size: 16),
                   SizedBox(width: 8),
                   Expanded(child: Text(
-                    'Limpia la búsqueda para arrastrar y soltar.',
+                    'Limpia la bÃºsqueda para arrastrar y soltar.',
                     style: TextStyle(color: AppTheme.neonBlue, fontSize: 12),
                   ),),
                 ],
@@ -234,12 +234,12 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: ListTile(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         leading: CircleAvatar(
-          backgroundColor: AppTheme.neonPink.withOpacity(0.1),
+          backgroundColor: AppTheme.neonPink.withValues(alpha: 0.1),
           child: Text(
             '${index + 1}', 
             style: const TextStyle(color: AppTheme.neonPink, fontWeight: FontWeight.bold),

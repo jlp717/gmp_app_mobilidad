@@ -1,13 +1,13 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
-/// [VentasCards] - Tarjetas de métricas de ventas del vendedor
+/// [VentasCards] - Tarjetas de mÃ©tricas de ventas del vendedor
 ///
 /// MUESTRA DATOS REALES:
 /// - Ventas de Hoy (total, cantidad de operaciones, margen)
 /// - Ventas del Mes (total, cantidad, comparativa mes anterior)
-/// - Ventas del Año (total acumulado)
+/// - Ventas del AÃ±o (total acumulado)
 /// - Clientes Atendidos (hoy, mes)
 class VentasCards extends StatelessWidget {
   const VentasCards({
@@ -54,12 +54,12 @@ class VentasCards extends StatelessWidget {
 
         const SizedBox(height: 12),
 
-        // Fila inferior: Ventas Año y Clientes
+        // Fila inferior: Ventas AÃ±o y Clientes
         Row(
           children: [
             Expanded(
               child: _VentaCardCompact(
-                title: 'Ventas Año',
+                title: 'Ventas AÃ±o',
                 total: ventasAnio.total,
                 subtitle: '${ventasAnio.cantidad} operaciones',
                 margen: ventasAnio.margen,
@@ -113,13 +113,13 @@ class _VentaCardCompact extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Cabecera con icono y título
+            // Cabecera con icono y tÃ­tulo
             Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -154,7 +154,7 @@ class _VentaCardCompact extends StatelessWidget {
 
             const SizedBox(height: 4),
 
-            // Subtítulo con cantidad de operaciones
+            // SubtÃ­tulo con cantidad de operaciones
             Text(
               subtitle,
               style: theme.textTheme.bodySmall?.copyWith(
@@ -164,7 +164,7 @@ class _VentaCardCompact extends StatelessWidget {
 
             const SizedBox(height: 8),
 
-            // Margen y variación
+            // Margen y variaciÃ³n
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -236,7 +236,7 @@ class _ClientesCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: Colors.orange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
@@ -303,7 +303,7 @@ class _ClientesCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Row(

@@ -1,4 +1,4 @@
-/// Add to Order Sheet
+﻿/// Add to Order Sheet
 /// ==================
 /// Bottom sheet for adding products to the current order with quantity,
 /// unit, and tariff selection.
@@ -151,7 +151,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
   InputDecoration _qtyFieldDeco(Color color) {
     return InputDecoration(
       filled: true,
-      fillColor: color.withOpacity(0.1),
+      fillColor: color.withValues(alpha: 0.1),
       contentPadding: const EdgeInsets.symmetric(vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -247,9 +247,9 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.4)),
+          border: Border.all(color: color.withValues(alpha: 0.4)),
         ),
         child: Icon(icon, color: color, size: 24),
       ),
@@ -267,9 +267,9 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.3)),
+          border: Border.all(color: color.withValues(alpha: 0.3)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -717,7 +717,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             ),
                             decoration: BoxDecoration(
                               color: isSelected
-                                  ? AppTheme.neonGreen.withOpacity(0.2)
+                                  ? AppTheme.neonGreen.withValues(alpha: 0.2)
                                   : AppTheme.darkCard,
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
@@ -938,7 +938,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             },
                             style: ElevatedButton.styleFrom(
                               backgroundColor: selected
-                                  ? AppTheme.neonBlue.withOpacity(0.2)
+                                  ? AppTheme.neonBlue.withValues(alpha: 0.2)
                                   : AppTheme.darkCard,
                               foregroundColor:
                                   selected ? AppTheme.neonBlue : Colors.white70,
@@ -988,7 +988,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                                     fontSize: 8,
                                     color: unitStock > 0
                                         ? Colors.white30
-                                        : AppTheme.error.withOpacity(0.6),
+                                        : AppTheme.error.withValues(alpha: 0.6),
                                   ),
                                 ),
                               ],
@@ -1019,7 +1019,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                           color: AppTheme.darkCard,
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: AppTheme.borderColor.withOpacity(0.6),
+                            color: AppTheme.borderColor.withValues(alpha: 0.6),
                           ),
                         ),
                         child: Column(
@@ -1037,7 +1037,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             Text(
                               _selectedUnit == 'CAJAS'
                                   ? 'Precio por caja: ${PedidosFormatters.money(boxPrice, decimals: 3)}'
-                                  : '1 caja = ${_formatUnitQty(qtyPerBox, _selectedUnit)} $selectedLabel · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)}',
+                                  : '1 caja = ${_formatUnitQty(qtyPerBox, _selectedUnit)} $selectedLabel Â· Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)}',
                               style: const TextStyle(
                                 color: Colors.white54,
                                 fontSize: 10,
@@ -1127,7 +1127,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                           style: OutlinedButton.styleFrom(
                             foregroundColor: AppTheme.neonBlue,
                             side: BorderSide(
-                              color: AppTheme.neonBlue.withOpacity(0.4),
+                              color: AppTheme.neonBlue.withValues(alpha: 0.4),
                             ),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
@@ -1388,7 +1388,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Se ha añadido el stock disponible. Faltan ${missingQty.toStringAsFixed(missingQty.truncateToDouble() == missingQty ? 0 : 2)} de $pName',
+              'Se ha aÃ±adido el stock disponible. Faltan ${missingQty.toStringAsFixed(missingQty.truncateToDouble() == missingQty ? 0 : 2)} de $pName',
               style: const TextStyle(
                 fontWeight: FontWeight.bold,
                 color: Colors.white,

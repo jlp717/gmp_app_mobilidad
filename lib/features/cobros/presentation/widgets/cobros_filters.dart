@@ -1,4 +1,4 @@
-/// COBROS FILTERS WIDGET
+﻿/// COBROS FILTERS WIDGET
 /// Panel de filtros para entregas/cobros
 library;
 
@@ -45,12 +45,12 @@ class _CobrosFiltersState extends State<CobrosFilters> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Título
+          // TÃ­tulo
           const Row(
             children: [
               Icon(
@@ -75,19 +75,19 @@ class _CobrosFiltersState extends State<CobrosFilters> {
           // Buscador
           Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
+              color: Colors.white.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
             ),
             child: TextField(
               controller: _searchController,
               style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
               decoration: InputDecoration(
                 hintText: 'Buscar cliente...',
-                hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
+                hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5)),
                 prefixIcon: Icon(
                   Icons.search,
-                  color: AppTheme.textSecondary.withOpacity(0.5),
+                  color: AppTheme.textSecondary.withValues(alpha: 0.5),
                   size: 18,
                 ),
                 border: InputBorder.none,
@@ -122,13 +122,13 @@ class _CobrosFiltersState extends State<CobrosFilters> {
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? AppTheme.neonPurple.withOpacity(0.2)
-                        : Colors.white.withOpacity(0.05),
+                        ? AppTheme.neonPurple.withValues(alpha: 0.2)
+                        : Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: isSelected
-                          ? AppTheme.neonPurple.withOpacity(0.5)
-                          : Colors.white.withOpacity(0.1),
+                          ? AppTheme.neonPurple.withValues(alpha: 0.5)
+                          : Colors.white.withValues(alpha: 0.1),
                     ),
                   ),
                   child: Row(

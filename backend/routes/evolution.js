@@ -4,9 +4,11 @@ const express = require('express');
 const { verifyToken } = require('../middleware/auth');
 const logger = require('../middleware/logger');
 const evolutionService = require('../services/evolution.service');
+const { evolutionLimiter } = require('../middleware/security');
 
 const router = express.Router();
 router.use(verifyToken);
+router.use(evolutionLimiter);
 
 // Req #2: Margin visibility
 const MARGIN_ROLES = ['JEFE_VENTAS', 'ADMIN'];
@@ -40,8 +42,9 @@ router.get('/monthly', async (req, res) => {
         result.monthly = stripMargin(result.monthly, req.user);
         res.json({ success: true, ...result });
     } catch (error) {
+        const requestId = req.headers['x-request-id'] || '';
         logger.error(`[EVOLUTION] GET /monthly error: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: error.message, request_id: requestId });
     }
 });
 
@@ -57,8 +60,9 @@ router.get('/products', async (req, res) => {
         });
         res.json({ success: true, products });
     } catch (error) {
+        const requestId = req.headers['x-request-id'] || '';
         logger.error(`[EVOLUTION] GET /products error: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: error.message, request_id: requestId });
     }
 });
 
@@ -74,8 +78,9 @@ router.get('/clients', async (req, res) => {
         });
         res.json({ success: true, clients });
     } catch (error) {
+        const requestId = req.headers['x-request-id'] || '';
         logger.error(`[EVOLUTION] GET /clients error: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: error.message, request_id: requestId });
     }
 });
 

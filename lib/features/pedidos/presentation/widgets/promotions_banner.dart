@@ -1,4 +1,4 @@
-/// Promotions Banner Widget
+﻿/// Promotions Banner Widget
 /// ========================
 /// Horizontal scrollable banner showing products with active promotions.
 /// Handles PRICE promos (price reduction) and GIFT promos (buy X get Y free).
@@ -106,7 +106,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: AppTheme.warning.withOpacity(0.3)),
+          border: Border.all(color: AppTheme.warning.withValues(alpha: 0.3)),
         ),
         child: Row(
           children: [
@@ -352,7 +352,7 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                 Text(
                   'Compra ${promo.minQty.toInt()}, lleva ${(promo.minQty + promo.giftQty).toInt()}',
                   style: TextStyle(
-                    color: AppTheme.neonPurple.withOpacity(0.7),
+                    color: AppTheme.neonPurple.withValues(alpha: 0.7),
                     fontSize: Responsive.fontSize(context, small: 9, large: 10),
                   ),
                 ),

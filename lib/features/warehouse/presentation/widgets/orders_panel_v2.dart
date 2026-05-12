@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -70,12 +70,12 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
               end: Alignment.bottomCenter,
               colors: [
                 AppTheme.darkSurface,
-                AppTheme.darkBase.withOpacity(0.95),
+                AppTheme.darkBase.withValues(alpha: 0.95),
               ],
             ),
             border: Border(
               left: BorderSide(
-                color: AppTheme.neonBlue.withOpacity(0.15),
+                color: AppTheme.neonBlue.withValues(alpha: 0.15),
               ),
             ),
           ),
@@ -98,10 +98,10 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                 margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 padding: const EdgeInsets.all(3),
                 decoration: BoxDecoration(
-                  color: AppTheme.darkCard.withOpacity(0.25),
+                  color: AppTheme.darkCard.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
-                    color: AppTheme.borderColor.withOpacity(0.15),
+                    color: AppTheme.borderColor.withValues(alpha: 0.15),
                   ),
                 ),
                 child: TabBar(
@@ -109,10 +109,10 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                   labelColor: AppTheme.neonBlue,
                   unselectedLabelColor: AppTheme.textTertiary,
                   indicator: BoxDecoration(
-                    color: AppTheme.neonBlue.withOpacity(0.12),
+                    color: AppTheme.neonBlue.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: AppTheme.neonBlue.withOpacity(0.25),
+                      color: AppTheme.neonBlue.withValues(alpha: 0.25),
                     ),
                   ),
                   indicatorSize: TabBarIndicatorSize.tab,
@@ -204,11 +204,11 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: AppTheme.neonBlue.withOpacity(0.1),
+            color: AppTheme.neonBlue.withValues(alpha: 0.1),
           ),
           boxShadow: [
             BoxShadow(
-              color: AppTheme.neonBlue.withOpacity(0.03),
+              color: AppTheme.neonBlue.withValues(alpha: 0.03),
               blurRadius: 8,
             ),
           ],
@@ -217,15 +217,15 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
           onChanged: (v) => setState(() => _searchQuery = v.toLowerCase().trim()),
           style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
           decoration: InputDecoration(
-            hintText: 'Buscar artículo, cliente, pedido...',
+            hintText: 'Buscar artÃ­culo, cliente, pedido...',
             hintStyle: TextStyle(
-              color: AppTheme.textTertiary.withOpacity(0.4),
+              color: AppTheme.textTertiary.withValues(alpha: 0.4),
               fontSize: 12,
             ),
             prefixIcon: Icon(
               Icons.search_rounded,
               size: 18,
-              color: AppTheme.neonBlue.withOpacity(0.5),
+              color: AppTheme.neonBlue.withValues(alpha: 0.5),
             ),
             suffixIcon: _searchQuery.isNotEmpty
                 ? IconButton(
@@ -237,7 +237,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             filled: true,
-            fillColor: AppTheme.darkCard.withOpacity(0.3),
+            fillColor: AppTheme.darkCard.withValues(alpha: 0.3),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,
@@ -245,7 +245,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide(
-                color: AppTheme.neonBlue.withOpacity(0.3),
+                color: AppTheme.neonBlue.withValues(alpha: 0.3),
               ),
             ),
           ),
@@ -254,9 +254,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // BULK ACTIONS
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   Widget _buildBulkActions(WidgetRef ref) {
     final planner = ref.read(loadPlannerProvider);
@@ -282,7 +282,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
           Expanded(
             child: _MiniActionButton(
               icon: Icons.add_circle_outline,
-              label: 'Añadir todo',
+              label: 'AÃ±adir todo',
               color: AppTheme.neonGreen,
               onPressed: planner.overflowBoxes.isNotEmpty
                   ? () => ref.read(loadPlannerProvider.notifier).includeAllOrders()
@@ -322,9 +322,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // FILTER CHIPS
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   Widget _buildFilterChips() {
     return Padding(
@@ -359,9 +359,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // SORT ROW
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   Widget _buildSortRow() {
     return Padding(
@@ -404,7 +404,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                 ),
                 DropdownMenuItem(
                   value: BoxSortMode.order,
-                  child: Text('N° Pedido'),
+                  child: Text('NÂ° Pedido'),
                 ),
               ],
               onChanged: (v) => setState(() => _sortMode = v ?? BoxSortMode.none),
@@ -415,9 +415,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // SORT HELPER
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   List<MapEntry<int, List<LoadBox>>> _sortOrders(
       List<MapEntry<int, List<LoadBox>>> orders,) {
@@ -451,9 +451,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
     return orders;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // CLIENTS TAB
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   Widget _buildClientsTab(WidgetRef ref) {
     final planner = ref.read(loadPlannerProvider);
@@ -478,9 +478,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // BOXES TAB
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   Widget _buildBoxesTab(WidgetRef ref) {
     final planner = ref.read(loadPlannerProvider);
@@ -542,9 +542,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   // OVERFLOW TAB
-  // ═══════════════════════════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   Widget _buildOverflowTab(WidgetRef ref) {
     final planner = ref.read(loadPlannerProvider);
@@ -569,7 +569,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
           leading: Icon(
             Icons.warning_rounded,
             size: 16,
-            color: AppTheme.error.withOpacity(0.7),
+            color: AppTheme.error.withValues(alpha: 0.7),
           ),
           title: Text(
             box.label,
@@ -607,22 +607,22 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: AppTheme.darkCard.withOpacity(0.2),
+              color: AppTheme.darkCard.withValues(alpha: 0.2),
               border: Border.all(
-                color: AppTheme.borderColor.withOpacity(0.15),
+                color: AppTheme.borderColor.withValues(alpha: 0.15),
               ),
             ),
             child: Icon(
               Icons.inbox_outlined,
               size: 28,
-              color: AppTheme.textTertiary.withOpacity(0.3),
+              color: AppTheme.textTertiary.withValues(alpha: 0.3),
             ),
           ),
           const SizedBox(height: 12),
           Text(
             message,
             style: TextStyle(
-              color: AppTheme.textTertiary.withOpacity(0.5),
+              color: AppTheme.textTertiary.withValues(alpha: 0.5),
               fontSize: 13,
               fontWeight: FontWeight.w500,
             ),
@@ -633,9 +633,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // SUB-WIDGETS
-// ═══════════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 class _MiniActionButton extends StatelessWidget {
 
@@ -665,18 +665,18 @@ class _MiniActionButton extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: isEnabled
-              ? color.withOpacity(0.08)
-              : AppTheme.darkCard.withOpacity(0.15),
+              ? color.withValues(alpha: 0.08)
+              : AppTheme.darkCard.withValues(alpha: 0.15),
           borderRadius: BorderRadius.circular(8),
           border: Border.all(
             color: isEnabled
-                ? color.withOpacity(0.25)
-                : AppTheme.borderColor.withOpacity(0.08),
+                ? color.withValues(alpha: 0.25)
+                : AppTheme.borderColor.withValues(alpha: 0.08),
           ),
           boxShadow: isEnabled
               ? [
                   BoxShadow(
-                    color: color.withOpacity(0.06),
+                    color: color.withValues(alpha: 0.06),
                     blurRadius: 8,
                   ),
                 ]
@@ -689,7 +689,7 @@ class _MiniActionButton extends StatelessWidget {
             Icon(
               icon,
               size: 13,
-              color: isEnabled ? color : AppTheme.textTertiary.withOpacity(0.3),
+              color: isEnabled ? color : AppTheme.textTertiary.withValues(alpha: 0.3),
             ),
             const SizedBox(width: 4),
             Text(
@@ -698,7 +698,7 @@ class _MiniActionButton extends StatelessWidget {
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
                 color:
-                    isEnabled ? color : AppTheme.textTertiary.withOpacity(0.3),
+                    isEnabled ? color : AppTheme.textTertiary.withValues(alpha: 0.3),
                 letterSpacing: 0.2,
               ),
             ),
@@ -733,17 +733,17 @@ class _FilterChip extends StatelessWidget {
         duration: AppTheme.animFast,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: selected ? color.withOpacity(0.12) : Colors.transparent,
+          color: selected ? color.withValues(alpha: 0.12) : Colors.transparent,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: selected
-                ? color.withOpacity(0.4)
-                : AppTheme.borderColor.withOpacity(0.2),
+                ? color.withValues(alpha: 0.4)
+                : AppTheme.borderColor.withValues(alpha: 0.2),
           ),
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: color.withOpacity(0.08),
+                    color: color.withValues(alpha: 0.08),
                     blurRadius: 6,
                   ),
                 ]
@@ -781,10 +781,10 @@ class _ClientRow extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: AppTheme.darkCard.withOpacity(0.25),
+          color: AppTheme.darkCard.withValues(alpha: 0.25),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: AppTheme.borderColor.withOpacity(0.1),
+            color: AppTheme.borderColor.withValues(alpha: 0.1),
           ),
         ),
         child: Row(
@@ -794,7 +794,7 @@ class _ClientRow extends StatelessWidget {
               width: 28,
               height: 28,
               decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withOpacity(0.15),
+                color: AppTheme.neonBlue.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Center(
@@ -879,7 +879,7 @@ class _ClientRow extends StatelessWidget {
                   child: Icon(
                     Icons.remove_circle_outline,
                     size: 16,
-                    color: AppTheme.error.withOpacity(0.6),
+                    color: AppTheme.error.withValues(alpha: 0.6),
                   ),
                 ),
               ),
@@ -921,13 +921,13 @@ class _OrderRow extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
             color: isExcluded
-                ? AppTheme.darkCard.withOpacity(0.15)
-                : AppTheme.darkCard.withOpacity(0.25),
+                ? AppTheme.darkCard.withValues(alpha: 0.15)
+                : AppTheme.darkCard.withValues(alpha: 0.25),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
               color: isExcluded
-                  ? AppTheme.error.withOpacity(0.25)
-                  : AppTheme.borderColor.withOpacity(0.1),
+                  ? AppTheme.error.withValues(alpha: 0.25)
+                  : AppTheme.borderColor.withValues(alpha: 0.1),
             ),
           ),
           child: Row(

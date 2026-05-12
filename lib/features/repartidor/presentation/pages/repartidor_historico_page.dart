@@ -1,8 +1,8 @@
-/// REPARTIDOR HISTÓRICO PAGE v4.0
+﻿/// REPARTIDOR HISTÃ“RICO PAGE v4.0
 /// Full redesign with advanced filters, year selector, search by number,
 /// proper deduplication, and working signatures
 ///
-/// Nivel 1: Lista de clientes con búsqueda
+/// Nivel 1: Lista de clientes con bÃºsqueda
 /// Nivel 2: Documentos del cliente con filtros avanzados
 library;
 
@@ -61,7 +61,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   void initState() {
     super.initState();
     if (widget.initialClientId != null) {
-      // Navigate directly to client documents — set state immediately to show loading
+      // Navigate directly to client documents â€” set state immediately to show loading
       _selectedClientId = widget.initialClientId;
       _selectedClientName = widget.initialClientName ?? widget.initialClientId!;
       _isLoading = true;
@@ -271,7 +271,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           color: AppTheme.surfaceColor,
           border: Border(
               bottom: BorderSide(
-                  color: AppTheme.neonPurple.withOpacity(0.2),),),
+                  color: AppTheme.neonPurple.withValues(alpha: 0.2),),),
         ),
         child: Column(
           children: [
@@ -296,11 +296,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        'Cód: $_selectedClientId',
+                        'CÃ³d: $_selectedClientId',
                         style: TextStyle(
                             fontSize: Responsive.fontSize(context,
                                 small: 9, large: 11,),
-                            color: AppTheme.textSecondary.withOpacity(0.8),),
+                            color: AppTheme.textSecondary.withValues(alpha: 0.8),),
                       ),
                     ],
                   ),
@@ -314,7 +314,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
     }
 
     return SmartSyncHeader(
-      title: 'Histórico',
+      title: 'HistÃ³rico',
       subtitle: 'Documentos repartidos por cliente',
       lastSync: DateTime.now(),
       isLoading: _isLoading,
@@ -344,12 +344,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: [
-              AppTheme.neonPurple.withOpacity(0.15),
-              AppTheme.neonBlue.withOpacity(0.15),
+              AppTheme.neonPurple.withValues(alpha: 0.15),
+              AppTheme.neonBlue.withValues(alpha: 0.15),
             ],
           ),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
+          border: Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.3)),
         ),
         child: const Row(
           mainAxisSize: MainAxisSize.min,
@@ -375,7 +375,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 height: 32,
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? AppTheme.neonPurple.withOpacity(0.2)
+                      ? AppTheme.neonPurple.withValues(alpha: 0.2)
                       : AppTheme.darkBase,
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -427,9 +427,9 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             controller: _searchController,
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
-              hintText: 'Buscar cliente por código o nombre...',
+              hintText: 'Buscar cliente por cÃ³digo o nombre...',
               hintStyle:
-                  TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
+                  TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5)),
               prefixIcon:
                   const Icon(Icons.search, color: AppTheme.textSecondary),
               suffixIcon: _searchController.text.isNotEmpty
@@ -488,7 +488,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                         children: [
                           Icon(Icons.search_off,
                               size: 48,
-                              color: AppTheme.textSecondary.withOpacity(0.5),),
+                              color: AppTheme.textSecondary.withValues(alpha: 0.5),),
                           const SizedBox(height: 16),
                           const Text('No se encontraron clientes',
                               style: TextStyle(color: AppTheme.textSecondary),),
@@ -523,7 +523,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withOpacity(0.05)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
         ),
         child: Row(
           children: [
@@ -532,7 +532,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               width: Responsive.value(context, phone: 36, desktop: 44),
               height: Responsive.value(context, phone: 36, desktop: 44),
               decoration: BoxDecoration(
-                color: AppTheme.neonPurple.withOpacity(0.1),
+                color: AppTheme.neonPurple.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Center(
@@ -558,7 +558,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 5, vertical: 1,),
                         decoration: BoxDecoration(
-                          color: AppTheme.neonBlue.withOpacity(0.2),
+                          color: AppTheme.neonBlue.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(client.id,
@@ -573,7 +573,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                             style: TextStyle(
                                 fontSize: 10,
                                 color:
-                                    AppTheme.textSecondary.withOpacity(0.7),),),
+                                    AppTheme.textSecondary.withValues(alpha: 0.7),),),
                     ],
                   ),
                   const SizedBox(height: 3),
@@ -602,7 +602,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               ),
             ),
             Icon(Icons.chevron_right,
-                color: AppTheme.textSecondary.withOpacity(0.5),),
+                color: AppTheme.textSecondary.withValues(alpha: 0.5),),
           ],
         ),
       ),
@@ -652,17 +652,17 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: _selectedYear != null
-                        ? AppTheme.neonBlue.withOpacity(0.5)
-                        : Colors.white.withOpacity(0.1),
+                        ? AppTheme.neonBlue.withValues(alpha: 0.5)
+                        : Colors.white.withValues(alpha: 0.1),
                   ),
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int?>(
                     value: _selectedYear,
-                    hint: Text('Últimos 3 años',
+                    hint: Text('Ãšltimos 3 aÃ±os',
                         style: TextStyle(
                             fontSize: 12,
-                            color: AppTheme.textSecondary.withOpacity(0.7),),),
+                            color: AppTheme.textSecondary.withValues(alpha: 0.7),),),
                     dropdownColor: AppTheme.surfaceColor,
                     icon: const Icon(Icons.calendar_month,
                         size: 16, color: AppTheme.neonBlue,),
@@ -671,7 +671,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     isDense: true,
                     items: [
                       const DropdownMenuItem<int?>(
-                        child: Text('Últimos 3 años',
+                        child: Text('Ãšltimos 3 aÃ±os',
                             style: TextStyle(fontSize: 12),),
                       ),
                       ...years.map((y) => DropdownMenuItem<int?>(
@@ -699,10 +699,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   controller: _docSearchController,
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
-                    hintText: 'Buscar nº documento...',
+                    hintText: 'Buscar nÂº documento...',
                     hintStyle: TextStyle(
                         fontSize: 12,
-                        color: AppTheme.textSecondary.withOpacity(0.5),),
+                        color: AppTheme.textSecondary.withValues(alpha: 0.5),),
                     prefixIcon: const Icon(Icons.tag,
                         size: 16, color: AppTheme.textSecondary,),
                     suffixIcon: _docSearchController.text.isNotEmpty
@@ -764,13 +764,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 decoration: BoxDecoration(
                   color: _filterDocType != null
-                      ? AppTheme.neonPurple.withOpacity(0.1)
+                      ? AppTheme.neonPurple.withValues(alpha: 0.1)
                       : AppTheme.surfaceColor,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: _filterDocType != null
-                        ? AppTheme.neonPurple.withOpacity(0.5)
-                        : Colors.white.withOpacity(0.1),
+                        ? AppTheme.neonPurple.withValues(alpha: 0.5)
+                        : Colors.white.withValues(alpha: 0.1),
                   ),
                 ),
                 child: DropdownButtonHideUnderline(
@@ -780,13 +780,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                       children: [
                         Icon(Icons.description,
                             size: 14,
-                            color: AppTheme.textSecondary.withOpacity(0.6),),
+                            color: AppTheme.textSecondary.withValues(alpha: 0.6),),
                         const SizedBox(width: 4),
                         Text('Tipo',
                             style: TextStyle(
                                 fontSize: 11,
                                 color:
-                                    AppTheme.textSecondary.withOpacity(0.6),),),
+                                    AppTheme.textSecondary.withValues(alpha: 0.6),),),
                       ],
                     ),
                     isDense: true,
@@ -835,13 +835,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 decoration: BoxDecoration(
                   color: _filterStatus != null
-                      ? _statusColor(_filterStatus).withOpacity(0.1)
+                      ? _statusColor(_filterStatus).withValues(alpha: 0.1)
                       : AppTheme.surfaceColor,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: _filterStatus != null
-                        ? _statusColor(_filterStatus).withOpacity(0.5)
-                        : Colors.white.withOpacity(0.1),
+                        ? _statusColor(_filterStatus).withValues(alpha: 0.5)
+                        : Colors.white.withValues(alpha: 0.1),
                   ),
                 ),
                 child: DropdownButtonHideUnderline(
@@ -851,13 +851,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                       children: [
                         Icon(Icons.local_shipping,
                             size: 14,
-                            color: AppTheme.textSecondary.withOpacity(0.6),),
+                            color: AppTheme.textSecondary.withValues(alpha: 0.6),),
                         const SizedBox(width: 4),
                         Text('Est.',
                             style: TextStyle(
                                 fontSize: 11,
                                 color:
-                                    AppTheme.textSecondary.withOpacity(0.6),),),
+                                    AppTheme.textSecondary.withValues(alpha: 0.6),),),
                       ],
                     ),
                     isDense: true,
@@ -929,10 +929,10 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     height: 38,
                     width: 38,
                     decoration: BoxDecoration(
-                      color: AppTheme.error.withOpacity(0.1),
+                      color: AppTheme.error.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                       border:
-                          Border.all(color: AppTheme.error.withOpacity(0.3)),
+                          Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
                     ),
                     child: const Icon(Icons.filter_alt_off,
                         size: 16, color: AppTheme.error,),
@@ -960,11 +960,11 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         gradient: LinearGradient(
           colors: [
             AppTheme.surfaceColor,
-            AppTheme.surfaceColor.withOpacity(0.7),
+            AppTheme.surfaceColor.withValues(alpha: 0.7),
           ],
         ),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -993,14 +993,14 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         Text(label,
             style: TextStyle(
                 fontSize: Responsive.fontSize(context, small: 8, large: 9),
-                color: AppTheme.textSecondary.withOpacity(0.7),),),
+                color: AppTheme.textSecondary.withValues(alpha: 0.7),),),
       ],
     );
   }
 
   Widget _buildStatDivider() {
     return Container(
-        width: 1, height: 24, color: Colors.white.withOpacity(0.08),);
+        width: 1, height: 24, color: Colors.white.withValues(alpha: 0.08),);
   }
 
   Widget _buildFilterDropdown({
@@ -1017,12 +1017,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         height: 38,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
-          color: isActive ? color.withOpacity(0.1) : AppTheme.surfaceColor,
+          color: isActive ? color.withValues(alpha: 0.1) : AppTheme.surfaceColor,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isActive
-                ? color.withOpacity(0.5)
-                : Colors.white.withOpacity(0.1),
+                ? color.withValues(alpha: 0.5)
+                : Colors.white.withValues(alpha: 0.1),
           ),
         ),
         child: Row(
@@ -1064,14 +1064,14 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         decoration: BoxDecoration(
           gradient: isActive
               ? LinearGradient(
-                  colors: [color.withOpacity(0.2), color.withOpacity(0.1)],)
+                  colors: [color.withValues(alpha: 0.2), color.withValues(alpha: 0.1)],)
               : null,
           color: isActive ? null : AppTheme.surfaceColor,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isActive
-                ? color.withOpacity(0.5)
-                : Colors.white.withOpacity(0.1),
+                ? color.withValues(alpha: 0.5)
+                : Colors.white.withValues(alpha: 0.1),
             width: isActive ? 1.5 : 1,
           ),
         ),
@@ -1102,7 +1102,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(_hasActiveFilters ? Icons.filter_alt_off : Icons.folder_open,
-                size: 48, color: AppTheme.textSecondary.withOpacity(0.5),),
+                size: 48, color: AppTheme.textSecondary.withValues(alpha: 0.5),),
             const SizedBox(height: 16),
             Text(
                 _hasActiveFilters
@@ -1191,8 +1191,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: isFactura
-                        ? Colors.purple.withOpacity(0.2)
-                        : AppTheme.neonBlue.withOpacity(0.2),
+                        ? Colors.purple.withValues(alpha: 0.2)
+                        : AppTheme.neonBlue.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
@@ -1226,13 +1226,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                       '  (Alb: ${doc.serie}-${doc.terminal}-${doc.albaranNumber})',
                       style: TextStyle(
                           fontSize: 9,
-                          color: AppTheme.textSecondary.withOpacity(0.6),),),
+                          color: AppTheme.textSecondary.withValues(alpha: 0.6),),),
                 const Spacer(),
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.1),
+                    color: statusColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Row(
@@ -1256,21 +1256,21 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             Row(
               children: [
                 Icon(Icons.calendar_today,
-                    size: 12, color: AppTheme.textSecondary.withOpacity(0.6),),
+                    size: 12, color: AppTheme.textSecondary.withValues(alpha: 0.6),),
                 const SizedBox(width: 4),
                 Text(DateFormat('dd/MM/yyyy').format(doc.date),
                     style: TextStyle(
                         fontSize: 11,
-                        color: AppTheme.textSecondary.withOpacity(0.8),),),
+                        color: AppTheme.textSecondary.withValues(alpha: 0.8),),),
                 if (doc.time != null) ...[
                   const SizedBox(width: 6),
                   Icon(Icons.access_time,
-                      size: 11, color: AppTheme.textSecondary.withOpacity(0.5),),
+                      size: 11, color: AppTheme.textSecondary.withValues(alpha: 0.5),),
                   const SizedBox(width: 2),
                   Text(doc.time!,
                       style: TextStyle(
                           fontSize: 10,
-                          color: AppTheme.textSecondary.withOpacity(0.7),),),
+                          color: AppTheme.textSecondary.withValues(alpha: 0.7),),),
                 ],
                 if (hasAnySignature) ...[
                   const SizedBox(width: 8),
@@ -1278,7 +1278,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                     decoration: BoxDecoration(
-                      color: AppTheme.neonPurple.withOpacity(0.15),
+                      color: AppTheme.neonPurple.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Row(
@@ -1344,7 +1344,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(2),),
             ),
 
@@ -1357,8 +1357,8 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: isFactura
-                          ? Colors.purple.withOpacity(0.2)
-                          : AppTheme.neonBlue.withOpacity(0.2),
+                          ? Colors.purple.withValues(alpha: 0.2)
+                          : AppTheme.neonBlue.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Icon(
@@ -1375,13 +1375,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                         Text(
                             isFactura && doc.facturaNumber != null
                                 ? 'Factura F-${doc.facturaNumber} (Alb: ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number})'
-                                : 'Albarán ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}',
+                                : 'AlbarÃ¡n ${doc.serie}-${doc.terminal}-${doc.albaranNumber ?? doc.number}',
                             style: const TextStyle(
                                 fontSize: 17,
                                 fontWeight: FontWeight.bold,
                                 color: AppTheme.textPrimary,),),
                         Text(
-                            '${DateFormat('dd/MM/yyyy').format(doc.date)} · ${CurrencyFormatter.format(doc.amount)}',
+                            '${DateFormat('dd/MM/yyyy').format(doc.date)} Â· ${CurrencyFormatter.format(doc.amount)}',
                             style: const TextStyle(
                                 fontSize: 13, color: AppTheme.textSecondary,),),
                       ],
@@ -1440,7 +1440,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         decoration: BoxDecoration(
           color: AppTheme.darkSurface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          border: Border(top: BorderSide(color: Colors.white.withOpacity(0.1))),
+          border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
         ),
         child: SafeArea(
           child: Column(
@@ -1508,7 +1508,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   backgroundColor: Colors.grey,
                   child: Icon(Icons.share, color: Colors.white, size: 20),
                 ),
-                title: const Text('Más opciones...',
+                title: const Text('MÃ¡s opciones...',
                     style: TextStyle(color: Colors.white),),
                 onTap: () {
                   Navigator.pop(context);
@@ -1542,7 +1542,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: color.withOpacity(0.15),
+                color: color.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(icon, color: color, size: 20),
@@ -1559,12 +1559,12 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     Text(subtitle,
                         style: TextStyle(
                             fontSize: 11,
-                            color: AppTheme.textSecondary.withOpacity(0.7),),),
+                            color: AppTheme.textSecondary.withValues(alpha: 0.7),),),
                 ],
               ),
             ),
             Icon(Icons.chevron_right,
-                color: AppTheme.textSecondary.withOpacity(0.5),),
+                color: AppTheme.textSecondary.withValues(alpha: 0.5),),
           ],
         ),
       ),
@@ -1577,7 +1577,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
   Future<void> _previewDocument(_DocumentItem doc) async {
     final modal =
-        AsyncOperationModal.show(context, text: 'Cargando previsualización...');
+        AsyncOperationModal.show(context, text: 'Cargando previsualizaciÃ³n...');
     try {
       final isFactura = doc.type == _DocType.factura;
       final bytes = await RepartidorDataService.downloadDocument(
@@ -1706,7 +1706,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
   Future<void> _emailDocument(_DocumentItem doc) async {
     final isFactura = doc.type == _DocType.factura;
-    final typeLabel = isFactura ? 'Factura' : 'Albarán';
+    final typeLabel = isFactura ? 'Factura' : 'AlbarÃ¡n';
     final clientName = _selectedClientName ?? 'Cliente';
 
     final result = await EmailFormModal.show(
@@ -1745,7 +1745,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         albaranTerminal: doc.terminal,
         albaranYear: doc.ejercicio,
       );
-      modal.success('✓ Email enviado correctamente');
+      modal.success('âœ“ Email enviado correctamente');
     } catch (e) {
       modal.error('Error enviando email: $e',
           onRetry: () => _emailDocument(doc),);
@@ -1754,13 +1754,13 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
 
   Future<void> _whatsAppDocument(_DocumentItem doc) async {
     final isFactura = doc.type == _DocType.factura;
-    final typeLabel = isFactura ? 'Factura' : 'Albarán';
+    final typeLabel = isFactura ? 'Factura' : 'AlbarÃ¡n';
     final clientName = _selectedClientName ?? 'Cliente';
 
     final result = await WhatsAppFormModal.show(
       context,
       defaultMessage:
-          'Hola $clientName, aquí tiene su documento $typeLabel ${doc.number}. 📄\n\n'
+          'Hola $clientName, aquÃ­ tiene su documento $typeLabel ${doc.number}. ðŸ“„\n\n'
           'Saludos - Granja Mari Pepa',
     );
 
@@ -1924,7 +1924,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         terminal: doc.terminal,
         numero: doc.albaranNumber ?? doc.number,
         docLabel:
-            '${doc.type == _DocType.factura ? "Factura" : "Albarán"} #${doc.number}',
+            '${doc.type == _DocType.factura ? "Factura" : "AlbarÃ¡n"} #${doc.number}',
         legacySignatureName: doc.legacySignatureName,
         legacyDate: doc.legacyDate,
       ),
@@ -2217,11 +2217,11 @@ class _SignatureDialogState extends State<_SignatureDialog> {
       if (widget.legacyDate != null) {
         info += '\nFecha: ${widget.legacyDate}';
       }
-      info += '\n\n(Imagen no disponible en registros históricos)';
+      info += '\n\n(Imagen no disponible en registros histÃ³ricos)';
     }
     setState(() {
       _loading = false;
-      _error = info ?? 'No se encontró firma para este documento';
+      _error = info ?? 'No se encontrÃ³ firma para este documento';
     });
   }
 
@@ -2257,7 +2257,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                             color: Colors.white,
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                                color: AppTheme.neonPurple.withOpacity(0.3),),
+                                color: AppTheme.neonPurple.withValues(alpha: 0.3),),
                           ),
                           child: ClipRRect(
                             borderRadius: BorderRadius.circular(12),
@@ -2280,7 +2280,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                             style: TextStyle(
                                 fontSize: 11,
                                 color:
-                                    AppTheme.textSecondary.withOpacity(0.8),),),
+                                    AppTheme.textSecondary.withValues(alpha: 0.8),),),
                     ],
                   )
                 // Name-only signature (no image)
@@ -2292,7 +2292,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                             Container(
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
-                                color: AppTheme.neonPurple.withOpacity(0.1),
+                                color: AppTheme.neonPurple.withValues(alpha: 0.1),
                                 shape: BoxShape.circle,
                               ),
                               child: const Icon(Icons.check_circle,
@@ -2313,7 +2313,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                               Text('Fecha: $_fecha',
                                   style: TextStyle(
                                       color: AppTheme.textSecondary
-                                          .withOpacity(0.8),
+                                          .withValues(alpha: 0.8),
                                       fontSize: 12,),),
                             ],
                             const SizedBox(height: 12),
@@ -2321,7 +2321,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                               '(Imagen no disponible - solo registro de firma)',
                               style: TextStyle(
                                   color:
-                                      AppTheme.textSecondary.withOpacity(0.5),
+                                      AppTheme.textSecondary.withValues(alpha: 0.5),
                                   fontSize: 10,),
                               textAlign: TextAlign.center,
                             ),
@@ -2336,7 +2336,7 @@ class _SignatureDialogState extends State<_SignatureDialog> {
                             Icon(Icons.gesture,
                                 size: 48, color: Colors.grey.shade400,),
                             const SizedBox(height: 12),
-                            Text(_error ?? 'No se encontró firma',
+                            Text(_error ?? 'No se encontrÃ³ firma',
                                 style: TextStyle(
                                     color: Colors.grey.shade400, fontSize: 13,),
                                 textAlign: TextAlign.center,),

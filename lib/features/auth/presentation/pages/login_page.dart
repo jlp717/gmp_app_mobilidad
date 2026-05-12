@@ -1,4 +1,4 @@
-import 'dart:math' as math;
+﻿import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -9,7 +9,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/auth/presentation/widgets/role_selection_dialog.dart';
 import 'package:go_router/go_router.dart';
 
-/// Página de login espectacular con diseño glassmorphism y feedback intuitivo
+/// PÃ¡gina de login espectacular con diseÃ±o glassmorphism y feedback intuitivo
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -168,7 +168,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           ),
           content: Text(
             _errorMessage ??
-                'Credenciales incorrectas. Por favor, inténtalo de nuevo.',
+                'Credenciales incorrectas. Por favor, intÃ©ntalo de nuevo.',
             style: const TextStyle(color: Colors.white),
           ),
           actions: [
@@ -245,19 +245,19 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         Positioned(
           top: -100,
           right: -100,
-          child: _buildOrb(280, AppTheme.neonBlue.withOpacity(0.15)),
+          child: _buildOrb(280, AppTheme.neonBlue.withValues(alpha: 0.15)),
         ),
         // Bottom-left orb
         Positioned(
           bottom: -150,
           left: -150,
-          child: _buildOrb(350, AppTheme.neonPurple.withOpacity(0.12)),
+          child: _buildOrb(350, AppTheme.neonPurple.withValues(alpha: 0.12)),
         ),
         // Center accent
         Positioned(
           top: MediaQuery.of(context).size.height * 0.3,
           right: MediaQuery.of(context).size.width * 0.1,
-          child: _buildOrb(100, AppTheme.neonPink.withOpacity(0.08)),
+          child: _buildOrb(100, AppTheme.neonPink.withValues(alpha: 0.08)),
         ),
       ],
     );
@@ -345,7 +345,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           'Plataforma inteligente de ventas\nDatos en tiempo real para tu equipo comercial',
           style: TextStyle(
             fontSize: 17,
-            color: Colors.white.withOpacity(0.6),
+            color: Colors.white.withValues(alpha: 0.6),
             height: 1.6,
             letterSpacing: 0.3,
           ),
@@ -389,7 +389,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           'Plataforma de Ventas Inteligente',
           style: TextStyle(
             fontSize: 14,
-            color: Colors.white.withOpacity(0.5),
+            color: Colors.white.withValues(alpha: 0.5),
           ),
         ),
       ],
@@ -413,7 +413,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             boxShadow: [
               BoxShadow(
                 color: const Color(0xFF00D9FF)
-                    .withOpacity(0.3 + _logoController.value * 0.2),
+                    .withValues(alpha: 0.3 + _logoController.value * 0.2),
                 blurRadius: 30 + _logoController.value * 15,
                 spreadRadius: 2,
               ),
@@ -434,8 +434,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(24),
-        color: Colors.white.withOpacity(0.05),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        color: Colors.white.withValues(alpha: 0.05),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -444,7 +444,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           const SizedBox(width: 6),
           Text(label,
               style: TextStyle(
-                  fontSize: 13, color: Colors.white.withOpacity(0.7),),),
+                  fontSize: 13, color: Colors.white.withValues(alpha: 0.7),),),
         ],
       ),
     );
@@ -456,18 +456,18 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       padding: EdgeInsets.all(Responsive.isSmall(context) ? 24 : 36),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(32),
-        color: Colors.white.withOpacity(0.03),
+        color: Colors.white.withValues(alpha: 0.03),
         border: Border.all(
           color: _hasError
-              ? AppTheme.error.withOpacity(0.5)
-              : Colors.white.withOpacity(0.08),
+              ? AppTheme.error.withValues(alpha: 0.5)
+              : Colors.white.withValues(alpha: 0.08),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
             color: _hasError
-                ? AppTheme.error.withOpacity(0.1)
-                : Colors.black.withOpacity(0.4),
+                ? AppTheme.error.withValues(alpha: 0.1)
+                : Colors.black.withValues(alpha: 0.4),
             blurRadius: 50,
             offset: const Offset(0, 25),
           ),
@@ -491,10 +491,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             ),
             const SizedBox(height: 4),
             Text(
-              'Inicia sesión para continuar',
+              'Inicia sesiÃ³n para continuar',
               style: TextStyle(
                 fontSize: 15,
-                color: Colors.white.withOpacity(0.5),
+                color: Colors.white.withValues(alpha: 0.5),
               ),
             ),
 
@@ -507,8 +507,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(18),
-                  color: AppTheme.error.withOpacity(0.1),
-                  border: Border.all(color: AppTheme.error.withOpacity(0.3)),
+                  color: AppTheme.error.withValues(alpha: 0.1),
+                  border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
@@ -516,7 +516,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: AppTheme.error.withOpacity(0.2),
+                        color: AppTheme.error.withValues(alpha: 0.2),
                       ),
                       child: const Icon(Icons.error_outline,
                           color: AppTheme.error, size: 20,),
@@ -539,7 +539,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                             _errorMessage ?? 'Verifica tus credenciales',
                             style: TextStyle(
                               fontSize: 12,
-                              color: AppTheme.error.withOpacity(0.8),
+                              color: AppTheme.error.withValues(alpha: 0.8),
                             ),
                           ),
                         ],
@@ -562,7 +562,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               focusNode: _usernameFocus,
               isFocused: _isUsernameFocused,
               label: 'Usuario',
-              hint: 'Tu código de acceso',
+              hint: 'Tu cÃ³digo de acceso',
               icon: Icons.person_rounded,
               textInputAction: TextInputAction.next,
               onChanged: (_) => _clearError(),
@@ -577,22 +577,22 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               controller: _passwordController,
               focusNode: _passwordFocus,
               isFocused: _isPasswordFocused,
-              label: 'Contraseña',
-              hint: '••••••••',
+              label: 'ContraseÃ±a',
+              hint: 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢',
               icon: Icons.lock_rounded,
               obscure: _obscurePassword,
               textInputAction: TextInputAction.done,
               onChanged: (_) => _clearError(),
               onSubmit: (_) => _handleLogin(),
               validator: (v) =>
-                  v?.isEmpty ?? false ? 'Ingresa tu contraseña' : null,
+                  v?.isEmpty ?? false ? 'Ingresa tu contraseÃ±a' : null,
               suffix: IconButton(
                 icon: Icon(
                   _obscurePassword
                       ? Icons.visibility_off_rounded
                       : Icons.visibility_rounded,
                   size: 20,
-                  color: Colors.white.withOpacity(0.4),
+                  color: Colors.white.withValues(alpha: 0.4),
                 ),
                 onPressed: () =>
                     setState(() => _obscurePassword = !_obscurePassword),
@@ -623,13 +623,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                               ],
                             ),
                       color:
-                          isLoading ? Colors.white.withOpacity(0.1) : null,
+                          isLoading ? Colors.white.withValues(alpha: 0.1) : null,
                       boxShadow: isLoading
                           ? []
                           : [
                               BoxShadow(
                                 color:
-                                    const Color(0xFF00D9FF).withOpacity(0.35),
+                                    const Color(0xFF00D9FF).withValues(alpha: 0.35),
                                 blurRadius: 25,
                                 offset: const Offset(0, 10),
                               ),
@@ -643,14 +643,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                               child: CircularProgressIndicator(
                                 strokeWidth: 2.5,
                                 valueColor: AlwaysStoppedAnimation(
-                                    Colors.white.withOpacity(0.8),),
+                                    Colors.white.withValues(alpha: 0.8),),
                               ),
                             )
                           : const Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
                                 Text(
-                                  'Iniciar Sesión',
+                                  'Iniciar SesiÃ³n',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.w600,
@@ -685,10 +685,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Conexión segura • GMP 2026',
+                  'ConexiÃ³n segura â€¢ GMP 2026',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.white.withOpacity(0.35),
+                    color: Colors.white.withValues(alpha: 0.35),
                     letterSpacing: 0.3,
                   ),
                 ),
@@ -723,7 +723,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             fontSize: 13,
             fontWeight: FontWeight.w500,
             color:
-                isFocused ? AppTheme.neonBlue : Colors.white.withOpacity(0.5),
+                isFocused ? AppTheme.neonBlue : Colors.white.withValues(alpha: 0.5),
             letterSpacing: 0.3,
           ),
         ),
@@ -734,14 +734,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             borderRadius: BorderRadius.circular(18),
             border: Border.all(
               color:
-                  isFocused ? AppTheme.neonBlue : Colors.white.withOpacity(0.1),
+                  isFocused ? AppTheme.neonBlue : Colors.white.withValues(alpha: 0.1),
               width: isFocused ? 1.5 : 1,
             ),
-            color: Colors.white.withOpacity(isFocused ? 0.08 : 0.04),
+            color: Colors.white.withValues(alpha: isFocused ? 0.08 : 0.04),
             boxShadow: isFocused
                 ? [
                     BoxShadow(
-                      color: AppTheme.neonBlue.withOpacity(0.1),
+                      color: AppTheme.neonBlue.withValues(alpha: 0.1),
                       blurRadius: 15,
                     ),
                   ]
@@ -758,12 +758,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             style: const TextStyle(fontSize: 15, color: Colors.white),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: TextStyle(color: Colors.white.withOpacity(0.25)),
+              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.25)),
               prefixIcon: Icon(icon,
                   size: 20,
                   color: isFocused
                       ? AppTheme.neonBlue
-                      : Colors.white.withOpacity(0.4),),
+                      : Colors.white.withValues(alpha: 0.4),),
               suffixIcon: suffix,
               filled: false,
               contentPadding:

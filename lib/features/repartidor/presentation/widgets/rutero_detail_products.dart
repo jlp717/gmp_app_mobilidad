@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -123,7 +123,7 @@ class RuteroDetailProducts extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppTheme.error.withOpacity(0.1),
+                color: AppTheme.error.withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -163,12 +163,12 @@ class RuteroDetailProducts extends StatelessWidget {
         children: [
           Icon(
             Icons.inventory_2_outlined,
-            color: AppTheme.textSecondary.withOpacity(0.5),
+            color: AppTheme.textSecondary.withValues(alpha: 0.5),
             size: 64,
           ),
           const SizedBox(height: 16),
           const Text(
-            'No hay líneas de producto',
+            'No hay lÃ­neas de producto',
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
           ),
         ],
@@ -186,7 +186,7 @@ class RuteroDetailProducts extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: AppTheme.holoGradient,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.2)),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.2)),
       ),
       child: Column(
         children: [
@@ -207,12 +207,12 @@ class RuteroDetailProducts extends StatelessWidget {
                     const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
                   color: checked == total
-                      ? AppTheme.success.withOpacity(0.2)
-                      : AppTheme.warning.withOpacity(0.2),
+                      ? AppTheme.success.withValues(alpha: 0.2)
+                      : AppTheme.warning.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  checked == total ? '✓ COMPLETO' : 'PENDIENTE',
+                  checked == total ? 'âœ“ COMPLETO' : 'PENDIENTE',
                   style: TextStyle(
                     color:
                         checked == total ? AppTheme.success : AppTheme.warning,
@@ -231,7 +231,7 @@ class RuteroDetailProducts extends StatelessWidget {
                     color: AppTheme.neonCyan, size: 18),
                 const SizedBox(width: 8),
                 Text(
-                  'Orden de Preparación: $ordenPreparacion',
+                  'Orden de PreparaciÃ³n: $ordenPreparacion',
                   style: const TextStyle(
                     color: AppTheme.neonCyan,
                     fontWeight: FontWeight.w600,
@@ -266,7 +266,7 @@ class RuteroDetailProducts extends StatelessWidget {
               label: Text(allChecked ? 'DESMARCAR TODO' : 'MARCAR TODO'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.neonBlue,
-                side: BorderSide(color: AppTheme.neonBlue.withOpacity(0.5)),
+                side: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.5)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
@@ -322,8 +322,8 @@ class _ProductCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: isChecked
-              ? AppTheme.success.withOpacity(0.3)
-              : AppTheme.warning.withOpacity(0.3),
+              ? AppTheme.success.withValues(alpha: 0.3)
+              : AppTheme.warning.withValues(alpha: 0.3),
         ),
       ),
       child: Material(
@@ -361,7 +361,7 @@ class _ProductCard extends StatelessWidget {
       height: 28,
       decoration: BoxDecoration(
         color:
-            isChecked ? AppTheme.success.withOpacity(0.2) : AppTheme.darkBase,
+            isChecked ? AppTheme.success.withValues(alpha: 0.2) : AppTheme.darkBase,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isChecked ? AppTheme.success : AppTheme.borderColor,
@@ -437,7 +437,7 @@ class _ProductCard extends StatelessWidget {
                   vertical: 2,
                 ),
                 decoration: BoxDecoration(
-                  color: AppTheme.warning.withOpacity(0.2),
+                  color: AppTheme.warning.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: const Text(
@@ -471,7 +471,7 @@ class _ProductCard extends StatelessWidget {
           ),
           decoration: BoxDecoration(
             border: Border.all(
-              color: AppTheme.neonBlue.withOpacity(0.5),
+              color: AppTheme.neonBlue.withValues(alpha: 0.5),
             ),
             borderRadius: BorderRadius.circular(8),
           ),

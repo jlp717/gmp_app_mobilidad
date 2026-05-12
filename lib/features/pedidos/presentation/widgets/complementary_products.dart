@@ -1,4 +1,4 @@
-/// Complementary Products Widget
+﻿/// Complementary Products Widget
 /// ==============================
 /// Shows products frequently bought together with items in cart
 library;
@@ -65,7 +65,7 @@ class ComplementaryProducts extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: AppTheme.darkCard,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3), width: 0.5),
+                      border: Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.3), width: 0.5),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -74,7 +74,7 @@ class ComplementaryProducts extends StatelessWidget {
                         Text(name, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
                             maxLines: 1, overflow: TextOverflow.ellipsis,),
                         const SizedBox(height: 2),
-                        Text(code, style: TextStyle(color: AppTheme.neonPurple.withOpacity(0.7), fontSize: 9)),
+                        Text(code, style: TextStyle(color: AppTheme.neonPurple.withValues(alpha: 0.7), fontSize: 9)),
                         const SizedBox(height: 4),
                         Row(
                           children: [

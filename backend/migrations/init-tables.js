@@ -409,13 +409,12 @@ async function createIfNotExists(queryFn, tableName, ddl) {
 
 async function ensureColumn(queryFn, table, column, definition) {
   try {
-    const check = await queryFn(`
-      SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS2
-      WHERE TABLE_SCHEMA = '${APP_SCHEMA}'
-        AND TABLE_NAME = '${table}'
-        AND COLUMN_NAME = '${column}'
-      FETCH FIRST 1 ROW ONLY
-    `);
+    const check = await queryFn(
+      `SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS2
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?
+       FETCH FIRST 1 ROW ONLY`,
+      [APP_SCHEMA, table, column]
+    );
     if (check && check.length > 0) return false;
   } catch (_) { /* try ALTER anyway */ }
   try {
@@ -469,7 +468,7 @@ async function initAllTables(queryFn) {
 
   // Create indexes (silent fail if exist)
   for (const idx of INDEXES) {
-    try { await queryFn(idx); } catch (_) { /* exists */ }
+    try { await queryFn(idx); } catch (_) { logger.debug(`[INIT-TABLES] Index ${idx.substring(0, 60)}... already exists`); }
   }
 
   const created = results.filter(r => r.status === 'CREATED').length;

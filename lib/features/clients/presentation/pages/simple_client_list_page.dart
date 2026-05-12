@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -40,7 +40,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
   String? _error;
   String _searchQuery = '';
   DateTime? _lastFetchTime; // Track last sync
-  // final _currencyFormat = NumberFormat.currency(symbol: '€', decimalDigits: 0);
+  // final _currencyFormat = NumberFormat.currency(symbol: 'â‚¬', decimalDigits: 0);
   Timer? _debounceTimer;
   final TextEditingController _searchController = TextEditingController();
 
@@ -165,10 +165,10 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
     // Fallback if phones array is empty but phone fields exist (legacy compat)
     if (phones.isEmpty) {
       if (client['phone'] != null && (client['phone'] as String).isNotEmpty) {
-        phones.add({'type': 'Teléfono 1', 'number': client['phone']});
+        phones.add({'type': 'TelÃ©fono 1', 'number': client['phone']});
       }
       if (client['phone2'] != null && (client['phone2'] as String).isNotEmpty) {
-        phones.add({'type': 'Teléfono 2', 'number': client['phone2']});
+        phones.add({'type': 'TelÃ©fono 2', 'number': client['phone2']});
       }
     }
 
@@ -188,13 +188,13 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
             const Text('Enviar WhatsApp',
                 style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 8),
-            const Text('Selecciona el número:',
+            const Text('Selecciona el nÃºmero:',
                 style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
             const SizedBox(height: 12),
             if (phones.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('No hay teléfonos guardados',
+                child: Text('No hay telÃ©fonos guardados',
                     style: TextStyle(color: AppTheme.textSecondary)),
               ),
             ...phones.map(
@@ -202,7 +202,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
                 leading:
                     const Icon(Icons.phone_android, color: Color(0xFF25D366)),
                 title: Text((p['number'] as String?) ?? ''),
-                subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
+                subtitle: Text((p['type'] as String?) ?? 'TelÃ©fono'),
                 onTap: () {
                   Navigator.pop(ctx);
                   _launchWhatsApp((p['number'] as String?) ?? '');
@@ -212,8 +212,8 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
             const Divider(),
             ListTile(
               leading: const Icon(Icons.dialpad, color: AppTheme.neonPink),
-              title: const Text('Introducir número manualmente'),
-              subtitle: const Text('Escribe un número personalizado'),
+              title: const Text('Introducir nÃºmero manualmente'),
+              subtitle: const Text('Escribe un nÃºmero personalizado'),
               onTap: () {
                 Navigator.pop(ctx);
                 _showCustomPhoneDialog(isWhatsApp: true);
@@ -237,7 +237,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
           controller: controller,
           keyboardType: TextInputType.phone,
           decoration: InputDecoration(
-            labelText: 'Número de teléfono',
+            labelText: 'NÃºmero de telÃ©fono',
             hintText: 'Ej: 600 123 456',
             prefixIcon: Icon(isWhatsApp ? Icons.chat : Icons.phone),
             border: const OutlineInputBorder(),
@@ -287,8 +287,8 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
     // Professional message
     final message =
         Uri.encodeComponent('Hola, soy $nombreComercial de Mari Pepa. '
-            'Mañana día $fecha tenemos visita. '
-            '¿Necesitas cualquier cosilla?');
+            'MaÃ±ana dÃ­a $fecha tenemos visita. '
+            'Â¿Necesitas cualquier cosilla?');
 
     final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
     if (await canLaunchUrl(uri)) {
@@ -377,7 +377,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
               horizontal: Responsive.padding(context, small: 12, large: 16)),
           child: TextField(
             decoration: InputDecoration(
-              hintText: 'Buscar cliente, NIF, Ciudad, Código...',
+              hintText: 'Buscar cliente, NIF, Ciudad, CÃ³digo...',
               prefixIcon: const Icon(Icons.search),
               filled: true,
               fillColor: AppTheme.surfaceColor,
@@ -535,7 +535,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
               FilterChip(
                 label: const Text('Con Alertas'),
                 selected: _onlyWithAlerts,
-                selectedColor: AppTheme.neonPink.withOpacity(0.2),
+                selectedColor: AppTheme.neonPink.withValues(alpha: 0.2),
                 checkmarkColor: AppTheme.neonPink,
                 labelStyle: TextStyle(
                   fontSize: 12,
@@ -630,7 +630,7 @@ class _ClientCard extends StatelessWidget {
                   // Avatar
                   CircleAvatar(
                     radius: avatarRadius,
-                    backgroundColor: AppTheme.neonGreen.withOpacity(0.2),
+                    backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.2),
                     child: Text(
                       name.isNotEmpty ? name[0].toUpperCase() : 'C',
                       style: TextStyle(
@@ -746,7 +746,7 @@ class _ClientCard extends StatelessWidget {
                       if (lastPurchase.isNotEmpty) ...[
                         const SizedBox(height: 2),
                         Text(
-                          'Última: $lastPurchase',
+                          'Ãšltima: $lastPurchase',
                           style:
                               Theme.of(context).textTheme.labelSmall?.copyWith(
                                     color: AppTheme.textTertiary,
@@ -805,7 +805,7 @@ class _ClientCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: AppTheme.neonPurple.withOpacity(0.15),
+                color: AppTheme.neonPurple.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Row(
@@ -829,7 +829,7 @@ class _ClientCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withOpacity(0.15),
+                color: AppTheme.neonBlue.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Row(
@@ -854,7 +854,7 @@ class _ClientCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: AppTheme.neonGreen.withOpacity(0.15),
+                color: AppTheme.neonGreen.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Row(

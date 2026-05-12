@@ -1,4 +1,4 @@
-/// Product Card (Redesigned)
+﻿/// Product Card (Redesigned)
 /// =========================
 /// Catalog product card with purchase history badges, unit type indicators,
 /// YoY change, IVA toggle, and dual price display
@@ -89,7 +89,7 @@ class _ProductCardState extends State<ProductCard> {
     final hasClientePrice = widget.product.precioCliente > 0;
 
     return Card(
-      color: inCart ? AppTheme.darkCard.withOpacity(0.92) : AppTheme.darkCard,
+      color: inCart ? AppTheme.darkCard.withValues(alpha: 0.92) : AppTheme.darkCard,
       margin: const EdgeInsets.only(bottom: 6),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
@@ -98,7 +98,7 @@ class _ProductCardState extends State<ProductCard> {
               ? AppTheme.neonGreen
               : widget.promo != null
                   ? AppTheme.neonPurple
-                  : AppTheme.borderColor.withOpacity(0.3),
+                  : AppTheme.borderColor.withValues(alpha: 0.3),
           width: inCart ? 1.5 : (widget.promo != null ? 1.5 : 1.0),
         ),
       ),
@@ -165,7 +165,7 @@ class _ProductCardState extends State<ProductCard> {
                                 color: (widget.product.hasPurchased
                                         ? AppTheme.success
                                         : AppTheme.error)
-                                    .withOpacity(0.4),
+                                    .withValues(alpha: 0.4),
                                 blurRadius: 4,
                               ),
                             ],
@@ -189,10 +189,10 @@ class _ProductCardState extends State<ProductCard> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 5, vertical: 1,),
                           decoration: BoxDecoration(
-                            color: AppTheme.neonBlue.withOpacity(0.12),
+                            color: AppTheme.neonBlue.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
-                                color: AppTheme.neonBlue.withOpacity(0.3),),
+                                color: AppTheme.neonBlue.withValues(alpha: 0.3),),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -222,10 +222,10 @@ class _ProductCardState extends State<ProductCard> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 4, vertical: 1,),
                             decoration: BoxDecoration(
-                              color: AppTheme.neonPurple.withOpacity(0.2),
+                              color: AppTheme.neonPurple.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(
-                                  color: AppTheme.neonPurple.withOpacity(0.4),),
+                                  color: AppTheme.neonPurple.withValues(alpha: 0.4),),
                             ),
                             child: Text(
                               widget.promo!.promoDesc,
@@ -318,13 +318,13 @@ class _ProductCardState extends State<ProductCard> {
                             horizontal: 5, vertical: 1,),
                         decoration: BoxDecoration(
                           color: _showClientePrice
-                              ? AppTheme.neonGreen.withOpacity(0.15)
-                              : Colors.white.withOpacity(0.06),
+                              ? AppTheme.neonGreen.withValues(alpha: 0.15)
+                              : Colors.white.withValues(alpha: 0.06),
                           borderRadius: BorderRadius.circular(4),
                           border: Border.all(
                             color: _showClientePrice
-                                ? AppTheme.neonGreen.withOpacity(0.4)
-                                : Colors.white.withOpacity(0.1),
+                                ? AppTheme.neonGreen.withValues(alpha: 0.4)
+                                : Colors.white.withValues(alpha: 0.1),
                           ),
                         ),
                         child: Text(
@@ -368,13 +368,13 @@ class _ProductCardState extends State<ProductCard> {
                           padding: const EdgeInsets.all(2),
                           decoration: BoxDecoration(
                             color: _showIva
-                                ? AppTheme.neonPurple.withOpacity(0.2)
-                                : Colors.white.withOpacity(0.08),
+                                ? AppTheme.neonPurple.withValues(alpha: 0.2)
+                                : Colors.white.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
                               color: _showIva
-                                  ? AppTheme.neonPurple.withOpacity(0.5)
-                                  : Colors.white.withOpacity(0.15),
+                                  ? AppTheme.neonPurple.withValues(alpha: 0.5)
+                                  : Colors.white.withValues(alpha: 0.15),
                             ),
                           ),
                           child: Text(
@@ -412,10 +412,10 @@ class _ProductCardState extends State<ProductCard> {
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
-                      color: AppTheme.neonBlue.withOpacity(0.1),
+                      color: AppTheme.neonBlue.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6),
                       border:
-                          Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+                          Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
                     ),
                     child: Text(
                       'U/C: ${_formatUc(widget.product.unitsPerBox)}',
@@ -451,10 +451,10 @@ class _ProductCardState extends State<ProductCard> {
                     width: 28,
                     height: 28,
                     decoration: BoxDecoration(
-                      color: AppTheme.neonBlue.withOpacity(0.15),
+                      color: AppTheme.neonBlue.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
                       border:
-                          Border.all(color: AppTheme.neonBlue.withOpacity(0.4)),
+                          Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.4)),
                     ),
                     child: const Icon(Icons.add,
                         color: AppTheme.neonBlue, size: 18,),
@@ -493,15 +493,15 @@ class _ProductCardState extends State<ProductCard> {
     IconData icon;
 
     if (isPositive) {
-      bgColor = AppTheme.success.withOpacity(0.15);
+      bgColor = AppTheme.success.withValues(alpha: 0.15);
       textColor = AppTheme.success;
       icon = Icons.trending_up;
     } else if (isNegative) {
-      bgColor = AppTheme.error.withOpacity(0.15);
+      bgColor = AppTheme.error.withValues(alpha: 0.15);
       textColor = AppTheme.error;
       icon = Icons.trending_down;
     } else {
-      bgColor = Colors.white.withOpacity(0.08);
+      bgColor = Colors.white.withValues(alpha: 0.08);
       textColor = Colors.white54;
       icon = Icons.trending_flat;
     }

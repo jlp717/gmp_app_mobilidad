@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
 
@@ -57,7 +57,7 @@ class RuteroFilterBar extends StatelessWidget {
         decoration: InputDecoration(
           hintText: 'Buscar...',
           hintStyle: TextStyle(
-            color: AppTheme.textSecondary.withOpacity(0.7),
+            color: AppTheme.textSecondary.withValues(alpha: 0.7),
             fontSize: 13,
           ),
           prefixIcon:
@@ -208,7 +208,7 @@ class RuteroFilterBar extends StatelessWidget {
             child: FilterChip(
               label: const Text('Con Alertas'),
               selected: onlyWithAlerts,
-              selectedColor: AppTheme.neonPink.withOpacity(0.2),
+              selectedColor: AppTheme.neonPink.withValues(alpha: 0.2),
               checkmarkColor: AppTheme.neonPink,
               padding: EdgeInsets.zero,
               labelStyle: TextStyle(

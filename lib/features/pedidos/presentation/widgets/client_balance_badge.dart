@@ -1,4 +1,4 @@
-/// Client Balance Badge
+﻿/// Client Balance Badge
 /// ====================
 /// Shows outstanding balance and risk level for selected client
 /// with info icon that opens an explanation modal.
@@ -51,9 +51,9 @@ class ClientBalanceBadge extends StatelessWidget {
         margin: const EdgeInsets.only(top: 4),
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          color: color.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.3), width: 0.5),
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -87,7 +87,7 @@ class ClientBalanceBadge extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 5, vertical: 1,),
                         decoration: BoxDecoration(
-                          color: color.withOpacity(0.16),
+                          color: color.withValues(alpha: 0.16),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
@@ -116,7 +116,7 @@ class ClientBalanceBadge extends StatelessWidget {
             const SizedBox(width: 6),
             Icon(
               Icons.info_outline_rounded,
-              color: color.withOpacity(0.6),
+              color: color.withValues(alpha: 0.6),
               size: 14,
             ),
           ],
@@ -140,7 +140,7 @@ class ClientBalanceBadge extends StatelessWidget {
         backgroundColor: AppTheme.darkSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: AppTheme.borderColor.withOpacity(0.3)),
+          side: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.3)),
         ),
         title: const Row(
           children: [
@@ -193,7 +193,7 @@ class ClientBalanceBadge extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: AppTheme.darkCard,
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: color.withOpacity(0.3)),
+                  border: Border.all(color: color.withValues(alpha: 0.3)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,7 +204,7 @@ class ClientBalanceBadge extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 2,),
                           decoration: BoxDecoration(
-                            color: color.withOpacity(0.15),
+                            color: color.withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
@@ -256,9 +256,9 @@ class ClientBalanceBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.05),
+        color: color.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

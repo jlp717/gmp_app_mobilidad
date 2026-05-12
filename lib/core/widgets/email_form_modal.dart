@@ -1,12 +1,12 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-/// 📧 EMAIL FORM MODAL
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/// â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+/// ðŸ“§ EMAIL FORM MODAL
+/// â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 ///
-/// Modal con formulario de envío de email.
+/// Modal con formulario de envÃ­o de email.
 /// Campos: destinatario (validado), asunto (pre-rellenado), cuerpo (opcional).
 ///
 /// Uso:
@@ -18,7 +18,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 ///   if (result != null) {
 ///     // result.email, result.subject, result.body
 ///   }
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/// â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
 class EmailFormResult {
 
@@ -89,7 +89,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
     }
     final regex = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$');
     if (!regex.hasMatch(value.trim())) {
-      return 'Email inválido';
+      return 'Email invÃ¡lido';
     }
     return null;
   }
@@ -117,10 +117,10 @@ class _EmailFormModalState extends State<EmailFormModal> {
         decoration: BoxDecoration(
           color: AppTheme.darkSurface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+          border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
           boxShadow: [
             BoxShadow(
-              color: AppTheme.neonBlue.withOpacity(0.15),
+              color: AppTheme.neonBlue.withValues(alpha: 0.15),
               blurRadius: 30,
               spreadRadius: 2,
             ),
@@ -138,7 +138,7 @@ class _EmailFormModalState extends State<EmailFormModal> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: AppTheme.neonBlue.withOpacity(0.15),
+                      color: AppTheme.neonBlue.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(Icons.email_rounded, color: AppTheme.neonBlue, size: 22),
@@ -255,18 +255,18 @@ class _EmailFormModalState extends State<EmailFormModal> {
   InputDecoration _inputDecoration({required String hint, required IconData icon}) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5), fontSize: 13),
+      hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5), fontSize: 13),
       prefixIcon: Icon(icon, color: AppTheme.textSecondary, size: 18),
       filled: true,
       fillColor: AppTheme.darkBase,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppTheme.borderColor.withOpacity(0.5)),
+        borderSide: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.5)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppTheme.borderColor.withOpacity(0.3)),
+        borderSide: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.3)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),

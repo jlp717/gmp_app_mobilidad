@@ -1,4 +1,4 @@
-/// Order Status Badge
+﻿/// Order Status Badge
 /// ==================
 /// Reusable badge showing order status with color, icon and animation.
 library;
@@ -88,12 +88,12 @@ class OrderStatusBadge extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            theme.primary.withOpacity(0.2),
-            theme.primary.withOpacity(0.1),
+            theme.primary.withValues(alpha: 0.2),
+            theme.primary.withValues(alpha: 0.1),
           ],
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: theme.primary.withOpacity(0.4)),
+        border: Border.all(color: theme.primary.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -107,7 +107,7 @@ class OrderStatusBadge extends StatelessWidget {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                      color: theme.primary.withOpacity(0.6), blurRadius: 4,),
+                      color: theme.primary.withValues(alpha: 0.6), blurRadius: 4,),
                 ],
               ),
             ),

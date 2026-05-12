@@ -1,16 +1,16 @@
-import 'package:fl_chart/fl_chart.dart';
+﻿import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
-/// [SalesChartCard] - Tarjeta con gráfica de ventas y unidades
+/// [SalesChartCard] - Tarjeta con grÃ¡fica de ventas y unidades
 ///
-/// CARACTERÍSTICAS:
-/// - Muestra datos de últimos 7 días
-/// - Comparación con período anterior
+/// CARACTERÃSTICAS:
+/// - Muestra datos de Ãºltimos 7 dÃ­as
+/// - ComparaciÃ³n con perÃ­odo anterior
 /// - Indicador de crecimiento
-/// - Gráfica de barras con fl_chart
+/// - GrÃ¡fica de barras con fl_chart
 class SalesChartCard extends StatelessWidget {
   const SalesChartCard({
     required this.salesSummary, super.key,
@@ -30,7 +30,7 @@ class SalesChartCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header con título y crecimiento
+            // Header con tÃ­tulo y crecimiento
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -45,7 +45,7 @@ class SalesChartCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Últimos 7 días',
+                      'Ãšltimos 7 dÃ­as',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
@@ -86,7 +86,7 @@ class SalesChartCard extends StatelessWidget {
 
             const SizedBox(height: 24),
 
-            // Gráfica
+            // GrÃ¡fica
             if (hasData) ...[
               SizedBox(
                 height: Responsive.scale(context, 200),
@@ -102,7 +102,7 @@ class SalesChartCard extends StatelessWidget {
                       Icon(
                         Icons.bar_chart_outlined,
                         size: 48,
-                        color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5),
+                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -131,7 +131,7 @@ class SalesChartCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -164,7 +164,7 @@ class SalesChartCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -202,7 +202,7 @@ class SalesChartCard extends StatelessWidget {
     final theme = Theme.of(context);
     final data = salesSummary.dailyData;
 
-    // Calcular valor máximo para escala
+    // Calcular valor mÃ¡ximo para escala
     final maxSales = data.map((d) => d.sales).reduce((a, b) => a > b ? a : b);
     final maxY = (maxSales * 1.2).ceilToDouble();
 
@@ -281,7 +281,7 @@ class SalesChartCard extends StatelessWidget {
           horizontalInterval: maxY / 5,
           getDrawingHorizontalLine: (value) {
             return FlLine(
-              color: theme.colorScheme.outlineVariant.withOpacity(0.5),
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
               strokeWidth: 1,
             );
           },

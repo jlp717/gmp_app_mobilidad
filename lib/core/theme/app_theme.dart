@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -68,23 +68,23 @@ class AppTheme {
         end: Alignment.bottomRight,
         colors: [
           darkSurface,
-          darkCard.withOpacity(0.8),
+          darkCard.withValues(alpha: 0.8),
         ],
       );
 
   /// Urgent indicator gradient (red pulse)
   static LinearGradient get urgentGradient => LinearGradient(
         colors: [
-          error.withOpacity(0.3),
-          error.withOpacity(0.1),
+          error.withValues(alpha: 0.3),
+          error.withValues(alpha: 0.1),
         ],
       );
 
   /// Success indicator gradient
   static LinearGradient get successGradient => LinearGradient(
         colors: [
-          success.withOpacity(0.3),
-          success.withOpacity(0.1),
+          success.withValues(alpha: 0.3),
+          success.withValues(alpha: 0.1),
         ],
       );
 
@@ -170,7 +170,7 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: darkCard,
         elevation: 4,
-        shadowColor: neonBlue.withOpacity(0.1),
+        shadowColor: neonBlue.withValues(alpha: 0.1),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       ),
 
@@ -242,11 +242,11 @@ class AppTheme {
   // ============================================================================
 
   static BoxDecoration glassMorphism({Color? color}) => BoxDecoration(
-        color: (color ?? darkCard).withOpacity(0.7),
+        color: (color ?? darkCard).withValues(alpha: 0.7),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: neonBlue.withOpacity(0.2)),
+        border: Border.all(color: neonBlue.withValues(alpha: 0.2)),
         boxShadow: [
-          BoxShadow(color: neonBlue.withOpacity(0.1), blurRadius: 20),
+          BoxShadow(color: neonBlue.withValues(alpha: 0.1), blurRadius: 20),
         ],
       );
 
@@ -255,9 +255,9 @@ class AppTheme {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: color),
         boxShadow: [
-          BoxShadow(color: color.withOpacity(0.3), blurRadius: 20),
+          BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 20),
           BoxShadow(
-              color: color.withOpacity(0.1), blurRadius: 40, spreadRadius: 5,),
+              color: color.withValues(alpha: 0.1), blurRadius: 40, spreadRadius: 5,),
         ],
       );
 
@@ -266,12 +266,12 @@ class AppTheme {
         gradient: cardGradient,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: (glowColor ?? neonBlue).withOpacity(0.3),
+          color: (glowColor ?? neonBlue).withValues(alpha: 0.3),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: (glowColor ?? neonBlue).withOpacity(0.15),
+            color: (glowColor ?? neonBlue).withValues(alpha: 0.15),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -285,14 +285,14 @@ class AppTheme {
           end: Alignment.bottomRight,
           colors: [
             darkSurface,
-            error.withOpacity(0.1),
+            error.withValues(alpha: 0.1),
           ],
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: error.withOpacity(0.5), width: 2),
+        border: Border.all(color: error.withValues(alpha: 0.5), width: 2),
         boxShadow: [
           BoxShadow(
-            color: error.withOpacity(0.2),
+            color: error.withValues(alpha: 0.2),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),
@@ -306,11 +306,11 @@ class AppTheme {
           end: Alignment.bottomRight,
           colors: [
             darkSurface,
-            success.withOpacity(0.08),
+            success.withValues(alpha: 0.08),
           ],
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: success.withOpacity(0.4), width: 1.5),
+        border: Border.all(color: success.withValues(alpha: 0.4), width: 1.5),
       );
 
   /// NEW: Factura card decoration (purple tint for invoices)
@@ -320,14 +320,14 @@ class AppTheme {
           end: Alignment.bottomRight,
           colors: [
             darkSurface,
-            neonPurple.withOpacity(0.1),
+            neonPurple.withValues(alpha: 0.1),
           ],
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: neonPurple.withOpacity(0.4), width: 1.5),
+        border: Border.all(color: neonPurple.withValues(alpha: 0.4), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: neonPurple.withOpacity(0.15),
+            color: neonPurple.withValues(alpha: 0.15),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -344,7 +344,7 @@ class AppTheme {
         ),
         boxShadow: [
           BoxShadow(
-            color: neonBlue.withOpacity(0.4),
+            color: neonBlue.withValues(alpha: 0.4),
             blurRadius: 20,
             spreadRadius: 2,
           ),
@@ -353,9 +353,9 @@ class AppTheme {
 
   /// NEW: Subtle pulsing border animation colors
   static List<Color> get pulsingBorderColors => [
-        neonBlue.withOpacity(0.3),
-        neonCyan.withOpacity(0.5),
-        neonBlue.withOpacity(0.3),
+        neonBlue.withValues(alpha: 0.3),
+        neonCyan.withValues(alpha: 0.5),
+        neonBlue.withValues(alpha: 0.3),
       ];
 
   // Spacing constants (tablet-optimized) - re-export from AppColors
@@ -388,19 +388,19 @@ class AppTheme {
     double glowBlur = 16.0,
   }) {
     return BoxDecoration(
-      color: (color ?? darkCard).withOpacity(opacity),
+      color: (color ?? darkCard).withValues(alpha: opacity),
       borderRadius: BorderRadius.circular(borderRadius),
       border: Border.all(
-        color: (borderColor ?? neonBlue).withOpacity(0.2),
+        color: (borderColor ?? neonBlue).withValues(alpha: 0.2),
         width: borderWidth,
       ),
       boxShadow: [
         BoxShadow(
-          color: (glowColor ?? neonBlue).withOpacity(0.08),
+          color: (glowColor ?? neonBlue).withValues(alpha: 0.08),
           blurRadius: glowBlur,
         ),
         BoxShadow(
-          color: Colors.black.withOpacity(0.3),
+          color: Colors.black.withValues(alpha: 0.3),
           blurRadius: 8,
           offset: const Offset(0, 4),
         ),
@@ -422,17 +422,17 @@ class AppTheme {
         begin: begin,
         end: end,
         colors: [
-          startColor.withOpacity(0.15),
-          endColor.withOpacity(0.05),
+          startColor.withValues(alpha: 0.15),
+          endColor.withValues(alpha: 0.05),
         ],
       ),
       borderRadius: BorderRadius.circular(borderRadius),
       border: Border.all(
-        color: startColor.withOpacity(borderOpacity),
+        color: startColor.withValues(alpha: borderOpacity),
       ),
       boxShadow: [
         BoxShadow(
-          color: startColor.withOpacity(0.06),
+          color: startColor.withValues(alpha: 0.06),
           blurRadius: 12,
           offset: const Offset(0, 4),
         ),
@@ -446,7 +446,7 @@ class AppTheme {
 
   static List<BoxShadow> elevation1 = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.15),
+      color: Colors.black.withValues(alpha: 0.15),
       blurRadius: 4,
       offset: const Offset(0, 2),
     ),
@@ -454,24 +454,24 @@ class AppTheme {
 
   static List<BoxShadow> elevation2 = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.2),
+      color: Colors.black.withValues(alpha: 0.2),
       blurRadius: 8,
       offset: const Offset(0, 4),
     ),
     BoxShadow(
-      color: neonBlue.withOpacity(0.05),
+      color: neonBlue.withValues(alpha: 0.05),
       blurRadius: 16,
     ),
   ];
 
   static List<BoxShadow> elevation3 = [
     BoxShadow(
-      color: Colors.black.withOpacity(0.25),
+      color: Colors.black.withValues(alpha: 0.25),
       blurRadius: 16,
       offset: const Offset(0, 8),
     ),
     BoxShadow(
-      color: neonBlue.withOpacity(0.08),
+      color: neonBlue.withValues(alpha: 0.08),
       blurRadius: 24,
     ),
   ];

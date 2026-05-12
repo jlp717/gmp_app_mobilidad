@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
@@ -90,14 +90,14 @@ class RuteroClientListItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: hasObservaciones
-              ? AppTheme.warning.withOpacity(0.8)
-              : accentColor.withOpacity(0.5),
+              ? AppTheme.warning.withValues(alpha: 0.8)
+              : accentColor.withValues(alpha: 0.5),
           width: hasObservaciones ? 2 : 1.5,
         ),
         boxShadow: [
           BoxShadow(
             color: (hasObservaciones ? AppTheme.warning : accentColor)
-                .withOpacity(0.1),
+                .withValues(alpha: 0.1),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -199,7 +199,7 @@ class RuteroClientListItem extends StatelessWidget {
       width: 85,
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
-        color: accentColor.withOpacity(0.12),
+        color: accentColor.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -225,7 +225,7 @@ class RuteroClientListItem extends StatelessWidget {
               ),
             ),
             Text(
-              'Este período (acumulativo de semanas)',
+              'Este perÃ­odo (acumulativo de semanas)',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 8,
@@ -242,11 +242,11 @@ class RuteroClientListItem extends StatelessWidget {
               ),
             ),
             Text(
-              'No vendió en ${selectedYear - 1}',
+              'No vendiÃ³ en ${selectedYear - 1}',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 8,
-                color: accentColor.withOpacity(0.8),
+                color: accentColor.withValues(alpha: 0.8),
               ),
             ),
           ] else ...[
@@ -262,7 +262,7 @@ class RuteroClientListItem extends StatelessWidget {
               'vs ${selectedYear - 1}',
               style: TextStyle(
                 fontSize: 9,
-                color: accentColor.withOpacity(0.8),
+                color: accentColor.withValues(alpha: 0.8),
               ),
             ),
           ],
@@ -275,8 +275,8 @@ class RuteroClientListItem extends StatelessWidget {
               ),
               decoration: BoxDecoration(
                 color: margin >= 15
-                    ? AppTheme.success.withOpacity(0.2)
-                    : AppTheme.warning.withOpacity(0.2),
+                    ? AppTheme.success.withValues(alpha: 0.2)
+                    : AppTheme.warning.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
@@ -315,7 +315,7 @@ class RuteroClientListItem extends StatelessWidget {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.neonPink.withOpacity(0.4),
+                    color: AppTheme.neonPink.withValues(alpha: 0.4),
                     blurRadius: 4,
                     offset: const Offset(0, 2),
                   ),
@@ -351,7 +351,7 @@ class RuteroClientListItem extends StatelessWidget {
               vertical: 2,
             ),
             decoration: BoxDecoration(
-              color: AppTheme.neonBlue.withOpacity(0.15),
+              color: AppTheme.neonBlue.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
@@ -428,7 +428,7 @@ class RuteroClientListItem extends StatelessWidget {
                 vertical: 2,
               ),
               decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withOpacity(0.15),
+                color: AppTheme.neonBlue.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
@@ -497,7 +497,7 @@ class RuteroClientListItem extends StatelessWidget {
                   fontSize: 13,
                 ),
                 message:
-                    'El acumulado del año anterior aparecerá a partir de la 2ª semana.',
+                    'El acumulado del aÃ±o anterior aparecerÃ¡ a partir de la 2Âª semana.',
                 child: Icon(
                   Icons.info_outline,
                   size: 14,
@@ -521,7 +521,7 @@ class RuteroClientListItem extends StatelessWidget {
             color: AppTheme.neonPink,
             size: 26,
           ),
-          tooltip: 'Cómo llegar',
+          tooltip: 'CÃ³mo llegar',
           splashRadius: 24,
           padding: const EdgeInsets.all(4),
           constraints: const BoxConstraints(minWidth: 44, minHeight: 44),

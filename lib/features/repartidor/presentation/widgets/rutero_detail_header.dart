@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -89,12 +89,12 @@ class RuteroDetailHeader extends StatelessWidget {
         gradient: LinearGradient(
           colors: _isFactura
               ? [
-                  AppTheme.neonPurple.withOpacity(0.3),
-                  AppTheme.neonPurple.withOpacity(0.1),
+                  AppTheme.neonPurple.withValues(alpha: 0.3),
+                  AppTheme.neonPurple.withValues(alpha: 0.1),
                 ]
               : [
-                  AppTheme.neonBlue.withOpacity(0.2),
-                  AppTheme.neonBlue.withOpacity(0.05),
+                  AppTheme.neonBlue.withValues(alpha: 0.2),
+                  AppTheme.neonBlue.withValues(alpha: 0.05),
                 ],
         ),
         borderRadius: BorderRadius.circular(8),
@@ -114,7 +114,7 @@ class RuteroDetailHeader extends StatelessWidget {
           Text(
             _isFactura
                 ? 'FACTURA ${albaran.serieFactura.isNotEmpty ? "${albaran.serieFactura}-" : ""}${albaran.numeroFactura}'
-                : 'ALBARÁN ${albaran.serie.isNotEmpty ? albaran.serie : "A"}${albaran.terminal > 0 ? "-${albaran.terminal}" : ""}-${albaran.numeroAlbaran}',
+                : 'ALBARÃN ${albaran.serie.isNotEmpty ? albaran.serie : "A"}${albaran.terminal > 0 ? "-${albaran.terminal}" : ""}-${albaran.numeroAlbaran}',
             style: TextStyle(
               color: _isFactura ? AppTheme.neonPurple : AppTheme.neonBlue,
               fontWeight: FontWeight.bold,
@@ -131,7 +131,7 @@ class RuteroDetailHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
         Text(
-          NumberFormat.currency(symbol: '€', locale: 'es_ES')
+          NumberFormat.currency(symbol: 'â‚¬', locale: 'es_ES')
               .format(albaran.importeTotal),
           style: TextStyle(
             color: _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
@@ -143,15 +143,15 @@ class RuteroDetailHeader extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
           decoration: BoxDecoration(
             color: (_isUrgent ? AppTheme.obligatorio : AppTheme.success)
-                .withOpacity(0.15),
+                .withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(4),
           ),
           child: Text(
             isCompleted
-                ? '✓ ENTREGADO'
+                ? 'âœ“ ENTREGADO'
                 : _isUrgent
-                    ? '⚠ COBRO OBLIGATORIO'
-                    : '✓ COBRO OPCIONAL',
+                    ? 'âš  COBRO OBLIGATORIO'
+                    : 'âœ“ COBRO OPCIONAL',
             style: TextStyle(
               color: isCompleted
                   ? AppTheme.success

@@ -126,6 +126,28 @@ exports.pedidosLimiter = rateLimit({
     keyGenerator: (req) => req.user?.id || req.ip || 'unknown'
 });
 
+exports.bolsaLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    message: { 
+        error: 'Demasiadas solicitudes de bolsa comercial. Intente más tarde.'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => req.user?.id || req.ip || 'unknown'
+});
+
+exports.evolutionLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 40,
+    message: { 
+        error: 'Demasiadas solicitudes de evolución. Intente más tarde.'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => req.user?.id || req.ip || 'unknown'
+});
+
 // =============================================================================
 // SECURITY HEADERS
 // =============================================================================

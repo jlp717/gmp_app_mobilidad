@@ -1,4 +1,4 @@
-/// Client Search Dialog for Pedidos
+﻿/// Client Search Dialog for Pedidos
 /// =================================
 /// Bottom sheet with debounced search to select a client for the order
 library;
@@ -267,7 +267,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                 width: 36,
                 height: 36,
                 decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withOpacity(0.1),
+                  color: AppTheme.neonBlue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Center(
@@ -299,7 +299,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                           ),
                         ),
                         if (city.isNotEmpty) ...[
-                          Text(' · ', style: TextStyle(color: Colors.white38, fontSize: Responsive.fontSize(context, small: 11, large: 12))),
+                          Text(' Â· ', style: TextStyle(color: Colors.white38, fontSize: Responsive.fontSize(context, small: 11, large: 12))),
                           Flexible(
                             child: Text(
                               city,
@@ -309,7 +309,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                           ),
                         ],
                         if (nif.isNotEmpty) ...[
-                          Text(' · ', style: TextStyle(color: Colors.white38, fontSize: Responsive.fontSize(context, small: 11, large: 12))),
+                          Text(' Â· ', style: TextStyle(color: Colors.white38, fontSize: Responsive.fontSize(context, small: 11, large: 12))),
                           Text(
                             nif,
                             style: TextStyle(color: Colors.white54, fontSize: Responsive.fontSize(context, small: 11, large: 12)),

@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/foundation.dart'; // For compute
 import 'package:flutter/material.dart';
@@ -190,23 +190,23 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       final response = await ApiClient.get('/rutero/vendedores',
           cacheKey: 'vendedores_list', cacheTTL: const Duration(hours: 1));
       debugPrint(
-          '📋 Vendedores API response: ${response.runtimeType} - keys: ${response is Map ? response.keys : 'not a map'}');
+          'ðŸ“‹ Vendedores API response: ${response.runtimeType} - keys: ${response is Map ? response.keys : 'not a map'}');
       if (mounted) {
         setState(() {
           // Safe conversion - convert each item explicitly to Map<String, dynamic>
           final data = Map<String, dynamic>.from(response as Map);
           final rawList = data['vendedores'] ?? [];
           debugPrint(
-              '📋 Raw vendedores list length: ${rawList is List ? rawList.length : 'not a list'}');
+              'ðŸ“‹ Raw vendedores list length: ${rawList is List ? rawList.length : 'not a list'}');
           _vendedoresDisponibles = (rawList as List)
               .map((item) => Map<String, dynamic>.from(item as Map))
               .toList();
           debugPrint(
-              '📋 Vendedores disponibles loaded: ${_vendedoresDisponibles.length}');
+              'ðŸ“‹ Vendedores disponibles loaded: ${_vendedoresDisponibles.length}');
         });
       }
     } catch (e) {
-      debugPrint('❌ Error loading vendedores: $e');
+      debugPrint('âŒ Error loading vendedores: $e');
     }
   }
 
@@ -503,7 +503,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     if (_fiFilters.fi5 != null) parts.add('Tipo');
     if (_fiFilters.fi3 != null) parts.add('Det');
     if (_fiFilters.fi4 != null) parts.add('Esp');
-    return parts.isEmpty ? 'Categorías' : parts.join('+');
+    return parts.isEmpty ? 'CategorÃ­as' : parts.join('+');
   }
 
   @override
@@ -524,7 +524,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
               // Smart Sync Header
               SmartSyncHeader(
                 title: 'Panel de Control',
-                subtitle: 'Visión General del Negocio',
+                subtitle: 'VisiÃ³n General del Negocio',
                 lastSync: _lastFetchTime,
                 isLoading: _isLoading,
                 onSync: _fetchAllData,
@@ -575,7 +575,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                           if (_isLoading)
                             Positioned.fill(
                               child: ColoredBox(
-                                color: Colors.black.withOpacity(0.3),
+                                color: Colors.black.withValues(alpha: 0.3),
                                 child: const Center(
                                   child: SizedBox(
                                     width: 20,
@@ -754,7 +754,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                     Expanded(
                       child: Text(
                         _fiFilters.isEmpty
-                            ? 'Categorías'
+                            ? 'CategorÃ­as'
                             : _buildFiFilterSummary(),
                         style: TextStyle(
                             color: _fiFilters.isNotEmpty
@@ -845,7 +845,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
-                  color: Colors.amber.withOpacity(0.2),
+                  color: Colors.amber.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4)),
               child: const Text('Cambios pendientes',
                   style: TextStyle(color: Colors.amber, fontSize: 10)),
@@ -853,7 +853,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
           ],
         ],
       ),
-      collapsedBackgroundColor: AppTheme.surfaceColor.withOpacity(0.5),
+      collapsedBackgroundColor: AppTheme.surfaceColor.withValues(alpha: 0.5),
       backgroundColor: AppTheme.surfaceColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       collapsedShape:
@@ -866,7 +866,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
           children: [
             const Padding(
               padding: EdgeInsets.only(top: 8),
-              child: Text('Años:',
+              child: Text('AÃ±os:',
                   style: TextStyle(color: Colors.white, fontSize: 12)),
             ),
             const SizedBox(width: 12),
@@ -888,7 +888,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                             _hasPendingChanges = true;
                           });
                         },
-                        selectedColor: AppTheme.neonPurple.withOpacity(0.3),
+                        selectedColor: AppTheme.neonPurple.withValues(alpha: 0.3),
                         checkmarkColor: AppTheme.neonPurple,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8)),
@@ -957,7 +957,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                   _hasPendingChanges = true;
                 });
               },
-              selectedColor: AppTheme.neonBlue.withOpacity(0.3),
+              selectedColor: AppTheme.neonBlue.withValues(alpha: 0.3),
               checkmarkColor: AppTheme.neonBlue,
               visualDensity: VisualDensity.compact,
               padding: EdgeInsets.zero,
@@ -1037,13 +1037,13 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
               runSpacing: 12,
               children: [
                 _buildKPICard(
-                  'Ventas Período',
+                  'Ventas PerÃ­odo',
                   CurrencyFormatter.format(totalSales),
                   Icons.euro,
                   AppTheme.neonBlue,
                   width: cardWidth,
                   subtitle: growthPercent != 0
-                      ? '${growthPercent >= 0 ? "+" : ""}${growthPercent.toStringAsFixed(1)}% vs año ant.'
+                      ? '${growthPercent >= 0 ? "+" : ""}${growthPercent.toStringAsFixed(1)}% vs aÃ±o ant.'
                       : null,
                   trend: growthPercent >= 0 ? 'up' : 'down',
                 ),
@@ -1107,14 +1107,14 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
           end: Alignment.bottomRight,
           colors: [
             AppTheme.surfaceColor,
-            color.withOpacity(0.08),
+            color.withValues(alpha: 0.08),
           ],
         ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
         boxShadow: [
           BoxShadow(
-              color: color.withOpacity(0.08),
+              color: color.withValues(alpha: 0.08),
               blurRadius: 12,
               offset: const Offset(0, 4)),
         ],
@@ -1127,7 +1127,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
+                  color: color.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, color: color, size: 16),
@@ -1193,9 +1193,9 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       margin: EdgeInsets.only(left: depth * 16.0, bottom: 8, top: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.15),
+        color: Colors.orange.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.orange.withOpacity(0.4)),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1385,7 +1385,7 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
               onChanged: _onSearchChanged,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: 'Buscar por código o nombre...',
+                hintText: 'Buscar por cÃ³digo o nombre...',
                 hintStyle: const TextStyle(color: Colors.white30),
                 prefixIcon: const Icon(Icons.search, color: Colors.white54),
                 filled: true,

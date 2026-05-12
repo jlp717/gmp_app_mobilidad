@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,7 +23,7 @@ class CobroDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
-  final _currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: '€');
+  final _currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: 'â‚¬');
   String _formaPago = 'CONTADO';
   final Map<String, String> _itemStates = {};
   final Map<String, double> _partialAmounts = {};
@@ -57,7 +57,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     if (_isSubmitting) return;
     if (totalACobrar <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona algún documento para cobrar')),
+        const SnackBar(content: Text('Selecciona algÃºn documento para cobrar')),
       );
       return;
     }
@@ -155,7 +155,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             Text(
-              'Código: ${widget.codigoCliente}',
+              'CÃ³digo: ${widget.codigoCliente}',
               style: const TextStyle(fontSize: 12, color: Colors.white70),
             ),
           ],
@@ -173,7 +173,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                     padding: const EdgeInsets.all(12),
                     margin: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: AppTheme.error.withOpacity(0.2),
+                      color: AppTheme.error.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: AppTheme.error),
                     ),
@@ -246,7 +246,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
         side: state != 'NONE'
-            ? BorderSide(color: AppTheme.success.withOpacity(0.4))
+            ? BorderSide(color: AppTheme.success.withValues(alpha: 0.4))
             : BorderSide.none,
       ),
       child: ExpansionTile(
@@ -312,7 +312,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
                         borderSide: BorderSide(
-                          color: AppTheme.neonBlue.withOpacity(0.3),
+                          color: AppTheme.neonBlue.withValues(alpha: 0.3),
                         ),
                       ),
                     ),
@@ -369,7 +369,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
         border:
-            Border(top: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2))),
+            Border(top: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.2))),
       ),
       child: Row(
         children: [

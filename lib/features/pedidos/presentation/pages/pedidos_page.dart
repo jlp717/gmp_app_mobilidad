@@ -1,4 +1,4 @@
-/// Pedidos Page
+﻿/// Pedidos Page
 /// ============
 /// Main order entry page with two tabs: Nuevo Pedido (catalog+cart) and Mis Pedidos (history)
 library;
@@ -59,7 +59,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   Timer? _autoSaveTimer;
   ProviderSubscription<String?>? _vendorSubscription;
 
-  // Mejora 10 â€” Mis Pedidos search & date filter
+  // Mejora 10 Ã¢â‚¬â€ Mis Pedidos search & date filter
   String _orderSearch = '';
   DateTime? _orderDateFrom;
   DateTime? _orderDateTo;
@@ -275,7 +275,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'No se pudo cargar el artículo ${fallbackName.isNotEmpty ? fallbackName : productCode}',
+            'No se pudo cargar el artÃ­culo ${fallbackName.isNotEmpty ? fallbackName : productCode}',
           ),
           backgroundColor: AppTheme.error,
         ),
@@ -554,7 +554,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       ),
       body: Column(
         children: [
-          // "Ver como" vendor selector for JEFE_VENTAS â€” visible on BOTH tabs
+          // "Ver como" vendor selector for JEFE_VENTAS Ã¢â‚¬â€ visible on BOTH tabs
           if (widget.isJefeVentas)
             GlobalVendorSelector(
               isJefeVentas: true,
@@ -573,7 +573,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
   }
 
-  // â”€â”€ TAB 1: Nuevo Pedido â”€â”€
+  // Ã¢â€â‚¬Ã¢â€â‚¬ TAB 1: Nuevo Pedido Ã¢â€â‚¬Ã¢â€â‚¬
 
   Widget _buildNuevoPedidoTab() {
     final provider = ref.watch(pedidosProvider);
@@ -596,7 +596,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         // Divider
         Container(
           width: 1,
-          color: AppTheme.borderColor.withOpacity(0.3),
+          color: AppTheme.borderColor.withValues(alpha: 0.3),
         ),
         // Right: order summary
         Expanded(
@@ -757,7 +757,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                     builder: (ctx) => AlertDialog(
                       title: const Text('Cambiar cliente'),
                       content: const Text(
-                        'El carrito tiene productos. ¿Desea cambiar de cliente y vaciar el carrito?',
+                        'El carrito tiene productos. Â¿Desea cambiar de cliente y vaciar el carrito?',
                       ),
                       actions: [
                         TextButton(
@@ -929,7 +929,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       );
     }
 
-    // Mejora 9 â€” Favoritos primero
+    // Mejora 9 Ã¢â‚¬â€ Favoritos primero
     final sortedProducts = [...provider.products]..sort((a, b) {
         final aSales = a.salesThisYear + a.salesPrevYear;
         final bSales = b.salesThisYear + b.salesPrevYear;
@@ -958,7 +958,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           );
         }
         final product = sortedProducts[i];
-        // Mejora 1 â€” cartQty
+        // Mejora 1 Ã¢â‚¬â€ cartQty
         OrderLine? lineInCart;
         for (final line in provider.lines) {
           if (line.codigoArticulo == product.code) {
@@ -986,8 +986,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             final messenger = ScaffoldMessenger.of(context);
             messenger.hideCurrentSnackBar();
 
-            // Simple product (only CAJAS, not dual) — quick add 1 caja
-            // Multi-unit or dual product — open UnitSelectorModal
+            // Simple product (only CAJAS, not dual) â€” quick add 1 caja
+            // Multi-unit or dual product â€” open UnitSelectorModal
             final initialUnit = lineInCart?.unidadMedida ??
                 provider.lastUnitForProduct(product.code) ??
                 product.availableUnits.first;
@@ -1073,7 +1073,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         child: Container(
           height: 80,
           decoration: BoxDecoration(
-            color: AppTheme.darkCard.withOpacity(0.5),
+            color: AppTheme.darkCard.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(12),
           ),
         ),
@@ -1081,7 +1081,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
   }
 
-  // ── TAB 2: Mis Pedidos ──
+  // â”€â”€ TAB 2: Mis Pedidos â”€â”€
 
   Widget _buildMisPedidosTab() {
     final provider = ref.watch(pedidosProvider);
@@ -1281,7 +1281,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           ],
         ),
         content: Text(
-          '¿Seguro que quieres anular el pedido #${order.numeroPedidoFormatted}?',
+          'Â¿Seguro que quieres anular el pedido #${order.numeroPedidoFormatted}?',
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -1331,7 +1331,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           ],
         ),
         content: Text(
-          '¿Deseas confirmar el borrador #${order.numeroPedidoFormatted}?',
+          'Â¿Deseas confirmar el borrador #${order.numeroPedidoFormatted}?',
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -1391,7 +1391,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           ],
         ),
         content: Text(
-          '¿Seguro que quieres eliminar el borrador #${order.numeroPedidoFormatted}? Esta acción no se puede deshacer.',
+          'Â¿Seguro que quieres eliminar el borrador #${order.numeroPedidoFormatted}? Esta acciÃ³n no se puede deshacer.',
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [

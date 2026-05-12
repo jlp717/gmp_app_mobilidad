@@ -1,14 +1,14 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
-/// [UltimasVentasWidget] - Lista de las últimas ventas realizadas
+/// [UltimasVentasWidget] - Lista de las Ãºltimas ventas realizadas
 ///
-/// Muestra las ventas más recientes del vendedor con:
+/// Muestra las ventas mÃ¡s recientes del vendedor con:
 /// - Fecha de la venta
 /// - Nombre del cliente
 /// - Importe
-/// - Número de albarán
+/// - NÃºmero de albarÃ¡n
 class UltimasVentasWidget extends StatelessWidget {
   const UltimasVentasWidget({
     required this.ultimasVentas, super.key,
@@ -57,7 +57,7 @@ class UltimasVentasWidget extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
+                    color: Colors.blue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
@@ -68,7 +68,7 @@ class UltimasVentasWidget extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  'Últimas Ventas',
+                  'Ãšltimas Ventas',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -136,7 +136,7 @@ class _VentaItem extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.grey.withOpacity(0.1),
+              color: Colors.grey.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(
@@ -149,7 +149,7 @@ class _VentaItem extends StatelessWidget {
 
           const SizedBox(width: 12),
 
-          // Cliente y albarán
+          // Cliente y albarÃ¡n
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

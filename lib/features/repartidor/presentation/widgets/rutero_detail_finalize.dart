@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:signature/signature.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -245,15 +245,15 @@ class RuteroDetailFinalize extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.15),
+        color: Colors.orange.withValues(alpha: 0.15),
         border: Border.all(color: Colors.orange),
         borderRadius: BorderRadius.circular(8),
       ),
       child: const Text(
-        'ATENCIÓN: Si marca en verde sin modificar cantidades, '
-        'la entrega está OK. Si modifica o quita cantidades, la '
-        'entrega NO coincide — debe añadir observaciones en la '
-        "pestaña 'Observaciones' antes de confirmar.",
+        'ATENCIÃ“N: Si marca en verde sin modificar cantidades, '
+        'la entrega estÃ¡ OK. Si modifica o quita cantidades, la '
+        'entrega NO coincide â€” debe aÃ±adir observaciones en la '
+        "pestaÃ±a 'Observaciones' antes de confirmar.",
         style: TextStyle(
           color: Colors.orange,
           fontSize: 13,
@@ -269,7 +269,7 @@ class RuteroDetailFinalize extends StatelessWidget {
       style: const TextStyle(color: AppTheme.textPrimary),
       decoration: InputDecoration(
         labelText: 'Observaciones',
-        hintText: 'Añadir nota sobre la entrega...',
+        hintText: 'AÃ±adir nota sobre la entrega...',
         alignLabelWithHint: true,
         errorText: observacionesError,
         filled: true,
@@ -290,7 +290,7 @@ class RuteroDetailFinalize extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.neonBlue.withOpacity(0.3),
+            color: AppTheme.neonBlue.withValues(alpha: 0.3),
             blurRadius: 16,
             offset: const Offset(0, 4),
           ),

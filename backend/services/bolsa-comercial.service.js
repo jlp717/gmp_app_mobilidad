@@ -35,11 +35,24 @@ async function getOrCreateBolsa(vendedorCode, year, month) {
              VALUES (?, ?, ?, 3.00, 0)`,
             [code, y, m]
         );
-        rows = await queryWithParams(
-            `SELECT * FROM ${SCHEMA}.BOLSA_COMERCIAL
-             WHERE TRIM(CODIGOVENDEDOR) = ? AND EJERCICIO = ? AND MES = ?`,
-            [code, y, m]
-        );
+        // Return defaults immediately without a second SELECT
+        const bolsa = {
+            ID: null, CODIGOVENDEDOR: code,
+            EJERCICIO: y, MES: m,
+            LIMITE_PCT: 3.00, LIMITE_IMPORTE: 0,
+            SALDO_DISPONIBLE: 0, CONSUMIDO: 0, ACUMULADO: 0
+        };
+        return {
+            id: bolsa.ID,
+            vendedor: (bolsa.CODIGOVENDEDOR || '').trim(),
+            ejercicio: parseInt(bolsa.EJERCICIO),
+            mes: parseInt(bolsa.MES),
+            limitePct: parseFloat(bolsa.LIMITE_PCT) || 3.0,
+            limiteImporte: parseFloat(bolsa.LIMITE_IMPORTE) || 0,
+            saldoDisponible: parseFloat(bolsa.SALDO_DISPONIBLE) || 0,
+            consumido: parseFloat(bolsa.CONSUMIDO) || 0,
+            acumulado: parseFloat(bolsa.ACUMULADO) || 0,
+        };
     }
 
     const bolsa = rows[0];

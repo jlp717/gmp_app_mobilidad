@@ -45,11 +45,11 @@ class ApiConfig {
   static Future<void> initialize() async {
     if (_currentEnvironment == ApiEnvironment.production) {
       // PRODUCCIÓN: Usar directamente el dominio
-      print('🚀 [ApiConfig] PRODUCCIÓN: $_productionUrl');
+      debugPrint('🚀 [ApiConfig] PRODUCCIÓN: $_productionUrl');
     } else {
       // DESARROLLO: Detectar servidor
       await NetworkService.initialize();
-      print('🚀 [ApiConfig] DESARROLLO: ${NetworkService.activeBaseUrl}');
+      debugPrint('🚀 [ApiConfig] DESARROLLO: ${NetworkService.activeBaseUrl}');
     }
   }
 

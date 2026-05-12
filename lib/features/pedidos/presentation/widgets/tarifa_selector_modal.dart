@@ -1,4 +1,4 @@
-/// Tarifa Selector Modal
+﻿/// Tarifa Selector Modal
 /// ======================
 /// Orange popup to select pricing tariff per order line.
 /// Shows PT (client tariff), PU (per-unit breakdown), and all other tariffs.
@@ -44,7 +44,7 @@ class TarifaSelectorModal extends StatefulWidget {
   State<TarifaSelectorModal> createState() => _TarifaSelectorModalState();
 }
 
-// Internal selection marker — PT, PU, or numeric tariff code as string
+// Internal selection marker â€” PT, PU, or numeric tariff code as string
 const _kPT = '__PT__';
 const _kPU = '__PU__';
 
@@ -116,9 +116,9 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
       padding: const EdgeInsets.only(bottom: 8),
       child: Material(
         color: isClientTariff && selected
-            ? orange.withOpacity(0.18)
+            ? orange.withValues(alpha: 0.18)
             : selected
-                ? orange.withOpacity(0.1)
+                ? orange.withValues(alpha: 0.1)
                 : AppTheme.darkCard,
         borderRadius: BorderRadius.circular(10),
         child: InkWell(
@@ -215,7 +215,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
               const SizedBox(height: 12),
             ],
 
-            // PT row — client's assigned tariff
+            // PT row â€” client's assigned tariff
             if (ct != null)
               _buildRow(
                 selKey: _kPT,
@@ -254,7 +254,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            '${_fmt(ct.price)} €/cj',
+                            '${_fmt(ct.price)} â‚¬/cj',
                             style: const TextStyle(color: orange, fontSize: 12),
                           ),
                         ],
@@ -262,14 +262,14 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                     ),
                     if (p.unitsPerBox > 1)
                       Text(
-                        '(${_fmt(ct.precioUnitario)} €/$unitAbbr)',
-                        style: TextStyle(color: orange.withOpacity(0.75), fontSize: 11),
+                        '(${_fmt(ct.precioUnitario)} â‚¬/$unitAbbr)',
+                        style: TextStyle(color: orange.withValues(alpha: 0.75), fontSize: 11),
                       ),
                   ],
                 ),
               ),
 
-            // PU row — per-unit breakdown of PT
+            // PU row â€” per-unit breakdown of PT
             if (_showPU && ct != null)
               _buildRow(
                 selKey: _kPU,
@@ -290,7 +290,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                       ),
                     ),
                     Text(
-                      '${_fmt(ct.precioUnitario)} €/$unitAbbr',
+                      '${_fmt(ct.precioUnitario)} â‚¬/$unitAbbr',
                       style: TextStyle(
                         color: _selected == _kPU ? orange : Colors.white54,
                         fontSize: 12,
@@ -329,7 +329,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            '${_fmt(t.price)} €/cj',
+                            '${_fmt(t.price)} â‚¬/cj',
                             style: const TextStyle(color: Colors.white54, fontSize: 11),
                           ),
                         ],
@@ -337,7 +337,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                     ),
                     if (p.unitsPerBox > 1)
                       Text(
-                        '(${_fmt(t.precioUnitario)} €/$unitAbbr)',
+                        '(${_fmt(t.precioUnitario)} â‚¬/$unitAbbr)',
                         style: const TextStyle(color: Colors.white38, fontSize: 11),
                       ),
                   ],
@@ -371,7 +371,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                   onPressed: () => Navigator.pop(context, _priceForSelection(_selected)),
                   icon: const Icon(Icons.check, size: 18),
                   label: Text(
-                    'ACEPTAR  ${_fmt(_priceForSelection(_selected))} €/${_unitAbbr(p.displayUnit)}',
+                    'ACEPTAR  ${_fmt(_priceForSelection(_selected))} â‚¬/${_unitAbbr(p.displayUnit)}',
                     style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(
@@ -390,6 +390,6 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
 
   static String _abbreviate(String s) {
     if (s.length <= 20) return s;
-    return '${s.substring(0, 18)}…';
+    return '${s.substring(0, 18)}â€¦';
   }
 }

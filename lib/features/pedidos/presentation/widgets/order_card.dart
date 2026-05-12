@@ -1,4 +1,4 @@
-/// Order Card
+﻿/// Order Card
 /// ==========
 /// Premium card showing order info with gradient by status, swipe actions.
 library;
@@ -42,10 +42,10 @@ class OrderCard extends StatelessWidget {
           colors: theme.gradient,
         ),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: theme.primary.withOpacity(0.25)),
+        border: Border.all(color: theme.primary.withValues(alpha: 0.25)),
         boxShadow: [
           BoxShadow(
-            color: theme.primary.withOpacity(0.1),
+            color: theme.primary.withValues(alpha: 0.1),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -67,14 +67,14 @@ class OrderCard extends StatelessWidget {
                     OrderStatusBadge(estado: order.estado, fontSize: 10),
                     const Spacer(),
                     Icon(Icons.calendar_today_outlined,
-                        size: 12, color: Colors.white.withOpacity(0.4),),
+                        size: 12, color: Colors.white.withValues(alpha: 0.4),),
                     const SizedBox(width: 4),
                     Text(
                       order.fechaFormatted.isNotEmpty
                           ? order.fechaFormatted
                           : order.fecha,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.5),
+                        color: Colors.white.withValues(alpha: 0.5),
                         fontSize: 11,
                       ),
                     ),
@@ -91,13 +91,13 @@ class OrderCard extends StatelessWidget {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            theme.primary.withOpacity(0.2),
-                            theme.primary.withOpacity(0.08),
+                            theme.primary.withValues(alpha: 0.2),
+                            theme.primary.withValues(alpha: 0.08),
                           ],
                         ),
                         borderRadius: BorderRadius.circular(12),
                         border:
-                            Border.all(color: theme.primary.withOpacity(0.3)),
+                            Border.all(color: theme.primary.withValues(alpha: 0.3)),
                       ),
                       child: Icon(
                         theme.icon,
@@ -122,9 +122,9 @@ class OrderCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '#${order.numeroPedidoFormatted}  ·  ${order.clienteCode}',
+                            '#${order.numeroPedidoFormatted}  Â·  ${order.clienteCode}',
                             style: TextStyle(
-                              color: theme.primary.withOpacity(0.8),
+                              color: theme.primary.withValues(alpha: 0.8),
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                             ),
@@ -140,7 +140,7 @@ class OrderCard extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.03),
+                    color: Colors.white.withValues(alpha: 0.03),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Row(
@@ -148,7 +148,7 @@ class OrderCard extends StatelessWidget {
                     children: [
                       _statItem(
                         Icons.format_list_numbered,
-                        '${order.lineCount} líneas',
+                        '${order.lineCount} lÃ­neas',
                         Colors.white70,
                       ),
                       _statItem(
@@ -202,7 +202,7 @@ class OrderCard extends StatelessWidget {
                           _actionChip(
                             context,
                             Icons.description_outlined,
-                            'Albarán',
+                            'AlbarÃ¡n',
                             AppTheme.neonPurple,
                             onViewAlbaran!,
                           ),
@@ -228,7 +228,7 @@ class OrderCard extends StatelessWidget {
   Widget _statItem(IconData icon, String value, Color color) {
     return Column(
       children: [
-        Icon(icon, color: color.withOpacity(0.7), size: 14),
+        Icon(icon, color: color.withValues(alpha: 0.7), size: 14),
         const SizedBox(height: 2),
         Text(
           value,
@@ -256,9 +256,9 @@ class OrderCard extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withOpacity(0.3)),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

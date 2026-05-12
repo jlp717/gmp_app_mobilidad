@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 
@@ -67,7 +67,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
     if (widget.data.isEmpty) {
       return const Center(child: Padding(
         padding: EdgeInsets.all(32),
-        child: Text('No hay datos para esta selección', style: TextStyle(color: Colors.white30)),
+        child: Text('No hay datos para esta selecciÃ³n', style: TextStyle(color: Colors.white30)),
       ),);
     }
 
@@ -76,7 +76,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
       shadowColor: Colors.black45,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: Colors.white.withOpacity(0.05)),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
       ),
       color: AppTheme.surfaceColor,
       child: Container(
@@ -87,7 +87,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
             end: Alignment.bottomRight,
             colors: [
               AppTheme.surfaceColor,
-              AppTheme.darkBase.withOpacity(0.95),
+              AppTheme.darkBase.withValues(alpha: 0.95),
             ],
           ),
         ),
@@ -98,8 +98,8 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
               decoration: BoxDecoration(
-                border: Border(bottom: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2))),
-                color: Colors.white.withOpacity(0.02),
+                border: Border(bottom: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.2))),
+                color: Colors.white.withValues(alpha: 0.02),
               ),
               child: const Row(
                 children: [
@@ -142,8 +142,8 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.15),
-        border: Border(top: BorderSide(color: Colors.orange.withOpacity(0.5), width: 2)),
+        color: Colors.orange.withValues(alpha: 0.15),
+        border: Border(top: BorderSide(color: Colors.orange.withValues(alpha: 0.5), width: 2)),
       ),
       child: Row(
         children: [
@@ -165,7 +165,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
             ),
           ),
-          // MARG column - show % not €
+          // MARG column - show % not â‚¬
           Expanded(
             flex: 2,
             child: Text(
@@ -174,8 +174,8 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
           ),
-          // M.ACUM column - FIX: show % not € for consistency with row data
-          // Previously showed CurrencyFormatter.format(totalMargin) which displayed €
+          // M.ACUM column - FIX: show % not â‚¬ for consistency with row data
+          // Previously showed CurrencyFormatter.format(totalMargin) which displayed â‚¬
           // Individual rows show accMarginPct%, so total should too
           Expanded(
             flex: 2,
@@ -246,11 +246,11 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
         ),
         decoration: BoxDecoration(
           color: isSelected 
-             ? levelColor.withOpacity(0.15) 
-             : (level > 0 ? Colors.white.withOpacity(0.02 * level) : Colors.transparent),
+             ? levelColor.withValues(alpha: 0.15) 
+             : (level > 0 ? Colors.white.withValues(alpha: 0.02 * level) : Colors.transparent),
           border: Border(
-            bottom: BorderSide(color: Colors.white.withOpacity(0.05)),
-            left: level > 0 ? BorderSide(color: levelColor.withOpacity(0.3), width: 2) : BorderSide.none,
+            bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+            left: level > 0 ? BorderSide(color: levelColor.withValues(alpha: 0.3), width: 2) : BorderSide.none,
           ),
         ),
         child: Row(
@@ -275,7 +275,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
             else
               Padding(
                 padding: const EdgeInsets.only(right: 8),
-                child: Icon(Icons.circle, size: 6, color: levelColor.withOpacity(0.5)),
+                child: Icon(Icons.circle, size: 6, color: levelColor.withValues(alpha: 0.5)),
               ),
             
             // Name
@@ -297,7 +297,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
                   if (hasChildren && level == 0)
                     Text(
                       '${node.children.length} items',
-                      style: TextStyle(color: levelColor.withOpacity(0.6), fontSize: 10),
+                      style: TextStyle(color: levelColor.withValues(alpha: 0.6), fontSize: 10),
                     ),
                 ],
               ),
@@ -327,7 +327,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               ),
             ),
             
-            // ACCUMULATED MARGIN — show own margin% for leaf nodes too
+            // ACCUMULATED MARGIN â€” show own margin% for leaf nodes too
             Expanded(
               flex: 2,
               child: Builder(

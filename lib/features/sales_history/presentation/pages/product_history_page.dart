@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
@@ -116,7 +116,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
     return Scaffold(
       backgroundColor: AppColors.backgroundColor,
       appBar: AppBar(
-        title: const Text('Histórico de Ventas'),
+        title: const Text('HistÃ³rico de Ventas'),
         backgroundColor: AppColors.cardColor,
         elevation: 0,
         actions: [
@@ -143,7 +143,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                         controller: _clientController,
                         style: const TextStyle(color: Colors.white),
                         decoration: InputDecoration(
-                          hintText: 'Cód. Cliente (Opcional)',
+                          hintText: 'CÃ³d. Cliente (Opcional)',
                           hintStyle: const TextStyle(color: Colors.white54),
                           filled: true,
                           fillColor: AppColors.backgroundColor,
@@ -201,7 +201,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
           if (!historyState.isLoading && historyState.summary != null)
             _buildSummaryHeader(context, historyState.summary!),
 
-          // Results — adaptive layout
+          // Results â€” adaptive layout
           Expanded(
             child: historyState.isLoading
                 ? const SkeletonList(itemCount: 6, itemHeight: 60)
@@ -308,12 +308,12 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                 productName: item.productName,
                 size: 40,
               ),),
-              // Ficha técnica button
+              // Ficha tÃ©cnica button
               DataCell(
                 IconButton(
                   icon: const Icon(Icons.description_outlined,
                       color: AppColors.primary, size: 20,),
-                  tooltip: 'Ficha Técnica',
+                  tooltip: 'Ficha TÃ©cnica',
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _openFichaTecnica(context, item, baseUrl),
@@ -356,7 +356,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
   }
 
   // ===========================================================================
-  // FICHA TÉCNICA — Download PDF and open viewer
+  // FICHA TÃ‰CNICA â€” Download PDF and open viewer
   // ===========================================================================
   Future<void> _openFichaTecnica(
       BuildContext ctx, ProductHistoryItem item, String baseUrl,) async {
@@ -382,7 +382,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
             ),
             const SizedBox(width: 16),
             Text(
-              'Descargando ficha técnica...',
+              'Descargando ficha tÃ©cnica...',
               style: TextStyle(color: Colors.grey[300]),
             ),
           ],
@@ -397,7 +397,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
 
       if (!File(filePath).existsSync()) {
         ScaffoldMessenger.of(ctx).showSnackBar(
-          const SnackBar(content: Text('No se encontró la ficha técnica')),
+          const SnackBar(content: Text('No se encontrÃ³ la ficha tÃ©cnica')),
         );
         return;
       }
@@ -405,13 +405,13 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
       navigator.push(MaterialPageRoute(
         builder: (_) => _PdfViewerPage(
           filePath: filePath,
-          title: 'Ficha Técnica - ${item.productCode.trim()}',
+          title: 'Ficha TÃ©cnica - ${item.productCode.trim()}',
         ),
       ),);
     } catch (e) {
       if (navigator.canPop()) navigator.pop();
       final msg = e.toString().contains('404')
-          ? 'No hay ficha técnica para este producto'
+          ? 'No hay ficha tÃ©cnica para este producto'
           : 'Error al descargar: $e';
       ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(msg)));
     }
@@ -419,7 +419,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
 }
 
 // =============================================================================
-// PRODUCT CARD — Portrait layout item
+// PRODUCT CARD â€” Portrait layout item
 // =============================================================================
 class _ProductCard extends StatelessWidget {
 
@@ -462,7 +462,7 @@ class _ProductCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Cód: ${item.productCode}',
+                    'CÃ³d: ${item.productCode}',
                     style: const TextStyle(color: Colors.white38, fontSize: 11),
                   ),
                   const SizedBox(height: 6),
@@ -510,7 +510,7 @@ class _ProductCard extends StatelessWidget {
                           color: Colors.white,
                           bold: true,),
                       const Spacer(),
-                      // Ficha Técnica button
+                      // Ficha TÃ©cnica button
                       Material(
                         color: Colors.transparent,
                         child: InkWell(
@@ -525,7 +525,7 @@ class _ProductCard extends StatelessWidget {
                                 horizontal: 8, vertical: 4,),
                             decoration: BoxDecoration(
                               border: Border.all(
-                                  color: AppColors.primary.withOpacity(0.5),),
+                                  color: AppColors.primary.withValues(alpha: 0.5),),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Row(
@@ -556,7 +556,7 @@ class _ProductCard extends StatelessWidget {
 }
 
 // =============================================================================
-// PRODUCT THUMBNAIL — Reusable image widget with tap-to-fullscreen
+// PRODUCT THUMBNAIL â€” Reusable image widget with tap-to-fullscreen
 // =============================================================================
 class _ProductThumbnail extends StatelessWidget {
 
@@ -619,7 +619,7 @@ class _ProductThumbnail extends StatelessWidget {
 }
 
 // =============================================================================
-// FULLSCREEN IMAGE VIEWER — InteractiveViewer with pinch-to-zoom
+// FULLSCREEN IMAGE VIEWER â€” InteractiveViewer with pinch-to-zoom
 // =============================================================================
 class _FullscreenImageViewer extends StatelessWidget {
 
@@ -682,7 +682,7 @@ class _FullscreenImageViewer extends StatelessWidget {
 }
 
 // =============================================================================
-// PDF VIEWER PAGE — In-app PDF viewer for fichas técnicas
+// PDF VIEWER PAGE â€” In-app PDF viewer for fichas tÃ©cnicas
 // =============================================================================
 class _PdfViewerPage extends StatelessWidget {
 

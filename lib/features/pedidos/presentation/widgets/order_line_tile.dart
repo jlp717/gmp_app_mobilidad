@@ -1,4 +1,4 @@
-/// Order Line Tile
+﻿/// Order Line Tile
 /// ================
 /// Single order line in the cart summary with swipe-to-delete
 library;
@@ -17,6 +17,7 @@ class OrderLineTile extends StatelessWidget {
   const OrderLineTile({
     required this.line, required this.index, required this.onDismissed, required this.onTap, required this.onIncrement, required this.onDecrement, super.key,
     this.onClaseLineaToggle,
+    this.onDiscountChanged,
   });
   final OrderLine line;
   final int index;
@@ -71,7 +72,7 @@ class OrderLineTile extends StatelessWidget {
   String _priceLabel() {
     if (line.precioVenta <= 0) return '';
     final abbr = _unitAbbr(line.unidadMedida);
-    return '@ ${PedidosFormatters.money(line.precioVenta, decimals: 3)} â‚¬/$abbr';
+    return '@ ${PedidosFormatters.money(line.precioVenta, decimals: 3)} Ã¢â€šÂ¬/$abbr';
   }
 
   static String _unitAbbr(String unit) {
@@ -111,7 +112,7 @@ class OrderLineTile extends StatelessWidget {
         padding: const EdgeInsets.only(right: 20),
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         decoration: BoxDecoration(
-          color: AppTheme.error.withOpacity(0.2),
+          color: AppTheme.error.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(10),
         ),
         child: const Icon(Icons.delete_outline, color: AppTheme.error),
@@ -125,7 +126,7 @@ class OrderLineTile extends StatelessWidget {
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
-          side: BorderSide(color: AppTheme.borderColor.withOpacity(0.2)),
+          side: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.2)),
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
@@ -293,7 +294,7 @@ class OrderLineTile extends StatelessWidget {
                               color: AppTheme.warning, size: 13,),
                           const SizedBox(width: 3),
                           Text(
-                            '0,00 â‚¬',
+                            '0,00 Ã¢â€šÂ¬',
                             style: TextStyle(
                               color: AppTheme.error,
                               fontWeight: FontWeight.bold,
@@ -332,7 +333,7 @@ class OrderLineTile extends StatelessWidget {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
                   decoration: BoxDecoration(
-                    color: marginColor.withOpacity(0.12),
+                    color: marginColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(

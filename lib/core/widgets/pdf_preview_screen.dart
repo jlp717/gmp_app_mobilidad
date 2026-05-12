@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
@@ -9,9 +9,9 @@ import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-/// 📄 PDF PREVIEW SCREEN
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/// â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+/// ðŸ“„ PDF PREVIEW SCREEN
+/// â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 ///
 /// Pantalla full-screen con visor PDF + acciones en barra inferior.
 ///
@@ -25,7 +25,7 @@ import 'package:share_plus/share_plus.dart';
 ///       onWhatsAppTap: () => showWhatsAppModal(...),
 ///     ),
 ///   ));
-/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/// â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
 
 class PdfPreviewScreen extends StatefulWidget {
 
@@ -199,7 +199,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
             ),
             if (_isReady && _totalPages > 0)
               Text(
-                'Página ${_currentPage + 1} de $_totalPages',
+                'PÃ¡gina ${_currentPage + 1} de $_totalPages',
                 style: const TextStyle(
                   color: AppTheme.textSecondary,
                   fontSize: 12,
@@ -301,7 +301,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
       onPageError: (page, error) {
         if (mounted) {
           setState(
-              () => _errorMessage = 'Error en página ${page ?? 0}: $error',);
+              () => _errorMessage = 'Error en pÃ¡gina ${page ?? 0}: $error',);
         }
       },
     );
@@ -313,7 +313,7 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
         border: Border(
-          top: BorderSide(color: AppTheme.borderColor.withOpacity(0.5)),
+          top: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.5)),
         ),
       ),
       child: SafeArea(
@@ -358,9 +358,9 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color.withOpacity(0.3)),
+            border: Border.all(color: color.withValues(alpha: 0.3)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,

@@ -1,16 +1,16 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
-/// Widget reutilizable para filtros jerárquicos FI1-FI5
+/// Widget reutilizable para filtros jerÃ¡rquicos FI1-FI5
 /// 
-/// Estructura de jerarquía:
-/// - FI1: Categoría principal (ej: PRODUCTOS DEL MAR, CARNE CONGELADA)
-/// - FI2: Subcategoría (ej: LANGOSTINO, GAMBA) - depende de FI1
-/// - FI3: Atributo adicional (poco usado, ~19% artículos)
-/// - FI4: Características especiales (SIN GLUTEN, VEGANO) (~18% artículos)
-/// - FI5: Tipo de conservación (CONGELADO, HELADO, CARNE FRESCA)
+/// Estructura de jerarquÃ­a:
+/// - FI1: CategorÃ­a principal (ej: PRODUCTOS DEL MAR, CARNE CONGELADA)
+/// - FI2: SubcategorÃ­a (ej: LANGOSTINO, GAMBA) - depende de FI1
+/// - FI3: Atributo adicional (poco usado, ~19% artÃ­culos)
+/// - FI4: CaracterÃ­sticas especiales (SIN GLUTEN, VEGANO) (~18% artÃ­culos)
+/// - FI5: Tipo de conservaciÃ³n (CONGELADO, HELADO, CARNE FRESCA)
 class FiFiltersWidget extends StatefulWidget {
 
   const FiFiltersWidget({
@@ -36,7 +36,7 @@ class FiFiltersWidget extends StatefulWidget {
   /// Mostrar solo FI principales (FI1, FI2, FI5) u ocultar FI3/FI4
   final bool showAdvanced;
   
-  /// Si el widget está habilitado
+  /// Si el widget estÃ¡ habilitado
   final bool enabled;
 
   @override
@@ -344,12 +344,12 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Row 1: FI1 (Categoría) + FI5 (Tipo)
+        // Row 1: FI1 (CategorÃ­a) + FI5 (Tipo)
         Row(
           children: [
             Expanded(
               child: _buildDropdown(
-                label: 'Categoría',
+                label: 'CategorÃ­a',
                 value: _selectedFi1,
                 options: _fi1Options,
                 loading: _loadingFi1,
@@ -372,9 +372,9 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
         ),
         if (!Responsive.isLandscapeCompact(context)) ...[
           const SizedBox(height: 8),
-          // Row 2: FI2 (Subcategoría) - Siempre visible pero disabled si no hay FI1
+          // Row 2: FI2 (SubcategorÃ­a) - Siempre visible pero disabled si no hay FI1
           _buildDropdown(
-            label: 'Subcategoría',
+            label: 'SubcategorÃ­a',
             value: _selectedFi2,
             options: _fi2Options,
             loading: _loadingFi2,
@@ -442,7 +442,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildDropdown(
-          label: 'Categoría Principal (FI1)',
+          label: 'CategorÃ­a Principal (FI1)',
           value: _selectedFi1,
           options: _fi1Options,
           loading: _loadingFi1,
@@ -451,7 +451,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
         ),
         const SizedBox(height: 12),
         _buildDropdown(
-          label: 'Subcategoría (FI2)',
+          label: 'SubcategorÃ­a (FI2)',
           value: _selectedFi2,
           options: _fi2Options,
           loading: _loadingFi2,
@@ -472,7 +472,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
           ),
           const SizedBox(height: 12),
           _buildDropdown(
-            label: 'Características (FI4)',
+            label: 'CaracterÃ­sticas (FI4)',
             value: _selectedFi4,
             options: _fi4Options,
             loading: _loadingFi4,
@@ -482,7 +482,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
         ],
         const SizedBox(height: 12),
         _buildDropdown(
-          label: 'Tipo Conservación (FI5)',
+          label: 'Tipo ConservaciÃ³n (FI5)',
           value: _selectedFi5,
           options: _fi5Options,
           loading: _loadingFi5,
@@ -520,7 +520,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
     final effectiveEnabled = enabled && !loading && widget.enabled;
     final hasOptions = options.isNotEmpty;
     
-    // Colores consistentes con el diseño de la app
+    // Colores consistentes con el diseÃ±o de la app
     Color getBorderColor() {
       if (!effectiveEnabled) return Colors.grey.shade700;
       if (isActive) return AppTheme.neonBlue;
@@ -528,8 +528,8 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
     }
     
     Color getFillColor() {
-      if (!effectiveEnabled) return AppTheme.surfaceColor.withOpacity(0.5);
-      if (isActive) return AppTheme.neonBlue.withOpacity(0.15);
+      if (!effectiveEnabled) return AppTheme.surfaceColor.withValues(alpha: 0.5);
+      if (isActive) return AppTheme.neonBlue.withValues(alpha: 0.15);
       return AppTheme.surfaceColor;
     }
     

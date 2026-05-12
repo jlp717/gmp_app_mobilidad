@@ -1,13 +1,13 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 import 'package:gmp_app_mobilidad/features/authentication/domain/entities/user.dart';
 
-/// [DashboardHeader] - Header del dashboard con saludo y último acceso
+/// [DashboardHeader] - Header del dashboard con saludo y Ãºltimo acceso
 ///
-/// CARACTERÍSTICAS:
-/// - Saludo personalizado según hora del día
-/// - Información del usuario
-/// - Último acceso (elemento requerido en specs)
+/// CARACTERÃSTICAS:
+/// - Saludo personalizado segÃºn hora del dÃ­a
+/// - InformaciÃ³n del usuario
+/// - Ãšltimo acceso (elemento requerido en specs)
 class DashboardHeader extends StatelessWidget {
   const DashboardHeader({
     super.key,
@@ -44,7 +44,7 @@ class DashboardHeader extends StatelessWidget {
 
             const SizedBox(width: 16),
 
-            // Información del usuario
+            // InformaciÃ³n del usuario
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -69,13 +69,13 @@ class DashboardHeader extends StatelessWidget {
                       Icon(
                         Icons.access_time,
                         size: 14,
-                        color: theme.colorScheme.onPrimaryContainer.withOpacity(0.7),
+                        color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'Último acceso: ${Formatters.dateTimeShort(user?.lastLoginAt ?? now)}',
+                        'Ãšltimo acceso: ${Formatters.dateTimeShort(user?.lastLoginAt ?? now)}',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onPrimaryContainer.withOpacity(0.7),
+                          color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
                         ),
                       ),
                     ],
@@ -108,7 +108,7 @@ class DashboardHeader extends StatelessWidget {
 
   String _getGreeting(int hour) {
     if (hour < 12) {
-      return 'Buenos días';
+      return 'Buenos dÃ­as';
     } else if (hour < 19) {
       return 'Buenas tardes';
     } else {
