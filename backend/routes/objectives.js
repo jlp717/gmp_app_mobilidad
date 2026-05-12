@@ -769,9 +769,6 @@ router.get('/evolution', verifyToken, async (req, res) => {
             if (multiVendorTargets) {
                 annualObjective = multiVendorTargets.annualObjectiveByYear[year] || 0;
                 monthlyObjective = annualObjective / 12;
-            } else if (hasFixedTargetsForYear) {
-                annualObjective = Object.values(fixedTargetsForYear).reduce((sum, value) => sum + (parseFloat(value) || 0), 0);
-                monthlyObjective = annualObjective / 12;
             } else {
                 // Standard calculation: previous year * (1 + targetPct)
                 // Fallback to 10% if 0 (though normally handled by getVendorTargetConfig)
@@ -784,7 +781,7 @@ router.get('/evolution', verifyToken, async (req, res) => {
             // CALCULATE SEASONAL FACTORS
             // ===================================
             const seasonalTargets = {};
-            if (!multiVendorTargets && !hasFixedTargetsForYear && combinedPrevTotal > 0) {
+            if (!multiVendorTargets && combinedPrevTotal > 0) {
                 const avgMonthly = combinedPrevTotal / 12;
                 let rawSum = 0;
 
@@ -821,11 +818,19 @@ router.get('/evolution', verifyToken, async (req, res) => {
                 // SEASONAL OBJECTIVE with INHERITED support:
                 let seasonalObjective = 0;
 
-                // FIXED TARGET OVERRIDE: If fixed targets exist, use each month exactly.
+                // FIXED TARGET OVERRIDE: Use fixed target when available, fallback to dynamic.
                 if (multiVendorTargets) {
                     seasonalObjective = multiVendorTargets.monthlyObjectiveByYear[year]?.[m] || 0;
                 } else if (hasFixedTargetsForYear) {
-                    seasonalObjective = fixedTargetsForYear[m] || 0;
+                    seasonalObjective = fixedTargetsForYear[m];
+                    if (!seasonalObjective) {
+                        // Fallback: month without COMMERCIAL_TARGETS → use dynamic calculation
+                        if (combinedPrevTotal > 0) {
+                            seasonalObjective = seasonalTargets[m] || (prevYearMonthlySales[m] * 1.10);
+                        } else if (annualObjective > 0) {
+                            seasonalObjective = annualObjective / 12;
+                        }
+                    }
                 } else if (combinedPrevTotal > 0) {
                     // Use calculated seasonal target (Dynamic)
                     seasonalObjective = seasonalTargets[m] || (prevYearMonthlySales[m] * 1.10);
