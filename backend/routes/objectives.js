@@ -714,8 +714,8 @@ router.get('/evolution', verifyToken, async (req, res) => {
         }
 
         // ==========================================================================
-        // FIXED TARGETS: Check if vendor has fixed monthly targets from COMMERCIAL_TARGETS
-        // Supports both single-vendor and ALL-vendors aggregation.
+        // FIXED TARGETS: Check if vendor has fixed monthly targets from COMMERCIAL_TARGETS.
+        // Only applies to single-vendor view (multi-vendor view always uses dynamic).
         // ==========================================================================
         const fixedTargetsByYear = {};
         if (vendorCodesArray.length === 1) {
@@ -725,33 +725,6 @@ router.get('/evolution', verifyToken, async (req, res) => {
             }
             if (Object.values(fixedTargetsByYear).some(targets => Object.keys(targets).length > 0)) {
                 logger.info(`[OBJECTIVES] Vendor ${firstCode} has fixed monthly targets in COMMERCIAL_TARGETS`);
-            }
-        } else if (isAll || vendorCodesArray.length > 1) {
-            // ALL vendors or multi-vendor: aggregate fixed targets across all vendors
-            try {
-                const allFixedRows = await queryWithParams(`
-                    SELECT MES, SUM(IMPORTE_OBJETIVO) as TOTAL_OBJ
-                    FROM JAVIER.COMMERCIAL_TARGETS
-                    WHERE ANIO IN (${yearsArray.map(() => '?').join(',')})
-                      AND ACTIVO = 1
-                    GROUP BY MES
-                `, yearsArray, false);
-                if (allFixedRows && allFixedRows.length > 0) {
-                    const targets = {};
-                    allFixedRows.forEach(row => {
-                        const mes = parseInt(row.MES);
-                        const obj = parseFloat(row.TOTAL_OBJ) || 0;
-                        if (mes && obj > 0) targets[mes] = obj;
-                    });
-                    if (Object.keys(targets).length > 0) {
-                        for (const year of yearsArray) {
-                            fixedTargetsByYear[year] = { ...targets };
-                        }
-                        logger.info(`[OBJECTIVES] ALL vendors: loaded ${Object.keys(targets).length} months of aggregated fixed targets`);
-                    }
-                }
-            } catch (e) {
-                logger.debug(`[OBJECTIVES] Could not load aggregated fixed targets: ${e.message}`);
             }
         }
 
