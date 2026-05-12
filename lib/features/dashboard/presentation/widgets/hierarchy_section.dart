@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/dashboard_chart_factory.dart'; // Use factory instead of direct chart
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/matrix_data_table.dart';

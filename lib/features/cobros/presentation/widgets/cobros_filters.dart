@@ -1,4 +1,4 @@
-﻿/// COBROS FILTERS WIDGET
+/// COBROS FILTERS WIDGET
 /// Panel de filtros para entregas/cobros
 library;
 

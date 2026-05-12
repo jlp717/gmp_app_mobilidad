@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 
 /// [ClientConditionsWidget] - Widget que muestra informaciÃ³n de condiciones del cliente
 ///

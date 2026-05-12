@@ -1,4 +1,4 @@
-﻿/// Facturas Page
+/// Facturas Page
 /// ==============
 /// Invoice listing with filters, search and actions for commercial profile
 /// Premium modern UI with smooth animations
