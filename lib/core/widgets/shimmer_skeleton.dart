@@ -1,4 +1,4 @@
-﻿/// Shimmer Loading Skeleton Widget
+/// Shimmer Loading Skeleton Widget
 /// ================================
 /// Premium loading placeholder for perceived instant performance
 /// Uses shimmer animation to indicate loading state

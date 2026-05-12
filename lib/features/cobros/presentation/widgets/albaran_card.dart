@@ -1,4 +1,4 @@
-﻿/// ALBARAN CARD WIDGET
+/// ALBARAN CARD WIDGET
 /// Tarjeta premium para mostrar un albarÃ¡n/entrega
 library;
 

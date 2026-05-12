@@ -1,4 +1,4 @@
-﻿/// COBROS SUMMARY CARD
+/// COBROS SUMMARY CARD
 /// Tarjeta de resumen diario de entregas
 library;
 

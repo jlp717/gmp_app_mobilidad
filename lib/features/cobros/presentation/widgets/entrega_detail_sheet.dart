@@ -1,4 +1,4 @@
-﻿/// ENTREGA DETAIL SHEET
+/// ENTREGA DETAIL SHEET
 /// Bottom sheet con detalle del albarÃ¡n y acciones
 library;
 
