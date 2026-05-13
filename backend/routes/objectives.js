@@ -28,7 +28,7 @@ const {
     isCacheReady: isMetadataCacheReady
 } = require('../services/metadataCache');
 
-const OBJECTIVES_CACHE_VERSION = 'v20260508-r2-r1default';
+const OBJECTIVES_CACHE_VERSION = 'v20260512-r3-hybrid';
 
 // =============================================================================
 // INHERITED OBJECTIVES LOGIC
