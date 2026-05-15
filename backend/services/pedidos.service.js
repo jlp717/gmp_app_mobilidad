@@ -3178,10 +3178,41 @@ async function checkDraftAccumulation(vendedorCode, { autoConfirm = false, thres
     }
 }
 
+// Cache simple para no re-sondear que tabla de promociones existe en cada
+// peticion. Se calcula una vez por proceso.
+let _promoSourceTable = null; // 'PRD' | 'PMR' | 'NONE'
+
+async function detectPromoSourceTable() {
+    if (_promoSourceTable) return _promoSourceTable;
+    const candidates = ['PRD', 'PMR'];
+    for (const t of candidates) {
+        try {
+            const r = await queryWithParams(
+                `SELECT COUNT(*) AS N FROM QSYS2.SYSTABLES WHERE TABLE_SCHEMA = 'DSEDAC' AND TABLE_NAME = ?`,
+                [t], false, false
+            );
+            if (parseInt(r?.[0]?.N) > 0) {
+                _promoSourceTable = t;
+                logger.info(`[PEDIDOS] Tabla de promociones detectada: DSEDAC.${t}`);
+                return t;
+            }
+        } catch (e) { /* sigue probando */ }
+    }
+    _promoSourceTable = 'NONE';
+    logger.warn(`[PEDIDOS] Ninguna tabla de promociones (PRD/PMR) existe en DSEDAC. Promociones desactivadas.`);
+    return 'NONE';
+}
+
 async function getActivePromotions(clientCode) {
     try {
         const trimmedClientCode = String(clientCode || '').trim();
         if (!trimmedClientCode) {
+            return [];
+        }
+
+        // Si en este entorno no hay tabla de promociones, salir limpio sin error.
+        const source = await detectPromoSourceTable();
+        if (source === 'NONE') {
             return [];
         }
 
@@ -3191,18 +3222,19 @@ async function getActivePromotions(clientCode) {
         const day = now.getDate();
         const today = year * 10000 + month * 100 + day;
 
-        // Promociones DSEDAC.PRD son globales por producto + rango de fechas.
-        // Si en el futuro PRD incorporara CODIGOCLIENTE o segmentos, anadir filtro aqui.
+        // Stock se lee de DSEDAC.ARO (no STA, que no existe). Almacen 1 por defecto.
+        // Mantengo la SQL parametrizada por nombre de tabla.
         const sql = `
             SELECT P.CODIGOARTICULO, P.DESCRIPCION, P.TIPOPROMOCION,
                    P.PRECIOPROMOCIONAL, P.DIADESDE, P.MESDESDE, P.ANODESDE,
                    P.DIAHASTA, P.MESHASTA, P.ANOHASTA,
                    P.CANTIDADMINIMA, P.CANTIDADREGALO, P.ACUMULABLESN,
                    A.DESCRIPCIONARTICULO AS NOMBRE_ARTICULO,
-                   S.ENVASES AS STOCK_ENVASES, S.UNIDADES AS STOCK_UNIDADES
-            FROM DSEDAC.PRD P
+                   AR.STOCKACTUAL AS STOCK_ENVASES,
+                   0 AS STOCK_UNIDADES
+            FROM DSEDAC.${source} P
             LEFT JOIN DSEDAC.ART A ON P.CODIGOARTICULO = A.CODIGOARTICULO
-            LEFT JOIN DSEDAC.STA S ON P.CODIGOARTICULO = S.CODIGOARTICULO AND S.CODIGOALMACEN = 1
+            LEFT JOIN DSEDAC.ARO AR ON P.CODIGOARTICULO = AR.CODIGOARTICULO AND AR.CODIGOALMACEN = 1
             WHERE (P.ANOHASTA * 10000 + P.MESHASTA * 100 + P.DIAHASTA) >= ?
               AND (P.ANODESDE * 10000 + P.MESDESDE * 100 + P.DIADESDE) <= ?
         `;
@@ -3210,22 +3242,21 @@ async function getActivePromotions(clientCode) {
         let rows = [];
         try {
             rows = await queryWithParams(sql, [today, today]);
-            logger.info(`[PEDIDOS] Promociones activas hoy=${today}: ${rows?.length || 0} fila(s) (clienteCtx=${trimmedClientCode})`);
+            logger.info(`[PEDIDOS] Promociones activas hoy=${today}: ${rows?.length || 0} fila(s) desde DSEDAC.${source} (clienteCtx=${trimmedClientCode})`);
             if (!rows || rows.length === 0) {
-                // Diagnostic: PRD vacia o sin promociones vigentes. Verificar dato ERP.
                 try {
                     const probe = await queryWithParams(
-                        'SELECT COUNT(*) AS TOTAL FROM DSEDAC.PRD',
+                        `SELECT COUNT(*) AS TOTAL FROM DSEDAC.${source}`,
                         [], false, false
                     );
                     const total = parseInt(probe?.[0]?.TOTAL) || 0;
-                    logger.info(`[PEDIDOS] DSEDAC.PRD total filas=${total}; vigentes hoy=0. Revisa fechas ANODESDE/ANOHASTA si esperabas promociones.`);
+                    logger.info(`[PEDIDOS] DSEDAC.${source} total filas=${total}; vigentes hoy=0. Revisa fechas DIADESDE/ANOHASTA si esperabas promociones.`);
                 } catch (probeErr) {
-                    logger.warn(`[PEDIDOS] DSEDAC.PRD probe fallo: ${probeErr.message} (tabla quiza no existe en este entorno)`);
+                    logger.warn(`[PEDIDOS] DSEDAC.${source} probe fallo: ${probeErr.message}`);
                 }
             }
         } catch (e) {
-            logger.warn('[PEDIDOS] Promociones DSEDAC.PRD fallaron o no existen: ' + e.message);
+            logger.warn(`[PEDIDOS] Query promociones DSEDAC.${source} fallo (columnas distintas?): ${e.message}`);
             return [];
         }
 
