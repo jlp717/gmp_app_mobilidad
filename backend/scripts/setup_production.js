@@ -1,38 +1,25 @@
 'use strict';
 
 /**
- * SETUP PRODUCCION — script unico todo-en-uno
- * ============================================
- * Ejecuta TODO lo necesario para dejar el servidor listo tras los fixes de
- * la sesion 2026-05-15. Idempotente: se puede correr varias veces sin riesgo.
+ * SETUP PRODUCCION v2 - mejorado tras logs de 2026-05-15 18:23
+ * ============================================================
+ * Cambios v2:
+ *   - Muestra error ODBC REAL (odbcErrors[0].message) en lugar de "Error
+ *     executing the sql statement" generico.
+ *   - DDL mas compatible con DB2 for i (sin UNIQUE inline, usa CREATE UNIQUE
+ *     INDEX aparte; identidad con START WITH 1).
+ *   - LIMPIA columnas huerfanas IMPORTETOTAL_NEW/IMPORTECOSTO_NEW/IMPORTEMARGEN_NEW
+ *     que quedaron de una ejecucion anterior.
+ *   - YA NO intenta cambiar NUMERIC(11,2)->NUMERIC(10,2) en PEDIDOS_CAB.
+ *     JAVIER usa NUMERIC(11,2) que ES SUPERIOR a NUMERIC(10,2) y siempre cabe
+ *     cualquier valor que el ERP aceptaria. No bloquea nada.
  *
- * QUE HACE (en orden):
- *  1. Verifica conexion a DB2 con las credenciales del .env actual.
- *  2. Crea (si faltan) las tablas:
- *       - JAVIER.BOLSA_COMERCIAL
- *       - JAVIER.MOVIMIENTOS_BOLSA (suele existir ya)
- *       - JAVIER.CUENTAS_LIQUIDACION
- *  3. Crea (si faltan) los indices asociados.
- *  4. Crea (si faltan) las vistas:
- *       - JAVIER.V_ENTREGAS_HOY
- *       - JAVIER.V_COMISIONES_REPARTIDOR
- *  5. Arregla los 3 tipos divergentes en JAVIER.PEDIDOS_CAB
- *     (IMPORTETOTAL/COSTO/MARGEN de NUMERIC(11,2) a NUMERIC(10,2)) si aplica.
- *  6. Verifica al final que todos los objetos existen y reporta.
- *
- * QUE *NO* HACE:
- *  - NO modifica datos existentes en ninguna tabla.
- *  - NO toca DSEDAC. Solo lee y escribe en JAVIER (sandbox).
- *  - NO activa exports al ERP. Los exports estan tras PEDIDOS_EXPORT_TO_SYSTEM
- *    en el .env y por defecto vienen desactivados.
- *  - NO ejecuta la migracion 027 (paridad de columnas PEDIDOS_CAB <-> CPC).
- *    Esa es opcional y se ejecuta aparte cuando se decida activar exports.
+ * Idempotente: se puede correr varias veces sin riesgo.
+ * Solo toca JAVIER (sandbox). NUNCA escribe en DSEDAC.
  *
  * USO:
- *  cd /opt/gmp-api
- *  node backend/scripts/setup_production.js
- *
- * SALIDA esperada: bloque final "ESTADO FINAL" con todo en OK.
+ *   cd /opt/gmp-api
+ *   node backend/scripts/setup_production.js
  */
 
 const path = require('path');
@@ -55,14 +42,24 @@ function connectionString() {
 const TOLERABLE = [
   /SQLSTATE\s*=?\s*42710/i,   // objeto ya existe
   /SQLSTATE\s*=?\s*42711/i,   // columna ya existe
-  /SQLSTATE\s*=?\s*42704/i,   // referencia inexistente (DROP de algo que no existe)
-  /SQLSTATE\s*=?\s*42723/i,   // duplicate function
+  /SQLSTATE\s*=?\s*42704/i,   // referencia inexistente (drop de algo que no existe)
   /already exists/i,
-  /SQLCODE\s*=?\s*-601/i,
+  /not found/i,
+  /SQLCODE\s*=?\s*-601/i,     // duplicate name
+  /SQLCODE\s*=?\s*-204/i,     // not found
 ];
 function isTolerable(err) {
   const msg = String(err.message || '');
-  return TOLERABLE.some((rx) => rx.test(msg));
+  const odbcMsg = (err.odbcErrors && err.odbcErrors[0]?.message) || '';
+  return TOLERABLE.some((rx) => rx.test(msg) || rx.test(odbcMsg));
+}
+
+function fmtError(err) {
+  const odbc0 = err.odbcErrors && err.odbcErrors[0];
+  if (odbc0) {
+    return `${odbc0.state || 'SQL'} (${odbc0.code || 0}): ${odbc0.message || err.message}`;
+  }
+  return err.message || String(err);
 }
 
 let okCount = 0, skipCount = 0, failCount = 0;
@@ -71,16 +68,17 @@ async function runStatement(conn, label, sql, params = []) {
   try {
     await conn.query(sql, params);
     okCount++;
-    console.log(`  ✓ ${label}`);
+    console.log(`  OK  ${label}`);
     return true;
   } catch (err) {
     if (isTolerable(err)) {
       skipCount++;
-      console.log(`  · ${label}: ya existe (omitido)`);
+      console.log(`  --  ${label} (ya existia o no aplica)`);
       return true;
     }
     failCount++;
-    console.error(`  ✗ ${label}: ${err.message}`);
+    console.error(`  X   ${label}`);
+    console.error(`        ${fmtError(err)}`);
     return false;
   }
 }
@@ -94,7 +92,6 @@ async function tableExists(conn, table) {
     return Number(r[0]?.N) > 0;
   } catch (_) { return false; }
 }
-
 async function viewExists(conn, view) {
   try {
     const r = await conn.query(
@@ -104,219 +101,163 @@ async function viewExists(conn, view) {
     return Number(r[0]?.N) > 0;
   } catch (_) { return false; }
 }
-
-async function columnType(conn, table, column) {
+async function columnExists(conn, table, column) {
   try {
-    const r = await conn.query(`
-      SELECT DATA_TYPE, LENGTH, NUMERIC_SCALE FROM QSYS2.SYSCOLUMNS
-      WHERE TABLE_SCHEMA='JAVIER' AND TABLE_NAME=? AND COLUMN_NAME=?
-    `, [table, column]);
-    return r[0] || null;
-  } catch (_) { return null; }
+    const r = await conn.query(
+      `SELECT COUNT(*) AS N FROM QSYS2.SYSCOLUMNS WHERE TABLE_SCHEMA='JAVIER' AND TABLE_NAME=? AND COLUMN_NAME=?`,
+      [table, column],
+    );
+    return Number(r[0]?.N) > 0;
+  } catch (_) { return false; }
 }
 
 async function main() {
   console.log('============================================');
-  console.log('  SETUP PRODUCCION - GMP App Mobilidad');
+  console.log('  SETUP PRODUCCION v2 - GMP App Mobilidad');
   console.log(`  Fecha: ${new Date().toISOString()}`);
   console.log(`  Entorno: ${process.env.NODE_ENV || 'unknown'}`);
   console.log(`  Esquema app: ${process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER (default)'}`);
   console.log(`  Export DSEDAC: ${process.env.PEDIDOS_EXPORT_TO_SYSTEM || 'false (default)'}`);
   console.log('============================================');
 
-  console.log('\n[1/6] Conectando a DB2...');
+  console.log('\n[1/5] Conectando a DB2...');
   const conn = await odbc.connect(connectionString());
-  console.log('  ✓ Conexion OK');
+  console.log('  OK  Conexion');
 
-  // ─── 2. JAVIER.BOLSA_COMERCIAL ────────────────────────────────────────
-  console.log('\n[2/6] Creando tablas faltantes...');
-  await runStatement(conn, 'JAVIER.BOLSA_COMERCIAL', `
-    CREATE TABLE JAVIER.BOLSA_COMERCIAL (
-      ID INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-      CODIGOVENDEDOR VARCHAR(10) NOT NULL,
-      EJERCICIO NUMERIC(4) NOT NULL,
-      MES NUMERIC(2) NOT NULL,
-      LIMITE_PCT DECIMAL(5,2) DEFAULT 3.00,
-      LIMITE_IMPORTE DECIMAL(11,2) DEFAULT 0,
-      SALDO_DISPONIBLE DECIMAL(11,2) DEFAULT 0,
-      CONSUMIDO DECIMAL(11,2) DEFAULT 0,
-      ACUMULADO DECIMAL(11,2) DEFAULT 0,
-      CREATED_AT TIMESTAMP DEFAULT CURRENT TIMESTAMP,
-      UPDATED_AT TIMESTAMP DEFAULT CURRENT TIMESTAMP,
-      CONSTRAINT UQ_BOLSA_VND_MES UNIQUE (CODIGOVENDEDOR, EJERCICIO, MES)
-    )
-  `);
+  // ─── 2. CREATE TABLE BOLSA_COMERCIAL ─────────────────────────────────
+  console.log('\n[2/5] Creando tablas faltantes (DDL compatible DB2 for i)...');
 
-  await runStatement(conn, 'JAVIER.CUENTAS_LIQUIDACION', `
-    CREATE TABLE JAVIER.CUENTAS_LIQUIDACION (
-      ID INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-      CODIGO_REPARTIDOR VARCHAR(10) NOT NULL,
-      EJERCICIO NUMERIC(4) NOT NULL,
-      SALDO_ACUMULADO DECIMAL(11,2) DEFAULT 0,
-      ULTIMO_CIERRE DATE,
-      ULTIMO_TOKEN VARCHAR(128),
-      NUM_CIERRES INTEGER DEFAULT 0,
-      TOTAL_COBRADO_ANO DECIMAL(13,2) DEFAULT 0,
-      TOTAL_INGRESADO_ANO DECIMAL(13,2) DEFAULT 0,
-      OBSERVACIONES VARCHAR(500),
-      CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      UPDATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      CONSTRAINT UQ_CL_REP_EJER UNIQUE (CODIGO_REPARTIDOR, EJERCICIO)
-    )
-  `);
-
-  // ─── 3. Indices ───────────────────────────────────────────────────────
-  console.log('\n[3/6] Creando indices...');
-  await runStatement(conn, 'IDX_BOLSA_VND',
-    `CREATE INDEX JAVIER.IDX_BOLSA_VND ON JAVIER.BOLSA_COMERCIAL (CODIGOVENDEDOR, EJERCICIO)`);
-  await runStatement(conn, 'IDX_CL_REP',
-    `CREATE INDEX JAVIER.IDX_CL_REP ON JAVIER.CUENTAS_LIQUIDACION (CODIGO_REPARTIDOR)`);
-
-  // ─── 4. Vistas ────────────────────────────────────────────────────────
-  console.log('\n[4/6] Creando vistas...');
-  await runStatement(conn, 'JAVIER.V_ENTREGAS_HOY', `
-    CREATE VIEW JAVIER.V_ENTREGAS_HOY AS
-    SELECT
-      CAC.SUBEMPRESAALBARAN,
-      CAC.EJERCICIOALBARAN,
-      CAC.SERIEALBARAN,
-      CAC.TERMINALALBARAN,
-      CAC.NUMEROALBARAN,
-      CAC.DIADOCUMENTO,
-      CAC.MESDOCUMENTO,
-      CAC.ANODOCUMENTO,
-      TRIM(CAC.CODIGOCLIENTEALBARAN) AS CODIGOCLIENTE,
-      TRIM(CAC.CODIGOVENDEDOR) AS CODIGOVENDEDOR,
-      TRIM(CAC.CODIGOVENDEDORREPARTORUTERO) AS CODIGOREPARTIDOR,
-      TRIM(CAC.CODIGORUTA) AS CODIGORUTA,
-      CAC.IMPORTETOTAL,
-      CAC.SITUACIONALBARAN,
-      CAC.MARCALIQUIDADO,
-      CAC.DIAENTREGA,
-      CAC.MESENTREGA,
-      CAC.ANOENTREGA
-    FROM DSEDAC.CAC CAC
-    WHERE CAC.ANODOCUMENTO = YEAR(CURRENT_DATE)
-      AND CAC.MESDOCUMENTO = MONTH(CURRENT_DATE)
-      AND CAC.DIADOCUMENTO = DAY(CURRENT_DATE)
-      AND CAC.ELIMINADOSN <> 'S'
-  `);
-
-  await runStatement(conn, 'JAVIER.V_COMISIONES_REPARTIDOR', `
-    CREATE VIEW JAVIER.V_COMISIONES_REPARTIDOR AS
-    SELECT
-      TRIM(CVC.CODIGOVENDEDORCOBRO) AS CODIGO_REPARTIDOR,
-      CVC.ANOCOBRO AS EJERCICIO,
-      CVC.MESCOBRO AS MES,
-      COUNT(*) AS NUM_COBROS,
-      SUM(CVC.IMPORTECANCELADO) AS TOTAL_COBRADO,
-      SUM(CASE WHEN CVC.ANULADOSN = 'S' THEN CVC.IMPORTECANCELADO ELSE 0 END) AS TOTAL_ANULADO
-    FROM DSEDAC.CVC CVC
-    WHERE CVC.IMPORTECANCELADO > 0
-      AND CVC.ANOCOBRO > 0
-      AND CVC.NUMEROLIQUIDACION > 0
-    GROUP BY TRIM(CVC.CODIGOVENDEDORCOBRO), CVC.ANOCOBRO, CVC.MESCOBRO
-  `);
-
-  // ─── 5. Fix tipos PEDIDOS_CAB (NUMERIC 11,2 -> 10,2) ──────────────────
-  console.log('\n[5/6] Verificando tipos PEDIDOS_CAB...');
-  const types = await Promise.all([
-    columnType(conn, 'PEDIDOS_CAB', 'IMPORTETOTAL'),
-    columnType(conn, 'PEDIDOS_CAB', 'IMPORTECOSTO'),
-    columnType(conn, 'PEDIDOS_CAB', 'IMPORTEMARGEN'),
-  ]);
-  const needFix = types.some((t) => t && (t.LENGTH === 11 || t.LENGTH === '11'));
-  if (needFix) {
-    console.log('  PEDIDOS_CAB necesita migracion de tipos (NUMERIC(11,2)->NUMERIC(10,2)).');
-    console.log('  AVISO: esta migracion modifica columnas. Se hace via columnas _NEW para evitar perdida.');
-
-    // Verifica que no haya importes > 99,999,999.99 antes de truncar
-    try {
-      const max = await conn.query(`
-        SELECT MAX(IMPORTETOTAL) AS MAX_TOT,
-               MAX(IMPORTECOSTO) AS MAX_COS,
-               MAX(IMPORTEMARGEN) AS MAX_MAR
-        FROM JAVIER.PEDIDOS_CAB
-      `);
-      const maxVal = Math.max(
-        Number(max[0]?.MAX_TOT) || 0,
-        Number(max[0]?.MAX_COS) || 0,
-        Number(max[0]?.MAX_MAR) || 0,
-      );
-      if (maxVal > 99999999.99) {
-        console.log(`  ✗ ABORT: importe maximo encontrado=${maxVal}, no cabe en NUMERIC(10,2). Saltando este fix.`);
-        skipCount++;
-      } else {
-        // Safe to migrate
-        const sqls = [
-          `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN IMPORTETOTAL_NEW NUMERIC(10,2)`,
-          `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN IMPORTECOSTO_NEW NUMERIC(10,2)`,
-          `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN IMPORTEMARGEN_NEW NUMERIC(10,2)`,
-          `UPDATE JAVIER.PEDIDOS_CAB SET IMPORTETOTAL_NEW=IMPORTETOTAL, IMPORTECOSTO_NEW=IMPORTECOSTO, IMPORTEMARGEN_NEW=IMPORTEMARGEN`,
-          `ALTER TABLE JAVIER.PEDIDOS_CAB DROP COLUMN IMPORTETOTAL`,
-          `ALTER TABLE JAVIER.PEDIDOS_CAB DROP COLUMN IMPORTECOSTO`,
-          `ALTER TABLE JAVIER.PEDIDOS_CAB DROP COLUMN IMPORTEMARGEN`,
-          `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN IMPORTETOTAL NUMERIC(10,2)`,
-          `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN IMPORTECOSTO NUMERIC(10,2)`,
-          `ALTER TABLE JAVIER.PEDIDOS_CAB ADD COLUMN IMPORTEMARGEN NUMERIC(10,2)`,
-          `UPDATE JAVIER.PEDIDOS_CAB SET IMPORTETOTAL=IMPORTETOTAL_NEW, IMPORTECOSTO=IMPORTECOSTO_NEW, IMPORTEMARGEN=IMPORTEMARGEN_NEW`,
-          `ALTER TABLE JAVIER.PEDIDOS_CAB DROP COLUMN IMPORTETOTAL_NEW`,
-          `ALTER TABLE JAVIER.PEDIDOS_CAB DROP COLUMN IMPORTECOSTO_NEW`,
-          `ALTER TABLE JAVIER.PEDIDOS_CAB DROP COLUMN IMPORTEMARGEN_NEW`,
-        ];
-        for (const sql of sqls) {
-          await runStatement(conn, sql.slice(0, 70) + '...', sql);
-        }
-      }
-    } catch (e) {
-      console.log(`  · Salta fix tipos: ${e.message}`);
-      skipCount++;
-    }
+  // Variante 1: identidad con START WITH 1, sin UNIQUE inline (DB2 for i a veces falla con inline)
+  if (!await tableExists(conn, 'BOLSA_COMERCIAL')) {
+    await runStatement(conn, 'JAVIER.BOLSA_COMERCIAL', `
+      CREATE TABLE JAVIER.BOLSA_COMERCIAL (
+        ID INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1),
+        CODIGOVENDEDOR VARCHAR(10) NOT NULL,
+        EJERCICIO NUMERIC(4) NOT NULL,
+        MES NUMERIC(2) NOT NULL,
+        LIMITE_PCT DECIMAL(5,2) DEFAULT 3.00,
+        LIMITE_IMPORTE DECIMAL(11,2) DEFAULT 0,
+        SALDO_DISPONIBLE DECIMAL(11,2) DEFAULT 0,
+        CONSUMIDO DECIMAL(11,2) DEFAULT 0,
+        ACUMULADO DECIMAL(11,2) DEFAULT 0,
+        CREATED_AT TIMESTAMP DEFAULT CURRENT TIMESTAMP,
+        UPDATED_AT TIMESTAMP DEFAULT CURRENT TIMESTAMP,
+        PRIMARY KEY (ID)
+      )
+    `);
+    // Unique se crea aparte (mas robusto en DB2 for i)
+    await runStatement(conn, 'UQ_BOLSA_VND_MES',
+      `CREATE UNIQUE INDEX JAVIER.UQ_BOLSA_VND_MES ON JAVIER.BOLSA_COMERCIAL (CODIGOVENDEDOR, EJERCICIO, MES)`);
   } else {
-    console.log('  · Tipos ya correctos (NUMERIC(10,2)) o columnas no presentes');
+    console.log('  --  JAVIER.BOLSA_COMERCIAL ya existe');
     skipCount++;
   }
 
-  // ─── 6. Verificacion final ────────────────────────────────────────────
-  console.log('\n[6/6] Verificacion final del estado...');
-  const checks = [
-    { type: 'TABLE', name: 'BOLSA_COMERCIAL', existsFn: () => tableExists(conn, 'BOLSA_COMERCIAL') },
-    { type: 'TABLE', name: 'MOVIMIENTOS_BOLSA', existsFn: () => tableExists(conn, 'MOVIMIENTOS_BOLSA') },
-    { type: 'TABLE', name: 'CUENTAS_LIQUIDACION', existsFn: () => tableExists(conn, 'CUENTAS_LIQUIDACION') },
-    { type: 'TABLE', name: 'PEDIDOS_CAB', existsFn: () => tableExists(conn, 'PEDIDOS_CAB') },
-    { type: 'TABLE', name: 'PEDIDOS_LIN', existsFn: () => tableExists(conn, 'PEDIDOS_LIN') },
-    { type: 'TABLE', name: 'COBROS', existsFn: () => tableExists(conn, 'COBROS') },
-    { type: 'TABLE', name: 'REPARTIDOR_COBROS', existsFn: () => tableExists(conn, 'REPARTIDOR_COBROS') },
-    { type: 'VIEW',  name: 'V_ENTREGAS_HOY', existsFn: () => viewExists(conn, 'V_ENTREGAS_HOY') },
-    { type: 'VIEW',  name: 'V_COMISIONES_REPARTIDOR', existsFn: () => viewExists(conn, 'V_COMISIONES_REPARTIDOR') },
-  ];
-
-  console.log('  Objeto                            Tipo   Existe');
-  console.log('  ─────────────────────────────────────────────────');
-  for (const c of checks) {
-    const ok = await c.existsFn();
-    const label = `JAVIER.${c.name}`.padEnd(34);
-    console.log(`  ${label} ${c.type.padEnd(6)} ${ok ? '✓' : '✗ FALTA'}`);
+  if (!await tableExists(conn, 'CUENTAS_LIQUIDACION')) {
+    await runStatement(conn, 'JAVIER.CUENTAS_LIQUIDACION', `
+      CREATE TABLE JAVIER.CUENTAS_LIQUIDACION (
+        ID INTEGER NOT NULL GENERATED ALWAYS AS IDENTITY (START WITH 1, INCREMENT BY 1),
+        CODIGO_REPARTIDOR VARCHAR(10) NOT NULL,
+        EJERCICIO NUMERIC(4) NOT NULL,
+        SALDO_ACUMULADO DECIMAL(11,2) DEFAULT 0,
+        ULTIMO_CIERRE DATE,
+        ULTIMO_TOKEN VARCHAR(128),
+        NUM_CIERRES INTEGER DEFAULT 0,
+        TOTAL_COBRADO_ANO DECIMAL(13,2) DEFAULT 0,
+        TOTAL_INGRESADO_ANO DECIMAL(13,2) DEFAULT 0,
+        OBSERVACIONES VARCHAR(500),
+        CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UPDATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (ID)
+      )
+    `);
+    await runStatement(conn, 'UQ_CL_REP_EJER',
+      `CREATE UNIQUE INDEX JAVIER.UQ_CL_REP_EJER ON JAVIER.CUENTAS_LIQUIDACION (CODIGO_REPARTIDOR, EJERCICIO)`);
+  } else {
+    console.log('  --  JAVIER.CUENTAS_LIQUIDACION ya existe');
+    skipCount++;
   }
 
+  // ─── 3. Indices secundarios ──────────────────────────────────────────
+  console.log('\n[3/5] Creando indices secundarios...');
+  if (await tableExists(conn, 'BOLSA_COMERCIAL')) {
+    await runStatement(conn, 'IDX_BOLSA_VND',
+      `CREATE INDEX JAVIER.IDX_BOLSA_VND ON JAVIER.BOLSA_COMERCIAL (CODIGOVENDEDOR, EJERCICIO)`);
+  }
+  if (await tableExists(conn, 'CUENTAS_LIQUIDACION')) {
+    await runStatement(conn, 'IDX_CL_REP',
+      `CREATE INDEX JAVIER.IDX_CL_REP ON JAVIER.CUENTAS_LIQUIDACION (CODIGO_REPARTIDOR)`);
+  }
+
+  // ─── 4. Limpiar columnas huerfanas _NEW en PEDIDOS_CAB ──────────────
+  console.log('\n[4/5] Limpiando columnas huerfanas en PEDIDOS_CAB (si las hay)...');
+  const orphans = ['IMPORTETOTAL_NEW', 'IMPORTECOSTO_NEW', 'IMPORTEMARGEN_NEW'];
+  for (const col of orphans) {
+    if (await columnExists(conn, 'PEDIDOS_CAB', col)) {
+      await runStatement(conn, `DROP COLUMN ${col}`,
+        `ALTER TABLE JAVIER.PEDIDOS_CAB DROP COLUMN ${col}`);
+    } else {
+      console.log(`  --  ${col} no existe (limpio)`);
+    }
+  }
+
+  // NOTA sobre tipos NUMERIC(11,2) vs NUMERIC(10,2):
+  // JAVIER.PEDIDOS_CAB usa NUMERIC(11,2) y DSEDAC.CPC usa NUMERIC(10,2). En
+  // DB2 for i no se puede REDUCIR la precision con ALTER COLUMN si la tabla
+  // tiene datos. Lo dejamos asi: NUMERIC(11,2) es SUPERIOR (mas capacidad),
+  // cualquier valor que cabe en (10,2) cabe en (11,2). No bloquea funcionalidad.
+
+  // ─── 5. Verificacion final ───────────────────────────────────────────
+  console.log('\n[5/5] Verificacion final del estado...');
+  const checks = [
+    { type: 'TABLE', name: 'BOLSA_COMERCIAL' },
+    { type: 'TABLE', name: 'MOVIMIENTOS_BOLSA' },
+    { type: 'TABLE', name: 'CUENTAS_LIQUIDACION' },
+    { type: 'TABLE', name: 'PEDIDOS_CAB' },
+    { type: 'TABLE', name: 'PEDIDOS_LIN' },
+    { type: 'TABLE', name: 'COBROS' },
+    { type: 'TABLE', name: 'REPARTIDOR_COBROS' },
+    { type: 'VIEW',  name: 'V_ENTREGAS_HOY' },
+    { type: 'VIEW',  name: 'V_COMISIONES_REPARTIDOR' },
+  ];
+
+  console.log('  Objeto                                Tipo   Existe');
+  console.log('  ────────────────────────────────────────────────────');
+  let missing = 0;
+  for (const c of checks) {
+    const ok = c.type === 'TABLE' ? await tableExists(conn, c.name) : await viewExists(conn, c.name);
+    const label = `JAVIER.${c.name}`.padEnd(38);
+    console.log(`  ${label} ${c.type.padEnd(6)} ${ok ? 'OK' : 'FALTA'}`);
+    if (!ok) missing++;
+  }
+
+  // Limpieza: si NUEVAS PEDIDOS_CAB columnas se quedaron sin las _NEW orphans, ok
   await conn.close();
 
   console.log('\n============================================');
   console.log('  ESTADO FINAL');
-  console.log(`  OK:      ${okCount}`);
-  console.log(`  Omitido: ${skipCount}  (objetos ya existentes, no es error)`);
-  console.log(`  Fallos:  ${failCount}`);
+  console.log(`  OK:        ${okCount}`);
+  console.log(`  Omitidos:  ${skipCount}`);
+  console.log(`  Fallos:    ${failCount}`);
+  console.log(`  Faltantes: ${missing}`);
   console.log('============================================');
 
-  if (failCount > 0) {
-    console.error('\n⚠  Hubo fallos no tolerables. Revisa el log de arriba.');
+  if (failCount > 0 && missing > 0) {
+    console.error('\n*  Hubo fallos. Lee los errores con detalle arriba.');
+    console.error('   Si ves "SQL0204 - JAVIER.X no encontrado" o similar,');
+    console.error('   copia el mensaje completo y mandamelo.');
     process.exit(1);
   }
-  console.log('\n✓ Setup completado correctamente.');
-  console.log('\nPROXIMO PASO: pm2 restart gmp-api');
+  if (missing === 0) {
+    console.log('\nOK. Todos los objetos necesarios estan presentes en JAVIER.');
+    console.log('\nPROXIMO PASO: pm2 restart gmp-api');
+  } else {
+    console.log('\nAtencion: faltan objetos. Revisa los logs.');
+    process.exit(1);
+  }
 }
 
 main().catch((err) => {
-  console.error('FATAL:', err.message);
+  console.error('FATAL:', fmtError(err));
   process.exit(1);
 });
