@@ -8,8 +8,24 @@
 const { query, queryWithParams, getPool, initDb } = require('../config/db');
 const ERP_SCHEMA = process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER';
 const logger = require('../middleware/logger');
-const { cachedQuery } = require('./query-optimizer');
+const { cachedQuery, invalidateOnMutation } = require('./query-optimizer');
 const { redisCache, TTL } = require('./redis-cache');
+
+// Best-effort cache invalidation tras una mutación de pedidos.
+// No bloquea el flujo si Redis está caído ni si el módulo está mockeado en tests.
+function invalidatePedidosCache(pedidoId) {
+    try {
+        if (typeof invalidateOnMutation !== 'function') return;
+        const result = invalidateOnMutation('PEDIDOS', pedidoId);
+        if (result && typeof result.catch === 'function') {
+            result.catch((err) => {
+                logger.warn(`[PEDIDOS] Cache invalidation skipped: ${err.message}`);
+            });
+        }
+    } catch (err) {
+        logger.warn(`[PEDIDOS] Cache invalidation skipped: ${err.message}`);
+    }
+}
 const { LACLAE_SALES_FILTER } = require('../utils/common');
 const { CircuitBreaker } = require('./circuit-breaker');
 const { getClientDays } = require('./laclae');
@@ -1074,7 +1090,7 @@ async function initPedidosTables() {
 // PRODUCTS
 // ============================================================================
 
-async function getProducts({ search, clientCode, family, marca, limit = 50, offset = 0 }) {
+async function getProducts({ search, clientCode, family, marca, prefamily, limit = 50, offset = 0 }) {
     const params = [];
     let where = "WHERE A.ANOBAJA = 0 AND TRIM(A.CODIGOARTICULO) <> ''";
 
@@ -1090,6 +1106,13 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
     if (marca) {
         where += ' AND TRIM(A.CODIGOMARCA) = ?';
         params.push(marca.trim());
+    }
+    // Req #14: filtro por prefamilia (e.g. Nestlé) — usa LIKE para soportar
+    // matches parciales (NESTL%, NESTLE, NESTLE_PRO, etc.).
+    if (prefamily) {
+        const pf = `${String(prefamily).toUpperCase()}%`;
+        where += ' AND UPPER(TRIM(A.CODIGOPREFAMILIA)) LIKE ?';
+        params.push(pf);
     }
 
     const currentYear = new Date().getFullYear();
@@ -1174,7 +1197,7 @@ async function getProducts({ search, clientCode, family, marca, limit = 50, offs
 
     const finalParams = [...historyParams, clientCodeTrimmed, ...params, offset, limit];
 
-    const cacheKey = `pedidos:products_v2:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${offset}:${limit}`;
+    const cacheKey = `pedidos:products_v2:${clientCodeTrimmed}:${search || ''}:${family || ''}:${marca || ''}:${prefamily || ''}:${offset}:${limit}`;
 
     try {
         const rows = await cachedQuery(
@@ -1686,6 +1709,9 @@ async function createOrder({ clientCode, clientName, vendedorCode, tipoventa = '
     // Recalculate totals
     await recalculateOrderTotals(pedidoId);
 
+    // Invalida caché de listados de pedidos para reflejar el nuevo borrador.
+    invalidatePedidosCache(pedidoId);
+
     // Return created order
     return getOrderDetail(pedidoId);
 }
@@ -1699,6 +1725,9 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
 
     const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
 
+    // Req #7: Si IMPORTETOTAL viene a 0 (borradores sin recalcular), calcular fallback
+    // desde la suma real de IMPORTEVENTA en PEDIDOS_LIN. IMPORTE_CALCULADO se prioriza
+    // sobre IMPORTETOTAL en el adaptador de routes.
     let sql = `
         SELECT C.ID, C.EJERCICIO, C.NUMEROPEDIDO, C.SERIEPEDIDO,
             C.DIADOCUMENTO, C.MESDOCUMENTO, C.ANODOCUMENTO, C.HORADOCUMENTO,
@@ -1708,6 +1737,8 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
             TRIM(C.TIPOVENTA) AS TIPOVENTA,
             TRIM(C.ESTADO) AS ESTADO,
             C.IMPORTETOTAL, C.IMPORTEBASE, C.IMPORTEIVA, C.IMPORTECOSTO, C.IMPORTEMARGEN,
+            COALESCE(NULLIF(C.IMPORTETOTAL, 0), LC.LINE_TOTAL, 0) AS IMPORTE_CALCULADO,
+            COALESCE(LC.LINE_COST, 0) AS TOTAL_COSTO,
             TRIM(C.OBSERVACIONES) AS OBSERVACIONES,
             TRIM(C.CODIGOFORMAPAGO) AS CODIGOFORMAPAGO,
             C.CODIGOTARIFA,
@@ -1721,7 +1752,14 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
             C.CREATED_AT, C.UPDATED_AT,
             COALESCE(LC.LINE_COUNT, 0) AS LINE_COUNT
         FROM ${ERP_SCHEMA}.PEDIDOS_CAB C
-        LEFT JOIN (SELECT PEDIDO_ID, COUNT(*) AS LINE_COUNT FROM ${ERP_SCHEMA}.PEDIDOS_LIN GROUP BY PEDIDO_ID) LC ON C.ID = LC.PEDIDO_ID
+        LEFT JOIN (
+            SELECT PEDIDO_ID,
+                   COUNT(*) AS LINE_COUNT,
+                   COALESCE(SUM(IMPORTEVENTA), 0) AS LINE_TOTAL,
+                   COALESCE(SUM(IMPORTECOSTO), 0) AS LINE_COST
+            FROM ${ERP_SCHEMA}.PEDIDOS_LIN
+            GROUP BY PEDIDO_ID
+        ) LC ON C.ID = LC.PEDIDO_ID
         WHERE 1=1`;
 
     const params = [];
@@ -1843,10 +1881,14 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
                 vendedorCode: r.CODIGOVENDEDOR,
                 tipoventa: r.TIPOVENTA,
                 estado: r.ESTADO,
-                total: parseFloat(r.IMPORTETOTAL) || 0,
+                // Req #7: prioriza el total calculado desde líneas si IMPORTETOTAL
+                // está a 0 (típico en borradores sin recalcular cabecera).
+                total: parseFloat(r.IMPORTE_CALCULADO) || parseFloat(r.IMPORTETOTAL) || 0,
+                totalHeader: parseFloat(r.IMPORTETOTAL) || 0,
+                totalCalculated: parseFloat(r.IMPORTE_CALCULADO) || 0,
                 base: parseFloat(r.IMPORTEBASE) || 0,
                 iva: parseFloat(r.IMPORTEIVA) || 0,
-                costo: parseFloat(r.IMPORTECOSTO) || 0,
+                costo: parseFloat(r.IMPORTECOSTO) || parseFloat(r.TOTAL_COSTO) || 0,
                 margen: parseFloat(r.IMPORTEMARGEN) || 0,
                 observaciones: r.OBSERVACIONES,
                 formaPago: r.CODIGOFORMAPAGO,
@@ -2162,6 +2204,7 @@ async function updateOrderLine(lineId, {
     );
 
     await recalculateOrderTotals(pedidoId);
+    invalidatePedidosCache(pedidoId);
     return getOrderDetail(pedidoId);
 }
 
@@ -2178,6 +2221,7 @@ async function deleteOrderLine(lineId, pedidoId) {
     );
 
     await recalculateOrderTotals(pid);
+    invalidatePedidosCache(pid);
     return getOrderDetail(pid);
 }
 
@@ -2219,7 +2263,23 @@ async function confirmOrder(orderId, saleType, options = {}) {
     const id = parseInt(orderId);
     if (isNaN(id)) throw new Error('Invalid orderId');
 
-    // STATE GUARD: Check current state to prevent double-confirm
+    // CRITICAL: race-condition guard. Reservamos atomicamente el pedido pasando
+    // a estado intermedio CONFIRMANDO en una sola sentencia (compare-and-swap).
+    // Si el UPDATE no afecta filas, otro request ya tomo el pedido (o el estado
+    // no es BORRADOR), y abortamos con un error claro.
+    const reserveResult = await queryWithParams(
+        `UPDATE ${ERP_SCHEMA}.PEDIDOS_CAB
+            SET ESTADO = 'CONFIRMANDO',
+                UPDATED_AT = CURRENT_TIMESTAMP
+          WHERE ID = ?
+            AND ESTADO = 'BORRADOR'`,
+        [id], false
+    );
+    const rowsAffected = (reserveResult && typeof reserveResult.count === 'number')
+        ? reserveResult.count
+        : (typeof reserveResult === 'number' ? reserveResult : null);
+
+    // STATE READ (siempre): trae payload + estado actual tras el intento de reserva.
     const currentRows = await queryWithParams(
         `SELECT ESTADO,
                 ID, EJERCICIO, NUMEROPEDIDO, SERIEPEDIDO, TERMINAL,
@@ -2235,22 +2295,55 @@ async function confirmOrder(orderId, saleType, options = {}) {
          FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE ID = ?`,
         [id], false
     );
-    
+
     if (!currentRows || currentRows.length === 0) {
         throw new Error('Pedido no encontrado');
     }
-    
+
     const currentState = (currentRows[0].ESTADO || '').trim();
-    
-    // Prevent confirming an already confirmed or shipped order
-    if (currentState === 'CONFIRMADO') {
-        throw new Error('El pedido ya está anulado');
+
+    // Si rowsAffected es 0 y el estado NO es CONFIRMANDO de este request,
+    // significa que otro proceso lo tomo (CONFIRMADO/ENVIADO) o estaba en
+    // estado invalido. Algunos drivers ODBC no reportan rowsAffected, por
+    // eso confiamos en el estado leido.
+    if (rowsAffected === 0) {
+        if (currentState === 'CONFIRMADO' || currentState === 'CONFIRMANDO') {
+            const err = new Error('Pedido ya confirmado o en proceso de confirmacion por otra sesion');
+            err.code = 'PEDIDO_ALREADY_CONFIRMING';
+            err.status = 409;
+            throw err;
+        }
+        if (currentState !== 'BORRADOR') {
+            const err = new Error(`Solo se pueden confirmar pedidos en estado BORRADOR (estado actual: ${currentState})`);
+            err.code = 'PEDIDO_INVALID_STATE';
+            err.status = 409;
+            throw err;
+        }
     }
-    
-    // Only BORRADOR orders can be confirmed
-    if (currentState !== 'BORRADOR') {
-        throw new Error(`Solo se pueden confirmar pedidos en estado BORRADOR (estado actual: ${currentState})`);
+    // Si llegamos aqui con currentState != CONFIRMANDO/BORRADOR, hay corrupcion.
+    if (currentState !== 'CONFIRMANDO' && currentState !== 'BORRADOR') {
+        const err = new Error(`Estado inesperado tras intento de reserva: ${currentState}`);
+        err.code = 'PEDIDO_INVALID_STATE';
+        err.status = 409;
+        throw err;
     }
+
+    // Helper: revierte CONFIRMANDO -> BORRADOR cuando un retorno temprano o un
+    // fallo deja el pedido bloqueado en estado intermedio. Best-effort: si falla
+    // se loguea pero NO se propaga, para no enmascarar el error original.
+    const revertConfirming = async (reasonTag) => {
+        try {
+            await queryWithParams(
+                `UPDATE ${ERP_SCHEMA}.PEDIDOS_CAB
+                    SET ESTADO = 'BORRADOR', UPDATED_AT = CURRENT_TIMESTAMP
+                  WHERE ID = ? AND ESTADO = 'CONFIRMANDO'`,
+                [id], false
+            );
+            logger.info(`[PEDIDOS] CONFIRMANDO->BORRADOR revertido (#${id}) tag=${reasonTag}`);
+        } catch (revertErr) {
+            logger.error(`[PEDIDOS] No se pudo revertir CONFIRMANDO->BORRADOR para #${id}: ${revertErr.message}`);
+        }
+    };
 
     const clientCode = trimString(currentRows[0].CODIGOCLIENTE || options.clientCode);
     const vendedorCode = trimString(currentRows[0].CODIGOVENDEDOR || options.vendedorCode);
@@ -2292,6 +2385,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
         const bolsaService = require('./bolsa-comercial.service');
         const bolsaResult = await bolsaService.validateOrderWithBolsa(vendedorCode, lines);
         if (!bolsaResult.valid && !options.forceConfirm) {
+            await revertConfirming('BOLSA_INSUFICIENTE');
             return {
                 blocked: true,
                 reason: 'BOLSA_INSUFICIENTE',
@@ -2358,6 +2452,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
             }
         }
 
+        await revertConfirming('STOCK_INSUFICIENTE');
         return {
             blocked: true,
             reason: 'STOCK_INSUFICIENTE',
@@ -2403,6 +2498,9 @@ async function confirmOrder(orderId, saleType, options = {}) {
             logger.info(`[PEDIDOS] Order #${id} exported to ${syncResult.targetSchema}.CPC and confirmed`);
         } catch (systemErr) {
             logger.error(`[PEDIDOS] System export failed for order #${id}: ${systemErr.message}`);
+            // El transaction interno ya hizo rollback de los inserts; revertimos
+            // CONFIRMANDO -> BORRADOR para que el usuario pueda reintentar.
+            await revertConfirming('SYSTEM_EXPORT_FAILED');
             throw new Error(`No se pudo pasar el pedido a sistema. No se ha confirmado. Error: ${systemErr.message}`);
         }
     } else {
@@ -2480,6 +2578,9 @@ async function confirmOrder(orderId, saleType, options = {}) {
             logger.warn(`[PEDIDOS] Bolsa consumption failed (order confirmed anyway): ${bolsaErr.message}`);
         }
     }
+
+    // Invalida caché tras confirmación (cambia ESTADO, importes y stock reservas).
+    invalidatePedidosCache(id);
 
     return { ...order, stockWarnings };
 }
@@ -2936,6 +3037,9 @@ async function getRecommendations(clientCode, vendedorCode) {
 // ============================================================================
 
 async function getFamilies() {
+    // Req #14: incluir prefamilia para agrupaciones tipo "Nestlé".
+    // Se devuelven tanto código simple (compat) como objeto completo cuando el caller
+    // lo requiere via getFamiliesDetailed().
     const sql = `SELECT DISTINCT TRIM(CODIGOFAMILIA) AS CODE FROM DSEDAC.ART WHERE ANOBAJA = 0 AND CODIGOFAMILIA != '' ORDER BY 1`;
     const cacheKey = 'pedidos:families';
 
@@ -2945,6 +3049,40 @@ async function getFamilies() {
     } catch (error) {
         logger.error(`[PEDIDOS] getFamilies error: ${error.message}`);
         throw error;
+    }
+}
+
+/**
+ * Req #14: Detalle de familias con prefamilia, para que el frontend pueda
+ * agrupar dinámicamente (ej.: chip "Nestlé" suma todas las familias cuya
+ * prefamilia comience por NESTL%, etc.).
+ */
+async function getFamiliesDetailed() {
+    const sql = `
+        SELECT
+            TRIM(CODIGOFAMILIA) AS CODE,
+            COALESCE(MAX(TRIM(DESCRIPCIONFAMILIA)), '') AS NAME,
+            COALESCE(MAX(TRIM(CODIGOPREFAMILIA)), '') AS PREFAMILY,
+            COUNT(*) AS ART_COUNT
+        FROM DSEDAC.ART
+        WHERE (ANOBAJA = 0 OR ANOBAJA IS NULL)
+          AND CODIGOFAMILIA <> ''
+        GROUP BY TRIM(CODIGOFAMILIA)
+        ORDER BY NAME
+    `;
+    const cacheKey = 'pedidos:families:detailed';
+    try {
+        const rows = await cachedQuery((sql) => query(sql), sql, cacheKey, TTL.SHORT);
+        return rows.map(r => ({
+            code: (r.CODE || '').trim(),
+            name: (r.NAME || r.CODE || '').trim(),
+            prefamily: (r.PREFAMILY || '').trim(),
+            artCount: Number(r.ART_COUNT) || 0,
+            isNestle: /NESTL/i.test(String(r.PREFAMILY || '')),
+        })).filter(f => f.code);
+    } catch (error) {
+        logger.warn(`[PEDIDOS] getFamiliesDetailed error (returning []): ${error.message}`);
+        return [];
     }
 }
 
@@ -2961,6 +3099,85 @@ async function getBrands() {
     }
 }
 
+// ============================================================================
+// Req #8: DRAFT ACCUMULATION CONTROL
+// ============================================================================
+/**
+ * Si un comercial acumula >= threshold borradores, devuelve la lista de
+ * borradores y opcionalmente auto-confirma el más antiguo. Se diseña como
+ * función pura (lectura) por defecto; el caller (route POST /pedidos)
+ * decide si invocar la auto-confirmación pasando `autoConfirm: true`.
+ */
+async function checkDraftAccumulation(vendedorCode, { autoConfirm = false, threshold = 3, options = {} } = {}) {
+    const code = String(vendedorCode || '').trim();
+    if (!code) return { warning: false, drafts: [] };
+
+    let drafts = [];
+    try {
+        drafts = await queryWithParams(
+            `SELECT ID, NUMEROPEDIDO, TRIM(CODIGOCLIENTE) AS CODIGOCLIENTE,
+                    TRIM(NOMBRECLIENTE) AS NOMBRECLIENTE, IMPORTETOTAL, CREATED_AT
+             FROM ${ERP_SCHEMA}.PEDIDOS_CAB
+             WHERE TRIM(CODIGOVENDEDOR) = ?
+               AND TRIM(ESTADO) = 'BORRADOR'
+             ORDER BY ID ASC`,
+            [code],
+            false,
+        );
+    } catch (err) {
+        logger.warn(`[PEDIDOS] checkDraftAccumulation read error: ${err.message}`);
+        return { warning: false, drafts: [], error: err.message };
+    }
+
+    if (!drafts || drafts.length < threshold) {
+        return { warning: false, drafts: drafts || [], count: (drafts || []).length };
+    }
+
+    const oldest = drafts[0];
+    if (!autoConfirm) {
+        return {
+            warning: true,
+            count: drafts.length,
+            threshold,
+            oldestId: oldest.ID,
+            oldestNumber: oldest.NUMEROPEDIDO,
+            message: `Tienes ${drafts.length} borradores acumulados. Se recomienda confirmar el más antiguo (#${oldest.NUMEROPEDIDO}).`,
+            drafts,
+        };
+    }
+
+    // Auto-confirm path (opt-in): seguro con try/catch que NO bloquea creación
+    try {
+        await confirmOrder(oldest.ID, 'CC', {
+            ...options,
+            userId: options.userId || 'AUTO_DRAFT_GUARD',
+            forceConfirm: true,
+        });
+        logger.warn(`[PEDIDOS] Auto-confirmed draft #${oldest.NUMEROPEDIDO} (id=${oldest.ID}) por acumulación (${drafts.length})`);
+        return {
+            warning: true,
+            autoConfirmed: true,
+            autoConfirmedId: oldest.ID,
+            autoConfirmedNumber: oldest.NUMEROPEDIDO,
+            count: drafts.length,
+            message: `Tenías ${drafts.length} borradores. El más antiguo (#${oldest.NUMEROPEDIDO}) se ha confirmado automáticamente.`,
+            drafts,
+        };
+    } catch (confirmErr) {
+        logger.error(`[PEDIDOS] checkDraftAccumulation auto-confirm failed for #${oldest.NUMEROPEDIDO}: ${confirmErr.message}`);
+        return {
+            warning: true,
+            autoConfirmed: false,
+            autoConfirmError: confirmErr.message,
+            count: drafts.length,
+            oldestId: oldest.ID,
+            oldestNumber: oldest.NUMEROPEDIDO,
+            drafts,
+            message: `${drafts.length} borradores acumulados. No se pudo auto-confirmar el más antiguo (${confirmErr.code || confirmErr.message}).`,
+        };
+    }
+}
+
 async function getActivePromotions(clientCode) {
     try {
         const trimmedClientCode = String(clientCode || '').trim();
@@ -2974,6 +3191,8 @@ async function getActivePromotions(clientCode) {
         const day = now.getDate();
         const today = year * 10000 + month * 100 + day;
 
+        // Promociones DSEDAC.PRD son globales por producto + rango de fechas.
+        // Si en el futuro PRD incorporara CODIGOCLIENTE o segmentos, anadir filtro aqui.
         const sql = `
             SELECT P.CODIGOARTICULO, P.DESCRIPCION, P.TIPOPROMOCION,
                    P.PRECIOPROMOCIONAL, P.DIADESDE, P.MESDESDE, P.ANODESDE,
@@ -2987,10 +3206,24 @@ async function getActivePromotions(clientCode) {
             WHERE (P.ANOHASTA * 10000 + P.MESHASTA * 100 + P.DIAHASTA) >= ?
               AND (P.ANODESDE * 10000 + P.MESDESDE * 100 + P.DIADESDE) <= ?
         `;
-        
+
         let rows = [];
         try {
             rows = await queryWithParams(sql, [today, today]);
+            logger.info(`[PEDIDOS] Promociones activas hoy=${today}: ${rows?.length || 0} fila(s) (clienteCtx=${trimmedClientCode})`);
+            if (!rows || rows.length === 0) {
+                // Diagnostic: PRD vacia o sin promociones vigentes. Verificar dato ERP.
+                try {
+                    const probe = await queryWithParams(
+                        'SELECT COUNT(*) AS TOTAL FROM DSEDAC.PRD',
+                        [], false, false
+                    );
+                    const total = parseInt(probe?.[0]?.TOTAL) || 0;
+                    logger.info(`[PEDIDOS] DSEDAC.PRD total filas=${total}; vigentes hoy=0. Revisa fechas ANODESDE/ANOHASTA si esperabas promociones.`);
+                } catch (probeErr) {
+                    logger.warn(`[PEDIDOS] DSEDAC.PRD probe fallo: ${probeErr.message} (tabla quiza no existe en este entorno)`);
+                }
+            }
         } catch (e) {
             logger.warn('[PEDIDOS] Promociones DSEDAC.PRD fallaron o no existen: ' + e.message);
             return [];
@@ -3484,9 +3717,15 @@ function calculateSemanticScore(origProduct, candidate) {
     // ========================================
     // BONUS: Same main ingredient
     // ========================================
+    // Bug fix: la variable origHasCandidateIngredient no existia, lanzaba
+    // ReferenceError y los productos con mainIngredient devolvian [].
+    // Evitamos doble-conteo si LEVEL 3 (linea ~3579) ya bonifico
+    // ingrediente principal compatible.
+    const alreadyScoredMainIngredient = origEssence.isProcessed &&
+        origEssence.mainIngredient === candEssence.mainIngredient;
     if (origEssence.mainIngredient && candEssence.mainIngredient &&
         origEssence.mainIngredient === candEssence.mainIngredient &&
-        !origHasCandidateIngredient) {
+        !alreadyScoredMainIngredient) {
         score += 20;
         reasons.push(`Mismo ingrediente base: ${candEssence.mainIngredient}`);
     }
@@ -3939,10 +4178,12 @@ module.exports = {
     updateOrderStatus,
     getRecommendations,
     getFamilies,
+    getFamiliesDetailed,
     getBrands,
     getProductFamilies,
     getProductBrands,
     getActivePromotions,
+    checkDraftAccumulation,
     getClientBalance,
     cloneOrder,
     getComplementaryProducts,

@@ -14,12 +14,19 @@ async function runSchemaAudit() {
     logger.info('🔍 [SCHEMA-AUDIT] Starting schema parity check between JAVIER and DSEDAC...');
     
     const schemasToVerify = ['JAVIER', 'DSEDAC'];
+    // BOLSA_COMERCIAL / MOVIMIENTOS_BOLSA NO se auditan aqui: viven siempre en
+    // JAVIER (decision de negocio) y NO se replican a DSEDAC en produccion.
     const tablesToCheck = [
         'PEDIDOS_CAB', 'PEDIDOS_LIN', 'PEDIDOS_SEQ', 'PEDIDOS_STOCK_RESERVE',
         'COBROS', 'DELIVERY_STATUS', 'CLIENT_NOTES',
         'KPI_ALERTS', 'KPI_LOADS', 'KPI_FILE_AUDIT',
         'LQD_COBROS', 'LQD_LIQUIDACIONES', 'LQD_IDEMPOTENCY', 'LQD_COMMISSION_TIERS',
-        'BOLSA_COMERCIAL', 'MOVIMIENTOS_BOLSA', 'CUENTAS_LIQUIDACION'
+        'CUENTAS_LIQUIDACION',
+        // Repartidor finance core tables (P1 - todas usan APP_SCHEMA dinamico):
+        'REPARTIDOR_COBROS', 'REPARTIDOR_LIQUIDACION_OPS',
+        'REPARTIDOR_FINANCIAL_BALANCES', 'REPARTIDOR_COMMISSION_TIERS',
+        'REPARTIDOR_LIQUIDACION_EMAILS', 'REPARTIDOR_COBROS_AUDIT',
+        'CLIENT_SIGNERS',
     ];
     
     let allGood = true;

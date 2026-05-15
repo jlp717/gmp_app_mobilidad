@@ -1,0 +1,27 @@
+﻿CHECKLIST FINAL DE BACKUP - 2026-05-13
+========================================
+
+ESQUEMA JAVIER:
+[x] 81 vistas con CREATE VIEW extraído de QSYS2.SYSVIEWS
+[x] 65 tablas listadas con estructura de INFORMATION_SCHEMA  
+[x] Datos de RUTERO_CONFIG (926 filas) guardados
+[x] Datos de COMM_CONFIG, COMMISSION_EXCEPTIONS guardados
+[x] Datos de COMMERCIAL_TARGETS (82 filas) guardados
+[x] Datos de COMMERCIAL_TARGETS_HISTORY (1 fila) guardado
+[x] Datos de PAYMENT_CONDITIONS (23 filas) guardados
+[x] Datos de COMMISSION_PAYMENTS (26 filas) guardados
+[x] Datos de PEDIDOS_CAB (15 filas) y PEDIDOS_LIN (21 filas) guardados
+[x] Datos de ALMACEN_PERSONAL (5 filas) guardados
+[x] Datos de LACLAE_RESUMEN (500+ filas) guardados
+[x] Backup tables (BKP_*) documentadas
+[x] Tablas vacías (53) identificadas y documentadas
+
+ESQUEMA DSEDAC (objetos NUESTROS):
+[x] DSEDAC.COMM_CONFIG - 1 fila - CONFIG/backup activo - DATOS CAPTURADOS
+[x] DSEDAC.CLI_AUTH - 2 filas - Autenticación clientes - DATOS CAPTURADOS
+[x] DSEDAC.CLI_TOKENS - ~190 filas - Refresh tokens - DATOS CAPTURADOS
+[x] DSEDAC.CLI_LOGIN_HISTORY - ~246 filas - Login history - DATOS CAPTURADOS
+
+ARCHIVOS GENERADOS (total):
+11 archivos
+449,81 KB total

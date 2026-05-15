@@ -8,6 +8,9 @@ const { CobrosRepository } = require('../domain/cobros-repository');
 const { query, queryWithParams, getPool } = require('../../../../config/db');
 const logger = require('../../../../middleware/logger');
 
+// Schema dinamico para tablas APP (JAVIER en dev / DSEDAC en prod).
+const APP_SCHEMA = String(process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER').trim().toUpperCase();
+
 class CommercialCobrosError extends Error {
   constructor(code, message, status = 409) {
     super(message);
@@ -117,7 +120,7 @@ class Db2CobrosRepository extends CobrosRepository {
           PC.ID, PC.EJERCICIO, PC.NUMEROPEDIDO, PC.SERIEPEDIDO,
           PC.DIADOCUMENTO, PC.MESDOCUMENTO, PC.ANODOCUMENTO,
           PC.IMPORTETOTAL, PC.TIPOVENTA, PC.ESTADO
-        FROM JAVIER.PEDIDOS_CAB PC
+        FROM ${APP_SCHEMA}.PEDIDOS_CAB PC
         WHERE TRIM(PC.CODIGOCLIENTE) = ?
           AND PC.ORIGEN = 'A'
           AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
@@ -132,7 +135,7 @@ class Db2CobrosRepository extends CobrosRepository {
           PC.ID, PC.EJERCICIO, PC.NUMEROPEDIDO, PC.SERIEPEDIDO,
           PC.DIADOCUMENTO, PC.MESDOCUMENTO, PC.ANODOCUMENTO,
           PC.IMPORTETOTAL, PC.TIPOVENTA, PC.ESTADO
-        FROM JAVIER.PEDIDOS_CAB PC
+        FROM ${APP_SCHEMA}.PEDIDOS_CAB PC
         WHERE TRIM(PC.CODIGOCLIENTE) = ?
           AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
           AND PC.IMPORTETOTAL > 0
@@ -223,7 +226,7 @@ class Db2CobrosRepository extends CobrosRepository {
         PC.NUMEROPEDIDO,
         PC.IMPORTETOTAL,
         TRIM(PC.ESTADO) AS ESTADO
-      FROM JAVIER.PEDIDOS_CAB PC
+      FROM ${APP_SCHEMA}.PEDIDOS_CAB PC
       WHERE PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
         AND PC.IMPORTETOTAL > 0
         ${vendorFilter}
@@ -284,7 +287,7 @@ class Db2CobrosRepository extends CobrosRepository {
     const conn = await pool.connect();
     try {
       await conn.query('BEGIN WORK');
-      await conn.query('LOCK TABLE JAVIER.COBROS IN EXCLUSIVE MODE');
+      await conn.query(`LOCK TABLE ${APP_SCHEMA}.COBROS IN EXCLUSIVE MODE`);
 
       const order = await this.findOrderForPayment(conn, normalizedClient, normalizedReference);
       if (!order) {
@@ -299,7 +302,7 @@ class Db2CobrosRepository extends CobrosRepository {
       const stableReference = stableOrderReference(order);
       const existingRows = await conn.query(
         `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
-         FROM JAVIER.COBROS WHERE ID = ?`,
+         FROM ${APP_SCHEMA}.COBROS WHERE ID = ?`,
         [id],
       );
       if (existingRows.length > 0) {
@@ -326,14 +329,44 @@ class Db2CobrosRepository extends CobrosRepository {
 
       const paidRows = await conn.query(
         `SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL_COBRADO
-         FROM JAVIER.COBROS
+         FROM ${APP_SCHEMA}.COBROS
          WHERE TRIM(CODIGO_CLIENTE) = ?
            AND (REFERENCIA = ? OR REFERENCIA LIKE ?)`,
         [normalizedClient, stableReference, `%${legacyOrderReference(order)}%`],
       );
-      const pendingBeforeCents = toCents(order.IMPORTETOTAL) - toCents(paidRows?.[0]?.TOTAL_COBRADO);
+      const paidComercialCents = toCents(paidRows?.[0]?.TOTAL_COBRADO);
+
+      // CROSS-TABLE: tambien restamos cobros REPARTIDOR para el mismo documento.
+      // El comercial NO puede recobrar lo que el repartidor ya cobro al entregar.
+      let paidRepartidorCents = 0;
+      try {
+        const repartidorRows = await conn.query(
+          `SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
+             FROM ${APP_SCHEMA}.REPARTIDOR_COBROS
+            WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
+              AND (TRIM(SERIEDOCUMENTO) || '-' || TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20)))) = ?`,
+          [normalizedClient, legacyOrderReference(order)],
+        );
+        paidRepartidorCents = toCents(repartidorRows?.[0]?.TOTAL_REP);
+        if (paidRepartidorCents > 0) {
+          logger.info(`[COBROS_REPO] Cross-table REPARTIDOR_COBROS ya tiene ${paidRepartidorCents}c para ${normalizedClient}/${legacyOrderReference(order)}`);
+        }
+      } catch (xtableErr) {
+        // Si la tabla no existe en este entorno, log y seguimos sin restar.
+        logger.warn(`[COBROS_REPO] Cross-table REPARTIDOR_COBROS check fallo (continuando): ${xtableErr.message}`);
+      }
+
+      const totalAlreadyPaidCents = paidComercialCents + paidRepartidorCents;
+      const pendingBeforeCents = toCents(order.IMPORTETOTAL) - totalAlreadyPaidCents;
       if (pendingBeforeCents <= 0) {
-        throw new CommercialCobrosError('PAYMENT_ALREADY_REGISTERED', 'El pedido ya esta cobrado', 409);
+        const source = paidRepartidorCents > 0 ? 'REPARTIDOR' : 'COMERCIAL';
+        throw new CommercialCobrosError(
+          'PAYMENT_ALREADY_REGISTERED',
+          paidRepartidorCents > 0
+            ? `El pedido ya esta cobrado por ${source} (entrega al cliente)`
+            : 'El pedido ya esta cobrado',
+          409,
+        );
       }
       const pendingAfterCents = pendingBeforeCents - amountCents;
       if (pendingAfterCents < 0) {
@@ -347,7 +380,7 @@ class Db2CobrosRepository extends CobrosRepository {
       }
 
       await conn.query(`
-        INSERT INTO JAVIER.COBROS (
+        INSERT INTO ${APP_SCHEMA}.COBROS (
           ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO,
           TIPO_VENTA, TIPO_MODO, TIPO_USUARIO, CODIGO_USUARIO,
           OBSERVACIONES
@@ -386,12 +419,12 @@ class Db2CobrosRepository extends CobrosRepository {
 
   async ensureCobrosTable() {
     try {
-      await query(`SELECT 1 FROM JAVIER.COBROS FETCH FIRST 1 ROW ONLY`);
+      await query(`SELECT 1 FROM ${APP_SCHEMA}.COBROS FETCH FIRST 1 ROW ONLY`);
       return true;
     } catch(e) {
       try {
         await query(`
-          CREATE TABLE JAVIER.COBROS (
+          CREATE TABLE ${APP_SCHEMA}.COBROS (
             ID VARCHAR(64) PRIMARY KEY,
             CODIGO_CLIENTE VARCHAR(20),
             REFERENCIA VARCHAR(100),
@@ -407,7 +440,7 @@ class Db2CobrosRepository extends CobrosRepository {
         `);
         return true;
       } catch(createErr) {
-        logger.error(`[COBROS] Error creando tabla JAVIER.COBROS: ${createErr.message}`);
+        logger.error(`[COBROS] Error creando tabla ${APP_SCHEMA}.COBROS: ${createErr.message}`);
         return false;
       }
     }
@@ -416,7 +449,7 @@ class Db2CobrosRepository extends CobrosRepository {
   async getPaymentsForClient(clientCode) {
     return await queryWithParams(`
       SELECT REFERENCIA, SUM(IMPORTE) AS TOTAL_IMPORTE
-      FROM JAVIER.COBROS
+      FROM ${APP_SCHEMA}.COBROS
       WHERE TRIM(CODIGO_CLIENTE) = ?
       GROUP BY REFERENCIA
     `, [trim(clientCode)], []) || [];
@@ -425,7 +458,7 @@ class Db2CobrosRepository extends CobrosRepository {
   async getAllPayments() {
     return await queryWithParams(`
       SELECT TRIM(CODIGO_CLIENTE) AS CODIGO_CLIENTE, REFERENCIA, SUM(IMPORTE) AS TOTAL_IMPORTE
-      FROM JAVIER.COBROS
+      FROM ${APP_SCHEMA}.COBROS
       GROUP BY TRIM(CODIGO_CLIENTE), REFERENCIA
     `, [], []) || [];
   }
@@ -440,7 +473,7 @@ class Db2CobrosRepository extends CobrosRepository {
         PC.NUMEROPEDIDO,
         PC.IMPORTETOTAL,
         TRIM(PC.ESTADO) AS ESTADO
-      FROM JAVIER.PEDIDOS_CAB PC
+      FROM ${APP_SCHEMA}.PEDIDOS_CAB PC
       WHERE TRIM(PC.CODIGOCLIENTE) = ?
         AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
         AND PC.IMPORTETOTAL > 0
@@ -461,7 +494,7 @@ class Db2CobrosRepository extends CobrosRepository {
       SELECT
         C.ID, C.CODIGO_CLIENTE, C.IMPORTE, C.FORMA_PAGO,
         C.REFERENCIA, C.OBSERVACIONES, C.FECHA
-      FROM JAVIER.COBROS C
+      FROM ${APP_SCHEMA}.COBROS C
       WHERE TRIM(C.CODIGO_CLIENTE) = ?
       ORDER BY C.FECHA DESC
       FETCH FIRST ${limit} ROWS ONLY OFFSET ${offset} ROWS
@@ -480,7 +513,7 @@ class Db2CobrosRepository extends CobrosRepository {
         COUNT(*) as TOTAL_COBROS,
         SUM(IMPORTE) as TOTAL_IMPORTE,
         AVG(IMPORTE) as PROMEDIO
-      FROM JAVIER.COBROS
+      FROM ${APP_SCHEMA}.COBROS
       WHERE CODIGO_USUARIO = ?
     `;
 

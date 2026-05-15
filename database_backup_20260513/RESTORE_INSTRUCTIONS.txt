@@ -1,0 +1,29 @@
+﻿================================================================================
+INSTRUCCIONES CRITICAS PARA RESTAURACION
+================================================================================
+
+1. Las vistas JAVIER referencian tablas por NOMBRE DE SISTEMA:
+   - CUSTO00001 = CUSTOMER_CREDENTIALS
+   - REFRE00001 = REFRESH_TOKENS
+   - LACLA00001 = LACLAE_RESUMEN
+   - LOGIN00001 = LOGIN_ATTEMPTS
+
+2. Al recrear las tablas con CREATE TABLE, Db2 asignara automaticamente
+   NUEVOS nombres de sistema. Las vistas QUEDARAN ROTAS.
+
+3. SOLUCION: Despues de recrear las tablas y antes de crear las vistas,
+   ejecutar para CADA tabla referenciada:
+   
+   CREATE OR REPLACE ALIAS JAVIER.CUSTO00001 FOR JAVIER.CUSTOMER_CREDENTIALS;
+   CREATE OR REPLACE ALIAS JAVIER.REFRE00001 FOR JAVIER.REFRESH_TOKENS;
+   CREATE OR REPLACE ALIAS JAVIER.LACLA00001 FOR JAVIER.LACLAE_RESUMEN;
+   CREATE OR REPLACE ALIAS JAVIER.LOGIN00001 FOR JAVIER.LOGIN_ATTEMPTS;
+
+4. Las 4 funciones SQL (FN_MEDIOS_*) deben recriarse desde las definiciones
+   en FUNCTIONS.txt
+
+5. Vista V_MEDIOS_POWERBI depende de FN_MEDIOS_REPORT_DATA()
+   -> Crear primero la funcion, luego la vista
+
+6. Las tablas en DSEDAC (CLI_AUTH, CLI_TOKENS, CLI_LOGIN_HISTORY)
+   NO tienen vistas que las referencien, son independientes.

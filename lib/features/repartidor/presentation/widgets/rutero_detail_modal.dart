@@ -1679,6 +1679,17 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                           Text('Cliente: ${widget.albaran.nombreCliente}',
                               style: const TextStyle(
                                   color: AppTheme.textPrimary, fontSize: 13)),
+                          if (widget.albaran.nombreFiscal != null &&
+                              widget.albaran.nombreFiscal!.isNotEmpty &&
+                              widget.albaran.nombreFiscal!.toUpperCase() != widget.albaran.nombreCliente.toUpperCase())
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                'N. fiscal: ${widget.albaran.nombreFiscal}',
+                                style: TextStyle(
+                                    color: AppTheme.textSecondary, fontSize: 11),
+                              ),
+                            ),
                           const SizedBox(height: 8),
                           ...(_items.take(5).map((item) => Padding(
                                 padding: const EdgeInsets.only(bottom: 2),

@@ -261,6 +261,26 @@ class RepartidorFinanzasService {
     await invalidateAllForRepartidor(repartidorId);
   }
 
+  /// Req #16 (devoluciones): anula un cobro registrado por el repartidor.
+  /// El backend valida que el cobro no esté liquidado y que el repartidor
+  /// solicitante sea el dueño (o JEFE/ADMIN).
+  Future<Map<String, dynamic>> reverseCobro({
+    required String repartidorId,
+    required String idempotencyToken,
+    required String reason,
+  }) async {
+    final response = await ApiClient.post(
+      '/repartidor-finanzas/cobros/reverse',
+      {
+        'repartidorId': repartidorId,
+        'idempotencyToken': idempotencyToken,
+        'reason': reason,
+      },
+    );
+    await invalidateAllForRepartidor(repartidorId);
+    return Map<String, dynamic>.from(response);
+  }
+
   Future<RepartidorCommissionSummary> getCommissionSummary({
     required String repartidorId,
     required DateTime from,

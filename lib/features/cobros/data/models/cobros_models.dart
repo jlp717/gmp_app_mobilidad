@@ -70,6 +70,43 @@ enum TipoModoCobro {
 // MODELS
 // ============================================
 
+/// Estado de un cobro/vencimiento (Req #15).
+enum EstadoCobro {
+  vencido,
+  pendiente,
+  alDia;
+
+  /// Parsea desde el backend (CVC + cálculo de fecha).
+  static EstadoCobro fromString(String? value) {
+    final v = (value ?? '').trim().toUpperCase();
+    if (v == 'VENCIDO') return EstadoCobro.vencido;
+    if (v == 'AL_DIA' || v == 'ALDIA') return EstadoCobro.alDia;
+    return EstadoCobro.pendiente;
+  }
+
+  String get label {
+    switch (this) {
+      case EstadoCobro.vencido:
+        return 'Vencido';
+      case EstadoCobro.pendiente:
+        return 'Pendiente';
+      case EstadoCobro.alDia:
+        return 'Al día';
+    }
+  }
+
+  Color get color {
+    switch (this) {
+      case EstadoCobro.vencido:
+        return Colors.red;
+      case EstadoCobro.pendiente:
+        return Colors.amber;
+      case EstadoCobro.alDia:
+        return Colors.green;
+    }
+  }
+}
+
 /// Cobro pendiente de un cliente
 class CobroPendiente {
 
@@ -78,27 +115,60 @@ class CobroPendiente {
     required this.referencia,
     required this.tipo,
     required this.fecha,
-    required this.importeTotal, required this.importePendiente, this.fechaVencimiento,
+    required this.importeTotal,
+    required this.importePendiente,
+    this.fechaVencimiento,
     this.formaPago,
     this.esCTR = false,
+    this.estado = EstadoCobro.pendiente,
+    this.importeCobrado = 0,
+    this.docKey,
   });
 
   factory CobroPendiente.fromJson(Map<String, dynamic> json) {
+    final pendiente =
+        ((json['importePendiente'] ?? json['importe'] ?? 0) as num).toDouble();
+    // Req #15: si el backend no envía `estado`, lo inferimos a partir del
+    // importe pendiente y la fecha de vencimiento (vencido si <hoy y pendiente>0).
+    final parsedVenc =
+        DateTime.tryParse((json['fechaVencimiento'] as String?) ?? '');
+    EstadoCobro estadoCalc;
+    if (json['estado'] != null) {
+      estadoCalc = EstadoCobro.fromString(json['estado'] as String?);
+    } else if (pendiente <= 0.0001) {
+      estadoCalc = EstadoCobro.alDia;
+    } else if (parsedVenc != null &&
+        parsedVenc.isBefore(DateTime.now().subtract(const Duration(days: 0)))) {
+      // Vencido si fecha venc < hoy.
+      final today = DateTime.now();
+      final dueOnly = DateTime(parsedVenc.year, parsedVenc.month, parsedVenc.day);
+      final todayOnly = DateTime(today.year, today.month, today.day);
+      estadoCalc = dueOnly.isBefore(todayOnly)
+          ? EstadoCobro.vencido
+          : EstadoCobro.pendiente;
+    } else {
+      estadoCalc = EstadoCobro.pendiente;
+    }
+
     return CobroPendiente(
       id: json['id']?.toString() ?? '',
       referencia: (json['referencia'] as String?) ?? '',
       tipo: _parseTipoCobro((json['tipo'] as String?) ?? 'normal'),
       fecha:
           DateTime.tryParse((json['fecha'] as String?) ?? '') ?? DateTime.now(),
-      fechaVencimiento:
-          DateTime.tryParse((json['fechaVencimiento'] as String?) ?? ''),
+      fechaVencimiento: parsedVenc,
       importeTotal:
           ((json['importeTotal'] ?? json['importe'] ?? 0) as num).toDouble(),
-      importePendiente:
-          ((json['importePendiente'] ?? json['importe'] ?? 0) as num)
+      importePendiente: pendiente,
+      importeCobrado:
+          ((json['importeCobrado'] ?? json['importeCancelado'] ?? 0) as num)
               .toDouble(),
       formaPago: json['formaPago'] as String?,
       esCTR: json['esCTR'] == true,
+      estado: estadoCalc,
+      docKey: json['docKey'] is Map
+          ? Map<String, dynamic>.from(json['docKey'] as Map)
+          : null,
     );
   }
   final String id;
@@ -108,8 +178,17 @@ class CobroPendiente {
   final DateTime? fechaVencimiento;
   final double importeTotal;
   final double importePendiente;
+  final double importeCobrado;
   final String? formaPago;
   final bool esCTR;
+  final EstadoCobro estado;
+  final Map<String, dynamic>? docKey;
+
+  bool get isVencido => estado == EstadoCobro.vencido;
+  int get diasMora {
+    if (fechaVencimiento == null || !isVencido) return 0;
+    return DateTime.now().difference(fechaVencimiento!).inDays;
+  }
 
   static TipoCobro _parseTipoCobro(String value) {
     switch (value.toLowerCase()) {

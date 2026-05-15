@@ -674,11 +674,14 @@ class RepartidorCobroDia {
     required this.cobrado,
     required this.pendiente,
     this.id,
+    this.idempotencyToken,
   });
 
   factory RepartidorCobroDia.fromJson(JsonMap json) {
+    final tokenRaw = json['idempotencyToken'];
     return RepartidorCobroDia(
       id: json['id']?.toString(),
+      idempotencyToken: tokenRaw == null ? null : tokenRaw.toString().trim(),
       fecha: _stringValue(json, const ['fecha']),
       codigoCliente: _stringValue(json, const ['codigoCliente']),
       nombreCliente: _stringValue(json, const ['nombreCliente']),
@@ -692,6 +695,8 @@ class RepartidorCobroDia {
   }
 
   final String? id;
+  /// Req #16: token de idempotencia del cobro. Necesario para anularlo.
+  final String? idempotencyToken;
   final String fecha;
   final String codigoCliente;
   final String nombreCliente;
@@ -701,6 +706,10 @@ class RepartidorCobroDia {
   final double importe;
   final double cobrado;
   final double pendiente;
+
+  /// True si este cobro puede anularse desde la UI (tiene token).
+  bool get canBeReversed =>
+      idempotencyToken != null && idempotencyToken!.isNotEmpty;
 }
 
 class RepartidorDailySummary {

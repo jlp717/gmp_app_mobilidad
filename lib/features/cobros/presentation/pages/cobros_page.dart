@@ -313,6 +313,20 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         (client['code'] ?? client['codigoCliente'] ?? client['codigo'] ?? '')
             .toString();
     final pending = _provider.pendingForClient(code);
+    final vencido = _provider.vencidoForClient(code);
+    final estado = _provider.estadoForClient(code);
+    // Req #15: badge tricolor según estado consolidado del cliente.
+    final Color badgeColor;
+    switch (estado) {
+      case 'VENCIDO':
+        badgeColor = AppTheme.error;
+        break;
+      case 'PENDIENTE':
+        badgeColor = AppTheme.warning;
+        break;
+      default:
+        badgeColor = AppTheme.success;
+    }
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -320,7 +334,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: pending > 0
-            ? BorderSide(color: AppTheme.warning.withValues(alpha: 0.4))
+            ? BorderSide(color: badgeColor.withValues(alpha: 0.45))
             : BorderSide.none,
       ),
       child: InkWell(
@@ -382,24 +396,47 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                 ),
               ),
               if (pending > 0)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppTheme.warning.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(20),
-                    border:
-                        Border.all(color: AppTheme.warning.withValues(alpha: 0.4)),
-                  ),
-                  child: Text(
-                    '${pending.toStringAsFixed(2)} €',
-                    style: TextStyle(
-                      color: AppTheme.warning,
-                      fontWeight: FontWeight.bold,
-                      fontSize:
-                          Responsive.fontSize(context, small: 12, large: 14),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: badgeColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(
+                          color: badgeColor.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Text(
+                        '${pending.toStringAsFixed(2)} €',
+                        style: TextStyle(
+                          color: badgeColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: Responsive.fontSize(
+                            context,
+                            small: 12,
+                            large: 14,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                    if (vencido > 0) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Vencido: ${vencido.toStringAsFixed(2)} €',
+                        style: TextStyle(
+                          color: AppTheme.error,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               if (pending == 0)
                 Container(

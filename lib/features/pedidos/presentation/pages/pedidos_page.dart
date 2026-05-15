@@ -208,6 +208,39 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     provider.loadFilters();
     provider.loadOrders(vendedorCodes: codes);
     provider.loadPromotions();
+
+    // Req #8: refrescar estado de borradores acumulados y notificar al usuario
+    // si supera el umbral. Se hace por vendedor primario (primer código).
+    final firstVendor = codes.split(',').first.trim();
+    if (firstVendor.isNotEmpty) {
+      provider.refreshDraftStatus(firstVendor).then((_) {
+        if (!mounted) return;
+        if (provider.hasDraftAccumulationWarning) {
+          final msg = provider.draftWarningMessage ??
+              'Tienes ${provider.accumulatedDraftCount} borradores '
+                  'acumulados. Conviene confirmar el más antiguo.';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(msg),
+              backgroundColor: AppTheme.warning,
+              duration: const Duration(seconds: 5),
+              action: SnackBarAction(
+                label: 'Ver',
+                textColor: Colors.white,
+                onPressed: () {
+                  // El usuario ya está en la pantalla de pedidos; mostramos sus
+                  // borradores cambiando al tab "Mis Pedidos".
+                  if (_tabController.length > 1) {
+                    _tabController.animateTo(1);
+                  }
+                  provider.clearDraftWarning();
+                },
+              ),
+            ),
+          );
+        }
+      });
+    }
   }
 
   void _onCatalogScroll() {

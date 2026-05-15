@@ -251,8 +251,13 @@ async function generateInvoicePDF(facturaData) {
             y += 26;
 
             // INFORMACIÓN DEL CLIENTE
+            const comercialName = header.nombreComercial || header.clienteNombre || '';
+            const fiscalName = header.nombreFiscal || '';
+
             const clienteBoxStartY = y;
-            doc.rect(40, y, 515, 85)
+            const needsTwoLines = fiscalName && fiscalName.toUpperCase() !== comercialName.toUpperCase();
+            const boxHeight = needsTwoLines ? 105 : 85;
+            doc.rect(40, y, 515, boxHeight)
                 .fillAndStroke(COLORS.ultraLight, COLORS.lightGray)
                 .lineWidth(1);
 
@@ -260,9 +265,19 @@ async function generateInvoicePDF(facturaData) {
             doc.fontSize(8).font('Helvetica-Bold').fillColor(COLORS.secondary).text('FACTURAR A', 45, y);
             y += 15;
 
-            doc.fontSize(12).font('Helvetica-Bold').fillColor(COLORS.darkGray)
-                .text((header.clienteNombre || '').toUpperCase(), 45, y, { width: 500 });
-            y += 18;
+            // Commercial name — prominent, large
+            doc.fontSize(11).font('Helvetica-Bold').fillColor(COLORS.darkGray)
+                .text(comercialName.toUpperCase(), 45, y, { width: 500 });
+            y += 15;
+
+            // Fiscal name — secondary, smaller (only if different from commercial)
+            if (needsTwoLines) {
+                doc.fontSize(8).font('Helvetica').fillColor(COLORS.mediumGray)
+                    .text(`Nombre fiscal: ${fiscalName.toUpperCase()}`, 45, y, { width: 500 });
+                y += 16;
+            } else {
+                y += 3;
+            }
 
             doc.fontSize(9).font('Helvetica').fillColor(COLORS.darkGray);
             if (header.clienteDireccion) {
@@ -279,7 +294,7 @@ async function generateInvoicePDF(facturaData) {
                 doc.fontSize(9).font('Helvetica-Bold').text(`NIF/CIF: ${header.clienteNif}`, 45, y);
             }
 
-            y = clienteBoxStartY + 93;
+            y = clienteBoxStartY + boxHeight + 8;
 
             // TABLA DE PRODUCTOS
             doc.rect(40, y, 515, 16).fillAndStroke(COLORS.secondary, COLORS.secondary);

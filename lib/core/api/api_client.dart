@@ -768,14 +768,16 @@ class ApiClient {
       final statusCode = e.response?.statusCode ?? 0;
       final data = e.response?.data;
 
-      // Extract server error message
+      // Extract server error message + semantic code
       String? serverMessage;
+      String? serverCode;
       if (data is Map<String, dynamic>) {
         final error = data['error'] as String?;
         final details = data['details'] as String?;
         serverMessage = details != null && details.isNotEmpty
             ? '$error: $details'
             : (error ?? data['message'] as String?);
+        serverCode = data['code'] as String?;
       }
 
       if (statusCode == 401) {
@@ -805,31 +807,43 @@ class ApiClient {
         return ApiException(
           serverMessage ?? 'Credenciales inválidas. Verifica usuario y PIN.',
           statusCode: 401,
+          code: serverCode,
         );
       } else if (statusCode == 403) {
         return ApiException(
           serverMessage ?? 'Acceso denegado. No tienes permisos.',
           statusCode: 403,
+          code: serverCode,
         );
       } else if (statusCode == 404) {
         return ApiException(
           serverMessage ?? 'Recurso no encontrado.',
           statusCode: 404,
+          code: serverCode,
         );
       } else if (statusCode == 429) {
         return ApiException(
           serverMessage ?? 'Demasiados intentos. Espera un momento.',
           statusCode: 429,
+          code: serverCode,
+        );
+      } else if (statusCode == 409) {
+        return ApiException(
+          serverMessage ?? 'Conflicto con el estado actual.',
+          statusCode: 409,
+          code: serverCode,
         );
       } else if (statusCode >= 500) {
         return ApiException(
           'Error del servidor ($statusCode). Inténtalo más tarde.',
           statusCode: statusCode,
+          code: serverCode,
         );
       }
       return ApiException(
         serverMessage ?? 'Error ($statusCode)',
         statusCode: statusCode,
+        code: serverCode,
       );
     } else if (e.type == DioExceptionType.unknown) {
       final errorMsg = e.error?.toString().toLowerCase() ?? '';
@@ -965,10 +979,15 @@ class _RetryInterceptor extends Interceptor {
 }
 
 class ApiException implements Exception {
-  ApiException(this.message, {this.statusCode});
+  ApiException(this.message, {this.statusCode, this.code});
   final String message;
   final int? statusCode;
 
+  /// Código semántico devuelto por el backend (por ejemplo
+  /// `COBRO_ALREADY_LIQUIDADO`, `PAYMENT_AUTHZ_DENIED`, ...). Permite
+  /// que la UI haga mensaje específico sin parsear el texto humano.
+  final String? code;
+
   @override
-  String toString() => message;
+  String toString() => code != null ? '[$code] $message' : message;
 }

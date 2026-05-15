@@ -52,6 +52,20 @@ class RuteroDetailHeader extends StatelessWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
+          if (albaran.nombreFiscal != null &&
+              albaran.nombreFiscal!.isNotEmpty &&
+              albaran.nombreFiscal!.toUpperCase() !=
+                  albaran.nombreCliente.toUpperCase())
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                albaran.nombreFiscal!,
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 12,
+                ),
+              ),
+            ),
           const SizedBox(height: 4),
           Row(
             children: [

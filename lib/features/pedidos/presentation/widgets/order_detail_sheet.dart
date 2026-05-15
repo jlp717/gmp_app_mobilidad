@@ -425,9 +425,17 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                             Responsive.fontSize(context, small: 14, large: 16),
                       ),
                     ),
-                    Text(
-                      '${line.porcentajeMargen.toStringAsFixed(1)}% mg',
-                      style: TextStyle(color: marginColor, fontSize: 11),
+                    // Req #2: margen solo visible para JEFE_VENTAS/ADMIN.
+                    Consumer(
+                      builder: (ctx, ref, _) {
+                        final visible =
+                            ref.watch(pedidosProvider).isMarginVisible;
+                        if (!visible) return const SizedBox.shrink();
+                        return Text(
+                          '${line.porcentajeMargen.toStringAsFixed(1)}% mg',
+                          style: TextStyle(color: marginColor, fontSize: 11),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -531,25 +539,40 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           const SizedBox(height: 10),
           const Divider(color: AppTheme.borderColor),
           const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildTotalItem(
-                  'Total',
-                  PedidosFormatters.money(
-                      header.total > 0 ? header.total : totalImporte,),
-                  AppTheme.neonGreen,),
-              _buildTotalItem('Margen', PedidosFormatters.money(totalMargen),
-                  Colors.white70,),
-              _buildTotalItem(
-                  '% Margen',
-                  '${pctMargen.toStringAsFixed(1)}%',
-                  pctMargen >= 15
-                      ? AppTheme.neonGreen
-                      : pctMargen >= 5
-                          ? Colors.orange
-                          : AppTheme.error,),
-            ],
+          // Req #2: Margen/% margen solo visibles para JEFE_VENTAS/ADMIN.
+          Consumer(
+            builder: (ctx, ref, _) {
+              final showMargin =
+                  ref.watch(pedidosProvider).isMarginVisible;
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _buildTotalItem(
+                    'Total',
+                    PedidosFormatters.money(
+                      header.total > 0 ? header.total : totalImporte,
+                    ),
+                    AppTheme.neonGreen,
+                  ),
+                  if (showMargin) ...[
+                    _buildTotalItem(
+                      'Margen',
+                      PedidosFormatters.money(totalMargen),
+                      Colors.white70,
+                    ),
+                    _buildTotalItem(
+                      '% Margen',
+                      '${pctMargen.toStringAsFixed(1)}%',
+                      pctMargen >= 15
+                          ? AppTheme.neonGreen
+                          : pctMargen >= 5
+                              ? Colors.orange
+                              : AppTheme.error,
+                    ),
+                  ],
+                ],
+              );
+            },
           ),
         ],
       ),

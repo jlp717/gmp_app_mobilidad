@@ -195,13 +195,22 @@ async function ensureUtf8(conn) {
     } catch (e) {
         logger.debug(`[DB] CHGJOB CCSID(1208) skipped: ${e.message}`);
     }
-    // Ensure JAVIER schema is in library list to prevent SQL5051
-    // when creating tables in JAVIER schema (needed for CREATE TABLE DDL).
-    try {
-        await conn.query("CALL QSYS.QCMDEXC('ADDLIBLE JAVIER', 0000000018.00000)");
-        logger.debug('[DB] Added JAVIER to library list');
-    } catch (e) {
-        logger.debug(`[DB] ADDLIBLE JAVIER skipped (may already exist): ${e.message}`);
+    // Ensure APP_SCHEMA is in library list to prevent SQL5051
+    // when creating tables in the app schema (needed for CREATE TABLE DDL).
+    // En prod APP_SCHEMA=DSEDAC; ademas siempre anadimos JAVIER porque BOLSA_*
+    // vive alli incluso en produccion.
+    const APP_SCHEMA = String(process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER').trim().toUpperCase();
+    const librariesToAdd = new Set([APP_SCHEMA, 'JAVIER']);
+    for (const lib of librariesToAdd) {
+        try {
+            // 18.00000 = length of command string + 8 padding (ADDLIBLE JAVIER = 14 chars; 18 also valida para DSEDAC=14)
+            const cmd = `ADDLIBLE ${lib}`;
+            const lenStr = String(cmd.length).padStart(10, '0') + '.00000';
+            await conn.query(`CALL QSYS.QCMDEXC('${cmd}', ${lenStr})`);
+            logger.debug(`[DB] Added ${lib} to library list`);
+        } catch (e) {
+            logger.debug(`[DB] ADDLIBLE ${lib} skipped (may already exist): ${e.message}`);
+        }
     }
     _utf8Connections.add(conn);
 }
