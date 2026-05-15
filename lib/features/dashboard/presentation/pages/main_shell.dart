@@ -104,9 +104,9 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   String _defaultScopedVendor(UserModel user, List<String> vendorCodes) {
     // Commercial 80 (Almeria lead) defaults to ALL team members
-    final normalizedCode = (user?.code ?? '').replaceFirst(RegExp(r'^0+'), '');
+    final normalizedCode = (user.code ?? '').replaceFirst(RegExp(r'^0+'), '');
     if (normalizedCode == '80') return 'ALL';
-    final ownCode = user?.vendedorCode ?? user?.code;
+    final ownCode = user.vendedorCode ?? user.code ?? '';
     if (vendorCodes.contains(ownCode)) return ownCode;
     return vendorCodes.isNotEmpty ? vendorCodes.first : ownCode;
   }
