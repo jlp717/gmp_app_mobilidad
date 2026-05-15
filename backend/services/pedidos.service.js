@@ -2890,11 +2890,22 @@ async function getRecommendations(clientCode, vendedorCode) {
     const trimVendor = (vendedorCode || '').trim();
 
     // Strategy 1: Client purchase history (last 12 months)
+    // FIX 2026-05-15: ampliamos las metricas devueltas porque la UI mostraba
+    // "0 cajas" para muchos productos:
+    //  - Antes solo se devolvia SUM(CANTIDADUNIDADES). Para muchos productos
+    //    LINDTO guarda la cantidad en CANTIDADENVASES, no en CANTIDADUNIDADES,
+    //    y por eso salia 0.
+    //  - Ahora devolvemos AMBOS campos sumados (envases + unidades) y ademas
+    //    el promedio por compra y el importe total, para que la UI pueda
+    //    mostrar "X cajas" o "X unidades" segun la metrica que tenga datos.
     const historySql = `
         SELECT TRIM(L.CODIGOARTICULO) AS code,
             TRIM(L.DESCRIPCION) AS name,
             COUNT(*) AS frequency,
-            SUM(L.CANTIDADUNIDADES) AS totalUnits,
+            COALESCE(SUM(L.CANTIDADUNIDADES), 0) AS totalUnits,
+            COALESCE(SUM(L.CANTIDADENVASES), 0) AS totalEnvases,
+            COALESCE(SUM(L.IMPORTEVENTA), 0) AS totalAmount,
+            COALESCE(AVG(L.CANTIDADENVASES), 0) AS avgEnvases,
             MAX(L.ANODOCUMENTO * 10000 + L.MESDOCUMENTO * 100 + L.DIADOCUMENTO) AS lastPurchase
         FROM DSEDAC.LINDTO L
         WHERE TRIM(L.CODIGOCLIENTEALBARAN) = ?
@@ -2906,18 +2917,32 @@ async function getRecommendations(clientCode, vendedorCode) {
         ORDER BY frequency DESC
         FETCH FIRST 20 ROWS ONLY`;
 
-    // Execute history query
     let history = [];
     try {
         const historyRows = await queryWithParams(historySql, [trimClient]);
-        history = (historyRows || []).map(r => ({
-            code: (r.CODE || '').trim(),
-            name: (r.NAME || '').trim(),
-            frequency: parseInt(r.FREQUENCY) || 0,
-            totalUnits: parseFloat(r.TOTALUNITS) || 0,
-            lastPurchase: r.LASTPURCHASE,
-            source: 'history',
-        }));
+        history = (historyRows || []).map(r => {
+            const totalUnits = parseFloat(r.TOTALUNITS) || 0;
+            const totalEnvases = parseFloat(r.TOTALENVASES) || 0;
+            const totalAmount = parseFloat(r.TOTALAMOUNT) || 0;
+            const avgEnvases = parseFloat(r.AVGENVASES) || 0;
+            // "suggestedUnits" = la metrica que tiene datos (preferimos envases)
+            // para que la UI muestre algo sensato y NO "0 cajas".
+            const suggestedUnits = avgEnvases > 0
+                ? avgEnvases
+                : (totalEnvases > 0 ? totalEnvases : totalUnits);
+            return {
+                code: (r.CODE || '').trim(),
+                name: (r.NAME || '').trim(),
+                frequency: parseInt(r.FREQUENCY) || 0,
+                totalUnits,
+                totalEnvases,
+                totalAmount,
+                avgEnvases,
+                suggestedUnits,
+                lastPurchase: r.LASTPURCHASE,
+                source: 'history',
+            };
+        });
     } catch (error) {
         logger.error(`[PEDIDOS] getRecommendations history error: ${error.message}`);
     }
@@ -3178,99 +3203,119 @@ async function checkDraftAccumulation(vendedorCode, { autoConfirm = false, thres
     }
 }
 
-// Cache simple para no re-sondear que tabla de promociones existe en cada
-// peticion. Se calcula una vez por proceso.
-let _promoSourceTable = null; // 'PRD' | 'PMR' | 'NONE'
+// Cache de descubrimiento: tabla fuente + columnas presentes.
+let _promoSource = null; // { table: 'PRD'|'PMR'|'NONE', cols: Set<string> }
 
-async function detectPromoSourceTable() {
-    if (_promoSourceTable) return _promoSourceTable;
+async function detectPromoSource() {
+    if (_promoSource) return _promoSource;
     const candidates = ['PRD', 'PMR'];
     for (const t of candidates) {
         try {
-            const r = await queryWithParams(
-                `SELECT COUNT(*) AS N FROM QSYS2.SYSTABLES WHERE TABLE_SCHEMA = 'DSEDAC' AND TABLE_NAME = ?`,
+            const cols = await queryWithParams(
+                `SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS
+                  WHERE TABLE_SCHEMA = 'DSEDAC' AND TABLE_NAME = ?`,
                 [t], false, false
             );
-            if (parseInt(r?.[0]?.N) > 0) {
-                _promoSourceTable = t;
-                logger.info(`[PEDIDOS] Tabla de promociones detectada: DSEDAC.${t}`);
-                return t;
+            if (Array.isArray(cols) && cols.length > 0) {
+                const set = new Set(cols.map(c => String(c.COLUMN_NAME || '').trim().toUpperCase()));
+                _promoSource = { table: t, cols: set };
+                logger.info(`[PEDIDOS] Tabla de promociones detectada: DSEDAC.${t} (${set.size} cols)`);
+                return _promoSource;
             }
-        } catch (e) { /* sigue probando */ }
+        } catch (_) { /* sigue probando */ }
     }
-    _promoSourceTable = 'NONE';
+    _promoSource = { table: 'NONE', cols: new Set() };
     logger.warn(`[PEDIDOS] Ninguna tabla de promociones (PRD/PMR) existe en DSEDAC. Promociones desactivadas.`);
-    return 'NONE';
+    return _promoSource;
 }
 
 async function getActivePromotions(clientCode) {
     try {
         const trimmedClientCode = String(clientCode || '').trim();
-        if (!trimmedClientCode) {
-            return [];
-        }
+        if (!trimmedClientCode) return [];
 
-        // Si en este entorno no hay tabla de promociones, salir limpio sin error.
-        const source = await detectPromoSourceTable();
-        if (source === 'NONE') {
-            return [];
-        }
+        const src = await detectPromoSource();
+        if (src.table === 'NONE') return [];
+
+        const has = (col) => src.cols.has(col);
+
+        // Heuristica: detecta el "esquema PRD" (campos estandar de promocion)
+        // y, si faltan, intenta variantes habituales.
+        const colArticulo  = has('CODIGOARTICULO') ? 'P.CODIGOARTICULO' : (has('CDARTICULO') ? 'P.CDARTICULO' : `''`);
+        const colDescrip   = has('DESCRIPCION')    ? 'P.DESCRIPCION'    : (has('DESCRIPCIONPROMOCION') ? 'P.DESCRIPCIONPROMOCION' : `''`);
+        const colTipo      = has('TIPOPROMOCION')  ? 'P.TIPOPROMOCION'  : `''`;
+        const colPrecio    = has('PRECIOPROMOCIONAL') ? 'P.PRECIOPROMOCIONAL' : (has('PRECIO') ? 'P.PRECIO' : '0');
+        const colCantMin   = has('CANTIDADMINIMA') ? 'P.CANTIDADMINIMA' : (has('CTMINIMA') ? 'P.CTMINIMA' : '0');
+        const colCantReg   = has('CANTIDADREGALO') ? 'P.CANTIDADREGALO' : (has('CTREGALO') ? 'P.CTREGALO' : '0');
+        const colAcum      = has('ACUMULABLESN')   ? 'P.ACUMULABLESN'   : `'N'`;
+        const colDiaDesde  = has('DIADESDE')       ? 'P.DIADESDE'       : '1';
+        const colMesDesde  = has('MESDESDE')       ? 'P.MESDESDE'       : '1';
+        const colAnoDesde  = has('ANODESDE')       ? 'P.ANODESDE'       : '2000';
+        const colDiaHasta  = has('DIAHASTA')       ? 'P.DIAHASTA'       : '31';
+        const colMesHasta  = has('MESHASTA')       ? 'P.MESHASTA'       : '12';
+        const colAnoHasta  = has('ANOHASTA')       ? 'P.ANOHASTA'       : '9999';
+
+        const hasDateRange = has('ANOHASTA') && has('ANODESDE');
 
         const now = new Date();
-        const year = now.getFullYear();
-        const month = now.getMonth() + 1;
-        const day = now.getDate();
-        const today = year * 10000 + month * 100 + day;
+        const today = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
 
-        // Stock se lee de DSEDAC.ARO (no STA, que no existe). Almacen 1 por defecto.
-        // Mantengo la SQL parametrizada por nombre de tabla.
         const sql = `
-            SELECT P.CODIGOARTICULO, P.DESCRIPCION, P.TIPOPROMOCION,
-                   P.PRECIOPROMOCIONAL, P.DIADESDE, P.MESDESDE, P.ANODESDE,
-                   P.DIAHASTA, P.MESHASTA, P.ANOHASTA,
-                   P.CANTIDADMINIMA, P.CANTIDADREGALO, P.ACUMULABLESN,
+            SELECT ${colArticulo} AS CODIGOARTICULO,
+                   ${colDescrip}  AS DESCRIPCION,
+                   ${colTipo}     AS TIPOPROMOCION,
+                   ${colPrecio}   AS PRECIOPROMOCIONAL,
+                   ${colDiaDesde} AS DIADESDE,
+                   ${colMesDesde} AS MESDESDE,
+                   ${colAnoDesde} AS ANODESDE,
+                   ${colDiaHasta} AS DIAHASTA,
+                   ${colMesHasta} AS MESHASTA,
+                   ${colAnoHasta} AS ANOHASTA,
+                   ${colCantMin}  AS CANTIDADMINIMA,
+                   ${colCantReg}  AS CANTIDADREGALO,
+                   ${colAcum}     AS ACUMULABLESN,
                    A.DESCRIPCIONARTICULO AS NOMBRE_ARTICULO,
-                   AR.STOCKACTUAL AS STOCK_ENVASES,
+                   COALESCE(AR.STOCKACTUAL, 0) AS STOCK_ENVASES,
                    0 AS STOCK_UNIDADES
-            FROM DSEDAC.${source} P
-            LEFT JOIN DSEDAC.ART A ON P.CODIGOARTICULO = A.CODIGOARTICULO
-            LEFT JOIN DSEDAC.ARO AR ON P.CODIGOARTICULO = AR.CODIGOARTICULO AND AR.CODIGOALMACEN = 1
-            WHERE (P.ANOHASTA * 10000 + P.MESHASTA * 100 + P.DIAHASTA) >= ?
-              AND (P.ANODESDE * 10000 + P.MESDESDE * 100 + P.DIADESDE) <= ?
+            FROM DSEDAC.${src.table} P
+            LEFT JOIN DSEDAC.ART A ON ${colArticulo} = A.CODIGOARTICULO
+            LEFT JOIN DSEDAC.ARO AR ON ${colArticulo} = AR.CODIGOARTICULO AND AR.CODIGOALMACEN = 1
+            ${hasDateRange
+              ? `WHERE (${colAnoHasta} * 10000 + ${colMesHasta} * 100 + ${colDiaHasta}) >= ?
+                   AND (${colAnoDesde} * 10000 + ${colMesDesde} * 100 + ${colDiaDesde}) <= ?`
+              : ''}
+            FETCH FIRST 200 ROWS ONLY
         `;
 
         let rows = [];
         try {
-            rows = await queryWithParams(sql, [today, today]);
-            logger.info(`[PEDIDOS] Promociones activas hoy=${today}: ${rows?.length || 0} fila(s) desde DSEDAC.${source} (clienteCtx=${trimmedClientCode})`);
+            rows = hasDateRange
+                ? await queryWithParams(sql, [today, today])
+                : await queryWithParams(sql, [], []);
+            logger.info(`[PEDIDOS] Promociones activas hoy=${today}: ${rows?.length || 0} fila(s) desde DSEDAC.${src.table}`);
             if (!rows || rows.length === 0) {
                 try {
-                    const probe = await queryWithParams(
-                        `SELECT COUNT(*) AS TOTAL FROM DSEDAC.${source}`,
-                        [], false, false
-                    );
+                    const probe = await queryWithParams(`SELECT COUNT(*) AS TOTAL FROM DSEDAC.${src.table}`, [], false, false);
                     const total = parseInt(probe?.[0]?.TOTAL) || 0;
-                    logger.info(`[PEDIDOS] DSEDAC.${source} total filas=${total}; vigentes hoy=0. Revisa fechas DIADESDE/ANOHASTA si esperabas promociones.`);
-                } catch (probeErr) {
-                    logger.warn(`[PEDIDOS] DSEDAC.${source} probe fallo: ${probeErr.message}`);
-                }
+                    logger.info(`[PEDIDOS] DSEDAC.${src.table} total filas=${total}; vigentes hoy=0`);
+                } catch (_) { /* ok */ }
             }
         } catch (e) {
-            logger.warn(`[PEDIDOS] Query promociones DSEDAC.${source} fallo (columnas distintas?): ${e.message}`);
+            logger.warn(`[PEDIDOS] Query promociones DSEDAC.${src.table} fallo: ${e.message}`);
             return [];
         }
 
-        return rows.map(r => ({
-            code: r.CODIGOARTICULO?.trim(),
-            name: r.NOMBRE_ARTICULO?.trim() || r.DESCRIPCION?.trim(),
-            promoDesc: r.DESCRIPCION?.trim(),
-            promoType: r.CANTIDADREGALO > 0 ? 'GIFT' : 'PRICE',
+        return (rows || []).map(r => ({
+            code: String(r.CODIGOARTICULO || '').trim(),
+            name: String(r.NOMBRE_ARTICULO || r.DESCRIPCION || '').trim(),
+            promoDesc: String(r.DESCRIPCION || '').trim(),
+            promoType: (parseFloat(r.CANTIDADREGALO) || 0) > 0 ? 'GIFT' : 'PRICE',
             promoPrice: parseFloat(r.PRECIOPROMOCIONAL) || 0,
             minQty: parseFloat(r.CANTIDADMINIMA) || 0,
             giftQty: parseFloat(r.CANTIDADREGALO) || 0,
-            stackable: r.ACUMULABLESN === 'S',
+            stackable: String(r.ACUMULABLESN || '').trim() === 'S',
             stockEnvases: parseFloat(r.STOCK_ENVASES) || 0,
-            stockUnidades: parseFloat(r.STOCK_UNIDADES) || 0
+            stockUnidades: parseFloat(r.STOCK_UNIDADES) || 0,
         }));
     } catch (error) {
         logger.warn('[PEDIDOS] getActivePromotions error (returning []): ' + error.message);
@@ -3315,35 +3360,57 @@ async function deleteOrderLineRoute(pedidoId, lineId) { return deleteOrderLine(l
 async function getClientBalance(clientCode) {
     const code = clientCode.trim();
     const cacheKey = `pedidos:balance:${code}`;
+    const year = new Date().getFullYear();
 
-    const sql = `
-        SELECT
-            SUM(CASE WHEN L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('AB','VT') AND L.LCSRAB NOT IN ('N','Z','G','D')
-                     THEN L.LCIMVT ELSE 0 END) AS TOTAL_FACTURADO,
-            SUM(CASE WHEN L.LCTPVT = 'CO'
-                     THEN L.LCIMVT ELSE 0 END) AS TOTAL_COBRADO
+    // FIX 2026-05-15:
+    //   - "Cobrado" antes usaba L.LCTPVT='CO' en LACLAE, pero esa marca no
+    //     existe (LACLAE tiene VT/AB para ventas/abonos, no cobros). Resultado:
+    //     siempre 0.
+    //   - "Cobrado" REAL del cliente esta en DSEDAC.CVC.IMPORTECANCELADO,
+    //     sumando los vencimientos con ANOCOBRO = año actual.
+    //   - "Facturado" se mantiene desde LACLAE (ventas y abonos).
+    const sqlFacturado = `
+        SELECT COALESCE(SUM(
+            CASE WHEN L.LCTPVT IN ('CC','VC')
+                  AND L.LCCLLN IN ('AB','VT')
+                  AND L.LCSRAB NOT IN ('N','Z','G','D')
+                THEN L.LCIMVT ELSE 0 END
+        ), 0) AS TOTAL_FACTURADO
         FROM DSED.LACLAE L
         WHERE L.LCCDCL = ?
-          AND L.LCAADC = YEAR(CURRENT_DATE)
+          AND L.LCAADC = ?
+    `;
+
+    const sqlCobrado = `
+        SELECT COALESCE(SUM(CVC.IMPORTECANCELADO), 0) AS TOTAL_COBRADO
+        FROM DSEDAC.CVC CVC
+        WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = ?
+          AND CVC.ANOCOBRO = ?
+          AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
     `;
 
     try {
-        const rows = await cachedQuery(
-            (s) => queryWithParams(s, [code]),
-            sql, cacheKey, TTL.SHORT
-        );
-        const row = rows[0] || {};
-        const facturado = parseFloat(row.TOTAL_FACTURADO) || 0;
-        const cobrado = Math.abs(parseFloat(row.TOTAL_COBRADO) || 0);
+        const [facturadoRows, cobradoRows] = await Promise.all([
+            cachedQuery(
+                (s) => queryWithParams(s, [code, year]),
+                sqlFacturado, `${cacheKey}:facturado`, TTL.SHORT
+            ),
+            cachedQuery(
+                (s) => queryWithParams(s, [code, year]),
+                sqlCobrado, `${cacheKey}:cobrado`, TTL.SHORT
+            ),
+        ]);
+        const facturado = parseFloat(facturadoRows?.[0]?.TOTAL_FACTURADO) || 0;
+        const cobrado = parseFloat(cobradoRows?.[0]?.TOTAL_COBRADO) || 0;
         return {
             facturadoAnual: facturado,
             cobradoAnual: cobrado,
-            saldoPendiente: facturado - cobrado,
-            year: new Date().getFullYear(),
+            saldoPendiente: Math.max(0, facturado - cobrado),
+            year,
         };
     } catch (error) {
         logger.error(`[PEDIDOS] getClientBalance error: ${error.message}`);
-        return { facturadoAnual: 0, cobradoAnual: 0, saldoPendiente: 0, year: new Date().getFullYear() };
+        return { facturadoAnual: 0, cobradoAnual: 0, saldoPendiente: 0, year };
     }
 }
 

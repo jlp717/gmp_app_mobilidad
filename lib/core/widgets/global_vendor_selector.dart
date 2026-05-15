@@ -13,12 +13,14 @@ class GlobalVendorSelector extends ConsumerStatefulWidget {
     this.allowedVendorCodes,
     this.includeAllOption = true,
     this.defaultVendorCode,
+    this.forceShow = false,
   });
   final bool isJefeVentas;
   final VoidCallback? onChanged;
   final List<String>? allowedVendorCodes;
   final bool includeAllOption;
   final String? defaultVendorCode;
+  final bool forceShow;
 
   @override
   ConsumerState<GlobalVendorSelector> createState() =>
@@ -32,7 +34,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
   @override
   void initState() {
     super.initState();
-    if (widget.isJefeVentas) {
+    if (widget.isJefeVentas || widget.forceShow) {
       _loadVendedores();
     }
   }
@@ -103,7 +105,12 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.isJefeVentas) return const SizedBox.shrink();
+    if (!widget.isJefeVentas && !widget.forceShow) return const SizedBox.shrink();
+
+    final shouldLoadVendors = widget.isJefeVentas || widget.forceShow;
+    if (shouldLoadVendors && _vendedores.isEmpty && !_isLoading) {
+      _loadVendedores();
+    }
 
     final filterState = ref.watch(filterProvider);
     final selectedVendor = filterState.selectedVendor;

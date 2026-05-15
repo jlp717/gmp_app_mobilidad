@@ -1111,6 +1111,218 @@ router.get('/debug/list-estados', debugMiddleware, async (req, res) => {
 });
 
 /**
+ * GET /api/pedidos/purchase-history-global
+ * =========================================
+ * Historico GLOBAL de compras (todos los clientes, todos los productos).
+ * Fuente: DSED.LACLAE (lineas albaranes). Devuelve detalle linea-a-linea y
+ * resumen agregado para construir tablas + graficos en la UI.
+ *
+ * Query params (todos opcionales):
+ *   - from (YYYY-MM-DD): default = 1 enero del año actual
+ *   - to   (YYYY-MM-DD): default = hoy
+ *   - vendedorCode (str): filtra por LCCDVD. Si "ALL" no filtra. Si el usuario
+ *     no es JEFE el backend fuerza a su propio vendedor.
+ *   - clientCode (str): filtra por LCCDCL
+ *   - productCode (str): filtra por LCCDRF
+ *   - limit (int, max 500, default 100)
+ *   - offset (int, default 0)
+ *
+ * Devuelve: { success, lines: [...], summary: {...}, pagination: {...} }
+ */
+router.get('/purchase-history-global', async (req, res) => {
+    try {
+        const userIsJefe = req.user?.userRole === 'JEFE_VENTAS' || req.user?.userRole === 'ADMIN';
+        const userVendor = String(req.user?.codigo || req.user?.userId || '').trim();
+
+        // Fechas
+        const now = new Date();
+        const defaultFrom = new Date(now.getFullYear(), 0, 1);
+        const from = req.query.from ? new Date(String(req.query.from)) : defaultFrom;
+        const to = req.query.to ? new Date(String(req.query.to)) : now;
+        const fromYmd = from.getFullYear() * 10000 + (from.getMonth() + 1) * 100 + from.getDate();
+        const toYmd = to.getFullYear() * 10000 + (to.getMonth() + 1) * 100 + to.getDate();
+
+        // Filtros
+        let vendor = String(req.query.vendedorCode || '').trim();
+        if (!userIsJefe && userVendor) vendor = userVendor; // comercial solo ve lo suyo
+        const isAllVendor = !vendor || vendor.toUpperCase() === 'ALL';
+        const clientCode = sanitizeCode(req.query.clientCode || '');
+        const productCode = sanitizeCode(req.query.productCode || '');
+
+        const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+        const offset = parseInt(req.query.offset) || 0;
+
+        // Condiciones WHERE
+        const where = [
+            `(L.LCAADC * 10000 + L.LCMMDC * 100 + L.LCDDDC) BETWEEN ? AND ?`,
+            `L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('VT','AB')`,
+            `L.LCSRAB NOT IN ('N','Z','G','D')`,
+        ];
+        const params = [fromYmd, toYmd];
+
+        if (!isAllVendor) {
+            // Soporta lista separada por comas
+            const vendors = vendor.split(',').map(v => v.trim()).filter(Boolean);
+            if (vendors.length > 0 && vendors.length <= 50) {
+                where.push(`TRIM(L.LCCDVD) IN (${vendors.map(() => '?').join(',')})`);
+                params.push(...vendors);
+            } else if (vendors.length > 50) {
+                // Embed sanitizado para evitar limite ODBC
+                const safe = vendors
+                    .filter(v => /^[A-Za-z0-9]{1,10}$/.test(v))
+                    .map(v => `'${v.replace(/'/g, "''")}'`)
+                    .join(',');
+                if (safe) where.push(`TRIM(L.LCCDVD) IN (${safe})`);
+            }
+        }
+        if (clientCode) {
+            where.push(`TRIM(L.LCCDCL) = ?`);
+            params.push(clientCode);
+        }
+        if (productCode) {
+            where.push(`TRIM(L.LCCDRF) = ?`);
+            params.push(productCode);
+        }
+
+        const whereSql = where.join(' AND ');
+
+        // 1) DETALLE linea a linea (paginado)
+        const detailSql = `
+            SELECT
+                L.LCAADC AS ANO, L.LCMMDC AS MES, L.LCDDDC AS DIA,
+                TRIM(L.LCCDCL) AS CODIGOCLIENTE,
+                COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE)) AS NOMBRECLIENTE,
+                TRIM(L.LCCDVD) AS CODIGOVENDEDOR,
+                TRIM(L.LCCDRF) AS CODIGOARTICULO,
+                TRIM(A.DESCRIPCIONARTICULO) AS DESCRIPCIONARTICULO,
+                L.LCCTUD AS CANTIDADUNIDADES,
+                L.LCCTEV AS CANTIDADENVASES,
+                L.LCPRVT AS PRECIOVENTA,
+                L.LCPJDT AS PORCENTAJEDESCUENTO,
+                L.LCIMVT AS IMPORTEVENTA,
+                (L.LCCTUD * L.LCPRVT) AS IMPORTESINDESCUENTO,
+                (L.LCCTUD * L.LCPRVT - L.LCIMVT) AS IMPORTEDESCUENTO,
+                TRIM(L.LCCDFP) AS CODIGOFORMAPAGO,
+                TRIM(L.LCSRAB) AS SERIEALBARAN, L.LCNRAB AS NUMEROALBARAN
+            FROM DSED.LACLAE L
+            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+            LEFT JOIN DSEDAC.CLI C ON TRIM(C.CODIGOCLIENTE) = TRIM(L.LCCDCL)
+            WHERE ${whereSql}
+            ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
+            OFFSET ${offset} ROWS FETCH FIRST ${limit} ROWS ONLY
+        `;
+
+        // 2) RESUMEN agregado
+        const summarySql = `
+            SELECT
+                COUNT(*) AS NUM_LINEAS,
+                COUNT(DISTINCT TRIM(L.LCCDCL)) AS NUM_CLIENTES,
+                COUNT(DISTINCT TRIM(L.LCCDRF)) AS NUM_PRODUCTOS,
+                COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_VENDIDO,
+                COALESCE(SUM(L.LCCTUD * L.LCPRVT), 0) AS TOTAL_SIN_DESCUENTO,
+                COALESCE(SUM(L.LCCTUD * L.LCPRVT - L.LCIMVT), 0) AS TOTAL_DESCUENTO,
+                COALESCE(SUM(L.LCCTUD), 0) AS TOTAL_UNIDADES
+            FROM DSED.LACLAE L
+            WHERE ${whereSql}
+        `;
+
+        // 3) TOP 10 productos del periodo
+        const topProductosSql = `
+            SELECT
+                TRIM(L.LCCDRF) AS CODE,
+                TRIM(A.DESCRIPCIONARTICULO) AS NAME,
+                COALESCE(SUM(L.LCIMVT), 0) AS IMPORTE,
+                COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
+                COUNT(*) AS NUM_LINEAS
+            FROM DSED.LACLAE L
+            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+            WHERE ${whereSql}
+            GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
+            ORDER BY IMPORTE DESC
+            FETCH FIRST 10 ROWS ONLY
+        `;
+
+        // 4) Comparacion misma fecha año anterior (lo que el usuario llamo "a estas alturas")
+        const lastYearSql = `
+            SELECT COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_LAST_YEAR
+            FROM DSED.LACLAE L
+            WHERE (L.LCAADC * 10000 + L.LCMMDC * 100 + L.LCDDDC) BETWEEN ? AND ?
+              AND L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('VT','AB')
+              AND L.LCSRAB NOT IN ('N','Z','G','D')
+        `;
+        const lastYearFrom = (from.getFullYear() - 1) * 10000 + (from.getMonth() + 1) * 100 + from.getDate();
+        const lastYearTo = (to.getFullYear() - 1) * 10000 + (to.getMonth() + 1) * 100 + to.getDate();
+        const lastYearParams = [lastYearFrom, lastYearTo];
+
+        const [detail, summary, topProducts, lastYear] = await Promise.all([
+            queryWithParams(detailSql, params, []),
+            queryWithParams(summarySql, params, []),
+            queryWithParams(topProductosSql, params, []),
+            queryWithParams(lastYearSql, lastYearParams, []),
+        ]);
+
+        const s = summary?.[0] || {};
+        const totalThisPeriod = parseFloat(s.TOTAL_VENDIDO) || 0;
+        const totalLastYear = parseFloat(lastYear?.[0]?.TOTAL_LAST_YEAR) || 0;
+        const variation = totalLastYear > 0
+            ? ((totalThisPeriod - totalLastYear) / totalLastYear) * 100
+            : null;
+
+        res.json({
+            success: true,
+            filters: {
+                from: from.toISOString().slice(0, 10),
+                to: to.toISOString().slice(0, 10),
+                vendedorCode: isAllVendor ? 'ALL' : vendor,
+                clientCode: clientCode || null,
+                productCode: productCode || null,
+            },
+            summary: {
+                numLineas: parseInt(s.NUM_LINEAS) || 0,
+                numClientes: parseInt(s.NUM_CLIENTES) || 0,
+                numProductos: parseInt(s.NUM_PRODUCTOS) || 0,
+                totalVendido: totalThisPeriod,
+                totalSinDescuento: parseFloat(s.TOTAL_SIN_DESCUENTO) || 0,
+                totalDescuento: parseFloat(s.TOTAL_DESCUENTO) || 0,
+                totalUnidades: parseFloat(s.TOTAL_UNIDADES) || 0,
+                comparativaAnoAnterior: {
+                    totalAnoAnterior: totalLastYear,
+                    variacionPct: variation,
+                },
+            },
+            topProducts: (topProducts || []).map(t => ({
+                code: (t.CODE || '').trim(),
+                name: (t.NAME || '').trim(),
+                importe: parseFloat(t.IMPORTE) || 0,
+                unidades: parseFloat(t.UNIDADES) || 0,
+                numLineas: parseInt(t.NUM_LINEAS) || 0,
+            })),
+            lines: (detail || []).map(r => ({
+                fecha: `${r.ANO}-${String(r.MES).padStart(2, '0')}-${String(r.DIA).padStart(2, '0')}`,
+                clienteCode: (r.CODIGOCLIENTE || '').trim(),
+                clienteName: (r.NOMBRECLIENTE || '').trim(),
+                vendedorCode: (r.CODIGOVENDEDOR || '').trim(),
+                productCode: (r.CODIGOARTICULO || '').trim(),
+                productName: (r.DESCRIPCIONARTICULO || '').trim(),
+                cantidad: parseFloat(r.CANTIDADUNIDADES) || 0,
+                envases: parseFloat(r.CANTIDADENVASES) || 0,
+                precio: parseFloat(r.PRECIOVENTA) || 0,
+                descuentoPct: parseFloat(r.PORCENTAJEDESCUENTO) || 0,
+                importe: parseFloat(r.IMPORTEVENTA) || 0,
+                importeSinDescuento: parseFloat(r.IMPORTESINDESCUENTO) || 0,
+                importeDescuento: parseFloat(r.IMPORTEDESCUENTO) || 0,
+                formaPago: (r.CODIGOFORMAPAGO || '').trim(),
+                albaran: `${(r.SERIEALBARAN || '').trim()}-${r.NUMEROALBARAN || ''}`,
+            })),
+            pagination: { limit, offset, hasMore: (detail || []).length === limit },
+        });
+    } catch (error) {
+        logger.error(`[PEDIDOS] purchase-history-global error: ${error.message}`);
+        res.status(500).json({ success: false, error: 'Error obteniendo historico global' });
+    }
+});
+
+/**
  * GET /api/pedidos/client-evolution/:clientCode
  */
 router.get('/client-evolution/:clientCode', async (req, res) => {

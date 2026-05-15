@@ -1552,6 +1552,25 @@ router.post('/entregas', verifyToken, async (req, res) => {
             entregaId = newIdResult[0]?.ID;
         }
 
+        // EXPORT al ERP DSEDAC (best-effort, no rompe el flujo).
+        // Solo se ejecuta si PEDIDOS_EXPORT_TO_SYSTEM=true en .env.
+        try {
+            const dsedacExports = require('../services/dsedac-exports.service');
+            const idempotencyToken = `ENT:${ejercicioAlbaran}:${serieAlbaran}:${numeroAlbaran}`;
+            await dsedacExports.exportEntregaToSystem(
+                {
+                    IDEMPOTENCY_TOKEN: idempotencyToken,
+                    CODIGOCLIENTEALBARAN: codigoCliente,
+                    CODIGOCLIENTE: codigoCliente,
+                    CODIGOVENDEDOR: codigoRepartidor,
+                    IMPORTETOTAL: importeTotal || 0,
+                },
+                [], // las lineas se exportarian aparte si la app las pasara
+            );
+        } catch (exportErr) {
+            logger.warn(`[REPARTIDOR] dsedac CAC export best-effort fail: ${exportErr.message}`);
+        }
+
         res.json({
             success: true,
             entregaId,

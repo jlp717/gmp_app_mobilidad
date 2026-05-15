@@ -13,6 +13,7 @@ import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
+import 'package:gmp_app_mobilidad/features/products_history/presentation/widgets/products_history_tab.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
@@ -43,9 +44,11 @@ class PedidosPage extends ConsumerStatefulWidget {
     required this.employeeCode,
     required this.isJefeVentas,
     super.key,
+    this.forceShowVendorSelector = false,
   });
   final String employeeCode;
   final bool isJefeVentas;
+  final bool forceShowVendorSelector;
 
   @override
   ConsumerState<PedidosPage> createState() => _PedidosPageState();
@@ -71,7 +74,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_onTabChange);
 
     if (widget.isJefeVentas) {
@@ -582,15 +585,18 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               icon: Icon(Icons.add_circle_outline),
             ),
             Tab(height: 40, text: 'Mis Pedidos', icon: Icon(Icons.list_alt)),
+            Tab(height: 40, text: 'Evolución', icon: Icon(Icons.show_chart)),
+            Tab(height: 40, text: 'Devoluciones', icon: Icon(Icons.assignment_return_outlined)),
           ],
         ),
       ),
       body: Column(
         children: [
           // "Ver como" vendor selector for JEFE_VENTAS Ã¢€â€ visible on BOTH tabs
-          if (widget.isJefeVentas)
+          if (widget.isJefeVentas || widget.forceShowVendorSelector)
             GlobalVendorSelector(
               isJefeVentas: true,
+              forceShow: widget.forceShowVendorSelector,
             ),
           Expanded(
             child: TabBarView(
@@ -598,6 +604,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               children: [
                 _buildNuevoPedidoTab(),
                 _buildMisPedidosTab(),
+                _buildEvolucionTab(),
+                _buildDevolucionesTab(),
               ],
             ),
           ),
@@ -1114,7 +1122,74 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
   }
 
-  // â”€â”€ TAB 2: Mis Pedidos â”€â”€
+  // == TAB 3: Evolución (histórico global de compras) ==
+
+  Widget _buildEvolucionTab() {
+    return ProductsHistoryTab(
+      isJefeVentas: widget.isJefeVentas,
+      vendedorCodes: _vendedorCodes,
+    );
+  }
+
+  // == TAB 4: Devoluciones (placeholder funcional) ==
+
+  Widget _buildDevolucionesTab() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(height: 60),
+            Icon(
+              Icons.assignment_return_outlined,
+              size: 72,
+              color: Colors.white.withValues(alpha: 0.25),
+            ),
+            const SizedBox(height: 18),
+            Text(
+              'Devoluciones',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.85),
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Proximamente: registro de devoluciones de cliente con motivo,\n'
+              'linea original y validacion por jefe de ventas.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.55),
+                fontSize: 13,
+              ),
+            ),
+            const SizedBox(height: 24),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              ),
+              child: const Text(
+                'EN DESARROLLO',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 11,
+                  letterSpacing: 1.2,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // == TAB 2: Mis Pedidos ==
 
   Widget _buildMisPedidosTab() {
     final provider = ref.watch(pedidosProvider);
@@ -1242,6 +1317,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         final order = provider.orders[index];
         return OrderCard(
           order: order,
+          // Margen solo visible para JEFE_VENTAS (no para COMERCIAL)
+          isMarginVisible: widget.isJefeVentas,
           onTap: () => _showOrderDetail(order),
           onDuplicate: () => _duplicateOrder(order),
           onCancel: order.estado != 'ANULADO' && order.estado != 'BORRADOR'

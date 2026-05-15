@@ -10,6 +10,7 @@ class RuteroHeader extends StatelessWidget {
     required this.isSmallScreen,
     required this.onRoleChanged,
     required this.onSortTap,
+    this.forceShowVendorSelector = false,
   });
 
   final String selectedRole;
@@ -17,6 +18,7 @@ class RuteroHeader extends StatelessWidget {
   final bool isSmallScreen;
   final void Function(String role) onRoleChanged;
   final VoidCallback onSortTap;
+  final bool forceShowVendorSelector;
 
   @override
   Widget build(BuildContext context) {
@@ -26,7 +28,11 @@ class RuteroHeader extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           _buildTopBar(),
-          if (isJefeVentas) const GlobalVendorSelector(isJefeVentas: true),
+          if (isJefeVentas || forceShowVendorSelector)
+            GlobalVendorSelector(
+              isJefeVentas: isJefeVentas,
+              forceShow: forceShowVendorSelector,
+            ),
         ],
       ),
     );

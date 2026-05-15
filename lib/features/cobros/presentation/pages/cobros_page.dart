@@ -16,9 +16,11 @@ class CobrosPage extends ConsumerStatefulWidget {
     required this.employeeCode,
     super.key,
     this.isJefeVentas = false,
+    this.forceShowVendorSelector = false,
   });
   final String employeeCode;
   final bool isJefeVentas;
+  final bool forceShowVendorSelector;
 
   @override
   ConsumerState<CobrosPage> createState() => _CobrosPageState();
@@ -128,6 +130,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
           _buildHeader(),
           GlobalVendorSelector(
             isJefeVentas: widget.isJefeVentas,
+            forceShow: widget.forceShowVendorSelector,
           ),
           _buildSearchArea(),
           Expanded(

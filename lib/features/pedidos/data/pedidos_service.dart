@@ -1118,6 +1118,10 @@ class Recommendation {
     required this.name,
     this.frequency = 0,
     this.totalUnits = 0,
+    this.totalEnvases = 0,
+    this.totalAmount = 0,
+    this.avgEnvases = 0,
+    this.suggestedUnits = 0,
     this.clientCount = 0,
   });
 
@@ -1129,6 +1133,10 @@ class Recommendation {
           ? json['frequency'] as int
           : int.tryParse(json['frequency']?.toString() ?? '0') ?? 0,
       totalUnits: _toDouble(json['totalUnits']),
+      totalEnvases: _toDouble(json['totalEnvases']),
+      totalAmount: _toDouble(json['totalAmount']),
+      avgEnvases: _toDouble(json['avgEnvases']),
+      suggestedUnits: _toDouble(json['suggestedUnits']),
       clientCount: json['clientCount'] is int
           ? json['clientCount'] as int
           : int.tryParse(json['clientCount']?.toString() ?? '0') ?? 0,
@@ -1138,6 +1146,13 @@ class Recommendation {
   final String name;
   final int frequency;
   final double totalUnits;
+  final double totalEnvases;
+  final double totalAmount;
+  final double avgEnvases;
+  /// Cantidad sugerida a comprar (preferentemente envases si hay datos).
+  /// La UI debe priorizar este campo sobre `totalUnits` para evitar mostrar
+  /// "0 cajas" cuando el dato real estaba en envases.
+  final double suggestedUnits;
   final int clientCount;
 }
 

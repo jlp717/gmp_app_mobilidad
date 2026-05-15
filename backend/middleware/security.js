@@ -102,24 +102,30 @@ exports.emailLimiter = rateLimit({
     legacyHeaders: false
 });
 
+// Para apps moviles los limites deben ser GENEROSOS por usuario. La app abre
+// pestanas que disparan 20-40 GET en paralelo. Limites bajos producen 429
+// masivos y rompen la UI. Limites RESTRICTIVOS solo en POST/PUT/DELETE
+// (escritura), no en GET de lectura.
 exports.cobrosLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 20,
-    message: { 
-        error: 'Demasiadas solicitudes de cobros. Intente más tarde.',
-        retryAfter: 900
+    windowMs: 60 * 1000,         // 1 minuto
+    max: 240,                    // 240 req/min/usuario (lectura GET intensiva OK)
+    message: {
+        error: 'Demasiadas solicitudes de cobros. Espera un momento.',
+        retryAfter: 60
     },
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => req.user?.id || req.ip || 'unknown'
+    keyGenerator: (req) => req.user?.id || req.ip || 'unknown',
+    skip: (req) => req.method !== 'POST' && req.method !== 'PUT' && req.method !== 'DELETE'
+        ? false : false // aplicar siempre, pero con limite generoso
 });
 
 exports.pedidosLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 30,
-    message: { 
-        error: 'Demasiadas solicitudes de pedidos. Intente más tarde.',
-        retryAfter: 900
+    windowMs: 60 * 1000,
+    max: 300,                    // 300 req/min/usuario para pedidos
+    message: {
+        error: 'Demasiadas solicitudes de pedidos. Espera un momento.',
+        retryAfter: 60
     },
     standardHeaders: true,
     legacyHeaders: false,
@@ -127,10 +133,10 @@ exports.pedidosLimiter = rateLimit({
 });
 
 exports.bolsaLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 30,
-    message: { 
-        error: 'Demasiadas solicitudes de bolsa comercial. Intente más tarde.'
+    windowMs: 60 * 1000,
+    max: 120,                    // 120 req/min/usuario
+    message: {
+        error: 'Demasiadas solicitudes de bolsa comercial. Espera un momento.'
     },
     standardHeaders: true,
     legacyHeaders: false,
@@ -139,9 +145,9 @@ exports.bolsaLimiter = rateLimit({
 
 exports.evolutionLimiter = rateLimit({
     windowMs: 60 * 1000,
-    max: 40,
-    message: { 
-        error: 'Demasiadas solicitudes de evolución. Intente más tarde.'
+    max: 120,                    // 120 req/min/usuario (era 40)
+    message: {
+        error: 'Demasiadas solicitudes de evolución. Espera un momento.'
     },
     standardHeaders: true,
     legacyHeaders: false,

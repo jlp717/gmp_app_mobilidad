@@ -17,9 +17,11 @@ class KpiDashboardPage extends ConsumerStatefulWidget {
     required this.employeeCode,
     required this.isJefeVentas,
     super.key,
+    this.forceShowVendorSelector = false,
   });
   final String employeeCode;
   final bool isJefeVentas;
+  final bool forceShowVendorSelector;
 
   @override
   ConsumerState<KpiDashboardPage> createState() => _KpiDashboardPageState();
@@ -125,9 +127,10 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
       body: Column(
         children: [
           // Vendor selector for JEFE_VENTAS
-          if (widget.isJefeVentas)
+          if (widget.isJefeVentas || widget.forceShowVendorSelector)
             GlobalVendorSelector(
               isJefeVentas: true,
+              forceShow: widget.forceShowVendorSelector,
             ),
           // Content
           Expanded(

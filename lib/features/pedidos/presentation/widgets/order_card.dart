@@ -19,6 +19,7 @@ class OrderCard extends StatelessWidget {
     this.onViewAlbaran,
     this.onResend,
     this.onDelete,
+    this.isMarginVisible = false,
   });
   final OrderSummary order;
   final VoidCallback onTap;
@@ -27,6 +28,9 @@ class OrderCard extends StatelessWidget {
   final VoidCallback? onViewAlbaran;
   final VoidCallback? onResend;
   final VoidCallback? onDelete;
+  /// Margen visible solo para JEFE_VENTAS. Default false para que el rol
+  /// COMERCIAL nunca lo vea por accidente si la pagina olvida pasarlo.
+  final bool isMarginVisible;
 
   @override
   Widget build(BuildContext context) {
@@ -156,11 +160,12 @@ class OrderCard extends StatelessWidget {
                         PedidosFormatters.money(order.total),
                         AppTheme.neonGreen,
                       ),
-                      _statItem(
-                        Icons.trending_up,
-                        '${order.margen.toStringAsFixed(1)}%',
-                        marginColor,
-                      ),
+                      if (isMarginVisible)
+                        _statItem(
+                          Icons.trending_up,
+                          '${order.margen.toStringAsFixed(1)}%',
+                          marginColor,
+                        ),
                     ],
                   ),
                 ),

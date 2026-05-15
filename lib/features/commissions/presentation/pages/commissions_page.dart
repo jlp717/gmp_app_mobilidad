@@ -17,11 +17,13 @@ class CommissionsPage extends ConsumerStatefulWidget {
       super.key,
       this.isJefeVentas = false,
       this.vendorSelectorCodes,
-      this.includeAllVendorOption = true});
+      this.includeAllVendorOption = true,
+      this.forceShowVendorSelector = false});
   final String employeeCode;
   final bool isJefeVentas;
   final List<String>? vendorSelectorCodes;
   final bool includeAllVendorOption;
+  final bool forceShowVendorSelector;
 
   @override
   ConsumerState<CommissionsPage> createState() => _CommissionsPageState();
@@ -1372,12 +1374,13 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (widget.isJefeVentas) ...[
+                      if (widget.isJefeVentas || widget.forceShowVendorSelector) ...[
                         GlobalVendorSelector(
-                          isJefeVentas: true,
+                          isJefeVentas: widget.isJefeVentas,
                           allowedVendorCodes: widget.vendorSelectorCodes,
                           includeAllOption: widget.includeAllVendorOption,
                           defaultVendorCode: widget.employeeCode,
+                          forceShow: widget.forceShowVendorSelector,
                         ),
                       ] else
                         const Text('Comisiones 2026',

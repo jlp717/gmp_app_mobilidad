@@ -565,13 +565,15 @@ class _ProductCardState extends State<ProductCard> {
     Navigator.of(context).push<void>(
       PageRouteBuilder<void>(
         opaque: false,
-        barrierColor: Colors.black87,
+        // FIX: fondo translucido oscuro en lugar de negro solido para que se
+        // distinga el contenido detras del modal.
+        barrierColor: const Color(0xCC101218), // ~80% opacidad sobre fondo oscuro
         barrierDismissible: true,
         pageBuilder: (ctx, anim, secondAnim) {
           return Scaffold(
-            backgroundColor: Colors.black,
+            backgroundColor: Colors.transparent,
             appBar: AppBar(
-              backgroundColor: Colors.black,
+              backgroundColor: Colors.transparent,
               elevation: 0,
               title: Text(
                 widget.product.name,
