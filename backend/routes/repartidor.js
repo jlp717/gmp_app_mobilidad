@@ -1111,7 +1111,7 @@ router.get('/debug/signatures', verifyToken, async (req, res) => {
                 CF.ANO, CF.MES, CF.DIA,
                 LENGTH(CF.FIRMABASE64) as FIRMA_SIZE,
                 TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENTE,
-                TRIM(COALESCE(CLI.NOMBRECLIENTE, '')) as NOMBRE_CLIENTE
+                TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRE_CLIENTE
             FROM DSEDAC.CACFIRMAS CF
             INNER JOIN DSEDAC.CPC CPC 
                 ON CPC.EJERCICIOALBARAN = CF.EJERCICIOALBARAN
@@ -1290,7 +1290,9 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
                 CAC.NUMEROFACTURA, CAC.SERIEFACTURA, CAC.EJERCICIOFACTURA,
                 CAC.DIADOCUMENTO as DIAFACTURA, CAC.MESDOCUMENTO as MESFACTURA, CAC.ANODOCUMENTO as ANOFACTURA,
                 TRIM(CAC.CODIGOCLIENTEALBARAN) as CODIGOCLIENTEFACTURA,
-                TRIM(COALESCE(CLI.NOMBRECLIENTE, '')) as NOMBRECLIENTEFACTURA,
+                TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRECLIENTEFACTURA,
+                TRIM(CLI.NOMBREALTERNATIVO) as NOMBRECOMERCIALFACTURA,
+                TRIM(CLI.NOMBRECLIENTE) as NOMBREFISCALFACTURA,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCIONCLIENTEFACTURA,
                 TRIM(COALESCE(CLI.POBLACION, '')) as POBLACIONCLIENTEFACTURA,
                 TRIM(COALESCE(CLI.PROVINCIA, '')) as PROVINCIACLIENTEFACTURA,
@@ -1308,7 +1310,19 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, 
         if (!headers || headers.length === 0) {
             return res.status(404).json({ success: false, error: 'Albarán no encontrado' });
         }
-        const header = headers[0];
+        const header = {
+            ...headers[0],
+            clienteNombre: headers[0].NOMBRECLIENTEFACTURA,
+            nombreComercial: headers[0].NOMBRECOMERCIALFACTURA || headers[0].NOMBRECLIENTEFACTURA,
+            nombreFiscal: headers[0].NOMBREFISCALFACTURA || headers[0].NOMBRECLIENTEFACTURA,
+            clienteId: headers[0].CODIGOCLIENTEFACTURA,
+            clienteDireccion: headers[0].DIRECCIONCLIENTEFACTURA,
+            clientePoblacion: headers[0].POBLACIONCLIENTEFACTURA,
+            clienteNif: headers[0].CIFCLIENTEFACTURA,
+            serie: headers[0].SERIEALBARAN,
+            numero: headers[0].NUMEROALBARAN,
+            total: parseFloat(headers[0].IMPORTETOTAL) || 0,
+        };
 
         // Fetch IVA breakdown from CPC (header-level, LAC has no IVA columns)
         try {
@@ -2031,7 +2045,9 @@ router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, async (req
                 CAC.TERMINALALBARAN,
                 CAC.DIADOCUMENTO as DIAFACTURA, CAC.MESDOCUMENTO as MESFACTURA, CAC.ANODOCUMENTO as ANOFACTURA,
                 TRIM(CAC.CODIGOCLIENTEALBARAN) as CODIGOCLIENTEFACTURA,
-                TRIM(COALESCE(CLI.NOMBRECLIENTE, '')) as NOMBRECLIENTEFACTURA,
+                TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRECLIENTEFACTURA,
+                TRIM(CLI.NOMBREALTERNATIVO) as NOMBRECOMERCIALFACTURA,
+                TRIM(CLI.NOMBRECLIENTE) as NOMBREFISCALFACTURA,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCIONCLIENTEFACTURA,
                 TRIM(COALESCE(CLI.POBLACION, '')) as POBLACIONCLIENTEFACTURA,
                 TRIM(COALESCE(CLI.PROVINCIA, '')) as PROVINCIACLIENTEFACTURA,
@@ -2087,7 +2103,16 @@ router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, async (req
             logger.warn(`[PDF] Invoice not found for any query combination: ${year}-${serie}-${number}`);
             return res.status(404).json({ success: false, error: 'Factura no encontrada (CAC)' });
         }
-        const header = headers[0];
+        const header = {
+            ...headers[0],
+            clienteNombre: headers[0].NOMBRECLIENTEFACTURA,
+            nombreComercial: headers[0].NOMBRECOMERCIALFACTURA || headers[0].NOMBRECLIENTEFACTURA,
+            nombreFiscal: headers[0].NOMBREFISCALFACTURA || headers[0].NOMBRECLIENTEFACTURA,
+            clienteId: headers[0].CODIGOCLIENTEFACTURA,
+            clienteDireccion: headers[0].DIRECCIONCLIENTEFACTURA,
+            clientePoblacion: headers[0].POBLACIONCLIENTEFACTURA,
+            clienteNif: headers[0].CIFCLIENTEFACTURA,
+        };
         const actualEjAlb = header.EJERCICIOALBARAN;
         const actualSerieAlb = (header.SERIEALBARAN || '').toString().trim();
         const actualTermAlb = header.TERMINALALBARAN || 0;

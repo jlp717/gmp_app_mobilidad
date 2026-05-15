@@ -4,6 +4,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -11,6 +12,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
 class OrderLineTile extends StatelessWidget {
 
@@ -97,6 +99,7 @@ class OrderLineTile extends StatelessWidget {
   }
 
   @override
+  // ignore: prefer_expression_function_bodies
   Widget build(BuildContext context) {
     final marginColor = line.porcentajeMargen >= 15
         ? AppTheme.neonGreen
@@ -279,6 +282,14 @@ class OrderLineTile extends StatelessWidget {
                               color: Colors.white38, fontSize: 10,),
                         ),
                       ],
+                      // Req #6: Descuento por línea editable.
+                      if (onDiscountChanged != null) ...[
+                        const SizedBox(height: 4),
+                        _LineDiscountChip(
+                          line: line,
+                          onChanged: onDiscountChanged!,
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -305,15 +316,28 @@ class OrderLineTile extends StatelessWidget {
                         ],
                       ),
                     ] else ...[
-                      Text(
-                        PedidosFormatters.money(line.precioVenta,
-                            decimals: 3,),
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: Responsive.fontSize(context,
-                              small: 11, large: 12,),
+                      // Req #6: Precio original tachado si hay descuento.
+                      if (line.lineDiscountPct > 0)
+                        Text(
+                          PedidosFormatters.money(line.precioVenta,
+                              decimals: 3,),
+                          style: TextStyle(
+                            color: Colors.white38,
+                            decoration: TextDecoration.lineThrough,
+                            fontSize: Responsive.fontSize(context,
+                                small: 10, large: 11,),
+                          ),
+                        )
+                      else
+                        Text(
+                          PedidosFormatters.money(line.precioVenta,
+                              decimals: 3,),
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: Responsive.fontSize(context,
+                                small: 11, large: 12,),
+                          ),
                         ),
-                      ),
                       const SizedBox(height: 2),
                       Text(
                         PedidosFormatters.money(line.importeVenta),
@@ -328,27 +352,138 @@ class OrderLineTile extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(width: 8),
-                // Margin indicator
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: marginColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    '${line.porcentajeMargen.toStringAsFixed(1)}%',
-                    style: TextStyle(
-                      color: marginColor,
-                      fontSize: Responsive.fontSize(context,
-                          small: 10, large: 11,),
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                // Req #2: Margin indicator solo visible para JEFE_VENTAS/ADMIN.
+                Consumer(
+                  builder: (ctx, ref, _) {
+                    final visible = ref.watch(pedidosProvider).isMarginVisible;
+                    if (!visible) return const SizedBox.shrink();
+                    return Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: marginColor.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${line.porcentajeMargen.toStringAsFixed(1)}%',
+                        style: TextStyle(
+                          color: marginColor,
+                          fontSize: Responsive.fontSize(context,
+                              small: 10, large: 11,),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Req #6: Pequeño chip editable para fijar un descuento por línea (0-100%).
+/// Toque corto: edita el porcentaje. Si > 0 muestra "‒X%", si 0 muestra "%".
+class _LineDiscountChip extends StatelessWidget {
+  const _LineDiscountChip({required this.line, required this.onChanged});
+
+  final OrderLine line;
+  final ValueChanged<double> onChanged;
+
+  Future<void> _editDiscount(BuildContext context) async {
+    final controller = TextEditingController(
+      text: line.lineDiscountPct > 0
+          ? line.lineDiscountPct.toStringAsFixed(2)
+          : '',
+    );
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          backgroundColor: AppTheme.darkSurface,
+          title: const Text('Descuento de línea',
+              style: TextStyle(color: Colors.white),),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              hintText: '0 - 100',
+              suffixText: '%',
+              hintStyle: TextStyle(color: Colors.white38),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, 0.0),
+              child: const Text('Quitar'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                final raw = controller.text.replaceAll(',', '.').trim();
+                final parsed = double.tryParse(raw) ?? 0;
+                final clamped = parsed.clamp(0.0, 100.0).toDouble();
+                Navigator.pop(ctx, clamped);
+              },
+              child: const Text('Aplicar'),
+            ),
+          ],
+        );
+      },
+    );
+    if (result != null) {
+      onChanged(result);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasDiscount = line.lineDiscountPct > 0;
+    return InkWell(
+      borderRadius: BorderRadius.circular(6),
+      onTap: () => _editDiscount(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(
+          color: hasDiscount
+              ? AppTheme.neonGreen.withValues(alpha: 0.18)
+              : Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: hasDiscount
+                ? AppTheme.neonGreen.withValues(alpha: 0.6)
+                : Colors.white24,
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              hasDiscount ? Icons.percent : Icons.local_offer_outlined,
+              size: 11,
+              color: hasDiscount ? AppTheme.neonGreen : Colors.white54,
+            ),
+            const SizedBox(width: 3),
+            Text(
+              hasDiscount
+                  ? '-${line.lineDiscountPct.toStringAsFixed(line.lineDiscountPct % 1 == 0 ? 0 : 1)}%'
+                  : 'Dto',
+              style: TextStyle(
+                color: hasDiscount ? AppTheme.neonGreen : Colors.white54,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
       ),
     );

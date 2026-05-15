@@ -151,6 +151,54 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                     },
                   ),
                 ),
+                // Req #14: chip Nestlé (filtra por prefamilia)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: FilterChip(
+                    avatar: Icon(
+                      Icons.star,
+                      size: 14,
+                      color: provider.selectedPrefamily == 'NESTLE'
+                          ? Colors.amber
+                          : Colors.white54,
+                    ),
+                    label: const Text('Nestlé'),
+                    selected: provider.selectedPrefamily == 'NESTLE',
+                    selectedColor: Colors.amber.withValues(alpha: 0.22),
+                    backgroundColor: AppTheme.darkCard,
+                    labelStyle: TextStyle(
+                      color: provider.selectedPrefamily == 'NESTLE'
+                          ? Colors.amber
+                          : Colors.white70,
+                      fontSize: Responsive.fontSize(
+                        context,
+                        small: 11,
+                        large: 13,
+                      ),
+                      fontWeight: FontWeight.w600,
+                    ),
+                    side: BorderSide(
+                      color: provider.selectedPrefamily == 'NESTLE'
+                          ? Colors.amber
+                          : AppTheme.borderColor,
+                    ),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    visualDensity: VisualDensity.compact,
+                    onSelected: (_) {
+                      final next = provider.selectedPrefamily == 'NESTLE'
+                          ? null
+                          : 'NESTLE';
+                      provider.setPrefamilyFilter(next);
+                      provider.loadProducts(
+                        vendedorCodes: widget.vendedorCodes,
+                        search: _searchController.text.isEmpty
+                            ? null
+                            : _searchController.text,
+                        reset: true,
+                      );
+                    },
+                  ),
+                ),
                 // Family chips
                 ...provider.families.map((family) {
                   final selected = provider.selectedFamily == family;

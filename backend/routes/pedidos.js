@@ -116,7 +116,7 @@ function parseFloatSafe(value, defaultVal) {
  */
 router.get('/products', async (req, res) => {
     try {
-        const { vendedorCodes, clientCode, family, marca } = req.query;
+        const { vendedorCodes, clientCode, family, marca, prefamily } = req.query;
 
         if (!vendedorCodes) {
             return res.status(400).json({ success: false, error: 'vendedorCodes is required' });
@@ -136,6 +136,8 @@ router.get('/products', async (req, res) => {
             clientCode: String(clientCode).trim(),
             family: family ? String(family).trim() : undefined,
             marca: marca ? String(marca).trim() : undefined,
+            // Req #14: filtro Nestlé / otras prefamilias.
+            prefamily: prefamily ? String(prefamily).trim() : undefined,
             limit,
             offset
         });
@@ -223,6 +225,52 @@ router.get('/families', async (req, res) => {
         res.json({ success: true, families });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /families: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * Req #14: GET /api/pedidos/families/detailed
+ * Devuelve familias con metadatos completos incluida la prefamilia (e.g. NESTLE)
+ * para que el frontend pueda agrupar chips dinámicamente.
+ */
+router.get('/families/detailed', async (req, res) => {
+    try {
+        const families = await pedidosService.getFamiliesDetailed();
+        res.json({ success: true, families });
+    } catch (error) {
+        logger.error(`[PEDIDOS] Error in GET /families/detailed: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * Req #8: GET /api/pedidos/draft-status/:vendedorCode
+ * Indica al frontend si hay >=3 borradores acumulados para advertir al usuario.
+ * Llamada solo de lectura: no auto-confirma. El frontend puede llamar a
+ * POST /api/pedidos/draft-status/:vendedorCode/auto-confirm para opt-in.
+ */
+router.get('/draft-status/:vendedorCode', async (req, res) => {
+    try {
+        const code = String(req.params.vendedorCode || '').trim();
+        const result = await pedidosService.checkDraftAccumulation(code);
+        res.json({ success: true, ...result });
+    } catch (error) {
+        logger.error(`[PEDIDOS] Error in GET /draft-status: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/draft-status/:vendedorCode/auto-confirm', async (req, res) => {
+    try {
+        const code = String(req.params.vendedorCode || '').trim();
+        const result = await pedidosService.checkDraftAccumulation(code, {
+            autoConfirm: true,
+            options: { userId: req.user?.codigo || req.user?.userId || 'API' },
+        });
+        res.json({ success: true, ...result });
+    } catch (error) {
+        logger.error(`[PEDIDOS] Error in POST /draft-status/auto-confirm: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -814,12 +862,20 @@ router.put('/:id/confirm', async (req, res) => {
         res.json({ success: true, order: sanitizeOrderForRole(order, req.user?.role || req.user?.tipo || 'COMERCIAL') });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/confirm: ${error.message}`);
-        const status = error.message.includes('not found') ? 404
-            : error.message.includes('BORRADOR') ? 409
-            : error.message.includes('Fecha reparto') ? 409
-            : error.message.includes('reserva de stock') ? 500
-            : 500;
-        res.status(status).json({ success: false, error: error.message });
+        // Errores tipados (PEDIDO_ALREADY_CONFIRMING / PEDIDO_INVALID_STATE) traen
+        // error.status; respetamos eso y devolvemos error.code al cliente.
+        const status = (error.status && Number.isInteger(error.status))
+            ? error.status
+            : (error.message.includes('not found') ? 404
+                : error.message.includes('BORRADOR') ? 409
+                : error.message.includes('Fecha reparto') ? 409
+                : error.message.includes('reserva de stock') ? 500
+                : 500);
+        res.status(status).json({
+            success: false,
+            code: error.code || undefined,
+            error: error.message,
+        });
     }
 });
 

@@ -380,6 +380,44 @@ router.post('/cobros', verifyToken, requireRepartidorAccess((req) => req.body.co
   }
 });
 
+// Req #16 (devoluciones): anula un cobro registrado por el repartidor.
+// Body: { idempotencyToken, repartidorId, reason }
+const reverseCobroSchema = z.object({
+  idempotencyToken: idempotencyTokenSchema,
+  repartidorId: singleCodeSchema,
+  reason: z.string().trim().min(1).max(500),
+});
+
+router.post('/cobros/reverse', verifyToken, requireRepartidorAccess((req) => req.body?.repartidorId), async (req, res) => {
+  try {
+    const body = reverseCobroSchema.parse(req.body);
+    const user = req.user || {};
+    const operador = user.code || user.id || 'unknown';
+    const isPrivileged = user.role === 'ADMIN' || user.role === 'JEFE_VENTAS' || user.isJefeVentas === true;
+
+    const result = await financeService.reverseCobro({
+      idempotencyToken: body.idempotencyToken,
+      repartidorId: body.repartidorId,
+      operador,
+      reason: body.reason,
+      allowAcrossRepartidores: isPrivileged,
+    });
+    await invalidateFinanceCaches(body.repartidorId);
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    if (error && error.code === 'COBRO_NOT_FOUND') {
+      return res.status(404).json({ success: false, error: error.message, code: error.code });
+    }
+    if (error && error.code === 'COBRO_ALREADY_LIQUIDADO') {
+      return res.status(409).json({ success: false, error: error.message, code: error.code });
+    }
+    if (error && error.code === 'PAYMENT_AUTHZ_DENIED') {
+      return res.status(403).json({ success: false, error: error.message, code: error.code });
+    }
+    return sendError(res, error, { action: 'POST /cobros/reverse', body: req.body });
+  }
+});
+
 router.post('/rutero/confirm-delivery-cobro', verifyToken, requireRepartidorAccess((req) => req.body?.cobro?.codigoRepartidor || req.body?.delivery?.repartidorId), async (req, res) => {
   try {
     const body = ruteroConfirmSchema.parse(req.body);

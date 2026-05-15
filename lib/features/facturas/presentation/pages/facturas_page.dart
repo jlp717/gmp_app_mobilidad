@@ -332,21 +332,38 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                factura.clienteNombre,
+                                factura.nombreComercial ?? factura.clienteNombre,
                                 style: TextStyle(
-                                  fontWeight: FontWeight.w900, // MAX weight
+                                  fontWeight: FontWeight.w900,
                                   fontSize:
                                       Responsive.isSmall(context) ? 16 : 19,
                                   color: isDark
                                       ? const Color(0xFF90CAF9)
-                                      : const Color(
-                                          0xFF0D47A1,
-                                        ), // Lighter blue in dark mode, Deep blue in light
+                                      : const Color(0xFF0D47A1),
                                   letterSpacing: 0.3,
                                 ),
-                                maxLines: 2, // Allow 2 lines for long names
+                                maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
                               ),
+                              if (factura.nombreFiscal != null &&
+                                  factura.nombreFiscal!.isNotEmpty &&
+                                  factura.nombreFiscal!.toUpperCase() !=
+                                      (factura.nombreComercial ?? factura.clienteNombre).toUpperCase())
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text(
+                                    factura.nombreFiscal!,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w400,
+                                      fontSize: 11,
+                                      color: isDark
+                                          ? Colors.grey.shade400
+                                          : Colors.grey.shade600,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
                               const SizedBox(height: 6),
                               Row(
                                 children: [

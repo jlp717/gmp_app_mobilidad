@@ -77,6 +77,8 @@ class AlbaranEntrega {
     required this.ejercicio,
     required this.codigoCliente,
     required this.nombreCliente,
+    this.nombreComercial,
+    this.nombreFiscal,
     required this.fecha,
     required this.importeTotal,
     this.serie = '',
@@ -128,6 +130,8 @@ class AlbaranEntrega {
       serieFactura: json['serieFactura']?.toString() ?? '',
       codigoCliente: json['codigoCliente']?.toString() ?? '',
       nombreCliente: json['nombreCliente']?.toString() ?? 'Cliente',
+      nombreComercial: json['nombreComercial']?.toString(),
+      nombreFiscal: json['nombreFiscal']?.toString(),
       direccion: json['direccion']?.toString() ?? '',
       poblacion: json['poblacion']?.toString() ?? '',
       telefono: json['telefono']?.toString() ?? '',
@@ -184,6 +188,8 @@ class AlbaranEntrega {
   final String serieFactura;
   final String codigoCliente;
   final String nombreCliente;
+  final String? nombreComercial;
+  final String? nombreFiscal;
   final String direccion;
   final String poblacion;
   final String telefono;

@@ -284,6 +284,25 @@ class CobrosProvider extends ChangeNotifier {
     return (entry?['total'] as num?)?.toDouble() ?? 0;
   }
 
+  /// Req #15: importe vencido por cliente (subset de pending).
+  double vencidoForClient(String code) {
+    final entry = _pendingSummary[code.trim()];
+    return (entry?['vencido'] as num?)?.toDouble() ?? 0;
+  }
+
+  /// Req #15: estado consolidado por cliente — VENCIDO | PENDIENTE | AL_DIA.
+  String estadoForClient(String code) {
+    final entry = _pendingSummary[code.trim()];
+    if (entry == null) return 'AL_DIA';
+    final estado = (entry['estado'] as String?)?.toUpperCase();
+    if (estado != null && estado.isNotEmpty) return estado;
+    final vencido = (entry['vencido'] as num?)?.toDouble() ?? 0;
+    final total = (entry['total'] as num?)?.toDouble() ?? 0;
+    if (vencido > 0) return 'VENCIDO';
+    if (total > 0) return 'PENDIENTE';
+    return 'AL_DIA';
+  }
+
   Future<void> cargarCobrosPendientes(String codigoCliente) async {
     _isLoading = true;
     _error = null;
@@ -355,6 +374,13 @@ class CobrosProvider extends ChangeNotifier {
       });
       if (response['success'] == true) {
         await cargarCobrosPendientes(codigoCliente);
+        // Refresca el summary agregado para que la lista principal se actualice.
+        // Solo si ya teniamos un summary cargado (vendedor conocido).
+        if (_pendingSummary.isNotEmpty) {
+          // No bloqueamos el flujo de UI con await: fire-and-forget.
+          // ignore: unawaited_futures
+          cargarPendingSummary(employeeCode);
+        }
         return true;
       }
       return false;

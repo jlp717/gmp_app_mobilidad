@@ -186,6 +186,13 @@ class NavigationConfigService {
       label: 'Cobros',
       color: Color(0xFF2196F3),
     ),
+    // Req #3: Bolsa Comercial
+    NavItem(
+      icon: Icons.account_balance_wallet_outlined,
+      selectedIcon: Icons.account_balance_wallet,
+      label: 'Bolsa',
+      color: Color(0xFFFFD600),
+    ),
     NavItem(
       icon: Icons.smart_toy_outlined,
       selectedIcon: Icons.smart_toy,

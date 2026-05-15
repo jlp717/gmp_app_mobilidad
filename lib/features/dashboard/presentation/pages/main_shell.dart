@@ -18,7 +18,9 @@ import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/dashboar
 import 'package:gmp_app_mobilidad/features/facturas/presentation/pages/facturas_page.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/pages/kpi_dashboard_page.dart';
 import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/objectives_page.dart';
+import 'package:gmp_app_mobilidad/features/bolsa/presentation/pages/bolsa_page.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/pedidos_page.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_clientes_page.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_historico_page.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_panel_page.dart';
@@ -348,6 +350,15 @@ class _MainShellState extends ConsumerState<MainShell> {
     if (_forceRepartidorMode && isJefeVentas && _selectedRepartidor == null) {
       _selectedRepartidor = 'ALL';
     }
+
+    // Req #2: Sincroniza rol del usuario en pedidosProvider para que la UI
+    // muestre/oculte márgenes según corresponda. Se hace de forma defensiva
+    // post-frame para no notificar listeners durante el build.
+    final currentRole = user.role;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(pedidosProvider).setUserRole(currentRole);
+    });
 
     // PERFORMANCE: Use select() to only rebuild when vendedorCodes changes
     final vendedorCodes = ref.watch(
@@ -1329,6 +1340,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           PedidosPage(employeeCode: employeeCode, isJefeVentas: true),
           KpiDashboardPage(employeeCode: employeeCode, isJefeVentas: true),
           CobrosPage(employeeCode: employeeCode, isJefeVentas: true),
+          const BolsaPage(),
           const ComingSoonPlaceholder(
             title: 'Nexus AI â€” Asistente Comercial',
             subtitle:
@@ -1393,6 +1405,8 @@ class _MainShellState extends ConsumerState<MainShell> {
           return KpiDashboardPage(employeeCode: empCode, isJefeVentas: false);
         case 'Cobros':
           return CobrosPage(employeeCode: empCode);
+        case 'Bolsa':
+          return const BolsaPage();
         case 'Chat IA':
           return const ComingSoonPlaceholder(
             title: 'Nexus AI â€” Asistente Comercial',

@@ -3,8 +3,13 @@
 /**
  * BOLSA COMERCIAL SERVICE
  * =======================
- * Manages the "commercial bag" — a per-vendor monthly budget that
+ * Manages the "commercial bag" - a per-vendor monthly budget that
  * tracks accumulated margin and allows flexible pricing within limits.
+ *
+ * INTENTIONAL: las tablas BOLSA_* viven SIEMPRE en JAVIER, incluso en
+ * produccion (cuando PEDIDOS_CONFIRMATION_SCHEMA=DSEDAC). Es una decision
+ * de negocio: la bolsa es control interno y NO se replica al ERP.
+ * NO sustituir SCHEMA por una variable de entorno.
  *
  * Tables: JAVIER.BOLSA_COMERCIAL, JAVIER.MOVIMIENTOS_BOLSA
  * ERP reads: DSEDAC.ARA (tariffs for margin calc)
@@ -13,7 +18,7 @@
 const { queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
 
-const SCHEMA = 'JAVIER';
+const SCHEMA = 'JAVIER'; // Hardcoded por diseno - ver comentario superior.
 
 // ── Get or create monthly bolsa ─────────────────────────────────────
 

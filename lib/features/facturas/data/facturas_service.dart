@@ -27,6 +27,8 @@ class Factura {
     required this.total,
     required this.base,
     required this.iva,
+    this.nombreComercial,
+    this.nombreFiscal,
   });
 
   factory Factura.fromJson(Map<String, dynamic> json) {
@@ -36,6 +38,9 @@ class Factura {
     // We trust the total from the server since multi-base invoices
     // might not expose all bases in the list view.
     final finalTotal = serverTotal;
+    final displayName = json['clienteNombre']?.toString() ?? 'Cliente';
+    final comercial = json['nombreComercial']?.toString() ?? displayName;
+    final fiscal = json['nombreFiscal']?.toString() ?? '';
 
     return Factura(
       id: json['id']?.toString() ?? '',
@@ -44,7 +49,9 @@ class Factura {
       ejercicio: json['ejercicio'] is int ? (json['ejercicio'] as int) : int.tryParse(json['ejercicio']?.toString() ?? '0') ?? 0,
       fecha: json['fecha']?.toString() ?? '',
       clienteId: json['clienteId']?.toString() ?? '',
-      clienteNombre: json['clienteNombre']?.toString() ?? 'Cliente',
+      clienteNombre: displayName,
+      nombreComercial: comercial,
+      nombreFiscal: fiscal,
       total: finalTotal,
       base: base,
       iva: iva,
@@ -57,6 +64,8 @@ class Factura {
   final String fecha;
   final String clienteId;
   final String clienteNombre;
+  final String? nombreComercial;
+  final String? nombreFiscal;
   final double total;
   final double base;
   final double iva;
@@ -96,17 +105,24 @@ class FacturaHeader {
     required this.clienteNif,
     required this.total,
     required this.bases,
+    this.nombreComercial,
+    this.nombreFiscal,
   });
 
   factory FacturaHeader.fromJson(Map<String, dynamic> json) {
     final basesJson = json['bases'] as List? ?? [];
+    final displayName = json['clienteNombre']?.toString() ?? '';
+    final comercial = json['nombreComercial']?.toString() ?? displayName;
+    final fiscal = json['nombreFiscal']?.toString() ?? '';
     return FacturaHeader(
       serie: json['serie']?.toString() ?? '',
       numero: json['numero'] is int ? (json['numero'] as int) : int.tryParse(json['numero']?.toString() ?? '0') ?? 0,
       ejercicio: json['ejercicio'] is int ? (json['ejercicio'] as int) : int.tryParse(json['ejercicio']?.toString() ?? '0') ?? 0,
       fecha: json['fecha']?.toString() ?? '',
       clienteId: json['clienteId']?.toString() ?? '',
-      clienteNombre: json['clienteNombre']?.toString() ?? '',
+      clienteNombre: displayName,
+      nombreComercial: comercial,
+      nombreFiscal: fiscal,
       clienteDireccion: json['clienteDireccion']?.toString() ?? '',
       clientePoblacion: json['clientePoblacion']?.toString() ?? '',
       clienteNif: json['clienteNif']?.toString() ?? '',
@@ -120,6 +136,8 @@ class FacturaHeader {
   final String fecha;
   final String clienteId;
   final String clienteNombre;
+  final String? nombreComercial;
+  final String? nombreFiscal;
   final String clienteDireccion;
   final String clientePoblacion;
   final String clienteNif;

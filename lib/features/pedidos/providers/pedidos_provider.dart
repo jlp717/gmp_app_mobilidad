@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_order_api.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 
 /// Chooses the provider-facing result from create + confirm API responses.
@@ -56,6 +57,14 @@ final pedidosProvider =
     ChangeNotifierProvider<PedidosProvider>((ref) => PedidosProvider());
 
 class PedidosProvider with ChangeNotifier {
+  // Req #9: PedidosOrderApi inyectable para testabilidad. Por defecto usa la
+  // implementación basada en PedidosService (estática) para mantener
+  // backwards-compat con el resto del provider.
+  PedidosProvider({PedidosOrderApi? orderApi})
+      : _orderApi = orderApi ?? const PedidosServiceOrderApi();
+
+  final PedidosOrderApi _orderApi;
+
   // â”€â”€ Cart State (current order being built) â”€â”€
   final List<OrderLine> _lines = [];
   String? _clientCode;
@@ -90,6 +99,15 @@ class PedidosProvider with ChangeNotifier {
   // â”€â”€ General â”€â”€
   bool _isSaving = false;
   String? _error;
+
+  // Req #2: Visibilidad de márgenes / costes según rol.
+  // JEFE_VENTAS y ADMIN ven márgenes; COMERCIAL/REPARTIDOR no.
+  bool _isJefeVentas = false;
+  String _userRole = 'COMERCIAL';
+
+  // Req #8: Estado del aviso de borradores acumulados.
+  String? _draftWarningMessage;
+  int _accumulatedDraftCount = 0;
 
   // â”€â”€ Client Balance â”€â”€
   Map<String, dynamic> _clientBalance = {};
@@ -171,6 +189,57 @@ class PedidosProvider with ChangeNotifier {
   bool get isLoadingAnalytics => _isLoadingAnalytics;
   DateTime? get lastAutoSaved => _lastAutoSaved;
   bool get isDirty => _isDirty;
+
+  // Req #2: getters de visibilidad por rol.
+  bool get isJefeVentas => _isJefeVentas;
+  bool get isMarginVisible => _isJefeVentas; // Solo JEFE_VENTAS/ADMIN ven margen.
+  String get userRole => _userRole;
+
+  /// Actualiza el rol del usuario logueado (e.g. al iniciar sesión o
+  /// cuando authProvider cambia). Notifica para que las vistas se
+  /// repinten ocultando/mostrando márgenes según corresponda.
+  void setUserRole(String? role) {
+    final normalized = (role ?? '').trim().toUpperCase();
+    final next = normalized == 'JEFE_VENTAS' || normalized == 'ADMIN';
+    if (next == _isJefeVentas && normalized == _userRole) return;
+    _isJefeVentas = next;
+    _userRole = normalized.isEmpty ? 'COMERCIAL' : normalized;
+    notifyListeners();
+  }
+
+  // Req #8: getters de aviso de borradores acumulados.
+  String? get draftWarningMessage => _draftWarningMessage;
+  int get accumulatedDraftCount => _accumulatedDraftCount;
+  bool get hasDraftAccumulationWarning =>
+      _draftWarningMessage != null && _accumulatedDraftCount >= 3;
+
+  /// Llamado por la UI para limpiar el warning una vez mostrado.
+  void clearDraftWarning() {
+    if (_draftWarningMessage == null && _accumulatedDraftCount == 0) return;
+    _draftWarningMessage = null;
+    _accumulatedDraftCount = 0;
+    notifyListeners();
+  }
+
+  /// Consulta al backend si el comercial acumula 3+ borradores.
+  /// Resultado disponible vía [draftWarningMessage] / [accumulatedDraftCount].
+  Future<void> refreshDraftStatus(String vendedorCode) async {
+    final code = vendedorCode.trim();
+    if (code.isEmpty) return;
+    try {
+      final raw = await ApiClient.get('/pedidos/draft-status/$code');
+      final data = raw is Map<String, dynamic> ? raw : <String, dynamic>{};
+      final warning = data['warning'] == true;
+      final count = (data['count'] ?? 0) is num
+          ? (data['count'] as num).toInt()
+          : int.tryParse((data['count'] ?? '0').toString()) ?? 0;
+      _accumulatedDraftCount = count;
+      _draftWarningMessage = warning ? (data['message']?.toString()) : null;
+      notifyListeners();
+    } catch (_) {
+      // Silencioso: no crítico
+    }
+  }
 
   bool get onlyWithStock => _onlyWithStock;
   double lastQtyForProduct(String code, {String? clientCode}) {
@@ -339,6 +408,7 @@ class PedidosProvider with ChangeNotifier {
         clientCode: _clientCode,
         family: _selectedFamily,
         marca: _selectedBrand,
+        prefamily: _selectedPrefamily,
         offset: _productOffset,
         forceRefresh: forceRefresh,
       );
@@ -372,6 +442,23 @@ class PedidosProvider with ChangeNotifier {
 
   void setBrandFilter(String? brand) {
     _selectedBrand = brand;
+    notifyListeners();
+  }
+
+  // Req #14: filtro por prefamilia (Nestlé y otras agrupaciones de marca).
+  String? _selectedPrefamily;
+
+  /// Prefamilia seleccionada (por ej. "NESTLE"). null = sin filtro.
+  String? get selectedPrefamily => _selectedPrefamily;
+
+  /// Configura el filtro de prefamilia.
+  void setPrefamilyFilter(String? prefamily) {
+    final next = (prefamily ?? '').trim();
+    final normalized = next.isEmpty ? null : next.toUpperCase();
+    if (_selectedPrefamily == normalized) return;
+    _selectedPrefamily = normalized;
+    // Filtros de prefamilia y familia son excluyentes a efectos visuales.
+    if (normalized != null) _selectedFamily = null;
     notifyListeners();
   }
 
@@ -756,7 +843,7 @@ class PedidosProvider with ChangeNotifier {
           [discountTag, obs].where((s) => s.isNotEmpty).join(' ').trim();
 
       // Step 1: Create the order
-      final createResult = await PedidosService.createOrder(
+      final createResult = await _orderApi.createOrder(
         clientCode: _clientCode!,
         clientName: _clientName ?? '',
         vendedorCode: vendedorCode,
@@ -765,14 +852,14 @@ class PedidosProvider with ChangeNotifier {
         observaciones: fullObservaciones,
       );
 
-      if (createResult == null || createResult['id'] == null) {
+      if (createResult['id'] == null) {
         _error = 'Error al crear el pedido';
         return null;
       }
 
       // Step 2: Immediately confirm the order (set to CONFIRMADO)
       final orderId = createResult['id'] as int;
-      final confirmedResult = await PedidosService.confirmOrder(
+      final confirmedResult = await _orderApi.confirmOrder(
         orderId,
         _saleType,
         deliveryDate: deliveryDate,

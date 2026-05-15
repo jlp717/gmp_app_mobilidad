@@ -282,15 +282,33 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                widget.albaran.nombreCliente,
-                style: TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: Responsive.isSmall(context) ? 13 : 15,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.albaran.nombreCliente,
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: Responsive.isSmall(context) ? 13 : 15,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (widget.albaran.nombreFiscal != null &&
+                      widget.albaran.nombreFiscal!.isNotEmpty &&
+                      widget.albaran.nombreFiscal!.toUpperCase() !=
+                          widget.albaran.nombreCliente.toUpperCase())
+                    Text(
+                      widget.albaran.nombreFiscal!,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 10,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
               ),
             ),
             // Repartidor badge for directors (shown when viewing multiple repartidores)

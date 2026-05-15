@@ -131,6 +131,20 @@ class RuteroDetailCompleted extends StatelessWidget {
             label: 'Cliente',
             value: albaran.nombreCliente,
           ),
+          if (albaran.nombreFiscal != null &&
+              albaran.nombreFiscal!.isNotEmpty &&
+              albaran.nombreFiscal!.toUpperCase() !=
+                  albaran.nombreCliente.toUpperCase())
+            Padding(
+              padding: const EdgeInsets.only(left: 32, bottom: 4),
+              child: Text(
+                'N. fiscal: ${albaran.nombreFiscal}',
+                style: const TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 11,
+                ),
+              ),
+            ),
           const Divider(color: AppTheme.borderColor, height: 20),
           _InfoRow(
             icon: Icons.location_on,

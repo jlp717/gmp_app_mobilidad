@@ -739,7 +739,9 @@ class OrderLine {
           _toDouble(json['unidadesFraccion'] ?? json['UNIDADESFRACCION']),
       claseLinea:
           (json['claseLinea'] ?? json['CLASELINEA'] ?? 'VT').toString().trim(),
-    );
+    )..lineDiscountPct = _toDouble(
+        json['lineDiscountPct'] ?? json['DESCUENTO_LINEA'] ?? json['descuentoLinea'],
+      );
   }
   int? id;
   final String codigoArticulo;
@@ -828,6 +830,13 @@ class OrderLine {
     }
     importeVenta = double.parse((precioVenta * billingQty).toStringAsFixed(2));
     importeCosto = double.parse((precioCosto * billingQty).toStringAsFixed(2));
+    // Req #6: aplicar descuento por línea ANTES del descuento global, sobre
+    // importeVenta (no sobre precio unitario), para mantener trazabilidad.
+    if (lineDiscountPct > 0 && lineDiscountPct <= 100) {
+      importeVenta = double.parse(
+        (importeVenta * (1 - (lineDiscountPct / 100))).toStringAsFixed(2),
+      );
+    }
     importeMargen =
         double.parse((importeVenta - importeCosto).toStringAsFixed(2));
     porcentajeMargen = importeVenta > 0
@@ -1162,6 +1171,7 @@ class PedidosService {
     String? clientCode,
     String? family,
     String? marca,
+    String? prefamily,
     int limit = 50,
     int offset = 0,
     bool forceRefresh = false,
@@ -1177,9 +1187,12 @@ class PedidosService {
     }
     if (family != null && family.isNotEmpty) params['family'] = family;
     if (marca != null && marca.isNotEmpty) params['marca'] = marca;
+    if (prefamily != null && prefamily.isNotEmpty) {
+      params['prefamily'] = prefamily;
+    }
 
     final cacheKey =
-        'pedidos:products:${clientCode ?? ''}:${search ?? ''}:${family ?? ''}:${marca ?? ''}:$offset';
+        'pedidos:products:${clientCode ?? ''}:${search ?? ''}:${family ?? ''}:${marca ?? ''}:${prefamily ?? ''}:$offset';
     try {
       final response = await ApiClient.get(
         '$_base/products',

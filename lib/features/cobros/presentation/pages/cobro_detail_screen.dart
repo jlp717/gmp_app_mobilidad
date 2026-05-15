@@ -258,14 +258,49 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                   : Icons.radio_button_unchecked,
           color: state != 'NONE' ? AppTheme.success : AppTheme.textSecondary,
         ),
-        title: Text(
-          cobro.referencia.isNotEmpty ? cobro.referencia : cobro.id,
-          style:
-              const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                cobro.referencia.isNotEmpty ? cobro.referencia : cobro.id,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            // Req #15: badge tricolor según estado del vencimiento.
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: cobro.estado.color.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: cobro.estado.color.withValues(alpha: 0.45),
+                ),
+              ),
+              child: Text(
+                cobro.estado.label.toUpperCase(),
+                style: TextStyle(
+                  color: cobro.estado.color,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
         ),
         subtitle: Text(
-          'Vencimiento: ${cobro.fechaVencimiento != null ? DateFormat('dd/MM/yyyy').format(cobro.fechaVencimiento!) : 'N/A'}',
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          'Vencimiento: ${cobro.fechaVencimiento != null ? DateFormat('dd/MM/yyyy').format(cobro.fechaVencimiento!) : 'N/A'}'
+              '${cobro.isVencido ? '  ·  Mora ${cobro.diasMora}d' : ''}',
+          style: TextStyle(
+            color: cobro.isVencido
+                ? AppTheme.error.withValues(alpha: 0.9)
+                : AppTheme.textSecondary,
+            fontSize: 12,
+            fontWeight: cobro.isVencido ? FontWeight.w600 : FontWeight.normal,
+          ),
         ),
         trailing: Text(
           _currencyFormat.format(cobro.importePendiente),

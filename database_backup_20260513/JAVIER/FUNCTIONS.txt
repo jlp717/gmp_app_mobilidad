@@ -1,0 +1,14 @@
+﻿================================================================================
+FUNCIONES SQL EN ESQUEMA JAVIER
+================================================================================
+Total: 4 funciones SQL
+
+1. FN_MEDIOS_REPORT_DATA() - Usada por V_MEDIOS_POWERBI
+   Definicion: SELECT FROM DSEDAC.MEDL1 + MMDL1 + CLI 
+   (definicion completa en raw data)
+
+2. FN_GET_MEDIOS() - SELECT FROM DSEDAC.MEDL1
+
+3. FN_GET_MEDIOS_V2() - SELECT FROM DSEDAC.MEDL1 (v2)
+
+4. FN_GET_MEDIOS_FULL() - SELECT FROM DSEDAC.MEDL1 (full)

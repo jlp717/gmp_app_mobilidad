@@ -47,10 +47,26 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('token') ?? '';
 
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/evolution/monthly?clientCode=${widget.clientCode}&vendedorCodes=${widget.vendedorCodes}'),
+      // Req #12: usar el endpoint específico /api/pedidos/client-evolution/{code}
+      // que devuelve {monthlySales, topProducts, returns}. Se hace un fallback
+      // al endpoint legacy /api/evolution/monthly si el nuevo no responde, para
+      // mantener compatibilidad durante el rollout.
+      Uri uri = Uri.parse(
+        '$baseUrl/api/pedidos/client-evolution/${widget.clientCode}',
+      );
+      var response = await http.get(
+        uri,
         headers: {'Authorization': 'Bearer $token'},
       );
+      if (response.statusCode != 200) {
+        uri = Uri.parse(
+          '$baseUrl/api/evolution/monthly?clientCode=${widget.clientCode}&vendedorCodes=${widget.vendedorCodes}',
+        );
+        response = await http.get(
+          uri,
+          headers: {'Authorization': 'Bearer $token'},
+        );
+      }
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
