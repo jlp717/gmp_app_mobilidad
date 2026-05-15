@@ -194,7 +194,15 @@ class Db2CobrosRepository extends CobrosRepository {
   }
 
   /**
-   * Get pending payments summary for a vendor (all clients)
+   * Get pending payments summary for a vendor (all clients).
+   *
+   * FIX (2026-05-15): lee la deuda REAL desde DSEDAC.CVC (ERP) en vez de
+   * JAVIER.PEDIDOS_CAB. CVC tiene ~730k filas vivas, PEDIDOS_CAB solo 15
+   * (datos test). Por eso antes salian todos los clientes con check verde
+   * cuando si tenian deuda real visible al entrar al detalle.
+   *
+   * IBM i ODBC tiene limite practico de ~90 parametros. Con >50 vendor codes
+   * embebemos en SQL (codes validados 2-3 chars alfanumericos).
    */
   async getPendingSummary(vendorCode, context = {}) {
     const manager = isManagerContext(context);
@@ -207,52 +215,74 @@ class Db2CobrosRepository extends CobrosRepository {
     }
 
     const userCode = trim(context.userId || context.userCode);
-    const vendorCodes = requested.toUpperCase() === 'ALL'
+    const isAll = requested.toUpperCase() === 'ALL';
+    const vendorCodes = isAll
       ? []
       : requested.split(',').map((code) => trim(code)).filter(Boolean);
     if (!manager && vendorCodes.some((code) => !codesMatch(code, userCode))) {
       throw new CommercialCobrosError('FORBIDDEN_VENDOR', 'COMERCIAL solo puede consultar su vendedor', 403);
     }
 
-    await this.ensureCobrosTable();
-    const vendorFilter = vendorCodes.length > 0
-      ? `AND TRIM(PC.CODIGOVENDEDOR) IN (${vendorCodes.map(() => '?').join(',')})`
-      : '';
-    const orders = await queryWithParams(`
-      SELECT
-        PC.ID, TRIM(PC.CODIGOCLIENTE) AS CODIGOCLIENTE,
-        TRIM(PC.CODIGOVENDEDOR) AS CODIGOVENDEDOR,
-        TRIM(PC.SERIEPEDIDO) AS SERIEPEDIDO,
-        PC.NUMEROPEDIDO,
-        PC.IMPORTETOTAL,
-        TRIM(PC.ESTADO) AS ESTADO
-      FROM ${APP_SCHEMA}.PEDIDOS_CAB PC
-      WHERE PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
-        AND PC.IMPORTETOTAL > 0
-        ${vendorFilter}
-    `, vendorCodes, []);
+    const MAX_PARAMS = 50;
+    let vendorClause = '';
+    let queryParams = [];
+    if (!isAll && vendorCodes.length > 0) {
+      if (vendorCodes.length <= MAX_PARAMS) {
+        vendorClause = ` AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${vendorCodes.map(() => '?').join(',')})`;
+        queryParams = vendorCodes;
+      } else {
+        const safeCodes = vendorCodes
+          .filter((v) => /^[A-Za-z0-9]{1,10}$/.test(v))
+          .map((v) => `'${v.replace(/'/g, "''")}'`)
+          .join(',');
+        if (safeCodes) {
+          vendorClause = ` AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${safeCodes})`;
+        }
+      }
+    }
 
-    const payments = await this.getAllPayments();
+    const sql = `
+      SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
+             SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
+             COUNT(*) AS NUM_DOCS,
+             SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
+                 < (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
+                 THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
+       FROM DSEDAC.CVC CVC
+       LEFT JOIN DSEDAC.CLP CLP ON TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+       WHERE CVC.IMPORTEPENDIENTE <> 0
+         AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+         ${vendorClause}
+       GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN)
+       ORDER BY TOTAL_PENDIENTE DESC
+    `;
+
+    const rows = queryParams.length > 0
+      ? await queryWithParams(sql, queryParams, [])
+      : await query(sql, false);
+
     const summary = {};
-    let grandTotalCents = 0;
+    let grandTotal = 0;
+    let grandTotalVencido = 0;
+    let clientCount = 0;
 
-    for (const order of orders || []) {
-      const client = trim(order.CODIGOCLIENTE);
-      const paidCents = payments
-        .filter((payment) => trim(payment.CODIGO_CLIENTE) === client && paymentMatchesOrder(payment.REFERENCIA, order))
-        .reduce((sum, payment) => sum + toCents(payment.TOTAL_IMPORTE), 0);
-      const pendingCents = Math.max(0, toCents(order.IMPORTETOTAL) - paidCents);
-      if (pendingCents === 0) continue;
-      if (!summary[client]) summary[client] = { total: 0, count: 0 };
-      summary[client].total = fromCents(toCents(summary[client].total) + pendingCents);
-      summary[client].count += 1;
-      grandTotalCents += pendingCents;
+    for (const r of rows || []) {
+      const code = trim(r.CLIENTE);
+      const total = parseFloat(r.TOTAL_PENDIENTE) || 0;
+      const vencido = parseFloat(r.TOTAL_VENCIDO) || 0;
+      const docCount = parseInt(r.NUM_DOCS) || 0;
+      const estado = vencido > 0 ? 'VENCIDO' : (total > 0 ? 'PENDIENTE' : 'AL_DIA');
+      summary[code] = { total, vencido, count: docCount, estado };
+      grandTotal += total;
+      grandTotalVencido += vencido;
+      clientCount++;
     }
 
     return {
       summary,
-      grandTotal: fromCents(grandTotalCents),
-      clientCount: Object.keys(summary).length,
+      grandTotal,
+      grandTotalVencido,
+      clientCount,
     };
   }
 
@@ -398,6 +428,21 @@ class Db2CobrosRepository extends CobrosRepository {
         ]);
 
       await conn.query('COMMIT');
+
+      // EXPORT al ERP DSEDAC (best-effort, no rompe el flujo si falla).
+      // Solo se ejecuta si PEDIDOS_EXPORT_TO_SYSTEM=true en .env.
+      try {
+        const dsedacExports = require('../../../../services/dsedac-exports.service');
+        await dsedacExports.exportCobroToSystem({
+          IDEMPOTENCY_TOKEN: id,
+          CODIGO_CLIENTE: normalizedClient,
+          CODIGOVENDEDOR: order.CODIGOVENDEDOR || normalizedUserId,
+          IMPORTE: fromCents(amountCents),
+          CODIGO_USUARIO: normalizedUserId,
+        });
+      } catch (exportErr) {
+        logger.warn(`[COBROS] dsedac export best-effort fail: ${exportErr.message}`);
+      }
       return {
         id,
         clientCode: normalizedClient,

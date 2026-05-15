@@ -31,7 +31,7 @@
 - `lib/` — Flutter/Dart frontend (features/, core/, shared/)
 - `backend/` — Node.js API (routes/, services/, middleware/)
 - `backend/scripts/` — utility/investigation scripts
-- `.claude/` — Claude Code config, agents, skills, hooks
+- `.opencode/` — OpenCode config, agents, project briefing
 - NEVER save working files to root folder
 
 ## Concurrency: 1 MESSAGE = ALL RELATED OPERATIONS
@@ -149,89 +149,30 @@ nc localhost 3197
 - Always validate user input at system boundaries (backend routes)
 - Always sanitize file paths to prevent directory traversal
 
-## Swarm Orchestration (RuFlo)
+## User Patterns (CRITICAL — apply to ALL output)
 
-- Use hierarchical topology for complex multi-file tasks
-- Keep maxAgents at 6-8 for tight coordination
-- Use `run_in_background: true` for all agent Task calls
-- After spawning agents, STOP and wait — do NOT poll status
-- When agent results arrive, review ALL results before proceeding
-
-### Model Routing
-
-| Complexity | Model | Use Cases |
-|-----------|-------|-----------|
-| Simple | Haiku | Formatting, renames, simple lookups |
-| Medium | Sonnet | Feature implementation, bug fixes |
-| Complex | Opus | Architecture, security review, multi-file refactor |
-
-## V3 CLI Commands (RuFlo)
-
-```bash
-# Doctor check
-npx @claude-flow/cli@latest doctor --fix
-
-# Swarm init
-npx @claude-flow/cli@latest swarm init --topology hierarchical --max-agents 8 --strategy specialized
-
-# Memory
-npx @claude-flow/cli@latest memory search --query "your query"
-npx @claude-flow/cli@latest memory store --key "key" --value "value" --namespace patterns
-
-# Agent spawn
-npx @claude-flow/cli@latest agent spawn -t coder --name my-coder
-```
-
-## Available Agents (60+ Types)
-
-Core: `coder`, `reviewer`, `tester`, `planner`, `researcher`
-Specialized: `security-architect`, `security-auditor`, `performance-engineer`
-Swarm: `hierarchical-coordinator`, `mesh-coordinator`
-GitHub: `pr-manager`, `code-review-swarm`, `release-manager`
-
-## Installed Skills (`.agents/skills/`)
-
-### Caveman Suite
-- `caveman`, `caveman-commit`, `caveman-review`, `caveman-compress`, `caveman-help`
-- Default mode: **full** — drop articles, filler, pleasantries, hedging
-- Config: `~/.config/caveman/config.json` → `{ "defaultMode": "full" }`
-
-### Power Automate MCP (FlowStudio)
-- `flowstudio-power-automate-mcp` — CRUD flows, runs, triggers via MCP
-- `flowstudio-power-automate-debug` — Diagnose failing flows step-by-step
-- `flowstudio-power-automate-governance` — Compliance, tagging, archiving at scale
-- Requires: FlowStudio subscription + JWT token at https://mcp.flowstudio.app
-- **Python helper** (stdlib only, no pip needed):
-
-```python
-import json, urllib.request
-
-TOKEN = "<YOUR_JWT>"
-MCP = "https://mcp.flowstudio.app/mcp"
-
-def mcp(tool, args):
-    payload = {"jsonrpc": "2.0", "method": "tools/call", "id": 1,
-    "params": {"name": tool, "arguments": args}}
-    req = urllib.request.Request(MCP, data=json.dumps(payload).encode(),
-        headers={"x-api-key": TOKEN, "Content-Type": "application/json"})
-    raw = json.loads(urllib.request.urlopen(req, timeout=120).read())
-    return json.loads(raw["result"]["content"][0]["text"])
-```
-
-- **Node.js equivalent**: native `fetch` (Node 18+), same JSON-RPC pattern
-
-### Claude-Mem
-- Plugin `thedotmack/claude-mem` v12.4.7 — persistent memory compression
-- Hook-based: SessionStart, PostToolUse, SessionEnd → SQLite + Chroma FTS
-- MCP tools: `search`, `timeline`, `get_observations` for memory retrieval
-- Web viewer: http://localhost:37777
-- Config: `~/.claude-mem/settings.json` (auto-created on first run)
-- Active for Claude Code AND OpenCode via `npx claude-mem install --ide opencode`
+- **Standard**: Results must be exceptional — polished, animated, with personality. Generic output is unacceptable.
+- **Hates**: AI-loop copy ("team of experts", "integral solutions"), decorative emojis, generic templates, bugs, silent failures.
+- **Wants**: Purposeful animations, Material 3 with centralized colors (app_colors.dart), zero errors, verified before reporting.
+- **Workflow**: User wants to use ONLY the orchestrator. Do NOT ask the user to switch agents/modes. Context must be remembered across sessions via memory MCP.
+- **Zero tolerance**: console.log/print in production, hardcoded secrets, any/dynamic without justification, white screens, unverified "done" claims.
+- **Verification**: ALWAYS run tests/analyze before claiming completion. Report the exact command and result.
 
 ## MCP Servers
 
-- **claude-flow**: RuFlo orchestration, memory, swarm coordination
 - **context7**: Live documentation lookup for any library (Flutter, Dart, Node, Express, DB2, etc.)
   - Use `context7` MCP tools to fetch up-to-date API docs instead of guessing from memory
   - Especially useful for Flutter widgets, Dart APIs, and Node.js packages
   - Saves tokens by fetching only the relevant doc section, not the whole page
+- **ibm-db2-mcp**: IBM Db2 for i via ODBC (DSN=GMP, schema JAVIER)
+- **dart-flutter-mcp**: Dart/Flutter tooling daemon (hot reload, widget tree, tests)
+- **pub-mcp**: pub.dev package search and info
+- **gmp-deploy-ssh**: Deploy to production server (192.168.1.230)
+- **github**: PRs, issues, code search, repo management
+- **firecrawl**: Web research and content extraction
+- **memory**: Persistent context across sessions
+- **sequential-thinking**: Complex reasoning chains
+- **filesystem**: File operations within allowed directories
+- **ddg-search**: Web search
+- **time**: Timezone utilities
+- **fetch**: URL fetching

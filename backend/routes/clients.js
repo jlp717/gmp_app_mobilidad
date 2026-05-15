@@ -104,21 +104,28 @@ const getClientsHandler = async (req, res) => {
           ${clientCodesFilter ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL') : vendedorFilter.replace(/L\./g, '')}
         GROUP BY LCCDCL
       ) S ON C.CODIGOCLIENTE = S.CLIENT_CODE
-      -- Get vendor from most recent transaction (DB2 compatible)
-      -- When cache is active, use C.CODIGOCLIENTE (always resolves, even without matching sales)
-      -- When no cache (fallback), use S.CLIENT_CODE (only resolves for clients with vendor-filtered sales)
-      LEFT JOIN LATERAL (
-        SELECT LCCDVD as LAST_VENDOR
-        FROM DSED.LACLAE
-        WHERE LCCDCL = ${clientCodesFilter ? 'C.CODIGOCLIENTE' : 'S.CLIENT_CODE'}
-          AND LCAADC >= ${MIN_YEAR}
-          AND TPDC = 'LAC'
-          AND LCTPVT IN ('CC', 'VC')
-          AND LCCLLN IN ('AB', 'VT')
-          AND LCSRAB NOT IN ('N', 'Z')
-        ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC
-        FETCH FIRST 1 ROWS ONLY
-      ) LV ON 1=1
+      -- FIX 2026-05-15: el LATERAL JOIN original ejecutaba 1 sub-query por
+      -- cada cliente (2246 sub-queries) y hacia que la respuesta tardara 46s.
+      -- Lo sustituyo por una sola pasada con ROW_NUMBER OVER PARTITION BY
+      -- LCCDCL: DB2 for i materializa esto una sola vez y el JOIN con C es O(N).
+      LEFT JOIN (
+        SELECT CLIENT_CODE, LAST_VENDOR FROM (
+          SELECT
+            LCCDCL AS CLIENT_CODE,
+            LCCDVD AS LAST_VENDOR,
+            ROW_NUMBER() OVER (
+              PARTITION BY LCCDCL
+              ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC
+            ) AS RN
+          FROM DSED.LACLAE
+          WHERE LCAADC >= ${MIN_YEAR}
+            AND TPDC = 'LAC'
+            AND LCTPVT IN ('CC', 'VC')
+            AND LCCLLN IN ('AB', 'VT')
+            AND LCSRAB NOT IN ('N', 'Z')
+        ) X
+        WHERE RN = 1
+      ) LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE
       LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
       WHERE C.ANOBAJA = 0
         ${clientCodesFilter || (!vendedorCodes || vendedorCodes === 'ALL' || vendedorCodes.trim() === '' ? '' : `AND LV.LAST_VENDOR IS NOT NULL`)}

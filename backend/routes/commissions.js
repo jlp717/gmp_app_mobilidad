@@ -16,7 +16,7 @@ const router = express.Router();
 // ROUTES & HELPER FUNCTIONS
 // =============================================================================
 // FIX #1: Dynamic excluded vendors - loaded from DB with safety fallback
-const DEFAULT_EXCLUDED = ['3', '13', '93', '80'];
+const DEFAULT_EXCLUDED = ['3', '13', '93'];
 let EXCLUDED_VENDORS = [...DEFAULT_EXCLUDED];
 let _excludedVendorsLastLoad = 0;
 const EXCLUDED_CACHE_TTL = 5 * 60 * 1000; // Reload every 5 min
@@ -130,7 +130,7 @@ async function initCommissionTables() {
         try {
             const count = await conn.query(`SELECT COUNT(*) as CNT FROM JAVIER.COMMISSION_EXCEPTIONS`);
             if (count && count[0].CNT == 0) {
-                const defaultExcluded = ['03', '13', '93', '80'];
+                const defaultExcluded = ['03', '13', '93'];
                 for (const code of defaultExcluded) {
                     await conn.query(`INSERT INTO JAVIER.COMMISSION_EXCEPTIONS (CODIGOVENDEDOR, HIDE_COMMISSIONS, EXCLUIDO_COMISIONES) VALUES (?, 'N', 'Y')`, [code]);
                 }

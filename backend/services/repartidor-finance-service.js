@@ -1971,6 +1971,29 @@ async function closeLiquidacion(input) {
 
   const liquidacion =
     createdLiquidacion || await findLiquidacionByToken(input.idempotencyToken);
+
+  // EXPORT al ERP DSEDAC.CLV (best-effort, no rompe el flujo si falla).
+  // Solo se ejecuta si PEDIDOS_EXPORT_TO_SYSTEM=true y schema=DSEDAC.
+  // No exportamos si ya estabamos haciendo replay (la fila ya existe).
+  if (!replayedInsideTransaction && liquidacion) {
+    try {
+      const dsedacExports = require('./dsedac-exports.service');
+      await dsedacExports.exportLiquidacionToSystem({
+        IDEMPOTENCY_TOKEN: input.idempotencyToken,
+        CODIGOVENDEDOR: input.repartidorId,
+        CODIGO_REPARTIDOR: input.repartidorId,
+        IMPORTEEFECTIVO: liquidacion.totalEfectivo || 0,
+        IMPORTECHEQUES: liquidacion.totalCheques || 0,
+        IMPORTETARJETA: liquidacion.totalTarjeta || 0,
+        IMPORTEPOSTDATADOS: liquidacion.totalPostdatados || 0,
+        IMPORTEINGRESOENBANCO: liquidacion.ingresoBanco || 0,
+        IMPORTEGASTOS: liquidacion.gastos || 0,
+      });
+    } catch (exportErr) {
+      logger.warn(`[REPARTIDOR] dsedac CLV export best-effort fail: ${exportErr.message}`);
+    }
+  }
+
   return { created: !replayedInsideTransaction, liquidacion };
 }
 

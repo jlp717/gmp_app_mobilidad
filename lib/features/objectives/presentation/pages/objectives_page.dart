@@ -21,11 +21,13 @@ class ObjectivesPage extends ConsumerStatefulWidget {
       super.key,
       this.isJefeVentas = false,
       this.vendorSelectorCodes,
-      this.includeAllVendorOption = true});
+      this.includeAllVendorOption = true,
+      this.forceShowVendorSelector = false});
   final String employeeCode;
   final bool isJefeVentas;
   final List<String>? vendorSelectorCodes;
   final bool includeAllVendorOption;
+  final bool forceShowVendorSelector;
 
   @override
   ConsumerState<ObjectivesPage> createState() => _ObjectivesPageState();
@@ -950,6 +952,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
       allowedVendorCodes: widget.vendorSelectorCodes,
       includeAllOption: widget.includeAllVendorOption,
       defaultVendorCode: widget.employeeCode,
+      forceShow: widget.forceShowVendorSelector,
     );
   }
 
@@ -1009,7 +1012,7 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         ),
 
         // Selector de vendedor para jefe de ventas
-        if (widget.isJefeVentas) _buildVendedorSelector(),
+        if (widget.isJefeVentas || widget.forceShowVendorSelector) _buildVendedorSelector(),
 
         // Tab bar
         Container(

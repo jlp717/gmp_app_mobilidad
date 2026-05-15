@@ -23,11 +23,13 @@ class SimpleClientListPage extends ConsumerStatefulWidget {
       super.key,
       this.isJefeVentas = false,
       this.vendorSelectorCodes,
-      this.includeAllVendorOption = true});
+      this.includeAllVendorOption = true,
+      this.forceShowVendorSelector = false});
   final String employeeCode;
   final bool isJefeVentas;
   final List<String>? vendorSelectorCodes;
   final bool includeAllVendorOption;
+  final bool forceShowVendorSelector;
 
   @override
   ConsumerState<SimpleClientListPage> createState() =>
@@ -355,13 +357,14 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
                     ),
                   ],
                 ),
-              if (widget.isJefeVentas) ...[
+              if (widget.isJefeVentas || widget.forceShowVendorSelector) ...[
                 const SizedBox(height: 12),
                 GlobalVendorSelector(
-                  isJefeVentas: true,
+                  isJefeVentas: widget.isJefeVentas,
                   allowedVendorCodes: widget.vendorSelectorCodes,
                   includeAllOption: widget.includeAllVendorOption,
                   defaultVendorCode: widget.employeeCode,
+                  forceShow: widget.forceShowVendorSelector,
                 ),
               ],
             ],

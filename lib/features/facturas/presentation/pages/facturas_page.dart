@@ -27,7 +27,11 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class FacturasPage extends ConsumerStatefulWidget {
-  const FacturasPage({super.key});
+  const FacturasPage({
+    super.key,
+    this.forceShowVendorSelector = false,
+  });
+  final bool forceShowVendorSelector;
 
   @override
   ConsumerState<FacturasPage> createState() => _FacturasPageState();
@@ -1007,13 +1011,14 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                       ),
                     ],
                   ),
-                  if (authState?.user?.isJefeVentas ?? false) ...[
+                  if ((authState?.user?.isJefeVentas ?? false) || widget.forceShowVendorSelector) ...[
                     const SizedBox(height: 12),
                     Container(
                       constraints: const BoxConstraints(minHeight: 50),
                       width: double.infinity,
                       child: GlobalVendorSelector(
                         isJefeVentas: true,
+                        forceShow: widget.forceShowVendorSelector,
                       ),
                     ),
                   ],

@@ -117,7 +117,7 @@ interface CommissionSummaryResult {
 // EXCLUDED VENDORS CACHE
 // ============================================
 
-const DEFAULT_EXCLUDED = ['3', '13', '93', '80'];
+const DEFAULT_EXCLUDED = ['3', '13', '93'];
 let _excludedVendors: string[] = [...DEFAULT_EXCLUDED];
 let _excludedLastLoad = 0;
 const EXCLUDED_CACHE_TTL = 5 * 60 * 1000;
@@ -719,3 +719,278 @@ class CommissionsService {
 }
 
 export const commissionsService = new CommissionsService();
+
+// ============================================
+// COMMERCIAL TEAM COMMISSION — DB-configurable
+// ============================================
+// Leader (e.g. commercial 80) gets commission on team performance.
+// All params (members, rate, threshold, all-must-qualify) are read
+// from JAVIER.TEAM_COMMISSION_RULES + TEAM_COMMISSION_MEMBERS.
+// Falls back to sensible defaults if tables are empty/missing.
+
+interface TeamCommissionRule {
+  leaderCode: string;
+  year: number;
+  commissionRate: number;       // e.g. 0.70 (%)
+  growthThresholdPct: number;   // e.g. 10.00 (%)
+  allMustQualify: boolean;      // if true, ALL members must exceed threshold
+}
+
+interface TeamCommissionMember {
+  memberCode: string;
+}
+
+interface TeamCommissionConfig {
+  rule: TeamCommissionRule;
+  members: TeamCommissionMember[];
+}
+
+// Fallback defaults (used only if DB tables are empty/missing)
+const FALLBACK_TEAM_CONFIGS: Record<string, TeamCommissionConfig> = {
+  '80': {
+    rule: {
+      leaderCode: '80',
+      year: 2026,
+      commissionRate: 0.70,
+      growthThresholdPct: 10.00,
+      allMustQualify: true,
+    },
+    members: ['72', '73', '80', '81', '83', '86'].map(c => ({ memberCode: c })),
+  },
+};
+
+/**
+ * Load team commission config from DB for a given leader code and year.
+ * Falls back to hardcoded defaults if no DB config exists.
+ */
+async function loadTeamCommissionConfig(
+  leaderCode: string,
+  year: number,
+): Promise<TeamCommissionConfig> {
+  try {
+    // Load rule
+    const ruleRows = await odbcPool.query<Record<string, unknown>[]>(`
+      SELECT LEADER_CODE, YEAR, COMMISSION_RATE, GROWTH_THRESHOLD_PCT,
+             ALL_MUST_QUALIFY
+      FROM JAVIER.TEAM_COMMISSION_RULES
+      WHERE LEADER_CODE = ? AND YEAR = ? AND ACTIVE = 'Y'
+      FETCH FIRST 1 ROWS ONLY
+    `, [leaderCode, year]);
+
+    if (!ruleRows || ruleRows.length === 0) {
+      logger.debug(`[TEAM_COMM] No DB rule for leader=${leaderCode} year=${year}, using fallback`);
+      return FALLBACK_TEAM_CONFIGS[leaderCode] || {
+        rule: { leaderCode, year, commissionRate: 0.70, growthThresholdPct: 10.00, allMustQualify: true },
+        members: [],
+      };
+    }
+
+    const row = ruleRows[0];
+    const rule: TeamCommissionRule = {
+      leaderCode: String(row.LEADER_CODE).trim(),
+      year: toInt(row.YEAR),
+      commissionRate: toFloat(row.COMMISSION_RATE),
+      growthThresholdPct: toFloat(row.GROWTH_THRESHOLD_PCT),
+      allMustQualify: String(row.ALL_MUST_QUALIFY).trim() === 'Y',
+    };
+
+    // Load members
+    const memberRows = await odbcPool.query<Record<string, unknown>[]>(`
+      SELECT MEMBER_CODE
+      FROM JAVIER.TEAM_COMMISSION_MEMBERS
+      WHERE RULE_ID = (SELECT ID FROM JAVIER.TEAM_COMMISSION_RULES
+                       WHERE LEADER_CODE = ? AND YEAR = ? AND ACTIVE = 'Y')
+        AND ACTIVE = 'Y'
+      ORDER BY MEMBER_CODE
+    `, [leaderCode, year]);
+
+    const members: TeamCommissionMember[] = (memberRows || [])
+      .map(r => ({ memberCode: String(r.MEMBER_CODE).trim() }))
+      .filter(m => m.memberCode);
+
+    logger.info(`[TEAM_COMM] Loaded DB config: leader=${leaderCode} rate=${rule.commissionRate}% threshold=${rule.growthThresholdPct}% members=${members.length} allQualify=${rule.allMustQualify}`);
+
+    return { rule, members };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    logger.warn(`[TEAM_COMM] Error loading DB config for leader=${leaderCode}: ${msg}, using fallback`);
+    return FALLBACK_TEAM_CONFIGS[leaderCode] || {
+      rule: { leaderCode, year, commissionRate: 0.70, growthThresholdPct: 10.00, allMustQualify: true },
+      members: [],
+    };
+  }
+}
+
+interface TeamMemberCommission {
+  vendorCode: string;
+  vendorName: string;
+  prevYearSales: number;
+  currentSales: number;
+  threshold: number;
+  excess: number;
+  qualifies: boolean;
+  commission: number;
+}
+
+interface TeamCommissionResult {
+  year: number;
+  month: number;
+  members: TeamMemberCommission[];
+  totalExcess: number;
+  totalCommission: number;
+  qualifyingMembers: number;
+  allMembersQualified: boolean;
+  config: {
+    commissionRate: number;
+    growthThresholdPct: number;
+    allMustQualify: boolean;
+  };
+}
+
+/**
+ * Calculate team commission for a leader based on DB-configurable rules.
+ */
+async function calculateTeamCommission(
+  leaderCode: string,
+  year: number,
+  month: number,
+): Promise<TeamCommissionResult> {
+  const config = await loadTeamCommissionConfig(leaderCode, year);
+  const { rule, members } = config;
+  const prevYear = year - 1;
+  const thresholdMultiplier = 1 + (rule.growthThresholdPct / 100);
+
+  const memberResults: TeamMemberCommission[] = [];
+  let totalExcess = 0;
+  let totalCommission = 0;
+  let qualifyingMembers = 0;
+
+  for (const member of members) {
+    const code = member.memberCode;
+    const { clause, params } = buildVendedorFilterLACLAE(code);
+
+    // Current year sales for this month
+    const currRows = await odbcPool.query<Record<string, unknown>[]>(`
+      SELECT SUM(L.LCIMVT) AS SALES
+      FROM DSED.LACLAE L
+      WHERE L.LCAADC = ? AND L.LCMMDC = ?
+        AND ${LACLAE_SALES_FILTER}
+        ${clause}
+    `, [year, month, ...params]);
+
+    let currentSales = toFloat(currRows[0]?.SALES) || 0;
+    const bSales = await getBSales(code, year);
+    currentSales += (bSales[month] || 0);
+
+    // Previous year sales for same month
+    const prevRows = await odbcPool.query<Record<string, unknown>[]>(`
+      SELECT SUM(L.LCIMVT) AS SALES
+      FROM DSED.LACLAE L
+      WHERE L.LCAADC = ? AND L.LCMMDC = ?
+        AND ${LACLAE_SALES_FILTER}
+        ${clause}
+    `, [prevYear, month, ...params]);
+
+    let prevSales = toFloat(prevRows[0]?.SALES) || 0;
+    const bSalesPrev = await getBSales(code, prevYear);
+    prevSales += (bSalesPrev[month] || 0);
+
+    const threshold = prevSales * thresholdMultiplier;
+    const excess = Math.max(0, currentSales - threshold);
+    const qualifies = currentSales > threshold;
+    const commission = qualifies ? excess * (rule.commissionRate / 100) : 0;
+
+    if (qualifies) {
+      totalExcess += excess;
+      totalCommission += commission;
+      qualifyingMembers++;
+    }
+
+    const vendorName = await getVendorName(code);
+    memberResults.push({
+      vendorCode: code,
+      vendorName,
+      prevYearSales: prevSales,
+      currentSales,
+      threshold,
+      excess,
+      qualifies,
+      commission,
+    });
+  }
+
+  // If allMustQualify is true and NOT all members qualified, commission = 0
+  const allMembersQualified = qualifyingMembers === members.length;
+  if (rule.allMustQualify && !allMembersQualified) {
+    totalCommission = 0;
+    totalExcess = 0;
+  }
+
+  return {
+    year,
+    month,
+    members: memberResults,
+    totalExcess,
+    totalCommission,
+    qualifyingMembers,
+    allMembersQualified,
+    config: {
+      commissionRate: rule.commissionRate,
+      growthThresholdPct: rule.growthThresholdPct,
+      allMustQualify: rule.allMustQualify,
+    },
+  };
+}
+
+/**
+ * GET /commissions/team/:leaderCode
+ * Returns team commission breakdown for a leader.
+ */
+async function getTeamCommission(
+  leaderCode: string,
+  year: number,
+): Promise<{
+  success: boolean;
+  year: number;
+  leaderCode: string;
+  months: TeamCommissionResult[];
+  annualTotal: number;
+  annualExcess: number;
+  teamMembers: string[];
+  config: {
+    commissionRate: number;
+    growthThresholdPct: number;
+    allMustQualify: boolean;
+  };
+}> {
+  const config = await loadTeamCommissionConfig(leaderCode, year);
+  const months: TeamCommissionResult[] = [];
+  let annualTotal = 0;
+  let annualExcess = 0;
+
+  for (let m = 1; m <= 12; m++) {
+    const result = await calculateTeamCommission(leaderCode, year, m);
+    months.push(result);
+    annualTotal += result.totalCommission;
+    annualExcess += result.totalExcess;
+  }
+
+  return {
+    success: true,
+    year,
+    leaderCode,
+    months,
+    annualTotal,
+    annualExcess,
+    teamMembers: config.members.map(m => m.memberCode),
+    config: {
+      commissionRate: config.rule.commissionRate,
+      growthThresholdPct: config.rule.growthThresholdPct,
+      allMustQualify: config.rule.allMustQualify,
+    },
+  };
+}
+
+export const commissionsService = new CommissionsService();
+export { getTeamCommission, loadTeamCommissionConfig };
+export type { TeamCommissionResult, TeamMemberCommission, TeamCommissionConfig };

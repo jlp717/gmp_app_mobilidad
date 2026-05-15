@@ -96,11 +96,17 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   bool _hasScopedVendorAccess(UserModel user, List<String> vendorCodes) {
+    // Commercial 80 (Almeria lead) gets team view access
+    final normalizedCode = (user?.code ?? '').replaceFirst(RegExp(r'^0+'), '');
+    if (normalizedCode == '80' && vendorCodes.length > 1) return true;
     return !user.isJefeVentas && vendorCodes.length > 1;
   }
 
   String _defaultScopedVendor(UserModel user, List<String> vendorCodes) {
-    final ownCode = user.vendedorCode ?? user.code;
+    // Commercial 80 (Almeria lead) defaults to ALL team members
+    final normalizedCode = (user?.code ?? '').replaceFirst(RegExp(r'^0+'), '');
+    if (normalizedCode == '80') return 'ALL';
+    final ownCode = user?.vendedorCode ?? user?.code;
     if (vendorCodes.contains(ownCode)) return ownCode;
     return vendorCodes.isNotEmpty ? vendorCodes.first : ownCode;
   }
@@ -1355,21 +1361,38 @@ class _MainShellState extends ConsumerState<MainShell> {
     // ===============================================
     // COMERCIAL MODE
     // ===============================================
+
+    // Commercial 80 (Almeria lead) gets team view access
+    const commercial80TeamCodes = ['72', '73', '80', '81', '83', '86'];
+    final normalizedUserCode = (user?.code ?? '').replaceFirst(RegExp(r'^0+'), '');
+    final isCommercial80 = normalizedUserCode == '80';
+
+    // For commercial 80: extend vendedorCodes to include team members
+    final effectiveVendorCodes = isCommercial80
+        ? {...vendedorCodes, ...commercial80TeamCodes}.toList()
+        : vendedorCodes;
+
     final hasScopedVendorAccess =
-        user != null && _hasScopedVendorAccess(user, vendedorCodes);
+        user != null && _hasScopedVendorAccess(user, effectiveVendorCodes);
     final scopedDefaultCode = hasScopedVendorAccess && user != null
-        ? _defaultScopedVendor(user, vendedorCodes)
+        ? _defaultScopedVendor(user, effectiveVendorCodes)
         : '';
     final selectedScopedVendor =
         hasScopedVendorAccess ? ref.watch(selectedVendorProvider) : null;
     final scopedEmployeeCode = hasScopedVendorAccess
         ? (selectedScopedVendor != null &&
-                vendedorCodes.contains(selectedScopedVendor)
+                effectiveVendorCodes.contains(selectedScopedVendor)
             ? selectedScopedVendor
             : scopedDefaultCode)
         : null;
-    final empCode = scopedEmployeeCode ?? vendedorCodes.join(',');
-    final comercialNav = _getNavItems(false, vendedorCodes);
+    final empCode = scopedEmployeeCode ?? effectiveVendorCodes.join(',');
+
+    // For commercial 80: when "ALL" is selected, treat as jefe-like view
+    final isCommercial80AllMode = isCommercial80 &&
+        (selectedScopedVendor == null ||
+            selectedScopedVendor.isEmpty ||
+            selectedScopedVendor == 'ALL');
+    final comercialNav = _getNavItems(isCommercial80AllMode, effectiveVendorCodes);
 
     Widget comercialPageForIndex(int idx) {
       final label = idx < comercialNav.length ? comercialNav[idx].label : '';
@@ -1377,39 +1400,65 @@ class _MainShellState extends ConsumerState<MainShell> {
         case 'Clientes':
           return SimpleClientListPage(
             employeeCode: empCode,
-            isJefeVentas: hasScopedVendorAccess,
-            vendorSelectorCodes: hasScopedVendorAccess ? vendedorCodes : null,
+            isJefeVentas: isCommercial80AllMode || hasScopedVendorAccess,
+            vendorSelectorCodes: (isCommercial80AllMode || hasScopedVendorAccess)
+                ? effectiveVendorCodes
+                : null,
             includeAllVendorOption: !hasScopedVendorAccess,
+            forceShowVendorSelector: isCommercial80,
           );
         case 'Ruta':
-          return RuteroPage(employeeCode: empCode);
+          return RuteroPage(
+            employeeCode: empCode,
+            isJefeVentas: isCommercial80AllMode,
+            forceShowVendorSelector: isCommercial80,
+          );
         case 'Objetivos':
           return ObjectivesPage(
             employeeCode: empCode,
-            isJefeVentas: hasScopedVendorAccess,
-            vendorSelectorCodes: hasScopedVendorAccess ? vendedorCodes : null,
+            isJefeVentas: isCommercial80AllMode || hasScopedVendorAccess,
+            vendorSelectorCodes: (isCommercial80AllMode || hasScopedVendorAccess)
+                ? effectiveVendorCodes
+                : null,
             includeAllVendorOption: !hasScopedVendorAccess,
+            forceShowVendorSelector: isCommercial80,
           );
         case 'Comisiones':
           return CommissionsPage(
             employeeCode: empCode,
-            isJefeVentas: hasScopedVendorAccess,
-            vendorSelectorCodes: hasScopedVendorAccess ? vendedorCodes : null,
+            isJefeVentas: isCommercial80AllMode || hasScopedVendorAccess,
+            vendorSelectorCodes: (isCommercial80AllMode || hasScopedVendorAccess)
+                ? effectiveVendorCodes
+                : null,
             includeAllVendorOption: !hasScopedVendorAccess,
+            forceShowVendorSelector: isCommercial80,
           );
         case 'Facturas':
-          return const FacturasPage();
+          return FacturasPage(
+            forceShowVendorSelector: isCommercial80,
+          );
         case 'Pedidos':
-          return PedidosPage(employeeCode: empCode, isJefeVentas: false);
+          return PedidosPage(
+            employeeCode: empCode,
+            isJefeVentas: isCommercial80AllMode,
+            forceShowVendorSelector: isCommercial80,
+          );
         case 'Glacius':
-          return KpiDashboardPage(employeeCode: empCode, isJefeVentas: false);
+          return KpiDashboardPage(
+            employeeCode: empCode,
+            isJefeVentas: isCommercial80AllMode,
+            forceShowVendorSelector: isCommercial80,
+          );
         case 'Cobros':
-          return CobrosPage(employeeCode: empCode);
+          return CobrosPage(
+            employeeCode: empCode,
+            forceShowVendorSelector: isCommercial80,
+          );
         case 'Bolsa':
           return const BolsaPage();
         case 'Chat IA':
           return const ComingSoonPlaceholder(
-            title: 'Nexus AI â€” Asistente Comercial',
+            title: 'Nexus AI â€" Asistente Comercial',
             subtitle:
                 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
             icon: Icons.smart_toy,

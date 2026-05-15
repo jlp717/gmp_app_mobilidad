@@ -66,9 +66,14 @@ jobs:
       - name: Detect changed files
         id: changes
         run: |
-          echo "all=$(git diff --name-only HEAD~1 origin/test 2>/dev/null | tr '\n' ' ')" >> $GITHUB_OUTPUT
-          echo "backend=$(git diff --name-only HEAD~1 origin/test 2>/dev/null | grep -E '^backend/' | tr '\n' ' ' || echo '')" >> $GITHUB_OUTPUT
-          echo "lib=$(git diff --name-only HEAD~1 origin/test 2>/dev/null | grep -E '^lib/' | tr '\n' ' ' || echo '')" >> $GITHUB_OUTPUT
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            BASE="HEAD~1"
+          fi
+          echo "all=$(git diff --name-only $BASE HEAD 2>/dev/null | tr '\n' ' ')" >> $GITHUB_OUTPUT
+          echo "backend=$(git diff --name-only $BASE HEAD 2>/dev/null | grep -E '^backend/' | tr '\n' ' ' || echo '')" >> $GITHUB_OUTPUT
+          echo "lib=$(git diff --name-only $BASE HEAD 2>/dev/null | grep -E '^lib/' | tr '\n' ' ' || echo '')" >> $GITHUB_OUTPUT
 
   # ==========================================================================
   # PHASE 1a: FLUTTER LINT & ANALYZE (Parallel-safe)
@@ -177,23 +182,9 @@ jobs:
   backend-test:
     name: Backend Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     needs: [preflight, backend-lint]
     if: needs.preflight.outputs.should_skip_tests != 'true'
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: test
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
     outputs:
       test_result: ${{ steps.test.outputs.result }}
       coverage: ${{ steps.coverage.outputs.coverage }}
@@ -604,13 +595,8 @@ jobs:
     needs: [flutter-lint, backend-test, flutter-test, build-android-debug]
     if: failure()
     steps:
-      - name:通知
+      - name: Failure summary
         run: |
           echo "## ❌ CI/CD Pipeline Failed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Failed Jobs:" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ needs.flutter-lint.outputs.result || 'flutter-lint' }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ needs.backend-test.outputs.result || 'backend-test' }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- \`${{ needs.flutter-test.outputs.result || 'flutter-test' }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "👉 [View Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY

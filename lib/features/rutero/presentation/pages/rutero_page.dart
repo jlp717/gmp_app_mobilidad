@@ -29,9 +29,11 @@ class RuteroPage extends ConsumerStatefulWidget {
     required this.employeeCode,
     super.key,
     this.isJefeVentas = false,
+    this.forceShowVendorSelector = false,
   });
   final String employeeCode;
   final bool isJefeVentas;
+  final bool forceShowVendorSelector;
 
   @override
   ConsumerState<RuteroPage> createState() => _RuteroPageState();
@@ -553,6 +555,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
               isSmallScreen: isSmallScreen,
               onRoleChanged: _onRoleChanged,
               onSortTap: _openReorderModal,
+              forceShowVendorSelector: widget.forceShowVendorSelector,
             ),
             RuteroWeekSummary(
               selectedYear: _selectedYear,
