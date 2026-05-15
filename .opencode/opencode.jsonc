@@ -1,5 +1,7 @@
 ﻿// gmp_app_mobilidad — Flutter + Riverpod + Node.js + IBM DB2
 // Override del proyecto sobre la config global ~/.config/opencode/opencode.jsonc
+// MCPs optimizados: solo los del camino critico diario activos.
+// Los demas se activan on-demand cuando el orchestrator los necesita.
 {
   "$schema": "https://opencode.ai/config.json",
 
@@ -13,51 +15,39 @@
   },
 
   // MCPs activos en gmp_app_mobilidad.
+  // CRITICOS DIARIOS: siempre on
+  // ON-DEMAND: off por defecto, el orchestrator los activa cuando necesita
   "mcp": {
-    // Compartidos (siempre on)
+    // === CRITICOS DIARIOS (siempre on) ===
     "context7":            { "enabled": true },
     "sequential-thinking": { "enabled": true },
     "memory":              { "enabled": true },
     "filesystem":          { "enabled": true },
     "ddg-search":          { "enabled": true },
-
-    // Git y GitHub
     "git":                 { "enabled": true },
     "github":              { "enabled": true },
-
-    // Web scraping / investigación
     "firecrawl":           { "enabled": true },
-
-    // IBM DB2 for i — CRÍTICO para este proyecto
     "ibm-db2-mcp":         { "enabled": true },
-
-    // Flutter/Dart MCPs
     "dart-flutter-mcp":    { "enabled": true },
     "pub-mcp":             { "enabled": true },
-    "iflow-flutter":       { "enabled": true },
-
-    // Deploy SSH al servidor productivo (192.168.1.230)
     "gmp-deploy-ssh":      { "enabled": true },
-
-    // Sentry para monitorización de errores en prod
     "sentry":              { "enabled": true },
-
-    // Time utilities
     "time":                { "enabled": true },
-
-    // Code graph RAG — 99% token savings en sesiones largas
-    "code-graph-rag":      { "enabled": true },
-
-    // Serverless fetch
     "fetch":               { "enabled": true },
 
-    // Playwright para testing E2E de flujos móviles
-    "playwright":          { "enabled": true },
+    // === ON-DEMAND (off por defecto, activar segun necesidad) ===
+    // Code exploration profunda → activar con serena
+    "serena":              { "enabled": false },
+    // E2E testing → activar con playwright
+    "playwright":          { "enabled": false },
+    // Analisis de datos/reports → activar con excel
+    "excel":               { "enabled": false },
+    // Redundante con dart-flutter-mcp → solo si iflow aporta algo especifico
+    "iflow-flutter":       { "enabled": false },
+    // Token savings sesiones largas → activar si sesion >30 min
+    "code-graph-rag":      { "enabled": false },
 
-    // Excel para análisis de datos (reports, exports)
-    "excel":               { "enabled": true },
-
-    // No relevantes para este proyecto Flutter
+    // === NO RELEVANTES PARA ESTE PROYECTO FLUTTER ===
     "chrome-devtools":     { "enabled": false },
     "vercel":              { "enabled": false },
     "mcp-seo":             { "enabled": false },
@@ -67,7 +57,6 @@
     "brave-search":        { "enabled": false },
     "tavily":              { "enabled": false },
     "slack":               { "enabled": false },
-    "serena":              { "enabled": true },
     "desktop-commander":   { "enabled": false },
     "sqlite":              { "enabled": false },
     "figma-context":       { "enabled": false },
