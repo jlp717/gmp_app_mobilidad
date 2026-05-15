@@ -11,8 +11,10 @@ import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_models.dart';
+import 'package:gmp_app_mobilidad/features/bolsa/presentation/widgets/bolsa_monthly_chart.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/providers/bolsa_provider.dart';
 
 class BolsaPage extends ConsumerStatefulWidget {
@@ -85,9 +87,20 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
             ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: provider.refresh,
-        child: _buildBody(provider),
+      body: Column(
+        children: [
+          // Selector "Ver como" para que JEFE_VENTAS pueda inspeccionar la
+          // bolsa de cada comercial. Para COMERCIAL no se renderiza (forceShow
+          // es false y isJefeVentas es false).
+          if (user?.isJefeVentas == true)
+            const GlobalVendorSelector(isJefeVentas: true),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: provider.refresh,
+              child: _buildBody(provider),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -107,6 +120,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
       'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
       'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
     ];
+    final filtered = provider.filteredMovements;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -116,18 +130,51 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
         ),
         const SizedBox(height: 16),
         _ProgressBar(status: status),
-        const SizedBox(height: 24),
+        if (provider.history.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          BolsaMonthlyChart(history: provider.history),
+        ],
+        const SizedBox(height: 20),
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Text(
-            'Movimientos del mes (${provider.movements.length})',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: Responsive.fontSize(context, small: 14, large: 16),
-              fontWeight: FontWeight.bold,
-            ),
+          child: Row(
+            children: [
+              Text(
+                'Movimientos',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize:
+                      Responsive.fontSize(context, small: 14, large: 16),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                provider.movements.isEmpty
+                    ? ''
+                    : '(${filtered.length}/${provider.movements.length})',
+                style: const TextStyle(
+                  color: Colors.white54,
+                  fontSize: 12,
+                ),
+              ),
+              const Spacer(),
+              if (provider.tipoFilter != null ||
+                  provider.searchQuery.isNotEmpty)
+                TextButton.icon(
+                  onPressed: provider.clearFilters,
+                  icon: const Icon(Icons.clear, size: 14),
+                  label: const Text('Limpiar', style: TextStyle(fontSize: 11)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppTheme.warning,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                  ),
+                ),
+            ],
           ),
         ),
+        _MovimientosFilters(provider: provider),
+        const SizedBox(height: 8),
         if (provider.movements.isEmpty)
           Container(
             padding: const EdgeInsets.all(20),
@@ -141,8 +188,21 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
               style: TextStyle(color: Colors.white54),
             ),
           )
+        else if (filtered.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(20),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppTheme.darkSurface,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text(
+              'Ningún movimiento coincide con los filtros',
+              style: TextStyle(color: Colors.white54),
+            ),
+          )
         else
-          ...provider.movements.map((m) => _MovimientoTile(movimiento: m)),
+          ...filtered.map((m) => _MovimientoTile(movimiento: m)),
         const SizedBox(height: 32),
       ],
     );
@@ -396,6 +456,147 @@ class _ProgressBar extends StatelessWidget {
             minHeight: 10,
             backgroundColor: AppTheme.darkSurface,
             valueColor: AlwaysStoppedAnimation<Color>(color),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MovimientosFilters extends StatefulWidget {
+  const _MovimientosFilters({required this.provider});
+  final BolsaProvider provider;
+
+  @override
+  State<_MovimientosFilters> createState() => _MovimientosFiltersState();
+}
+
+class _MovimientosFiltersState extends State<_MovimientosFilters> {
+  late final TextEditingController _searchCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _searchCtrl = TextEditingController(text: widget.provider.searchQuery);
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.provider;
+    final counts = p.countsByTipo;
+
+    Widget chip(String label, BolsaMovimientoTipo? tipo, IconData icon) {
+      final selected = p.tipoFilter == tipo;
+      final count = tipo == null ? p.movements.length : (counts[tipo] ?? 0);
+      return Padding(
+        padding: const EdgeInsets.only(right: 6),
+        child: ChoiceChip(
+          selected: selected,
+          onSelected: (_) => p.setTipoFilter(tipo),
+          backgroundColor: AppTheme.darkSurface,
+          selectedColor: AppTheme.neonBlue.withValues(alpha: 0.25),
+          side: BorderSide(
+            color: selected
+                ? AppTheme.neonBlue
+                : Colors.white.withValues(alpha: 0.15),
+          ),
+          label: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 13, color: Colors.white.withValues(alpha: 0.7)),
+              const SizedBox(width: 4),
+              Text(label, style: const TextStyle(fontSize: 11)),
+              const SizedBox(width: 4),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.10),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  '$count',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          labelStyle: TextStyle(
+            color: selected ? Colors.white : Colors.white.withValues(alpha: 0.75),
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        SizedBox(
+          height: 32,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              chip('Todos', null, Icons.list_alt),
+              chip('Acumulación', BolsaMovimientoTipo.acumulacion,
+                  Icons.trending_up,),
+              chip('Consumo', BolsaMovimientoTipo.consumo,
+                  Icons.trending_down,),
+              chip('Ajustes', BolsaMovimientoTipo.ajuste, Icons.tune),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _searchCtrl,
+          onChanged: p.setSearchQuery,
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+          decoration: InputDecoration(
+            isDense: true,
+            prefixIcon: const Icon(Icons.search, size: 18, color: Colors.white54),
+            suffixIcon: _searchCtrl.text.isEmpty
+                ? null
+                : IconButton(
+                    icon: const Icon(Icons.close, size: 16),
+                    color: Colors.white54,
+                    onPressed: () {
+                      _searchCtrl.clear();
+                      p.setSearchQuery('');
+                    },
+                  ),
+            hintText: 'Buscar por artículo o descripción…',
+            hintStyle: TextStyle(
+              color: Colors.white.withValues(alpha: 0.35),
+              fontSize: 12,
+            ),
+            filled: true,
+            fillColor: AppTheme.darkSurface,
+            contentPadding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: Colors.white.withValues(alpha: 0.10),
+              ),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: Colors.white.withValues(alpha: 0.10),
+              ),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(
+                color: AppTheme.neonBlue.withValues(alpha: 0.5),
+              ),
+            ),
           ),
         ),
       ],

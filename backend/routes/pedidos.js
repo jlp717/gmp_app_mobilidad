@@ -1146,8 +1146,10 @@ router.get('/purchase-history-global', async (req, res) => {
         let vendor = String(req.query.vendedorCode || '').trim();
         if (!userIsJefe && userVendor) vendor = userVendor; // comercial solo ve lo suyo
         const isAllVendor = !vendor || vendor.toUpperCase() === 'ALL';
-        const clientCode = sanitizeCode(req.query.clientCode || '');
-        const productCode = sanitizeCode(req.query.productCode || '');
+        const clientCode = String(req.query.clientCode || '').trim();
+        const productCode = String(req.query.productCode || '').trim();
+        const familia = String(req.query.familia || '').trim();
+        const marca = String(req.query.marca || '').trim();
 
         const limit = Math.min(parseInt(req.query.limit) || 100, 500);
         const offset = parseInt(req.query.offset) || 0;
@@ -1182,6 +1184,16 @@ router.get('/purchase-history-global', async (req, res) => {
         if (productCode) {
             where.push(`TRIM(L.LCCDRF) = ?`);
             params.push(productCode);
+        }
+        // Filtros adicionales por familia y marca (vienen de DSEDAC.ART
+        // via el JOIN con A en la consulta detalle/top).
+        if (familia) {
+            where.push(`L.LCCDRF IN (SELECT CODIGOARTICULO FROM DSEDAC.ART WHERE TRIM(CODIGOFAMILIA) = ?)`);
+            params.push(familia);
+        }
+        if (marca) {
+            where.push(`L.LCCDRF IN (SELECT CODIGOARTICULO FROM DSEDAC.ART WHERE TRIM(CODIGOMARCA) = ?)`);
+            params.push(marca);
         }
 
         const whereSql = where.join(' AND ');
@@ -1276,6 +1288,8 @@ router.get('/purchase-history-global', async (req, res) => {
                 vendedorCode: isAllVendor ? 'ALL' : vendor,
                 clientCode: clientCode || null,
                 productCode: productCode || null,
+                familia: familia || null,
+                marca: marca || null,
             },
             summary: {
                 numLineas: parseInt(s.NUM_LINEAS) || 0,
@@ -1317,8 +1331,158 @@ router.get('/purchase-history-global', async (req, res) => {
             pagination: { limit, offset, hasMore: (detail || []).length === limit },
         });
     } catch (error) {
-        logger.error(`[PEDIDOS] purchase-history-global error: ${error.message}`);
-        res.status(500).json({ success: false, error: 'Error obteniendo historico global' });
+        // STACK COMPLETO + odbcErrors para diagnostico (el 500 en 3ms suele ser
+        // error de sintaxis SQL o de prepare antes de tocar la BD).
+        const odbc0 = error.odbcErrors && error.odbcErrors[0];
+        const odbcMsg = odbc0 ? `${odbc0.state} (${odbc0.code}): ${odbc0.message}` : '';
+        logger.error(`[PEDIDOS] purchase-history-global ERROR: ${error.message}\n  ODBC: ${odbcMsg}\n  STACK: ${error.stack || ''}`);
+        res.status(500).json({
+            success: false,
+            error: 'Error obteniendo historico global',
+            detail: process.env.NODE_ENV !== 'production' ? error.message : undefined,
+            odbc: process.env.NODE_ENV !== 'production' ? odbcMsg : undefined,
+        });
+    }
+});
+
+/**
+ * GET /api/pedidos/product-comparative/:productCode
+ * ==================================================
+ * Compara las ventas mensuales (en envases) de un producto entre el año
+ * actual y el año anterior. Se usa al abrir el modal "Anadir al pedido"
+ * para que el vendedor vea de un vistazo si el cliente esta comprando
+ * mas o menos respecto al mismo periodo del año anterior.
+ *
+ * Query params:
+ *  - clientCode (opcional): si se pasa, filtra solo por ese cliente
+ *  - vendedorCode (opcional): si se pasa, filtra solo por ese vendedor
+ *
+ * Devuelve:
+ *  {
+ *    success, code, name,
+ *    currentYear:  { year, total, monthly: [{m, envases, importe}, ...] },
+ *    previousYear: { year, total, monthly: [...] },
+ *    variation:    { envasesPct, importePct }
+ *  }
+ */
+router.get('/product-comparative/:productCode', async (req, res) => {
+    try {
+        const productCode = String(req.params.productCode || '').trim();
+        if (!productCode) {
+            return res.status(400).json({ success: false, error: 'productCode requerido' });
+        }
+        const clientCode = String(req.query.clientCode || '').trim();
+        const vendedorCode = String(req.query.vendedorCode || '').trim();
+
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const previousYear = currentYear - 1;
+        const todayDayOfYear = now.getMonth() * 100 + now.getDate(); // mm*100+dd para comparar "a estas alturas"
+
+        const where = [`TRIM(L.LCCDRF) = ?`, `L.LCTPVT IN ('CC','VC')`,
+                       `L.LCCLLN IN ('VT','AB')`, `L.LCSRAB NOT IN ('N','Z','G','D')`];
+        const params = [productCode];
+        if (clientCode) {
+            where.push('TRIM(L.LCCDCL) = ?');
+            params.push(clientCode);
+        }
+        if (vendedorCode && vendedorCode.toUpperCase() !== 'ALL') {
+            where.push('TRIM(L.LCCDVD) = ?');
+            params.push(vendedorCode);
+        }
+        const whereSql = where.join(' AND ');
+
+        const sqlByMonth = `
+            SELECT
+                L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
+                COALESCE(SUM(L.LCCTEV), 0) AS ENVASES,
+                COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
+                COALESCE(SUM(L.LCIMVT), 0) AS IMPORTE
+            FROM DSED.LACLAE L
+            WHERE ${whereSql}
+              AND L.LCAADC IN (?, ?)
+            GROUP BY L.LCAADC, L.LCMMDC
+            ORDER BY L.LCAADC, L.LCMMDC
+        `;
+
+        const sqlProductName = `
+            SELECT TRIM(DESCRIPCIONARTICULO) AS NAME
+            FROM DSEDAC.ART
+            WHERE TRIM(CODIGOARTICULO) = ?
+            FETCH FIRST 1 ROW ONLY
+        `;
+
+        const [rows, nameRows] = await Promise.all([
+            queryWithParams(sqlByMonth, [...params, currentYear, previousYear], []),
+            queryWithParams(sqlProductName, [productCode], []),
+        ]);
+
+        const empty = () => Array.from({ length: 12 }, (_, i) => ({
+            m: i + 1, envases: 0, unidades: 0, importe: 0,
+        }));
+        const monthlyCurrent = empty();
+        const monthlyPrevious = empty();
+        for (const r of (rows || [])) {
+            const y = parseInt(r.YEAR);
+            const m = parseInt(r.MONTH);
+            if (!m || m < 1 || m > 12) continue;
+            const slot = (y === currentYear ? monthlyCurrent : (y === previousYear ? monthlyPrevious : null));
+            if (!slot) continue;
+            slot[m - 1] = {
+                m,
+                envases: parseFloat(r.ENVASES) || 0,
+                unidades: parseFloat(r.UNIDADES) || 0,
+                importe: parseFloat(r.IMPORTE) || 0,
+            };
+        }
+
+        const sumKey = (arr, key) => arr.reduce((s, x) => s + (x[key] || 0), 0);
+        const totalEnvCur = sumKey(monthlyCurrent, 'envases');
+        const totalImpCur = sumKey(monthlyCurrent, 'importe');
+        const totalEnvPrev = sumKey(monthlyPrevious, 'envases');
+        const totalImpPrev = sumKey(monthlyPrevious, 'importe');
+
+        // Comparativa "a estas alturas": acumulado hasta el dia actual ambos años
+        const ymdNow = (now.getMonth() + 1) * 100 + now.getDate();
+        const cutoff = (arr) => arr.reduce((s, x, idx) => {
+            const mmdd = (idx + 1) * 100 + (idx + 1 === now.getMonth() + 1 ? now.getDate() : 99);
+            return mmdd <= ymdNow ? s + x.envases : s;
+        }, 0);
+        // simplification: sumamos meses cerrados completos + el actual proporcional
+        const monthsClosed = now.getMonth(); // 0..11
+        const partialDay = now.getDate();
+        const daysInCurrentMonth = new Date(currentYear, monthsClosed + 1, 0).getDate();
+        const accum = (arr) => {
+            let s = 0;
+            for (let i = 0; i < monthsClosed; i++) s += arr[i].envases;
+            s += arr[monthsClosed].envases * (partialDay / daysInCurrentMonth);
+            return s;
+        };
+        const ytdCur = accum(monthlyCurrent);
+        const ytdPrev = accum(monthlyPrevious);
+
+        const variation = {
+            envasesPct: totalEnvPrev > 0 ? ((totalEnvCur - totalEnvPrev) / totalEnvPrev) * 100 : null,
+            importePct: totalImpPrev > 0 ? ((totalImpCur - totalImpPrev) / totalImpPrev) * 100 : null,
+            ytdEnvasesPct: ytdPrev > 0 ? ((ytdCur - ytdPrev) / ytdPrev) * 100 : null,
+            ytdCur,
+            ytdPrev,
+        };
+
+        res.json({
+            success: true,
+            code: productCode,
+            name: (nameRows?.[0]?.NAME || '').trim(),
+            filters: { clientCode: clientCode || null, vendedorCode: vendedorCode || null },
+            currentYear:  { year: currentYear,  total: totalEnvCur,  totalImporte: totalImpCur,  monthly: monthlyCurrent },
+            previousYear: { year: previousYear, total: totalEnvPrev, totalImporte: totalImpPrev, monthly: monthlyPrevious },
+            variation,
+        });
+    } catch (error) {
+        const odbc0 = error.odbcErrors && error.odbcErrors[0];
+        const odbcMsg = odbc0 ? `${odbc0.state} (${odbc0.code}): ${odbc0.message}` : '';
+        logger.error(`[PEDIDOS] product-comparative error: ${error.message} | ODBC: ${odbcMsg}`);
+        res.status(500).json({ success: false, error: 'Error obteniendo comparativa de producto' });
     }
 });
 
@@ -1327,7 +1491,7 @@ router.get('/purchase-history-global', async (req, res) => {
  */
 router.get('/client-evolution/:clientCode', async (req, res) => {
     try {
-        const clientCode = sanitizeCode(req.params.clientCode);
+        const clientCode = String(req.params.clientCode || '').trim();
         const currentYear = new Date().getFullYear();
         const startYear = currentYear - 2; // 3 years of history
 

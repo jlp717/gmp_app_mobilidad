@@ -8,6 +8,7 @@ import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/widgets/repartidor_monthly_summary_bar.dart';
 import 'package:intl/intl.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
@@ -99,6 +100,10 @@ class _RepartidorLiquidacionDiariaPageState
           title: 'Liquidacion Diaria',
           date: _sessionDate,
         ),
+        // Resumen acumulado del mes: cobrado / liquidado / pendiente.
+        // Da contexto al repartidor antes de cerrar el dia.
+        if (!isAggregate)
+          RepartidorMonthlySummaryBar(repartidorId: widget.repartidorId),
         Expanded(
           child: Form(
             key: _formKey,

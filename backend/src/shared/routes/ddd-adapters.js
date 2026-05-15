@@ -712,8 +712,9 @@ function createPedidosRoutes() {
     }
   });
 
-  // GET /api/pedidos/:id
-  router.get('/:id', async (req, res) => {
+  // GET /api/pedidos/:id  - SOLO numerico para no capturar rutas como
+  // /purchase-history-global, /draft-status/:vendedorCode, etc.
+  router.get('/:id([0-9]+)', async (req, res) => {
     try {
       const { id } = req.params;
       const order = await repo.getOrderById(id);

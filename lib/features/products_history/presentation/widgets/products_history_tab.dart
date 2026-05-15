@@ -38,6 +38,8 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
   DateTime _to = DateTime.now();
   String _clientCode = '';
   String _productCode = '';
+  String _familiaFilter = '';
+  String _marcaFilter = '';
   late String _vendedorFilter;
 
   Map<String, dynamic>? _summary;
@@ -65,6 +67,8 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
           'vendedorCode': _vendedorFilter,
           if (_clientCode.isNotEmpty) 'clientCode': _clientCode,
           if (_productCode.isNotEmpty) 'productCode': _productCode,
+          if (_familiaFilter.isNotEmpty) 'familia': _familiaFilter,
+          if (_marcaFilter.isNotEmpty) 'marca': _marcaFilter,
           'limit': '300',
         },
       );
@@ -152,6 +156,8 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
           const SizedBox(height: 12),
           _buildComparativaCard(),
           const SizedBox(height: 12),
+          _buildMonthlyBarsCard(),
+          const SizedBox(height: 12),
           _buildTopProductsCard(),
           const SizedBox(height: 12),
           _buildLinesTable(),
@@ -215,6 +221,36 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Familia (código)',
+                      isDense: true,
+                    ),
+                    onSubmitted: (v) {
+                      setState(() => _familiaFilter = v.trim());
+                      _load();
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      labelText: 'Marca (código)',
+                      isDense: true,
+                    ),
+                    onSubmitted: (v) {
+                      setState(() => _marcaFilter = v.trim());
+                      _load();
+                    },
+                  ),
+                ),
+              ],
+            ),
             if (widget.isJefeVentas) ...[
               const SizedBox(height: 8),
               TextField(
@@ -230,9 +266,58 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
                 },
               ),
             ],
+            // Chips activos: muestra los filtros aplicados y permite quitarlos
+            if (_clientCode.isNotEmpty ||
+                _productCode.isNotEmpty ||
+                _familiaFilter.isNotEmpty ||
+                _marcaFilter.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 6,
+                runSpacing: 4,
+                children: [
+                  if (_clientCode.isNotEmpty)
+                    _activeFilterChip('Cliente: $_clientCode',
+                        () => setState(() {
+                              _clientCode = '';
+                              _load();
+                            })),
+                  if (_productCode.isNotEmpty)
+                    _activeFilterChip('Producto: $_productCode',
+                        () => setState(() {
+                              _productCode = '';
+                              _load();
+                            })),
+                  if (_familiaFilter.isNotEmpty)
+                    _activeFilterChip('Familia: $_familiaFilter',
+                        () => setState(() {
+                              _familiaFilter = '';
+                              _load();
+                            })),
+                  if (_marcaFilter.isNotEmpty)
+                    _activeFilterChip('Marca: $_marcaFilter',
+                        () => setState(() {
+                              _marcaFilter = '';
+                              _load();
+                            })),
+                ],
+              ),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  Widget _activeFilterChip(String label, VoidCallback onClear) {
+    return Chip(
+      label: Text(label, style: const TextStyle(fontSize: 11)),
+      backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.15),
+      side: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.4)),
+      deleteIcon: const Icon(Icons.close, size: 14),
+      onDeleted: onClear,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      visualDensity: VisualDensity.compact,
     );
   }
 
@@ -336,6 +421,118 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
                     : '${variacion >= 0 ? '+' : ''}${_fmtPct(variacion)}',
                 style:
                     TextStyle(color: color, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Gráfico mensual de ventas: agrupa las líneas devueltas por mes y
+  /// muestra barras con el importe vendido. Visual igual que el comparador
+  /// del rutero. Se calcula en el frontend para no pedir endpoint extra.
+  Widget _buildMonthlyBarsCard() {
+    if (_lines.isEmpty) return const SizedBox.shrink();
+    final monthlyTotals = List<double>.filled(12, 0);
+    for (final line in _lines) {
+      final fecha = (line['fecha'] ?? '').toString();
+      if (fecha.length < 7) continue;
+      final mes = int.tryParse(fecha.substring(5, 7));
+      if (mes == null || mes < 1 || mes > 12) continue;
+      final importe = (line['importe'] as num?)?.toDouble() ?? 0;
+      monthlyTotals[mes - 1] += importe;
+    }
+    final maxVal = monthlyTotals.fold<double>(0, (m, x) => x > m ? x : m);
+    if (maxVal == 0) return const SizedBox.shrink();
+    const labels = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    final now = DateTime.now();
+
+    return Card(
+      color: AppTheme.darkCard,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Ventas por mes',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              height: 140,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: List.generate(12, (i) {
+                  final value = monthlyTotals[i];
+                  final h = maxVal > 0 ? (value / maxVal) * 100 : 0.0;
+                  final isCurrent = i + 1 == now.month;
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          if (value > 0)
+                            Text(
+                              _fmtMoney(value),
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.6),
+                                fontSize: 8,
+                              ),
+                            ),
+                          const SizedBox(height: 2),
+                          Container(
+                            height: h < 4 ? 4 : h,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                                colors: isCurrent
+                                    ? [
+                                        AppTheme.neonGreen,
+                                        AppTheme.neonGreen.withValues(alpha: 0.4),
+                                      ]
+                                    : [
+                                        AppTheme.neonBlue,
+                                        AppTheme.neonBlue.withValues(alpha: 0.3),
+                                      ],
+                              ),
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(4),
+                              ),
+                              boxShadow: isCurrent
+                                  ? [
+                                      BoxShadow(
+                                        color: AppTheme.neonGreen.withValues(alpha: 0.4),
+                                        blurRadius: 6,
+                                      ),
+                                    ]
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            labels[i],
+                            style: TextStyle(
+                              color: isCurrent
+                                  ? AppTheme.neonGreen
+                                  : Colors.white.withValues(alpha: 0.55),
+                              fontSize: 10,
+                              fontWeight: isCurrent
+                                  ? FontWeight.w700
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
               ),
             ),
           ],

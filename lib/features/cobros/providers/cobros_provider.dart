@@ -47,6 +47,7 @@ class CobrosProvider extends ChangeNotifier {
   EstadoCliente? _estadoClienteActual;
   Map<String, Map<String, dynamic>> _pendingSummary = {};
   double _grandTotal = 0;
+  double _grandTotalVencido = 0;
   String _filtroEstado = 'todos';
   String _filtroCliente = '';
   DateTime? _filtroFecha;
@@ -62,6 +63,15 @@ class CobrosProvider extends ChangeNotifier {
   String get filtroCliente => _filtroCliente;
   Map<String, Map<String, dynamic>> get pendingSummary => _pendingSummary;
   double get grandTotal => _grandTotal;
+  double get grandTotalVencido => _grandTotalVencido;
+  /// Numero de clientes con cualquier importe pendiente (>0).
+  int get clientsWithDebt => _pendingSummary.values
+      .where((v) => ((v['total'] as num?)?.toDouble() ?? 0) > 0)
+      .length;
+  /// Numero de clientes con importe vencido (>0).
+  int get clientsWithVencido => _pendingSummary.values
+      .where((v) => ((v['vencido'] as num?)?.toDouble() ?? 0) > 0)
+      .length;
 
   int get totalEntregasPendientes => _albaranesPendientes
       .where((a) => a.estado == EstadoEntrega.pendiente)
@@ -267,6 +277,8 @@ class CobrosProvider extends ChangeNotifier {
         _pendingSummary =
             raw.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v as Map)));
         _grandTotal = (response['grandTotal'] as num?)?.toDouble() ?? 0;
+        _grandTotalVencido =
+            (response['grandTotalVencido'] as num?)?.toDouble() ?? 0;
         _error = null;
       } else {
         _error = 'Error al cargar resumen de pendientes';

@@ -55,6 +55,28 @@ class BolsaService {
     }
   }
 
+  /// GET /api/bolsa/:vendedorCode/history?months=12
+  static Future<List<BolsaMonthlyPoint>> getHistory(
+    String vendedorCode, {
+    int months = 12,
+  }) async {
+    final code = vendedorCode.trim();
+    if (code.isEmpty) return [];
+    try {
+      final response = await ApiClient.get(
+        '$_base/$code/history',
+        queryParameters: <String, dynamic>{'months': months.toString()},
+      );
+      final list = response['points'] as List? ?? [];
+      return list
+          .map((p) => BolsaMonthlyPoint.fromJson(p as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      debugPrint('[BolsaService] getHistory error: $e');
+      return [];
+    }
+  }
+
   /// PUT /api/bolsa/:vendedorCode/config (JEFE_VENTAS / ADMIN)
   static Future<BolsaStatus> updateConfig(
     String vendedorCode, {

@@ -1107,12 +1107,20 @@ async function getProducts({ search, clientCode, family, marca, prefamily, limit
         where += ' AND TRIM(A.CODIGOMARCA) = ?';
         params.push(marca.trim());
     }
-    // Req #14: filtro por prefamilia (e.g. Nestlé) — usa LIKE para soportar
-    // matches parciales (NESTL%, NESTLE, NESTLE_PRO, etc.).
+    // Req #14: filtro por prefamilia (e.g. Nestlé). Buscamos en 3 columnas
+    // (prefamilia, marca, descripcion) para que el chip "Nestlé" encuentre
+    // productos aunque CODIGOPREFAMILIA este vacio en algunos articulos.
+    // Tambien aceptamos prefijo corto: NES -> NES%, NESTLE -> NESTLE%
     if (prefamily) {
-        const pf = `${String(prefamily).toUpperCase()}%`;
-        where += ' AND UPPER(TRIM(A.CODIGOPREFAMILIA)) LIKE ?';
-        params.push(pf);
+        const term = String(prefamily).toUpperCase().trim();
+        const likeStart = `${term}%`;
+        const likeAny = `%${term}%`;
+        where += ` AND (
+              UPPER(TRIM(A.CODIGOPREFAMILIA)) LIKE ?
+           OR UPPER(TRIM(A.CODIGOMARCA))       LIKE ?
+           OR UPPER(TRIM(A.DESCRIPCIONARTICULO)) LIKE ?
+        )`;
+        params.push(likeStart, likeStart, likeAny);
     }
 
     const currentYear = new Date().getFullYear();
@@ -3381,11 +3389,21 @@ async function getClientBalance(clientCode) {
           AND L.LCAADC = ?
     `;
 
+    // FIX 2026-05-15 (segunda iteracion): la query anterior filtraba por
+    // CVC.ANOCOBRO = año actual, pero ANOCOBRO solo se rellena cuando el ERP
+    // procesa el cobro (puede haber retraso o estar a 0). El resultado era
+    // que TODOS los clientes mostraban "Cobrado: 0,00 €".
+    //
+    // Mejor criterio: sumar IMPORTECANCELADO de los vencimientos del cliente
+    // emitidos en el año actual, sin filtrar por ANOCOBRO. Esto refleja
+    // cuanto del facturado este año YA se ha cobrado, que es lo que el
+    // usuario espera ver.
     const sqlCobrado = `
         SELECT COALESCE(SUM(CVC.IMPORTECANCELADO), 0) AS TOTAL_COBRADO
         FROM DSEDAC.CVC CVC
         WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = ?
-          AND CVC.ANOCOBRO = ?
+          AND CVC.ANOEMISION = ?
+          AND CVC.IMPORTECANCELADO > 0
           AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
     `;
 

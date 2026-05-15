@@ -30,6 +30,11 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   List<Map<String, dynamic>> _foundClients = [];
   bool _isSearchingClients = false;
   final TextEditingController _searchController = TextEditingController();
+
+  /// Filtro de estado: 'todos' | 'vencido' | 'pendiente' | 'aldia'.
+  /// Por defecto 'pendiente' para que al abrir veas SOLO los clientes con
+  /// algun pendiente, en vez de todos en verde que es confuso.
+  String _estadoFilter = 'pendiente';
   Timer? _debounceTimer;
   bool _isInitialized = false;
   ProviderSubscription<String?>? _vendorSubscription;
@@ -132,7 +137,9 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             isJefeVentas: widget.isJefeVentas,
             forceShow: widget.forceShowVendorSelector,
           ),
+          _buildSummaryCard(cobros),
           _buildSearchArea(),
+          _buildEstadoFilterChips(),
           Expanded(
             child: visibleClients.isEmpty && !_isSearchingClients
                 ? _buildNoClientsState(cobros.grandTotal)
@@ -164,9 +171,26 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       if (code.isNotEmpty) byCode[code] = client;
     }
 
-    final entries = cobros.pendingSummary.entries
-        .where((entry) => ((entry.value['total'] as num?)?.toDouble() ?? 0) > 0)
-        .toList()
+    final entries = cobros.pendingSummary.entries.where((entry) {
+      final total = (entry.value['total'] as num?)?.toDouble() ?? 0;
+      final vencido = (entry.value['vencido'] as num?)?.toDouble() ?? 0;
+      // Estado segun la API: VENCIDO si hay vencido, PENDIENTE si total>0
+      // sin vencido, AL_DIA si total=0
+      final estado = vencido > 0
+          ? 'vencido'
+          : (total > 0 ? 'pendiente' : 'aldia');
+      switch (_estadoFilter) {
+        case 'vencido':
+          return estado == 'vencido';
+        case 'pendiente':
+          return estado == 'pendiente' || estado == 'vencido'; // ambos
+        case 'aldia':
+          return estado == 'aldia';
+        case 'todos':
+        default:
+          return true;
+      }
+    }).toList()
       ..sort((a, b) {
         final aTotal = (a.value['total'] as num?)?.toDouble() ?? 0;
         final bTotal = (b.value['total'] as num?)?.toDouble() ?? 0;
@@ -186,6 +210,172 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         'name': name,
       };
     }).toList();
+  }
+
+  /// Card resumen agregada en la cabecera: total pendiente, total vencido,
+  /// numero de clientes con deuda. De un vistazo el comercial/jefe ve el
+  /// estado global de cobros antes de entrar en el detalle por cliente.
+  Widget _buildSummaryCard(CobrosProvider cobros) {
+    final fmtMoney = (num v) {
+      final s = v.toStringAsFixed(2).replaceAllMapped(
+            RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+            (m) => '${m[1]}.',
+          );
+      return '$s€';
+    };
+    final tienePendiente = cobros.grandTotal > 0;
+    final tieneVencido = cobros.grandTotalVencido > 0;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            (tieneVencido ? Colors.redAccent : AppTheme.neonBlue)
+                .withValues(alpha: 0.12),
+            AppTheme.darkSurface.withValues(alpha: 0.6),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: (tieneVencido
+                  ? Colors.redAccent
+                  : (tienePendiente ? Colors.amber : AppTheme.neonGreen))
+              .withValues(alpha: 0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _summaryItem(
+              'Pendiente total',
+              fmtMoney(cobros.grandTotal),
+              Icons.account_balance_wallet,
+              Colors.amber,
+            ),
+          ),
+          Container(
+            width: 1, height: 36,
+            color: Colors.white.withValues(alpha: 0.08),
+          ),
+          Expanded(
+            child: _summaryItem(
+              'Vencido',
+              fmtMoney(cobros.grandTotalVencido),
+              Icons.error_outline,
+              Colors.redAccent,
+            ),
+          ),
+          Container(
+            width: 1, height: 36,
+            color: Colors.white.withValues(alpha: 0.08),
+          ),
+          Expanded(
+            child: _summaryItem(
+              'Clientes',
+              '${cobros.clientsWithDebt}'
+                  '${cobros.clientsWithVencido > 0 ? ' (${cobros.clientsWithVencido}v)' : ''}',
+              Icons.people_outline,
+              AppTheme.neonBlue,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _summaryItem(String label, String value, IconData icon, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 13),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.55),
+                  fontSize: 10,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Chip bar de filtros por estado de deuda. Permite alternar entre:
+  /// - "Pendientes" (default): todos con cobro pendiente (vencido + pendiente)
+  /// - "Vencidos": solo los que tienen importes vencidos
+  /// - "Al dia": solo los que no deben nada
+  /// - "Todos": no filtra
+  Widget _buildEstadoFilterChips() {
+    final filters = const [
+      _FilterDef('pendiente', 'Pendientes', Icons.schedule, Colors.amber),
+      _FilterDef('vencido', 'Vencidos', Icons.error_outline, Colors.redAccent),
+      _FilterDef('aldia', 'Al dia', Icons.check_circle_outline, AppTheme.neonGreen),
+      _FilterDef('todos', 'Todos', Icons.list, Colors.white70),
+    ];
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.darkSurface.withValues(alpha: 0.4),
+        border: Border(
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+        ),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: filters.map((f) {
+            final selected = _estadoFilter == f.value;
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilterChip(
+                avatar: Icon(f.icon, size: 16,
+                    color: selected ? Colors.white : f.color,),
+                label: Text(f.label),
+                selected: selected,
+                onSelected: (_) =>
+                    setState(() => _estadoFilter = f.value),
+                backgroundColor: AppTheme.darkCard,
+                selectedColor: f.color.withValues(alpha: 0.25),
+                labelStyle: TextStyle(
+                  color: selected ? Colors.white : Colors.white70,
+                  fontWeight:
+                      selected ? FontWeight.w600 : FontWeight.normal,
+                ),
+                side: BorderSide(
+                  color: selected
+                      ? f.color.withValues(alpha: 0.6)
+                      : Colors.white.withValues(alpha: 0.1),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
   }
 
   Widget _buildHeader() {
@@ -461,4 +651,13 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       ),
     );
   }
+}
+
+/// Definicion de un chip de filtro de estado.
+class _FilterDef {
+  const _FilterDef(this.value, this.label, this.icon, this.color);
+  final String value;
+  final String label;
+  final IconData icon;
+  final Color color;
 }
