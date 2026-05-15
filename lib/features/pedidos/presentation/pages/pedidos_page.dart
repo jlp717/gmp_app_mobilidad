@@ -29,6 +29,7 @@ import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_ca
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_detail_sheet.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_empty_state.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_filters_bar.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/mis_pedidos_yoy_bar.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_kpi_dashboard.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_summary_widget.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/product_card.dart';
@@ -272,6 +273,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   Future<void> _openProductByCode(
     String code, {
     String fallbackName = '',
+    double suggestedEnvases = 0,
   }) async {
     final productCode = code.trim();
     if (productCode.isEmpty) return;
@@ -320,7 +322,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     }
 
     if (mounted && product != null) {
-      _onProductTap(product);
+      _showAddToOrderDialog(product, suggestedEnvases: suggestedEnvases);
     }
   }
 
@@ -390,8 +392,13 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     return null;
   }
 
-  void _showAddToOrderDialog(Product product) {
-    AddToOrderSheet.show(context, ref, product: product);
+  void _showAddToOrderDialog(Product product, {double suggestedEnvases = 0}) {
+    AddToOrderSheet.show(
+      context,
+      ref,
+      product: product,
+      suggestedEnvases: suggestedEnvases,
+    );
   }
 
   void _showDraftsDialog(PedidosProvider provider) {
@@ -757,8 +764,12 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             (provider.clientHistory.isNotEmpty ||
                 provider.similarClients.isNotEmpty))
           RecommendationsSection(
-            onProductTap: (code, name) {
-              _openProductByCode(code, fallbackName: name);
+            onProductTap: (code, name, suggestedQty) {
+              _openProductByCode(
+                code,
+                fallbackName: name,
+                suggestedEnvases: suggestedQty,
+              );
             },
           ),
         // Complementary products (based on cart contents)
@@ -1195,6 +1206,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     final provider = ref.watch(pedidosProvider);
     return Column(
       children: [
+        MisPedidosYoYBar(vendedorCodes: _vendedorCodes),
         OrderKpiDashboard(vendedorCodes: _vendedorCodes),
         const Divider(color: AppTheme.borderColor, height: 1),
         OrderFiltersBar(

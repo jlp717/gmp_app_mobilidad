@@ -152,3 +152,36 @@ class BolsaMovimiento {
   /// Importe con signo: positivo si acumulación, negativo si consumo.
   double get importeFirmado => tipo.isCredit ? importe : -importe;
 }
+
+/// Punto histórico mensual (acumulado/consumido por mes).
+class BolsaMonthlyPoint {
+  BolsaMonthlyPoint({
+    required this.ejercicio,
+    required this.mes,
+    required this.acumulado,
+    required this.consumido,
+    required this.saldoDisponible,
+  });
+
+  factory BolsaMonthlyPoint.fromJson(Map<String, dynamic> json) {
+    double n(dynamic v) => v is num
+        ? v.toDouble()
+        : double.tryParse(v?.toString() ?? '') ?? 0;
+    int i(dynamic v) => v is num
+        ? v.toInt()
+        : int.tryParse(v?.toString() ?? '') ?? 0;
+    return BolsaMonthlyPoint(
+      ejercicio: i(json['ejercicio']),
+      mes: i(json['mes']),
+      acumulado: n(json['acumulado']),
+      consumido: n(json['consumido']),
+      saldoDisponible: n(json['saldoDisponible']),
+    );
+  }
+
+  final int ejercicio;
+  final int mes;
+  final double acumulado;
+  final double consumido;
+  final double saldoDisponible;
+}

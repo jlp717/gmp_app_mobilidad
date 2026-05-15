@@ -163,10 +163,19 @@ async function getCobrosSchemaInfo() {
 }
 
 function codeList(raw) {
-  return String(raw || '')
+  // FIX 2026-05-15: antes filtraba con length<=2, lo que descartaba IDs
+  // alfanumericos validos como "A4" si len fuera distinto, o codigos de 3+
+  // caracteres (futuros vendedores). Resultado: ids=[] silencioso y endpoints
+  // devolvian datos vacios sin error. Ahora acepta 1..10 chars alfanum y
+  // logea si la lista queda vacia con datos en raw.
+  const items = String(raw || '')
     .split(',')
     .map((item) => item.trim())
-    .filter((item) => item && /^[a-zA-Z0-9]+$/.test(item) && item.length <= 2);
+    .filter((item) => item && /^[A-Za-z0-9_-]{1,10}$/.test(item));
+  if (items.length === 0 && raw && String(raw).trim().length > 0) {
+    logger.warn(`[REPARTIDOR_FINANZAS] codeList: input "${raw}" no produjo IDs validos`);
+  }
+  return items;
 }
 
 function inClause(column, values) {

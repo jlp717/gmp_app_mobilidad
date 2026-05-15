@@ -1,10 +1,14 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
+
+
+import 'dart:typed_data';
+import 'package:dio/dio.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 
 /// Premium product image widget with elegant fallback.
 /// Memoizes failed URLs to prevent repeated 404 requests.
 /// Uses product-code-based gradient for visually distinct placeholders.
+/// Now caches image bytes persistently using CacheService.
 class SmartProductImage extends StatelessWidget {
   const SmartProductImage({
     required this.imageUrl,

@@ -14,6 +14,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/product_comparative_strip.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/product_detail_sheet.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/product_history_sheet.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/stock_alternatives_sheet.dart';
@@ -25,6 +26,7 @@ class AddToOrderSheet {
     BuildContext context,
     WidgetRef ref, {
     required Product product,
+    double suggestedEnvases = 0,
   }) {
     return showModalBottomSheet<void>(
       context: context,
@@ -35,15 +37,20 @@ class AddToOrderSheet {
       ),
       builder: (ctx) => _AddToOrderBody(
         product: product,
+        suggestedEnvases: suggestedEnvases,
       ),
     );
   }
 }
 
 class _AddToOrderBody extends ConsumerStatefulWidget {
-  const _AddToOrderBody({required this.product});
+  const _AddToOrderBody({required this.product, this.suggestedEnvases = 0});
 
   final Product product;
+  /// Cantidad de cajas sugerida en base al historial de compras del cliente.
+  /// Se usa como valor inicial cuando NO hay ya una linea existente del
+  /// producto en el pedido y el provider no recuerda una cantidad reciente.
+  final double suggestedEnvases;
 
   @override
   ConsumerState<_AddToOrderBody> createState() => _AddToOrderBodyState();
@@ -92,11 +99,19 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
       selectedUnit = 'CAJAS';
     }
 
+    // Prioridad para la cantidad inicial:
+    // 1. Si hay linea existente del producto en el pedido -> esa cantidad
+    // 2. Si el provider recuerda la ultima cantidad usada -> esa
+    // 3. Si la recomendacion paso una cantidad sugerida (del historial) -> esa
+    // 4. Default 0
+    final lastQty = prov.lastQtyForProduct(product.code);
     final initQty = existingLine != null
         ? (existingLine.cantidadEnvases > 0
             ? existingLine.cantidadEnvases
             : existingLine.cantidadUnidades)
-        : prov.lastQtyForProduct(product.code);
+        : (lastQty > 0
+            ? lastQty
+            : (widget.suggestedEnvases > 0 ? widget.suggestedEnvases : 0.0));
 
     final initCajas = existingLine?.cantidadEnvases ?? (isDual ? initQty : 0.0);
     final initUds = existingLine?.cantidadUnidades ??
@@ -532,6 +547,17 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     ),
                   ],
                 ),
+                // Strip de comparativa Año actual vs anterior. Da contexto
+                // inmediato al vendedor: "este cliente esta comprando mas/menos
+                // este año que el anterior". Es desplegable: por defecto fila
+                // compacta, al tocar muestra mini-graficos mensuales.
+                Builder(builder: (innerCtx) {
+                  final prov = ref.read(pedidosProvider);
+                  return ProductComparativeStrip(
+                    productCode: product.code,
+                    clientCode: prov.hasClient ? prov.clientCode : null,
+                  );
+                }),
                 if (_showWarehouseStock && _stockByWarehouse.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(

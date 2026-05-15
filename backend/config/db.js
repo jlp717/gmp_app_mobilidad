@@ -181,7 +181,11 @@ function queryWithTimeout(conn, sql, params, timeoutMs = QUERY_TIMEOUT_MS) {
 let dbPool = null;
 const MAX_RETRIES = 3;
 const RETRY_DELAY_BASE_MS = 500;
-const QUERY_TIMEOUT_MS = parseInt(process.env.DB_QUERY_TIMEOUT_MS, 10) || 60000;  // Max time per query, configurable for heavy queries like Evolution
+// FIX 2026-05-15: timeout subido de 60s a 120s. La query de /clients?vendor=ALL
+// para 92 vendedores hace agregaciones masivas sobre LACLAE (~2M filas) y
+// tarda ~50s la primera vez (siguientes son instantaneos por cache). 60s
+// era marginal y reventaba la primera carga tras restart. 120s da margen.
+const QUERY_TIMEOUT_MS = parseInt(process.env.DB_QUERY_TIMEOUT_MS, 10) || 120000;
 let poolRecreateInProgress = false;
 let keepaliveInterval = null;
 

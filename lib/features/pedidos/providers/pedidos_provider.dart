@@ -970,6 +970,19 @@ class PedidosProvider with ChangeNotifier {
       );
     } catch (e) {
       debugPrint('[PedidosProvider] loadOrderStats error: $e');
+      // FIX 2026-05-15: no dejar _orderStats=null si hay error.
+      // Inicializar con stats vacios para que la UI no muestre spinner eterno.
+      _orderStats ??= OrderStats(
+        totalOrders: 0,
+        totalAmount: 0,
+        totalBase: 0,
+        totalIva: 0,
+        avgMargin: 0,
+        avgTicket: 0,
+        byStatus: const <String, int>{},
+        dailyTrend: const <Map<String, dynamic>>[],
+        topClients: const <Map<String, dynamic>>[],
+      );
     } finally {
       _isLoadingStats = false;
       notifyListeners();

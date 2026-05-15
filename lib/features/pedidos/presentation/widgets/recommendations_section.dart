@@ -15,7 +15,11 @@ class RecommendationsSection extends ConsumerStatefulWidget {
   const RecommendationsSection({
     required this.onProductTap, super.key,
   });
-  final void Function(String code, String name) onProductTap;
+  /// Callback al tocar una recomendacion. Recibe codigo, nombre y la cantidad
+  /// sugerida (envases) basada en el historial de compras del cliente. Si la
+  /// cantidad sugerida es 0 significa que no hay datos historicos suficientes.
+  final void Function(String code, String name, double suggestedQty)
+      onProductTap;
 
   @override
   ConsumerState<RecommendationsSection> createState() => _RecommendationsSectionState();
@@ -96,7 +100,11 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
               title: 'Productos habituales',
               icon: Icons.history,
               items: provider.clientHistory,
-              badgeBuilder: (r) => '${r.frequency}x',
+              // Mostrar la cantidad media en cajas que suele pedir el cliente.
+              // Si suggestedUnits es 0, caer en frequency (n. veces comprado).
+              badgeBuilder: (r) => r.suggestedUnits > 0
+                  ? '${r.suggestedUnits.toStringAsFixed(0)} cj'
+                  : '${r.frequency}x',
             ),
           if (hasSimilar)
             _buildSection(
@@ -162,7 +170,11 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
   Widget _buildRecoCard(
       BuildContext context, Recommendation item, String badge,) {
     return InkWell(
-      onTap: () => widget.onProductTap(item.code, item.name),
+      onTap: () => widget.onProductTap(
+        item.code,
+        item.name,
+        item.suggestedUnits, // cantidad sugerida del historial
+      ),
       borderRadius: BorderRadius.circular(10),
       child: Container(
         width: 140,

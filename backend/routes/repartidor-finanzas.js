@@ -142,9 +142,16 @@ const tiersSchema = z.object({
   })).min(1).max(20),
 });
 
+// Defaults sensatos para que el frontend no tenga que mandar siempre los
+// rangos: si no se mandan, asumimos "este mes en curso".
+const firstDayCurrentMonthIso = () => {
+  const d = new Date();
+  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+};
+const todayIso = () => new Date().toISOString().slice(0, 10);
 const rangeQuerySchema = z.object({
-  from: dateSchema,
-  to: dateSchema,
+  from: dateSchema.default(firstDayCurrentMonthIso),
+  to: dateSchema.default(todayIso),
 });
 
 function captureException(error, context) {
@@ -211,11 +218,18 @@ function sendError(res, error, context) {
     });
   }
 
-  logger.error(`[REPARTIDOR_FINANZAS] ${context.action}: ${error.message}`);
+  // Logging mas detallado: odbcErrors + stack para debug.
+  const odbc0 = error.odbcErrors && error.odbcErrors[0];
+  const odbcMsg = odbc0 ? `${odbc0.state} (${odbc0.code}): ${odbc0.message}` : '';
+  logger.error(`[REPARTIDOR_FINANZAS] ${context.action}: ${error.message}`
+    + (odbcMsg ? `\n  ODBC: ${odbcMsg}` : '')
+    + (error.stack ? `\n  STACK: ${error.stack.split('\n').slice(0, 6).join('\n')}` : ''));
   captureException(error, context);
   return res.status(500).json({
     success: false,
     error: 'Error interno del servidor',
+    detail: process.env.NODE_ENV !== 'production' ? error.message : undefined,
+    odbc: process.env.NODE_ENV !== 'production' ? odbcMsg : undefined,
   });
 }
 

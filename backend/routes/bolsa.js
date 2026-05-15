@@ -68,6 +68,26 @@ router.get('/:vendedorCode/movements', verifyToken, async (req, res) => {
 });
 
 /**
+ * GET /api/bolsa/:vendedorCode/history?months=12
+ * Resumen mensual de los ultimos N meses (saldo / consumo / acumulado)
+ */
+router.get('/:vendedorCode/history', verifyToken, async (req, res) => {
+    try {
+        const vendedorCode = String(req.params.vendedorCode).trim();
+        if (!/^[a-zA-Z0-9]{1,10}$/.test(vendedorCode)) {
+            return res.status(400).json({ success: false, error: 'Invalid vendedorCode format' });
+        }
+        const months = parseInt(req.query.months) || 12;
+        const history = await bolsaService.getHistorialMensual(vendedorCode, months);
+        res.json({ success: true, ...history });
+    } catch (error) {
+        const requestId = req.headers['x-request-id'] || '';
+        logger.error(`[BOLSA] GET /history error: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message, request_id: requestId });
+    }
+});
+
+/**
  * PUT /api/bolsa/:vendedorCode/config
  * Update bolsa limits (JEFE_VENTAS / ADMIN only)
  */
