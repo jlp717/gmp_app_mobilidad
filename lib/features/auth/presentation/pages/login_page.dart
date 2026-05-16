@@ -9,7 +9,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/auth/presentation/widgets/role_selection_dialog.dart';
 import 'package:go_router/go_router.dart';
 
-/// Página de login espectacular con diseño glassmorphism y feedback intuitivo
+/// Login page V2 — Premium glassmorphism with fluid animations and micro-interactions.
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -29,32 +29,44 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   String? _errorMessage;
   bool _isUsernameFocused = false;
   bool _isPasswordFocused = false;
+  bool _isButtonHovered = false;
 
   late AnimationController _bgController;
   late AnimationController _logoController;
+  late AnimationController _orbController1;
+  late AnimationController _orbController2;
 
   @override
   void initState() {
     super.initState();
     _bgController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 8),
+      duration: const Duration(seconds: 12),
     )..repeat();
 
-    // Attempt Auto-Login
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _tryAutoLogin();
     });
 
     _logoController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 2),
+      duration: const Duration(seconds: 3),
     )..repeat(reverse: true);
 
+    _orbController1 = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 6),
+    )..repeat();
+
+    _orbController2 = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 8),
+    )..repeat();
+
     _usernameFocus.addListener(
-        () => setState(() => _isUsernameFocused = _usernameFocus.hasFocus),);
+        () => setState(() => _isUsernameFocused = _usernameFocus.hasFocus));
     _passwordFocus.addListener(
-        () => setState(() => _isPasswordFocused = _passwordFocus.hasFocus),);
+        () => setState(() => _isPasswordFocused = _passwordFocus.hasFocus));
   }
 
   @override
@@ -65,12 +77,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     _passwordFocus.dispose();
     _bgController.dispose();
     _logoController.dispose();
+    _orbController1.dispose();
+    _orbController2.dispose();
     super.dispose();
   }
 
   Future<void> _tryAutoLogin() async {
-    // Auto-login is handled automatically by AuthNotifier.build()
-    // Just check if already authenticated
     final authState = ProviderScope.containerOf(context).read(authProvider).value;
     if (authState?.isAuthenticated ?? false) {
       if (mounted) context.go('/dashboard');
@@ -92,7 +104,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     if (!_formKey.currentState!.validate()) return;
 
     final ref = ProviderScope.containerOf(context);
-    debugPrint('[LoginPage] Attempting login for: ${_usernameController.text}');
 
     final success = await ref.read(authProvider.notifier).login(
       _usernameController.text.trim(),
@@ -101,81 +112,74 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
     if (!mounted) return;
 
-    // Debug: Print the actual error
-    if (!success) {
-      debugPrint('[LoginPage] Login FAILED. Error: ${ref.read(authProvider).value?.error}');
-    }
-
     if (success) {
       final user = ref.read(authProvider).value?.user;
-      debugPrint(
-          '[LoginPage] Login Success. Role: ${user?.role}, IsJefe: ${user?.isJefeVentas}',);
 
-      // Robust check for Jefe role
       final isJefe = user?.isJefeVentas ?? false ||
           user?.role == 'JEFE_VENTAS' ||
           user?.role == 'JEFE';
 
       if (isJefe) {
-        debugPrint(
-            '[LoginPage] User detected as Jefe. Triggering Role Selection Dialog...',);
-
         if (!mounted) return;
 
-        // Use Future.microtask to ensure we are out of current frame
         Future.microtask(() async {
           if (!mounted) return;
           await showDialog(
               context: context,
               barrierDismissible: false,
-              builder: (ctx) => const RoleSelectionDialog(),);
+              builder: (ctx) => const RoleSelectionDialog());
         });
       } else {
-        debugPrint('[LoginPage] Regular user. Navigating to Dashboard...');
         context.go('/dashboard');
       }
     } else {
       setState(() {
         _hasError = true;
         final rawError = ref.read(authProvider).value?.error ?? 'Credenciales incorrectas';
-        
-        // Provide user-friendly messages for specific error types
+
         if (rawError.contains('Demasiados intentos') || rawError.contains('429')) {
           _errorMessage = 'Demasiados intentos. Espera unos minutos antes de intentar de nuevo.';
         } else if (rawError.contains('ROLE_SELECTION')) {
-          _errorMessage = rawError; // Pass through role selection signal
+          _errorMessage = rawError;
         } else {
           _errorMessage = rawError;
         }
       });
 
-      debugPrint(
-          '[LoginPage] Login Failed. Showing Dialog. Error: $_errorMessage',);
-
-      // Force ensure dialog shows
       await showDialog(
         context: context,
         builder: (context) => AlertDialog(
           backgroundColor: AppTheme.darkCard,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+            side: BorderSide(color: AppTheme.error.withValues(alpha: 0.2)),
+          ),
+          title: Row(
             children: [
-              Icon(Icons.error_outline, color: AppTheme.error),
-              SizedBox(width: 8),
-              Text('Error de acceso', style: TextStyle(color: AppTheme.error)),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.error.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.error_outline, color: AppTheme.error, size: 20),
+              ),
+              const SizedBox(width: 12),
+              const Text('Error de acceso', style: TextStyle(color: AppTheme.error)),
             ],
           ),
           content: Text(
-            _errorMessage ??
-                'Credenciales incorrectas. Por favor, inténtalo de nuevo.',
+            _errorMessage ?? 'Credenciales incorrectas. Por favor, inténtalo de nuevo.',
             style: const TextStyle(color: Colors.white),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Entendido',
-                  style: TextStyle(color: AppTheme.neonBlue),),
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text('Entendido', style: TextStyle(color: AppTheme.neonBlue)),
             ),
           ],
         ),
@@ -191,13 +195,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     return Scaffold(
       body: Stack(
         children: [
-          // Animated background
           _buildAnimatedBackground(),
-
-          // Floating orbs
           _buildFloatingOrbs(),
-
-          // Main content
+          _buildGridOverlay(),
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
@@ -222,14 +222,16 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         return Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              begin: Alignment(math.cos(angle) * 0.5, math.sin(angle) * 0.5),
-              end: Alignment(math.cos(angle + math.pi) * 0.5,
-                  math.sin(angle + math.pi) * 0.5,),
+              begin: Alignment(math.cos(angle) * 0.3, math.sin(angle) * 0.3),
+              end: Alignment(
+                math.cos(angle + math.pi) * 0.3,
+                math.sin(angle + math.pi) * 0.3,
+              ),
               colors: const [
-                Color(0xFF0D0D1A),
-                Color(0xFF1A1A2E),
-                Color(0xFF16213E),
-                Color(0xFF0F0F23),
+                Color(0xFF0A0E1A),
+                Color(0xFF0F172A),
+                Color(0xFF111827),
+                Color(0xFF0A0E1A),
               ],
             ),
           ),
@@ -238,42 +240,72 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
+  /// Subtle grid overlay for depth
+  Widget _buildGridOverlay() {
+    return CustomPaint(
+      size: Size.infinite,
+      painter: _GridPainter(),
+    );
+  }
+
   Widget _buildFloatingOrbs() {
     return Stack(
       children: [
-        // Top-right orb
+        // Top-right orb — blue
         Positioned(
-          top: -100,
-          right: -100,
-          child: _buildOrb(280, AppTheme.neonBlue.withValues(alpha: 0.15)),
+          top: -80,
+          right: -80,
+          child: AnimatedBuilder(
+            animation: _orbController1,
+            builder: (context, _) {
+              final offset = math.sin(_orbController1.value * 2 * math.pi) * 20;
+              return Transform.translate(
+                offset: Offset(offset, offset * 0.5),
+                child: _buildOrb(300, AppTheme.neonBlue.withValues(alpha: 0.12)),
+              );
+            },
+          ),
         ),
-        // Bottom-left orb
+        // Bottom-left orb — purple
         Positioned(
-          bottom: -150,
-          left: -150,
-          child: _buildOrb(350, AppTheme.neonPurple.withValues(alpha: 0.12)),
+          bottom: -120,
+          left: -120,
+          child: AnimatedBuilder(
+            animation: _orbController2,
+            builder: (context, _) {
+              final offset = math.cos(_orbController2.value * 2 * math.pi) * 15;
+              return Transform.translate(
+                offset: Offset(offset, -offset * 0.7),
+                child: _buildOrb(380, AppTheme.neonPurple.withValues(alpha: 0.1)),
+              );
+            },
+          ),
         ),
-        // Center accent
+        // Center accent — pink
         Positioned(
-          top: MediaQuery.of(context).size.height * 0.3,
-          right: MediaQuery.of(context).size.width * 0.1,
-          child: _buildOrb(100, AppTheme.neonPink.withValues(alpha: 0.08)),
+          top: MediaQuery.of(context).size.height * 0.25,
+          right: MediaQuery.of(context).size.width * 0.08,
+          child: _buildOrb(120, AppTheme.neonPink.withValues(alpha: 0.06)),
+        ),
+        // Bottom-right accent — cyan
+        Positioned(
+          bottom: 100,
+          right: 60,
+          child: _buildOrb(80, AppTheme.neonCyan.withValues(alpha: 0.08)),
         ),
       ],
     );
   }
 
   Widget _buildOrb(double size, Color color) {
-    return AnimatedBuilder(
-      animation: _logoController,
-      builder: (context, _) => Container(
-        width: size + _logoController.value * 20,
-        height: size + _logoController.value * 20,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: RadialGradient(
-            colors: [color, Colors.transparent],
-          ),
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: RadialGradient(
+          colors: [color, Colors.transparent],
+          stops: const [0.0, 0.7],
         ),
       ),
     );
@@ -283,20 +315,17 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Left: Branding
         Expanded(
           child: _buildBranding()
               .animate()
-              .fadeIn(duration: 800.ms)
-              .slideX(begin: -0.2),
+              .fadeIn(duration: 800.ms, curve: Curves.easeOutCubic)
+              .slideX(begin: -0.15, curve: Curves.easeOutCubic),
         ),
-        // Responsive gap between branding and login card
         SizedBox(width: Responsive.value(context, phone: 32, desktop: 80)),
-        // Right: Login card
         _buildLoginCard()
             .animate()
-            .fadeIn(delay: 200.ms, duration: 800.ms)
-            .slideY(begin: 0.1),
+            .fadeIn(delay: 200.ms, duration: 800.ms, curve: Curves.easeOutCubic)
+            .slideY(begin: 0.1, curve: Curves.easeOutCubic),
       ],
     );
   }
@@ -305,12 +334,14 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        _buildCompactBranding().animate().fadeIn(duration: 600.ms),
-        const SizedBox(height: 48),
+        _buildCompactBranding()
+            .animate()
+            .fadeIn(duration: 600.ms, curve: Curves.easeOutCubic),
+        const SizedBox(height: 40),
         _buildLoginCard()
             .animate()
-            .fadeIn(delay: 300.ms, duration: 600.ms)
-            .slideY(begin: 0.15),
+            .fadeIn(delay: 300.ms, duration: 600.ms, curve: Curves.easeOutCubic)
+            .slideY(begin: 0.12, curve: Curves.easeOutCubic),
       ],
     );
   }
@@ -320,40 +351,36 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Logo
-        _buildLogo(size: 90),
-        const SizedBox(height: 48),
-        // Title
+        _buildLogo(size: 80),
+        const SizedBox(height: 40),
         ShaderMask(
           shaderCallback: (bounds) => const LinearGradient(
-            colors: [Color(0xFF00D9FF), Color(0xFFBF5AF2), Color(0xFFFF6B9D)],
+            colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6), Color(0xFFEC4899)],
           ).createShader(bounds),
           child: const Text(
             'GMP\nMobilidad',
             style: TextStyle(
-              fontSize: 64,
+              fontSize: 56,
               fontWeight: FontWeight.w800,
               height: 0.95,
               color: Colors.white,
-              letterSpacing: -3,
+              letterSpacing: -2.5,
             ),
           ),
         ),
-        const SizedBox(height: 24),
-        // Subtitle
+        const SizedBox(height: 20),
         Text(
           'Plataforma inteligente de ventas\nDatos en tiempo real para tu equipo comercial',
           style: TextStyle(
-            fontSize: 17,
-            color: Colors.white.withValues(alpha: 0.6),
+            fontSize: 16,
+            color: Colors.white.withValues(alpha: 0.5),
             height: 1.6,
-            letterSpacing: 0.3,
+            letterSpacing: 0.2,
           ),
         ),
-        const SizedBox(height: 40),
-        // Features (responsive: wrap on narrow screens)
+        const SizedBox(height: 32),
         Wrap(
-          spacing: 12,
+          spacing: 10,
           runSpacing: 8,
           children: [
             _buildFeatureChip(Icons.bolt_rounded, 'Tiempo Real'),
@@ -368,28 +395,28 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Widget _buildCompactBranding() {
     return Column(
       children: [
-        _buildLogo(size: 70),
-        const SizedBox(height: 24),
+        _buildLogo(size: 64),
+        const SizedBox(height: 20),
         ShaderMask(
           shaderCallback: (bounds) => const LinearGradient(
-            colors: [Color(0xFF00D9FF), Color(0xFFBF5AF2)],
+            colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6)],
           ).createShader(bounds),
           child: const Text(
             'GMP Movilidad',
             style: TextStyle(
-              fontSize: 32,
+              fontSize: 28,
               fontWeight: FontWeight.w700,
               color: Colors.white,
               letterSpacing: -1,
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Text(
           'Plataforma de Ventas Inteligente',
           style: TextStyle(
-            fontSize: 14,
-            color: Colors.white.withValues(alpha: 0.5),
+            fontSize: 13,
+            color: Colors.white.withValues(alpha: 0.4),
           ),
         ),
       ],
@@ -400,29 +427,35 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     return AnimatedBuilder(
       animation: _logoController,
       builder: (context, _) {
-        return Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(size * 0.28),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF00D9FF), Color(0xFF7B61FF), Color(0xFFBF5AF2)],
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFF00D9FF)
-                    .withValues(alpha: 0.3 + _logoController.value * 0.2),
-                blurRadius: 30 + _logoController.value * 15,
-                spreadRadius: 2,
+        final scale = 1.0 + math.sin(_logoController.value * 2 * math.pi) * 0.03;
+        return Transform.scale(
+          scale: scale,
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(size * 0.3),
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6), Color(0xFFEC4899)],
               ),
-            ],
-          ),
-          child: Icon(
-            Icons.analytics_rounded,
-            size: size * 0.5,
-            color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF3B82F6)
+                      .withValues(alpha: 0.25 + _logoController.value * 0.15),
+                  blurRadius: 24 + _logoController.value * 12,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: Center(
+              child: Icon(
+                Icons.analytics_rounded,
+                size: size * 0.45,
+                color: Colors.white,
+              ),
+            ),
           ),
         );
       },
@@ -431,20 +464,25 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   Widget _buildFeatureChip(IconData icon, String label) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        color: Colors.white.withValues(alpha: 0.05),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+        color: Colors.white.withValues(alpha: 0.04),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: AppTheme.neonBlue),
+          Icon(icon, size: 14, color: AppTheme.neonBlue),
           const SizedBox(width: 6),
-          Text(label,
-              style: TextStyle(
-                  fontSize: 13, color: Colors.white.withValues(alpha: 0.7),),),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white.withValues(alpha: 0.6),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ],
       ),
     );
@@ -453,23 +491,37 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Widget _buildLoginCard() {
     return Container(
       width: Responsive.clampWidth(context, 400),
-      padding: EdgeInsets.all(Responsive.isSmall(context) ? 24 : 36),
+      padding: EdgeInsets.all(Responsive.isSmall(context) ? 28 : 36),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(32),
-        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Colors.white.withValues(alpha: 0.04),
+            Colors.white.withValues(alpha: 0.02),
+          ],
+        ),
         border: Border.all(
           color: _hasError
-              ? AppTheme.error.withValues(alpha: 0.5)
-              : Colors.white.withValues(alpha: 0.08),
-          width: 1.5,
+              ? AppTheme.error.withValues(alpha: 0.3)
+              : Colors.white.withValues(alpha: 0.06),
+          width: 1,
         ),
         boxShadow: [
           BoxShadow(
             color: _hasError
-                ? AppTheme.error.withValues(alpha: 0.1)
-                : Colors.black.withValues(alpha: 0.4),
-            blurRadius: 50,
-            offset: const Offset(0, 25),
+                ? AppTheme.error.withValues(alpha: 0.08)
+                : Colors.black.withValues(alpha: 0.3),
+            blurRadius: 40,
+            offset: const Offset(0, 20),
+          ),
+          BoxShadow(
+            color: _hasError
+                ? AppTheme.error.withValues(alpha: 0.04)
+                : AppTheme.neonBlue.withValues(alpha: 0.04),
+            blurRadius: 60,
+            spreadRadius: 2,
           ),
         ],
       ),
@@ -483,7 +535,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             const Text(
               'Bienvenido',
               style: TextStyle(
-                fontSize: 28,
+                fontSize: 26,
                 fontWeight: FontWeight.w700,
                 color: Colors.white,
                 letterSpacing: -0.5,
@@ -493,22 +545,22 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             Text(
               'Inicia sesión para continuar',
               style: TextStyle(
-                fontSize: 15,
-                color: Colors.white.withValues(alpha: 0.5),
+                fontSize: 14,
+                color: Colors.white.withValues(alpha: 0.4),
               ),
             ),
 
-            const SizedBox(height: 36),
+            const SizedBox(height: 32),
 
-            // Error banner (inline, not modal)
+            // Error banner
             if (_hasError)
               Container(
                 margin: const EdgeInsets.only(bottom: 20),
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(18),
-                  color: AppTheme.error.withValues(alpha: 0.1),
-                  border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  color: AppTheme.error.withValues(alpha: 0.08),
+                  border: Border.all(color: AppTheme.error.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   children: [
@@ -516,10 +568,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: AppTheme.error.withValues(alpha: 0.2),
+                        color: AppTheme.error.withValues(alpha: 0.15),
                       ),
-                      child: const Icon(Icons.error_outline,
-                          color: AppTheme.error, size: 20,),
+                      child: const Icon(Icons.error_outline, color: AppTheme.error, size: 18),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -539,18 +590,19 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                             _errorMessage ?? 'Verifica tus credenciales',
                             style: TextStyle(
                               fontSize: 12,
-                              color: AppTheme.error.withValues(alpha: 0.8),
+                              color: AppTheme.error.withValues(alpha: 0.7),
                             ),
                           ),
                         ],
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close,
-                          size: 18, color: AppTheme.error,),
-                      onPressed: _clearError,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
+                    InkWell(
+                      onTap: _clearError,
+                      borderRadius: BorderRadius.circular(8),
+                      child: const Padding(
+                        padding: EdgeInsets.all(4),
+                        child: Icon(Icons.close, size: 16, color: AppTheme.error),
+                      ),
                     ),
                   ],
                 ),
@@ -567,10 +619,10 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               textInputAction: TextInputAction.next,
               onChanged: (_) => _clearError(),
               validator: (v) =>
-                  v?.trim().isEmpty ?? false ? 'Ingresa tu usuario' : null,
+                  (v?.trim().isEmpty ?? false) ? 'Ingresa tu usuario' : null,
             ),
 
-            const SizedBox(height: 18),
+            const SizedBox(height: 16),
 
             // Password field
             _buildInputField(
@@ -578,118 +630,142 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               focusNode: _passwordFocus,
               isFocused: _isPasswordFocused,
               label: 'Contraseña',
-              hint: 'â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢',
+              hint: '••••••••',
               icon: Icons.lock_rounded,
               obscure: _obscurePassword,
               textInputAction: TextInputAction.done,
               onChanged: (_) => _clearError(),
               onSubmit: (_) => _handleLogin(),
               validator: (v) =>
-                  v?.isEmpty ?? false ? 'Ingresa tu contraseña' : null,
-              suffix: IconButton(
-                icon: Icon(
-                  _obscurePassword
-                      ? Icons.visibility_off_rounded
-                      : Icons.visibility_rounded,
-                  size: 20,
-                  color: Colors.white.withValues(alpha: 0.4),
+                  (v?.isEmpty ?? false) ? 'Ingresa tu contraseña' : null,
+              suffix: InkWell(
+                onTap: () => setState(() => _obscurePassword = !_obscurePassword),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Icon(
+                    _obscurePassword
+                        ? Icons.visibility_off_rounded
+                        : Icons.visibility_rounded,
+                    size: 18,
+                    color: Colors.white.withValues(alpha: 0.3),
+                  ),
                 ),
-                onPressed: () =>
-                    setState(() => _obscurePassword = !_obscurePassword),
               ),
             ),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 28),
 
             // Login button
             Consumer(
               builder: (context, ref, _) {
                 final authState = ref.watch(authProvider);
                 final isLoading = authState.isLoading;
-                return GestureDetector(
-                  onTap: isLoading ? null : _handleLogin,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    height: 56,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      gradient: isLoading
-                          ? null
-                          : const LinearGradient(
-                              colors: [
-                                Color(0xFF00D9FF),
-                                Color(0xFF7B61FF),
-                                Color(0xFFFF6B9D),
+                return MouseRegion(
+                  onEnter: (_) => setState(() => _isButtonHovered = true),
+                  onExit: (_) => setState(() => _isButtonHovered = false),
+                  child: GestureDetector(
+                    onTap: isLoading ? null : _handleLogin,
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      height: 54,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                        gradient: isLoading
+                            ? null
+                            : const LinearGradient(
+                                begin: Alignment.centerLeft,
+                                end: Alignment.centerRight,
+                                colors: [
+                                  Color(0xFF3B82F6),
+                                  Color(0xFF8B5CF6),
+                                  Color(0xFFEC4899),
+                                ],
+                              ),
+                        color: isLoading ? Colors.white.withValues(alpha: 0.08) : null,
+                        boxShadow: isLoading
+                            ? []
+                            : [
+                                BoxShadow(
+                                  color: const Color(0xFF3B82F6)
+                                      .withValues(alpha: _isButtonHovered ? 0.4 : 0.25),
+                                  blurRadius: _isButtonHovered ? 30 : 20,
+                                  offset: Offset(0, _isButtonHovered ? 12 : 8),
+                                ),
                               ],
-                            ),
-                      color:
-                          isLoading ? Colors.white.withValues(alpha: 0.1) : null,
-                      boxShadow: isLoading
-                          ? []
-                          : [
-                              BoxShadow(
-                                color:
-                                    const Color(0xFF00D9FF).withValues(alpha: 0.35),
-                                blurRadius: 25,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
-                    ),
-                    child: Center(
-                      child: isLoading
-                          ? SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2.5,
-                                valueColor: AlwaysStoppedAnimation(
-                                    Colors.white.withValues(alpha: 0.8),),
-                              ),
-                            )
-                          : const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Text(
-                                  'Iniciar Sesión',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.white,
-                                    letterSpacing: 0.5,
+                      ),
+                      child: Center(
+                        child: isLoading
+                            ? SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2.5,
+                                  valueColor: AlwaysStoppedAnimation(
+                                    Colors.white.withValues(alpha: 0.8),
                                   ),
                                 ),
-                                SizedBox(width: 10),
-                                Icon(Icons.arrow_forward_rounded,
-                                    color: Colors.white, size: 20,),
-                              ],
-                            ),
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Text(
+                                    'Iniciar Sesión',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                      letterSpacing: 0.3,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  AnimatedPadding(
+                                    duration: const Duration(milliseconds: 200),
+                                    padding: EdgeInsets.only(
+                                      left: _isButtonHovered ? 4 : 0,
+                                    ),
+                                    child: const Icon(
+                                      Icons.arrow_forward_rounded,
+                                      color: Colors.white,
+                                      size: 18,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
                     ),
                   ),
                 );
               },
             ),
 
-            const SizedBox(height: 28),
+            const SizedBox(height: 24),
 
             // Footer
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: AppTheme.neonGreen,
+                    color: AppTheme.neonGreen.withValues(alpha: 0.8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.neonGreen.withValues(alpha: 0.3),
+                        blurRadius: 8,
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'Conexión segura â€¢ GMP 2026',
+                  'Conexión segura • GMP 2026',
                   style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.white.withValues(alpha: 0.35),
-                    letterSpacing: 0.3,
+                    fontSize: 11,
+                    color: Colors.white.withValues(alpha: 0.3),
+                    letterSpacing: 0.2,
                   ),
                 ),
               ],
@@ -717,32 +793,34 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label,
+        AnimatedDefaultTextStyle(
+          duration: const Duration(milliseconds: 200),
           style: TextStyle(
-            fontSize: 13,
+            fontSize: 12,
             fontWeight: FontWeight.w500,
-            color:
-                isFocused ? AppTheme.neonBlue : Colors.white.withValues(alpha: 0.5),
+            color: isFocused ? AppTheme.neonBlue : Colors.white.withValues(alpha: 0.4),
             letterSpacing: 0.3,
           ),
+          child: Text(label),
         ),
         const SizedBox(height: 8),
         AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOut,
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
             border: Border.all(
-              color:
-                  isFocused ? AppTheme.neonBlue : Colors.white.withValues(alpha: 0.1),
+              color: isFocused
+                  ? AppTheme.neonBlue.withValues(alpha: 0.5)
+                  : Colors.white.withValues(alpha: 0.06),
               width: isFocused ? 1.5 : 1,
             ),
-            color: Colors.white.withValues(alpha: isFocused ? 0.08 : 0.04),
+            color: Colors.white.withValues(alpha: isFocused ? 0.06 : 0.03),
             boxShadow: isFocused
                 ? [
                     BoxShadow(
-                      color: AppTheme.neonBlue.withValues(alpha: 0.1),
-                      blurRadius: 15,
+                      color: AppTheme.neonBlue.withValues(alpha: 0.08),
+                      blurRadius: 12,
                     ),
                   ]
                 : [],
@@ -755,19 +833,20 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             onChanged: onChanged,
             onFieldSubmitted: onSubmit,
             validator: validator,
-            style: const TextStyle(fontSize: 15, color: Colors.white),
+            style: const TextStyle(fontSize: 14, color: Colors.white),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.25)),
-              prefixIcon: Icon(icon,
-                  size: 20,
-                  color: isFocused
-                      ? AppTheme.neonBlue
-                      : Colors.white.withValues(alpha: 0.4),),
+              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.2)),
+              prefixIcon: Icon(
+                icon,
+                size: 18,
+                color: isFocused
+                    ? AppTheme.neonBlue
+                    : Colors.white.withValues(alpha: 0.3),
+              ),
               suffixIcon: suffix,
               filled: false,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               border: InputBorder.none,
               errorStyle: const TextStyle(fontSize: 11, height: 0.8),
             ),
@@ -776,4 +855,25 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       ],
     );
   }
+}
+
+/// Subtle grid pattern painter for background depth
+class _GridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.015)
+      ..strokeWidth = 0.5;
+
+    const spacing = 60.0;
+    for (var x = 0.0; x < size.width; x += spacing) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
+    }
+    for (var y = 0.0; y < size.height; y += spacing) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

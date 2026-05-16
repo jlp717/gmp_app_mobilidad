@@ -94,3 +94,20 @@ Ejemplos de decisiones que requieren este formato:
 - Nuevo endpoint o cambio en contrato de API existente
 - Query DB2 que toca tablas de producción (DSEDAC, DSEMAC, etc.)
 - Cambio en estrategia de caché (14 archivos detectados — deuda técnica activa)
+
+## Herramientas Instaladas (Mayo 2026)
+
+### Beads Issue Tracker
+- Proyecto usa **bd (beads)** para issue tracking. Ver referencias en AGENTS.md raíz.
+- CLI: `bd ready` (buscar trabajo), `bd show <id>`, `bd close <id>`, `bd dolt push`
+- MCP beads habilitado para integración nativa.
+
+### OpenSpec (Spec-Driven Development)
+- Workflow: `/opsx-propose "idea"` → genera spec → implementar → `/opsx-apply` → `/opsx-archive`
+- Skills: openspec-propose, openspec-explore, openspec-apply-change, openspec-archive-change
+
+### Task Master (on-demand, requiere TASK_MASTER_API_KEY)
+- `task-master-mcp` para gestión estructurada de tareas con dependencias.
+
+### Skill Seekers (CLI)
+- Convierte documentación web/GitHub/PDFs en skills: `skill-seekers create <url> --target opencode`

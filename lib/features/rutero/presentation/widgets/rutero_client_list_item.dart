@@ -497,7 +497,7 @@ class RuteroClientListItem extends StatelessWidget {
                   fontSize: 13,
                 ),
                 message:
-                    'El acumulado del año anterior aparecerá a partir de la 2Âª semana.',
+                    'El acumulado del año anterior aparecerá a partir de la 2ª semana.',
                 child: Icon(
                   Icons.info_outline,
                   size: 14,

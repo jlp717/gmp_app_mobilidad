@@ -21,6 +21,7 @@ class Db2PedidosRepository extends PedidosRepository {
       clientCode,
       family,
       marca,
+      prefamily,
       limit,
       offset
     });

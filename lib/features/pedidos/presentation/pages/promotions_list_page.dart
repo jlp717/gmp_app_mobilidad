@@ -338,7 +338,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                         color: stockColor,
                       ),
                       label: Text(
-                        '${item.code} Â· ${item.name}',
+                        '${item.code} · ${item.name}',
                         style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 11,

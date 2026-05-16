@@ -367,7 +367,7 @@ export function verifyToken(
     req: AuthenticatedRequest,
     res: Response,
     next: NextFunction
-): void {
+): Response | void {
     const authHeader = req.headers['authorization'];
     
     if (!authHeader) {
@@ -427,7 +427,7 @@ export function optionalAuth(
     req: AuthenticatedRequest,
     res: Response,
     next: NextFunction
-): void {
+): Response | void {
     const authHeader = req.headers['authorization'];
     
     if (!authHeader) {
@@ -452,14 +452,14 @@ export function optionalAuth(
         req.tokenPayload = payload;
     }
     
-    next();
+    return next();
 }
 
 /**
  * Middleware to require specific roles
  */
 export function requireRoles(...roles: string[]) {
-    return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    return (req: AuthenticatedRequest, res: Response, next: NextFunction): Response | void => {
         if (!req.user) {
             return res.status(401).json({ 
                 error: 'Autenticación requerida',
@@ -475,7 +475,7 @@ export function requireRoles(...roles: string[]) {
             });
         }
         
-        next();
+        return next();
     };
 }
 
@@ -486,7 +486,7 @@ export function requireJefeVentas(
     req: AuthenticatedRequest,
     res: Response,
     next: NextFunction
-): void {
+): Response | void {
     if (!req.user?.isJefeVentas) {
         logger.warn(`[AUTH] Jefe Ventas access denied for user: ${req.user?.code}`);
         return res.status(403).json({ 
@@ -508,7 +508,7 @@ export function requireJefeVentas(
 export async function handleRefreshToken(
     req: Request,
     res: Response
-): Promise<void> {
+): Promise<Response | void> {
     try {
         const { refreshToken } = req.body;
         
@@ -589,7 +589,7 @@ export async function handleRefreshToken(
 export async function handleLogout(
     req: AuthenticatedRequest,
     res: Response
-): Promise<void> {
+): Promise<Response | void> {
     try {
         const userId = req.user?.id;
         

@@ -23,7 +23,8 @@ env:
   FLUTTER_VERSION: '3.35.6'
   NODE_VERSION: '22'
   JAVA_VERSION: '17'
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+  # Allow Node 20 actions to run on their native runtime (compat mode after Node 20 deprecation)
+  ACTIONS_ALLOW_USE_OF_NODE20: 'true'
 
 # Cancel redundant workflow runs - prevents queue buildup
 concurrency:
@@ -70,14 +71,23 @@ jobs:
         id: changes
         continue-on-error: true
         run: |
+          CHANGED=""
+          BACKEND=""
+          LIB=""
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             BASE="${{ github.event.pull_request.base.sha }}"
           else
+            # Use FETCH_HEAD or HEAD~1, fallback to empty if not enough history
             BASE="HEAD~1"
+            git rev-parse --quiet HEAD~1 2>/dev/null || BASE="$(git log --oneline --max-count=1 --format='%H' 2>/dev/null || echo 'HEAD')"
           fi
-          echo "all=$(git diff --name-only "$BASE" HEAD 2>/dev/null | tr '\n' ' ')" >> "$GITHUB_OUTPUT"
-          echo "backend=$(git diff --name-only "$BASE" HEAD 2>/dev/null | grep -E '^backend/' | tr '\n' ' ' || echo '')" >> "$GITHUB_OUTPUT"
-          echo "lib=$(git diff --name-only "$BASE" HEAD 2>/dev/null | grep -E '^lib/' | tr '\n' ' ' || echo '')" >> "$GITHUB_OUTPUT"
+          CHANGED=$(git diff --name-only "$BASE" HEAD 2>/dev/null | tr '\n' ' ' || echo "")
+          BACKEND=$(echo "$CHANGED" | grep -E '^backend/' | tr '\n' ' ' || echo "")
+          LIB=$(echo "$CHANGED" | grep -E '^lib/' | tr '\n' ' ' || echo "")
+          echo "all=$CHANGED" >> "$GITHUB_OUTPUT"
+          echo "backend=$BACKEND" >> "$GITHUB_OUTPUT"
+          echo "lib=$LIB" >> "$GITHUB_OUTPUT"
+          echo "::debug::Changed files: [$CHANGED]"
 
   # ==========================================================================
   # PHASE 1a: FLUTTER LINT & ANALYZE (Parallel-safe)
@@ -123,8 +133,12 @@ jobs:
         id: analyze
         run: |
           # Run analyze and capture output
+          mkdir -p /tmp/ci-artifacts
           OUTPUT=$(flutter analyze 2>&1 || true)
           echo "$OUTPUT"
+          
+          # Save full output for self-heal workflow
+          echo "$OUTPUT" > /tmp/ci-artifacts/flutter-analyze.log
           
           # Count errors (actual errors, not infos)
           ERROR_COUNT=$(echo "$OUTPUT" | grep -c "error -" || echo "0")
@@ -137,6 +151,8 @@ jobs:
           if [ "$ERROR_COUNT" -gt 0 ]; then
             echo "exit_code=1" >> $GITHUB_OUTPUT
             echo "::error::Found $ERROR_COUNT error(s) in Flutter code"
+            # Extract error locations for rapid diagnosis
+            echo "$OUTPUT" | grep "error -" | head -10 | sed 's/^/  ::error file=/'
             exit 1
           else
             echo "exit_code=0" >> $GITHUB_OUTPUT
@@ -174,11 +190,35 @@ jobs:
       - name: Backend lint
         id: lint
         run: |
+          mkdir -p /tmp/ci-artifacts
           cd backend
-          npm run lint --if-present || true
-          npx tsc --noEmit || true
-          echo "exit_code=0" >> $GITHUB_OUTPUT
-          echo "error_count=0" >> $GITHUB_OUTPUT
+          
+          # ESLint
+          LINT_OUTPUT=$(npm run lint --if-present 2>&1 || true)
+          echo "::group::ESLint output"
+          echo "$LINT_OUTPUT"
+          echo "::endgroup::"
+          
+          # TypeScript check
+          TSC_OUTPUT=$(npx tsc --noEmit 2>&1 || true)
+          echo "::group::TypeScript output"
+          echo "$TSC_OUTPUT"
+          echo "::endgroup::"
+          
+          # Save for self-heal workflow
+          echo "$LINT_OUTPUT" > /tmp/ci-artifacts/eslint.log
+          echo "$TSC_OUTPUT" > /tmp/ci-artifacts/tsc.log
+          
+          # Count TSC errors
+          TSC_ERRORS=$(echo "$TSC_OUTPUT" | grep -c "error TS" || echo "0")
+          if [ "$TSC_ERRORS" -gt 0 ]; then
+            echo "exit_code=1" >> $GITHUB_OUTPUT
+            echo "error_count=$TSC_ERRORS" >> $GITHUB_OUTPUT
+            echo "::warning::Found $TSC_ERRORS TypeScript error(s)"
+          else
+            echo "exit_code=0" >> $GITHUB_OUTPUT
+            echo "error_count=0" >> $GITHUB_OUTPUT
+          fi
 
   # ==========================================================================
   # PHASE 2: BACKEND TESTS
@@ -209,13 +249,22 @@ jobs:
       - name: Backend tests
         id: test
         run: |
+          mkdir -p /tmp/ci-artifacts
           cd backend
           RESULT=$(npx jest --passWithNoTests --coverage --silent 2>&1 || echo "FAILED")
           echo "$RESULT"
+          
+          # Save for self-heal workflow
+          echo "$RESULT" > /tmp/ci-artifacts/jest.log
+          
           if echo "$RESULT" | grep -q "Test Suites:"; then
             echo "result=passed" >> $GITHUB_OUTPUT
           else
             echo "result=failed" >> $GITHUB_OUTPUT
+            # Extract failed test names for rapid diagnosis
+            echo "$RESULT" | grep -B1 "●" | grep -v "^--$" | head -10 | while read line; do
+              echo "::error::Test failed: $line"
+            done
             exit 1
           fi
 
@@ -272,12 +321,21 @@ jobs:
       - name: Flutter tests
         id: test
         run: |
+          mkdir -p /tmp/ci-artifacts
           RESULT=$(flutter test --no-pub --coverage 2>&1 || echo "FAILED")
           echo "$RESULT"
+          
+          # Save for self-heal workflow
+          echo "$RESULT" > /tmp/ci-artifacts/flutter-test.log
+          
           if echo "$RESULT" | grep -q "All tests passed"; then
             echo "result=passed" >> $GITHUB_OUTPUT
           else
             echo "result=failed" >> $GITHUB_OUTPUT
+            # Extract failing test names
+            echo "$RESULT" | grep -E "^\d+:\d+" | head -10 | while read line; do
+              echo "::error::Test location: $line"
+            done
             exit 1
           fi
 
@@ -320,10 +378,11 @@ jobs:
           cd backend
           AUDIT=$(npm audit --audit-level=high 2>&1 || true)
           echo "$AUDIT"
-          VULNS=$(echo "$AUDIT" | grep -c "vulnerability" || echo "0")
-          echo "vulns=$VULNS" >> $GITHUB_OUTPUT
+          # grep -c outputs "0" on stdout even with exit code 1; use || true to avoid double output
+          VULNS=$(echo "$AUDIT" | grep -c "vulnerability" || true)
+          echo "vulns=$VULNS" >> "$GITHUB_OUTPUT"
           
-          if [ "$VULNS" -gt 0 ]; then
+          if [ "$VULNS" -gt 0 ] 2>/dev/null; then
             echo "::warning::Found $VULNS vulnerability(ies)"
           fi
 
@@ -333,14 +392,18 @@ jobs:
           FOUND=0
           
           # Check for default secrets (exclude test files)
-          if grep -rn "default-secret\|dev-access-secret\|dev-refresh-secret" backend --include="*.js" --include="*.ts" 2>/dev/null | grep -v "===" | grep -v "!==" | grep -v ".test." | grep -v "__tests__" | grep -v "instrument."; then
+          SECRET_MATCHES=$(grep -rn "default-secret\|dev-access-secret\|dev-refresh-secret" backend --include="*.js" --include="*.ts" 2>/dev/null | grep -v "===" | grep -v "!==" | grep -v ".test." | grep -v "__tests__" | grep -v "instrument." || true)
+          if [ -n "$SECRET_MATCHES" ]; then
             echo "❌ Found hardcoded default secrets!"
+            echo "$SECRET_MATCHES"
             FOUND=1
           fi
           
           # Check for .env files in repo
-          if git ls-files | grep -E "\.env$|\.env\.(local|production|staging|produccion)$" 2>/dev/null; then
+          ENV_FILES=$(git ls-files | grep -E "\.env$|\.env\.(local|production|staging|produccion)$" 2>/dev/null || true)
+          if [ -n "$ENV_FILES" ]; then
             echo "❌ Found .env files committed!"
+            echo "$ENV_FILES"
             FOUND=1
           fi
           
@@ -352,8 +415,14 @@ jobs:
 
       - name: Generate SBOM
         run: |
-          cd backend && npm ls --json 2>/dev/null > ../sbom-backend.json || echo '{}' > ../sbom-backend.json
-          flutter pub deps --json 2>/dev/null > sbom-flutter.json || echo '{}' > sbom-flutter.json
+          cd backend
+          npm ls --json --depth=0 2>/dev/null > ../sbom-backend.json || printf '{"type":"empty"}' > ../sbom-backend.json
+          # Only generate Flutter SBOM if flutter is installed
+          if command -v flutter &>/dev/null; then
+            flutter pub deps --json 2>/dev/null > sbom-flutter.json || printf '{"type":"empty"}' > sbom-flutter.json
+          else
+            printf '{"type":"empty","note":"flutter not available in this job"}' > sbom-flutter.json
+          fi
 
       - name: Upload SBOM
         uses: actions/upload-artifact@v4
@@ -441,6 +510,15 @@ jobs:
           name: android-debug-${{ github.sha }}
           path: build/app/outputs/flutter-apk/*.apk
           retention-days: 7
+
+      - name: Upload CI artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ci-artifacts-${{ github.sha }}
+          path: /tmp/ci-artifacts/
+          retention-days: 3
+          if-no-files-found: ignore
 
       - name: Build summary
         run: |
@@ -590,17 +668,87 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ==========================================================================
+  # CI ARTIFACTS: Upload structured diagnostic logs
+  # ==========================================================================
+  upload-artifacts:
+    name: Upload CI Diagnostics
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    needs: [flutter-lint, backend-lint, backend-test, flutter-test]
+    if: failure()
+    steps:
+      - name: Upload error logs
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-diagnostics-${{ github.sha }}
+          path: /tmp/ci-artifacts/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ==========================================================================
   # FAILURE NOTIFICATION
   # ==========================================================================
   notify-failure:
     name: Notify Failure
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [preflight, flutter-lint, backend-test, flutter-test, build-android-debug, build-android-release, security]
+    needs: [preflight, flutter-lint, backend-lint, backend-test, flutter-test, security, build-android-debug, build-android-release]
     if: failure()
     steps:
-      - name: Failure summary
+      - name: Collect failure details
+        id: details
         run: |
           echo "## ❌ CI/CD Pipeline Failed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "👉 [View Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+          echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check Flutter lint
+        run: |
+          STATUS="${{ needs.flutter-lint.result }}"
+          echo "| Flutter Lint | $STATUS |" >> $GITHUB_STEP_SUMMARY
+          if [ "$STATUS" != "success" ]; then
+            echo "| → Errors | ${{ needs.flutter-lint.outputs.error_count || '?' }} |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check Backend lint
+        run: |
+          STATUS="${{ needs.backend-lint.result }}"
+          echo "| Backend Lint | $STATUS |" >> $GITHUB_STEP_SUMMARY
+          if [ "$STATUS" != "success" ]; then
+            echo "| → Errors | ${{ needs.backend-lint.outputs.error_count || '?' }} |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Check Backend tests
+        run: |
+          STATUS="${{ needs.backend-test.result }}"
+          echo "| Backend Tests | $STATUS |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check Flutter tests
+        run: |
+          STATUS="${{ needs.flutter-test.result }}"
+          echo "| Flutter Tests | $STATUS |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check Security
+        run: |
+          STATUS="${{ needs.security.result }}"
+          echo "| Security Scan | $STATUS |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Failure links
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- [View Full Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
+          echo "- [View Commit](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🛠️ Quick Fix Commands" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "# Reproduce locally:" >> $GITHUB_STEP_SUMMARY
+          echo "git pull && cd backend && npm ci && npx jest" >> $GITHUB_STEP_SUMMARY
+          echo "flutter analyze && flutter test" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "_The [CI Self-Heal](${{ github.server_url }}/${{ github.repository }}/actions/workflows/ci-self-heal.yml) workflow may have automatically analyzed this failure._" >> $GITHUB_STEP_SUMMARY

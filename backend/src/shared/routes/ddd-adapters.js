@@ -26,7 +26,7 @@ const { Db2ConnectionPool } = require('../../core/infrastructure/database/db2-co
 const { ResponseCache } = require('../../core/infrastructure/cache/response-cache');
 const { performanceCache } = require('../../core/infrastructure/cache/performance-cache');
 const { cachedQuery } = require('../../../services/query-optimizer');
-const { query } = require('../../../config/db');
+const { query, queryWithParams } = require('../../../config/db');
 const { TTL: RedisTTL } = require('../../../services/redis-cache');
 const { buildVendedorFilterLACLAE, sanitizeForSQL, MIN_YEAR, getVendorVisibilityScope } = require('../../../utils/common');
 const { getClientCodesFromCache } = require('../../../services/laclae');
@@ -247,17 +247,18 @@ function createPedidosRoutes() {
 
   router.get('/products', async (req, res) => {
     try {
-      const { vendedorCodes, clientCode, family, marca, search, limit, offset } = req.query;
+      const { vendedorCodes, clientCode, family, marca, prefamily, search, limit, offset } = req.query;
       if (!vendedorCodes) return res.status(400).json({ success: false, error: 'vendedorCodes is required' });
       if (!clientCode) return res.status(400).json({ success: false, error: 'clientCode is required' });
 
-      const cacheKey = `ddd:products:${vendedorCodes}:${clientCode}:${family || ''}:${marca || ''}:${search || ''}:${limit || 50}:${offset || 0}`;
+      const cacheKey = `ddd:products:${vendedorCodes}:${clientCode}:${family || ''}:${marca || ''}:${prefamily || ''}:${search || ''}:${limit || 50}:${offset || 0}`;
       await withCache(cache, cacheKey, TTL_MS.PRODUCT_CATALOG, async () => {
         const result = await repo.searchProducts({
           vendedorCodes,
           clientCode: String(clientCode).trim(),
           family: family ? String(family).trim() : undefined,
           marca: marca ? String(marca).trim() : undefined,
+          prefamily: prefamily ? String(prefamily).trim() : undefined,
           search: search ? String(search).trim() : undefined,
           limit: parseInt(limit) || 50,
           offset: parseInt(offset) || 0
@@ -339,11 +340,17 @@ function createPedidosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const cacheKey = `ddd:stats:${userId}`;
+      // Use vendedorCodes from query if privileged user, otherwise own code
+      const vendedorCodes = req.query.vendedorCodes || userId;
+      const dateFrom = req.query.dateFrom ? String(req.query.dateFrom).trim() : undefined;
+      const dateTo = req.query.dateTo ? String(req.query.dateTo).trim() : undefined;
+
+      const cacheKey = `ddd:stats:${vendedorCodes}:${dateFrom || ''}:${dateTo || ''}`;
       await withCache(cache, cacheKey, TTL_MS.ORDER_STATS, async () => {
-        const stats = await repo.getOrderStats({ userId });
+        const pedidosService = require('../../../services/pedidos.service');
+        const stats = await pedidosService.getOrderStats(vendedorCodes, dateFrom, dateTo);
         return { success: true, stats };
-      }, res);
+      }, res, req);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /stats: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
@@ -432,12 +439,18 @@ function createPedidosRoutes() {
     try {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
-      
-      const cacheKey = `ddd:orders-stats:${userId}`;
+
+      // Use vendedorCodes from query if privileged user, otherwise own code
+      const vendedorCodes = req.query.vendedorCodes || userId;
+      const dateFrom = req.query.dateFrom ? String(req.query.dateFrom).trim() : undefined;
+      const dateTo = req.query.dateTo ? String(req.query.dateTo).trim() : undefined;
+
+      const cacheKey = `ddd:orders-stats:${vendedorCodes}:${dateFrom || ''}:${dateTo || ''}`;
       await withCache(cache, cacheKey, TTL_MS.ORDER_STATS, async () => {
-        const stats = await repo.getOrderStats({ userId });
+        const pedidosService = require('../../../services/pedidos.service');
+        const stats = await pedidosService.getOrderStats(vendedorCodes, dateFrom, dateTo);
         return { success: true, stats };
-      }, res);
+      }, res, req);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /orders/stats: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
@@ -634,6 +647,173 @@ function createPedidosRoutes() {
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /analytics: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // =============================================================================
+  // ADDITIONAL MISSING ENDPOINTS (ported from legacy pedidos.js)
+  // =============================================================================
+
+  // GET /api/pedidos/families/detailed
+  router.get('/families/detailed', async (req, res) => {
+    try {
+      const pedidosService = require('../../../services/pedidos.service');
+      const families = await pedidosService.getFamiliesDetailed();
+      res.json({ success: true, families });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /families/detailed: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // GET /api/pedidos/draft-status/:vendedorCode
+  router.get('/draft-status/:vendedorCode', async (req, res) => {
+    try {
+      const code = String(req.params.vendedorCode || '').trim();
+      const pedidosService = require('../../../services/pedidos.service');
+      const result = await pedidosService.checkDraftAccumulation(code);
+      res.json({ success: true, ...result });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /draft-status: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // POST /api/pedidos/draft-status/:vendedorCode/auto-confirm
+  router.post('/draft-status/:vendedorCode/auto-confirm', async (req, res) => {
+    try {
+      const code = String(req.params.vendedorCode || '').trim();
+      const pedidosService = require('../../../services/pedidos.service');
+      const result = await pedidosService.checkDraftAccumulation(code, {
+        autoConfirm: true,
+        options: { userId: req.user?.code || req.user?.id || 'API' },
+      });
+      res.json({ success: true, ...result });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in POST /draft-status/auto-confirm: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // GET /api/pedidos/purchase-history-global
+  router.get('/purchase-history-global', async (req, res) => {
+    try {
+      const userIsJefe = req.user?.role === 'JEFE_VENTAS' || req.user?.role === 'ADMIN';
+      const userVendor = String(req.user?.code || req.user?.id || '').trim();
+
+      const now = new Date();
+      const defaultFrom = new Date(now.getFullYear(), 0, 1);
+      const from = req.query.from ? new Date(String(req.query.from)) : defaultFrom;
+      const to = req.query.to ? new Date(String(req.query.to)) : now;
+      const fromYmd = from.getFullYear() * 10000 + (from.getMonth() + 1) * 100 + from.getDate();
+      const toYmd = to.getFullYear() * 10000 + (to.getMonth() + 1) * 100 + to.getDate();
+
+      let vendor = String(req.query.vendedorCode || '').trim();
+      if (!userIsJefe && userVendor) vendor = userVendor;
+      const isAllVendor = !vendor || vendor.toUpperCase() === 'ALL';
+      const clientCode = String(req.query.clientCode || '').trim();
+      const productCode = String(req.query.productCode || '').trim();
+      const familia = String(req.query.familia || '').trim();
+      const marca = String(req.query.marca || '').trim();
+      const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+      const offset = parseInt(req.query.offset) || 0;
+
+      const where = [
+        `(L.LCAADC * 10000 + L.LCMMDC * 100 + L.LCDDDC) BETWEEN ? AND ?`,
+        `L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('VT','AB')`,
+        `L.LCSRAB NOT IN ('N','Z','G','D')`,
+      ];
+      const params = [fromYmd, toYmd];
+
+      if (!isAllVendor) {
+        const vendors = vendor.split(',').map(v => v.trim()).filter(Boolean);
+        if (vendors.length > 0 && vendors.length <= 50) {
+          where.push(`TRIM(L.LCCDVD) IN (${vendors.map(() => '?').join(',')})`);
+          params.push(...vendors);
+        } else if (vendors.length > 50) {
+          const safe = vendors
+            .filter(v => /^[A-Za-z0-9]{1,10}$/.test(v))
+            .map(v => `'${v.replace(/'/g, "''")}'`)
+            .join(',');
+          if (safe) where.push(`TRIM(L.LCCDVD) IN (${safe})`);
+        }
+      }
+      if (clientCode) { where.push(`TRIM(L.LCCDCL) = ?`); params.push(clientCode); }
+      if (productCode) { where.push(`TRIM(L.LCCDRF) = ?`); params.push(productCode); }
+      if (familia) { where.push(`L.LCCDRF IN (SELECT CODIGOARTICULO FROM DSEDAC.ART WHERE TRIM(CODIGOFAMILIA) = ?)`); params.push(familia); }
+      if (marca) { where.push(`L.LCCDRF IN (SELECT CODIGOARTICULO FROM DSEDAC.ART WHERE TRIM(CODIGOMARCA) = ?)`); params.push(marca); }
+
+      const whereSql = where.join(' AND ');
+
+      const detailSql = `
+        SELECT L.LCAADC AS ANO, L.LCMMDC AS MES, L.LCDDDC AS DIA,
+          TRIM(L.LCCDCL) AS CODIGOCLIENTE,
+          COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE)) AS NOMBRECLIENTE,
+          TRIM(L.LCCDVD) AS CODIGOVENDEDOR, TRIM(L.LCCDRF) AS CODIGOARTICULO,
+          TRIM(A.DESCRIPCIONARTICULO) AS DESCRIPCIONARTICULO,
+          L.LCCTUD AS CANTIDADUNIDADES, L.LCCTEV AS CANTIDADENVASES,
+          L.LCPRVT AS PRECIOVENTA, L.LCPJDT AS PORCENTAJEDESCUENTO,
+          L.LCIMVT AS IMPORTEVENTA, (L.LCCTUD * L.LCPRVT) AS IMPORTESINDESCUENTO,
+          (L.LCCTUD * L.LCPRVT - L.LCIMVT) AS IMPORTEDESCUENTO,
+          TRIM(L.LCCDFP) AS CODIGOFORMAPAGO,
+          TRIM(L.LCSRAB) AS SERIEALBARAN, L.LCNRAB AS NUMEROALBARAN
+        FROM DSED.LACLAE L
+        LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+        LEFT JOIN DSEDAC.CLI C ON TRIM(C.CODIGOCLIENTE) = TRIM(L.LCCDCL)
+        WHERE ${whereSql}
+        ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
+        OFFSET ${offset} ROWS FETCH FIRST ${limit} ROWS ONLY`;
+
+      const summarySql = `
+        SELECT COUNT(*) AS NUM_LINEAS, COUNT(DISTINCT TRIM(L.LCCDCL)) AS NUM_CLIENTES,
+          COUNT(DISTINCT TRIM(L.LCCDRF)) AS NUM_PRODUCTOS,
+          COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_VENDIDO,
+          COALESCE(SUM(L.LCCTUD * L.LCPRVT), 0) AS TOTAL_SIN_DESCUENTO,
+          COALESCE(SUM(L.LCCTUD * L.LCPRVT - L.LCIMVT), 0) AS TOTAL_DESCUENTO,
+          COALESCE(SUM(L.LCCTUD), 0) AS TOTAL_UNIDADES
+        FROM DSED.LACLAE L WHERE ${whereSql}`;
+
+      const topProductosSql = `
+        SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME,
+          COALESCE(SUM(L.LCIMVT), 0) AS IMPORTE, COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
+          COUNT(*) AS NUM_LINEAS
+        FROM DSED.LACLAE L LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+        WHERE ${whereSql}
+        GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
+        ORDER BY IMPORTE DESC FETCH FIRST 10 ROWS ONLY`;
+
+      const lastYearFrom = (from.getFullYear() - 1) * 10000 + (from.getMonth() + 1) * 100 + from.getDate();
+      const lastYearTo = (to.getFullYear() - 1) * 10000 + (to.getMonth() + 1) * 100 + to.getDate();
+
+      const [detail, summary, topProducts, lastYear] = await Promise.all([
+        queryWithParams(detailSql, params, false),
+        queryWithParams(summarySql, params, false),
+        queryWithParams(topProductosSql, params, false),
+        queryWithParams(`SELECT COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_LAST_YEAR FROM DSED.LACLAE L WHERE (L.LCAADC * 10000 + L.LCMMDC * 100 + L.LCDDDC) BETWEEN ? AND ? AND L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('VT','AB') AND L.LCSRAB NOT IN ('N','Z','G','D')`, [lastYearFrom, lastYearTo], false),
+      ]);
+
+      const s = summary?.[0] || {};
+      const totalThisPeriod = parseFloat(s.TOTAL_VENDIDO) || 0;
+      const totalLastYear = parseFloat(lastYear?.[0]?.TOTAL_LAST_YEAR) || 0;
+      const variation = totalLastYear > 0 ? ((totalThisPeriod - totalLastYear) / totalLastYear) * 100 : null;
+
+      res.json({
+        success: true,
+        filters: { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10), vendedorCode: isAllVendor ? 'ALL' : vendor, clientCode: clientCode || null, productCode: productCode || null, familia: familia || null, marca: marca || null },
+        summary: {
+          numLineas: parseInt(s.NUM_LINEAS) || 0, numClientes: parseInt(s.NUM_CLIENTES) || 0, numProductos: parseInt(s.NUM_PRODUCTOS) || 0,
+          totalVendido: totalThisPeriod, totalSinDescuento: parseFloat(s.TOTAL_SIN_DESCUENTO) || 0, totalDescuento: parseFloat(s.TOTAL_DESCUENTO) || 0, totalUnidades: parseFloat(s.TOTAL_UNIDADES) || 0,
+          comparativaAnoAnterior: { totalAnoAnterior: totalLastYear, variacionPct: variation },
+        },
+        topProducts: (topProducts || []).map(t => ({ code: (t.CODE || '').trim(), name: (t.NAME || '').trim(), importe: parseFloat(t.IMPORTE) || 0, unidades: parseFloat(t.UNIDADES) || 0, numLineas: parseInt(t.NUM_LINEAS) || 0 })),
+        lines: (detail || []).map(r => ({ fecha: `${r.ANO}-${String(r.MES).padStart(2, '0')}-${String(r.DIA).padStart(2, '0')}`, clienteCode: (r.CODIGOCLIENTE || '').trim(), clienteName: (r.NOMBRECLIENTE || '').trim(), vendedorCode: (r.CODIGOVENDEDOR || '').trim(), productCode: (r.CODIGOARTICULO || '').trim(), productName: (r.DESCRIPCIONARTICULO || '').trim(), cantidad: parseFloat(r.CANTIDADUNIDADES) || 0, envases: parseFloat(r.CANTIDADENVASES) || 0, precio: parseFloat(r.PRECIOVENTA) || 0, descuentoPct: parseFloat(r.PORCENTAJEDESCUENTO) || 0, importe: parseFloat(r.IMPORTEVENTA) || 0, importeSinDescuento: parseFloat(r.IMPORTESINDESCUENTO) || 0, importeDescuento: parseFloat(r.IMPORTEDESCUENTO) || 0, formaPago: (r.CODIGOFORMAPAGO || '').trim(), albaran: `${(r.SERIEALBARAN || '').trim()}-${r.NUMEROALBARAN || ''}` })),
+        pagination: { limit, offset, hasMore: (detail || []).length === limit },
+      });
+    } catch (error) {
+      const odbc0 = error.odbcErrors && error.odbcErrors[0];
+      const odbcMsg = odbc0 ? `${odbc0.state} (${odbc0.code}): ${odbc0.message}` : '';
+      logger.error(`[DDD-PEDIDOS] purchase-history-global ERROR: ${error.message}\n  ODBC: ${odbcMsg}\n  STACK: ${error.stack || ''}`);
+      res.status(500).json({ success: false, error: 'Error obteniendo historico global', detail: process.env.NODE_ENV !== 'production' ? error.message : undefined, odbc: process.env.NODE_ENV !== 'production' ? odbcMsg : undefined });
     }
   });
 
@@ -874,12 +1054,19 @@ function createPedidosRoutes() {
   router.put('/:id/cancel', async (req, res) => {
     try {
       const { id } = req.params;
+      const numericId = parseInt(id);
+      if (isNaN(numericId)) {
+        return res.status(400).json({ success: false, error: 'Invalid order ID' });
+      }
       const pedidosService = require('../../../services/pedidos.service');
-      const result = await pedidosService.cancelOrder(parseInt(id), { userId: req.user?.code });
+      const result = await pedidosService.cancelOrder(numericId, { userId: req.user?.code });
       res.json({ success: true, order: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/cancel: ${error.message}`);
-      res.status(error.message.includes('no se puede') ? 409 : 500).json({ success: false, error: error.message });
+      const status = error.message.includes('no se puede') || error.message.includes('anulado') || error.message.includes('enviado')
+        ? 409
+        : error.message.includes('no encontrado') ? 404 : 500;
+      res.status(status).json({ success: false, error: error.message });
     }
   });
 

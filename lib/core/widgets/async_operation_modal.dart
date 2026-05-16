@@ -3,12 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
-/// â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
-/// â³ ASYNC OPERATION MODAL
-/// â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+/// ⏳ ASYNC OPERATION MODAL
+/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 /// 
 /// Modal centrado y bloqueante para operaciones asíncronas.
-/// Estados: loading â†’ success (auto-cierre) | error (reintentar/cerrar)
+/// Estados: loading → success (auto-cierre) | error (reintentar/cerrar)
 /// 
 /// Incluye:
 /// - Timeout de seguridad configurable (default 45s)
@@ -22,7 +22,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 ///   } catch (e) {
 ///     controller.error('Error: $e', onRetry: () => tryAgain());
 ///   }
-/// â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”
+/// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 enum _ModalState { loading, success, error }
 
@@ -58,12 +58,12 @@ class AsyncOperationModalController {
   Timer? _timeoutTimer;
   Timer? _cancelButtonTimer;
 
-  /// Transition to success state â†’ auto-closes after 1.5s
+  /// Transition to success state → auto-closes after 1.5s
   void success([String? text]) {
     if (_closed) return;
     _timeoutTimer?.cancel();
     _cancelButtonTimer?.cancel();
-    _textNotifier.value = text ?? 'Â¡Completado!';
+    _textNotifier.value = text ?? '¡Completado!';
     _stateNotifier.value = _ModalState.success;
     Future.delayed(const Duration(milliseconds: 1500), close);
   }

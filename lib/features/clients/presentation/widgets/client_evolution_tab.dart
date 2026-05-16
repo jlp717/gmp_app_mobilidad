@@ -274,7 +274,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
             dense: true,
             leading: const Icon(Icons.assignment_return, color: AppTheme.error),
             title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-            subtitle: Text('C\u00f3d: $code \u2022 $units uds \u2022 ${CurrencyFormatter.formatWhole(amount)}', style: const TextStyle(fontSize: 11)),
+            subtitle: Text('Cód: $code • $units uds • ${CurrencyFormatter.formatWhole(amount)}', style: const TextStyle(fontSize: 11)),
             trailing: Text(CurrencyFormatter.formatWhole(amount), style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.error, fontSize: 13)),
           ),
         );

@@ -27,6 +27,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   String _formaPago = 'CONTADO';
   final Map<String, String> _itemStates = {};
   final Map<String, double> _partialAmounts = {};
+  final Map<String, String> _partialErrors = {};
   bool _isSubmitting = false;
 
   @override
@@ -44,7 +45,13 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     var total = 0.0;
     _itemStates.forEach((id, state) {
       if (state == 'COMPLETO') {
-        final item = _provider.cobrosPendientes.firstWhere((e) => e.id == id);
+        final item = _provider.cobrosPendientes.firstWhere(
+          (e) => e.id == id,
+          orElse: () => CobroPendiente(
+            id: id, referencia: id, tipo: TipoCobro.normal,
+            fecha: DateTime.now(), importeTotal: 0, importePendiente: 0,
+          ),
+        );
         total += item.importePendiente;
       } else if (state == 'PARCIAL') {
         total += _partialAmounts[id] ?? 0.0;
@@ -53,14 +60,92 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     return total;
   }
 
+  /// Valida el importe parcial de un cobro y actualiza errores visuales.
+  void _validatePartialAmount(String cobroId, String rawValue) {
+    final cobro = _provider.cobrosPendientes.firstWhere(
+      (e) => e.id == cobroId,
+      orElse: () => CobroPendiente(
+        id: cobroId, referencia: cobroId, tipo: TipoCobro.normal,
+        fecha: DateTime.now(), importeTotal: 0, importePendiente: 0,
+      ),
+    );
+    final amount = double.tryParse(rawValue.replaceAll(',', '.'));
+    if (amount == null || amount <= 0) {
+      _partialErrors[cobroId] = 'Importe invalido';
+    } else if (amount > cobro.importePendiente) {
+      _partialErrors[cobroId] =
+          'Maximo: ${_currencyFormat.format(cobro.importePendiente)}';
+    } else {
+      _partialErrors.remove(cobroId);
+    }
+    if (amount != null) _partialAmounts[cobroId] = amount;
+    setState(() {});
+  }
+
   Future<void> _submitCobro(double totalACobrar) async {
     if (_isSubmitting) return;
     if (totalACobrar <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona algún documento para cobrar')),
+        const SnackBar(content: Text('Selecciona algun documento para cobrar')),
       );
       return;
     }
+
+    // Check for validation errors in partial amounts
+    if (_partialErrors.isNotEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Corrige los importes parciales antes de cobrar'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+      return;
+    }
+
+    // Confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkSurface,
+        title: const Text('Confirmar cobro'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Cliente: ${widget.nombreCliente}',
+              style: const TextStyle(color: Colors.white70),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Importe: ${_currencyFormat.format(totalACobrar)}',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Forma de pago: $_formaPago',
+              style: const TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Confirmar cobro'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
 
     var fallos = 0;
 
@@ -144,6 +229,18 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     final pendientes = cobros.cobrosPendientes;
     final totalAbonar = _calcularTotalACobrar();
 
+    // Calcular resumen del cliente desde los cobros pendientes
+    double totalPendiente = 0;
+    double totalVencido = 0;
+    int numDocs = 0;
+    for (final c in pendientes) {
+      if (c.estado != EstadoCobro.alDia) {
+        totalPendiente += c.importePendiente;
+        numDocs++;
+      }
+      if (c.isVencido) totalVencido += c.importePendiente;
+    }
+
     return Scaffold(
       backgroundColor: AppTheme.darkBase,
       appBar: AppBar(
@@ -155,7 +252,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             Text(
-              'Código: ${widget.codigoCliente}',
+              'Codigo: ${widget.codigoCliente}',
               style: const TextStyle(fontSize: 12, color: Colors.white70),
             ),
           ],
@@ -163,76 +260,209 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         backgroundColor: AppTheme.darkSurface,
         iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () =>
+                cobros.cargarCobrosPendientes(widget.codigoCliente),
+            tooltip: 'Actualizar',
+          ),
+        ],
       ),
       body: cobros.isLoading && pendientes.isEmpty
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                if (cobros.error != null)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    margin: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.error.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppTheme.error),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.error_outline, color: AppTheme.error),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            cobros.error!,
-                            style: const TextStyle(color: Colors.white),
+          : RefreshIndicator(
+              onRefresh: () =>
+                  cobros.cargarCobrosPendientes(widget.codigoCliente),
+              color: AppTheme.neonBlue,
+              child: Column(
+                children: [
+                  if (cobros.error != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.error.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.error),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: AppTheme.error),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              cobros.error!,
+                              style: const TextStyle(color: Colors.white),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
+                  // Resumen del cliente
+                  if (pendientes.isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.darkSurface.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: totalVencido > 0
+                              ? AppTheme.error.withValues(alpha: 0.3)
+                              : AppTheme.neonBlue.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _detailSummaryItem(
+                              'Pendiente',
+                              _currencyFormat.format(totalPendiente),
+                              Icons.account_balance_wallet,
+                              totalPendiente > 0
+                                  ? AppTheme.warning
+                                  : AppTheme.success,
+                            ),
+                          ),
+                          Container(
+                            width: 1, height: 32,
+                            color: Colors.white.withValues(alpha: 0.08),
+                          ),
+                          Expanded(
+                            child: _detailSummaryItem(
+                              'Vencido',
+                              _currencyFormat.format(totalVencido),
+                              Icons.error_outline,
+                              totalVencido > 0
+                                  ? AppTheme.error
+                                  : AppTheme.success,
+                            ),
+                          ),
+                          Container(
+                            width: 1, height: 32,
+                            color: Colors.white.withValues(alpha: 0.08),
+                          ),
+                          Expanded(
+                            child: _detailSummaryItem(
+                              'Documentos',
+                              '$numDocs',
+                              Icons.receipt_long,
+                              AppTheme.neonBlue,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  // Total a cobrar (solo si hay seleccion)
+                  if (pendientes.isNotEmpty && totalAbonar > 0)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Total a cobrar:',
+                            style: TextStyle(
+                                color: Colors.white70, fontSize: 14),
+                          ),
+                          Text(
+                            _currencyFormat.format(totalAbonar),
+                            style: TextStyle(
+                              color: AppTheme.success,
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  Expanded(
+                    child: pendientes.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.check_circle_outline,
+                                  size: 64,
+                                  color: AppTheme.success
+                                      .withValues(alpha: 0.3),
+                                ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'No hay cobros pendientes',
+                                  style: TextStyle(
+                                      color: AppTheme.textSecondary),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'El cliente esta al dia',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: AppTheme.textSecondary
+                                        .withValues(alpha: 0.7),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.all(16),
+                            itemCount: pendientes.length,
+                            itemBuilder: (context, index) {
+                              final cobro = pendientes[index];
+                              return _buildCobroCard(cobro);
+                            },
+                          ),
                   ),
-                if (pendientes.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'Total a cobrar:',
-                          style: TextStyle(color: Colors.white70, fontSize: 16),
-                        ),
-                        Text(
-                          _currencyFormat.format(totalAbonar),
-                          style: TextStyle(
-                            color: totalAbonar > 0
-                                ? AppTheme.success
-                                : AppTheme.textSecondary,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                Expanded(
-                  child: pendientes.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'No hay cobros pendientes',
-                            style: TextStyle(color: AppTheme.textSecondary),
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: pendientes.length,
-                          itemBuilder: (context, index) {
-                            final cobro = pendientes[index];
-                            return _buildCobroCard(cobro);
-                          },
-                        ),
-                ),
-                if (pendientes.isNotEmpty) _buildBottomBar(totalAbonar),
-              ],
+                  if (pendientes.isNotEmpty) _buildBottomBar(totalAbonar),
+                ],
+              ),
             ),
+    );
+  }
+
+  Widget _detailSummaryItem(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 12),
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.5),
+                  fontSize: 9,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -350,15 +580,16 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                           color: AppTheme.neonBlue.withValues(alpha: 0.3),
                         ),
                       ),
+                      errorText: _partialErrors[cobro.id],
+                      errorMaxLines: 1,
+                      suffixText:
+                          'Max: ${_currencyFormat.format(cobro.importePendiente)}',
+                      suffixStyle: const TextStyle(
+                        color: Colors.white54,
+                        fontSize: 10,
+                      ),
                     ),
-                    onChanged: (value) {
-                      final amount =
-                          double.tryParse(value.replaceAll(',', '.'));
-                      if (amount != null) {
-                        _partialAmounts[cobro.id] = amount;
-                        setState(() {});
-                      }
-                    },
+                    onChanged: (value) => _validatePartialAmount(cobro.id, value),
                   ),
                 ],
               ],

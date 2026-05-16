@@ -45,7 +45,7 @@ class SalesChartCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Ãšltimos 7 días',
+                      'Últimos 7 días',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                       ),

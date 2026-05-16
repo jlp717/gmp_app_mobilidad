@@ -69,7 +69,7 @@ class PlannerToolbar extends StatelessWidget {
 
               const Spacer(),
 
-              // Profit optimizer â€” glow on hover
+              // Profit optimizer – glow on hover
               _GlowToolButton(
                 icon: Icons.auto_awesome_rounded,
                 tooltip: 'Optimizar carga (max beneficio)',
@@ -129,7 +129,7 @@ class PlannerToolbar extends StatelessWidget {
               ),
               const SizedBox(width: 6),
 
-              // Reset â€” warning glow
+              // Reset – warning glow
               _GlowToolButton(
                 icon: Icons.refresh_rounded,
                 tooltip: 'Recalcular (descartar cambios)',
@@ -189,7 +189,7 @@ class PlannerToolbar extends StatelessWidget {
 }
 
 // =============================================================================
-// PILL SEGMENTED CONTROL â€” floating pill with animated highlight
+// PILL SEGMENTED CONTROL – floating pill with animated highlight
 // =============================================================================
 
 class _PillSegmented<T> extends StatelessWidget {
@@ -278,7 +278,7 @@ class _PillSegmented<T> extends StatelessWidget {
 }
 
 // =============================================================================
-// GLOW TOOL BUTTON â€” icon button with subtle glow when active/hovered
+// GLOW TOOL BUTTON – icon button with subtle glow when active/hovered
 // =============================================================================
 
 class _GlowToolButton extends StatefulWidget {

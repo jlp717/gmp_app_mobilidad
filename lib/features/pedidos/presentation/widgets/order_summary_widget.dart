@@ -169,7 +169,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                       ],
                     ),
                     content: const Text(
-                      'Â¿Seguro que quieres eliminar todas las líneas del pedido?',
+                      '¿Seguro que quieres eliminar todas las líneas del pedido?',
                       style: TextStyle(color: Colors.white70),
                     ),
                     actions: [
@@ -366,7 +366,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
             ),
           ),
           const SizedBox(height: 12),
-          // C5 â€” Global discount
+          // C5 – Global discount
           Padding(
             padding: const EdgeInsets.only(bottom: 10),
             child: Row(
@@ -477,7 +477,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
               ),
             ],
           ),
-          // C3 â€” IVA breakdown
+          // C3 – IVA breakdown
           if (provider.ivaBreakdown.isNotEmpty)
             Padding(
               padding: const EdgeInsets.only(top: 6),
@@ -537,7 +537,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                 ],
               ),
             ),
-          // E1 â€” Preview before confirm
+          // E1 – Preview before confirm
           SizedBox(
             width: double.infinity,
             height: 48,
@@ -739,7 +739,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      '$equivText  Â·  $unitLabel',
+                      '$equivText  ·  $unitLabel',
                       style: const TextStyle(
                         color: AppTheme.neonBlue,
                         fontSize: 11,
@@ -1202,7 +1202,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     });
   }
 
-  // E1 â€” Preview sheet before confirm (Amazon-style DraggableScrollableSheet)
+  // E1 – Preview sheet before confirm (Amazon-style DraggableScrollableSheet)
   void _showOrderPreview(BuildContext context, PedidosProvider provider) {
     if (!provider.hasClient) {
       ScaffoldMessenger.of(context).showSnackBar(

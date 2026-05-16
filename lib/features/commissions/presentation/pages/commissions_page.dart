@@ -134,7 +134,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                 decoration: BoxDecoration(
                     color: Colors.blue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8)),
-                child: const Text('âš ï¸ Todas las cifras son SIN IVA',
+                child: const Text('⚠️ Todas las cifras son SIN IVA',
                     style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.bold,
@@ -148,22 +148,22 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               const SizedBox(height: 12),
               _buildStep(
                 '✅ Estado Mensual',
-                'â€¢ VERDE âœ“ = Superas el objetivo del mes\nâ€¢ ROJO âœ— = Por debajo del objetivo\nâ€¢ Solo comisionas si superas el 100%',
+                '• VERDE ✓ = Superas el objetivo del mes\n• ROJO ✗ = Por debajo del objetivo\n• Solo comisionas si superas el 100%',
               ),
               const SizedBox(height: 12),
               _buildStep(
                   'ðŸ’° Franjas de Comisión',
                   'El % se aplica SOLO al exceso sobre el objetivo:\n\n'
-                      'â€¢ Franja 1 (100-103%): 1.0%\n'
-                      'â€¢ Franja 2 (103-106%): 1.3%\n'
-                      'â€¢ Franja 3 (106-110%): 1.6%\n'
-                      'â€¢ Franja 4 (>110%):    2.0%'),
+                      '• Franja 1 (100-103%): 1.0%\n'
+                      '• Franja 2 (103-106%): 1.3%\n'
+                      '• Franja 3 (106-110%): 1.6%\n'
+                      '• Franja 4 (>110%):    2.0%'),
               const SizedBox(height: 12),
               _buildStep(
                   'ðŸ“… Ritmo Diario',
                   r'Compara tus ventas actuales vs. lo esperado al día de hoy:\n'
-                      r'â€¢ âœ“ Verde (Adelantado/En ritmo) = Vas por buen camino\n'
-                      'â€¢ âš  Naranja (Rezagado) = Necesitas acelerar'),
+                      r'• ✓ Verde (Adelantado/En ritmo) = Vas por buen camino\n'
+                      '• ⚠ Naranja (Rezagado) = Necesitas acelerar'),
               const SizedBox(height: 12),
               _buildStep(
                 '🔒 Meses Pendientes',
@@ -321,7 +321,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       final isPaid = paidMonths.contains(m);
                       final isFuture = m > now.month;
                       var label = _getMonthName(m);
-                      if (isPaid) label += '  âœ“ PAGADO';
+                      if (isPaid) label += '  ✓ PAGADO';
                       if (isFuture) label += '  (Futuro)';
                       return DropdownMenuItem(
                         value: m,
@@ -553,7 +553,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
   }
 
   /// Step 2: Confirmation modal with full details and safety warnings.
-  /// Pagos son solo INSERT â€“ no UPDATE. Snapshot historico intencional.
+  /// Pagos son solo INSERT – no UPDATE. Snapshot historico intencional.
   Future<void> _showPayConfirmation({
     required String vendorCode,
     required String vendorName,
@@ -1936,7 +1936,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     color: AppTheme.neonBlue)),
           ),
           const SizedBox(width: 4),
-          Text('$range â†’ $rate',
+          Text('$range → $rate',
               style:
                   TextStyle(fontSize: 9, color: Colors.white.withValues(alpha: 0.7))),
         ],
@@ -2028,7 +2028,7 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
   @override
   Widget build(BuildContext context) {
     final data = widget.data;
-    final vendorCode = data['vendedorCode']?.toString() ?? '???';
+    final vendorCode = data['vendedorCode']?.toString() ?? '?';
     final vendorName = data['vendorName']?.toString() ?? 'Vendedor';
     final isExcluded = (data['isExcluded'] as bool?) ?? false;
     final grandTotal = (data['grandTotalCommission'] as num?)?.toDouble() ?? 0;

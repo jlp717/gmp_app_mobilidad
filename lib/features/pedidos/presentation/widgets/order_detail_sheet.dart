@@ -103,7 +103,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           ],
         ),
         content: const Text(
-          'Esta accion no se puede deshacer. Â¿Deseas anular este pedido?',
+          'Esta accion no se puede deshacer. ¿Deseas anular este pedido?',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -153,7 +153,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           ],
         ),
         content: Text(
-          'Â¿Deseas confirmar el pedido #${header.numeroPedido} para el cliente ${header.clienteName}?',
+          '¿Deseas confirmar el pedido #${header.numeroPedido} para el cliente ${header.clienteName}?',
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [

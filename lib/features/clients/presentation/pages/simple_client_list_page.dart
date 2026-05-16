@@ -290,7 +290,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
     final message =
         Uri.encodeComponent('Hola, soy $nombreComercial de Mari Pepa. '
             'Mañana día $fecha tenemos visita. '
-            'Â¿Necesitas cualquier cosilla?');
+            '¿Necesitas cualquier cosilla?');
 
     final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
     if (await canLaunchUrl(uri)) {
@@ -618,10 +618,16 @@ class _ClientCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: AppTheme.surfaceColor,
+      color: AppTheme.darkCard.withValues(alpha: 0.92),
+      elevation: 0,
+      shadowColor: AppTheme.neonBlue.withValues(alpha: 0.08),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         child: Padding(
           padding: EdgeInsets.all(cardPadding),
           child: Column(
@@ -631,13 +637,28 @@ class _ClientCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Avatar
-                  CircleAvatar(
-                    radius: avatarRadius,
-                    backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.2),
+                  Container(
+                    width: avatarRadius * 2,
+                    height: avatarRadius * 2,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          AppTheme.neonGreen.withValues(alpha: 0.28),
+                          AppTheme.neonBlue.withValues(alpha: 0.16),
+                        ],
+                      ),
+                      border: Border.all(
+                        color: AppTheme.neonGreen.withValues(alpha: 0.2),
+                      ),
+                    ),
                     child: Text(
                       name.isNotEmpty ? name[0].toUpperCase() : 'C',
                       style: TextStyle(
-                        color: AppTheme.neonGreen,
+                        color: Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: avatarFontSize,
                       ),
@@ -747,13 +768,31 @@ class _ClientCard extends StatelessWidget {
                             ),
                       ),
                       if (lastPurchase.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          'Ãšltima: $lastPurchase',
-                          style:
-                              Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: AppTheme.textTertiary,
-                                  ),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.neonBlue.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(
+                              AppTheme.radiusFull,
+                            ),
+                            border: Border.all(
+                              color: AppTheme.neonBlue.withValues(alpha: 0.14),
+                            ),
+                          ),
+                          child: Text(
+                            'Último pedido: $lastPurchase',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                          ),
                         ),
                       ],
                     ],

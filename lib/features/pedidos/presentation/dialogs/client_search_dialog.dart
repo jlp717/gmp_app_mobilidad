@@ -299,7 +299,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                           ),
                         ),
                         if (city.isNotEmpty) ...[
-                          Text(' Â· ', style: TextStyle(color: Colors.white38, fontSize: Responsive.fontSize(context, small: 11, large: 12))),
+                          Text(' · ', style: TextStyle(color: Colors.white38, fontSize: Responsive.fontSize(context, small: 11, large: 12))),
                           Flexible(
                             child: Text(
                               city,
@@ -309,7 +309,7 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                           ),
                         ],
                         if (nif.isNotEmpty) ...[
-                          Text(' Â· ', style: TextStyle(color: Colors.white38, fontSize: Responsive.fontSize(context, small: 11, large: 12))),
+                          Text(' · ', style: TextStyle(color: Colors.white38, fontSize: Responsive.fontSize(context, small: 11, large: 12))),
                           Text(
                             nif,
                             style: TextStyle(color: Colors.white54, fontSize: Responsive.fontSize(context, small: 11, large: 12)),

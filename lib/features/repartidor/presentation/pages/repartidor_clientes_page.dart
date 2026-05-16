@@ -315,7 +315,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${client.id} Â· ${client.address}',
+                      '${client.id} · ${client.address}',
                       style: TextStyle(fontSize: Responsive.fontSize(context, small: 9, large: 11), color: AppTheme.textSecondary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -333,7 +333,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                           _clientStat(
                             Icons.local_shipping,
                             client.repName != null && client.repName!.isNotEmpty
-                                ? 'Rep ${client.repCode!} â€” ${client.repName!}'
+                                ? 'Rep ${client.repCode!} – ${client.repName!}'
                                 : 'Rep ${client.repCode!}',
                             AppTheme.neonPurple,
                           ),

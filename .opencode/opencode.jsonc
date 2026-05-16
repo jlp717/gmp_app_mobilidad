@@ -60,6 +60,18 @@
     "desktop-commander":   { "enabled": false },
     "sqlite":              { "enabled": false },
     "figma-context":       { "enabled": false },
-    "cloudflare":          { "enabled": false }
+    "cloudflare":          { "enabled": false },
+
+    // === NUEVOS MCPs MAYO 2026 (on-demand) ===
+    // Issue tracking con dependencias → beads init + beads-mcp (ACTIVO)
+    "beads":               { "enabled": true },
+    // Task management estructurado → requiere TASK_MASTER_API_KEY
+    "task-master":         { "enabled": false },
+    // IBM i MCP oficial (complementario) → requiere credenciales IBM i
+    "ibmi-mcp-official":   { "enabled": false },
+    // Spec-driven development CLI (ACTIVO)
+    "openspec":            { "enabled": true },
+    // Docs-to-skills converter (CLI, no MCP)
+    "skill-seekers":       { "enabled": false }
   }
 }

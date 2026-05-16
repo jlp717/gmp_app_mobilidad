@@ -589,7 +589,9 @@ class _ProductCardState extends State<ProductCard> {
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 5,
-                child: Image.network(
+                child: ColoredBox(
+                  color: Colors.white,
+                  child: Image.network(
                   imageUrl,
                   headers: ApiClient.authHeaders,
                   fit: BoxFit.contain,
@@ -628,6 +630,7 @@ class _ProductCardState extends State<ProductCard> {
                         textAlign: TextAlign.center,
                       ),
                     ],
+                  ),
                   ),
                 ),
               ),

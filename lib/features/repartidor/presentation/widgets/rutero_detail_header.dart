@@ -162,10 +162,10 @@ class RuteroDetailHeader extends StatelessWidget {
           ),
           child: Text(
             isCompleted
-                ? 'âœ“ ENTREGADO'
+                ? '✓ ENTREGADO'
                 : _isUrgent
-                    ? 'âš  COBRO OBLIGATORIO'
-                    : 'âœ“ COBRO OPCIONAL',
+                    ? '⚠ COBRO OBLIGATORIO'
+                    : '✓ COBRO OPCIONAL',
             style: TextStyle(
               color: isCompleted
                   ? AppTheme.success

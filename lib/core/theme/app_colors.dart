@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
 
-/// Centralized color palette for GMP App.
-/// Use these constants instead of hardcoded Color(0xFF...) values.
-/// This ensures consistency across the app and makes theme changes easier.
+/// Centralized color palette for GMP App — V2 Premium Edition.
+/// Modern, refined tones with glassmorphism-friendly opacity levels.
 class AppColors {
   AppColors._();
 
   // ============================================================================
-  // BASE COLORS - Dark Theme Foundation
+  // BASE COLORS — Deep Space Foundation (V2 refined)
   // ============================================================================
 
-  static const Color darkBase = Color(0xFF0F172A);
-  static const Color darkSurface = Color(0xFF1E293B);
-  static const Color darkCard = Color(0xFF334155);
-  static const Color borderColor = Color(0xFF475569);
+  static const Color darkBase = Color(0xFF0A0E1A);
+  static const Color darkSurface = Color(0xFF111827);
+  static const Color darkCard = Color(0xFF1F2937);
+  static const Color borderColor = Color(0xFF374151);
 
   // Aliases for compatibility
   static const Color backgroundColor = darkBase;
@@ -21,44 +20,57 @@ class AppColors {
   static const Color cardColor = darkCard;
 
   // ============================================================================
-  // NEON ACCENTS - Primary Palette
+  // NEON ACCENTS — Refined Premium Palette
   // ============================================================================
 
-  static const Color neonBlue = Color(0xFF00D4FF);
-  static const Color neonGreen = Color(0xFF00FF88);
-  static const Color neonPurple = Color(0xFFBB86FC);
-  static const Color neonPink = Color(0xFFFF6B9D);
-  static const Color neonCyan = Color(0xFF00FFFF);
-  static const Color neonTeal = Color(0xFF00CED1);
-  static const Color neonElectric = Color(0xFF7DF9FF);
-  static const Color holoBlue = Color(0xFF1E90FF);
+  static const Color neonBlue = Color(0xFF3B82F6);
+  static const Color neonGreen = Color(0xFF10B981);
+  static const Color neonPurple = Color(0xFF8B5CF6);
+  static const Color neonPink = Color(0xFFEC4899);
+  static const Color neonCyan = Color(0xFF06B6D4);
+  static const Color neonTeal = Color(0xFF14B8A6);
+  static const Color neonElectric = Color(0xFF60A5FA);
+  static const Color holoBlue = Color(0xFF2563EB);
 
   // Aliases
   static const Color primary = neonBlue;
   static const Color secondary = neonGreen;
 
   // ============================================================================
+  // PREMIUM GRADIENT COLORS — Soft, modern blends
+  // ============================================================================
+
+  static const Color premiumBlueStart = Color(0xFF3B82F6);
+  static const Color premiumBlueEnd = Color(0xFF8B5CF6);
+  static const Color premiumPinkStart = Color(0xFFEC4899);
+  static const Color premiumPinkEnd = Color(0xFFF43F5E);
+  static const Color premiumGreenStart = Color(0xFF10B981);
+  static const Color premiumGreenEnd = Color(0xFF06B6D4);
+  static const Color premiumSunriseStart = Color(0xFFF59E0B);
+  static const Color premiumSunriseEnd = Color(0xFFEF4444);
+
+  // ============================================================================
   // GLOW INTENSITIES
   // ============================================================================
 
-  static const Color glowIntense = Color(0xFF00D4FF);
-  static const Color glowMedium = Color(0xFF0099CC);
-  static const Color glowSubtle = Color(0xFF006699);
+  static const Color glowIntense = Color(0xFF3B82F6);
+  static const Color glowMedium = Color(0xFF2563EB);
+  static const Color glowSubtle = Color(0xFF1D4ED8);
 
   // ============================================================================
   // STATUS COLORS
   // ============================================================================
 
-  static const Color success = Color(0xFF00FF88);
-  static const Color error = Color(0xFFFF3B5C);
-  static const Color warning = Color(0xFFFFAA00);
-  static const Color info = Color(0xFF00D4FF);
+  static const Color success = Color(0xFF10B981);
+  static const Color error = Color(0xFFEF4444);
+  static const Color warning = Color(0xFFF59E0B);
+  static const Color info = Color(0xFF3B82F6);
 
   // Payment status colors
-  static const Color obligatorio = Color(0xFFFF3B5C);
-  static const Color opcional = Color(0xFFFFAA00);
-  static const Color cobrado = Color(0xFF00FF88);
-  static const Color credito = Color(0xFF00D4FF);
+  static const Color obligatorio = Color(0xFFEF4444);
+  static const Color opcional = Color(0xFFF59E0B);
+  static const Color cobrado = Color(0xFF10B981);
+  static const Color credito = Color(0xFF3B82F6);
 
   // Aliases for compatibility
   static const Color successColor = success;
@@ -67,18 +79,18 @@ class AppColors {
   static const Color infoColor = info;
 
   // ============================================================================
-  // TEXT COLORS
+  // TEXT COLORS — Improved contrast
   // ============================================================================
 
-  static const Color textPrimary = Color(0xFFFFFFFF);
-  static const Color textSecondary = Color(0xFFB0B8D4);
+  static const Color textPrimary = Color(0xFFF9FAFB);
+  static const Color textSecondary = Color(0xFF9CA3AF);
   static const Color textTertiary = Color(0xFF6B7280);
 
   // ============================================================================
   // CHART COLORS
   // ============================================================================
 
-  static const Color chartYellow = Color(0xFFFFC233);
+  static const Color chartYellow = Color(0xFFFBBF24);
   static const Color chartViolet = Color(0xFF8B5CF6);
   static const Color chartEmerald = Color(0xFF10B981);
   static const Color chartAmber = Color(0xFFF59E0B);
@@ -95,28 +107,33 @@ class AppColors {
   ];
 
   // ============================================================================
-  // GRADIENTS - Predefined for common use cases
+  // GRADIENTS — Premium V2
   // ============================================================================
 
+  /// Primary gradient — soft blue to purple
   static const LinearGradient primaryGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
     colors: [
-      Color(0x4D00D4FF), // 30% opacity neonBlue
-      Color(0x1A00D4FF), // 10% opacity neonBlue
+      Color(0x4D3B82F6),
+      Color(0x1A3B82F6),
     ],
   );
 
+  /// Holographic gradient — cyan → blue → purple → cyan
   static const LinearGradient holoGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
     colors: [
-      Color(0x2600FFFF), // 15% opacity neonCyan
-      Color(0x1A00D4FF), // 10% opacity neonBlue
-      Color(0x1ABB86FC), // 10% opacity neonPurple
-      Color(0x2600FFFF), // 15% opacity neonCyan
+      Color(0x2606B6D4),
+      Color(0x1A3B82F6),
+      Color(0x1A8B5CF6),
+      Color(0x2606B6D4),
     ],
     stops: [0.0, 0.35, 0.65, 1.0],
   );
 
+  /// Scanner gradient — vertical cyan sweep
   static const LinearGradient scannerGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
@@ -128,8 +145,46 @@ class AppColors {
     stops: [0.0, 0.5, 1.0],
   );
 
+  /// Login button gradient — blue → purple → pink
+  static const LinearGradient loginGradient = LinearGradient(
+    begin: Alignment.centerLeft,
+    end: Alignment.centerRight,
+    colors: [
+      Color(0xFF3B82F6),
+      Color(0xFF8B5CF6),
+      Color(0xFFEC4899),
+    ],
+  );
+
+  /// Success gradient — green → teal
+  static const LinearGradient successGradient = LinearGradient(
+    colors: [
+      Color(0xFF10B981),
+      Color(0xFF06B6D4),
+    ],
+  );
+
+  /// Warning gradient — amber → red
+  static const LinearGradient warningGradient = LinearGradient(
+    colors: [
+      Color(0xFFF59E0B),
+      Color(0xFFEF4444),
+    ],
+  );
+
+  /// Brand gradient for logos and headers
+  static const LinearGradient brandGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFF3B82F6),
+      Color(0xFF8B5CF6),
+      Color(0xFFEC4899),
+    ],
+  );
+
   // ============================================================================
-  // SPACING CONSTANTS (commonly used with colors)
+  // SPACING CONSTANTS
   // ============================================================================
 
   static const double paddingS = 12;
@@ -147,11 +202,11 @@ class AppColors {
   static const Duration animPulse = Duration(milliseconds: 1500);
 
   // ============================================================================
-  // LEGACY COLORS - Kept for compatibility with older code
+  // LEGACY COLORS — Kept for compatibility with older code
   // ============================================================================
 
-  static const Color surfaceVariant = Color(0xFF1E293B);
-  static const Color outlineVariant = Color(0xFF475569);
-  static const Color inverseSurface = Color(0xFFFFFFFF);
-  static const Color inversePrimary = Color(0xFF0F172A);
+  static const Color surfaceVariant = Color(0xFF111827);
+  static const Color outlineVariant = Color(0xFF374151);
+  static const Color inverseSurface = Color(0xFFF9FAFB);
+  static const Color inversePrimary = Color(0xFF0A0E1A);
 }

@@ -68,7 +68,7 @@ class UltimasVentasWidget extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  'Ãšltimas Ventas',
+                  'Últimas Ventas',
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),

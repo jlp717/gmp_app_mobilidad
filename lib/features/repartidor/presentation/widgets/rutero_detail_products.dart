@@ -212,7 +212,7 @@ class RuteroDetailProducts extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  checked == total ? 'âœ“ COMPLETO' : 'PENDIENTE',
+                  checked == total ? '✓ COMPLETO' : 'PENDIENTE',
                   style: TextStyle(
                     color:
                         checked == total ? AppTheme.success : AppTheme.warning,

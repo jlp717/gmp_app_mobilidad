@@ -96,8 +96,11 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
     }
   }
 
-  String _imageUrl(String code) => '${ApiConfig.baseUrl}/products/'
-      '${Uri.encodeComponent(code.trim())}/image';
+  String _imageUrl(String code) {
+    final trimmed = code.trim();
+    if (trimmed.isEmpty) return '';
+    return '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(trimmed)}/image';
+  }
 
   Future<void> _openFichaTecnica(BuildContext ctx) async {
     final navigator = Navigator.of(ctx);

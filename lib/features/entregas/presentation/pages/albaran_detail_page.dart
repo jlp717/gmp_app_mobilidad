@@ -542,7 +542,7 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                     color: Colors.green.shade700, size: 32,),
                 const SizedBox(width: 12),
                 Text(
-                  'Â¡Entrega completada!',
+                  '¡Entrega completada!',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,

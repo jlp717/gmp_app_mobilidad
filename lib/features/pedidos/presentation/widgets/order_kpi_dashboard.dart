@@ -18,64 +18,73 @@ class OrderKpiDashboard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final prov = ref.watch(pedidosProvider);
     final stats = prov.orderStats;
+    final showMargin = prov.isMarginVisible;
 
     if (prov.isLoadingStats || stats == null) {
-      return _buildLoadingState();
+      return _buildLoadingState(showMarginCards: showMargin);
     }
+
+    final cards = <Widget>[
+      Expanded(
+        child: _kpiCard(
+          context,
+          'Pedidos',
+          '${stats.totalOrders}',
+          _trendIcon(stats.trendOrdersPct),
+          _trendText(stats.trendOrdersPct),
+          Icons.receipt_long_outlined,
+          AppTheme.neonBlue,
+        ),
+      ),
+      const SizedBox(width: 6),
+      Expanded(
+        child: _kpiCard(
+          context,
+          'Importe',
+          PedidosFormatters.money(stats.totalAmount),
+          _trendIcon(stats.trendAmountPct),
+          _trendText(stats.trendAmountPct),
+          Icons.euro,
+          AppTheme.neonGreen,
+        ),
+      ),
+    ];
+
+    if (showMargin) {
+      cards.add(const SizedBox(width: 6));
+      cards.add(
+        Expanded(
+          child: _kpiCard(
+            context,
+            'Margen',
+            '${stats.avgMargin.toStringAsFixed(1)}%',
+            null,
+            null,
+            Icons.trending_up,
+            _marginColor(stats.avgMargin),
+          ),
+        ),
+      );
+    }
+
+    cards.add(const SizedBox(width: 6));
+    cards.add(
+      Expanded(
+        child: _kpiCard(
+          context,
+          'Ticket',
+          PedidosFormatters.money(stats.avgTicket),
+          null,
+          null,
+          Icons.calculate_outlined,
+          AppTheme.neonPurple,
+        ),
+      ),
+    );
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: _kpiCard(
-              context,
-              'Pedidos',
-              '${stats.totalOrders}',
-              _trendIcon(stats.trendOrdersPct),
-              _trendText(stats.trendOrdersPct),
-              Icons.receipt_long_outlined,
-              AppTheme.neonBlue,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: _kpiCard(
-              context,
-              'Importe',
-              PedidosFormatters.money(stats.totalAmount),
-              _trendIcon(stats.trendAmountPct),
-              _trendText(stats.trendAmountPct),
-              Icons.euro,
-              AppTheme.neonGreen,
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: _kpiCard(
-              context,
-              'Margen',
-              '${stats.avgMargin.toStringAsFixed(1)}%',
-              null,
-              null,
-              Icons.trending_up,
-              _marginColor(stats.avgMargin),
-            ),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: _kpiCard(
-              context,
-              'Ticket',
-              PedidosFormatters.money(stats.avgTicket),
-              null,
-              null,
-              Icons.calculate_outlined,
-              AppTheme.neonPurple,
-            ),
-          ),
-        ],
-      ),
+      child: Row(children: cards),
     );
   }
 
@@ -132,16 +141,17 @@ class OrderKpiDashboard extends ConsumerWidget {
     );
   }
 
-  Widget _buildLoadingState() {
+  Widget _buildLoadingState({bool showMarginCards = true}) {
+    final cardCount = showMarginCards ? 4 : 3;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       child: Row(
         children: List.generate(
-          4,
+          cardCount,
           (i) => Expanded(
             child: Container(
               height: 44,
-              margin: EdgeInsets.only(right: i < 3 ? 6 : 0),
+              margin: EdgeInsets.only(right: i < cardCount - 1 ? 6 : 0),
               decoration: BoxDecoration(
                 color: AppTheme.darkSurface,
                 borderRadius: BorderRadius.circular(10),

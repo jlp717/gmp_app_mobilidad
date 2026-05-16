@@ -184,7 +184,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
                       icon: Icons.straighten_rounded,
                       label: 'Dims',
                       value:
-                          '${widget.box.w.toStringAsFixed(0)}Ã—${widget.box.d.toStringAsFixed(0)}Ã—${widget.box.h.toStringAsFixed(0)} cm',
+                          '${widget.box.w.toStringAsFixed(0)}×${widget.box.d.toStringAsFixed(0)}×${widget.box.h.toStringAsFixed(0)} cm',
                     ),
 
                     // Position
@@ -216,7 +216,7 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
 }
 
 // =============================================================================
-// INFO ROW â€” icon + label + value with subtle styling
+// INFO ROW – icon + label + value with subtle styling
 // =============================================================================
 
 class _InfoRow extends StatelessWidget {
@@ -264,7 +264,7 @@ class _InfoRow extends StatelessWidget {
 }
 
 // =============================================================================
-// DIMENSION BARS â€” compact W/D/H visualization
+// DIMENSION BARS – compact W/D/H visualization
 // =============================================================================
 
 class _DimensionBars extends StatelessWidget {

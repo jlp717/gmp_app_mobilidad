@@ -12,9 +12,9 @@ import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/metric
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/orders_panel_v2.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/planner_toolbar.dart';
 
-/// Load Planner V2 â€” Premium redesign.
+/// Load Planner V2 – Premium redesign.
 ///
-/// Layout: Header â†’ Toolbar â†’ MetricsBar â†’ [Canvas (70%) | Panel (30%)]
+/// Layout: Header → Toolbar → MetricsBar → [Canvas (70%) | Panel (30%)]
 /// Responsive: tablet = side-by-side, phone = canvas + bottom sheet.
 class LoadPlannerV2Page extends ConsumerStatefulWidget {
 
@@ -122,9 +122,9 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
     );
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-  // PREMIUM HEADER â€” gradient bg, glassmorphism back button, glow accents
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PREMIUM HEADER – gradient bg, glassmorphism back button, glow accents
+  // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildHeader(BuildContext context) {
     return Container(
@@ -248,9 +248,9 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
     );
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-  // SHIMMER LOADING â€” premium skeleton
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SHIMMER LOADING – premium skeleton
+  // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildShimmerLoading() {
     return AnimatedBuilder(
@@ -315,9 +315,9 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
     );
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-  // TABLET LAYOUT â€” side by side with animated panel
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TABLET LAYOUT – side by side with animated panel
+  // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildTabletLayout(LoadPlannerProvider provider) {
     return Row(
@@ -413,9 +413,9 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
     );
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-  // PHONE LAYOUT â€” canvas + bottom sheet
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PHONE LAYOUT – canvas + bottom sheet
+  // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildPhoneLayout(LoadPlannerProvider provider) {
     return Stack(
@@ -510,9 +510,9 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
     );
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-  // ERROR STATE â€” premium design
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ERROR STATE – premium design
+  // ═══════════════════════════════════════════════════════════════════════════
 
   Widget _buildError(String error) {
     return Center(
@@ -585,7 +585,7 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
 }
 
 // =============================================================================
-// GLASS ICON BUTTON â€” shared glassmorphism button used in header
+// GLASS ICON BUTTON – shared glassmorphism button used in header
 // =============================================================================
 
 class _GlassIconButton extends StatelessWidget {

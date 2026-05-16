@@ -14,6 +14,7 @@
  */
 
 import express, { Request, Response } from 'express';
+// @ts-ignore - db.js doesn't have type declarations
 import { query, queryWithParams } from '../config/db';
 import logger from '../middleware/logger';
 import { 
@@ -27,6 +28,7 @@ import {
     AuthenticatedRequest 
 } from '../middleware/auth';
 import { loginLimiter, validateBody, validationSchemas, detectSqlInjection } from '../middleware/security';
+// @ts-ignore - audit.js doesn't have type declarations
 import { auditLogin, getClientIP } from '../middleware/audit';
 import bcrypt from 'bcrypt';
 import fs from 'fs';
@@ -97,7 +99,7 @@ function handleFailedLogin(
     safeUser: string,
     requestId: string,
     message: string
-): void {
+): Response {
     const lockouts = loadLockouts();
     const current = lockouts[safeUser] || { count: 0, lastAttempt: 0 };
     current.count += 1;
@@ -285,7 +287,7 @@ router.post('/login',
                         .then(() => {
                             logger.info(`[${requestId}] 🔒 Migrated plaintext PIN to bcrypt for vendor ${vendedorCode}`);
                         })
-                        .catch(err => {
+                        .catch((err: Error) => {
                             logger.warn(`[${requestId}] Failed to migrate PIN: ${err}`);
                         });
                     })
@@ -348,10 +350,10 @@ router.post('/login',
             // ===================================================================
             logger.info(`[${requestId}] 🔐 Login successful for ${vendedorName} (${vendedorCode})`);
             
-            // Clear lockout on success
-            const lockouts = loadLockouts();
-            delete lockouts[safeUser];
-            saveLockouts(lockouts);
+            // Clear lockout on success (load fresh in case it changed)
+            const freshLockouts = loadLockouts();
+            delete freshLockouts[safeUser];
+            saveLockouts(freshLockouts);
 
             // Determine final role
             let finalRole = 'COMERCIAL';
@@ -378,8 +380,7 @@ router.post('/login',
                 id: `V${vendedorCode}`, 
                 user: vendedorCode, 
                 role: finalRole, 
-                isJefeVentas,
-                timestamp: Date.now()
+                isJefeVentas
             });
             
             const refreshToken = signRefreshToken({ 
@@ -420,12 +421,12 @@ router.post('/login',
 
             logger.info(`✅ Login successful: ${vendedorCode} - ${vendedorName} (${response.user.role})`);
             auditLogin(req, vendedorCode, vendedorName, finalRole, true);
-            res.json(response);
+            return res.json(response);
 
         } catch (error) {
             logger.error(`[${requestId}] Login error: ${(error as Error).message}`);
             auditLogin(req, req.body?.username || 'unknown', null, null, false);
-            res.status(401).json({ 
+            return res.status(401).json({ 
                 error: 'Error de autenticación. Verifique sus credenciales.',
                 code: 'AUTH_ERROR'
             });
@@ -482,8 +483,7 @@ router.post('/switch-role', verifyToken, async (req: AuthenticatedRequest, res: 
         const accessToken = signAccessToken({ 
             id: userId, 
             user: userId, 
-            role: newRole,
-            timestamp: Date.now()
+            role: newRole
         });
         
         const refreshToken = signRefreshToken({ 
@@ -492,7 +492,7 @@ router.post('/switch-role', verifyToken, async (req: AuthenticatedRequest, res: 
             role: newRole
         });
 
-        res.json({
+        return res.json({
             success: true,
             role: newRole,
             token: accessToken,
@@ -503,7 +503,7 @@ router.post('/switch-role', verifyToken, async (req: AuthenticatedRequest, res: 
 
     } catch (error) {
         logger.error(`Switch role error: ${(error as Error).message}`);
-        res.status(500).json({ 
+        return res.status(500).json({ 
             error: 'Error cambiando de rol',
             code: 'SERVER_ERROR'
         });
@@ -603,11 +603,11 @@ router.get('/repartidores', verifyToken, async (req: Request, res: Response) => 
         _repartidoresCacheTime = now;
         
         logger.info(`[Auth] Repartidores list: ${deduplicated.length} entries`);
-        res.json(deduplicated);
+        return res.json(deduplicated);
         
     } catch (error) {
         logger.error(`Error fetching repartidores: ${(error as Error).message}`);
-        res.status(500).json({ error: 'Error de base de datos', code: 'DB_ERROR' });
+        return res.status(500).json({ error: 'Error de base de datos', code: 'DB_ERROR' });
     }
 });
 

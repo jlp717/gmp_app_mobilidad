@@ -7,7 +7,7 @@ import 'package:gmp_app_mobilidad/features/authentication/domain/entities/user.d
 /// CARACTERÍSTICAS:
 /// - Saludo personalizado según hora del día
 /// - Información del usuario
-/// - Ãšltimo acceso (elemento requerido en specs)
+/// - Último acceso (elemento requerido en specs)
 class DashboardHeader extends StatelessWidget {
   const DashboardHeader({
     super.key,
@@ -73,7 +73,7 @@ class DashboardHeader extends StatelessWidget {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'Ãšltimo acceso: ${Formatters.dateTimeShort(user?.lastLoginAt ?? now)}',
+                        'Último acceso: ${Formatters.dateTimeShort(user?.lastLoginAt ?? now)}',
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
                         ),

@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
-class SmartSyncHeader extends StatelessWidget { // NEW: compact mode for smaller header
+/// Smart Sync Header — V2 Premium.
+/// Modern header with refined gradients, border radius, and subtle interactions.
+class SmartSyncHeader extends StatelessWidget {
 
   const SmartSyncHeader({
     required this.title, required this.subtitle, required this.onSync, super.key,
     this.lastSync,
     this.isLoading = false,
     this.onMonthTap,
-    this.compact = false, // Default false for backwards compatibility
+    this.compact = false,
   });
   final String title;
   final String subtitle;
@@ -23,41 +25,45 @@ class SmartSyncHeader extends StatelessWidget { // NEW: compact mode for smaller
   Widget build(BuildContext context) {
     final isCompact = compact || Responsive.isLandscapeCompact(context);
     final factor = Responsive.landscapeScale(context);
-    // Extreme padding reduction in auto-compact mode
-    final vertPad = (isCompact ? 2 : 16) * factor;
-    final iconSize = (isCompact ? 18 : 24) * factor;
+    final vertPad = (isCompact ? 2 : 14) * factor;
+    final iconSize = (isCompact ? 18 : 22) * factor;
     final iconPad = (isCompact ? 6 : 10) * factor;
-    final titleSize = (isCompact ? 14 : 20) * factor;
+    final titleSize = (isCompact ? 14 : 18) * factor;
     final subtitleSize = (isCompact ? 11 : 12) * factor;
 
     return Container(
-      padding: EdgeInsets.fromLTRB(isCompact ? 12 : Responsive.padding(context, small: 16, large: 24), vertPad, isCompact ? 12 : Responsive.padding(context, small: 16, large: 24), vertPad),
+      padding: EdgeInsets.fromLTRB(
+        isCompact ? 12 : Responsive.padding(context, small: 16, large: 24),
+        vertPad,
+        isCompact ? 12 : Responsive.padding(context, small: 16, large: 24),
+        vertPad,
+      ),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppTheme.surfaceColor,
-            AppTheme.surfaceColor.withValues(alpha: 0.8),
+            AppTheme.darkCard,
+            AppTheme.darkSurface.withValues(alpha: 0.9),
           ],
         ),
         border: Border(
-          bottom: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.2)),
+          bottom: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.15)),
         ),
       ),
       child: Row(
         children: [
-          // Icon
+          // Icon container
           Container(
             padding: EdgeInsets.all(iconPad),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  AppTheme.neonBlue.withValues(alpha: 0.2),
-                  AppTheme.neonPurple.withValues(alpha: 0.2),
+                  AppTheme.neonBlue.withValues(alpha: 0.15),
+                  AppTheme.neonPurple.withValues(alpha: 0.12),
                 ],
               ),
-              borderRadius: BorderRadius.circular(compact ? 8 : 12),
+              borderRadius: BorderRadius.circular(isCompact ? AppTheme.radiusSm : AppTheme.radiusMd),
             ),
             child: Icon(Icons.local_shipping_outlined, color: AppTheme.neonBlue, size: iconSize),
           ),
@@ -71,8 +77,9 @@ class SmartSyncHeader extends StatelessWidget { // NEW: compact mode for smaller
                   title,
                   style: TextStyle(
                     fontSize: titleSize,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w600,
                     color: AppTheme.textPrimary,
+                    letterSpacing: -0.2,
                   ),
                 ),
                 if (!isCompact) ...[
@@ -86,7 +93,7 @@ class SmartSyncHeader extends StatelessWidget { // NEW: compact mode for smaller
                             style: TextStyle(
                               fontSize: subtitleSize,
                               color: AppTheme.neonBlue,
-                              fontWeight: FontWeight.w600,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                           const SizedBox(width: 4),
@@ -99,7 +106,7 @@ class SmartSyncHeader extends StatelessWidget { // NEW: compact mode for smaller
                       subtitle,
                       style: TextStyle(
                         fontSize: subtitleSize,
-                        color: AppTheme.textSecondary.withValues(alpha: 0.8),
+                        color: AppTheme.textSecondary,
                       ),
                     ),
                 ],
@@ -107,24 +114,29 @@ class SmartSyncHeader extends StatelessWidget { // NEW: compact mode for smaller
             ),
           ),
           // Sync Button
-          IconButton(
-            onPressed: isLoading ? null : onSync,
-            padding: EdgeInsets.zero,
-            constraints: BoxConstraints(minWidth: isCompact ? 32 : 40, minHeight: isCompact ? 32 : 40),
-            icon: isLoading
-                ? SizedBox(
-                    width: isCompact ? 18 : 24,
-                    height: isCompact ? 18 : 24,
-                    child: const CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppTheme.neonBlue,
-                    ),
-                  )
-                : Icon(Icons.sync, color: AppTheme.neonBlue, size: isCompact ? 20 : 24),
+          InkWell(
+            onTap: isLoading ? null : onSync,
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.neonBlue.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              ),
+              child: isLoading
+                  ? SizedBox(
+                      width: isCompact ? 18 : 20,
+                      height: isCompact ? 18 : 20,
+                      child: const CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.neonBlue,
+                      ),
+                    )
+                  : Icon(Icons.sync_rounded, color: AppTheme.neonBlue, size: isCompact ? 20 : 22),
+            ),
           ),
         ],
       ),
     );
   }
 }
-

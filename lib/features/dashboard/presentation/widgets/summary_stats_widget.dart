@@ -139,7 +139,7 @@ class SummaryStatsWidget extends StatelessWidget {
                     label: 'Venta Promedio Diaria',
                     value: Formatters.currency(avgDailySales),
                     gradient: AppTheme.successGradient,
-                    subtitle: 'Ãšltimos ${dailyData.length} días',
+                    subtitle: 'Últimos ${dailyData.length} días',
                   ),
                 ),
               ],

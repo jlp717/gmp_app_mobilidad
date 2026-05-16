@@ -639,6 +639,162 @@ router.get('/:id/pdf', async (req, res) => {
 });
 
 /**
+ * GET /api/pedidos/product-comparative/:productCode
+ * ==================================================
+ * Compara las ventas mensuales (en envases) de un producto entre el año
+ * actual y el año anterior. NOTA: debe estar ANTES de /:id catch-all.
+ */
+router.get('/product-comparative/:productCode', async (req, res) => {
+    try {
+        const productCode = String(req.params.productCode || '').trim();
+        if (!productCode) {
+            return res.status(400).json({ success: false, error: 'productCode requerido' });
+        }
+        const clientCode = String(req.query.clientCode || '').trim();
+        const vendedorCode = String(req.query.vendedorCode || '').trim();
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const previousYear = currentYear - 1;
+
+        const where = [`TRIM(L.LCCDRF) = ?`, `L.LCTPVT IN ('CC','VC')`,
+                       `L.LCCLLN IN ('VT','AB')`, `L.LCSRAB NOT IN ('N','Z','G','D')`];
+        const params = [productCode];
+        if (clientCode) { where.push('TRIM(L.LCCDCL) = ?'); params.push(clientCode); }
+        if (vendedorCode && vendedorCode.toUpperCase() !== 'ALL') { where.push('TRIM(L.LCCDVD) = ?'); params.push(vendedorCode); }
+        const whereSql = where.join(' AND ');
+
+        const sqlByMonth = `
+            SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
+                COALESCE(SUM(L.LCCTEV), 0) AS ENVASES,
+                COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
+                COALESCE(SUM(L.LCIMVT), 0) AS IMPORTE
+            FROM DSED.LACLAE L
+            WHERE ${whereSql} AND L.LCAADC IN (?, ?)
+            GROUP BY L.LCAADC, L.LCMMDC
+            ORDER BY L.LCAADC, L.LCMMDC
+        `;
+        const sqlProductName = `
+            SELECT TRIM(DESCRIPCIONARTICULO) AS NAME
+            FROM DSEDAC.ART WHERE TRIM(CODIGOARTICULO) = ?
+            FETCH FIRST 1 ROW ONLY
+        `;
+
+        const [rows, nameRows] = await Promise.all([
+            queryWithParams(sqlByMonth, [...params, currentYear, previousYear], []),
+            queryWithParams(sqlProductName, [productCode], []),
+        ]);
+
+        const empty = () => Array.from({ length: 12 }, (_, i) => ({ m: i + 1, envases: 0, unidades: 0, importe: 0 }));
+        const monthlyCurrent = empty();
+        const monthlyPrevious = empty();
+        for (const r of (rows || [])) {
+            const y = parseInt(r.YEAR);
+            const m = parseInt(r.MONTH);
+            if (!m || m < 1 || m > 12) continue;
+            const slot = y === currentYear ? monthlyCurrent : (y === previousYear ? monthlyPrevious : null);
+            if (!slot) continue;
+            slot[m - 1] = { m, envases: parseFloat(r.ENVASES) || 0, unidades: parseFloat(r.UNIDADES) || 0, importe: parseFloat(r.IMPORTE) || 0 };
+        }
+
+        const sumKey = (arr, key) => arr.reduce((s, x) => s + (x[key] || 0), 0);
+        const totalEnvCur = sumKey(monthlyCurrent, 'envases');
+        const totalImpCur = sumKey(monthlyCurrent, 'importe');
+        const totalEnvPrev = sumKey(monthlyPrevious, 'envases');
+        const totalImpPrev = sumKey(monthlyPrevious, 'importe');
+
+        const monthsClosed = now.getMonth();
+        const partialDay = now.getDate();
+        const daysInCurrentMonth = new Date(currentYear, monthsClosed + 1, 0).getDate();
+        const accum = (arr) => {
+            let s = 0;
+            for (let i = 0; i < monthsClosed; i++) s += arr[i].envases;
+            s += arr[monthsClosed].envases * (partialDay / daysInCurrentMonth);
+            return s;
+        };
+
+        res.json({
+            success: true, code: productCode,
+            name: (nameRows?.[0]?.NAME || '').trim(),
+            filters: { clientCode: clientCode || null, vendedorCode: vendedorCode || null },
+            currentYear:  { year: currentYear, total: totalEnvCur, totalImporte: totalImpCur, monthly: monthlyCurrent },
+            previousYear: { year: previousYear, total: totalEnvPrev, totalImporte: totalImpPrev, monthly: monthlyPrevious },
+            variation: {
+                envasesPct: totalEnvPrev > 0 ? ((totalEnvCur - totalEnvPrev) / totalEnvPrev) * 100 : null,
+                importePct: totalImpPrev > 0 ? ((totalImpCur - totalImpPrev) / totalImpPrev) * 100 : null,
+                ytdEnvasesPct: (() => { const c = accum(monthlyCurrent), p = accum(monthlyPrevious); return p > 0 ? ((c - p) / p) * 100 : null; })(),
+            },
+        });
+    } catch (error) {
+        const odbc0 = error.odbcErrors && error.odbcErrors[0];
+        const odbcMsg = odbc0 ? `${odbc0.state} (${odbc0.code}): ${odbc0.message}` : '';
+        logger.error(`[PEDIDOS] product-comparative error: ${error.message} | ODBC: ${odbcMsg}`);
+        res.status(500).json({ success: false, error: 'Error obteniendo comparativa de producto' });
+    }
+});
+
+/**
+ * GET /api/pedidos/client-evolution/:clientCode
+ */
+router.get('/client-evolution/:clientCode', async (req, res) => {
+    try {
+        const clientCode = String(req.params.clientCode || '').trim();
+        if (!clientCode) {
+            return res.status(400).json({ success: false, error: 'clientCode requerido' });
+        }
+        const currentYear = new Date().getFullYear();
+        const startYear = currentYear - 2;
+
+        const monthlyQuery = `
+            SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
+                   SUM(L.LCIMVT) AS SALES, SUM(L.LCCTUD) AS UNITS
+            FROM DSED.LACLAE L
+            WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
+              AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
+            GROUP BY L.LCAADC, L.LCMMDC
+            ORDER BY L.LCAADC ASC, L.LCMMDC ASC
+        `;
+        const monthlyData = await queryWithParams(monthlyQuery, [clientCode, startYear, 'CC', 'VC', 'AB', 'VT']);
+
+        const topProductsQuery = `
+            SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME,
+                   SUM(L.LCIMVT) AS TOTAL_SALES, SUM(L.LCCTUD) AS TOTAL_UNITS
+            FROM DSED.LACLAE L
+            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+            WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
+              AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
+            GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
+            ORDER BY TOTAL_SALES DESC
+            FETCH FIRST 20 ROWS ONLY
+        `;
+        const topProductsData = await queryWithParams(topProductsQuery, [clientCode, currentYear - 1, 'CC', 'VC', 'AB', 'VT']);
+
+        const returnsQuery = `
+            SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
+                   TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME,
+                   SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT
+            FROM DSED.LACLAE L
+            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+            WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
+              AND (L.LCSRAB = 'D' OR L.LCTPVT = 'DV')
+            GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
+            ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC
+            FETCH FIRST 50 ROWS ONLY
+        `;
+        const returnsData = await queryWithParams(returnsQuery, [clientCode, startYear]);
+
+        res.json({
+            success: true,
+            monthlySales: monthlyData.map(r => ({ year: r.YEAR, month: r.MONTH, sales: parseFloat(r.SALES), units: parseFloat(r.UNITS) })),
+            topProducts: topProductsData.map(r => ({ code: r.CODE, name: r.NAME, totalSales: parseFloat(r.TOTAL_SALES), totalUnits: parseFloat(r.TOTAL_UNITS) })),
+            returns: returnsData.map(r => ({ year: r.YEAR, month: r.MONTH, productCode: r.PRODUCT_CODE, productName: r.PRODUCT_NAME, units: parseFloat(r.UNITS), amount: parseFloat(r.AMOUNT) })),
+        });
+    } catch (error) {
+        logger.error('[PEDIDOS] client-evolution error: ' + error.message);
+        res.status(500).json({ success: false, error: 'Error getting client evolution' });
+    }
+});
+
+/**
  * GET /api/pedidos/:id
  * Order detail with header + lines
  */
@@ -1342,220 +1498,6 @@ router.get('/purchase-history-global', async (req, res) => {
             detail: process.env.NODE_ENV !== 'production' ? error.message : undefined,
             odbc: process.env.NODE_ENV !== 'production' ? odbcMsg : undefined,
         });
-    }
-});
-
-/**
- * GET /api/pedidos/product-comparative/:productCode
- * ==================================================
- * Compara las ventas mensuales (en envases) de un producto entre el año
- * actual y el año anterior. Se usa al abrir el modal "Anadir al pedido"
- * para que el vendedor vea de un vistazo si el cliente esta comprando
- * mas o menos respecto al mismo periodo del año anterior.
- *
- * Query params:
- *  - clientCode (opcional): si se pasa, filtra solo por ese cliente
- *  - vendedorCode (opcional): si se pasa, filtra solo por ese vendedor
- *
- * Devuelve:
- *  {
- *    success, code, name,
- *    currentYear:  { year, total, monthly: [{m, envases, importe}, ...] },
- *    previousYear: { year, total, monthly: [...] },
- *    variation:    { envasesPct, importePct }
- *  }
- */
-router.get('/product-comparative/:productCode', async (req, res) => {
-    try {
-        const productCode = String(req.params.productCode || '').trim();
-        if (!productCode) {
-            return res.status(400).json({ success: false, error: 'productCode requerido' });
-        }
-        const clientCode = String(req.query.clientCode || '').trim();
-        const vendedorCode = String(req.query.vendedorCode || '').trim();
-
-        const now = new Date();
-        const currentYear = now.getFullYear();
-        const previousYear = currentYear - 1;
-        const todayDayOfYear = now.getMonth() * 100 + now.getDate(); // mm*100+dd para comparar "a estas alturas"
-
-        const where = [`TRIM(L.LCCDRF) = ?`, `L.LCTPVT IN ('CC','VC')`,
-                       `L.LCCLLN IN ('VT','AB')`, `L.LCSRAB NOT IN ('N','Z','G','D')`];
-        const params = [productCode];
-        if (clientCode) {
-            where.push('TRIM(L.LCCDCL) = ?');
-            params.push(clientCode);
-        }
-        if (vendedorCode && vendedorCode.toUpperCase() !== 'ALL') {
-            where.push('TRIM(L.LCCDVD) = ?');
-            params.push(vendedorCode);
-        }
-        const whereSql = where.join(' AND ');
-
-        const sqlByMonth = `
-            SELECT
-                L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
-                COALESCE(SUM(L.LCCTEV), 0) AS ENVASES,
-                COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
-                COALESCE(SUM(L.LCIMVT), 0) AS IMPORTE
-            FROM DSED.LACLAE L
-            WHERE ${whereSql}
-              AND L.LCAADC IN (?, ?)
-            GROUP BY L.LCAADC, L.LCMMDC
-            ORDER BY L.LCAADC, L.LCMMDC
-        `;
-
-        const sqlProductName = `
-            SELECT TRIM(DESCRIPCIONARTICULO) AS NAME
-            FROM DSEDAC.ART
-            WHERE TRIM(CODIGOARTICULO) = ?
-            FETCH FIRST 1 ROW ONLY
-        `;
-
-        const [rows, nameRows] = await Promise.all([
-            queryWithParams(sqlByMonth, [...params, currentYear, previousYear], []),
-            queryWithParams(sqlProductName, [productCode], []),
-        ]);
-
-        const empty = () => Array.from({ length: 12 }, (_, i) => ({
-            m: i + 1, envases: 0, unidades: 0, importe: 0,
-        }));
-        const monthlyCurrent = empty();
-        const monthlyPrevious = empty();
-        for (const r of (rows || [])) {
-            const y = parseInt(r.YEAR);
-            const m = parseInt(r.MONTH);
-            if (!m || m < 1 || m > 12) continue;
-            const slot = (y === currentYear ? monthlyCurrent : (y === previousYear ? monthlyPrevious : null));
-            if (!slot) continue;
-            slot[m - 1] = {
-                m,
-                envases: parseFloat(r.ENVASES) || 0,
-                unidades: parseFloat(r.UNIDADES) || 0,
-                importe: parseFloat(r.IMPORTE) || 0,
-            };
-        }
-
-        const sumKey = (arr, key) => arr.reduce((s, x) => s + (x[key] || 0), 0);
-        const totalEnvCur = sumKey(monthlyCurrent, 'envases');
-        const totalImpCur = sumKey(monthlyCurrent, 'importe');
-        const totalEnvPrev = sumKey(monthlyPrevious, 'envases');
-        const totalImpPrev = sumKey(monthlyPrevious, 'importe');
-
-        // Comparativa "a estas alturas": acumulado hasta el dia actual ambos años
-        const ymdNow = (now.getMonth() + 1) * 100 + now.getDate();
-        const cutoff = (arr) => arr.reduce((s, x, idx) => {
-            const mmdd = (idx + 1) * 100 + (idx + 1 === now.getMonth() + 1 ? now.getDate() : 99);
-            return mmdd <= ymdNow ? s + x.envases : s;
-        }, 0);
-        // simplification: sumamos meses cerrados completos + el actual proporcional
-        const monthsClosed = now.getMonth(); // 0..11
-        const partialDay = now.getDate();
-        const daysInCurrentMonth = new Date(currentYear, monthsClosed + 1, 0).getDate();
-        const accum = (arr) => {
-            let s = 0;
-            for (let i = 0; i < monthsClosed; i++) s += arr[i].envases;
-            s += arr[monthsClosed].envases * (partialDay / daysInCurrentMonth);
-            return s;
-        };
-        const ytdCur = accum(monthlyCurrent);
-        const ytdPrev = accum(monthlyPrevious);
-
-        const variation = {
-            envasesPct: totalEnvPrev > 0 ? ((totalEnvCur - totalEnvPrev) / totalEnvPrev) * 100 : null,
-            importePct: totalImpPrev > 0 ? ((totalImpCur - totalImpPrev) / totalImpPrev) * 100 : null,
-            ytdEnvasesPct: ytdPrev > 0 ? ((ytdCur - ytdPrev) / ytdPrev) * 100 : null,
-            ytdCur,
-            ytdPrev,
-        };
-
-        res.json({
-            success: true,
-            code: productCode,
-            name: (nameRows?.[0]?.NAME || '').trim(),
-            filters: { clientCode: clientCode || null, vendedorCode: vendedorCode || null },
-            currentYear:  { year: currentYear,  total: totalEnvCur,  totalImporte: totalImpCur,  monthly: monthlyCurrent },
-            previousYear: { year: previousYear, total: totalEnvPrev, totalImporte: totalImpPrev, monthly: monthlyPrevious },
-            variation,
-        });
-    } catch (error) {
-        const odbc0 = error.odbcErrors && error.odbcErrors[0];
-        const odbcMsg = odbc0 ? `${odbc0.state} (${odbc0.code}): ${odbc0.message}` : '';
-        logger.error(`[PEDIDOS] product-comparative error: ${error.message} | ODBC: ${odbcMsg}`);
-        res.status(500).json({ success: false, error: 'Error obteniendo comparativa de producto' });
-    }
-});
-
-/**
- * GET /api/pedidos/client-evolution/:clientCode
- */
-router.get('/client-evolution/:clientCode', async (req, res) => {
-    try {
-        const clientCode = String(req.params.clientCode || '').trim();
-        const currentYear = new Date().getFullYear();
-        const startYear = currentYear - 2; // 3 years of history
-
-        // 1. Monthly sales
-        const monthlyQuery = `
-            SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
-                   SUM(L.LCIMVT) AS SALES,
-                   SUM(L.LCCTUD) AS UNITS
-            FROM DSED.LACLAE L
-            WHERE TRIM(L.LCCDCL) = ? 
-              AND L.LCAADC >= ?
-              AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
-            GROUP BY L.LCAADC, L.LCMMDC
-            ORDER BY L.LCAADC ASC, L.LCMMDC ASC
-        `;
-        const monthlyData = await queryWithParams(monthlyQuery, [clientCode, startYear, 'CC', 'VC', 'AB', 'VT']);
-
-        // 2. Top Products (this year)
-        const topProductsQuery = `
-            SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME,
-                   SUM(L.LCIMVT) AS TOTAL_SALES,
-                   SUM(L.LCCTUD) AS TOTAL_UNITS
-            FROM DSED.LACLAE L
-            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
-            WHERE TRIM(L.LCCDCL) = ? 
-              AND L.LCAADC >= ?
-              AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
-            GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
-            ORDER BY TOTAL_SALES DESC
-            FETCH FIRST 20 ROWS ONLY
-        `;
-        const topProductsData = await queryWithParams(topProductsQuery, [clientCode, currentYear - 1, 'CC', 'VC', 'AB', 'VT']);
-
-        // 3. Returns (Devoluciones)
-        const returnsQuery = `
-            SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
-                   TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME,
-                   SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT
-            FROM DSED.LACLAE L
-            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
-            WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
-              AND (L.LCSRAB = 'D' OR L.LCTPVT = 'DV')
-            GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
-            ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC
-            FETCH FIRST 50 ROWS ONLY
-        `;
-        const returnsData = await queryWithParams(returnsQuery, [clientCode, startYear]);
-
-        res.json({
-            success: true,
-            monthlySales: monthlyData.map(r => ({
-                year: r.YEAR, month: r.MONTH, sales: parseFloat(r.SALES), units: parseFloat(r.UNITS)
-            })),
-            topProducts: topProductsData.map(r => ({
-                code: r.CODE, name: r.NAME, totalSales: parseFloat(r.TOTAL_SALES), totalUnits: parseFloat(r.TOTAL_UNITS)
-            })),
-            returns: returnsData.map(r => ({
-                year: r.YEAR, month: r.MONTH, productCode: r.PRODUCT_CODE, productName: r.PRODUCT_NAME,
-                units: parseFloat(r.UNITS), amount: parseFloat(r.AMOUNT)
-            }))
-        });
-    } catch (error) {
-        logger.error('[PEDIDOS] client-evolution error: ' + error.message);
-        res.status(500).json({ success: false, error: 'Error getting client evolution' });
     }
 });
 
