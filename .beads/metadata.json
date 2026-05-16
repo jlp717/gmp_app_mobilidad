@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "gmp_app_mobilidad",
+  "project_id": "fb796ab6-88d1-49e3-91db-fc3fe116d253"
+}
