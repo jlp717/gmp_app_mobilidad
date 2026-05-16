@@ -98,10 +98,10 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // â”€â”€ Header â”€â”€
+            // ── Header ──
             _buildHeader(provider),
 
-            // â”€â”€ Scrollable Content â”€â”€
+            // ── Scrollable Content ──
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -126,7 +126,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               ),
             ),
 
-            // â”€â”€ Confirm Footer â”€â”€
+            // ── Confirm Footer ──
             _buildConfirmFooter(total, margin),
           ],
         ),
@@ -744,7 +744,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '$qty Ã— ${PedidosFormatters.money(effectivePrice, decimals: 3)}',
+                  '$qty × ${PedidosFormatters.money(effectivePrice, decimals: 3)}',
                   style: const TextStyle(
                       color: AppTheme.textSecondary, fontSize: 11),
                 ),
@@ -1158,19 +1158,25 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       if (result != null && mounted) {
         HapticFeedback.mediumImpact();
         Navigator.of(context).pop(true);
-      } else {
+      } else if (mounted) {
+        // Confirmation failed — reset button and show error
         setState(() => _isConfirming = false);
-      }
-    } catch (e) {
-      setState(() => _isConfirming = false);
-      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: $e'),
+          const SnackBar(
+            content: Text('No se pudo confirmar el pedido. Intentalo de nuevo.'),
             backgroundColor: AppTheme.error,
           ),
         );
       }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isConfirming = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
     }
   }
 }

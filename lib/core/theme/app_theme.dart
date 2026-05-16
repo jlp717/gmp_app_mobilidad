@@ -2,11 +2,29 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Ultra-modern, minimalist, futuristic theme for tablet app
-/// Dark theme with neon blue/green accents
-/// Optimized for tablets (10+ inches)
+/// Ultra-modern, minimalist, futuristic theme for tablet app — V2 Premium.
+/// Dark theme with refined neon accents, generous border radius, and premium glassmorphism.
 class AppTheme {
   AppTheme._();
+
+  // ============================================================================
+  // BORDER RADIUS SYSTEM — V2 (generous, modern)
+  // ============================================================================
+
+  /// Small radius — chips, badges, tags
+  static const double radiusSm = 12.0;
+
+  /// Medium radius — buttons, inputs, small cards
+  static const double radiusMd = 16.0;
+
+  /// Large radius — cards, modals, panels
+  static const double radiusLg = 24.0;
+
+  /// Extra large radius — hero cards, login panel
+  static const double radiusXl = 28.0;
+
+  /// Full pill — pills, avatars
+  static const double radiusFull = 9999.0;
 
   // ============================================================================
   // COLOR PALETTE - Re-exports from AppColors for compatibility
@@ -55,12 +73,14 @@ class AppTheme {
   static const List<Color> chartColors = AppColors.chartColors;
 
   // ============================================================================
-  // GRADIENTS - Holographic & Futuristic
+  // GRADIENTS - Premium V2
   // ============================================================================
 
   static const LinearGradient primaryGradient = AppColors.primaryGradient;
   static const LinearGradient holoGradient = AppColors.holoGradient;
   static const LinearGradient scannerGradient = AppColors.scannerGradient;
+  static const LinearGradient loginGradient = AppColors.loginGradient;
+  static const LinearGradient brandGradient = AppColors.brandGradient;
 
   /// Card gradient for delivery cards
   static LinearGradient get cardGradient => LinearGradient(
@@ -112,8 +132,8 @@ class AppTheme {
         onError: textPrimary,
       ),
 
-      // Typography - Roboto
-      textTheme: GoogleFonts.robotoTextTheme(
+      // Typography - Inter (more modern than Roboto)
+      textTheme: GoogleFonts.interTextTheme(
         ThemeData.dark().textTheme.copyWith(
               displayLarge: const TextStyle(
                   fontSize: 57,
@@ -166,12 +186,12 @@ class AppTheme {
             ),
       ),
 
-      // Card Theme - Updated to 20px for modern rounded look
+      // Card Theme — V2: 24px radius, premium shadow
       cardTheme: CardThemeData(
         color: darkCard,
-        elevation: 4,
-        shadowColor: neonBlue.withValues(alpha: 0.1),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        elevation: 2,
+        shadowColor: neonBlue.withValues(alpha: 0.08),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusLg)),
       ),
 
       // App Bar Theme
@@ -182,26 +202,26 @@ class AppTheme {
         iconTheme: IconThemeData(color: neonBlue),
       ),
 
-      // Button Themes - Updated to 16px rounded
+      // Button Themes — V2: 16px radius, premium
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: neonBlue,
           foregroundColor: darkBase,
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusMd)),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
         ),
       ),
 
-      // Input Theme - Updated to 16px rounded
+      // Input Theme — V2: 16px radius, clean borders
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: darkSurface,
         border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(radiusMd),
             borderSide: BorderSide.none,),
         focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(radiusMd),
             borderSide: const BorderSide(color: neonBlue, width: 2),),
       ),
 
@@ -234,51 +254,77 @@ class AppTheme {
         rangeSelectionBackgroundColor: neonBlue.withValues(alpha: 0.2),
         dividerColor: Colors.white24,
       ),
+
+      // Dialog Theme — V2: generous radius
+      dialogTheme: DialogThemeData(
+        backgroundColor: darkCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusLg)),
+        elevation: 8,
+        shadowColor: Colors.black.withValues(alpha: 0.4),
+      ),
+
+      // Bottom Sheet Theme — V2
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: darkCard,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(radiusLg)),
+        ),
+        elevation: 8,
+      ),
+
+      // Snackbar Theme
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: darkCard,
+        contentTextStyle: const TextStyle(color: textPrimary, fontSize: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusMd)),
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
   // ============================================================================
-  // CUSTOM DECORATIONS
+  // CUSTOM DECORATIONS — V2 Premium
   // ============================================================================
 
+  /// Glassmorphism — V2: softer, more refined
   static BoxDecoration glassMorphism({Color? color}) => BoxDecoration(
-        color: (color ?? darkCard).withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: neonBlue.withValues(alpha: 0.2)),
+        color: (color ?? darkCard).withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(radiusLg),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         boxShadow: [
-          BoxShadow(color: neonBlue.withValues(alpha: 0.1), blurRadius: 20),
+          BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 20, offset: const Offset(0, 8)),
         ],
       );
 
+  /// Neon glow — V2: subtler, more premium
   static BoxDecoration neonGlow({required Color color}) => BoxDecoration(
         color: darkCard,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color),
+        borderRadius: BorderRadius.circular(radiusLg),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
         boxShadow: [
-          BoxShadow(color: color.withValues(alpha: 0.3), blurRadius: 20),
-          BoxShadow(
-              color: color.withValues(alpha: 0.1), blurRadius: 40, spreadRadius: 5,),
+          BoxShadow(color: color.withValues(alpha: 0.15), blurRadius: 16),
+          BoxShadow(color: color.withValues(alpha: 0.05), blurRadius: 32, spreadRadius: 2),
         ],
       );
 
-  /// NEW: Holographic card decoration with gradient
+  /// Holographic card — V2
   static BoxDecoration holoCard({Color? glowColor}) => BoxDecoration(
         gradient: cardGradient,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(radiusLg),
         border: Border.all(
-          color: (glowColor ?? neonBlue).withValues(alpha: 0.3),
-          width: 1.5,
+          color: (glowColor ?? neonBlue).withValues(alpha: 0.2),
+          width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: (glowColor ?? neonBlue).withValues(alpha: 0.15),
+            color: (glowColor ?? neonBlue).withValues(alpha: 0.08),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       );
 
-  /// NEW: Urgent card decoration (for obligatory payments)
+  /// Urgent card decoration (for obligatory payments)
   static BoxDecoration urgentCard() => BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -288,18 +334,18 @@ class AppTheme {
             error.withValues(alpha: 0.1),
           ],
         ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: error.withValues(alpha: 0.5), width: 2),
+        borderRadius: BorderRadius.circular(radiusLg),
+        border: Border.all(color: error.withValues(alpha: 0.4), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: error.withValues(alpha: 0.2),
-            blurRadius: 16,
+            color: error.withValues(alpha: 0.12),
+            blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       );
 
-  /// NEW: Success card decoration (for completed items)
+  /// Success card decoration
   static BoxDecoration successCard() => BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -309,32 +355,32 @@ class AppTheme {
             success.withValues(alpha: 0.08),
           ],
         ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: success.withValues(alpha: 0.4), width: 1.5),
+        borderRadius: BorderRadius.circular(radiusLg),
+        border: Border.all(color: success.withValues(alpha: 0.3), width: 1),
       );
 
-  /// NEW: Factura card decoration (purple tint for invoices)
+  /// Factura card decoration (purple tint)
   static BoxDecoration facturaCard() => BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
             darkSurface,
-            neonPurple.withValues(alpha: 0.1),
+            neonPurple.withValues(alpha: 0.08),
           ],
         ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: neonPurple.withValues(alpha: 0.4), width: 1.5),
+        borderRadius: BorderRadius.circular(radiusLg),
+        border: Border.all(color: neonPurple.withValues(alpha: 0.3), width: 1),
         boxShadow: [
           BoxShadow(
-            color: neonPurple.withValues(alpha: 0.15),
+            color: neonPurple.withValues(alpha: 0.08),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
         ],
       );
 
-  /// NEW: Floating action button glow
+  /// Floating action button glow
   static BoxDecoration fabGlow() => BoxDecoration(
         shape: BoxShape.circle,
         gradient: const LinearGradient(
@@ -344,44 +390,30 @@ class AppTheme {
         ),
         boxShadow: [
           BoxShadow(
-            color: neonBlue.withValues(alpha: 0.4),
-            blurRadius: 20,
-            spreadRadius: 2,
+            color: neonBlue.withValues(alpha: 0.3),
+            blurRadius: 16,
+            spreadRadius: 1,
           ),
         ],
       );
 
-  /// NEW: Subtle pulsing border animation colors
+  /// Pulsing border animation colors
   static List<Color> get pulsingBorderColors => [
         neonBlue.withValues(alpha: 0.3),
         neonCyan.withValues(alpha: 0.5),
         neonBlue.withValues(alpha: 0.3),
       ];
 
-  // Spacing constants (tablet-optimized) - re-export from AppColors
-  static const double paddingS = AppColors.paddingS;
-  static const double paddingM = AppColors.paddingM;
-  static const double paddingL = AppColors.paddingL;
-  static const double paddingXL = AppColors.paddingXL;
-
-  // Animation durations - re-export from AppColors
-  static const Duration animFast = AppColors.animFast;
-  static const Duration animNormal = AppColors.animNormal;
-  static const Duration animSlow = AppColors.animSlow;
-  static const Duration animPulse = AppColors.animPulse;
-
   // ============================================================================
-  // GLASSMORPHISM HELPERS
+  // GLASSMORPHISM HELPERS — V2
   // ============================================================================
 
   /// Premium frosted glass container decoration.
-  /// [blur] controls the backdrop blur intensity.
-  /// [opacity] controls background transparency.
   static BoxDecoration glassMorphismPremium({
     Color? color,
     double blur = 20.0,
     double opacity = 0.6,
-    double borderRadius = 16.0,
+    double borderRadius = 24.0,
     Color? borderColor,
     double borderWidth = 1.0,
     Color? glowColor,
@@ -391,12 +423,12 @@ class AppTheme {
       color: (color ?? darkCard).withValues(alpha: opacity),
       borderRadius: BorderRadius.circular(borderRadius),
       border: Border.all(
-        color: (borderColor ?? neonBlue).withValues(alpha: 0.2),
+        color: (borderColor ?? Colors.white).withValues(alpha: 0.08),
         width: borderWidth,
       ),
       boxShadow: [
         BoxShadow(
-          color: (glowColor ?? neonBlue).withValues(alpha: 0.08),
+          color: (glowColor ?? neonBlue).withValues(alpha: 0.06),
           blurRadius: glowBlur,
         ),
         BoxShadow(
@@ -412,8 +444,8 @@ class AppTheme {
   static BoxDecoration gradientCard({
     required Color startColor,
     required Color endColor,
-    double borderRadius = 14.0,
-    double borderOpacity = 0.25,
+    double borderRadius = 24.0,
+    double borderOpacity = 0.2,
     AlignmentGeometry begin = Alignment.topLeft,
     AlignmentGeometry end = Alignment.bottomRight,
   }) {
@@ -422,8 +454,8 @@ class AppTheme {
         begin: begin,
         end: end,
         colors: [
-          startColor.withValues(alpha: 0.15),
-          endColor.withValues(alpha: 0.05),
+          startColor.withValues(alpha: 0.12),
+          endColor.withValues(alpha: 0.04),
         ],
       ),
       borderRadius: BorderRadius.circular(borderRadius),
@@ -432,7 +464,7 @@ class AppTheme {
       ),
       boxShadow: [
         BoxShadow(
-          color: startColor.withValues(alpha: 0.06),
+          color: startColor.withValues(alpha: 0.04),
           blurRadius: 12,
           offset: const Offset(0, 4),
         ),
@@ -441,40 +473,68 @@ class AppTheme {
   }
 
   // ============================================================================
-  // ELEVATION/SHADOW SYSTEM
+  // ELEVATION/SHADOW SYSTEM — V2 (softer, more layered)
   // ============================================================================
 
-  static List<BoxShadow> elevation1 = [
-    BoxShadow(
-      color: Colors.black.withValues(alpha: 0.15),
-      blurRadius: 4,
-      offset: const Offset(0, 2),
-    ),
-  ];
+  static List<BoxShadow> get elevation1 => [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.1),
+          blurRadius: 4,
+          offset: const Offset(0, 2),
+        ),
+      ];
 
-  static List<BoxShadow> elevation2 = [
-    BoxShadow(
-      color: Colors.black.withValues(alpha: 0.2),
-      blurRadius: 8,
-      offset: const Offset(0, 4),
-    ),
-    BoxShadow(
-      color: neonBlue.withValues(alpha: 0.05),
-      blurRadius: 16,
-    ),
-  ];
+  static List<BoxShadow> get elevation2 => [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.15),
+          blurRadius: 8,
+          offset: const Offset(0, 4),
+        ),
+        BoxShadow(
+          color: neonBlue.withValues(alpha: 0.04),
+          blurRadius: 16,
+        ),
+      ];
 
-  static List<BoxShadow> elevation3 = [
-    BoxShadow(
-      color: Colors.black.withValues(alpha: 0.25),
-      blurRadius: 16,
-      offset: const Offset(0, 8),
-    ),
-    BoxShadow(
-      color: neonBlue.withValues(alpha: 0.08),
-      blurRadius: 24,
-    ),
-  ];
+  static List<BoxShadow> get elevation3 => [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.2),
+          blurRadius: 16,
+          offset: const Offset(0, 8),
+        ),
+        BoxShadow(
+          color: neonBlue.withValues(alpha: 0.06),
+          blurRadius: 24,
+        ),
+      ];
+
+  /// Premium hero shadow — for featured cards and login panel
+  static List<BoxShadow> get heroShadow => [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.3),
+          blurRadius: 40,
+          offset: const Offset(0, 20),
+        ),
+        BoxShadow(
+          color: neonBlue.withValues(alpha: 0.08),
+          blurRadius: 60,
+          spreadRadius: 4,
+        ),
+      ];
+
+  // ============================================================================
+  // SPACING & ANIMATION — re-export from AppColors
+  // ============================================================================
+
+  static const double paddingS = AppColors.paddingS;
+  static const double paddingM = AppColors.paddingM;
+  static const double paddingL = AppColors.paddingL;
+  static const double paddingXL = AppColors.paddingXL;
+
+  static const Duration animFast = AppColors.animFast;
+  static const Duration animNormal = AppColors.animNormal;
+  static const Duration animSlow = AppColors.animSlow;
+  static const Duration animPulse = AppColors.animPulse;
 
   // ============================================================================
   // TEXT SCALE HELPERS

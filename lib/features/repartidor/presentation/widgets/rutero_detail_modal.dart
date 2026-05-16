@@ -685,7 +685,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       child: const Text(
         'ATENCIÓN: Si marca en verde sin modificar cantidades, '
         'la entrega está OK. Si modifica o quita cantidades, la '
-        'entrega NO coincide â€” debe añadir observaciones en la '
+        'entrega NO coincide – debe añadir observaciones en la '
         "pestaña 'Observaciones' antes de confirmar.",
         style: TextStyle(
           color: Colors.orange,
@@ -1286,7 +1286,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
     }
 
     if (_isUrgent && !_isPaid) {
-      _pagoError = 'âš ï¸ COBRO OBLIGATORIO';
+      _pagoError = '⚠️ COBRO OBLIGATORIO';
       _tabController.animateTo(1);
       isValid = false;
     }
@@ -1337,7 +1337,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Â¿Está seguro de confirmar esta entrega?',
+              '¿Está seguro de confirmar esta entrega?',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
             ),
             const SizedBox(height: 16),
@@ -1839,7 +1839,7 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              'Â¿Desea enviar la nota de entrega al cliente?',
+              '¿Desea enviar la nota de entrega al cliente?',
               style: TextStyle(color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 20),

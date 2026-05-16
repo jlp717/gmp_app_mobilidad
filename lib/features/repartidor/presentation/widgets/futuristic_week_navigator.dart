@@ -583,11 +583,11 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     
     if (count > 0) {
       if (status == 'good') {
-        statusText = 'âœ“ Todas las entregas completadas';
+        statusText = '✓ Todas las entregas completadas';
         statusIcon = Icons.check_circle;
         statusColor = AppTheme.success;
       } else if (status == 'bad') {
-        statusText = 'âš  Entregas pendientes o con incidencias';
+        statusText = '⚠ Entregas pendientes o con incidencias';
         statusIcon = Icons.warning;
         statusColor = AppTheme.error;
       } else {

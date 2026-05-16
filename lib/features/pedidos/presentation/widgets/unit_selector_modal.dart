@@ -137,7 +137,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
       parts.add(
           'U/R: ${p.unitsRetractil.toStringAsFixed(p.unitsRetractil == p.unitsRetractil.roundToDouble() ? 0 : 1)}',);
     }
-    return parts.isEmpty ? null : parts.join('  Â·  ');
+    return parts.isEmpty ? null : parts.join('  ·  ');
   }
 
   /// Get stock for the selected unit
@@ -180,7 +180,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
   }
 
   /// Content description per unit button.
-  /// CAJAS: "1 cj = 10 band" â€” non-CAJAS: "1 band = 0.1 cj"
+  /// CAJAS: "1 cj = 10 band" – non-CAJAS: "1 band = 0.1 cj"
   String? _subtitleForUnit(String unit) {
     final p = widget.product;
     if (p == null || p.unitsPerBox <= 1) return null;

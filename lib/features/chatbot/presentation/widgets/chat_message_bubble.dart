@@ -149,7 +149,7 @@ class ChatMessageBubble extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: lines.map((line) {
-        if (line.startsWith('â€¢') || line.startsWith('-')) {
+        if (line.startsWith('•') || line.startsWith('-')) {
           // Bullet point
           return Padding(
             padding: const EdgeInsets.only(left: 4, bottom: 4),

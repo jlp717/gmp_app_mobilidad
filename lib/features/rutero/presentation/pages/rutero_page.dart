@@ -275,7 +275,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     return filterCode ?? widget.employeeCode;
   }
 
-  /// Para operaciones de escritura (POST): devuelve un ÃšNICO código de vendedor.
+  /// Para operaciones de escritura (POST): devuelve un ÚNICO código de vendedor.
   /// Retorna null si hay múltiples vendedores y no se ha seleccionado uno específico.
   String? get _singleVendedorCode {
     if (!mounted) return null;
@@ -283,7 +283,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     if (filterCode != null) return filterCode;
     // Si employeeCode no contiene comas, es un solo vendedor
     if (!widget.employeeCode.contains(',')) return widget.employeeCode;
-    // Jefe de ventas sin selección específica â†’ no se puede escribir
+    // Jefe de ventas sin selección específica → no se puede escribir
     return null;
   }
 
@@ -619,7 +619,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           ),
           const SizedBox(width: 8),
           Text(
-            'Preparando datosâ€¦ se actualizará automáticamente',
+            'Preparando datos… se actualizará automáticamente',
             style: TextStyle(
               color: AppTheme.neonBlue.withValues(alpha: 0.9),
               fontSize: 11,
@@ -1214,7 +1214,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     final message =
         Uri.encodeComponent('Hola, soy $nombreComercial de Mari Pepa. '
             'Mañana día $fecha tenemos visita. '
-            'Â¿Necesitas cualquier cosilla?');
+            '¿Necesitas cualquier cosilla?');
 
     final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
     if (await canLaunchUrl(uri)) {
@@ -1601,11 +1601,11 @@ class _ReorderDialogState extends State<ReorderDialog> {
           children: [
             Icon(Icons.warning_amber_rounded, color: AppTheme.warning),
             SizedBox(width: 8),
-            Text('Â¿Descartar cambios?'),
+            Text('¿Descartar cambios?'),
           ],
         ),
         content: const Text(
-          'Has modificado el orden de la ruta. Â¿Quieres descartar los cambios sin guardar?',
+          'Has modificado el orden de la ruta. ¿Quieres descartar los cambios sin guardar?',
         ),
         actions: [
           TextButton(
@@ -1691,7 +1691,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: const Text(
                 'Arrastra para ordenar o usa las flechas. Usa el icono ðŸ“… para mover a otro día.\n'
-                'âš ï¸ Los cambios solo se aplican al pulsar GUARDAR CAMBIOS.',
+                '⚠️ Los cambios solo se aplican al pulsar GUARDAR CAMBIOS.',
                 style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
               ),
             ),

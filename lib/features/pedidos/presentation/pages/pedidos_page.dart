@@ -63,7 +63,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   Timer? _autoSaveTimer;
   ProviderSubscription<String?>? _vendorSubscription;
 
-  // Mejora 10 Ã¢€â€ Mis Pedidos search & date filter
+  // Mejora 10 — Mis Pedidos search & date filter
   String _orderSearch = '';
   DateTime? _orderDateFrom;
   DateTime? _orderDateTo;
@@ -599,7 +599,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       ),
       body: Column(
         children: [
-          // "Ver como" vendor selector for JEFE_VENTAS Ã¢€â€ visible on BOTH tabs
+          // "Ver como" vendor selector for JEFE_VENTAS — visible on BOTH tabs
           if (widget.isJefeVentas || widget.forceShowVendorSelector)
             GlobalVendorSelector(
               isJefeVentas: true,
@@ -621,7 +621,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
   }
 
-  // Ã¢â€€Ã¢â€€ TAB 1: Nuevo Pedido Ã¢â€€Ã¢â€€
+  // ── TAB 1: Nuevo Pedido ──
 
   Widget _buildNuevoPedidoTab() {
     final provider = ref.watch(pedidosProvider);
@@ -809,7 +809,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                     builder: (ctx) => AlertDialog(
                       title: const Text('Cambiar cliente'),
                       content: const Text(
-                        'El carrito tiene productos. Â¿Desea cambiar de cliente y vaciar el carrito?',
+                        'El carrito tiene productos. ¿Desea cambiar de cliente y vaciar el carrito?',
                       ),
                       actions: [
                         TextButton(
@@ -981,7 +981,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       );
     }
 
-    // Mejora 9 Ã¢€â€ Favoritos primero
+    // Mejora 9 — Favoritos primero
     final sortedProducts = [...provider.products]..sort((a, b) {
         final aSales = a.salesThisYear + a.salesPrevYear;
         final bSales = b.salesThisYear + b.salesPrevYear;
@@ -1010,7 +1010,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           );
         }
         final product = sortedProducts[i];
-        // Mejora 1 Ã¢€â€ cartQty
+        // Mejora 1 — cartQty
         OrderLine? lineInCart;
         for (final line in provider.lines) {
           if (line.codigoArticulo == product.code) {
@@ -1038,8 +1038,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             final messenger = ScaffoldMessenger.of(context);
             messenger.hideCurrentSnackBar();
 
-            // Simple product (only CAJAS, not dual) â€” quick add 1 caja
-            // Multi-unit or dual product â€” open UnitSelectorModal
+            // Simple product (only CAJAS, not dual) – quick add 1 caja
+            // Multi-unit or dual product – open UnitSelectorModal
             final initialUnit = lineInCart?.unidadMedida ??
                 provider.lastUnitForProduct(product.code) ??
                 product.availableUnits.first;
@@ -1403,7 +1403,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           ],
         ),
         content: Text(
-          'Â¿Seguro que quieres anular el pedido #${order.numeroPedidoFormatted}?',
+          '¿Seguro que quieres anular el pedido #${order.numeroPedidoFormatted}?',
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -1453,7 +1453,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           ],
         ),
         content: Text(
-          'Â¿Deseas confirmar el borrador #${order.numeroPedidoFormatted}?',
+          '¿Deseas confirmar el borrador #${order.numeroPedidoFormatted}?',
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -1513,7 +1513,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           ],
         ),
         content: Text(
-          'Â¿Seguro que quieres eliminar el borrador #${order.numeroPedidoFormatted}? Esta acción no se puede deshacer.',
+          '¿Seguro que quieres eliminar el borrador #${order.numeroPedidoFormatted}? Esta acción no se puede deshacer.',
           style: const TextStyle(color: Colors.white70),
         ),
         actions: [

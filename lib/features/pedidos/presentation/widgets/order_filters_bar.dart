@@ -249,7 +249,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                             DropdownMenuItem(
                                 value: 'cliente', child: Text('Cliente'),),
                             DropdownMenuItem(
-                                value: 'numero', child: Text('NÂº Pedido'),),
+                                value: 'numero', child: Text('Nº Pedido'),),
                           ],
                           onChanged: (v) {
                             if (v != null) widget.onSortByChanged(v);

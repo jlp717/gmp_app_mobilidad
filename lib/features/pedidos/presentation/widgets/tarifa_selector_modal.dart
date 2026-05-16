@@ -44,7 +44,7 @@ class TarifaSelectorModal extends StatefulWidget {
   State<TarifaSelectorModal> createState() => _TarifaSelectorModalState();
 }
 
-// Internal selection marker â€” PT, PU, or numeric tariff code as string
+// Internal selection marker – PT, PU, or numeric tariff code as string
 const _kPT = '__PT__';
 const _kPU = '__PU__';
 
@@ -215,7 +215,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
               const SizedBox(height: 12),
             ],
 
-            // PT row â€” client's assigned tariff
+            // PT row – client's assigned tariff
             if (ct != null)
               _buildRow(
                 selKey: _kPT,
@@ -269,7 +269,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                 ),
               ),
 
-            // PU row â€” per-unit breakdown of PT
+            // PU row – per-unit breakdown of PT
             if (_showPU && ct != null)
               _buildRow(
                 selKey: _kPU,
@@ -390,6 +390,6 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
 
   static String _abbreviate(String s) {
     if (s.length <= 20) return s;
-    return '${s.substring(0, 18)}â€¦';
+    return '${s.substring(0, 18)}…';
   }
 }

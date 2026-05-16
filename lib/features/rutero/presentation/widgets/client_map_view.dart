@@ -272,7 +272,7 @@ class _ClientInfoCard extends StatelessWidget {
                       ),
                     if (client.lastSale != null)
                       Text(
-                        'Ãšltima venta: €${client.lastSale!.toStringAsFixed(0)}',
+                        'Última venta: €${client.lastSale!.toStringAsFixed(0)}',
                         style: const TextStyle(color: AppTheme.success, fontSize: 11),
                       ),
                   ],

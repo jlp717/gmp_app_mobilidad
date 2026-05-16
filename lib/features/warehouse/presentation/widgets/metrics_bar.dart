@@ -42,8 +42,8 @@ class MetricsBar extends StatelessWidget {
             label: 'Volumen',
             value: m.volumePct,
             current: (m.usedVolumeCm3 / 1e6).toStringAsFixed(1),
-            unit: 'm\u00B3',
-            max: '${(m.containerVolumeCm3 / 1e6).toStringAsFixed(1)} m\u00B3',
+            unit: 'm³',
+            max: '${(m.containerVolumeCm3 / 1e6).toStringAsFixed(1)} m³',
             color: _statusColor(m.volumePct),
           ),
           const SizedBox(width: 10),
@@ -83,7 +83,7 @@ class MetricsBar extends StatelessWidget {
 }
 
 // =============================================================================
-// CIRCULAR GAUGE CARD â€” arc progress + value inside
+// CIRCULAR GAUGE CARD – arc progress + value inside
 // =============================================================================
 
 class _CircularGaugeCard extends StatelessWidget {
@@ -186,7 +186,7 @@ class _CircularGaugeCard extends StatelessWidget {
                 ],
               ),
               Text(
-                '$label Â· $max',
+                '$label · $max',
                 style: AppTheme.captionText.copyWith(fontSize: 9),
               ),
             ],
@@ -198,7 +198,7 @@ class _CircularGaugeCard extends StatelessWidget {
 }
 
 // =============================================================================
-// ARC PAINTER â€” draws circular progress arc
+// ARC PAINTER – draws circular progress arc
 // =============================================================================
 
 class _ArcPainter extends CustomPainter {
@@ -257,7 +257,7 @@ class _ArcPainter extends CustomPainter {
 }
 
 // =============================================================================
-// PREMIUM STATUS BADGE â€” with pulse animation for EXCESO
+// PREMIUM STATUS BADGE – with pulse animation for EXCESO
 // =============================================================================
 
 class _PremiumStatusBadge extends StatefulWidget {
@@ -357,7 +357,7 @@ class _PremiumStatusBadgeState extends State<_PremiumStatusBadge>
 }
 
 // =============================================================================
-// BOX COUNT CARD â€” placed + overflow with tiny gradient card
+// BOX COUNT CARD – placed + overflow with tiny gradient card
 // =============================================================================
 
 class _BoxCountCard extends StatelessWidget {
@@ -408,7 +408,7 @@ class _BoxCountCard extends StatelessWidget {
 }
 
 // =============================================================================
-// PREMIUM SAVE INDICATOR â€” with subtle animations
+// PREMIUM SAVE INDICATOR – with subtle animations
 // =============================================================================
 
 class _PremiumSaveIndicator extends StatelessWidget {

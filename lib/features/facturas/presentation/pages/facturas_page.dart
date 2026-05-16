@@ -865,7 +865,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         cuerpo: result.body,
         clienteNombre: factura.clienteNombre,
       );
-      modal.success('âœ“ Email enviado a ${result.email}');
+      modal.success('✓ Email enviado a ${result.email}');
     } catch (e) {
       modal.error(
         'Error enviando email: $e',
@@ -1200,7 +1200,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               Expanded(
                 child: _buildSearchField(
                   controller: _facturaSearchController,
-                  hint: 'NÂº Factura...',
+                  hint: 'Nº Factura...',
                   icon: Icons.receipt,
                 ),
               ),

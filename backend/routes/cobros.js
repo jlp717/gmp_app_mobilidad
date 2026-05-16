@@ -465,6 +465,10 @@ router.post('/:codigoCliente/registrar', registrarCobroLimiter, async (req, res)
  * GET /api/cobros/pending-summary/:vendedorCode
  * Returns total pending amounts grouped by client for a given vendor
  * Supports single vendor, multiple vendors (comma-separated), or ALL
+ *
+ * Source: DSEDAC.CVC (ERP vencimientos reales — deuda comercial del cliente).
+ * FIX 2026-05-16: Enriquece cada entrada con NOMBREALTERNATIVO y DESCRIPCIONCLIENTE
+ * de DSEDAC.CLI para que el frontend no tenga que mostrar "Cliente XXX".
  */
 router.get('/pending-summary/:vendedorCode', async (req, res) => {
     try {
@@ -500,20 +504,25 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
             }
         }
 
+        // FIX 2026-05-16: LEFT JOIN con CLI para incluir nombres reales de clientes
+        // que tienen deuda pero no aparecen en la lista de clientes del comercial.
         const sql = `
           SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
                  SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
                  COUNT(*) AS NUM_DOCS,
                  SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
                      < (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
-                     THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
-           FROM DSEDAC.CVC CVC
-           LEFT JOIN DSEDAC.CLP CLP ON TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
-           WHERE CVC.IMPORTEPENDIENTE <> 0
-             AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
-             ${vendorClause}
-           GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN)
-           ORDER BY TOTAL_PENDIENTE DESC
+                     THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO,
+                 TRIM(CLI.NOMBREALTERNATIVO) AS NOMBRE_ALT,
+                 TRIM(CLI.DESCRIPCIONCLIENTE) AS NOMBRE_CLI
+            FROM DSEDAC.CVC CVC
+            LEFT JOIN DSEDAC.CLP CLP ON TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+            LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+            WHERE CVC.IMPORTEPENDIENTE <> 0
+              AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+              ${vendorClause}
+            GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CLI.NOMBREALTERNATIVO), TRIM(CLI.DESCRIPCIONCLIENTE)
+            ORDER BY TOTAL_PENDIENTE DESC
         `;
 
         const cacheKeyVendedor = `cobros:pending-summary:${vendedorCodeParam}`;
@@ -532,7 +541,13 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
             const count = parseInt(r.NUM_DOCS) || 0;
             // Estado por cliente: VENCIDO si tiene cualquier vencido, PENDIENTE si pending>0 sin vencidos, AL_DIA si total=0
             const estado = vencido > 0 ? 'VENCIDO' : (total > 0 ? 'PENDIENTE' : 'AL_DIA');
-            summary[code] = { total, vencido, count, estado };
+            // FIX 2026-05-16: incluir nombres del ERP para que el frontend no muestre "Cliente XXX"
+            const nombreAlt = (r.NOMBRE_ALT || '').trim();
+            const nombreCli = (r.NOMBRE_CLI || '').trim();
+            summary[code] = {
+                total, vencido, count, estado,
+                nombre: nombreAlt || nombreCli || null,
+            };
             grandTotal += total;
             grandTotalVencido += vencido;
         });
@@ -543,6 +558,7 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
             grandTotal,
             grandTotalVencido,
             clientCount: Object.keys(summary).length,
+            source: 'CVC',
         });
 
     } catch (error) {

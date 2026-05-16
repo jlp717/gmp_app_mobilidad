@@ -223,7 +223,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                 const SizedBox(width: 8),
                 Text(
                   _showSearch
-                      ? 'RESULTADOS DE BÃšSQUEDA'
+                      ? 'RESULTADOS DE BÚSQUEDA'
                       : 'ALTERNATIVAS INTELIGENTES',
                   style: TextStyle(
                     color: _showSearch ? AppTheme.neonBlue : AppTheme.neonGreen,
@@ -451,7 +451,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${widget.product.code.trim()} Â· ${widget.product.family}',
+                  '${widget.product.code.trim()} · ${widget.product.family}',
                   style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.3), fontSize: 11,),
                 ),
@@ -674,7 +674,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '$code${brand.isNotEmpty ? ' Â· $brand' : ''}',
+                      '$code${brand.isNotEmpty ? ' · $brand' : ''}',
                       style: const TextStyle(
                           color: AppTheme.textTertiary, fontSize: 11,),
                     ),
@@ -911,7 +911,7 @@ class _StockAlternativesSheetState extends State<_StockAlternativesSheet> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '$code${brand.isNotEmpty ? ' Â· $brand' : ''}',
+                      '$code${brand.isNotEmpty ? ' · $brand' : ''}',
                       style: const TextStyle(
                           color: AppTheme.textTertiary, fontSize: 11,),
                     ),

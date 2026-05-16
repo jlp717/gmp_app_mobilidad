@@ -80,7 +80,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Auth redirect is handled by GoRouter in main.dart â€” no manual navigation needed here.
+    // Auth redirect is handled by GoRouter in main.dart – no manual navigation needed here.
   }
 
   bool get _isRepartidorEffective {
@@ -455,29 +455,37 @@ class _MainShellState extends ConsumerState<MainShell> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
+      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isSelected ? item.selectedIcon : item.icon,
-              color: isSelected ? item.color : AppTheme.textSecondary,
-              size: 22,
+            AnimatedScale(
+              scale: isSelected ? 1.15 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              child: Icon(
+                isSelected ? item.selectedIcon : item.icon,
+                color: isSelected ? item.color : AppTheme.textSecondary,
+                size: 22,
+              ),
             ),
             const SizedBox(height: 2),
-            Text(
-              item.label,
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 200),
               style: TextStyle(
                 fontSize: 9,
                 color: isSelected ? item.color : AppTheme.textSecondary,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              child: Text(
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -530,8 +538,8 @@ class _MainShellState extends ConsumerState<MainShell> {
     showModalBottomSheet<void>(
       context: context,
       backgroundColor: AppTheme.surfaceColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg)),
       ),
       builder: (ctx) => SafeArea(
         child: Column(
@@ -744,17 +752,17 @@ class _MainShellState extends ConsumerState<MainShell> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         decoration: BoxDecoration(
           color: _forceAlmacenMode
-              ? AppTheme.neonPink.withValues(alpha: 0.15)
+              ? AppTheme.neonPink.withValues(alpha: 0.1)
               : _forceRepartidorMode
-                  ? Colors.orange.withValues(alpha: 0.15)
-                  : AppTheme.neonBlue.withValues(alpha: 0.15),
-          borderRadius: BorderRadius.circular(12),
+                  ? Colors.orange.withValues(alpha: 0.1)
+                  : AppTheme.neonBlue.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           border: Border.all(
             color: _forceAlmacenMode
-                ? AppTheme.neonPink.withValues(alpha: 0.5)
+                ? AppTheme.neonPink.withValues(alpha: 0.3)
                 : _forceRepartidorMode
-                    ? Colors.orange.withValues(alpha: 0.5)
-                    : AppTheme.neonBlue.withValues(alpha: 0.5),
+                    ? Colors.orange.withValues(alpha: 0.3)
+                    : AppTheme.neonBlue.withValues(alpha: 0.3),
           ),
         ),
         child: PopupMenuButton<String>(
@@ -762,8 +770,8 @@ class _MainShellState extends ConsumerState<MainShell> {
           offset: const Offset(0, 40),
           color: AppTheme.surfaceColor,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -965,38 +973,57 @@ class _MainShellState extends ConsumerState<MainShell> {
   }) {
     final isSmall = Responsive.isSmall(context);
 
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
         padding:
             EdgeInsets.symmetric(vertical: isSmall ? 8 : 12, horizontal: 4),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          color: isSelected ? item.color.withValues(alpha: 0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          color: isSelected ? item.color.withValues(alpha: 0.12) : Colors.transparent,
           border: isSelected
-              ? Border.all(color: item.color.withValues(alpha: 0.3))
+              ? Border.all(color: item.color.withValues(alpha: 0.25))
               : null,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: item.color.withValues(alpha: 0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : [],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isSelected ? item.selectedIcon : item.icon,
-              color: isSelected ? item.color : AppTheme.textSecondary,
-              size: isSmall ? 20 : 24,
+            AnimatedScale(
+              scale: isSelected ? 1.1 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              child: Icon(
+                isSelected ? item.selectedIcon : item.icon,
+                color: isSelected ? item.color : AppTheme.textSecondary,
+                size: isSmall ? 20 : 24,
+              ),
             ),
             const SizedBox(height: 4),
-            Text(
-              item.label,
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 200),
               style: TextStyle(
                 fontSize: isSmall ? 8 : 10,
                 color: isSelected ? item.color : AppTheme.textSecondary,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              child: Text(
+                item.label,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -1007,12 +1034,13 @@ class _MainShellState extends ConsumerState<MainShell> {
   Widget _buildLogoutButton() {
     return InkWell(
       onTap: () => ref.read(authProvider.notifier).logout(),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: AppTheme.error.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          color: AppTheme.error.withValues(alpha: 0.08),
+          border: Border.all(color: AppTheme.error.withValues(alpha: 0.15)),
         ),
         child: const Column(
           children: [
@@ -1037,12 +1065,13 @@ class _MainShellState extends ConsumerState<MainShell> {
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const NetworkSettingsPage()),
       ),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: AppTheme.neonPurple.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          color: AppTheme.neonPurple.withValues(alpha: 0.08),
+          border: Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.15)),
         ),
         child: const Column(
           children: [
@@ -1065,12 +1094,13 @@ class _MainShellState extends ConsumerState<MainShell> {
   Widget _buildCollapseButton() {
     return InkWell(
       onTap: () => setState(() => _isNavExpanded = !_isNavExpanded),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: AppTheme.neonBlue.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          color: AppTheme.neonBlue.withValues(alpha: 0.08),
+          border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.15)),
         ),
         child: Column(
           children: [
@@ -1348,7 +1378,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           CobrosPage(employeeCode: employeeCode, isJefeVentas: true),
           const BolsaPage(),
           const ComingSoonPlaceholder(
-            title: 'Nexus AI â€” Asistente Comercial',
+            title: 'Nexus AI – Asistente Comercial',
             subtitle:
                 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
             icon: Icons.smart_toy,
@@ -1458,7 +1488,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           return const BolsaPage();
         case 'Chat IA':
           return const ComingSoonPlaceholder(
-            title: 'Nexus AI â€" Asistente Comercial',
+            title: 'Nexus AI — Asistente Comercial',
             subtitle:
                 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
             icon: Icons.smart_toy,
@@ -1567,7 +1597,7 @@ class _LogoutConfirmationDialog extends StatelessWidget {
 
             // Title (responsive)
             Text(
-              'Â¿Cerrar Sesión?',
+              '¿Cerrar Sesión?',
               style: TextStyle(
                 fontSize: titleFs,
                 fontWeight: FontWeight.w600,
@@ -1579,7 +1609,7 @@ class _LogoutConfirmationDialog extends StatelessWidget {
 
             // Message
             Text(
-              'Estás a punto de salir de tu cuenta, $userName. Â¿Estás seguro?',
+              'Estás a punto de salir de tu cuenta, $userName. ¿Estás seguro?',
               style: TextStyle(
                 fontSize: 14,
                 color: AppTheme.textSecondary.withValues(alpha: 0.8),

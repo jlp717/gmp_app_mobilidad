@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
+/// Multi-select dialog — V2 Premium.
+/// Modern dialog with refined styling, search, and smooth interactions.
 class MultiSelectDialog<T> extends StatefulWidget {
 
   const MultiSelectDialog({
@@ -66,107 +68,180 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
 
   @override
   Widget build(BuildContext context) {
-    // If remote search is enabled, show _currentItems directly (server does filtering)
-    // If local search, filter _currentItems by query
-    final displayItems = widget.onRemoteSearch != null 
-        ? _currentItems 
+    final displayItems = widget.onRemoteSearch != null
+        ? _currentItems
         : _currentItems.where((item) {
             return widget.labelBuilder(item).toLowerCase().contains(_searchQuery.toLowerCase());
           }).toList();
 
     return Dialog(
-      backgroundColor: AppTheme.surfaceColor,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
       child: Container(
         constraints: BoxConstraints(
-          maxWidth: Responsive.clampWidth(context, 400),
+          maxWidth: Responsive.clampWidth(context, 420),
           maxHeight: Responsive.clampHeight(context, 600),
         ),
-        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              AppTheme.darkCard.withValues(alpha: 0.95),
+              AppTheme.darkSurface.withValues(alpha: 0.9),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 30,
+              offset: const Offset(0, 15),
+            ),
+          ],
+        ),
+        padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(widget.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+            // Header
+            Text(
+              widget.title,
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+                letterSpacing: -0.3,
+              ),
+            ),
             const SizedBox(height: 16),
+            // Search field
             TextField(
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Buscar...',
-                prefixIcon: _isLoading 
-                    ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70)))
-                    : const Icon(Icons.search, color: Colors.white54),
+                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                prefixIcon: _isLoading
+                    ? const Padding(
+                        padding: EdgeInsets.all(14),
+                        child: SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonBlue),
+                        ),
+                      )
+                    : Icon(Icons.search_rounded, color: Colors.white.withValues(alpha: 0.3)),
                 filled: true,
-                fillColor: AppTheme.darkBase,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                fillColor: AppTheme.darkSurface.withValues(alpha: 0.5),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                  borderSide: BorderSide.none,
+                ),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
               ),
               style: const TextStyle(color: Colors.white),
               onChanged: _onSearchChanged,
             ),
             const SizedBox(height: 12),
-            Expanded(
+            // List
+            Flexible(
               child: displayItems.isEmpty
-                  ? const Center(child: Text('No se encontraron resultados', style: TextStyle(color: Colors.white30)))
+                  ? Center(
+                      child: Text(
+                        'No se encontraron resultados',
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.25)),
+                      ),
+                    )
                   : ListView.builder(
+                      shrinkWrap: true,
                       itemCount: displayItems.length,
                       itemBuilder: (context, index) {
                         final item = displayItems[index];
-                        // Logic to handle selection state. 
-                        // Note: For objects (Map), containment check might rely on reference equality.
-                        // We assume T checks equality correctly or is same instance if possible.
-                        // Ideally we should use ID checking, but T is generic. 
-                        // We rely on '==' which works for Maps if contents identical? No, Dart Map equality is reference by default unless const.
-                        // However, for this specific use case (Maps from JSON), we might need a custom key extractor or just assume equality works because we populated _tempSelected from the same pool or manually.
-                        // Wait, if we search remotely, we get NEW instances of Maps. Map equality will FAIL.
-                        // Fix: We need a way to compare items. 
-                        // But T is generic. 
-                        // Let's assume for now that if using Map, we can't easily fix this without breaking generic.
-                        // BUT, for the dashboard, we select CODES (Strings). 
-                        // Ah, _tempSelected is Set<T>. If T is Map, we have a problem with remote search returning new maps.
-                        
-                        // HACK for Map<String, dynamic>:
+
                         var isSelected = _tempSelected.contains(item);
                         if (!isSelected && item is Map && item.containsKey('code')) {
-                           // Try finding by code in _tempSelected if T is Map
-                           // This breaks generic purity but solves the immediate issue for our Map-heavy app.
-                           final code = item['code'];
-                           isSelected = _tempSelected.any((e) => e is Map && e['code'] == code);
+                          final code = item['code'];
+                          isSelected = _tempSelected.any((e) => e is Map && e['code'] == code);
                         }
 
-                        return CheckboxListTile(
-                          title: Text(widget.labelBuilder(item), style: const TextStyle(color: Colors.white)),
-                          value: isSelected,
-                          activeColor: AppTheme.neonBlue,
-                          checkColor: Colors.white,
-                          onChanged: (val) {
-                            setState(() {
-                              if (val ?? false) {
-                                // If using Map identification hack, we should remove the OLD entry with same code first to avoid duplicates?
-                                // No, Set handles uniqueness by object.
-                                // If we want to replace the object with same code:
-                                if (item is Map && item.containsKey('code')) {
-                                   _tempSelected.removeWhere((e) => e is Map && e['code'] == item['code']);
-                                }
-                                _tempSelected.add(item);
-                              } else {
-                                if (item is Map && item.containsKey('code')) {
-                                   _tempSelected.removeWhere((e) => e is Map && e['code'] == item['code']);
-                                } else {
-                                  _tempSelected.remove(item);
-                                }
-                              }
-                            });
-                          },
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 2),
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () {
+                                setState(() {
+                                  if (isSelected) {
+                                    if (item is Map && item.containsKey('code')) {
+                                      _tempSelected.removeWhere((e) => e is Map && e['code'] == item['code']);
+                                    } else {
+                                      _tempSelected.remove(item);
+                                    }
+                                  } else {
+                                    if (item is Map && item.containsKey('code')) {
+                                      _tempSelected.removeWhere((e) => e is Map && e['code'] == item['code']);
+                                    }
+                                    _tempSelected.add(item);
+                                  }
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 22,
+                                      height: 22,
+                                      decoration: BoxDecoration(
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? AppTheme.neonBlue
+                                              : Colors.white.withValues(alpha: 0.15),
+                                          width: 1.5,
+                                        ),
+                                        color: isSelected
+                                            ? AppTheme.neonBlue.withValues(alpha: 0.15)
+                                            : Colors.transparent,
+                                      ),
+                                      child: isSelected
+                                          ? const Icon(Icons.check_rounded, color: AppTheme.neonBlue, size: 16)
+                                          : null,
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Text(
+                                        widget.labelBuilder(item),
+                                        style: TextStyle(
+                                          color: isSelected
+                                              ? Colors.white
+                                              : Colors.white.withValues(alpha: 0.6),
+                                          fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         );
                       },
                     ),
             ),
             const SizedBox(height: 16),
+            // Actions
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+                  ),
                   child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
                 ),
                 const SizedBox(width: 8),
@@ -174,9 +249,12 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.neonBlue,
                     foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+                    elevation: 0,
                   ),
                   onPressed: () => Navigator.pop(context, _tempSelected),
-                  child: const Text('Aplicar'),
+                  child: const Text('Aplicar', style: TextStyle(fontWeight: FontWeight.w600)),
                 ),
               ],
             ),
@@ -186,4 +264,3 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
     );
   }
 }
-

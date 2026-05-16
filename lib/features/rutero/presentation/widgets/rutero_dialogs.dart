@@ -236,7 +236,7 @@ class _PositionSelectorDialogState extends State<PositionSelectorDialog> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Â¿Dónde quieres insertar a ${''} ?',
+                  '¿Dónde quieres insertar a ${''} ?',
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 12),
@@ -612,7 +612,7 @@ class MoveConfirmationDialog extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           const Text(
-            'âš ï¸ Este cambio se aplicará de forma permanente.',
+            '⚠️ Este cambio se aplicará de forma permanente.',
             style: TextStyle(
               fontSize: 12,
               color: AppTheme.warning,
@@ -680,7 +680,7 @@ class ReorderConfirmationDialog extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           Text(
-            'Â¿Guardar el nuevo orden para ${_getDayLabel(day)}?',
+            '¿Guardar el nuevo orden para ${_getDayLabel(day)}?',
             textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 16),
           ),

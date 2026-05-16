@@ -201,7 +201,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
           if (!historyState.isLoading && historyState.summary != null)
             _buildSummaryHeader(context, historyState.summary!),
 
-          // Results â€” adaptive layout
+          // Results – adaptive layout
           Expanded(
             child: historyState.isLoading
                 ? const SkeletonList(itemCount: 6, itemHeight: 60)
@@ -356,7 +356,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
   }
 
   // ===========================================================================
-  // FICHA TÉCNICA â€” Download PDF and open viewer
+  // FICHA TÉCNICA – Download PDF and open viewer
   // ===========================================================================
   Future<void> _openFichaTecnica(
       BuildContext ctx, ProductHistoryItem item, String baseUrl,) async {
@@ -419,7 +419,7 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
 }
 
 // =============================================================================
-// PRODUCT CARD â€” Portrait layout item
+// PRODUCT CARD – Portrait layout item
 // =============================================================================
 class _ProductCard extends StatelessWidget {
 
@@ -556,7 +556,7 @@ class _ProductCard extends StatelessWidget {
 }
 
 // =============================================================================
-// PRODUCT THUMBNAIL â€” Reusable image widget with tap-to-fullscreen
+// PRODUCT THUMBNAIL – Reusable image widget with tap-to-fullscreen
 // =============================================================================
 class _ProductThumbnail extends StatelessWidget {
 
@@ -619,7 +619,7 @@ class _ProductThumbnail extends StatelessWidget {
 }
 
 // =============================================================================
-// FULLSCREEN IMAGE VIEWER â€” InteractiveViewer with pinch-to-zoom
+// FULLSCREEN IMAGE VIEWER – InteractiveViewer with pinch-to-zoom
 // =============================================================================
 class _FullscreenImageViewer extends StatelessWidget {
 
@@ -682,7 +682,7 @@ class _FullscreenImageViewer extends StatelessWidget {
 }
 
 // =============================================================================
-// PDF VIEWER PAGE â€” In-app PDF viewer for fichas técnicas
+// PDF VIEWER PAGE – In-app PDF viewer for fichas técnicas
 // =============================================================================
 class _PdfViewerPage extends StatelessWidget {
 

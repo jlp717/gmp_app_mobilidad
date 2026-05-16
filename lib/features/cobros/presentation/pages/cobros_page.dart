@@ -39,6 +39,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   bool _isInitialized = false;
   ProviderSubscription<String?>? _vendorSubscription;
   int _clientLoadGeneration = 0;
+  bool _isLoadingSummary = true;
+  String? _loadError;
 
   // Single source of truth: Riverpod provider
   CobrosProvider get _provider =>
@@ -76,23 +78,45 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       if (mounted && generation == _clientLoadGeneration) {
         setState(() => _foundClients = results);
       }
-    } catch (_) {}
-    if (mounted && generation == _clientLoadGeneration) {
-      setState(() => _isSearchingClients = false);
+    } catch (e) {
+      if (mounted && generation == _clientLoadGeneration) {
+        setState(() {
+          _foundClients = [];
+          _loadError = 'Error cargando clientes: $e';
+        });
+      }
+    } finally {
+      if (mounted && generation == _clientLoadGeneration) {
+        setState(() => _isSearchingClients = false);
+      }
     }
   }
 
-  void _loadPendingSummary() {
+  Future<void> _loadPendingSummary() async {
+    setState(() {
+      _isLoadingSummary = true;
+      _loadError = null;
+    });
     final selectedVendor = ref.read(selectedVendorProvider);
     final authState = ref.read(authProvider).value;
     final allVendorCodes = authState?.vendedorCodes ?? [];
 
-    if (selectedVendor != null && selectedVendor.isNotEmpty) {
-      _provider.cargarPendingSummary(selectedVendor);
-    } else if (allVendorCodes.isNotEmpty) {
-      _provider.cargarPendingSummary(null, vendedorCodes: allVendorCodes);
-    } else {
-      _provider.cargarPendingSummary(null);
+    try {
+      if (selectedVendor != null && selectedVendor.isNotEmpty) {
+        await _provider.cargarPendingSummary(selectedVendor);
+      } else if (allVendorCodes.isNotEmpty) {
+        await _provider.cargarPendingSummary(null, vendedorCodes: allVendorCodes);
+      } else {
+        await _provider.cargarPendingSummary(null);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loadError = 'Error cargando resumen: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingSummary = false);
+      }
     }
   }
 
@@ -102,9 +126,9 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         Timer(const Duration(milliseconds: 500), () => _loadClients(query));
   }
 
-  void _onVendorChanged() {
+  Future<void> _onRefresh() async {
     _loadClients(_searchController.text);
-    _loadPendingSummary();
+    await _loadPendingSummary();
   }
 
   @override
@@ -127,31 +151,73 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       cobrosProvider(CobrosParams(employeeCode: widget.employeeCode)),
     );
     final visibleClients = _visibleClients(cobros);
+    final search = _searchController.text.trim();
 
     return Scaffold(
       backgroundColor: AppTheme.darkBase,
-      body: Column(
-        children: [
-          _buildHeader(),
-          GlobalVendorSelector(
-            isJefeVentas: widget.isJefeVentas,
-            forceShow: widget.forceShowVendorSelector,
-          ),
-          _buildSummaryCard(cobros),
-          _buildSearchArea(),
-          _buildEstadoFilterChips(),
-          Expanded(
-            child: visibleClients.isEmpty && !_isSearchingClients
-                ? _buildNoClientsState(cobros.grandTotal)
-                : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: visibleClients.length,
-                    itemBuilder: (context, index) {
-                      return _buildClientCobroCard(visibleClients[index]);
-                    },
+      body: RefreshIndicator(
+        onRefresh: _onRefresh,
+        color: AppTheme.neonBlue,
+        child: Column(
+          children: [
+            _buildHeader(),
+            GlobalVendorSelector(
+              isJefeVentas: widget.isJefeVentas,
+              forceShow: widget.forceShowVendorSelector,
+            ),
+            // Loading state para pendingSummary
+            if (_isLoadingSummary)
+              const Expanded(
+                child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_loadError != null)
+              Expanded(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          color: AppTheme.error,
+                          size: 48,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _loadError!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: AppTheme.error),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: _onRefresh,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Reintentar'),
+                        ),
+                      ],
+                    ),
                   ),
-          ),
-        ],
+                ),
+              )
+            else ...[
+              _buildSummaryCard(cobros),
+              _buildSearchArea(),
+              _buildEstadoFilterChips(),
+              Expanded(
+                child: visibleClients.isEmpty && !_isSearchingClients
+                    ? _buildNoClientsState(cobros, search)
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: visibleClients.length,
+                        itemBuilder: (context, index) {
+                          return _buildClientCobroCard(visibleClients[index]);
+                        },
+                      ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -162,6 +228,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       return _foundClients;
     }
 
+    // Merge foundClients con pendingSummary para tener nombres reales de CLI
+    // cuando un cliente tiene deuda ERP pero no esta en la lista del comercial.
     final byCode = <String, Map<String, dynamic>>{};
     for (final client in _foundClients) {
       final code =
@@ -174,8 +242,6 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     final entries = cobros.pendingSummary.entries.where((entry) {
       final total = (entry.value['total'] as num?)?.toDouble() ?? 0;
       final vencido = (entry.value['vencido'] as num?)?.toDouble() ?? 0;
-      // Estado segun la API: VENCIDO si hay vencido, PENDIENTE si total>0
-      // sin vencido, AL_DIA si total=0
       final estado = vencido > 0
           ? 'vencido'
           : (total > 0 ? 'pendiente' : 'aldia');
@@ -183,7 +249,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         case 'vencido':
           return estado == 'vencido';
         case 'pendiente':
-          return estado == 'pendiente' || estado == 'vencido'; // ambos
+          return estado == 'pendiente' || estado == 'vencido';
         case 'aldia':
           return estado == 'aldia';
         case 'todos':
@@ -199,15 +265,20 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
 
     return entries.map((entry) {
       final existing = byCode[entry.key] ?? const <String, dynamic>{};
+      // Prioridad de nombre: lista de clientes > nombre desde CLI (API) > fallback
+      final apiName = (entry.value['nombre'] as String?)?.trim();
       final name = (existing['name'] ??
               existing['nombre'] ??
               existing['nombreCliente'] ??
+              apiName ??
               'Cliente ${entry.key}')
           .toString();
       return {
         ...existing,
         'code': entry.key,
         'name': name,
+        // Flag para saber si el cliente viene solo de CVC (no es cliente del comercial)
+        'fromErpDebt': existing.isEmpty && apiName != null,
       };
     }).toList();
   }
@@ -247,40 +318,65 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
               .withValues(alpha: 0.3),
         ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: _summaryItem(
-              'Pendiente total',
-              fmtMoney(cobros.grandTotal),
-              Icons.account_balance_wallet,
-              Colors.amber,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: _summaryItem(
+                  'Pendiente total',
+                  fmtMoney(cobros.grandTotal),
+                  Icons.account_balance_wallet,
+                  Colors.amber,
+                ),
+              ),
+              Container(
+                width: 1, height: 36,
+                color: Colors.white.withValues(alpha: 0.08),
+              ),
+              Expanded(
+                child: _summaryItem(
+                  'Vencido',
+                  fmtMoney(cobros.grandTotalVencido),
+                  Icons.error_outline,
+                  Colors.redAccent,
+                ),
+              ),
+              Container(
+                width: 1, height: 36,
+                color: Colors.white.withValues(alpha: 0.08),
+              ),
+              Expanded(
+                child: _summaryItem(
+                  'Clientes',
+                  '${cobros.clientsWithDebt}'
+                      '${cobros.clientsWithVencido > 0 ? ' (${cobros.clientsWithVencido}v)' : ''}',
+                  Icons.people_outline,
+                  AppTheme.neonBlue,
+                ),
+              ),
+            ],
           ),
-          Container(
-            width: 1, height: 36,
-            color: Colors.white.withValues(alpha: 0.08),
-          ),
-          Expanded(
-            child: _summaryItem(
-              'Vencido',
-              fmtMoney(cobros.grandTotalVencido),
-              Icons.error_outline,
-              Colors.redAccent,
-            ),
-          ),
-          Container(
-            width: 1, height: 36,
-            color: Colors.white.withValues(alpha: 0.08),
-          ),
-          Expanded(
-            child: _summaryItem(
-              'Clientes',
-              '${cobros.clientsWithDebt}'
-                  '${cobros.clientsWithVencido > 0 ? ' (${cobros.clientsWithVencido}v)' : ''}',
-              Icons.people_outline,
-              AppTheme.neonBlue,
-            ),
+          // Fuente de datos: CVC = deuda real del ERP (vencimientos comerciales)
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Icon(
+                Icons.info_outline,
+                size: 11,
+                color: Colors.white.withValues(alpha: 0.35),
+              ),
+              const SizedBox(width: 4),
+              Text(
+                'Deuda comercial real (ERP · CVC)',
+                style: TextStyle(
+                  fontSize: 9,
+                  color: Colors.white.withValues(alpha: 0.35),
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -464,51 +560,101 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     );
   }
 
-  Widget _buildNoClientsState(double grandTotal) {
+  Widget _buildNoClientsState(CobrosProvider cobros, String searchQuery) {
+    final hasDebt = cobros.grandTotal > 0;
+    final isFiltering = searchQuery.isNotEmpty || _estadoFilter != 'pendiente';
+
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.person_search,
-            size: 64,
-            color: AppTheme.textSecondary.withValues(alpha: 0.2),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'No se han encontrado clientes',
-            style: TextStyle(color: AppTheme.textSecondary),
-          ),
-          if (grandTotal > 0)
-            Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                'Total pendiente: ${grandTotal.toStringAsFixed(2)} €',
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isFiltering ? Icons.search_off : Icons.check_circle_outline,
+              size: 64,
+              color: (isFiltering
+                      ? AppTheme.textSecondary
+                      : AppTheme.success)
+                  .withValues(alpha: 0.3),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              isFiltering
+                  ? 'No se encontraron resultados'
+                  : (hasDebt
+                      ? 'No hay clientes con deuda'
+                      : 'Todo al dia'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isFiltering
+                  ? 'Prueba con otro termino de busqueda o filtro'
+                  : (hasDebt
+                      ? 'Los clientes con deuda no coinciden con el filtro actual'
+                      : 'No hay cobros pendientes para este comercial'),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 13,
+                color: AppTheme.textSecondary.withValues(alpha: 0.7),
+              ),
+            ),
+            if (hasDebt && !isFiltering) ...[
+              const SizedBox(height: 12),
+              Text(
+                'Pendiente total: ${cobros.grandTotal.toStringAsFixed(2)} €',
                 style: TextStyle(
-                  fontSize: Responsive.fontSize(context, small: 12, large: 14),
+                  fontSize: 14,
                   color: AppTheme.warning,
                   fontWeight: FontWeight.w600,
                 ),
               ),
-            ),
-        ],
+            ],
+            if (isFiltering) ...[
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () {
+                  _searchController.clear();
+                  setState(() => _estadoFilter = 'pendiente');
+                },
+                icon: const Icon(Icons.clear_all, size: 16),
+                label: const Text('Limpiar filtros'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppTheme.neonBlue,
+                  side: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildClientCobroCard(Map<String, dynamic> client) {
-    final name = (client['name'] ??
-            client['nombre'] ??
-            client['nombreCliente'] ??
-            'Cliente')
-        .toString();
     final code =
         (client['code'] ?? client['codigoCliente'] ?? client['codigo'] ?? '')
             .toString();
     final pending = _provider.pendingForClient(code);
     final vencido = _provider.vencidoForClient(code);
     final estado = _provider.estadoForClient(code);
-    // Req #15: badge tricolor según estado consolidado del cliente.
+    final fromErpDebt = client['fromErpDebt'] == true;
+
+    // Nombre: usar el que viene del backend (NOMBREALTERNATIVO > DESCRIPCIONCLIENTE)
+    // Si el cliente esta en la lista del comercial, usar ese nombre.
+    final name = (client['name'] ??
+            client['nombre'] ??
+            client['nombreCliente'] ??
+            'Cliente')
+        .toString();
+
+    // Badge tricolor segun estado consolidado del cliente.
     final Color badgeColor;
     switch (estado) {
       case 'VENCIDO':
@@ -548,12 +694,15 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
+              // Avatar con inicial
               CircleAvatar(
-                backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.1),
+                backgroundColor: fromErpDebt
+                    ? AppTheme.warning.withValues(alpha: 0.1)
+                    : AppTheme.neonBlue.withValues(alpha: 0.1),
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : '?',
                   style: TextStyle(
-                    color: AppTheme.neonBlue,
+                    color: fromErpDebt ? AppTheme.warning : AppTheme.neonBlue,
                     fontSize:
                         Responsive.fontSize(context, small: 18, large: 24),
                     fontWeight: FontWeight.bold,
@@ -565,6 +714,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // Nombre del cliente (NOMBREALTERNATIVO o fallback)
                     Text(
                       name,
                       style: TextStyle(
@@ -577,6 +727,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
+                    // Codigo de cliente debajo del nombre
                     Text(
                       'Código: $code',
                       style: TextStyle(
@@ -585,9 +736,30 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                         color: AppTheme.textSecondary,
                       ),
                     ),
+                    // Badge "Deuda ERP" para clientes que no son del comercial
+                    if (fromErpDebt) ...[
+                      const SizedBox(height: 2),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppTheme.warning.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'Deuda ERP',
+                          style: TextStyle(
+                            fontSize: 9,
+                            color: AppTheme.warning,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
+              // Columna derecha: importe pendiente/vencido o tick verde
               if (pending > 0)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -631,7 +803,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                     ],
                   ],
                 ),
-              if (pending == 0)
+              // Tick verde: solo si NO tiene pendiente Y NO tiene vencido
+              if (pending == 0 && vencido == 0)
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

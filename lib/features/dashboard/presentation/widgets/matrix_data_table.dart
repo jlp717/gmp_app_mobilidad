@@ -327,7 +327,7 @@ class _MatrixDataTableState extends State<MatrixDataTable> {
               ),
             ),
             
-            // ACCUMULATED MARGIN â€” show own margin% for leaf nodes too
+            // ACCUMULATED MARGIN – show own margin% for leaf nodes too
             Expanded(
               flex: 2,
               child: Builder(

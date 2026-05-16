@@ -61,7 +61,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
   void initState() {
     super.initState();
     if (widget.initialClientId != null) {
-      // Navigate directly to client documents â€” set state immediately to show loading
+      // Navigate directly to client documents – set state immediately to show loading
       _selectedClientId = widget.initialClientId;
       _selectedClientName = widget.initialClientName ?? widget.initialClientId!;
       _isLoading = true;
@@ -659,7 +659,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int?>(
                     value: _selectedYear,
-                    hint: Text('Ãšltimos 3 años',
+                    hint: Text('Últimos 3 años',
                         style: TextStyle(
                             fontSize: 12,
                             color: AppTheme.textSecondary.withValues(alpha: 0.7),),),
@@ -671,7 +671,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                     isDense: true,
                     items: [
                       const DropdownMenuItem<int?>(
-                        child: Text('Ãšltimos 3 años',
+                        child: Text('Últimos 3 años',
                             style: TextStyle(fontSize: 12),),
                       ),
                       ...years.map((y) => DropdownMenuItem<int?>(
@@ -699,7 +699,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                   controller: _docSearchController,
                   onChanged: (_) => setState(() {}),
                   decoration: InputDecoration(
-                    hintText: 'Buscar nÂº documento...',
+                    hintText: 'Buscar nº documento...',
                     hintStyle: TextStyle(
                         fontSize: 12,
                         color: AppTheme.textSecondary.withValues(alpha: 0.5),),
@@ -1381,7 +1381,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
                                 fontWeight: FontWeight.bold,
                                 color: AppTheme.textPrimary,),),
                         Text(
-                            '${DateFormat('dd/MM/yyyy').format(doc.date)} Â· ${CurrencyFormatter.format(doc.amount)}',
+                            '${DateFormat('dd/MM/yyyy').format(doc.date)} · ${CurrencyFormatter.format(doc.amount)}',
                             style: const TextStyle(
                                 fontSize: 13, color: AppTheme.textSecondary,),),
                       ],
@@ -1745,7 +1745,7 @@ class _RepartidorHistoricoPageState extends State<RepartidorHistoricoPage> {
         albaranTerminal: doc.terminal,
         albaranYear: doc.ejercicio,
       );
-      modal.success('âœ“ Email enviado correctamente');
+      modal.success('✓ Email enviado correctamente');
     } catch (e) {
       modal.error('Error enviando email: $e',
           onRetry: () => _emailDocument(doc),);

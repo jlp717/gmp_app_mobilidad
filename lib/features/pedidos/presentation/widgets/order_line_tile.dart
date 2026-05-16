@@ -74,7 +74,7 @@ class OrderLineTile extends StatelessWidget {
   String _priceLabel() {
     if (line.precioVenta <= 0) return '';
     final abbr = _unitAbbr(line.unidadMedida);
-    return '@ ${PedidosFormatters.money(line.precioVenta, decimals: 3)} Ã¢â€šÂ¬/$abbr';
+    return '@ ${PedidosFormatters.money(line.precioVenta, decimals: 3)} €/$abbr';
   }
 
   static String _unitAbbr(String unit) {
@@ -305,7 +305,7 @@ class OrderLineTile extends StatelessWidget {
                               color: AppTheme.warning, size: 13,),
                           const SizedBox(width: 3),
                           Text(
-                            '0,00 Ã¢â€šÂ¬',
+                            '0,00 €',
                             style: TextStyle(
                               color: AppTheme.error,
                               fontWeight: FontWeight.bold,

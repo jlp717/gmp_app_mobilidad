@@ -459,9 +459,9 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
 
   Widget _buildExampleQueries() {
     final examples = [
-      'Â¿Cuál es mi margen global este mes?',
-      'Â¿A qué precio puedo vender el producto ABC?',
-      'Â¿Cuánto debe el cliente 12345?',
+      '¿Cuál es mi margen global este mes?',
+      '¿A qué precio puedo vender el producto ABC?',
+      '¿Cuánto debe el cliente 12345?',
       'Comparar ventas 2024 vs 2023',
     ];
 

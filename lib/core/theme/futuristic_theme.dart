@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 /// - ðŸŽ¨ Paleta de colores neón cyberpunk
 /// - ðŸ’Ž Glassmorphism effects en todos los elementos
 /// - ðŸŒ™ Modo oscuro perfecto para TODA la app
-/// - âœ¨ Gradientes vibrantes y animados
+/// - ✨ Gradientes vibrantes y animados
 /// - ðŸ”® Efectos de blur y transparencias
 ///
 /// PALETA DE COLORES:

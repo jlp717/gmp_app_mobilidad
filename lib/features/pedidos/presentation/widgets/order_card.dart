@@ -126,7 +126,7 @@ class OrderCard extends StatelessWidget {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            '#${order.numeroPedidoFormatted}  Â·  ${order.clienteCode}',
+                            '#${order.numeroPedidoFormatted}  ·  ${order.clienteCode}',
                             style: TextStyle(
                               color: theme.primary.withValues(alpha: 0.8),
                               fontSize: 11,

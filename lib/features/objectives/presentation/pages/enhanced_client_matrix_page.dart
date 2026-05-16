@@ -1006,7 +1006,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     return Column(children: allProducts.map(_buildFiProduct).toList());
   }
 
-  /// Always-visible grouping level bar â€” chip per depth level.
+  /// Always-visible grouping level bar – chip per depth level.
   Widget _buildGroupingBar() {
     const labels = ['Sin grupos', 'FI1', 'FI1+2', 'FI1+2+3', 'FI1+2+3+4', 'Todos'];
     return Container(
@@ -2543,7 +2543,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
             ),
             subtitle: Text(
-              '$pCount productos â€¢ ${subs.length} subfam.',
+              '$pCount productos • ${subs.length} subfam.',
               style:
                   const TextStyle(fontSize: 9, color: AppTheme.textSecondary),
             ),
@@ -2560,7 +2560,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   ),
                 ),
                 Text(
-                  '${units.toStringAsFixed(0)} uds${widget.isJefeVentas ? " â€¢ ${margin.toStringAsFixed(1)}%" : ""}',
+                  '${units.toStringAsFixed(0)} uds${widget.isJefeVentas ? " • ${margin.toStringAsFixed(1)}%" : ""}',
                   style: const TextStyle(
                       fontSize: 9, color: AppTheme.textSecondary),
                 ),
@@ -3074,7 +3074,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         ? '-${_formatCurrency(avgDiscountEur)}'
                         : (avgDiscountPct > 0
                             ? '${avgDiscountPct.toStringAsFixed(0)}%'
-                            : 'âœ“'),
+                            : '✓'),
                     Colors.orange,
                     isBold: true,
                   ),
@@ -3264,7 +3264,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 5,
-                child: Image.network(
+                child: ColoredBox(
+                  color: Colors.white,
+                  child: Image.network(
                   imageUrl,
                   fit: BoxFit.contain,
                   headers: {
@@ -3304,7 +3306,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       ),
                     );
                   },
-                ),
+                  ),
+                ), // ColoredBox
               ),
             ),
           );
@@ -3316,7 +3319,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   }
 
   // ===========================================================================
-  // FICHA TÉCNICA â€” Download PDF and open viewer
+  // FICHA TÉCNICA – Download PDF and open viewer
   // ===========================================================================
   Future<void> _openFichaTecnica(
     BuildContext ctx,

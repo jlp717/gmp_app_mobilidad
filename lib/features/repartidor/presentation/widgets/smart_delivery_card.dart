@@ -322,7 +322,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                 ),
                 child: Text(
                   widget.repartidorNames != null && widget.repartidorNames!.containsKey(widget.albaran.codigoRepartidor)
-                      ? 'R ${widget.albaran.codigoRepartidor} â€” ${widget.repartidorNames![widget.albaran.codigoRepartidor]}'
+                      ? 'R ${widget.albaran.codigoRepartidor} – ${widget.repartidorNames![widget.albaran.codigoRepartidor]}'
                       : 'R ${widget.albaran.codigoRepartidor}',
                   style: TextStyle(
                     color: Colors.orange.shade700,

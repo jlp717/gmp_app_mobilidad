@@ -510,7 +510,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                         color: AppTheme.textPrimary,
                       ),
                       decoration: const InputDecoration(
-                        hintText: 'NÂº Alb/Fac...',
+                        hintText: 'Nº Alb/Fac...',
                         hintStyle: TextStyle(
                           fontSize: 11,
                           color: AppTheme.textSecondary,
@@ -596,7 +596,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                   DropdownMenuItem(
                     value: 'default',
                     child: Text(
-                      'â†• Orden',
+                      '↕ Orden',
                       style:
                           TextStyle(color: AppTheme.textPrimary, fontSize: 11),
                     ),
@@ -604,7 +604,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                   DropdownMenuItem(
                     value: 'importe_desc',
                     child: Text(
-                      'â†“ Mayor €',
+                      '↓ Mayor €',
                       style:
                           TextStyle(color: AppTheme.textPrimary, fontSize: 11),
                     ),
@@ -612,7 +612,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
                   DropdownMenuItem(
                     value: 'importe_asc',
                     child: Text(
-                      'â†‘ Menor €',
+                      '↑ Menor €',
                       style:
                           TextStyle(color: AppTheme.textPrimary, fontSize: 11),
                     ),

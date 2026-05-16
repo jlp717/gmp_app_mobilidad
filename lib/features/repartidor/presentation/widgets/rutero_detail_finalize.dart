@@ -252,7 +252,7 @@ class RuteroDetailFinalize extends StatelessWidget {
       child: const Text(
         'ATENCIÓN: Si marca en verde sin modificar cantidades, '
         'la entrega está OK. Si modifica o quita cantidades, la '
-        'entrega NO coincide â€” debe añadir observaciones en la '
+        'entrega NO coincide – debe añadir observaciones en la '
         "pestaña 'Observaciones' antes de confirmar.",
         style: TextStyle(
           color: Colors.orange,

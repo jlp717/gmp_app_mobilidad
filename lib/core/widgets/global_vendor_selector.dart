@@ -5,6 +5,8 @@ import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
+/// Global Vendor Selector — V2 Premium.
+/// Modern dropdown with refined styling and subtle interactions.
 class GlobalVendorSelector extends ConsumerStatefulWidget {
   const GlobalVendorSelector({
     required this.isJefeVentas,
@@ -126,14 +128,33 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
         horizontal: 12,
         vertical: isCompact ? 2 : 8,
       ),
-      color: AppTheme.surfaceColor,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.darkCard,
+            AppTheme.darkSurface.withValues(alpha: 0.9),
+          ],
+        ),
+        border: Border(
+          bottom: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.1)),
+        ),
+      ),
       child: Row(
         children: [
-          const Icon(Icons.visibility, color: AppTheme.neonBlue, size: 18),
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppTheme.neonBlue.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+            ),
+            child: const Icon(Icons.visibility_rounded, color: AppTheme.neonBlue, size: 16),
+          ),
           const SizedBox(width: 8),
           const Text(
             'Ver como:',
-            style: TextStyle(fontSize: 12, color: Colors.white70),
+            style: TextStyle(fontSize: 12, color: Colors.white60, fontWeight: FontWeight.w500),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -141,10 +162,11 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
               height: 36 * Responsive.landscapeScale(context),
               padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
-                color: AppTheme.darkSurface,
-                borderRadius: BorderRadius.circular(8),
+                color: AppTheme.darkSurface.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                 border: Border.all(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.3),
+                  color: AppTheme.neonBlue.withValues(alpha: 0.2),
+                  width: 1,
                 ),
               ),
               child: _isLoading
@@ -165,21 +187,22 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                         isDense: true,
                         dropdownColor: AppTheme.darkCard,
                         icon: const Icon(
-                          Icons.arrow_drop_down,
+                          Icons.arrow_drop_down_rounded,
                           color: AppTheme.neonBlue,
                           size: 20,
                         ),
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 13,
+                          fontWeight: FontWeight.w500,
                         ),
                         hint: Text(
                           widget.includeAllOption
                               ? 'Todos los comerciales'
                               : 'Selecciona comercial',
                           style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
+                            color: Colors.white60,
+                            fontWeight: FontWeight.w500,
                             fontSize: 13,
                           ),
                         ),
@@ -190,7 +213,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                                 'Todos los comerciales',
                                 style: TextStyle(
                                   color: Colors.white,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),

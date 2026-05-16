@@ -376,12 +376,15 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
               child: InteractiveViewer(
                 minScale: 0.5,
                 maxScale: 5,
-                child: SmartProductImage(
+                child: ColoredBox(
+                  color: Colors.white,
+                  child: SmartProductImage(
                   imageUrl: imageUrl,
                   productCode: product.code,
                   productName: product.name,
                   fit: BoxFit.contain,
                   headers: ApiClient.authHeaders,
+                  ),
                 ),
               ),
             ),
@@ -1063,7 +1066,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             Text(
                               _selectedUnit == 'CAJAS'
                                   ? 'Precio por caja: ${PedidosFormatters.money(boxPrice, decimals: 3)}'
-                                  : '1 caja = ${_formatUnitQty(qtyPerBox, _selectedUnit)} $selectedLabel Â· Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)}',
+                                  : '1 caja = ${_formatUnitQty(qtyPerBox, _selectedUnit)} $selectedLabel · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)}',
                               style: const TextStyle(
                                 color: Colors.white54,
                                 fontSize: 10,

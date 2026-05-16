@@ -18,6 +18,7 @@ import { Request, Response, NextFunction } from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
 import { z } from 'zod';
+// @ts-ignore - common.js doesn't have type declarations
 import { sanitizeForSQL } from '../utils/common';
 
 // =============================================================================
@@ -149,7 +150,7 @@ export const emailLimiter = rateLimit({
  * Creates comprehensive security headers middleware
  * Combines Helmet defaults with custom strict headers
  */
-export function createSecurityHeaders() {
+export function createSecurityHeaders(): (req: Request, res: Response, next: NextFunction) => void {
     const helmetMiddleware = helmet({
         contentSecurityPolicy: {
             directives: {
@@ -162,7 +163,7 @@ export function createSecurityHeaders() {
                 objectSrc: ["'none'"],
                 mediaSrc: ["'self'"],
                 frameSrc: ["'none'"],
-                upgradeInsecureRequests: isProduction ? [] : undefined
+                upgradeInsecureRequests: isProduction ? ([] as string[]) : null
             }
         },
         crossOriginEmbedderPolicy: true,
@@ -184,7 +185,7 @@ export function createSecurityHeaders() {
         xssFilter: true
     });
 
-    return (req: Request, res: Response, next: NextFunction) => {
+    return (req: Request, res: Response, next: NextFunction): void => {
         // Apply Helmet defaults
         helmetMiddleware(req, res, () => {
             // Add custom security headers
@@ -256,24 +257,23 @@ export const validationSchemas = {
  * Middleware factory for validating request body against Zod schema
  */
 export function validateBody(schema: z.ZodSchema) {
-    return (req: Request, res: Response, next: NextFunction) => {
+    return (req: Request, res: Response, next: NextFunction): Response | void => {
         try {
             const validatedData = schema.parse(req.body);
             (req as any).validatedBody = validatedData;
-            next();
+            return next();
         } catch (error) {
             if (error instanceof z.ZodError) {
                 const errors = error.errors.map(e => ({
                     field: e.path.join('.'),
                     message: e.message
                 }));
-                res.status(400).json({
+                return void res.status(400).json({
                     error: 'Validation failed',
                     details: errors
                 });
-                return;
             }
-            next(error);
+            return next(error);
         }
     };
 }
@@ -282,24 +282,23 @@ export function validateBody(schema: z.ZodSchema) {
  * Middleware factory for validating query parameters against Zod schema
  */
 export function validateQuery(schema: z.ZodSchema) {
-    return (req: Request, res: Response, next: NextFunction) => {
+    return (req: Request, res: Response, next: NextFunction): Response | void => {
         try {
             const validatedData = schema.parse(req.query);
             (req as any).validatedQuery = validatedData;
-            next();
+            return next();
         } catch (error) {
             if (error instanceof z.ZodError) {
                 const errors = error.errors.map(e => ({
                     field: e.path.join('.'),
                     message: e.message
                 }));
-                res.status(400).json({
+                return void res.status(400).json({
                     error: 'Invalid query parameters',
                     details: errors
                 });
-                return;
             }
-            next(error);
+            return next(error);
         }
     };
 }
@@ -308,7 +307,7 @@ export function validateQuery(schema: z.ZodSchema) {
  * Sanitizes all string inputs in request body
  * Removes potentially dangerous characters for SQL injection and XSS
  */
-export function sanitizeInput(req: Request, res: Response, next: NextFunction) {
+export function sanitizeInput(req: Request, res: Response, next: NextFunction): Response | void {
     if (req.body && typeof req.body === 'object') {
         const sanitize = (obj: any): any => {
             if (typeof obj === 'string') {
@@ -340,7 +339,7 @@ export function sanitizeInput(req: Request, res: Response, next: NextFunction) {
     
     // Sanitize query parameters
     if (req.query && typeof req.query === 'object') {
-        const sanitizedQuery: any = {};
+        const sanitizedQuery: Record<string, any> = {};
         for (const [key, value] of Object.entries(req.query)) {
             if (typeof value === 'string') {
                 sanitizedQuery[key] = sanitizeForSQL(value);
@@ -348,16 +347,16 @@ export function sanitizeInput(req: Request, res: Response, next: NextFunction) {
                 sanitizedQuery[key] = value;
             }
         }
-        req.query = sanitizedQuery;
+        req.query = sanitizedQuery as any;
     }
     
-    next();
+    return next();
 }
 
 /**
  * Validates Content-Type header for POST/PUT/PATCH requests
  */
-export function validateContentType(req: Request, res: Response, next: NextFunction) {
+export function validateContentType(req: Request, res: Response, next: NextFunction): Response | void {
     if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
         const contentType = req.headers['content-type'];
         
@@ -374,14 +373,14 @@ export function validateContentType(req: Request, res: Response, next: NextFunct
             });
         }
     }
-    next();
+    return next();
 }
 
 /**
  * Limits request body size to prevent DoS attacks
  */
 export function limitRequestBodySize(maxSize: string = '2mb') {
-    return (req: Request, res: Response, next: NextFunction) => {
+    return (req: Request, res: Response, next: NextFunction): Response | void => {
         const contentLength = parseInt(req.headers['content-length'] || '0', 10);
         const maxSizeBytes = parseSize(maxSize);
         
@@ -390,7 +389,7 @@ export function limitRequestBodySize(maxSize: string = '2mb') {
                 error: `Request body too large. Maximum size is ${maxSize}.` 
             });
         }
-        next();
+        return next();
     };
 }
 
@@ -416,7 +415,7 @@ function parseSize(size: string): number {
  * Middleware to detect and block potential SQL injection attempts
  * Analyzes query parameters and body for suspicious patterns
  */
-export function detectSqlInjection(req: Request, res: Response, next: NextFunction) {
+export function detectSqlInjection(req: Request, res: Response, next: NextFunction): Response | void {
     const sqlInjectionPatterns = [
         /(\b(SELECT|INSERT|UPDATE|DELETE|DROP|UNION|ALTER|CREATE|TRUNCATE)\b)/i,
         /(--|\/\*|\*\/)/, // SQL comments
@@ -467,7 +466,7 @@ export function detectSqlInjection(req: Request, res: Response, next: NextFuncti
         }
     }
     
-    next();
+    return next();
 }
 
 // =============================================================================
@@ -514,7 +513,7 @@ const SCANNER_PATH_PATTERNS = [
 const scannerIpTracker = new Map<string, { count: number; firstSeen: number; lastSeen: number }>();
 const SCANNER_LOG_WINDOW_MS = 5 * 60 * 1000;
 
-export function detectScannerProbes(req: Request, res: Response, next: NextFunction) {
+export function detectScannerProbes(req: Request, res: Response, next: NextFunction): Response | void {
     const fullPath = req.path || '';
 
     const isScannerProbe = SCANNER_PATH_PATTERNS.some(p => p.test(fullPath));
@@ -583,7 +582,7 @@ const suspiciousUserAgents = [
     /scrapy/i,
 ];
 
-export function detectSuspiciousAgents(req: Request, res: Response, next: NextFunction) {
+export function detectSuspiciousAgents(req: Request, res: Response, next: NextFunction): Response | void {
     const userAgent = req.get('user-agent') || '';
 
     // Allow our own app and health checks
@@ -608,7 +607,7 @@ export function detectSuspiciousAgents(req: Request, res: Response, next: NextFu
         }
     }
 
-    next();
+    return next();
 }
 
 // =============================================================================
