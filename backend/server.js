@@ -213,6 +213,18 @@ app.use(compression({
     }
 }));
 app.use(express.json({ limit: '2mb' }));
+// Handle JSON parse errors gracefully (prevents 500 on malformed bodies)
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    logger.warn(`[JSON Parse Error] ${req.method} ${req.path} from ${req.ip}: ${err.message}`);
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid JSON in request body',
+      hint: 'Ensure Content-Type is application/json and body is valid JSON'
+    });
+  }
+  next(err);
+});
 app.use(validateContentType);
 
 // ==================== OPTIMIZATION MIDDLEWARE ====================
@@ -737,15 +749,35 @@ app.use((err, req, res, next) => {
 
 // Prevent crashes from unhandled exceptions (like header errors)
 process.on('uncaughtException', (err) => {
-  console.error(`🔥 UNCAUGHT EXCEPTION: ${err.message}`, err.stack);
-  if (err.code !== 'ERR_HTTP_HEADERS_SENT') {
-    process.exit(1); // Let PM2 restart for critical state corruption
+  // Log with logger for proper formatting
+  if (typeof logger !== 'undefined') {
+    logger.error(`🔥 UNCAUGHT EXCEPTION: ${err.message}`);
+  } else {
+    console.error(`🔥 UNCAUGHT EXCEPTION: ${err.message}`, err.stack);
   }
+
+  // Only exit for truly critical errors; otherwise log and continue
+  const criticalCodes = ['ERR_OUT_OF_RANGE', 'ERR_MEMORY'];
+  if (criticalCodes.includes(err.code)) {
+    if (typeof logger !== 'undefined') {
+      logger.error('💀 Critical error — exiting (PM2 will restart)');
+    }
+    process.exit(1);
+  }
+  // Non-critical: log and keep running (avoids 181 restarts from transient errors)
 });
 
+// Handle unhandled rejections gracefully — DO NOT exit on every rejected promise
+// This was the #1 cause of 181 PM2 restarts (any async error = process.exit)
 process.on('unhandledRejection', (reason, promise) => {
-  console.error(`🔥 UNHANDLED REJECTION: ${reason}`);
-  process.exit(1);
+  const msg = reason instanceof Error ? reason.message : String(reason);
+  if (typeof logger !== 'undefined') {
+    logger.warn(`⚠️ Unhandled promise rejection: ${msg}`);
+  } else {
+    console.warn(`⚠️ Unhandled promise rejection: ${msg}`);
+  }
+  // Do NOT process.exit(1) — let the request error handler deal with it
+  // Only exit if it's a truly fatal error (out of memory, etc.)
 });
 
 // ==================== GRACEFUL SHUTDOWN ====================
@@ -788,7 +820,12 @@ const gracefulShutdown = async (signal) => {
       logger.info('📴 Redis cache closed');
     }
   } catch (e) {
-    logger.warn(`📴 Redis close error: ${e.message}`);
+    // "The client is closed" is expected during shutdown — don't log as warning
+    if (e.message && e.message.includes('client is closed')) {
+      logger.debug('📴 Redis already closed (expected during shutdown)');
+    } else {
+      logger.warn(`📴 Redis close error: ${e.message}`);
+    }
   }
   
   // 4. Clear LACLAE memory cache
