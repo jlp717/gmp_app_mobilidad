@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class HierarchySelector extends StatefulWidget {
-
   const HierarchySelector({
-    required this.currentHierarchy, required this.onChanged, super.key,
+    required this.currentHierarchy,
+    required this.onChanged,
+    super.key,
   });
   final List<String> currentHierarchy;
   final Function(List<String>) onChanged;
@@ -18,15 +19,29 @@ class _HierarchySelectorState extends State<HierarchySelector> {
   final Map<String, String> _dimensionLabels = {
     'vendor': 'Comercial',
     'client': 'Cliente',
-    'product': 'Producto',
-    'family': 'Familia',
+    'product': 'Producto (codigo+desc)',
+    'productCode': 'Codigo Producto',
+    'productDesc': 'Descripcion Producto',
+    'family': 'Familia (general)',
+    'family1': 'Familia 1',
+    'family2': 'Familia 2',
+    'family3': 'Familia 3',
+    'family4': 'Familia 4',
+    'family5': 'Familia 5',
   };
 
   final Map<String, IconData> _dimensionIcons = {
     'vendor': Icons.person_outline,
     'client': Icons.business,
     'product': Icons.inventory_2_outlined,
+    'productCode': Icons.tag_outlined,
+    'productDesc': Icons.description_outlined,
     'family': Icons.category_outlined,
+    'family1': Icons.layers_outlined,
+    'family2': Icons.layers_outlined,
+    'family3': Icons.layers_outlined,
+    'family4': Icons.layers_outlined,
+    'family5': Icons.layers_outlined,
   };
 
   late List<String> _activeDimensions;
@@ -40,7 +55,7 @@ class _HierarchySelectorState extends State<HierarchySelector> {
         .where((d) => !_activeDimensions.contains(d))
         .toList();
   }
-  
+
   void _updateHierarchy() {
     widget.onChanged(_activeDimensions);
   }
@@ -61,17 +76,23 @@ class _HierarchySelectorState extends State<HierarchySelector> {
               const SizedBox(width: 8),
               Text(
                 'Jerarquía de Agrupación',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(color: Colors.white70),
+                style: Theme.of(context)
+                    .textTheme
+                    .titleSmall
+                    ?.copyWith(color: Colors.white70),
               ),
               const Spacer(),
               const Text(
-                'Arrastra para ordenar', 
-                style: TextStyle(color: Colors.white30, fontSize: 10, fontStyle: FontStyle.italic),
+                'Arrastra para ordenar',
+                style: TextStyle(
+                    color: Colors.white30,
+                    fontSize: 10,
+                    fontStyle: FontStyle.italic),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          
+
           // Reorderable List for Active
           ReorderableListView(
             shrinkWrap: true,
@@ -87,17 +108,19 @@ class _HierarchySelectorState extends State<HierarchySelector> {
               });
             },
             children: [
-               for (final dim in _activeDimensions)
-                 _buildChip(dim, true, Key(dim)),
+              for (final dim in _activeDimensions)
+                _buildChip(dim, true, Key(dim)),
             ],
           ),
-          
+
           // Add button for inactive
           if (_availableDimensions.isNotEmpty) ...[
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
-              children: _availableDimensions.map((dim) => _buildChip(dim, false, Key('inactive_$dim'))).toList(),
+              children: _availableDimensions
+                  .map((dim) => _buildChip(dim, false, Key('inactive_$dim')))
+                  .toList(),
             ),
           ],
         ],
@@ -132,19 +155,26 @@ class _HierarchySelectorState extends State<HierarchySelector> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: isActive ? AppTheme.neonBlue.withValues(alpha: 0.15) : Colors.white10,
+              color: isActive
+                  ? AppTheme.neonBlue.withValues(alpha: 0.15)
+                  : Colors.white10,
               border: Border.all(
-                color: isActive ? AppTheme.neonBlue.withValues(alpha: 0.5) : Colors.white10,
+                color: isActive
+                    ? AppTheme.neonBlue.withValues(alpha: 0.5)
+                    : Colors.white10,
               ),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (isActive) 
-                  const Icon(Icons.drag_indicator, size: 16, color: Colors.white30),
+                if (isActive)
+                  const Icon(Icons.drag_indicator,
+                      size: 16, color: Colors.white30),
                 if (isActive) const SizedBox(width: 8),
-                Icon(_dimensionIcons[dim], size: 16, color: isActive ? AppTheme.neonBlue : Colors.white30),
+                Icon(_dimensionIcons[dim],
+                    size: 16,
+                    color: isActive ? AppTheme.neonBlue : Colors.white30),
                 const SizedBox(width: 8),
                 Text(
                   _dimensionLabels[dim]!,
@@ -155,11 +185,11 @@ class _HierarchySelectorState extends State<HierarchySelector> {
                   ),
                 ),
                 if (isActive && _activeDimensions.length > 1) ...[
-                   const SizedBox(width: 8),
-                   const Icon(Icons.close, size: 14, color: Colors.white30),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.close, size: 14, color: Colors.white30),
                 ] else if (!isActive) ...[
-                   const SizedBox(width: 8),
-                   const Icon(Icons.add, size: 14, color: AppTheme.neonBlue),
+                  const SizedBox(width: 8),
+                  const Icon(Icons.add, size: 14, color: AppTheme.neonBlue),
                 ],
               ],
             ),

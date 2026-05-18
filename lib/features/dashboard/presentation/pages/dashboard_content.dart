@@ -76,6 +76,9 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
   String? _error;
   DateTime? _lastFetchTime; // Track last sync time
 
+  // Chart type state
+  ChartType _chartType = ChartType.bar;
+
   // State for Chart Drill Down
   // State for Cascading Selection
   List<MatrixNode> _selectionPath =
@@ -555,7 +558,10 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                       if (_isLoading)
                         const LinearProgressIndicator(color: AppTheme.neonBlue),
                       _buildKPISection(),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 16),
+                      // Chart Type Toggle
+                      _buildChartTypeToggle(),
+                      const SizedBox(height: 8),
                       // Hierarchy Selector Replaces Fixed Breadcrumbs
                       // Loading overlay indicator when hierarchy changes
                       Stack(
@@ -888,7 +894,8 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
                             _hasPendingChanges = true;
                           });
                         },
-                        selectedColor: AppTheme.neonPurple.withValues(alpha: 0.3),
+                        selectedColor:
+                            AppTheme.neonPurple.withValues(alpha: 0.3),
                         checkmarkColor: AppTheme.neonPurple,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8)),
@@ -1177,6 +1184,58 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     );
   }
 
+  /// Chart type toggle buttons
+  Widget _buildChartTypeToggle() {
+    return Row(
+      children: [
+        const Icon(Icons.bar_chart, color: AppTheme.neonBlue, size: 16),
+        const SizedBox(width: 8),
+        const Text('Tipo de grafico:',
+            style: TextStyle(color: Colors.white70, fontSize: 12)),
+        const SizedBox(width: 12),
+        ...ChartType.values.map((type) {
+          final isSelected = _chartType == type;
+          final icon = type == ChartType.bar
+              ? Icons.bar_chart
+              : type == ChartType.pie
+                  ? Icons.pie_chart
+                  : Icons.show_chart;
+          final label = type == ChartType.bar
+              ? 'Barras'
+              : type == ChartType.pie
+                  ? 'Tarta'
+                  : 'Linea';
+          return Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: ChoiceChip(
+              label: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(icon,
+                      size: 14,
+                      color: isSelected ? Colors.white : Colors.white54),
+                  const SizedBox(width: 4),
+                  Text(label,
+                      style: TextStyle(
+                          fontSize: 11,
+                          color: isSelected ? Colors.white : Colors.white54)),
+                ],
+              ),
+              selected: isSelected,
+              onSelected: (_) {
+                setState(() => _chartType = type);
+              },
+              selectedColor: AppTheme.neonBlue.withValues(alpha: 0.3),
+              backgroundColor: Colors.white10,
+              showCheckmark: false,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
   // Calculate total margin for a list of nodes
   double _calculateTotalMargin(List<MatrixNode> nodes) {
     return nodes.fold(0, (sum, node) => sum + node.margin);
@@ -1226,7 +1285,6 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     required List<MatrixNode> data,
     required MatrixNode? selectedNode,
     required Color color,
-    required ChartType chartType,
     required int level,
   }) {
     // IMPORTANT: Capture level in local variable for closure
@@ -1240,7 +1298,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       periods: _matrixPeriods,
       selectedNode: selectedNode,
       color: color,
-      chartType: chartType,
+      chartType: _chartType,
       onNodeTap: (node) => _onNodeTap(node, capturedLevel),
     );
   }
@@ -1258,6 +1316,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       onNodeTap: (node) {
         // Optional: track selection if needed for other purposes
       },
+      chartType: _chartType,
     );
   }
 
@@ -1268,7 +1327,14 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       'vendor': 'Comerciales',
       'client': 'Clientes',
       'product': 'Productos',
-      'family': 'Familias'
+      'productCode': 'Codigos Producto',
+      'productDesc': 'Descripciones Producto',
+      'family': 'Familias',
+      'family1': 'Familia 1',
+      'family2': 'Familia 2',
+      'family3': 'Familia 3',
+      'family4': 'Familia 4',
+      'family5': 'Familia 5',
     };
     final name = map[type]?.toUpperCase() ?? type.toUpperCase();
 
@@ -1284,7 +1350,14 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
       'vendor': 'Comerciales',
       'client': 'Clientes',
       'product': 'Productos',
-      'family': 'Familias'
+      'productCode': 'Codigos Producto',
+      'productDesc': 'Descripciones Producto',
+      'family': 'Familias',
+      'family1': 'Familia 1',
+      'family2': 'Familia 2',
+      'family3': 'Familia 3',
+      'family4': 'Familia 4',
+      'family5': 'Familia 5',
     };
     return map[_hierarchy.first] ?? 'Elementos';
   }
@@ -1479,6 +1552,7 @@ class _MutableNode {
   final String type;
   double sales = 0;
   double margin = 0;
+  int orders = 0;
   List<_MutableNode> children = [];
 
   MatrixNode toMatrixNode() {
@@ -1488,6 +1562,7 @@ class _MutableNode {
       type: type,
       sales: sales,
       margin: margin,
+      orders: orders,
       growth: 0,
       children: children.map((c) => c.toMatrixNode()).toList()
         ..sort((a, b) => b.sales.compareTo(a.sales)),
@@ -1518,8 +1593,16 @@ List<MatrixNode> buildTreeIsolate(TreeBuildParams params) {
       return double.tryParse(v.toString()) ?? 0.0;
     }
 
+    int getInt(dynamic v) {
+      if (v == null) return 0;
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      return int.tryParse(v.toString()) ?? 0;
+    }
+
     final sales = getDouble(row['SALES'] ?? row['sales']);
     final margin = getDouble(row['MARGIN'] ?? row['margin']);
+    final orders = getInt(row['ORDERS'] ?? row['orders']);
 
     // Traverse hierarchy levels for this row
     for (var i = 0; i < hierarchy.length; i++) {
@@ -1555,6 +1638,7 @@ List<MatrixNode> buildTreeIsolate(TreeBuildParams params) {
 
       encMap[path]!.sales += sales;
       encMap[path]!.margin += margin;
+      encMap[path]!.orders += orders;
     }
   }
 

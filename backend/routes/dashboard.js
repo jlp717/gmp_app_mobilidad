@@ -295,6 +295,11 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
 
         const vendorColExpr = getVendorColumnExpr('L', { forLACTable: true });
 
+        // Determine if we need ART table join
+        const needsArtJoin = hierarchy.some(h =>
+            ['product', 'productCode', 'productDesc', 'family', 'family1', 'family2', 'family3', 'family4', 'family5', 'subfamily'].includes(h)
+        );
+
         hierarchy.forEach((level, index) => {
             const levelIdx = index + 1;
             if (level === 'vendor') {
@@ -304,11 +309,36 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
                 selectClauses.push(`RTRIM(L.LCCDCL) as ID_${levelIdx}`);
                 groupClauses.push('L.LCCDCL');
             } else if (level === 'product') {
+                // Legacy: product code as ID, description as NAME (resolved later)
                 selectClauses.push(`RTRIM(L.CODIGOARTICULO) as ID_${levelIdx}`);
                 groupClauses.push('L.CODIGOARTICULO');
+            } else if (level === 'productCode') {
+                // Product code only (for hierarchy that separates code from description)
+                selectClauses.push(`RTRIM(L.CODIGOARTICULO) as ID_${levelIdx}`);
+                groupClauses.push('L.CODIGOARTICULO');
+            } else if (level === 'productDesc') {
+                // Product description as the hierarchy level
+                selectClauses.push(`RTRIM(A.DESCRIPCIONARTICULO) as ID_${levelIdx}`);
+                groupClauses.push('A.DESCRIPCIONARTICULO');
             } else if (level === 'family') {
+                // Legacy: family code as ID, family name as NAME (resolved via product lookup)
                 selectClauses.push(`RTRIM(L.CODIGOARTICULO) as ID_${levelIdx}`);
                 groupClauses.push('L.CODIGOARTICULO');
+            } else if (level === 'family1') {
+                selectClauses.push(`COALESCE(NULLIF(TRIM(A.FI1), ''), 'Sin Familia 1') as ID_${levelIdx}`);
+                groupClauses.push('A.FI1');
+            } else if (level === 'family2') {
+                selectClauses.push(`COALESCE(NULLIF(TRIM(A.FI2), ''), 'Sin Familia 2') as ID_${levelIdx}`);
+                groupClauses.push('A.FI2');
+            } else if (level === 'family3') {
+                selectClauses.push(`COALESCE(NULLIF(TRIM(A.FI3), ''), 'Sin Familia 3') as ID_${levelIdx}`);
+                groupClauses.push('A.FI3');
+            } else if (level === 'family4') {
+                selectClauses.push(`COALESCE(NULLIF(TRIM(A.FI4), ''), 'Sin Familia 4') as ID_${levelIdx}`);
+                groupClauses.push('A.FI4');
+            } else if (level === 'family5') {
+                selectClauses.push(`COALESCE(NULLIF(TRIM(A.FI5), ''), 'Sin Familia 5') as ID_${levelIdx}`);
+                groupClauses.push('A.FI5');
             } else if (level === 'subfamily') {
                 selectClauses.push(`COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') as ID_${levelIdx}`);
                 groupClauses.push('A.CODIGOSUBFAMILIA');
@@ -317,8 +347,8 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
 
         selectClauses.push('SUM(L.LCIMVT) as SALES');
         selectClauses.push('SUM(L.LCIMVT - L.LCIMCT) as MARGIN');
+        selectClauses.push('COUNT(DISTINCT L.LCNRAB) as ORDERS');
 
-        const needsArtJoin = hierarchy.includes('subfamily');
         const artJoinClause = needsArtJoin ? 'LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO' : '';
 
         const aggregateSQL = `
@@ -372,9 +402,9 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
             }
         }
 
-        if (hierarchy.includes('product') || hierarchy.includes('family')) {
+        if (hierarchy.includes('product') || hierarchy.includes('productCode') || hierarchy.includes('productDesc') || hierarchy.includes('family')) {
             const prodIndices = [];
-            hierarchy.forEach((h, i) => { if (h === 'product' || h === 'family') prodIndices.push(i + 1); });
+            hierarchy.forEach((h, i) => { if (['product', 'productCode', 'productDesc', 'family'].includes(h)) prodIndices.push(i + 1); });
             const productCodesSet = new Set();
             prodIndices.forEach(idx => rawData.forEach(r => { if (r[`ID_${idx}`]) productCodesSet.add(r[`ID_${idx}`]); }));
 
@@ -391,16 +421,36 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
             }
         }
 
+        // FI Family lookups (FI1-FI5) - get distinct values from ART for each family level
+        const fiLevels = hierarchy.filter(h => h.startsWith('family') && h !== 'family');
+        if (fiLevels.length > 0) {
+            const fiLookupPromises = fiLevels.map(fiLevel => {
+                const fiCol = fiLevel.toUpperCase(); // FI1, FI2, etc.
+                const sql = `SELECT DISTINCT TRIM(${fiCol}) as CODE FROM DSEDAC.ART WHERE ${fiCol} IS NOT NULL AND TRIM(${fiCol}) <> ''`;
+                return lookup(sql, `names:${fiLevel.toLowerCase()}:distinct`).then(d => ({ type: fiLevel, data: d }));
+            });
+            nameLookups.push(...fiLookupPromises);
+        }
+
         const lookupResults = await Promise.all(nameLookups);
 
         const vendorMap = {};
         const clientMap = {};
         const productInfoMap = {};
+        const fiFamilyNames = {}; // FI1, FI2, etc. -> code maps
 
         lookupResults.forEach(res => {
             if (res.type === 'vendor') res.data.forEach(x => vendorMap[x.CODE] = x.NAME || x.CODE);
             if (res.type === 'client') res.data.forEach(x => clientMap[x.CODE] = x.NAME || x.CODE);
             if (res.type === 'art_mix') res.data.forEach(x => productInfoMap[x.CODE] = { prodName: x.NAME, famCode: x.FAM_CODE, famName: x.FAM_NAME });
+            // FI family levels: store distinct codes (they're already the display value)
+            if (res.type.startsWith('family') && res.type !== 'family') {
+                fiFamilyNames[res.type] = {};
+                res.data.forEach(x => {
+                    const code = x.CODE || 'Sin dato';
+                    fiFamilyNames[res.type][code] = code;
+                });
+            }
         });
 
         const aggregatedMap = new Map();
@@ -413,6 +463,12 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
                 else if (level === 'product') {
                     const info = productInfoMap[idVal];
                     row[`NAME_${idx}`] = info ? info.prodName : idVal;
+                } else if (level === 'productCode') {
+                    // Show code as both ID and name (code IS the display)
+                    row[`NAME_${idx}`] = idVal;
+                } else if (level === 'productDesc') {
+                    // Description is already the ID from the query
+                    row[`NAME_${idx}`] = idVal;
                 } else if (level === 'family') {
                     const info = productInfoMap[idVal];
                     if (info) {
@@ -422,6 +478,9 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
                         row[`ID_${idx}`] = 'UNK';
                         row[`NAME_${idx}`] = 'Unknown Family';
                     }
+                } else if (level.startsWith('family') && level !== 'family') {
+                    // FI1-FI5: ID is already the family value from the query
+                    row[`NAME_${idx}`] = idVal || 'Sin dato';
                 }
             });
 
