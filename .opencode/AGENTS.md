@@ -46,9 +46,9 @@ cd backend && npx jest
 - DB queries: `backend/services/` (DSN='GMP', queries parametrizadas siempre)
 
 ## Tests Existentes
-- 11/11 Flutter navigation tests ✅
-- 76/76 Backend tests ✅
-- Widget tests: OrderStatusBadge, SmartProductImage, ComingSoonPlaceholder, SkeletonWidgets, KPICard
+- Backend tests: 204/204 ✅
+- Flutter navigation tests: 11/11 ✅
+- Widget tests: ~60+ ✅ (OrderStatusBadge, SmartProductImage, ComingSoonPlaceholder, SkeletonWidgets, KPICard)
 
 ## Agentes Recomendados Para Este Proyecto
 - `@flutter-architect` → Decisiones Riverpod, Clean Architecture, estructura de features
@@ -111,3 +111,54 @@ Ejemplos de decisiones que requieren este formato:
 
 ### Skill Seekers (CLI)
 - Convierte documentación web/GitHub/PDFs en skills: `skill-seekers create <url> --target opencode`
+
+## Knowledge Base Persistente (Sistema de Memoria)
+
+**⚠️ IMPORTANTE**: OpenCode Go se resetea cada 24h, borrando toda la memoria del MCP.
+Para que el equipo NO OLVIDE nada, existe un sistema de persistencia multicapa.
+
+### Arquitectura
+```
+.opencode/knowledge/*.md    ← Source of truth (git-tracked, sobrevive a resets)
+         ↓ sync en cada sesión
+Memory Graph (MCP RAM)      ← Cache rápida para la sesión actual
+```
+
+### Protocolo de Inicio de Sesión (OBLIGATORIO)
+Al iniciar cualquier sesión en este proyecto, el orchestrator DEBE:
+
+1. **Leer** todos los archivos en `.opencode/knowledge/`
+2. **Cargar** el conocimiento en el memory graph vía `memory_create_entities`
+3. **Verificar** que los datos críticos están presentes (business_rules, architecture, db_schema)
+4. **Reportar** "Knowledge base loaded: [N] entities from [N] files"
+
+### Comandos Disponibles
+
+| Comando | Función |
+|---------|---------|
+| `/knowledge-bootstrap` | Carga todos los archivos knowledge en el memory graph |
+| `/knowledge-sync` | Sync bidireccional memory ↔ files (files ganan) |
+| `/knowledge-save` | Volcar memory graph actual a archivos |
+| `/health` | Auditoría completa del proyecto + update PROJECT_STATE.md |
+
+### Archivos Knowledge (9 total)
+- `BUSINESS_RULES.md` — Reglas de negocio
+- `ARCHITECTURE.md` — Arquitectura del sistema
+- `DB_SCHEMA.md` — Conocimiento de base de datos
+- `USER_PATTERNS.md` — Preferencias del usuario (Javier)
+- `TEAM_CAPABILITIES.md` — Roster de agentes y capacidades
+- `PROJECT_STATE.md` — Estado actual del proyecto (auto-actualizado)
+- `DECISIONS.md` — Architecture Decision Records
+- `SESSION_LOG.md` — Último resumen de sesión
+- `README.md` — Documentación del sistema
+
+### Reglas de Persistencia
+1. Los archivos SON la fuente de verdad. En conflicto, files > memory.
+2. Al final de cada sesión, el orchestrator actualiza `SESSION_LOG.md`
+3. Cuando se toma una decisión arquitectónica, se añade a `DECISIONS.md`
+4. Cuando cambia el estado del proyecto, se actualiza `PROJECT_STATE.md`
+
+### Tests (actualizado Mayo 2026)
+- Backend tests: 204/204 ✅
+- Flutter navigation tests: 11/11 ✅
+- Widget tests: ~60+ ✅
