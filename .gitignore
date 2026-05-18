@@ -48,7 +48,7 @@ app.*.map.json
 backend/node_modules/
 backend/*.log
 backend/.env
-backend/.env.produccion
+backend/.env.*
 backend/db_exploration_results.json
 backend/db_probe_results.json
 
@@ -109,6 +109,10 @@ upload-keystore.jks
 .claude-flow/agents/
 .claude-flow/learning/
 .claude-flow/CAPABILITIES.md
+
+# Large local environments / tools (not part of repo)
+ipex_ollama/
+pixel-agents/
 
 # Deprecated/test files that shouldn't be tracked
 backend/deprecated/
