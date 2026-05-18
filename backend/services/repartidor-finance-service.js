@@ -382,8 +382,18 @@ function getAppSchema() {
   return String(process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER').trim().toUpperCase();
 }
 
+function getCommissionConfigSchema() {
+  const schema = String(
+    process.env.REPARTIDOR_COMMISSION_CONFIG_SCHEMA ||
+    process.env.COMMISSION_APP_SCHEMA ||
+    'JAVIER'
+  ).trim().toUpperCase();
+  return schema === 'DSEDAC' ? 'DSEDAC' : 'JAVIER';
+}
+
 const ERP_DATA_SCHEMA = getErpDataSchema();
 const ERP_FINANCE_SCHEMA = getAppSchema();
+const COMMISSION_CONFIG_SCHEMA = getCommissionConfigSchema();
 const LQD_TABLE = `${ERP_DATA_SCHEMA}.LQD`;
 
 function value(row, key, fallback = undefined) {
@@ -2009,7 +2019,7 @@ async function closeLiquidacion(input) {
 async function getCommissionTiers() {
   const rows = await queryWithParams(`
     SELECT ID, THRESHOLD_PCT, COMMISSION_PCT, SORT_ORDER, ACTIVE_SN
-    FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COMMISSION_TIERS
+    FROM ${COMMISSION_CONFIG_SCHEMA}.REPARTIDOR_COMMISSION_TIERS
     WHERE ACTIVE_SN = 'S'
     ORDER BY SORT_ORDER, THRESHOLD_PCT
   `, [], false, false);
@@ -2024,22 +2034,27 @@ async function getCommissionTiers() {
 function calculateCommission({ deliveredAmount, collectedAmount, tiers }) {
   const delivered = roundMoney(deliveredAmount);
   const collected = roundMoney(collectedAmount);
-  const reached = [];
-  let total = 0;
+  const orderedTiers = [...(tiers || [])].sort((a, b) => {
+    const byThreshold = toNumber(a.thresholdPct) - toNumber(b.thresholdPct);
+    if (byThreshold !== 0) return byThreshold;
+    return toNumber(a.sortOrder) - toNumber(b.sortOrder);
+  });
+  let appliedTier = null;
 
-  for (const tier of tiers) {
+  // Business rule: apply only the highest reached threshold, and calculate
+  // commission over the excess above that threshold.
+  for (const tier of orderedTiers) {
     const thresholdAmount = roundMoney(delivered * (toNumber(tier.thresholdPct) / 100));
     const excess = Math.max(0, collected - thresholdAmount);
     const amount = roundMoney(excess * (toNumber(tier.commissionPct) / 100));
     if (excess > 0) {
-      reached.push({
+      appliedTier = {
         thresholdPct: toNumber(tier.thresholdPct),
         commissionPct: toNumber(tier.commissionPct),
         thresholdAmount,
         excess: roundMoney(excess),
         commission: amount,
-      });
-      total += amount;
+      };
     }
   }
 
@@ -2047,8 +2062,8 @@ function calculateCommission({ deliveredAmount, collectedAmount, tiers }) {
     deliveredAmount: delivered,
     collectedAmount: collected,
     collectedPct: delivered > 0 ? roundMoney((collected / delivered) * 100) : 0,
-    commission: roundMoney(total),
-    reached,
+    commission: appliedTier ? appliedTier.commission : 0,
+    reached: appliedTier ? [appliedTier] : [],
   };
 }
 
@@ -2141,7 +2156,7 @@ async function getCommissionSummary({ repartidorId, from, to }) {
 async function saveCommissionTiers({ tiers, updatedBy }) {
   await withTransaction(async (conn) => {
     await conn.query(`
-      UPDATE ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COMMISSION_TIERS
+      UPDATE ${COMMISSION_CONFIG_SCHEMA}.REPARTIDOR_COMMISSION_TIERS
       SET ACTIVE_SN = 'N',
           UPDATED_BY = ?,
           UPDATED_AT = CURRENT_TIMESTAMP
@@ -2151,7 +2166,7 @@ async function saveCommissionTiers({ tiers, updatedBy }) {
     for (let index = 0; index < tiers.length; index++) {
       const tier = tiers[index];
       await conn.query(`
-        INSERT INTO ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COMMISSION_TIERS (
+        INSERT INTO ${COMMISSION_CONFIG_SCHEMA}.REPARTIDOR_COMMISSION_TIERS (
           THRESHOLD_PCT,
           COMMISSION_PCT,
           SORT_ORDER,

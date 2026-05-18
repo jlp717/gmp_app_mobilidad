@@ -232,7 +232,8 @@ void main() {
     expect(find.text('Abonar'), findsOneWidget);
   });
 
-  testWidgets('comisiones displays summary and monthly table', (tester) async {
+  testWidgets('comisiones displays summary and commercial-style table',
+      (tester) async {
     final now = DateTime.now();
     final summaryArgs = (
       repartidorId: '94',
@@ -280,7 +281,8 @@ void main() {
     expect(find.text('Comisiones'), findsOneWidget);
     expect(find.textContaining('20,00'), findsWidgets);
     expect(find.text('COBRADO'), findsOneWidget);
-    expect(find.text('OBJ. MES'), findsOneWidget);
+    expect(find.text('EXCESO'), findsOneWidget);
+    expect(find.text('0.5%'), findsOneWidget);
   });
 
   testWidgets('comisiones accepts aggregate repartidor id', (tester) async {
@@ -303,6 +305,15 @@ void main() {
               collectedAmount: 275,
               collectedPct: 27.5,
               commission: 0.75,
+              reached: const [
+                RepartidorCommissionReachedTier(
+                  thresholdPct: 20,
+                  commissionPct: 1,
+                  thresholdAmount: 200,
+                  excess: 75,
+                  commission: 0.75,
+                ),
+              ],
             ),
           ),
           repartidorCommissionTiersProvider.overrideWith(
