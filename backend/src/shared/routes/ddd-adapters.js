@@ -507,6 +507,97 @@ function createPedidosRoutes() {
     }
   });
 
+  // GET /api/pedidos/product-comparative/:productCode
+  router.get('/product-comparative/:productCode', async (req, res) => {
+    try {
+      const productCode = String(req.params.productCode || '').trim();
+      if (!productCode) {
+        return res.status(400).json({ success: false, error: 'productCode requerido' });
+      }
+      const clientCode = String(req.query.clientCode || '').trim();
+      const vendedorCode = String(req.query.vendedorCode || '').trim();
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const previousYear = currentYear - 1;
+
+      const where = [`TRIM(L.LCCDRF) = ?`, `L.LCTPVT IN ('CC','VC')`,
+                     `L.LCCLLN IN ('VT','AB')`, `L.LCSRAB NOT IN ('N','Z','G','D')`];
+      const params = [productCode];
+      if (clientCode) { where.push('TRIM(L.LCCDCL) = ?'); params.push(clientCode); }
+      if (vendedorCode && vendedorCode.toUpperCase() !== 'ALL') { where.push('TRIM(L.LCCDVD) = ?'); params.push(vendedorCode); }
+      const whereSql = where.join(' AND ');
+
+      const { queryWithParams } = require('../../../config/db');
+
+      const sqlByMonth = `
+          SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
+              COALESCE(SUM(L.LCCTEV), 0) AS ENVASES,
+              COALESCE(SUM(L.LCCTUD), 0) AS UNIDADES,
+              COALESCE(SUM(L.LCIMVT), 0) AS IMPORTE
+          FROM DSED.LACLAE L
+          WHERE ${whereSql} AND L.LCAADC IN (?, ?)
+          GROUP BY L.LCAADC, L.LCMMDC
+          ORDER BY L.LCAADC, L.LCMMDC
+      `;
+      const sqlProductName = `
+          SELECT TRIM(DESCRIPCIONARTICULO) AS NAME
+          FROM DSEDAC.ART WHERE TRIM(CODIGOARTICULO) = ?
+          FETCH FIRST 1 ROW ONLY
+      `;
+
+      const [rows, nameRows] = await Promise.all([
+        queryWithParams(sqlByMonth, [...params, currentYear, previousYear], []),
+        queryWithParams(sqlProductName, [productCode], []),
+      ]);
+
+      const empty = () => Array.from({ length: 12 }, (_, i) => ({ m: i + 1, envases: 0, unidades: 0, importe: 0 }));
+      const monthlyCurrent = empty();
+      const monthlyPrevious = empty();
+      for (const r of (rows || [])) {
+        const y = parseInt(r.YEAR);
+        const m = parseInt(r.MONTH);
+        if (!m || m < 1 || m > 12) continue;
+        const slot = y === currentYear ? monthlyCurrent : (y === previousYear ? monthlyPrevious : null);
+        if (!slot) continue;
+        slot[m - 1] = { m, envases: parseFloat(r.ENVASES) || 0, unidades: parseFloat(r.UNIDADES) || 0, importe: parseFloat(r.IMPORTE) || 0 };
+      }
+
+      const sumKey = (arr, key) => arr.reduce((s, x) => s + (x[key] || 0), 0);
+      const totalEnvCur = sumKey(monthlyCurrent, 'envases');
+      const totalImpCur = sumKey(monthlyCurrent, 'importe');
+      const totalEnvPrev = sumKey(monthlyPrevious, 'envases');
+      const totalImpPrev = sumKey(monthlyPrevious, 'importe');
+
+      const monthsClosed = now.getMonth();
+      const partialDay = now.getDate();
+      const daysInCurrentMonth = new Date(currentYear, monthsClosed + 1, 0).getDate();
+      const accum = (arr) => {
+        let s = 0;
+        for (let i = 0; i < monthsClosed; i++) s += arr[i].envases;
+        s += arr[monthsClosed].envases * (partialDay / daysInCurrentMonth);
+        return s;
+      };
+
+      res.json({
+        success: true, code: productCode,
+        name: (nameRows?.[0]?.NAME || '').trim(),
+        filters: { clientCode: clientCode || null, vendedorCode: vendedorCode || null },
+        currentYear:  { year: currentYear, total: totalEnvCur, totalImporte: totalImpCur, monthly: monthlyCurrent },
+        previousYear: { year: previousYear, total: totalEnvPrev, totalImporte: totalImpPrev, monthly: monthlyPrevious },
+        variation: {
+          envasesPct: totalEnvPrev > 0 ? ((totalEnvCur - totalEnvPrev) / totalEnvPrev) * 100 : null,
+          importePct: totalImpPrev > 0 ? ((totalImpCur - totalImpPrev) / totalImpPrev) * 100 : null,
+          ytdEnvasesPct: (() => { const c = accum(monthlyCurrent), p = accum(monthlyPrevious); return p > 0 ? ((c - p) / p) * 100 : null; })(),
+        },
+      });
+    } catch (error) {
+      const odbc0 = error.odbcErrors && error.odbcErrors[0];
+      const odbcMsg = odbc0 ? `${odbc0.state} (${odbc0.code}): ${odbc0.message}` : '';
+      logger.error(`[DDD-PEDIDOS] product-comparative error: ${error.message} | ODBC: ${odbcMsg}`);
+      res.status(500).json({ success: false, error: 'Error obteniendo comparativa de producto' });
+    }
+  });
+
   // GET /api/pedidos/similar-products/:code
   router.get('/similar-products/:code', async (req, res) => {
     try {
@@ -785,11 +876,22 @@ function createPedidosRoutes() {
       const lastYearFrom = (from.getFullYear() - 1) * 10000 + (from.getMonth() + 1) * 100 + from.getDate();
       const lastYearTo = (to.getFullYear() - 1) * 10000 + (to.getMonth() + 1) * 100 + to.getDate();
 
-      const [detail, summary, topProducts, lastYear] = await Promise.all([
+      const monthlyByYearSql = `
+        SELECT L.LCAADC AS ANO, L.LCMMDC AS MES,
+          COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_VENDIDO,
+          COALESCE(SUM(L.LCCTUD * L.LCPRVT), 0) AS TOTAL_SIN_DESCUENTO,
+          COALESCE(SUM(L.LCCTUD * L.LCPRVT - L.LCIMVT), 0) AS TOTAL_DESCUENTO,
+          COALESCE(SUM(L.LCCTUD), 0) AS TOTAL_UNIDADES,
+          COUNT(*) AS NUM_LINEAS
+        FROM DSED.LACLAE L WHERE ${whereSql}
+        GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC DESC, L.LCMMDC`;
+
+      const [detail, summary, topProducts, lastYear, monthlyByYear] = await Promise.all([
         queryWithParams(detailSql, params, false),
         queryWithParams(summarySql, params, false),
         queryWithParams(topProductosSql, params, false),
         queryWithParams(`SELECT COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_LAST_YEAR FROM DSED.LACLAE L WHERE (L.LCAADC * 10000 + L.LCMMDC * 100 + L.LCDDDC) BETWEEN ? AND ? AND L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('VT','AB') AND L.LCSRAB NOT IN ('N','Z','G','D')`, [lastYearFrom, lastYearTo], false),
+        queryWithParams(monthlyByYearSql, params, false),
       ]);
 
       const s = summary?.[0] || {};
@@ -807,6 +909,7 @@ function createPedidosRoutes() {
         },
         topProducts: (topProducts || []).map(t => ({ code: (t.CODE || '').trim(), name: (t.NAME || '').trim(), importe: parseFloat(t.IMPORTE) || 0, unidades: parseFloat(t.UNIDADES) || 0, numLineas: parseInt(t.NUM_LINEAS) || 0 })),
         lines: (detail || []).map(r => ({ fecha: `${r.ANO}-${String(r.MES).padStart(2, '0')}-${String(r.DIA).padStart(2, '0')}`, clienteCode: (r.CODIGOCLIENTE || '').trim(), clienteName: (r.NOMBRECLIENTE || '').trim(), vendedorCode: (r.CODIGOVENDEDOR || '').trim(), productCode: (r.CODIGOARTICULO || '').trim(), productName: (r.DESCRIPCIONARTICULO || '').trim(), cantidad: parseFloat(r.CANTIDADUNIDADES) || 0, envases: parseFloat(r.CANTIDADENVASES) || 0, precio: parseFloat(r.PRECIOVENTA) || 0, descuentoPct: parseFloat(r.PORCENTAJEDESCUENTO) || 0, importe: parseFloat(r.IMPORTEVENTA) || 0, importeSinDescuento: parseFloat(r.IMPORTESINDESCUENTO) || 0, importeDescuento: parseFloat(r.IMPORTEDESCUENTO) || 0, formaPago: (r.CODIGOFORMAPAGO || '').trim(), albaran: `${(r.SERIEALBARAN || '').trim()}-${r.NUMEROALBARAN || ''}` })),
+        monthlyByYear: (monthlyByYear || []).map(r => ({ year: parseInt(r.ANO), month: parseInt(r.MES), totalVendido: parseFloat(r.TOTAL_VENDIDO) || 0, totalSinDescuento: parseFloat(r.TOTAL_SIN_DESCUENTO) || 0, totalDescuento: parseFloat(r.TOTAL_DESCUENTO) || 0, totalUnidades: parseFloat(r.TOTAL_UNIDADES) || 0, numLineas: parseInt(r.NUM_LINEAS) || 0 })),
         pagination: { limit, offset, hasMore: (detail || []).length === limit },
       });
     } catch (error) {

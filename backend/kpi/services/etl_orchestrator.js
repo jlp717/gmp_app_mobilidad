@@ -44,7 +44,7 @@ async function runETL({ localDir, loadId, force = false } = {}) {
   // 1. Idempotencia: comprobar si ya se procesó esta semana
   if (!force) {
     const existing = await kpiQuery(
-      'SELECT ID, STATUS, TOTAL_ALERTS FROM ${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?',
+      `SELECT ID, STATUS, TOTAL_ALERTS FROM ${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?`,
       [currentLoadId]
     );
     if (existing.rows.length > 0 && existing.rows[0].STATUS === 'COMPLETED') {
@@ -58,15 +58,15 @@ async function runETL({ localDir, loadId, force = false } = {}) {
     }
     // Si está IN_PROGRESS o FAILED, lo reprocesamos â€” borrar alertas y auditoría hijas
     if (existing.rows.length > 0) {
-      await kpiQuery('DELETE FROM ${SCHEMA}.KPI_FILE_AUDIT WHERE LOAD_ID = ?', [currentLoadId]);
-      await kpiQuery('DELETE FROM ${SCHEMA}.KPI_ALERTS WHERE LOAD_ID = ?', [currentLoadId]);
-      await kpiQuery('DELETE FROM ${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?', [currentLoadId]);
+      await kpiQuery(`DELETE FROM ${SCHEMA}.KPI_FILE_AUDIT WHERE LOAD_ID = ?`, [currentLoadId]);
+      await kpiQuery(`DELETE FROM ${SCHEMA}.KPI_ALERTS WHERE LOAD_ID = ?`, [currentLoadId]);
+      await kpiQuery(`DELETE FROM ${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?`, [currentLoadId]);
     }
   } else {
     // Force: limpiar todo de esta carga
-    await kpiQuery('DELETE FROM ${SCHEMA}.KPI_FILE_AUDIT WHERE LOAD_ID = ?', [currentLoadId]);
-    await kpiQuery('DELETE FROM ${SCHEMA}.KPI_ALERTS WHERE LOAD_ID = ?', [currentLoadId]);
-    await kpiQuery('DELETE FROM ${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?', [currentLoadId]);
+    await kpiQuery(`DELETE FROM ${SCHEMA}.KPI_FILE_AUDIT WHERE LOAD_ID = ?`, [currentLoadId]);
+    await kpiQuery(`DELETE FROM ${SCHEMA}.KPI_ALERTS WHERE LOAD_ID = ?`, [currentLoadId]);
+    await kpiQuery(`DELETE FROM ${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?`, [currentLoadId]);
   }
 
   // 2. Obtener archivos CSV (SFTP o local)
@@ -98,8 +98,8 @@ async function runETL({ localDir, loadId, force = false } = {}) {
   );
 
   // 5. Desactivar alertas anteriores y limpiar alertas expiradas
-  await kpiQuery('UPDATE ${SCHEMA}.KPI_ALERTS SET IS_ACTIVE = 0 WHERE IS_ACTIVE = 1');
-  await kpiQuery('DELETE FROM ${SCHEMA}.KPI_ALERTS WHERE EXPIRES_AT IS NOT NULL AND EXPIRES_AT < CURRENT TIMESTAMP');
+  await kpiQuery(`UPDATE ${SCHEMA}.KPI_ALERTS SET IS_ACTIVE = 0 WHERE IS_ACTIVE = 1`);
+  await kpiQuery(`DELETE FROM ${SCHEMA}.KPI_ALERTS WHERE EXPIRES_AT IS NOT NULL AND EXPIRES_AT < CURRENT TIMESTAMP`);
 
   // 6. Procesar cada CSV
   const fileResults = [];
