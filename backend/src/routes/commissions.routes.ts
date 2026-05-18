@@ -5,12 +5,13 @@
  *   GET  /api/commissions/summary         - Commission breakdown by vendor/year
  *   POST /api/commissions/pay             - Record commission payment
  *   GET  /api/commissions/excluded-vendors - List excluded vendor codes
+ *   GET  /api/commissions/team/80          - Team commission for commercial 80 (Almeria lead)
  *
  * SECURITY: Joi validation + parameterized queries via service layer.
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
-import { commissionsService } from '../services/commissions.service';
+import { commissionsService, getTeamCommission, loadTeamCommissionConfig } from '../services/commissions.service';
 import { validate } from '../middleware/validation.middleware';
 import { schemas } from '../utils/validators';
 import { requireAuth, requireRole } from '../middleware/auth.middleware';
@@ -103,7 +104,65 @@ router.get('/excluded-vendors',
       res.json({ success: true, excludedVendors });
     } catch (error) {
       logger.error('Error en GET /commissions/excluded-vendors:', error);
-      res.json({ success: true, excludedVendors: ['3', '13', '93', '80'] });
+      res.json({ success: true, excludedVendors: ['3', '13', '93'] });
+    }
+  },
+);
+
+/**
+ * GET /api/commissions/team/:leaderCode
+ * Team commission breakdown for a commercial leader.
+ * Commission rate, threshold, and team members are DB-configurable
+ * via JAVIER.TEAM_COMMISSION_RULES + TEAM_COMMISSION_MEMBERS.
+ */
+router.get('/team/:leaderCode',
+  requireAuth,
+  generalLimiter,
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const leaderCode = req.params.leaderCode;
+      const yearParam = req.query.year as string | undefined;
+      const currentYear = new Date().getFullYear();
+      const year = yearParam ? parseInt(yearParam, 10) : currentYear;
+
+      if (isNaN(year) || year < 2020 || year > currentYear + 1) {
+        res.status(400).json({ success: false, error: 'Year invalido' });
+        return;
+      }
+
+      const result = await getTeamCommission(leaderCode, year);
+      res.json(result);
+    } catch (error) {
+      logger.error('Error en GET /commissions/team/:leaderCode:', error);
+      next(error);
+    }
+  },
+);
+
+/**
+ * GET /api/commissions/team/:leaderCode/members
+ * Returns the list of vendor codes in a leader's team (from DB).
+ */
+router.get('/team/:leaderCode/members',
+  requireAuth,
+  async (req: Request, res: Response): Promise<void> => {
+    try {
+      const leaderCode = req.params.leaderCode;
+      const currentYear = new Date().getFullYear();
+      const config = await loadTeamCommissionConfig(leaderCode, currentYear);
+      res.json({
+        success: true,
+        leaderCode,
+        teamMembers: config.members.map(m => m.memberCode),
+        config: {
+          commissionRate: config.rule.commissionRate,
+          growthThresholdPct: config.rule.growthThresholdPct,
+          allMustQualify: config.rule.allMustQualify,
+        },
+      });
+    } catch (error) {
+      logger.error('Error en GET /commissions/team/:leaderCode/members:', error);
+      res.status(500).json({ success: false, error: 'Error cargando miembros' });
     }
   },
 );

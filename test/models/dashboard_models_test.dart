@@ -15,7 +15,7 @@ void main() {
         'todayOrders': 12,
         'lastMonthSales': 115000.00,
         'growthPercent': 9.1,
-        'period': {'year': 2025, 'month': 3}
+        'period': {'year': 2025, 'month': 3},
       };
 
       final metrics = DashboardMetrics.fromJson(json);
@@ -80,7 +80,7 @@ void main() {
         'totalEuros': 845.50,
         'totalMargin': 127.50,
         'totalBoxes': 25,
-        'numLines': 8
+        'numLines': 8,
       };
 
       final sale = RecentSale.fromJson(json);
@@ -130,7 +130,7 @@ void main() {
         'totalSales': 125000.0,
         'totalMargin': 18750.0,
         'totalBoxes': 4500,
-        'uniqueClients': 95
+        'uniqueClients': 95,
       };
 
       final point = SalesEvolutionPoint.fromJson(json);
@@ -153,19 +153,19 @@ void main() {
           'sales': 1250000.0,
           'margin': 187500.0,
           'boxes': 45000,
-          'clients': 120
+          'clients': 120,
         },
         'lastYear': {
           'year': 2024,
           'sales': 1100000.0,
           'margin': 165000.0,
           'boxes': 40000,
-          'clients': 110
+          'clients': 110,
         },
         'growth': {
           'salesPercent': 13.6,
-          'marginPercent': 13.6
-        }
+          'marginPercent': 13.6,
+        },
       };
 
       final comparison = YoYComparison.fromJson(json);
@@ -200,7 +200,7 @@ void main() {
         'marginPercent': 15.0,
         'totalBoxes': 1200,
         'totalUnits': 14400,
-        'numClients': 45
+        'numClients': 45,
       };
 
       final product = TopProduct.fromJson(json);
@@ -226,7 +226,7 @@ void main() {
         'marginPercent': 15.0,
         'totalBoxes': 10,
         'totalUnits': 100,
-        'numClients': 5
+        'numClients': 5,
       };
 
       final product = TopProduct.fromJson(json);
@@ -247,7 +247,7 @@ void main() {
         'marginPercent': 15.0,
         'totalBoxes': 900,
         'numOrders': 52,
-        'numProducts': 28
+        'numProducts': 28,
       };
 
       final client = TopClient.fromJson(json);
@@ -278,7 +278,7 @@ void main() {
     test('should parse positive growth', () {
       final json = {
         'salesPercent': 12.5,
-        'marginPercent': 8.3
+        'marginPercent': 8.3,
       };
 
       final growth = GrowthData.fromJson(json);
@@ -290,7 +290,7 @@ void main() {
     test('should parse negative growth', () {
       final json = {
         'salesPercent': -5.2,
-        'marginPercent': -3.1
+        'marginPercent': -3.1,
       };
 
       final growth = GrowthData.fromJson(json);

@@ -1,13 +1,12 @@
-import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widgets/modern_loading.dart';
-import '../../../../core/providers/dashboard_provider.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/utils/currency_formatter.dart';
-import '../../../../core/utils/date_formatter.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/date_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 
 /// Professional Advanced Analytics Page
 /// Features: Multi-year comparison, Spanish formatting, Advanced filters
@@ -20,7 +19,7 @@ class AnalyticsPage extends StatefulWidget {
 
 class _AnalyticsPageState extends State<AnalyticsPage> {
   // Filter state
-  Set<int> _selectedYears = {DateTime.now().year}; // Multi-select years
+  final Set<int> _selectedYears = {DateTime.now().year}; // Multi-select years
   int? _selectedMonth; // null = "Todo"
  String _granularity = 'month'; // 'month' or 'week'
   bool _upToToday = false; // YTD toggle
@@ -51,32 +50,33 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       final monthParam = _selectedMonth?.toString() ?? '';
       final upToTodayParam = _upToToday.toString();
       
-      // Fetch all data in parallel
+      // Fetch all data in parallel with caching for LACLAE-heavy endpoints
+      final yoyYear = _selectedYears.first.toString();
       final results = await Future.wait([
         ApiClient.get('/dashboard/sales-evolution', queryParameters: {
           'years': yearsParam,
           'granularity': _granularity,
           'upToToday': upToTodayParam,
           'months': '36',
-        }),
+        },),
         ApiClient.get('/dashboard/yoy-comparison', queryParameters: {
-          'year': _selectedYears.first.toString(),
-        }),
+          'year': yoyYear,
+        }, cacheKey: 'analytics_yoy_$yoyYear', cacheTTL: const Duration(hours: 6)),
         ApiClient.get('/analytics/top-clients', queryParameters: {
-          'year': _selectedYears.first.toString(),
+          'year': yoyYear,
           if (monthParam.isNotEmpty) 'month': monthParam,
           'limit': '10',
-        }),
+        }, cacheKey: 'analytics_top_clients_$yoyYear${monthParam.isNotEmpty ? "_$monthParam" : ""}', cacheTTL: const Duration(hours: 3)),
         ApiClient.get('/analytics/top-products', queryParameters: {
-          'year': _selectedYears.first.toString(),
+          'year': yoyYear,
           if (monthParam.isNotEmpty) 'month': monthParam,
           'limit': '10',
-        }),
+        }, cacheKey: 'analytics_top_products_$yoyYear${monthParam.isNotEmpty ? "_$monthParam" : ""}', cacheTTL: const Duration(hours: 3)),
         ApiClient.get('/analytics/trends'),
         ApiClient.get('/analytics/margins', queryParameters: {
-          'year': _selectedYears.first.toString(),
-        }),
-        ApiClient.get('/dashboard/metrics'),
+          'year': yoyYear,
+        }, cacheKey: 'analytics_margins_$yoyYear', cacheTTL: const Duration(hours: 6)),
+        ApiClient.get('/dashboard/metrics', cacheKey: 'analytics_dash_metrics_$yoyYear', cacheTTL: const Duration(minutes: 30)),
       ]);
 
       setState(() {
@@ -108,7 +108,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           : RefreshIndicator(
               onRefresh: _fetchAllData,
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16),
+                padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -137,13 +137,21 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Widget _buildHeader() {
     return Row(
       children: [
-        const Icon(Icons.analytics, color: AppTheme.neonBlue, size: 32),
+        Icon(
+          Icons.analytics,
+          color: AppTheme.neonBlue,
+          size: Responsive.iconSize(
+            context, phone: 24, desktop: 32,
+          ),
+        ),
         const SizedBox(width: 12),
-        const Text(
+        Text(
           'Analíticas Avanzadas',
           style: TextStyle(
             color: Colors.white,
-            fontSize: 24,
+            fontSize: Responsive.fontSize(
+              context, small: 18, large: 24,
+            ),
             fontWeight: FontWeight.bold,
           ),
         ),
@@ -157,7 +165,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -191,7 +199,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   _fetchAllData();
                 },
                 backgroundColor: AppTheme.darkBase,
-                selectedColor: AppTheme.neonBlue.withOpacity(0.3),
+                selectedColor: AppTheme.neonBlue.withValues(alpha: 0.3),
                 labelStyle: TextStyle(
                   color: isSelected ? AppTheme.neonBlue : Colors.white70,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
@@ -213,7 +221,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     const Text('Mes:', style: TextStyle(color: Colors.white70, fontSize: 14)),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<int?>(
-                      value: _selectedMonth,
+                      initialValue: _selectedMonth,
                       decoration: InputDecoration(
                         filled: true,
                         fillColor: AppTheme.darkBase,
@@ -226,11 +234,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       dropdownColor: AppTheme.darkBase,
                       style: const TextStyle(color: Colors.white),
                       items: [
-                        const DropdownMenuItem(value: null, child: Text('Todo el año')),
+                        const DropdownMenuItem(child: Text('Todo el año')),
                         ...List.generate(12, (i) => i + 1).map((month) => DropdownMenuItem(
                           value: month,
                           child: Text(DateFormatter.getMonthName(month)),
-                        )),
+                        ),),
                       ],
                       onChanged: (value) {
                         setState(() => _selectedMonth = value);
@@ -260,14 +268,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                         _fetchAllData();
                       },
                       style: ButtonStyle(
-                        backgroundColor: MaterialStateProperty.resolveWith((states) {
-                          if (states.contains(MaterialState.selected)) {
-                            return AppTheme.neonBlue.withOpacity(0.3);
+                        backgroundColor: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.selected)) {
+                            return AppTheme.neonBlue.withValues(alpha: 0.3);
                           }
                           return AppTheme.darkBase;
                         }),
-                        foregroundColor: MaterialStateProperty.resolveWith((states) {
-                          if (states.contains(MaterialState.selected)) {
+                        foregroundColor: WidgetStateProperty.resolveWith((states) {
+                          if (states.contains(WidgetState.selected)) {
                             return AppTheme.neonBlue;
                           }
                           return Colors.white70;
@@ -294,7 +302,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               setState(() => _upToToday = value);
               _fetchAllData();
             },
-            activeColor: AppTheme.neonGreen,
+            activeThumbColor: AppTheme.neonGreen,
             contentPadding: EdgeInsets.zero,
           ),
           
@@ -352,22 +360,22 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       }
     }
     
-    double totalSales = 0.0;
-    int totalClients = 0;
+    var totalSales = 0;
+    var totalClients = 0;
     
     for (final item in monthlyData.values) {
       totalSales += (item['totalSales'] as num?)?.toDouble() ?? 0.0;
       totalClients += (item['uniqueClients'] as num?)?.toInt() ?? 0;
     }
     
-    final totalMargin = 0.0; // Not available in CVC
+    const totalMargin = 0.0; // Not available in CVC
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
+        Text(
           'Indicadores Clave',
-          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          style: TextStyle(color: Colors.white, fontSize: Responsive.fontSize(context, small: 15, large: 18), fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
         Row(
@@ -388,15 +396,15 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   Widget _buildKPICard(String title, String value, IconData icon, Color color) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
+          colors: [color.withValues(alpha: 0.1), color.withValues(alpha: 0.05)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -425,16 +433,16 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              const Text(
+              Text(
                 'Evolución de Ventas',
-                style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(color: Colors.white, fontSize: Responsive.fontSize(context, small: 15, large: 18), fontWeight: FontWeight.bold),
               ),
               const Spacer(),
               if (_selectedYears.length > 1) _buildChartLegend(),
@@ -513,7 +521,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         barWidth: 3,
         isStrokeCapRound: true,
         dotData: FlDotData(
-          show: true,
           getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
             radius: 4,
             color: yearColors[entry.key] ?? Colors.white,
@@ -525,8 +532,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           show: true,
           gradient: LinearGradient(
             colors: [
-              (yearColors[entry.key] ?? Colors.white).withOpacity(0.1),
-              (yearColors[entry.key] ?? Colors.white).withOpacity(0.0),
+              (yearColors[entry.key] ?? Colors.white).withValues(alpha: 0.1),
+              (yearColors[entry.key] ?? Colors.white).withValues(alpha: 0),
             ],
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -583,13 +590,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             },
           ),
         ),
-        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(),
+        topTitles: const AxisTitles(),
       ),
       gridData: FlGridData(
-        show: true,
         drawVerticalLine: false,
-        getDrawingHorizontalLine: (value) => FlLine(
+        getDrawingHorizontalLine: (value) => const FlLine(
           color: Colors.white10,
           strokeWidth: 1,
         ),
@@ -632,18 +638,18 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     final growthPercent = (growth['salesPercent'] as num?)?.toDouble() ?? 0.0;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Comparativa Interanual',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(color: Colors.white, fontSize: Responsive.fontSize(context, small: 15, large: 18), fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           Row(
@@ -702,9 +708,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -727,18 +733,18 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     if (_marginsData.isEmpty) return const SizedBox();
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonGreen.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Análisis de Márgenes',
-            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(color: Colors.white, fontSize: Responsive.fontSize(context, small: 15, large: 18), fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 24),
           SizedBox(
@@ -766,7 +772,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             width: 16,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
             gradient: LinearGradient(
-              colors: [AppTheme.neonGreen, AppTheme.neonGreen.withOpacity(0.5)],
+              colors: [AppTheme.neonGreen, AppTheme.neonGreen.withValues(alpha: 0.5)],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
             ),
@@ -803,13 +809,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             },
           ),
         ),
-        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        rightTitles: const AxisTitles(),
+        topTitles: const AxisTitles(),
       ),
       gridData: FlGridData(
-        show: true,
         drawVerticalLine: false,
-        getDrawingHorizontalLine: (value) => FlLine(color: Colors.white10, strokeWidth: 1),
+        getDrawingHorizontalLine: (value) => const FlLine(color: Colors.white10, strokeWidth: 1),
       ),
       borderData: FlBorderData(show: false),
       barTouchData: BarTouchData(
@@ -863,7 +868,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: trendColor.withOpacity(0.3)),
+        border: Border.all(color: trendColor.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -879,26 +884,26 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             ],
           ),
           const SizedBox(height: 12),
-          Text(
+          const Text(
             'Predicción basada en histórico de 6 meses',
-            style: const TextStyle(color: Colors.white54, fontSize: 12),
+            style: TextStyle(color: Colors.white54, fontSize: 12),
           ),
           const SizedBox(height: 8),
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppTheme.darkBase.withOpacity(0.3),
+              color: AppTheme.darkBase.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: Colors.white10),
             ),
-            child: Row(
+            child: const Row(
               children: [
                 Icon(Icons.info_outline, size: 14, color: Colors.white54),
-                const SizedBox(width: 6),
+                SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     'Usamos regresión lineal sobre tus ventas de los últimos 6 meses para estimar los próximos 3 meses.',
-                    style: const TextStyle(color: Colors.white54, fontSize: 11),
+                    style: TextStyle(color: Colors.white54, fontSize: 11),
                   ),
                 ),
               ],
@@ -955,7 +960,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 child: LinearProgressIndicator(
                   value: confidence,
                   backgroundColor: Colors.white10,
-                  color: trendColor.withOpacity(0.7),
+                  color: trendColor.withValues(alpha: 0.7),
                   minHeight: 6,
                   borderRadius: BorderRadius.circular(3),
                 ),
@@ -989,7 +994,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1017,7 +1022,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonGreen.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonGreen.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1040,7 +1045,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   }
 
   Widget _buildRankedListItem(int rank, String name, String value) {
-    Color rankColor = Colors.white54;
+    var rankColor = Colors.white54;
     if (rank == 1) rankColor = Colors.amber;
     if (rank == 2) rankColor = Colors.grey[400]!;
     if (rank == 3) rankColor = Colors.brown[300]!;
@@ -1053,7 +1058,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             width: 24,
             height: 24,
             decoration: BoxDecoration(
-              color: rankColor.withOpacity(0.2),
+              color: rankColor.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Center(

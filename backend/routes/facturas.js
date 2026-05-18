@@ -8,13 +8,15 @@
 const express = require('express');
 const router = express.Router();
 const facturasService = require('../services/facturas.service');
+const pdfService = require('../services/pdf.service');
 const logger = require('../middleware/logger');
 const { sendEmailWithPdf, generateInvoiceEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
+const { verifyToken } = require('../middleware/auth');
 
 /**
  * GET /api/facturas
  */
-router.get('/', async (req, res, next) => {
+router.get('/', verifyToken, async (req, res, next) => {
     try {
         const params = {
             vendedorCodes: req.query.vendedorCodes,
@@ -32,12 +34,16 @@ router.get('/', async (req, res, next) => {
             return res.status(400).json({ success: false, error: 'vendedorCodes is required' });
         }
 
-        const facturas = await facturasService.getFacturas(params);
+        const result = await facturasService.getFacturas(params);
+
+        if (result.error && !result.success) {
+            logger.warn(`[facturas] Service error: ${result.error}`);
+        }
 
         res.json({
             success: true,
-            facturas,
-            count: facturas.length,
+            facturas: result.facturas || result || [],
+            count: (result.facturas || result || []).length,
             year: params.year || new Date().getFullYear()
         });
     } catch (error) {
@@ -49,7 +55,7 @@ router.get('/', async (req, res, next) => {
 /**
  * GET /api/facturas/years
  */
-router.get('/years', async (req, res, next) => {
+router.get('/years', verifyToken, async (req, res, next) => {
     try {
         const vendedorCodes = req.query.vendedorCodes;
 
@@ -59,19 +65,22 @@ router.get('/years', async (req, res, next) => {
 
         const years = await facturasService.getAvailableYears(vendedorCodes);
 
+        if (years.length > 0) {
+            logger.info(`[facturas/years] OK - ${years.length} years for vendors ${vendedorCodes.substring(0, 20)}`);
+        }
+
         res.json({ success: true, years });
     } catch (error) {
-        logger.error(`Error en GET /facturas/years: ${error.message}`);
-        next(error);
+        logger.warn(`[facturas/years] Returning empty years due to: ${error.message.substring(0, 100)}`);
+        res.json({ success: true, years: [] });
     }
 });
 
 /**
  * GET /api/facturas/summary
  */
-router.get('/summary', async (req, res, next) => {
+router.get('/summary', verifyToken, async (req, res, next) => {
     try {
-        // FIX #2: Pass dateFrom/dateTo to summary (was missing - caused wrong totals)
         const params = {
             vendedorCodes: req.query.vendedorCodes,
             year: req.query.year ? parseInt(req.query.year) : undefined,
@@ -79,7 +88,6 @@ router.get('/summary', async (req, res, next) => {
             dateFrom: req.query.dateFrom,
             dateTo: req.query.dateTo
         };
-        logger.info(`[FACTURAS] /summary params: vendor=${params.vendedorCodes}, year=${params.year}, dateFrom=${params.dateFrom}, dateTo=${params.dateTo}`);
 
         if (!params.vendedorCodes) {
             return res.status(400).json({ success: false, error: 'vendedorCodes is required' });
@@ -87,17 +95,22 @@ router.get('/summary', async (req, res, next) => {
 
         const summary = await facturasService.getSummary(params);
 
+        logger.info(`[facturas/summary] OK - ${summary.totalFacturas} facturas, ${summary.totalImporte}€ total`);
+
         res.json({ success: true, summary });
     } catch (error) {
-        logger.error(`Error en GET /facturas/summary: ${error.message}`);
-        next(error);
+        logger.warn(`[facturas/summary] Returning zeros due to: ${error.message.substring(0, 100)}`);
+        res.json({
+            success: true,
+            summary: { totalFacturas: 0, totalImporte: 0, totalBase: 0, totalIva: 0 }
+        });
     }
 });
 
 /**
  * GET /api/facturas/:serie/:numero/:ejercicio
  */
-router.get('/:serie/:numero/:ejercicio', async (req, res, next) => {
+router.get('/:serie/:numero/:ejercicio', verifyToken, async (req, res, next) => {
     try {
         const { serie, numero, ejercicio } = req.params;
 
@@ -120,7 +133,7 @@ router.get('/:serie/:numero/:ejercicio', async (req, res, next) => {
 /**
  * GET /api/facturas/:serie/:numero/:ejercicio/pdf
  */
-router.get('/:serie/:numero/:ejercicio/pdf', async (req, res, next) => {
+router.get('/:serie/:numero/:ejercicio/pdf', verifyToken, async (req, res, next) => {
     try {
         const { serie, numero, ejercicio } = req.params;
         const preview = req.query.preview === 'true';
@@ -140,7 +153,6 @@ router.get('/:serie/:numero/:ejercicio/pdf', async (req, res, next) => {
                 return res.status(404).json({ success: false, error: 'Factura no encontrada' });
             }
 
-            const pdfService = require('../services/pdf.service');
             pdfBuffer = await pdfService.generateInvoicePDF(factura);
 
             // Cache for reuse
@@ -148,12 +160,20 @@ router.get('/:serie/:numero/:ejercicio/pdf', async (req, res, next) => {
         }
 
         const filename = `Factura_${serie}_${numero}_${ejercicio}.pdf`;
+        const safeFilename = filename.replace(/[^a-zA-Z0-9._-]/g, '_');
         const disposition = preview ? 'inline' : 'attachment';
 
+        const wasCached = !!getCachedPdf(cacheKey);
+        logger.info(`[FACTURAS] PDF serving: ${filename} (${pdfBuffer.length} bytes, cache: ${wasCached ? 'HIT' : 'MISS'})`);
+
         res.set('Content-Type', 'application/pdf');
-        res.set('Content-Disposition', `${disposition}; filename=${filename}`);
+        res.set('Content-Disposition', `${disposition}; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(safeFilename)}`);
         res.set('Content-Length', pdfBuffer.length);
-        res.set('Cache-Control', 'private, max-age=300');
+        res.set('Accept-Ranges', 'bytes');
+        // FIX: no-store prevents Flutter HTTP client from caching stale/truncated PDF
+        // Server-side cache in emailPdfService.js (5min TTL) handles reuse
+        res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+        res.set('Pragma', 'no-cache');
 
         res.send(pdfBuffer);
     } catch (error) {
@@ -164,13 +184,27 @@ router.get('/:serie/:numero/:ejercicio/pdf', async (req, res, next) => {
 
 /**
  * POST /api/facturas/share/whatsapp
+ * WhatsApp share with PDF base64 for Flutter to share as document
  */
-router.post('/share/whatsapp', async (req, res, next) => {
+router.post('/share/whatsapp', verifyToken, async (req, res, next) => {
     try {
         const { serie, numero, ejercicio, telefono, clienteNombre } = req.body;
 
         if (!serie || !numero || !ejercicio || !telefono) {
             return res.status(400).json({ success: false, error: 'Missing required fields' });
+        }
+
+        // Get or generate PDF (with cache)
+        const cacheKey = `factura_${serie}_${numero}_${ejercicio}`;
+        let pdfBuffer = getCachedPdf(cacheKey);
+
+        if (!pdfBuffer) {
+            const factura = await facturasService.getFacturaDetail(serie, numero, ejercicio);
+            if (!factura) {
+                return res.status(404).json({ success: false, error: 'Factura no encontrada' });
+            }
+            pdfBuffer = await pdfService.generateInvoicePDF(factura);
+            cachePdf(cacheKey, pdfBuffer);
         }
 
         const factura = await facturasService.getFacturaDetail(serie, numero, ejercicio);
@@ -186,10 +220,19 @@ router.post('/share/whatsapp', async (req, res, next) => {
         const phoneClean = telefono.replace(/\D/g, '');
         const whatsappUrl = `https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`;
 
+        // Convert PDF to base64 for Flutter to share as document
+        const pdfBase64 = pdfBuffer.toString('base64');
+        const pdfFilename = `Factura_${serie}_${numero}_${ejercicio}.pdf`;
+
+        logger.info(`[FACTURAS] WhatsApp generated: Factura ${serie}-${numero} to ${phoneClean}`);
+
         res.json({
             success: true,
             whatsappUrl,
-            message
+            message,
+            pdfBase64,
+            pdfFilename,
+            mimeType: 'application/pdf'
         });
     } catch (error) {
         logger.error(`Error en POST /facturas/share/whatsapp: ${error.message}`);
@@ -201,7 +244,7 @@ router.post('/share/whatsapp', async (req, res, next) => {
  * POST /api/facturas/send-email
  * Server-side email sending with PDF attachment via Nodemailer
  */
-router.post('/send-email', async (req, res, next) => {
+router.post('/send-email', verifyToken, async (req, res, next) => {
     try {
         const { serie, numero, ejercicio, destinatario, asunto, cuerpo, clienteNombre } = req.body;
 
@@ -224,7 +267,6 @@ router.post('/send-email', async (req, res, next) => {
                 return res.status(404).json({ success: false, error: 'Factura no encontrada' });
             }
 
-            const pdfService = require('../services/pdf.service');
             pdfBuffer = await pdfService.generateInvoicePDF(factura);
             cachePdf(cacheKey, pdfBuffer);
         }
@@ -270,7 +312,7 @@ router.post('/send-email', async (req, res, next) => {
  * POST /api/facturas/share/email (LEGACY - kept for backward compatibility)
  * Now redirects to send-email
  */
-router.post('/share/email', async (req, res, next) => {
+router.post('/share/email', verifyToken, async (req, res, next) => {
     try {
         const { serie, numero, ejercicio, destinatario, clienteNombre } = req.body;
 

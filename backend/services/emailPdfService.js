@@ -1,11 +1,11 @@
 /**
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * 📧 EMAIL PDF SERVICE - Envío de PDFs por email server-side
+ * EMAIL PDF SERVICE - Envío de PDFs por email server-side
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * 
+ *
  * Servicio reutilizable para enviar emails con PDFs adjuntos
  * usando Nodemailer. Comparte infraestructura SMTP con emailService.
- * 
+ *
  * Usado por:
  *   - Facturas de Clientes
  *   - Histórico de Repartidores
@@ -14,41 +14,77 @@
 
 const nodemailer = require('nodemailer');
 const logger = require('../middleware/logger');
+const { smtpLogger, isSmtpDebugEnabled } = require('./smtpLogger');
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // CONFIGURACIÓN SMTP
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+// Primary SMTP config — prefer SMTP_PDF_* vars (explicit PDF config), fall back to SMTP_*
+const _smtpHost = process.env.SMTP_PDF_HOST || process.env.SMTP_HOST || 'mail.mari-pepa.com';
+const _smtpPort = parseInt(process.env.SMTP_PDF_PORT || process.env.SMTP_PORT) || 587;
+const _smtpSecure = (process.env.SMTP_PDF_SECURE || process.env.SMTP_SECURE) === 'true' || _smtpPort === 465;
+const _smtpUser = process.env.SMTP_PDF_USER || process.env.SMTP_USER || 'noreply@mari-pepa.com';
+const _smtpPass = process.env.SMTP_PDF_PASS || process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '';
+
 const SMTP_CONFIG = {
-    host: process.env.SMTP_HOST || '_dc-mx.bef93564e202.mari-pepa.com',
-    port: 465,
-    secure: true,
+    host: _smtpHost,
+    port: _smtpPort,
+    secure: _smtpSecure,
     auth: {
-        user: process.env.SMTP_USER || 'noreply@mari-pepa.com',
-        pass: process.env.SMTP_PASSWORD || '6pVyRf3xptxiN3i'
+        user: _smtpUser,
+        pass: _smtpPass
     },
-    connectionTimeout: 20000,
-    greetingTimeout: 10000,
-    socketTimeout: 30000,
+    connectionTimeout: parseInt(process.env.SMTP_PDF_CONNECTION_TIMEOUT) || 30000,
+    greetingTimeout: parseInt(process.env.SMTP_PDF_GREETING_TIMEOUT) || 25000,
+    socketTimeout: parseInt(process.env.SMTP_PDF_SOCKET_TIMEOUT) || 45000,
     tls: {
-        rejectUnauthorized: false,
-        minVersion: 'TLSv1.2'
-    }
+        rejectUnauthorized: false
+    },
+    logger: smtpLogger,
+    debug: isSmtpDebugEnabled()
 };
+
+// Fallback ports to try when primary fails (in order)
+const SMTP_FALLBACK_PORTS = [587, 2525];
+
+// Maximum number of retry attempts
+const MAX_RETRIES = SMTP_FALLBACK_PORTS.length + 1; // Primary + fallbacks
+
+function buildFallbackConfig(port) {
+    return { ...SMTP_CONFIG, port, secure: port === 465, pool: false };
+}
 
 const FROM_EMAIL = process.env.SMTP_FROM || 'noreply@mari-pepa.com';
 const FROM_NAME = 'Granja Mari Pepa';
 
 let transporter = null;
+let transporterHealthy = false;
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// INICIALIZACIÓN
+// INICIALIZACIÓN Y HEALTH CHECK
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+/**
+ * Invalidar transporter actual (forzar reconexión en próximo envío)
+ */
+function invalidateTransporter() {
+    if (transporter) {
+        try {
+            transporter.close();
+        } catch (e) {
+            // Ignorar errores al cerrar
+        }
+    }
+    transporter = null;
+    transporterHealthy = false;
+    logger.debug('Transporter invalidado, se recreará en próximo envío');
+}
 
 function getTransporter() {
     if (!transporter) {
         transporter = nodemailer.createTransport(SMTP_CONFIG);
-        logger.info('📧 EmailPdfService: Transporter SMTP inicializado', {
+        logger.info(`EmailPdfService: Transporter SMTP inicializado`, {
             host: SMTP_CONFIG.host,
             port: SMTP_CONFIG.port
         });
@@ -56,12 +92,34 @@ function getTransporter() {
     return transporter;
 }
 
+/**
+ * Verificar estado de conexión SMTP
+ */
+async function verifySmtpConnection() {
+    if (transporterHealthy && transporter) {
+        return true;
+    }
+
+    try {
+        const transport = getTransporter();
+        await transport.verify();
+        transporterHealthy = true;
+        logger.debug('SMTP connection verified');
+        return true;
+    } catch (error) {
+        transporterHealthy = false;
+        logger.warn(`SMTP verification failed: ${error.message}`);
+        return false;
+    }
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-// CACHÉ DE PDFs EN MEMORIA (TTL = 5 minutos)
+// CACHÉ DE PDFs EN MEMORIA (TTL = 5 minutos, MAX 50 items)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const pdfCache = new Map();
 const PDF_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
+const PDF_CACHE_MAX_ITEMS = 50; // Límite máximo para evitar memory leak
 
 /**
  * Almacenar PDF en caché temporal
@@ -69,6 +127,13 @@ const PDF_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
  * @param {Buffer} buffer - El PDF generado
  */
 function cachePdf(key, buffer) {
+    // Si el caché está lleno, eliminar el 20% más antiguo (LRU)
+    if (pdfCache.size >= PDF_CACHE_MAX_ITEMS) {
+        const toDelete = [...pdfCache.keys()].slice(0, Math.ceil(PDF_CACHE_MAX_ITEMS * 0.2));
+        toDelete.forEach(k => pdfCache.delete(k));
+        logger.debug(`PDF cache lleno, eliminados ${toDelete.length} items antiguos`);
+    }
+
     pdfCache.set(key, {
         buffer,
         timestamp: Date.now()
@@ -81,7 +146,7 @@ function cachePdf(key, buffer) {
         }
     }
 
-    logger.info(`📧 PDF cached: ${key} (${(buffer.length / 1024).toFixed(1)} KB, ${pdfCache.size} items in cache)`);
+    logger.debug(`PDF cached: ${key} (${(buffer.length / 1024).toFixed(1)} KB, ${pdfCache.size} items)`);
 }
 
 /**
@@ -98,7 +163,7 @@ function getCachedPdf(key) {
         return null;
     }
 
-    logger.info(`📧 PDF cache HIT: ${key}`);
+    logger.info(`PDF cache HIT: ${key}`);
     return entry.buffer;
 }
 
@@ -136,69 +201,131 @@ async function sendEmailWithPdf({ to, subject, htmlBody, textBody, pdfBuffer, pd
         throw new Error('Nombre del archivo PDF es requerido');
     }
 
-    try {
-        const transport = getTransporter();
+    // Ports to try: [primaryPort, ...fallbackPorts]
+    const portsToTry = [SMTP_CONFIG.port, ...SMTP_FALLBACK_PORTS.filter(p => p !== SMTP_CONFIG.port)];
+    let lastError;
+    let lastAttempt = 0; // Captured for use outside loop
 
-        const defaultHtml = `
-            <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background: linear-gradient(135deg, #003d7a 0%, #1a5490 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
-                    <h1 style="color: white; margin: 0; font-size: 22px;">📄 Documento Adjunto</h1>
-                    <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0; font-size: 14px;">Granja Mari Pepa</p>
-                </div>
-                <div style="background: #f8f9fa; padding: 28px; border-radius: 0 0 12px 12px;">
-                    <p style="font-size: 15px; color: #333; line-height: 1.6;">
-                        Estimado/a cliente,
-                    </p>
-                    <p style="font-size: 14px; color: #555; line-height: 1.6;">
-                        Adjunto encontrará el documento <strong>${pdfFilename}</strong>.
-                    </p>
-                    <div style="background: #e3f2fd; padding: 16px; border-radius: 8px; margin: 20px 0; text-align: center; border-left: 4px solid #1a5490;">
-                        <p style="font-size: 13px; color: #1a5490; font-weight: 600; margin: 0;">
-                            📎 ${pdfFilename} (${(pdfBuffer.length / 1024).toFixed(0)} KB)
+    for (let attempt = 0; attempt < portsToTry.length; attempt++) {
+        lastAttempt = attempt;
+        const currentPort = portsToTry[attempt];
+        try {
+            const transport = attempt === 0
+                ? getTransporter()
+                : nodemailer.createTransport(buildFallbackConfig(currentPort));
+
+            const defaultHtml = `
+                <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+                    <div style="background: linear-gradient(135deg, #003d7a 0%, #1a5490 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
+                        <h1 style="color: white; margin: 0; font-size: 22px;">Documento Adjunto</h1>
+                        <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0; font-size: 14px;">Granja Mari Pepa</p>
+                    </div>
+                    <div style="background: #f8f9fa; padding: 28px; border-radius: 0 0 12px 12px;">
+                        <p style="font-size: 15px; color: #333; line-height: 1.6;">
+                            Estimado/a cliente,
+                        </p>
+                        <p style="font-size: 14px; color: #555; line-height: 1.6;">
+                            Adjunto encontrará el documento <strong>${pdfFilename}</strong>.
+                        </p>
+                        <div style="background: #e3f2fd; padding: 16px; border-radius: 8px; margin: 20px 0; text-align: center; border-left: 4px solid #1a5490;">
+                            <p style="font-size: 13px; color: #1a5490; font-weight: 600; margin: 0;">
+                                ${pdfFilename} (${(pdfBuffer.length / 1024).toFixed(0)} KB)
+                            </p>
+                        </div>
+                        <hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;">
+                        <p style="font-size: 11px; color: #999; margin: 0;">
+                            Este email ha sido enviado desde la aplicación de gestión de Granja Mari Pepa.<br>
+                            Teléfono: 639 77 86 56 | www.mari-pepa.com
                         </p>
                     </div>
-                    <hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;">
-                    <p style="font-size: 11px; color: #999; margin: 0;">
-                        Este email ha sido enviado desde la aplicación de gestión de Granja Mari Pepa.<br>
-                        📞 639 77 86 56 | 🌐 www.mari-pepa.com
-                    </p>
                 </div>
-            </div>
-        `;
+            `;
 
-        const mailOptions = {
-            from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
-            to: to,
-            subject: subject || `Documento - ${FROM_NAME}`,
-            html: htmlBody || defaultHtml,
-            text: textBody || `Adjunto: ${pdfFilename}`,
-            attachments: [{
-                filename: pdfFilename,
-                content: pdfBuffer,
-                contentType: 'application/pdf'
-            }]
-        };
+            const mailOptions = {
+                from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
+                to: to,
+                subject: subject || `Documento - ${FROM_NAME}`,
+                html: htmlBody || defaultHtml,
+                text: textBody || `Adjunto: ${pdfFilename}`,
+                attachments: [{
+                    filename: pdfFilename,
+                    content: pdfBuffer,
+                    contentType: 'application/pdf'
+                }]
+            };
 
-        const info = await transport.sendMail(mailOptions);
+            // Log solo en intento 1, reintentos como debug
+            if (attempt === 0) {
+                logger.info(`Enviando email a ${to}...`, { subject, pdfFilename });
+            } else {
+                logger.debug(`Reintento email a ${to} (intento ${attempt + 1}/${MAX_RETRIES})...`);
+            }
 
-        logger.info('📧 Email con PDF enviado correctamente', {
-            to,
-            subject,
-            pdfFilename,
-            pdfSize: `${(pdfBuffer.length / 1024).toFixed(1)} KB`,
-            messageId: info.messageId
-        });
+            const info = await transport.sendMail(mailOptions);
 
-        return { success: true, messageId: info.messageId };
-    } catch (error) {
-        logger.error('📧 Error enviando email con PDF', {
-            to,
-            pdfFilename,
-            error: error.message,
-            code: error.code
-        });
-        throw error;
+            logger.info('✅ Email enviado correctamente', {
+                to,
+                subject,
+                pdfSize: `${(pdfBuffer.length / 1024).toFixed(1)} KB`,
+                messageId: info.messageId
+            });
+
+            return { success: true, messageId: info.messageId };
+        } catch (error) {
+            lastError = error;
+
+            // Clasificar tipo de error para decidir acción
+            const isTimeout = ['ETIMEDOUT', 'ESOCKETTIMEDOUT'].includes(error.code);
+            const isConnection = ['ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'CONNECTION', 'TIMEOUT'].includes(error.code);
+            const isAuth = error.code === 'EAUTH';
+
+            if (isTimeout || isConnection) {
+                // Timeout o conexión caída → intentar siguiente puerto
+                invalidateTransporter();
+                if (attempt + 1 < portsToTry.length) {
+                    logger.warn(`⚠️ Puerto ${currentPort} SMTP con error (${error.code}), reintentando con puerto ${portsToTry[attempt + 1]}...`);
+                } else {
+                    logger.warn(`⚠️ Error conexión en todos los puertos (intento ${attempt + 1}/${portsToTry.length}): ${error.code}`, { to });
+                }
+            } else if (isAuth) {
+                // Error autenticación → NO reintentar, es irrecuperable
+                logger.error('❌ Error autenticación SMTP (credenciales inválidas)', {
+                    user: SMTP_CONFIG.auth.user
+                });
+                throw new Error('Error de autenticación SMTP. Verifica las credenciales del servidor de correo.');
+            } else {
+                logger.warn(`⚠️ Error email (intento ${attempt + 1}/${MAX_RETRIES}): ${error.code} - ${error.message}`, { to });
+            }
+
+            // Reintentar con siguiente puerto si no es error de auth
+            if (!isAuth && attempt + 1 < portsToTry.length) {
+                const delay = (attempt + 1) * 1000;
+                logger.debug(`Esperando ${delay}ms antes de reintentar en puerto ${portsToTry[attempt + 1]}...`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+            } else {
+                break; // auth error o sin más puertos
+            }
+        }
     }
+
+    // Todos los reintentos fallaron
+    const errorCode = lastError?.code || 'UNKNOWN';
+    const isTimeoutError = ['ETIMEDOUT', 'ESOCKETTIMEDOUT', 'ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'CONNECTION', 'TIMEOUT'].includes(errorCode);
+    const triedPorts = portsToTry.slice(0, lastAttempt).join(', ');
+
+    let userFriendlyMessage = lastError?.message || 'Error desconocido enviando email';
+    if (isTimeoutError) {
+        userFriendlyMessage = `Timeout conectando al servidor de correo (${SMTP_CONFIG.host}, puertos ${triedPorts}). Verifica que el servidor SMTP está accesible desde el VPS.`;
+    }
+
+    logger.error(`❌ Email fallido tras ${MAX_RETRIES} intentos`, {
+        to,
+        pdfFilename,
+        errorCode,
+        message: userFriendlyMessage
+    });
+
+    throw new Error(userFriendlyMessage);
 }
 
 /**
@@ -209,14 +336,14 @@ function generateInvoiceEmailHtml({ serie, numero, fecha, total, clienteNombre, 
         return `
             <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <div style="background: linear-gradient(135deg, #003d7a 0%, #1a5490 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
-                    <h1 style="color: white; margin: 0; font-size: 22px;">📄 Factura ${serie}-${numero}</h1>
+                    <h1 style="color: white; margin: 0; font-size: 22px;">Factura ${serie}-${numero}</h1>
                     <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0; font-size: 14px;">Granja Mari Pepa</p>
                 </div>
                 <div style="background: #f8f9fa; padding: 28px; border-radius: 0 0 12px 12px;">
                     <p style="font-size: 14px; color: #555; line-height: 1.8; white-space: pre-line;">${customBody}</p>
                     <hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;">
                     <p style="font-size: 11px; color: #999; margin: 0;">
-                        Granja Mari Pepa | 📞 639 77 86 56 | 🌐 www.mari-pepa.com
+                        Granja Mari Pepa | Teléfono: 639 77 86 56 | www.mari-pepa.com
                     </p>
                 </div>
             </div>
@@ -226,7 +353,7 @@ function generateInvoiceEmailHtml({ serie, numero, fecha, total, clienteNombre, 
     return `
         <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="background: linear-gradient(135deg, #003d7a 0%, #1a5490 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
-                <h1 style="color: white; margin: 0; font-size: 22px;">📄 Factura ${serie}-${numero}</h1>
+                <h1 style="color: white; margin: 0; font-size: 22px;">Factura ${serie}-${numero}</h1>
                 <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0; font-size: 14px;">Granja Mari Pepa</p>
             </div>
             <div style="background: #f8f9fa; padding: 28px; border-radius: 0 0 12px 12px;">
@@ -238,7 +365,7 @@ function generateInvoiceEmailHtml({ serie, numero, fecha, total, clienteNombre, 
                 </p>
                 ${fecha ? `<p style="font-size: 13px; color: #777;">Fecha: <strong>${fecha}</strong></p>` : ''}
                 ${total ? `
-                <div style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin: 20px 0; text-align: center;">
+                <div style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin: 20px 0; text-align: center; border: 1px solid #c8e6c9;">
                     <p style="font-size: 22px; color: #2c5530; font-weight: bold; margin: 0;">
                         Total: ${typeof total === 'number' ? total.toFixed(2) : total} €
                     </p>
@@ -248,7 +375,7 @@ function generateInvoiceEmailHtml({ serie, numero, fecha, total, clienteNombre, 
                 </p>
                 <hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;">
                 <p style="font-size: 11px; color: #999; margin: 0;">
-                    <strong>Granja Mari Pepa</strong> | 📞 639 77 86 56 | 🌐 www.mari-pepa.com
+                    <strong>Granja Mari Pepa</strong> | Teléfono: 639 77 86 56 | www.mari-pepa.com
                 </p>
             </div>
         </div>
@@ -263,14 +390,14 @@ function generateDeliveryEmailHtml({ numero, serie, fecha, total, clienteNombre,
         return `
             <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
                 <div style="background: linear-gradient(135deg, #2c5530 0%, #4a7c59 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
-                    <h1 style="color: white; margin: 0; font-size: 22px;">📦 Albarán ${serie}-${numero}</h1>
+                    <h1 style="color: white; margin: 0; font-size: 22px;">Albarán ${serie}-${numero}</h1>
                     <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0; font-size: 14px;">Granja Mari Pepa</p>
                 </div>
                 <div style="background: #f8f9fa; padding: 28px; border-radius: 0 0 12px 12px;">
                     <p style="font-size: 14px; color: #555; line-height: 1.8; white-space: pre-line;">${customBody}</p>
                     <hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;">
                     <p style="font-size: 11px; color: #999; margin: 0;">
-                        Granja Mari Pepa | 📞 639 77 86 56 | 🌐 www.mari-pepa.com
+                        Granja Mari Pepa | Teléfono: 639 77 86 56 | www.mari-pepa.com
                     </p>
                 </div>
             </div>
@@ -280,7 +407,7 @@ function generateDeliveryEmailHtml({ numero, serie, fecha, total, clienteNombre,
     return `
         <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
             <div style="background: linear-gradient(135deg, #2c5530 0%, #4a7c59 100%); padding: 24px; border-radius: 12px 12px 0 0; text-align: center;">
-                <h1 style="color: white; margin: 0; font-size: 22px;">📦 Albarán ${serie}-${numero}</h1>
+                <h1 style="color: white; margin: 0; font-size: 22px;">Albarán ${serie}-${numero}</h1>
                 <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0; font-size: 14px;">Granja Mari Pepa</p>
             </div>
             <div style="background: #f8f9fa; padding: 28px; border-radius: 0 0 12px 12px;">
@@ -291,14 +418,14 @@ function generateDeliveryEmailHtml({ numero, serie, fecha, total, clienteNombre,
                     Adjunto le remitimos el albarán <strong>${serie}-${numero}</strong>${fecha ? ` con fecha <strong>${fecha}</strong>` : ''}.
                 </p>
                 ${total ? `
-                <div style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin: 20px 0; text-align: center;">
+                <div style="background: #e8f5e9; padding: 16px; border-radius: 8px; margin: 20px 0; text-align: center; border: 1px solid #c8e6c9;">
                     <p style="font-size: 22px; color: #2c5530; font-weight: bold; margin: 0;">
                         Total: ${typeof total === 'number' ? total.toFixed(2) : total} €
                     </p>
                 </div>` : ''}
                 <hr style="border: none; border-top: 1px solid #ddd; margin: 24px 0;">
                 <p style="font-size: 11px; color: #999; margin: 0;">
-                    <strong>Granja Mari Pepa</strong> | 📞 639 77 86 56 | 🌐 www.mari-pepa.com
+                    <strong>Granja Mari Pepa</strong> | Teléfono: 639 77 86 56 | www.mari-pepa.com
                 </p>
             </div>
         </div>
@@ -310,5 +437,7 @@ module.exports = {
     generateInvoiceEmailHtml,
     generateDeliveryEmailHtml,
     cachePdf,
-    getCachedPdf
+    getCachedPdf,
+    verifySmtpConnection,
+    invalidateTransporter
 };

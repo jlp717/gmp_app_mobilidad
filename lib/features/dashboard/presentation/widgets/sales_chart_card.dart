@@ -1,7 +1,8 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
 /// [SalesChartCard] - Tarjeta con gráfica de ventas y unidades
 ///
@@ -12,8 +13,7 @@ import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 /// - Gráfica de barras con fl_chart
 class SalesChartCard extends StatelessWidget {
   const SalesChartCard({
-    super.key,
-    required this.salesSummary,
+    required this.salesSummary, super.key,
   });
 
   final SalesSummary salesSummary;
@@ -89,12 +89,12 @@ class SalesChartCard extends StatelessWidget {
             // Gráfica
             if (hasData) ...[
               SizedBox(
-                height: 200,
+                height: Responsive.scale(context, 200),
                 child: _buildChart(context),
               ),
             ] else ...[
               SizedBox(
-                height: 200,
+                height: Responsive.scale(context, 200),
                 child: Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -102,7 +102,7 @@ class SalesChartCard extends StatelessWidget {
                       Icon(
                         Icons.bar_chart_outlined,
                         size: 48,
-                        color: theme.colorScheme.onSurfaceVariant.withOpacity(0.5),
+                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -131,7 +131,7 @@ class SalesChartCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
@@ -164,7 +164,7 @@ class SalesChartCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -214,7 +214,7 @@ class SalesChartCard extends StatelessWidget {
           enabled: true,
           touchTooltipData: BarTouchTooltipData(
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              final day = data[group.x.toInt()];
+              final day = data[group.x];
               return BarTooltipItem(
                 '${day.dayLabel}\n',
                 theme.textTheme.bodySmall!.copyWith(
@@ -240,7 +240,6 @@ class SalesChartCard extends StatelessWidget {
           ),
         ),
         titlesData: FlTitlesData(
-          show: true,
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -271,19 +270,18 @@ class SalesChartCard extends StatelessWidget {
             ),
           ),
           topTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
+            
           ),
           rightTitles: const AxisTitles(
-            sideTitles: SideTitles(showTitles: false),
+            
           ),
         ),
         gridData: FlGridData(
-          show: true,
           drawVerticalLine: false,
           horizontalInterval: maxY / 5,
           getDrawingHorizontalLine: (value) {
             return FlLine(
-              color: theme.colorScheme.outlineVariant.withOpacity(0.5),
+              color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
               strokeWidth: 1,
             );
           },

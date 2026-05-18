@@ -1,0 +1,30 @@
+# Ignore everything by default (if using a whitelist approach, but usually blacklist is better)
+# Standard heavy folders
+node_modules/
+.pub-cache/
+.dart_tool/
+build/
+android/
+ios/
+web/
+linux/
+macos/
+windows/
+
+# Sensitive
+.env
+.env.*
+*.pem
+*.key
+
+# Temporary/Cache
+.openclaw/canvas/
+.openclaw/cache/
+tmp/
+dist/
+coverage/
+*.log
+
+# Asset outputs
+assets/images/
+assets/fonts/

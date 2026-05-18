@@ -1,12 +1,19 @@
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import 'matrix_data_table.dart';
-import 'dashboard_chart_factory.dart'; // Use factory instead of direct chart
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/dashboard_chart_factory.dart'; // Use factory instead of direct chart
+import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/matrix_data_table.dart';
 
 /// One section of the Cascading Dashboard.
 /// Represents a single level in the hierarchy (e.g., "Clientes de Javier").
 /// Displays a Chart and a Table side-by-side (or vertical on small screens).
 class HierarchySection extends StatelessWidget {
+
+  const HierarchySection({
+    required this.title, required this.levelName, required this.data, required this.hierarchy, required this.periods, required this.onNodeTap, super.key,
+    this.selectedNode,
+    this.color = AppTheme.neonBlue,
+    this.chartType = ChartType.bar,
+  });
   final String title;
   final String levelName; 
   final List<MatrixNode> data; 
@@ -16,19 +23,6 @@ class HierarchySection extends StatelessWidget {
   final MatrixNode? selectedNode;
   final Color color;
   final ChartType chartType;
-
-  const HierarchySection({
-    super.key,
-    required this.title,
-    required this.levelName,
-    required this.data,
-    required this.hierarchy,
-    required this.periods,
-    required this.onNodeTap,
-    this.selectedNode,
-    this.color = AppTheme.neonBlue,
-    this.chartType = ChartType.bar,
-  });
 
   @override
   Widget build(BuildContext context) {
@@ -41,7 +35,7 @@ class HierarchySection extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           decoration: BoxDecoration(
-            color: color.withOpacity(0.1),
+            color: color.withValues(alpha: 0.1),
             border: Border(left: BorderSide(color: color, width: 4)),
           ),
           child: Text(

@@ -9,8 +9,18 @@ import { logger } from '../utils/logger';
 
 // Esquemas de validación
 const schemas = {
-  // Login - acepta tanto formato nuevo (usuario/password) como legacy (codigoCliente/nif)
+  // Login - acepta formato Flutter (username/password), nuevo (usuario/password) y legacy (codigoCliente/nif)
   login: Joi.object({
+    // Formato Flutter app
+    username: Joi.string()
+      .trim()
+      .min(1)
+      .max(50)
+      .messages({
+        'string.empty': 'El usuario es requerido',
+        'string.min': 'El usuario debe tener al menos 1 carácter',
+        'string.max': 'El usuario no puede exceder 50 caracteres',
+      }),
     // Formato nuevo para comerciales
     usuario: Joi.string()
       .trim()
@@ -49,7 +59,7 @@ const schemas = {
       .messages({
         'string.empty': 'La contraseña es requerida',
       }),
-  }).or('usuario', 'codigoCliente', 'codigoUsuario')  // Requiere al menos uno
+  }).or('username', 'usuario', 'codigoCliente', 'codigoUsuario')  // Requiere al menos uno
     .or('password', 'nif'),  // Requiere al menos una contraseña
 
   // Refresh token

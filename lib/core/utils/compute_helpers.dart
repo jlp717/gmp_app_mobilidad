@@ -2,6 +2,7 @@
 /// =======================
 /// Move heavy JSON parsing to background isolate
 /// Prevents UI jank on large API responses
+library;
 
 import 'dart:async';
 import 'dart:convert';
@@ -15,7 +16,7 @@ Future<T> parseJsonInBackground<T>(
 ) async {
   try {
     // Parse JSON in isolate
-    final Map<String, dynamic> parsed = await compute(
+    final parsed = await compute(
       _parseJson,
       jsonString,
     );
@@ -32,7 +33,7 @@ Future<List<T>> parseJsonListInBackground<T>(
   T Function(Map<String, dynamic>) fromJson,
 ) async {
   try {
-    final List<dynamic> parsed = await compute(
+    final parsed = await compute(
       _parseJsonList,
       jsonString,
     );

@@ -15,8 +15,7 @@ import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_m
 /// UBICACIÓN: Entre gráficas y Accesos Rápidos
 class SummaryStatsWidget extends StatelessWidget {
   const SummaryStatsWidget({
-    super.key,
-    required this.metrics,
+    required this.metrics, super.key,
   });
 
   final DashboardMetrics metrics;
@@ -34,7 +33,7 @@ class SummaryStatsWidget extends StatelessWidget {
     // Calcular promedio de ventas diarias
     final dailyData = metrics.salesSummary.dailyData;
     final avgDailySales = dailyData.isNotEmpty
-        ? dailyData.fold<double>(0.0, (sum, day) => sum + day.sales) / dailyData.length
+        ? dailyData.fold<double>(0, (sum, day) => sum + day.sales) / dailyData.length
         : 0.0;
     
     // Determinar tendencia (simplificado)
@@ -90,8 +89,8 @@ class SummaryStatsWidget extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: isGrowing 
-                        ? AppTheme.successColor.withOpacity(0.1)
-                        : AppTheme.errorColor.withOpacity(0.1),
+                        ? AppTheme.successColor.withValues(alpha: 0.1)
+                        : AppTheme.errorColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
@@ -206,17 +205,17 @@ class SummaryStatsWidget extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: [
             Colors.white,
-            gradient.colors.first.withOpacity(0.05),
+            gradient.colors.first.withValues(alpha: 0.05),
           ],
         ),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: gradient.colors.first.withOpacity(0.2),
+          color: gradient.colors.first.withValues(alpha: 0.2),
           width: 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: gradient.colors.first.withOpacity(0.1),
+            color: gradient.colors.first.withValues(alpha: 0.1),
             blurRadius: 12,
             offset: const Offset(0, 4),
           ),
@@ -281,11 +280,10 @@ class SummaryStatsWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: color.withOpacity(0.2),
-          width: 1,
+          color: color.withValues(alpha: 0.2),
         ),
       ),
       child: Column(

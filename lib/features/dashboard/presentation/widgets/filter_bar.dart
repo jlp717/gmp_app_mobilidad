@@ -1,14 +1,13 @@
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 /// Search filter bar with debounced input
 class FilterBar extends StatefulWidget {
-  final Function(String? productCode, String? productName, String? clientName) onFiltersChanged;
   
   const FilterBar({
-    super.key,
-    required this.onFiltersChanged,
+    required this.onFiltersChanged, super.key,
   });
+  final Function(String? productCode, String? productName, String? clientName) onFiltersChanged;
 
   @override
   State<FilterBar> createState() => _FilterBarState();
@@ -73,7 +72,7 @@ class _FilterBarState extends State<FilterBar> {
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

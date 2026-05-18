@@ -1,63 +1,69 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import '../theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
+/// Smart Sync Header — V2 Premium.
+/// Modern header with refined gradients, border radius, and subtle interactions.
 class SmartSyncHeader extends StatelessWidget {
+
+  const SmartSyncHeader({
+    required this.title, required this.subtitle, required this.onSync, super.key,
+    this.lastSync,
+    this.isLoading = false,
+    this.onMonthTap,
+    this.compact = false,
+  });
   final String title;
   final String subtitle;
   final DateTime? lastSync;
   final bool isLoading;
   final VoidCallback onSync;
   final VoidCallback? onMonthTap;
-  final bool compact; // NEW: compact mode for smaller header
-
-  const SmartSyncHeader({
-    super.key,
-    required this.title,
-    required this.subtitle,
-    this.lastSync,
-    this.isLoading = false,
-    required this.onSync,
-    this.onMonthTap,
-    this.compact = false, // Default false for backwards compatibility
-  });
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
-    final double vertPad = compact ? 8 : 16;
-    final double iconSize = compact ? 18 : 24;
-    final double iconPad = compact ? 6 : 10;
-    final double titleSize = compact ? 14 : 20;
-    final double subtitleSize = compact ? 11 : 12;
+    final isCompact = compact || Responsive.isLandscapeCompact(context);
+    final factor = Responsive.landscapeScale(context);
+    final vertPad = (isCompact ? 2 : 14) * factor;
+    final iconSize = (isCompact ? 18 : 22) * factor;
+    final iconPad = (isCompact ? 6 : 10) * factor;
+    final titleSize = (isCompact ? 14 : 18) * factor;
+    final subtitleSize = (isCompact ? 11 : 12) * factor;
 
     return Container(
-      padding: EdgeInsets.fromLTRB(compact ? 12 : 20, vertPad, compact ? 12 : 20, vertPad),
+      padding: EdgeInsets.fromLTRB(
+        isCompact ? 12 : Responsive.padding(context, small: 16, large: 24),
+        vertPad,
+        isCompact ? 12 : Responsive.padding(context, small: 16, large: 24),
+        vertPad,
+      ),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: [
-            AppTheme.surfaceColor,
-            AppTheme.surfaceColor.withOpacity(0.8),
+            AppTheme.darkCard,
+            AppTheme.darkSurface.withValues(alpha: 0.9),
           ],
         ),
         border: Border(
-          bottom: BorderSide(color: AppTheme.neonBlue.withOpacity(0.2), width: 1),
+          bottom: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.15)),
         ),
       ),
       child: Row(
         children: [
-          // Icon
+          // Icon container
           Container(
             padding: EdgeInsets.all(iconPad),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  AppTheme.neonBlue.withOpacity(0.2),
-                  AppTheme.neonPurple.withOpacity(0.2),
+                  AppTheme.neonBlue.withValues(alpha: 0.15),
+                  AppTheme.neonPurple.withValues(alpha: 0.12),
                 ],
               ),
-              borderRadius: BorderRadius.circular(compact ? 8 : 12),
+              borderRadius: BorderRadius.circular(isCompact ? AppTheme.radiusSm : AppTheme.radiusMd),
             ),
             child: Icon(Icons.local_shipping_outlined, color: AppTheme.neonBlue, size: iconSize),
           ),
@@ -71,58 +77,66 @@ class SmartSyncHeader extends StatelessWidget {
                   title,
                   style: TextStyle(
                     fontSize: titleSize,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w600,
                     color: AppTheme.textPrimary,
+                    letterSpacing: -0.2,
                   ),
                 ),
-                if (onMonthTap != null)
-                  GestureDetector(
-                    onTap: onMonthTap,
-                    child: Row(
-                      children: [
-                        Text(
-                          subtitle,
-                          style: TextStyle(
-                            fontSize: subtitleSize,
-                            color: AppTheme.neonBlue,
-                            fontWeight: FontWeight.w600,
+                if (!isCompact) ...[
+                  if (onMonthTap != null)
+                    GestureDetector(
+                      onTap: onMonthTap,
+                      child: Row(
+                        children: [
+                          Text(
+                            subtitle,
+                            style: TextStyle(
+                              fontSize: subtitleSize,
+                              color: AppTheme.neonBlue,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 4),
-                        Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue, size: compact ? 14 : 16),
-                      ],
+                          const SizedBox(width: 4),
+                          Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue, size: isCompact ? 14 : 16),
+                        ],
+                      ),
+                    )
+                  else
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        fontSize: subtitleSize,
+                        color: AppTheme.textSecondary,
+                      ),
                     ),
-                  )
-                else
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: subtitleSize,
-                      color: AppTheme.textSecondary.withOpacity(0.8),
-                    ),
-                  ),
+                ],
               ],
             ),
           ),
           // Sync Button
-          IconButton(
-            onPressed: isLoading ? null : onSync,
-            padding: EdgeInsets.zero,
-            constraints: BoxConstraints(minWidth: compact ? 32 : 40, minHeight: compact ? 32 : 40),
-            icon: isLoading
-                ? SizedBox(
-                    width: compact ? 18 : 24,
-                    height: compact ? 18 : 24,
-                    child: const CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppTheme.neonBlue,
-                    ),
-                  )
-                : Icon(Icons.sync, color: AppTheme.neonBlue, size: compact ? 20 : 24),
+          InkWell(
+            onTap: isLoading ? null : onSync,
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.neonBlue.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              ),
+              child: isLoading
+                  ? SizedBox(
+                      width: isCompact ? 18 : 20,
+                      height: isCompact ? 18 : 20,
+                      child: const CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppTheme.neonBlue,
+                      ),
+                    )
+                  : Icon(Icons.sync_rounded, color: AppTheme.neonBlue, size: isCompact ? 20 : 22),
+            ),
           ),
         ],
       ),
     );
   }
 }
-

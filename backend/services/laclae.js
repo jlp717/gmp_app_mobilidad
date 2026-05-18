@@ -3,16 +3,85 @@ const { getPool } = require('../config/db');
 
 // LACLAE Cache for fast visit/delivery day lookups
 // Structure: { vendedor: { clientCode: { visitDays: [], deliveryDays: [] } } }
+// PRODUCTION-READY: LRU eviction with MAX_ENTRIES limit to prevent memory exhaustion
+const MAX_CACHE_ENTRIES = 50000; // Max vendor-client pairs (50k entries ~ 50-100MB)
+const MAX_CONFIG_ENTRIES = 10000; // Max rutero config entries
 let laclaeCache = {};
 let laclaeCacheReady = false;
-
-// Load LACLAE visit/delivery data into memory cache
-// Rutero Configuration Cache (Overrides)
-// Structure: { clientCode: { day: 'lunes', order: 1, vendedor: 'XX' } }
-// Note: clientCode is unique enough, but technically a client could be visited by multiple vendors?
-// Assuming JAVIER.RUTERO_CONFIG is per pair VENDEDOR-CLIENTE.
-// Structure: { vendor: { clientCode: { day: 'lunes', order: 1 } } }
+let laclaeCacheLoadAttempted = false;
+let laclaeCacheLastLoadTime = null;
+let laclaeCacheAccessOrder = []; // LRU tracking: [vendor-client-key, ...]
 let ruteroConfigCache = {};
+let ruteroConfigAccessOrder = []; // LRU tracking for config
+let laclaeCacheLoadPromise = null;
+
+function toDayArray(days) {
+    if (Array.isArray(days)) return days;
+    if (days instanceof Set) return Array.from(days);
+    return [];
+}
+
+function normalizeCodeList(value) {
+    if (value === undefined || value === null) return [];
+    const values = Array.isArray(value) ? value : [value];
+    return values
+        .flatMap(v => String(v ?? '').split(','))
+        .map(v => v.trim())
+        .filter(v => v && !['undefined', 'null', 'N/A', 'ALL'].includes(v.toUpperCase()) && v.length <= 10);
+}
+
+// Evict oldest entries when cache exceeds limit
+function evictLaclaeCache(maxEntries) {
+    while (laclaeCacheAccessOrder.length > maxEntries) {
+        const oldest = laclaeCacheAccessOrder.shift();
+        if (oldest) {
+            const [vendor, client] = oldest.split('::');
+            if (vendor && client && laclaeCache[vendor]) {
+                delete laclaeCache[vendor][client];
+                if (Object.keys(laclaeCache[vendor]).length === 0) {
+                    delete laclaeCache[vendor];
+                }
+            }
+        }
+    }
+}
+
+function evictRuteroConfigCache(maxEntries) {
+    while (ruteroConfigAccessOrder.length > maxEntries) {
+        const oldest = ruteroConfigAccessOrder.shift();
+        if (oldest) {
+            const [vendor, client] = oldest.split('::');
+            if (vendor && client && ruteroConfigCache[vendor]) {
+                delete ruteroConfigCache[vendor][client];
+                if (Object.keys(ruteroConfigCache[vendor]).length === 0) {
+                    delete ruteroConfigCache[vendor];
+                }
+            }
+        }
+    }
+}
+
+// Track access for LRU
+function trackLaclaeAccess(vendor, client) {
+    const key = `${vendor}::${client}`;
+    const idx = laclaeCacheAccessOrder.indexOf(key);
+    if (idx !== -1) laclaeCacheAccessOrder.splice(idx, 1);
+    laclaeCacheAccessOrder.push(key);
+    evictLaclaeCache(MAX_CACHE_ENTRIES);
+}
+
+function trackRuteroConfigAccess(vendor, client) {
+    const key = `${vendor}::${client}`;
+    const idx = ruteroConfigAccessOrder.indexOf(key);
+    if (idx !== -1) ruteroConfigAccessOrder.splice(idx, 1);
+    ruteroConfigAccessOrder.push(key);
+    evictRuteroConfigCache(MAX_CONFIG_ENTRIES);
+}
+
+// P2: Prevent reload - once attempted, stay in same state
+function isCacheReady() {
+    return laclaeCacheReady;
+}
 
 async function loadRuteroConfigCache(conn) {
     try {
@@ -57,6 +126,19 @@ async function reloadRuteroConfig() {
 // Load LACLAE visit/delivery data into memory cache
 // NOW ENHANCED: Merges data from DSEDAC.CDVI (Master Route Config) + DSED.LACLAE (Sales/History)
 async function loadLaclaeCache() {
+    if (laclaeCacheLoadPromise) {
+        return laclaeCacheLoadPromise;
+    }
+
+    laclaeCacheLoadPromise = loadLaclaeCacheInternal();
+    try {
+        return await laclaeCacheLoadPromise;
+    } finally {
+        laclaeCacheLoadPromise = null;
+    }
+}
+
+async function loadLaclaeCacheInternal() {
     logger.info('📅 Loading LACLAE cache (visit/delivery days)...');
     const start = Date.now();
 
@@ -69,7 +151,8 @@ async function loadLaclaeCache() {
     try {
         const conn = await dbPool.connect();
         try {
-            laclaeCache = {};
+            const nextLaclaeCache = {};
+            const nextLaclaeCacheAccessOrder = [];
 
             // 1. Load Master Route Config from DSEDAC.CDVI (Cuadro de Visitas)
             // This ensures NEW clients without sales are included
@@ -96,6 +179,12 @@ async function loadLaclaeCache() {
                 JOIN DSEDAC.CLI K ON C.CODIGOCLIENTE = K.CODIGOCLIENTE  -- Join CLI to check ANOBAJA
                 WHERE (C.MARCAACTUALIZACION <> 'B' OR C.MARCAACTUALIZACION IS NULL OR TRIM(C.MARCAACTUALIZACION) = '')
                   AND (K.ANOBAJA = 0 OR K.ANOBAJA IS NULL) -- EXCLUDE BAJAS
+                  AND (  -- EXCLUDE zombie entries with NO visit days assigned
+                    TRIM(C.DIAVISITALUNESSN) = 'S' OR TRIM(C.DIAVISITAMARTESSN) = 'S' OR
+                    TRIM(C.DIAVISITAMIERCOLESSN) = 'S' OR TRIM(C.DIAVISITAJUEVESSN) = 'S' OR
+                    TRIM(C.DIAVISITAVIERNESSN) = 'S' OR TRIM(C.DIAVISITASABADOSN) = 'S' OR
+                    TRIM(C.DIAVISITADOMINGOSN) = 'S'
+                  )
             `);
 
             const dayNames = ['domingo', 'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado'];
@@ -104,9 +193,9 @@ async function loadLaclaeCache() {
             cdviRows.forEach(row => {
                 if (!row.VENDEDOR || !row.CLIENTE) return;
 
-                if (!laclaeCache[row.VENDEDOR]) laclaeCache[row.VENDEDOR] = {};
-                if (!laclaeCache[row.VENDEDOR][row.CLIENTE]) {
-                    laclaeCache[row.VENDEDOR][row.CLIENTE] = {
+                if (!nextLaclaeCache[row.VENDEDOR]) nextLaclaeCache[row.VENDEDOR] = {};
+                if (!nextLaclaeCache[row.VENDEDOR][row.CLIENTE]) {
+                    nextLaclaeCache[row.VENDEDOR][row.CLIENTE] = {
                         visitDays: new Set(),
                         deliveryDays: new Set(),
                         naturalOrder: {
@@ -119,9 +208,10 @@ async function loadLaclaeCache() {
                             domingo: Number(row.OR_D) || 0
                         }
                     };
+                    nextLaclaeCacheAccessOrder.push(`${row.VENDEDOR}::${row.CLIENTE}`);
                 }
 
-                const entry = laclaeCache[row.VENDEDOR][row.CLIENTE];
+                const entry = nextLaclaeCache[row.VENDEDOR][row.CLIENTE];
 
                 // Map 'S' to days (Handle 'S ' with trim)
                 if (String(row.VIS_D).trim() === 'S') entry.visitDays.add('domingo');
@@ -171,16 +261,17 @@ async function loadLaclaeCache() {
                 const cliente = row.CLIENTE?.trim() || '';
                 if (!vendedor || !cliente) return;
 
-                if (!laclaeCache[vendedor]) laclaeCache[vendedor] = {};
+                if (!nextLaclaeCache[vendedor]) nextLaclaeCache[vendedor] = {};
 
-                if (!laclaeCache[vendedor][cliente]) {
-                    laclaeCache[vendedor][cliente] = {
+                if (!nextLaclaeCache[vendedor][cliente]) {
+                    nextLaclaeCache[vendedor][cliente] = {
                         visitDays: new Set(),
                         deliveryDays: new Set()
                     };
+                    nextLaclaeCacheAccessOrder.push(`${vendedor}::${cliente}`);
                 }
 
-                const entry = laclaeCache[vendedor][cliente];
+                const entry = nextLaclaeCache[vendedor][cliente];
 
                 for (let i = 0; i < 7; i++) {
                     if (row[visitCols[i]] === 'S') entry.visitDays.add(dayNames[i]);
@@ -189,7 +280,7 @@ async function loadLaclaeCache() {
             });
 
             // Convert Sets to Arrays for compatibility
-            Object.values(laclaeCache).forEach(vendorClients => {
+            Object.values(nextLaclaeCache).forEach(vendorClients => {
                 Object.values(vendorClients).forEach(clientData => {
                     clientData.visitDays = Array.from(clientData.visitDays);
                     clientData.deliveryDays = Array.from(clientData.deliveryDays);
@@ -199,58 +290,70 @@ async function loadLaclaeCache() {
             // Load Overrides
             await loadRuteroConfigCache(conn);
 
-            const vendorCount = Object.keys(laclaeCache).length;
-            const totalClients = Object.values(laclaeCache).reduce((sum, v) => sum + Object.keys(v).length, 0);
+            const vendorCount = Object.keys(nextLaclaeCache).length;
+            const totalClients = Object.values(nextLaclaeCache).reduce((sum, v) => sum + Object.keys(v).length, 0);
             const duration = Date.now() - start;
 
             logger.info(`📅 LACLAE/CDVI cache loaded: ${vendorCount} vendors, ${totalClients} clients in ${duration}ms`);
+            laclaeCache = nextLaclaeCache;
+            laclaeCacheAccessOrder = nextLaclaeCacheAccessOrder;
+            evictLaclaeCache(MAX_CACHE_ENTRIES);
             laclaeCacheReady = true;
+            laclaeCacheLoadAttempted = true;
+            laclaeCacheLastLoadTime = Date.now();
 
         } finally {
             await conn.close();
         }
     } catch (error) {
         logger.warn(`⚠️ LACLAE cache failed to load: ${error.message} - using hash fallback`);
-        laclaeCacheReady = false;
+        if (Object.keys(laclaeCache).length === 0) {
+            laclaeCacheReady = false;
+        }
+        laclaeCacheLoadAttempted = true; // P2: Mark as attempted, never retry
     }
 }
 
-// Get clients for a day from cache
+// P2: Get clients for a day - NEVER reloads, uses fallback if not ready
 function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverrides = false) {
-    if (!laclaeCacheReady) return null; // Use fallback
+    // P2: If cache not ready and we've attempted load, use fallback (don't retry)
+    if (!laclaeCacheReady && laclaeCacheLoadAttempted) {
+        logger.warn('[LACLAE] Cache not ready, using fallback (no reload)');
+        return null;
+    }
+    
+    if (!laclaeCacheReady) {
+        // First request before cache loaded - trigger async load but return null
+        logger.warn('[LACLAE] Cache not yet loaded, triggering background load');
+        loadLaclaeCache().catch(() => {});
+        return null;
+    }
 
     const dayLower = day.toLowerCase();
     const isDelivery = role === 'repartidor';
     let finalClients = new Set();
 
-    const vendedors = vendedorCodes ? vendedorCodes.split(',').map(c => c.trim()) : Object.keys(laclaeCache);
+    const requestedVendors = normalizeCodeList(vendedorCodes);
+    const vendedors = requestedVendors.length > 0 ? requestedVendors : Object.keys(laclaeCache);
 
     vendedors.forEach(vendedor => {
-        // 1. Get Natural Clients (LACLAE)
         const vendorClients = laclaeCache[vendedor] || {};
         const configClients = ruteroConfigCache[vendedor] || {};
 
         Object.entries(vendorClients).forEach(([clientCode, data]) => {
-            const days = isDelivery ? data.deliveryDays : data.visitDays;
+            const days = toDayArray(isDelivery ? data.deliveryDays : data.visitDays);
 
             let shouldInclude = false;
 
             if (!ignoreOverrides) {
-                // Check override FOR THIS DAY SPECIFICALLY
                 const clientOverrides = configClients[clientCode] || {};
                 const overrideForDay = clientOverrides[dayLower];
 
-                // Check NEGATIVE override (Block)
-                const isBlocked = clientOverrides['!' + dayLower] || clientOverrides['no_' + dayLower];
-
-                if (isBlocked) {
-                    shouldInclude = false;
-                } else if (overrideForDay) {
-                    // Clearly overridden for this day -> INCLUDE
-                    shouldInclude = true;
+                if (overrideForDay) {
+                    // Entry exists for this day - check if it's a block (order < 0) or positive
+                    shouldInclude = overrideForDay.order >= 0;
                 } else {
-                    // No override for this specific day.
-                    // If we have Natural Visit Day AND no specific override blocking it -> INCLUDE
+                    // No override for this specific day - use natural days
                     if (days.includes(dayLower)) shouldInclude = true;
                 }
             } else {
@@ -265,13 +368,12 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverride
 
         logger.debug(`📊 getClientsForDay('${vendedor}', '${day}'): Found ${finalClients.size} so far`);
 
-        // 2. Add clients that exist ONLY in RuteroConfig (orphan overrides)
-        // ONLY if NOT ignoring overrides
+        // Add clients that exist ONLY in RuteroConfig (orphan overrides)
         if (!ignoreOverrides) {
             Object.entries(configClients).forEach(([clientCode, cfg]) => {
-                const clientOverrides = configClients[clientCode] || {};
-                // Only add POSITIVE overrides
-                if (clientOverrides[dayLower] && !dayLower.startsWith('!') && !dayLower.startsWith('no_')) {
+                const overrideForDay = cfg[dayLower];
+                // Only add POSITIVE overrides (order >= 0)
+                if (overrideForDay && overrideForDay.order >= 0) {
                     finalClients.add(clientCode);
                 }
             });
@@ -281,57 +383,60 @@ function getClientsForDay(vendedorCodes, day, role = 'comercial', ignoreOverride
     return Array.from(finalClients);
 }
 
-// Get week counts from cache - FIXED: Considera los overrides de RUTERO_CONFIG
-function getWeekCountsFromCache(vendedorCodes, role = 'comercial') {
+// Get week counts from cache - FIXED: Respects blocking entries (ORDEN = -1) and ignoreOverrides flag
+function getWeekCountsFromCache(vendedorCodes, role = 'comercial', ignoreOverrides = false) {
     if (!laclaeCacheReady) return null; // Use fallback
 
     const isDelivery = role === 'repartidor';
     const counts = { lunes: 0, martes: 0, miercoles: 0, jueves: 0, viernes: 0, sabado: 0, domingo: 0 };
     const clientsSet = { lunes: new Set(), martes: new Set(), miercoles: new Set(), jueves: new Set(), viernes: new Set(), sabado: new Set(), domingo: new Set() };
 
-    const vendedors = vendedorCodes ? vendedorCodes.split(',').map(c => c.trim()) : Object.keys(laclaeCache);
+    const requestedVendors = normalizeCodeList(vendedorCodes);
+    const vendedors = requestedVendors.length > 0 ? requestedVendors : Object.keys(laclaeCache);
 
     vendedors.forEach(vendedor => {
         const vendorClients = laclaeCache[vendedor] || {};
         const configClients = ruteroConfigCache[vendedor] || {};
 
-        // Set of clients that have been moved via RUTERO_CONFIG
-        const movedClients = new Set(Object.keys(configClients));
-
         Object.entries(vendorClients).forEach(([clientCode, data]) => {
-            const days = isDelivery ? data.deliveryDays : data.visitDays;
+            const days = toDayArray(isDelivery ? data.deliveryDays : data.visitDays);
 
-            // Check if this client has an override
-            // Check if this client has ANY overrides
-            const clientOverrides = configClients[clientCode] || {};
-            const overrideDays = Object.keys(clientOverrides);
+            if (!ignoreOverrides) {
+                const clientOverrides = configClients[clientCode] || {};
 
-            // 1. Add overrides (POSITIVE only)
-            overrideDays.forEach(day => {
-                if (day.startsWith('!') || day.startsWith('no_')) return; // Skip negative overrides
-                if (counts.hasOwnProperty(day)) {
-                    clientsSet[day].add(clientCode);
-                }
-            });
+                // 1. Add POSITIVE overrides (order >= 0)
+                Object.entries(clientOverrides).forEach(([day, cfg]) => {
+                    if (cfg.order >= 0 && counts.hasOwnProperty(day)) {
+                        clientsSet[day].add(clientCode);
+                    }
+                });
 
-            // 2. Add Natural Days (IF NOT BLOCKED)
-            days.forEach(day => {
-                const isBlocked = clientOverrides['!' + day] || clientOverrides['no_' + day];
-                if (counts.hasOwnProperty(day) && !clientOverrides[day] && !isBlocked) {
-                    clientsSet[day].add(clientCode);
-                }
-            });
+                // 2. Add Natural Days (if no override exists for that day)
+                days.forEach(day => {
+                    if (counts.hasOwnProperty(day) && !clientOverrides[day]) {
+                        clientsSet[day].add(clientCode);
+                    }
+                });
+            } else {
+                // Ignore overrides - purely natural counts from AS400
+                days.forEach(day => {
+                    if (counts.hasOwnProperty(day)) {
+                        clientsSet[day].add(clientCode);
+                    }
+                });
+            }
         });
 
-        // Also add clients that exist ONLY in RuteroConfig (orphans)
-        Object.entries(configClients).forEach(([clientCode, overrides]) => {
-            Object.keys(overrides).forEach(day => {
-                if (day.startsWith('!') || day.startsWith('no_')) return;
-                if (counts.hasOwnProperty(day)) {
-                    clientsSet[day].add(clientCode);
-                }
+        // Also add orphan overrides (clients only in RuteroConfig, not in LACLAE)
+        if (!ignoreOverrides) {
+            Object.entries(configClients).forEach(([clientCode, overrides]) => {
+                Object.entries(overrides).forEach(([day, cfg]) => {
+                    if (cfg.order >= 0 && counts.hasOwnProperty(day)) {
+                        clientsSet[day].add(clientCode);
+                    }
+                });
             });
-        });
+        }
     });
 
     Object.keys(counts).forEach(day => {
@@ -348,12 +453,13 @@ function getTotalClientsFromCache(vendedorCodes, role = 'comercial') {
     const isDelivery = role === 'repartidor';
     const allClients = new Set();
 
-    const vendedors = vendedorCodes ? vendedorCodes.split(',').map(c => c.trim()) : Object.keys(laclaeCache);
+    const requestedVendors = normalizeCodeList(vendedorCodes);
+    const vendedors = requestedVendors.length > 0 ? requestedVendors : Object.keys(laclaeCache);
 
     vendedors.forEach(vendedor => {
         const vendorClients = laclaeCache[vendedor] || {};
         Object.entries(vendorClients).forEach(([clientCode, data]) => {
-            const days = isDelivery ? data.deliveryDays : data.visitDays;
+            const days = toDayArray(isDelivery ? data.deliveryDays : data.visitDays);
             if (days.length > 0) {
                 allClients.add(clientCode);
             }
@@ -364,17 +470,35 @@ function getTotalClientsFromCache(vendedorCodes, role = 'comercial') {
 }
 
 // Get client codes from cache (for optimization)
+// Only returns clients with actual visit days assigned to this vendor.
+// Delivery-only entries (from LACLAE history) are excluded — those clients
+// belong to another vendor for sales purposes and only appear in repartidor views.
 function getClientCodesFromCache(vendedorCodes) {
     if (!laclaeCacheReady) return null;
 
     const allClients = new Set();
 
-    const vendedors = vendedorCodes ? vendedorCodes.split(',').map(c => c.trim()) : Object.keys(laclaeCache);
+    // Handle 'ALL' or empty string - use all vendors
+    if (!vendedorCodes || vendedorCodes === 'ALL' || vendedorCodes.trim() === '') {
+        Object.keys(laclaeCache).forEach(vendedor => {
+            const vendorClients = laclaeCache[vendedor] || {};
+            Object.entries(vendorClients).forEach(([clientCode, data]) => {
+                if (toDayArray(data.visitDays).length > 0) {
+                    allClients.add(clientCode);
+                }
+            });
+        });
+        return Array.from(allClients);
+    }
+
+    const vendedors = normalizeCodeList(vendedorCodes);
 
     vendedors.forEach(vendedor => {
         const vendorClients = laclaeCache[vendedor] || {};
-        Object.keys(vendorClients).forEach(clientCode => {
-            allClients.add(clientCode);
+        Object.entries(vendorClients).forEach(([clientCode, data]) => {
+            if (toDayArray(data.visitDays).length > 0) {
+                allClients.add(clientCode);
+            }
         });
     });
 
@@ -391,45 +515,52 @@ function getVendedoresFromCache() {
     })).sort((a, b) => b.clients - a.clients);
 }
 
-// Get aggregated active VISIT days for a vendor (if they have ANY client with visit on that day)
+// P7: Get aggregated active VISIT days for vendor(s) - handles single or comma-separated
 function getVendorActiveDaysFromCache(vendedorCode) {
     if (!laclaeCacheReady || !vendedorCode) {
         logger.warn(`getVendorActiveDaysFromCache: cache not ready or no vendedorCode`);
         return [];
     }
 
-    const trimmedCode = vendedorCode.trim();
-    const vendorClients = laclaeCache[trimmedCode];
-
-    if (!vendorClients) {
-        logger.warn(`Vendor ${trimmedCode} not in LACLAE cache. Available: ${Object.keys(laclaeCache).slice(0, 10).join(', ')}...`);
-        return [];
-    }
-
+    // P7: Split comma-separated codes and process each
+    const codes = String(vendedorCode).split(',').map(c => c.trim()).filter(Boolean);
     const daysSet = new Set();
-    Object.values(vendorClients).forEach(clientData => {
-        if (clientData.visitDays) {
-            clientData.visitDays.forEach(d => daysSet.add(d));
+    let totalClients = 0;
+
+    codes.forEach(code => {
+        const vendorClients = laclaeCache[code];
+        if (vendorClients) {
+            totalClients += Object.keys(vendorClients).length;
+            Object.values(vendorClients).forEach(clientData => {
+                toDayArray(clientData.visitDays).forEach(d => daysSet.add(d));
+            });
         }
     });
 
+    if (daysSet.size === 0 && codes.length > 0) {
+        logger.warn(`Vendors [${codes.join(',')}] not in LACLAE cache. Available: ${Object.keys(laclaeCache).slice(0, 10).join(', ')}...`);
+        return [];
+    }
+
     const result = Array.from(daysSet);
-    logger.info(`📅 Vendor ${trimmedCode} visit days: ${result.join(', ')} (${Object.keys(vendorClients).length} clients)`);
+    logger.info(`📅 Vendors [${codes.join(',')}] visit days: ${result.join(', ')} (${totalClients} clients)`);
     return result; // Returns ['lunes', 'martes'...]
 }
 
 // Get aggregated active DELIVERY days for a vendor (for repartidores in rutero)
+// P7: Get delivery days for vendor(s) - handles single or comma-separated
 function getVendorDeliveryDaysFromCache(vendedorCode) {
     if (!laclaeCacheReady || !vendedorCode) return [];
 
-    const trimmedCode = vendedorCode.trim();
-    const vendorClients = laclaeCache[trimmedCode] || {};
-
+    // P7: Split comma-separated codes and process each
+    const codes = String(vendedorCode).split(',').map(c => c.trim()).filter(Boolean);
     const daysSet = new Set();
-    Object.values(vendorClients).forEach(clientData => {
-        if (clientData.deliveryDays) {
-            clientData.deliveryDays.forEach(d => daysSet.add(d));
-        }
+
+    codes.forEach(code => {
+        const vendorClients = laclaeCache[code] || {};
+        Object.values(vendorClients).forEach(clientData => {
+            toDayArray(clientData.deliveryDays).forEach(d => daysSet.add(d));
+        });
     });
 
     return Array.from(daysSet);
@@ -458,19 +589,20 @@ function getClientCurrentDay(vendedor, clientCode) {
     const clientOverrides = configClients[clientStr];
 
     if (clientOverrides) {
-        // Return the first override day found (not perfect but acceptable for simple current-day logic)
-        // Or if today matches execution day?
-        // This function is ambiguous in multi-day. Let's return the first key.
-        const days = Object.keys(clientOverrides);
-        if (days.length > 0) return days[0];
+        // Return the first POSITIVE override day (skip blocking entries with order < 0)
+        const positiveDays = Object.entries(clientOverrides)
+            .filter(([, cfg]) => cfg.order >= 0)
+            .map(([day]) => day);
+        if (positiveDays.length > 0) return positiveDays[0];
     }
 
     // 2. Buscar días naturales en LACLAE
     const vendorClients = laclaeCache[vendedorStr] || {};
     const clientData = vendorClients[clientStr];
-    if (clientData && clientData.visitDays && clientData.visitDays.length > 0) {
+    const visitDays = clientData ? toDayArray(clientData.visitDays) : [];
+    if (visitDays.length > 0) {
         // Devolver el primer día de visita natural
-        return clientData.visitDays[0];
+        return visitDays[0];
     }
 
     return null;
@@ -497,28 +629,40 @@ function getClientDays(vendorCode, clientCode) {
         const vendorData = laclaeCache[vendorCode.trim()];
         if (vendorData && vendorData[trimmedClient]) {
             const data = vendorData[trimmedClient];
+            const visitDays = toDayArray(data.visitDays);
+            const deliveryDays = toDayArray(data.deliveryDays);
             return {
-                visitDays: data.visitDays || [],
-                deliveryDays: data.deliveryDays || [],
-                visitDaysShort: (data.visitDays || []).map(d => dayLabels[d] || d).join(''),
-                deliveryDaysShort: (data.deliveryDays || []).map(d => dayLabels[d] || d).join('')
+                visitDays,
+                deliveryDays,
+                visitDaysShort: visitDays.map(d => dayLabels[d] || d).join(''),
+                deliveryDaysShort: deliveryDays.map(d => dayLabels[d] || d).join('')
             };
         }
     }
 
-    // Search all vendors
+    // Search all vendors — prefer entries with actual visit days over empty ones
+    let fallbackResult = null;
     for (const [vCode, vendorData] of Object.entries(laclaeCache)) {
         if (vendorData[trimmedClient]) {
             const data = vendorData[trimmedClient];
-            return {
-                visitDays: data.visitDays || [],
-                deliveryDays: data.deliveryDays || [],
-                visitDaysShort: (data.visitDays || []).map(d => dayLabels[d] || d).join(''),
-                deliveryDaysShort: (data.deliveryDays || []).map(d => dayLabels[d] || d).join(''),
+            const visitDays = toDayArray(data.visitDays);
+            const deliveryDays = toDayArray(data.deliveryDays);
+            const result = {
+                visitDays,
+                deliveryDays,
+                visitDaysShort: visitDays.map(d => dayLabels[d] || d).join(''),
+                deliveryDaysShort: deliveryDays.map(d => dayLabels[d] || d).join(''),
                 foundVendor: vCode
             };
+            // Return immediately if this vendor has actual visit days
+            if (visitDays.length > 0) {
+                return result;
+            }
+            // Otherwise keep as fallback (e.g. delivery-only entries from LACLAE)
+            if (!fallbackResult) fallbackResult = result;
         }
     }
+    if (fallbackResult) return fallbackResult;
 
     return null;
 }
@@ -541,8 +685,22 @@ function getNaturalOrder(vendorCode, clientCode, day) {
     return order || 0;
 }
 
+// Clear all caches (for graceful shutdown)
+function clearLaclaeCache() {
+    laclaeCache = {};
+    laclaeCacheReady = false;
+    laclaeCacheLoadAttempted = false;
+    laclaeCacheLastLoadTime = null;
+    laclaeCacheAccessOrder = [];
+    ruteroConfigCache = {};
+    ruteroConfigAccessOrder = [];
+    logger.info('📴 LACLAE cache fully cleared');
+}
+
 module.exports = {
     loadLaclaeCache,
+    isCacheReady,
+    isCacheLoadAttempted: () => laclaeCacheLoadAttempted,
     getClientsForDay,
     getWeekCountsFromCache,
     getTotalClientsFromCache,
@@ -553,8 +711,9 @@ module.exports = {
     getCachedVendorCodes,
     reloadRuteroConfig,
     getClientCurrentDay,
-    reloadRuteroConfig,
-    getClientCurrentDay,
     getClientDays,
-    getNaturalOrder
+    getNaturalOrder,
+    ruteroConfigCache,
+    laclaeCacheLastLoadTime: () => laclaeCacheLastLoadTime,
+    clearLaclaeCache
 };

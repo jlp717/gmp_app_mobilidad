@@ -11,6 +11,14 @@ const PDFDocument = require('pdfkit');
 const logger = require('../middleware/logger');
 const path = require('path');
 const fs = require('fs');
+const { CircuitBreaker } = require('./circuit-breaker');
+
+const pdfBreaker = new CircuitBreaker({
+    name: 'pdf-generation',
+    failureThreshold: 5,
+    successThreshold: 2,
+    timeout: 30000
+});
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // CONFIGURACIÓN Y CONSTANTES
@@ -170,6 +178,16 @@ async function generateInvoicePDF(facturaData) {
         const header = facturaData.header || {};
         const lines = facturaData.lines || [];
 
+        // AUDIT FIX: Guard against corrupted/sentinel data
+        const totalCheck = parseFloat(header.total) || 0;
+        if (Math.abs(totalCheck) >= 900000) {
+            logger.warn(`⚠️ PDF blocked: sentinel total ${totalCheck} for ${header.serie}-${header.numero}`);
+            throw new Error('Factura con datos anómalos — importe no válido');
+        }
+        if (!header.numero || !header.serie) {
+            throw new Error('Factura sin número o serie — datos incompletos');
+        }
+
         logger.info(`📄 Generando PDF factura - Diseño Profesional v2.0 para ${header.serie}-${header.numero}`);
 
         return new Promise((resolve, reject) => {
@@ -233,8 +251,13 @@ async function generateInvoicePDF(facturaData) {
             y += 26;
 
             // INFORMACIÓN DEL CLIENTE
+            const comercialName = header.nombreComercial || header.clienteNombre || '';
+            const fiscalName = header.nombreFiscal || '';
+
             const clienteBoxStartY = y;
-            doc.rect(40, y, 515, 85)
+            const needsTwoLines = fiscalName && fiscalName.toUpperCase() !== comercialName.toUpperCase();
+            const boxHeight = needsTwoLines ? 105 : 85;
+            doc.rect(40, y, 515, boxHeight)
                 .fillAndStroke(COLORS.ultraLight, COLORS.lightGray)
                 .lineWidth(1);
 
@@ -242,9 +265,19 @@ async function generateInvoicePDF(facturaData) {
             doc.fontSize(8).font('Helvetica-Bold').fillColor(COLORS.secondary).text('FACTURAR A', 45, y);
             y += 15;
 
-            doc.fontSize(12).font('Helvetica-Bold').fillColor(COLORS.darkGray)
-                .text((header.clienteNombre || '').toUpperCase(), 45, y, { width: 500 });
-            y += 18;
+            // Commercial name — prominent, large
+            doc.fontSize(11).font('Helvetica-Bold').fillColor(COLORS.darkGray)
+                .text(comercialName.toUpperCase(), 45, y, { width: 500 });
+            y += 15;
+
+            // Fiscal name — secondary, smaller (only if different from commercial)
+            if (needsTwoLines) {
+                doc.fontSize(8).font('Helvetica').fillColor(COLORS.mediumGray)
+                    .text(`Nombre fiscal: ${fiscalName.toUpperCase()}`, 45, y, { width: 500 });
+                y += 16;
+            } else {
+                y += 3;
+            }
 
             doc.fontSize(9).font('Helvetica').fillColor(COLORS.darkGray);
             if (header.clienteDireccion) {
@@ -261,7 +294,7 @@ async function generateInvoicePDF(facturaData) {
                 doc.fontSize(9).font('Helvetica-Bold').text(`NIF/CIF: ${header.clienteNif}`, 45, y);
             }
 
-            y = clienteBoxStartY + 93;
+            y = clienteBoxStartY + boxHeight + 8;
 
             // TABLA DE PRODUCTOS
             doc.rect(40, y, 515, 16).fillAndStroke(COLORS.secondary, COLORS.secondary);
@@ -280,7 +313,31 @@ async function generateInvoicePDF(facturaData) {
             doc.fontSize(7).font('Helvetica').fillColor(COLORS.darkGray);
             let alternateRow = true;
 
-            lines.forEach((line) => {
+            // Group lines by albaran if albaran data is available
+            let albaranGroups = null;
+            if (lines.length > 0 && lines[0].albaranNum) {
+                const groups = {};
+                lines.forEach(line => {
+                    const key = `${line.albaranSerie || ''}-${line.albaranTerminal || ''}-${line.albaranNum}-${line.albaranEjercicio || ''}`;
+                    if (!groups[key]) {
+                        groups[key] = {
+                            albaranNum: line.albaranNum,
+                            albaranSerie: line.albaranSerie,
+                            albaranTerminal: line.albaranTerminal,
+                            albaranEjercicio: line.albaranEjercicio,
+                            albaranFecha: line.albaranFecha || '',
+                            lines: [],
+                            subtotal: 0
+                        };
+                    }
+                    groups[key].lines.push(line);
+                    groups[key].subtotal += parseFloat(line.importeNeto || line.importe || 0);
+                });
+                albaranGroups = Object.values(groups);
+                logger.info(`[PDF] Factura grouped into ${albaranGroups.length} albaranes`);
+            }
+
+            const renderLine = (line) => {
                 const descripcion = (line.descripcion || '').substring(0, 50);
                 const descHeight = doc.heightOfString(descripcion, { width: 170 });
                 const rowHeight = Math.max(20, descHeight + 12);
@@ -328,7 +385,47 @@ async function generateInvoicePDF(facturaData) {
 
                 y += rowHeight;
                 alternateRow = !alternateRow;
-            });
+            };
+
+            // Render lines - either grouped by albaran or flat
+            if (albaranGroups && albaranGroups.length > 0) {
+                albaranGroups.forEach((group) => {
+                    // Draw albaran header with subtotal
+                    if (y + 25 > 700) {
+                        doc.addPage();
+                        y = drawHeader(doc, 10) + 10;
+                    }
+
+                    doc.rect(40, y, 515, 20)
+                        .fillAndStroke('#E3F2FD', '#1a5490');
+
+                    doc.fontSize(8)
+                        .font('Helvetica-Bold')
+                        .fillColor('#003d7a');
+
+                    const albaranLabel = `Albarán: ${group.albaranSerie || ''}-${group.albaranTerminal || ''}-${group.albaranNum}`;
+                    const fechaLabel = group.albaranFecha ? `Fecha: ${group.albaranFecha}` : '';
+                    doc.text(albaranLabel, 45, y + 5, { width: 250 });
+
+                    if (fechaLabel) {
+                        doc.text(fechaLabel, 250, y + 5, { width: 150 });
+                    }
+
+                    const subtotalLabel = `SUBTOTAL ALBARÁN ${formatNumber(group.subtotal, 2)} €`;
+                    doc.text(subtotalLabel, 400, y + 5, { width: 150, align: 'right' });
+
+                    y += 24;
+                    alternateRow = true;
+
+                    group.lines.forEach((line) => {
+                        renderLine(line);
+                    });
+                });
+            } else {
+                lines.forEach((line) => {
+                    renderLine(line);
+                });
+            }
 
             doc.moveTo(40, y).lineTo(555, y).strokeColor(COLORS.lightGray).lineWidth(1).stroke();
             y += 12;

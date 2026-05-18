@@ -1,145 +1,174 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:provider/provider.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/models/user_model.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/services/navigation_config_service.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/coming_soon_placeholder.dart';
+import 'package:gmp_app_mobilidad/core/widgets/lazy_indexed_stack.dart';
+import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
+import 'package:gmp_app_mobilidad/features/clients/presentation/pages/simple_client_list_page.dart';
+import 'package:gmp_app_mobilidad/features/cobros/presentation/pages/cobros_page.dart';
+import 'package:gmp_app_mobilidad/features/commissions/presentation/pages/commissions_page.dart';
+import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/dashboard_content.dart';
+import 'package:gmp_app_mobilidad/features/facturas/presentation/pages/facturas_page.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/pages/kpi_dashboard_page.dart';
+import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/objectives_page.dart';
+import 'package:gmp_app_mobilidad/features/bolsa/presentation/pages/bolsa_page.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/pedidos_page.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_clientes_page.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_historico_page.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_panel_page.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_rutero_page.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/comisiones_page.dart'
+    as repartidor_finanzas;
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/liquidacion_diaria_page.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/repartidor_evolution_page.dart';
+import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/pages/vencimientos_page.dart';
+import 'package:gmp_app_mobilidad/features/rutero/presentation/pages/rutero_page.dart';
+import 'package:gmp_app_mobilidad/features/settings/presentation/pages/network_settings_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/articles_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/load_history_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/personnel_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/vehicles_page.dart';
+import 'package:gmp_app_mobilidad/features/warehouse/presentation/pages/warehouse_dashboard_page.dart';
 import 'package:url_launcher/url_launcher.dart';
-
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/providers/auth_provider.dart';
-import '../../../../core/providers/filter_provider.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/providers/dashboard_provider.dart';
-import '../../../../core/widgets/coming_soon_placeholder.dart';
-import '../../../clients/presentation/pages/simple_client_list_page.dart';
-import '../../../rutero/presentation/pages/rutero_page.dart';
-import '../../../objectives/presentation/pages/objectives_page.dart';
-import '../../../chatbot/presentation/pages/chatbot_page.dart';
-import '../../../commissions/presentation/pages/commissions_page.dart';
-import '../../../cobros/presentation/pages/cobros_page.dart';
-import '../../../settings/presentation/pages/network_settings_page.dart';
-import '../../../entregas/presentation/pages/entregas_page.dart';
-import '../../../entregas/providers/entregas_provider.dart';
-import '../../../repartidor/presentation/pages/repartidor_rutero_page.dart';
-import '../../../repartidor/presentation/pages/repartidor_comisiones_page.dart';
-import '../../../repartidor/presentation/pages/repartidor_historico_page.dart';
-import '../../../repartidor/presentation/pages/repartidor_panel_page.dart';
-import '../../../repartidor/presentation/pages/repartidor_clientes_page.dart';
-import '../../../facturas/presentation/pages/facturas_page.dart';
-import '../../../warehouse/presentation/pages/warehouse_dashboard_page.dart';
-import '../../../warehouse/presentation/pages/personnel_page.dart';
-import '../../../../core/models/user_model.dart';
-import 'dashboard_content.dart';
 
 /// Main app shell with navigation rail for tablet mode
 /// Panel de Control (Dashboard) is only visible for Jefe de Ventas
-class MainShell extends StatefulWidget {
+class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key});
 
   @override
-  State<MainShell> createState() => _MainShellState();
+  ConsumerState<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends ConsumerState<MainShell> {
   int _currentIndex = 0;
-  DashboardProvider? _dashboardProvider;
-  bool _isNavExpanded = true; 
-  
-  // State for Jefe Repartidor View
+  bool _isNavExpanded = true;
+
   String? _selectedRepartidor = 'ALL';
   List<Map<String, dynamic>> _repartidoresOptions = [];
   bool _isLoadingRepartidores = false;
-  
-  // Toggle state
+
   bool _forceRepartidorMode = false;
   bool _forceAlmacenMode = false;
 
-  // Navigate from Clientes → Histórico with preselected client
   String? _pendingClientId;
   String? _pendingClientName;
 
   @override
   void initState() {
     super.initState();
-    // Verify connection on startup
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _checkConnection();
       _checkForUpdates();
 
-      // Init mode based on real user role
-      final auth = context.read<AuthProvider>();
-      if (auth.currentUser?.isRepartidor == true) {
-         _forceRepartidorMode = true;
+      final authState = ref.read(authProvider).value;
+      final role = authState?.user?.role ?? '';
+      if (role == 'REPARTIDOR') {
+        _forceRepartidorMode = true;
       }
-
-      // Listen to FilterProvider changes to refresh DashboardProvider
-      final filterProvider = context.read<FilterProvider>();
-      filterProvider.addListener(_onFilterChanged);
     });
   }
 
-  void _onFilterChanged() {
-    if (_dashboardProvider == null) return;
-    final filterProvider = context.read<FilterProvider>();
-    final authProvider = context.read<AuthProvider>();
-    final selectedVendor = filterProvider.selectedVendor;
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Auth redirect is handled by GoRouter in main.dart – no manual navigation needed here.
+  }
 
-    if (selectedVendor != null && selectedVendor.isNotEmpty) {
-      _dashboardProvider!.updateVendedorCodes(selectedVendor.split(','));
-    } else {
-      // No filter = show all vendor codes
-      _dashboardProvider!.updateVendedorCodes(authProvider.vendedorCodes);
-    }
+  bool get _isRepartidorEffective {
+    final authState = ref.read(authProvider).value;
+    if (_forceRepartidorMode) return true;
+    if (_forceAlmacenMode) return false;
+    return authState?.user?.isRepartidor ?? false;
+  }
+
+  bool get _isAlmacenEffective {
+    if (_forceAlmacenMode) return true;
+    return false;
+  }
+
+  bool _hasScopedVendorAccess(UserModel user, List<String> vendorCodes) {
+    // Commercial 80 (Almeria lead) gets team view access
+    final normalizedCode = (user?.code ?? '').replaceFirst(RegExp(r'^0+'), '');
+    if (normalizedCode == '80' && vendorCodes.length > 1) return true;
+    return !user.isJefeVentas && vendorCodes.length > 1;
+  }
+
+  String _defaultScopedVendor(UserModel user, List<String> vendorCodes) {
+    // Commercial 80 (Almeria lead) defaults to ALL team members
+    final normalizedCode = (user.code ?? '').replaceFirst(RegExp(r'^0+'), '');
+    if (normalizedCode == '80') return 'ALL';
+    final ownCode = user.vendedorCode ?? user.code ?? '';
+    if (vendorCodes.contains(ownCode)) return ownCode;
+    return vendorCodes.isNotEmpty ? vendorCodes.first : ownCode;
+  }
+
+  void _ensureScopedVendorSelection(UserModel user, List<String> vendorCodes) {
+    if (!_hasScopedVendorAccess(user, vendorCodes)) return;
+    final selected = ref.read(selectedVendorProvider);
+    if (selected != null && vendorCodes.contains(selected)) return;
+
+    final defaultCode = _defaultScopedVendor(user, vendorCodes);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(filterProvider.notifier).setVendor(defaultCode);
+    });
   }
 
   @override
   void dispose() {
-    // Remove FilterProvider listener to avoid leaks
-    if (mounted) {
-      try {
-        context.read<FilterProvider>().removeListener(_onFilterChanged);
-      } catch (_) {}
-    }
     super.dispose();
   }
 
-  // Helper to determine effective mode
-  bool get _isRepartidorEffective {
-     final authProvider = Provider.of<AuthProvider>(context, listen: false);
-     final user = authProvider.currentUser;
-     if (user?.isRepartidor == true) return true; // Always true for real drivers
-     return _forceRepartidorMode; // Toggleable for Jefe
-  }
-
-  bool get _isAlmacenEffective => _forceAlmacenMode;
-
   void _checkForUpdates() {
-    final auth = context.read<AuthProvider>();
-    if (!auth.updateAvailable) return;
+    final authState = ref.read(authProvider).value;
+    if (!(authState?.updateAvailable ?? false)) return;
 
-    final bool isMandatory = auth.isMandatoryUpdate;
+    final isMandatory = authState?.isMandatoryUpdate ?? false;
 
     showDialog(
       context: context,
       barrierDismissible: !isMandatory,
-      builder: (context) => WillPopScope(
-        onWillPop: () async => !isMandatory,
+      builder: (context) => PopScope(
+        canPop: !isMandatory,
         child: AlertDialog(
           title: Text(
-            isMandatory ? 'Actualización Obligatoria' : 'Actualización Disponible',
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20),
+            isMandatory
+                ? 'Actualización Obligatoria'
+                : 'Actualización Disponible',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+            ),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                auth.updateMessage.isNotEmpty ? auth.updateMessage : 'Hay una nueva versión de la app con mejoras críticas.',
+                (authState?.updateMessage.isNotEmpty ?? false)
+                    ? authState!.updateMessage
+                    : 'Hay una nueva versión de la app con mejoras críticas.',
                 style: const TextStyle(color: Colors.white70),
               ),
               if (isMandatory) ...[
                 const SizedBox(height: 16),
                 const Text(
                   'Esta actualización es necesaria para garantizar la integridad de los datos y el correcto funcionamiento.',
-                  style: TextStyle(color: Colors.orange, fontSize: 12, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Colors.orange,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ],
@@ -149,27 +178,39 @@ class _MainShellState extends State<MainShell> {
             if (!isMandatory)
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('MÁS TARDE', style: TextStyle(color: Colors.white54)),
+                child: const Text(
+                  'MÁS TARDE',
+                  style: TextStyle(color: Colors.white54),
+                ),
               )
             else
-              TextButton(
-                onPressed: () => SystemNavigator.pop(),
-                child: const Text('CERRAR APP', style: TextStyle(color: AppTheme.error)),
+              const TextButton(
+                onPressed: SystemNavigator.pop,
+                child: Text(
+                  'CERRAR APP',
+                  style: TextStyle(color: AppTheme.error),
+                ),
               ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.neonBlue,
                 foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               onPressed: () {
                 launchUrl(
-                  Uri.parse(auth.playStoreUrl),
+                  Uri.parse(authState?.playStoreUrl ?? ''),
                   mode: LaunchMode.externalApplication,
                 );
               },
-              child: const Text('ACTUALIZAR AHORA', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text(
+                'ACTUALIZAR AHORA',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         ),
@@ -178,421 +219,488 @@ class _MainShellState extends State<MainShell> {
   }
 
   Future<void> _checkConnection() async {
-    final authProvider = context.read<AuthProvider>();
-      if (authProvider.currentUser != null) {
-        final now = DateTime.now();
-        
-        // Only create dashboard provider for Jefe de Ventas
-        if (authProvider.currentUser!.isJefeVentas) {
-          setState(() {
-            _dashboardProvider = DashboardProvider(
-              authProvider.vendedorCodes,
-              isJefeVentas: true,
-              year: now.year,
-              month: now.month,
-            );
-            _dashboardProvider!.fetchDashboardData();
-          });
-          // Fetch repartidores
-          _fetchRepartidores();
-        } else {
-          // Non-Jefe starts at first available section (Clientes)
-          setState(() {
-            _currentIndex = 0; // Will map to Clientes for non-Jefe
-          });
-        }
+    final authState = ref.read(authProvider).value;
+    final user = authState?.user;
+    if (user != null) {
+      if (user.isJefeVentas) {
+        // Fetch repartidores
+        _fetchRepartidores();
+      } else {
+        // Non-Jefe starts at first available section (Clientes)
+        setState(() {
+          _currentIndex = 0; // Will map to Clientes for non-Jefe
+        });
       }
+    }
   }
 
   // Show futuristic logout confirmation modal
-  Future<void> _showLogoutConfirmation(AuthProvider authProvider) async {
+  Future<void> _showLogoutConfirmation(AuthState authState) async {
     final shouldLogout = await showDialog<bool>(
       context: context,
       barrierColor: Colors.black54,
       builder: (context) => _LogoutConfirmationDialog(
-        userName: authProvider.currentUser?.name ?? 'Usuario',
+        userName: authState.user?.name ?? 'Usuario',
       ),
     );
-    
-    if (shouldLogout == true) {
-      authProvider.logout();
+
+    if (shouldLogout ?? false) {
+      ProviderScope.containerOf(context).read(authProvider.notifier).logout();
     }
   }
 
   Future<void> _fetchRepartidores() async {
-      setState(() => _isLoadingRepartidores = true);
-      try {
-        debugPrint('[MainShell] _fetchRepartidores: calling API...');
-        final res = await ApiClient.getList('/auth/repartidores');
-        debugPrint('[MainShell] _fetchRepartidores: got ${res.length} items, type=${res.runtimeType}');
-        if (res.isNotEmpty) {
-          debugPrint('[MainShell] First item: ${res.first} (type=${res.first.runtimeType})');
+    setState(() => _isLoadingRepartidores = true);
+    try {
+      debugPrint('[MainShell] _fetchRepartidores: calling API...');
+      final res = await ApiClient.getList('/auth/repartidores');
+      debugPrint(
+        '[MainShell] _fetchRepartidores: got ${res.length} items, type=${res.runtimeType}',
+      );
+      if (res.isNotEmpty) {
+        debugPrint(
+          '[MainShell] First item: ${res.first} (type=${res.first.runtimeType})',
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        // Helper to safely get value regardless of case
+        String? getValue(Map m, String key) {
+          if (m.containsKey(key)) return m[key]?.toString();
+          if (m.containsKey(key.toUpperCase())) {
+            return m[key.toUpperCase()]?.toString();
+          }
+          if (m.containsKey(key.toLowerCase())) {
+            return m[key.toLowerCase()]?.toString();
+          }
+          return null;
         }
-        if (!mounted) return;
-        setState(() {
-           // Helper to safely get value regardless of case
-           String? getValue(Map m, String key) {
-             if (m.containsKey(key)) return m[key]?.toString();
-             if (m.containsKey(key.toUpperCase())) return m[key.toUpperCase()]?.toString();
-             if (m.containsKey(key.toLowerCase())) return m[key.toLowerCase()]?.toString();
-             return null;
-           }
 
-           _repartidoresOptions = res.map((item) {
+        _repartidoresOptions = res
+            .map((item) {
               final m = Map<String, dynamic>.from(item as Map);
               return {
-                 'code': getValue(m, 'code') ?? getValue(m, 'CODIGOVENDEDOR') ?? '',
-                 'name': getValue(m, 'name') ?? getValue(m, 'NOMBREVENDEDOR') ?? 'Desconocido',
+                'code':
+                    getValue(m, 'code') ?? getValue(m, 'CODIGOVENDEDOR') ?? '',
+                'name': getValue(m, 'name') ??
+                    getValue(m, 'NOMBREVENDEDOR') ??
+                    'Desconocido',
               };
-           }).where((item) => item['code'] != null && item['code'].toString().isNotEmpty).toList();
-           
-           // Sort by code ascending
-           _repartidoresOptions.sort((a, b) => 
-             (a['code']?.toString() ?? '').compareTo(b['code']?.toString() ?? ''));
-           
-           debugPrint('[MainShell] _fetchRepartidores: mapped ${_repartidoresOptions.length} options');
-           _isLoadingRepartidores = false;
-        });
-      } catch (e, stack) {
-        debugPrint('[MainShell] ERROR fetching repartidores: $e');
-        debugPrint('[MainShell] Stack: $stack');
-        if (mounted) setState(() => _isLoadingRepartidores = false);
-      }
+            })
+            .where(
+              (item) =>
+                  item['code'] != null && item['code'].toString().isNotEmpty,
+            )
+            .toList();
+
+        // Sort by code ascending
+        _repartidoresOptions.sort(
+          (a, b) => (a['code']?.toString() ?? '')
+              .compareTo(b['code']?.toString() ?? ''),
+        );
+
+        debugPrint(
+          '[MainShell] _fetchRepartidores: mapped ${_repartidoresOptions.length} options',
+        );
+        _isLoadingRepartidores = false;
+      });
+    } catch (e, stack) {
+      debugPrint('[MainShell] ERROR fetching repartidores: $e');
+      debugPrint('[MainShell] Stack: $stack');
+      if (mounted) setState(() => _isLoadingRepartidores = false);
+    }
   }
 
-  // Get navigation destinations based on user role
   List<_NavItem> _getNavItems(bool isJefeVentas, List<String> vendorCodes) {
-    final items = <_NavItem>[];
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final user = authProvider.currentUser;
+    final authState = ref.read(authProvider).value;
+    final showCommissions = authState?.user?.showCommissions ?? false;
 
-    // ===============================================
-    // ALMACÉN MODE
-    // ===============================================
-    if (_isAlmacenEffective) {
-      items.add(_NavItem(
-        icon: Icons.warehouse_outlined,
-        selectedIcon: Icons.warehouse_rounded,
-        label: 'Expediciones',
-        color: AppTheme.neonBlue,
-      ));
-      items.add(_NavItem(
-        icon: Icons.groups_outlined,
-        selectedIcon: Icons.groups_rounded,
-        label: 'Personal',
-        color: AppTheme.neonPurple,
-      ));
-      items.add(_NavItem(
-        icon: Icons.smart_toy_outlined,
-        selectedIcon: Icons.smart_toy,
-        label: 'Chat IA',
-        color: AppTheme.neonPink,
-      ));
-      return items;
-    }
-    
-    // Check EFFECTIVE role
-    final isRepartidor = _isRepartidorEffective;
-    
-    // ===============================================
-    // REPARTIDOR MODE
-    // ===============================================
-    if (isRepartidor) {
-      final isJefe = user?.isJefeVentas == true;
-      // Panel only for Jefe in repartidor mode, NOT for real repartidores
-      if (isJefe) {
-        items.add(_NavItem(
-          icon: Icons.dashboard_outlined,
-          selectedIcon: Icons.dashboard,
-          label: 'Panel',
-          color: Colors.orange,
-        ));
-      }
-      items.add(_NavItem(
-        icon: Icons.people_outline,
-        selectedIcon: Icons.people,
-        label: 'Clientes',
-        color: AppTheme.neonGreen,
-      ));
-      items.add(_NavItem(
-        icon: Icons.route_outlined,
-        selectedIcon: Icons.route,
-        label: 'Rutero',
-        color: AppTheme.neonBlue,
-      ));
-      // Comisiones only for real repartidores, not Jefe in repartidor mode
-      if (!isJefe) {
-        items.add(_NavItem(
-          icon: Icons.euro_outlined,
-          selectedIcon: Icons.euro,
-          label: 'Comisiones',
-          color: AppTheme.neonGreen,
-        ));
-      }
-      items.add(_NavItem(
-        icon: Icons.history_outlined,
-        selectedIcon: Icons.history,
-        label: 'Histórico',
-        color: AppTheme.neonPurple,
-      ));
-      items.add(_NavItem(
-        icon: Icons.smart_toy_outlined,
-        selectedIcon: Icons.smart_toy,
-        label: 'Chat IA',
-        color: AppTheme.neonPink,
-      ));
-      return items;
-    }
-    
-    // ===============================================
-    // SALES MODE (Jefe / Comercial)
-    // ===============================================
-    if (isJefeVentas) {
-      items.add(_NavItem(
-        icon: Icons.dashboard_outlined,
-        selectedIcon: Icons.dashboard,
-        label: 'Panel',
-        color: AppTheme.neonBlue,
-      ));
-    }
-    items.add(_NavItem(
-      icon: Icons.people_outline,
-      selectedIcon: Icons.people,
-      label: 'Clientes',
-      color: AppTheme.neonGreen,
-    ));
-    items.add(_NavItem(
-      icon: Icons.route_outlined,
-      selectedIcon: Icons.route,
-      label: 'Ruta',
-      color: AppTheme.neonPurple,
-    ));
-    items.add(_NavItem(
-      icon: Icons.track_changes_outlined,
-      selectedIcon: Icons.track_changes,
-      label: 'Objetivos',
-      color: Colors.orange,
-    ));
-    
-    // Comisiones tab always visible for all sales roles (Jefe + Comercial)
-    items.add(_NavItem(
-      icon: Icons.euro_outlined,
-      selectedIcon: Icons.euro,
-      label: 'Comisiones',
-      color: AppTheme.neonGreen,
-    ));
-    
-    items.add(_NavItem(
-      icon: Icons.receipt_long_outlined,
-      selectedIcon: Icons.receipt_long,
-      label: 'Facturas',
-      color: Colors.teal,
-    ));
-    
-    items.add(_NavItem(
-      icon: Icons.smart_toy_outlined,
-      selectedIcon: Icons.smart_toy,
-      label: 'Chat IA',
-      color: AppTheme.neonPink,
-    ));
-    
-    return items;
+    final navItems = NavigationConfigService.getNavItems(
+      isAlmacen: _isAlmacenEffective,
+      isRepartidor: _isRepartidorEffective,
+      isJefeVentas: isJefeVentas,
+      showCommissions: showCommissions,
+    );
+
+    return navItems
+        .map(
+          (item) => _NavItem(
+            icon: item.icon,
+            selectedIcon: item.selectedIcon,
+            label: item.label,
+            color: item.color,
+          ),
+        )
+        .toList();
   }
 
   List<Map<String, String>> _getRepartidores(List<String> codes) {
-     return [
-       {'code': 'ALL', 'name': 'Todos los Repartidores'},
-       ...codes.map((c) => {'code': c, 'name': 'Repartidor $c'}),
-     ];
+    return [
+      {'code': 'ALL', 'name': 'Todos los Repartidores'},
+      ...codes.map((c) => {'code': c, 'name': 'Repartidor $c'}),
+    ];
   }
-
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
-    final user = authProvider.currentUser;
+    // PERFORMANCE: Use select() to only rebuild when user changes
+    final user = ref.watch(authProvider.select((state) => state.value?.user));
 
     if (user == null) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(child: ModernLoading(message: 'Cargando...')),
       );
     }
 
-    final isJefeVentas = user.isJefeVentas; 
-    // Init default selection for Jefe in Repartidor Mode
+    final isJefeVentas = user.isJefeVentas;
     if (_forceRepartidorMode && isJefeVentas && _selectedRepartidor == null) {
-       _selectedRepartidor = 'ALL';
+      _selectedRepartidor = 'ALL';
     }
 
-    final navItems = _getNavItems(isJefeVentas, authProvider.vendedorCodes);
+    // Req #2: Sincroniza rol del usuario en pedidosProvider para que la UI
+    // muestre/oculte márgenes según corresponda. Se hace de forma defensiva
+    // post-frame para no notificar listeners durante el build.
+    final currentRole = user.role;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(pedidosProvider).setUserRole(currentRole);
+    });
+
+    // PERFORMANCE: Use select() to only rebuild when vendedorCodes changes
+    final vendedorCodes = ref.watch(
+      authProvider.select((state) => state.value?.vendedorCodes ?? []),
+    );
+    _ensureScopedVendorSelection(user, vendedorCodes);
+    final navItems = _getNavItems(isJefeVentas, vendedorCodes);
     final safeIndex = _currentIndex.clamp(0, navItems.length - 1);
+    final useBottomNav = Responsive.useBottomNav(context);
+
+    if (useBottomNav) {
+      return _buildPhoneLayout(navItems, safeIndex, user, isJefeVentas);
+    }
+    return _buildTabletLayout(navItems, safeIndex, user, isJefeVentas);
+  }
+
+  // ---------------------------------------------------------------------------
+  // PHONE LAYOUT: Bottom navigation + drawer for avatar/settings
+  // ---------------------------------------------------------------------------
+  Widget _buildPhoneLayout(
+    List<_NavItem> navItems,
+    int safeIndex,
+    UserModel user,
+    bool isJefeVentas,
+  ) {
+    const maxBottomItems = 5;
+    final hasOverflow = navItems.length > maxBottomItems;
+    final bottomItems =
+        hasOverflow ? navItems.sublist(0, maxBottomItems - 1) : navItems;
+
+    return Scaffold(
+      backgroundColor: Colors.transparent,
+      drawer: _buildPhoneDrawer(user, isJefeVentas),
+      body: SafeArea(
+        child: _buildCurrentPage(isJefeVentas),
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceColor,
+          border:
+              Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+        ),
+        child: SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                // Hamburger/avatar button to open drawer
+                _buildBottomNavDrawerButton(user),
+                // Nav items
+                ...bottomItems.asMap().entries.map((entry) {
+                  final idx = entry.key;
+                  return Expanded(
+                    child: _buildBottomNavItem(
+                      item: entry.value,
+                      isSelected: safeIndex == idx,
+                      onTap: () => setState(() => _currentIndex = idx),
+                    ),
+                  );
+                }),
+                // "More" overflow button
+                if (hasOverflow)
+                  Expanded(
+                    child: _buildBottomNavItem(
+                      item: _NavItem(
+                        icon: Icons.more_horiz,
+                        selectedIcon: Icons.more_horiz,
+                        label: 'Más',
+                        color: AppTheme.textSecondary,
+                      ),
+                      isSelected: safeIndex >= maxBottomItems - 1,
+                      onTap: () =>
+                          _showOverflowMenu(navItems, maxBottomItems - 1),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Bottom nav item for phone layout
+  Widget _buildBottomNavItem({
+    required _NavItem item,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedScale(
+              scale: isSelected ? 1.15 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              child: Icon(
+                isSelected ? item.selectedIcon : item.icon,
+                color: isSelected ? item.color : AppTheme.textSecondary,
+                size: 22,
+              ),
+            ),
+            const SizedBox(height: 2),
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 200),
+              style: TextStyle(
+                fontSize: 9,
+                color: isSelected ? item.color : AppTheme.textSecondary,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+              ),
+              child: Text(
+                item.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Small avatar button at the left of the bottom nav to open drawer
+  Widget _buildBottomNavDrawerButton(UserModel user) {
+    return Builder(
+      builder: (ctx) => GestureDetector(
+        onTap: () => Scaffold.of(ctx).openDrawer(),
+        behavior: HitTestBehavior.opaque,
+        child: SizedBox(
+          width: 48,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 26,
+                height: 26,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [AppTheme.neonBlue, AppTheme.neonPurple],
+                  ),
+                ),
+                child: Center(
+                  child: Text(
+                    user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              const Icon(Icons.menu, color: AppTheme.textSecondary, size: 10),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Overflow bottom sheet for nav items that don't fit in bottom bar
+  void _showOverflowMenu(List<_NavItem> navItems, int startIndex) {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppTheme.surfaceColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 8, bottom: 12),
+              width: 32,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            ...navItems.sublist(startIndex).asMap().entries.map((entry) {
+              final actualIndex = startIndex + entry.key;
+              final item = entry.value;
+              final isSelected = _currentIndex == actualIndex;
+              return ListTile(
+                leading: Icon(
+                  isSelected ? item.selectedIcon : item.icon,
+                  color: isSelected ? item.color : AppTheme.textSecondary,
+                ),
+                title: Text(
+                  item.label,
+                  style: TextStyle(
+                    color: isSelected ? item.color : Colors.white,
+                    fontWeight:
+                        isSelected ? FontWeight.w600 : FontWeight.normal,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  setState(() => _currentIndex = actualIndex);
+                },
+              );
+            }),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Drawer for phone layout with user info, mode switcher, and actions
+  Widget _buildPhoneDrawer(UserModel user, bool isJefeVentas) {
+    return Drawer(
+      backgroundColor: AppTheme.surfaceColor,
+      width: MediaQuery.of(context).size.width * 0.72,
+      child: SafeArea(
+        child: Column(
+          children: [
+            const SizedBox(height: 16),
+            _buildUserAvatar(user, isJefeVentas),
+            const SizedBox(height: 16),
+            // Mode switcher in drawer for Jefe
+            if (isJefeVentas) _buildModeSwitcher(),
+            // Network settings removed for user restriction
+            const Spacer(),
+            const Divider(color: Colors.white10),
+            // Logout
+            ListTile(
+              leading: const Icon(
+                Icons.logout_rounded,
+                color: AppTheme.error,
+                size: 20,
+              ),
+              title: const Text(
+                'Cerrar Sesión',
+                style: TextStyle(color: AppTheme.error, fontSize: 13),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                ref.read(authProvider.notifier).logout();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // TABLET LAYOUT: Sidebar (original design, identical on large screens)
+  // ---------------------------------------------------------------------------
+  Widget _buildTabletLayout(
+    List<_NavItem> navItems,
+    int safeIndex,
+    UserModel user,
+    bool isJefeVentas,
+  ) {
+    final sidebarW = Responsive.sidebarWidth(context);
 
     return Scaffold(
       body: SafeArea(
         child: Row(
           children: [
-            // Custom Sidebar Navigation
+            // Sidebar Navigation
             AnimatedContainer(
               duration: const Duration(milliseconds: 250),
               curve: Curves.easeInOut,
-              width: _isNavExpanded ? 90 : 0, 
-              child: _isNavExpanded ? Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceColor,
-                  border: Border(
-                    right: BorderSide(color: Colors.white.withOpacity(0.05), width: 1),
-                  ),
-                ),
-                child: Column(
-                  children: [
-                    const SizedBox(height: 16),
-                    _buildUserAvatar(user, isJefeVentas),
-                    const SizedBox(height: 16),
-
-                    // MODE SWITCHER FOR JEFE
-                    // MODE SWITCHER FOR JEFE
-                    if (isJefeVentas)
-                         Padding(
-                           padding: const EdgeInsets.symmetric(horizontal: 12),
-                           child: Container(
-                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                             decoration: BoxDecoration(
-                               color: _forceAlmacenMode
-                                  ? AppTheme.neonPink.withOpacity(0.15)
-                                  : _forceRepartidorMode 
-                                       ? Colors.orange.withOpacity(0.15) 
-                                       : AppTheme.neonBlue.withOpacity(0.15),
-                               borderRadius: BorderRadius.circular(12),
-                               border: Border.all(
-                                 color: _forceAlmacenMode
-                                    ? AppTheme.neonPink.withOpacity(0.5)
-                                    : _forceRepartidorMode 
-                                         ? Colors.orange.withOpacity(0.5) 
-                                         : AppTheme.neonBlue.withOpacity(0.5),
-                                 width: 1
-                               )
-                             ),
-                             child: PopupMenuButton<String>(
-                               tooltip: 'Cambiar Perfil',
-                               offset: const Offset(0, 40),
-                               color: AppTheme.surfaceColor,
-                               shape: RoundedRectangleBorder(
-                                 borderRadius: BorderRadius.circular(12),
-                                 side: BorderSide(color: Colors.white.withOpacity(0.1))
-                               ),
-                               child: Row(
-                                 mainAxisAlignment: MainAxisAlignment.center,
-                                 children: [
-                                   Icon(
-                                     _forceAlmacenMode ? Icons.warehouse_rounded
-                                       : _forceRepartidorMode ? Icons.local_shipping : Icons.store,
-                                     color: _forceAlmacenMode ? AppTheme.neonPink
-                                       : _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
-                                     size: 20
-                                   ),
-                                   const SizedBox(width: 8),
-                                   Text(
-                                     _forceAlmacenMode ? 'Almacén'
-                                       : _forceRepartidorMode ? 'Reparto' : 'Ventas',
-                                     style: TextStyle(
-                                       fontSize: 11,
-                                       fontWeight: FontWeight.bold,
-                                       color: _forceAlmacenMode ? AppTheme.neonPink
-                                         : _forceRepartidorMode ? Colors.orange : AppTheme.neonBlue,
-                                     ),
-                                   ),
-                                   const Icon(Icons.arrow_drop_down, color: Colors.white54, size: 18),
-                                 ],
-                               ),
-                               itemBuilder: (context) => [
-                                 const PopupMenuItem(
-                                   value: 'VENTAS',
-                                   child: Row(
-                                     children: [
-                                       Icon(Icons.store, color: AppTheme.neonBlue, size: 18),
-                                       SizedBox(width: 12),
-                                       Text('Perfil Ventas', style: TextStyle(color: Colors.white)),
-                                     ],
-                                   ),
-                                 ),
-                                 const PopupMenuItem(
-                                   value: 'REPARTO',
-                                   child: Row(
-                                     children: [
-                                       Icon(Icons.local_shipping, color: Colors.orange, size: 18),
-                                       SizedBox(width: 12),
-                                       Text('Perfil Reparto', style: TextStyle(color: Colors.white)),
-                                     ],
-                                   ),
-                                 ),
-                                 const PopupMenuItem(
-                                   value: 'ALMACEN',
-                                   child: Row(
-                                     children: [
-                                       Icon(Icons.inventory_2, color: AppTheme.neonPink, size: 18),
-                                       SizedBox(width: 12),
-                                       Text('Perfil Almacén', style: TextStyle(color: Colors.white)),
-                                     ],
-                                   ),
-                                 ),
-                               ],
-                               onSelected: (value) {
-                                 if (value == 'ALMACEN') {
-                                    setState(() {
-                                      _forceAlmacenMode = true;
-                                      _forceRepartidorMode = false;
-                                      _currentIndex = 0;
-                                    });
-                                    return;
-                                  }
-                                 
-                                 final bool newMode = value == 'REPARTO';
-                                 setState(() {
-                                    _forceAlmacenMode = false;
-                                    _forceRepartidorMode = newMode;
-                                    _currentIndex = 0;
-                                  });
-                               },
-                             ),
-                           ),
-                         ),
-                    
-                    const SizedBox(height: 16),
-                    
-                    Expanded(
-                      child: ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        itemCount: navItems.length,
-                        itemBuilder: (context, index) {
-                          return Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: _buildNavItem(
-                              item: navItems[index],
-                              isSelected: safeIndex == index,
-                              onTap: () => setState(() => _currentIndex = index),
-                            ),
-                          );
-                        },
+              width: _isNavExpanded ? sidebarW : 0,
+              child: _isNavExpanded
+                  ? Container(
+                      decoration: BoxDecoration(
+                        color: AppTheme.surfaceColor,
+                        border: Border(
+                          right: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.05),
+                          ),
+                        ),
                       ),
-                    ),
-                    
-                    const Divider(height: 1, color: Colors.white10),
-                    Padding(
-                      padding: const EdgeInsets.all(12),
                       child: Column(
                         children: [
-                          _buildCollapseButton(),
-                          const SizedBox(height: 8),
-                          _buildLogoutButton(authProvider),
+                          const SizedBox(height: 16),
+                          _buildUserAvatar(user, isJefeVentas),
+                          const SizedBox(height: 16),
+
+                          // Mode switcher for Jefe
+                          if (isJefeVentas) _buildModeSwitcher(),
+
+                          const SizedBox(height: 16),
+
+                          Expanded(
+                            child: ListView.builder(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 8),
+                              itemCount: navItems.length,
+                              itemBuilder: (context, index) {
+                                return Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: _buildNavItem(
+                                    item: navItems[index],
+                                    isSelected: safeIndex == index,
+                                    onTap: () =>
+                                        setState(() => _currentIndex = index),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+
+                          const Divider(height: 1, color: Colors.white10),
+                          Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Column(
+                              children: [
+                                _buildCollapseButton(),
+                                const SizedBox(height: 8),
+                                _buildLogoutButton(),
+                              ],
+                            ),
+                          ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-              ) : null,
+                    )
+                  : null,
             ),
-            
-            // Expand button
+
+            // Expand button when sidebar is collapsed
             if (!_isNavExpanded)
               GestureDetector(
                 onTap: () => setState(() => _isNavExpanded = true),
@@ -600,26 +708,162 @@ class _MainShellState extends State<MainShell> {
                   width: 24,
                   decoration: BoxDecoration(
                     color: AppTheme.surfaceColor,
-                    border: Border(right: BorderSide(color: Colors.white.withOpacity(0.05), width: 1)),
+                    border: Border(
+                      right: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.05),
+                      ),
+                    ),
                   ),
                   child: Center(
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 4),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 20,
+                        horizontal: 4,
+                      ),
                       decoration: BoxDecoration(
-                        color: AppTheme.neonBlue.withOpacity(0.1),
+                        color: AppTheme.neonBlue.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: Icon(Icons.chevron_right_rounded, color: AppTheme.neonBlue, size: 16),
+                      child: const Icon(
+                        Icons.chevron_right_rounded,
+                        color: AppTheme.neonBlue,
+                        size: 16,
+                      ),
                     ),
                   ),
                 ),
               ),
-            
+
             // Main Content
             Expanded(
-              child: _buildCurrentPage(authProvider.vendedorCodes, isJefeVentas),
+              child: _buildCurrentPage(isJefeVentas),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  /// Mode switcher widget (used in both sidebar and drawer)
+  Widget _buildModeSwitcher() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+        decoration: BoxDecoration(
+          color: _forceAlmacenMode
+              ? AppTheme.neonPink.withValues(alpha: 0.1)
+              : _forceRepartidorMode
+                  ? Colors.orange.withValues(alpha: 0.1)
+                  : AppTheme.neonBlue.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          border: Border.all(
+            color: _forceAlmacenMode
+                ? AppTheme.neonPink.withValues(alpha: 0.3)
+                : _forceRepartidorMode
+                    ? Colors.orange.withValues(alpha: 0.3)
+                    : AppTheme.neonBlue.withValues(alpha: 0.3),
+          ),
+        ),
+        child: PopupMenuButton<String>(
+          tooltip: 'Cambiar Perfil',
+          offset: const Offset(0, 40),
+          color: AppTheme.surfaceColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                _forceAlmacenMode
+                    ? Icons.warehouse_rounded
+                    : _forceRepartidorMode
+                        ? Icons.local_shipping
+                        : Icons.store,
+                color: _forceAlmacenMode
+                    ? AppTheme.neonPink
+                    : _forceRepartidorMode
+                        ? Colors.orange
+                        : AppTheme.neonBlue,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Flexible(
+                child: Text(
+                  _forceAlmacenMode
+                      ? 'Almacén'
+                      : _forceRepartidorMode
+                          ? 'Reparto'
+                          : 'Ventas',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: _forceAlmacenMode
+                        ? AppTheme.neonPink
+                        : _forceRepartidorMode
+                            ? Colors.orange
+                            : AppTheme.neonBlue,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Icon(
+                Icons.arrow_drop_down,
+                color: Colors.white54,
+                size: 18,
+              ),
+            ],
+          ),
+          itemBuilder: (context) => [
+            const PopupMenuItem(
+              value: 'VENTAS',
+              child: Row(
+                children: [
+                  Icon(Icons.store, color: AppTheme.neonBlue, size: 18),
+                  SizedBox(width: 12),
+                  Text('Perfil Ventas', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'REPARTO',
+              child: Row(
+                children: [
+                  Icon(Icons.local_shipping, color: Colors.orange, size: 18),
+                  SizedBox(width: 12),
+                  Text('Perfil Reparto', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
+            const PopupMenuItem(
+              value: 'ALMACEN',
+              child: Row(
+                children: [
+                  Icon(Icons.inventory_2, color: AppTheme.neonPink, size: 18),
+                  SizedBox(width: 12),
+                  Text('Perfil Almacén', style: TextStyle(color: Colors.white)),
+                ],
+              ),
+            ),
+          ],
+          onSelected: (value) {
+            if (value == 'ALMACEN') {
+              setState(() {
+                _forceAlmacenMode = true;
+                _forceRepartidorMode = false;
+                _currentIndex = 0;
+              });
+              return;
+            }
+            final newMode = value == 'REPARTO';
+            setState(() {
+              _forceAlmacenMode = false;
+              _forceRepartidorMode = newMode;
+              _currentIndex = 0;
+            });
+          },
         ),
       ),
     );
@@ -636,13 +880,14 @@ class _MainShellState extends State<MainShell> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: isJefeVentas 
-                ? [AppTheme.neonBlue, AppTheme.neonPurple]
-                : [AppTheme.neonGreen, AppTheme.neonBlue],
+              colors: isJefeVentas
+                  ? [AppTheme.neonBlue, AppTheme.neonPurple]
+                  : [AppTheme.neonGreen, AppTheme.neonBlue],
             ),
             boxShadow: [
               BoxShadow(
-                color: (isJefeVentas ? AppTheme.neonBlue : AppTheme.neonGreen).withOpacity(0.3),
+                color: (isJefeVentas ? AppTheme.neonBlue : AppTheme.neonGreen)
+                    .withValues(alpha: 0.3),
                 blurRadius: 12,
                 spreadRadius: 2,
               ),
@@ -661,7 +906,7 @@ class _MainShellState extends State<MainShell> {
         ),
         const SizedBox(height: 6),
         Text(
-          user.name.length > 16 ? '${user.name.substring(0, 16)}' : user.name,
+          user.name.length > 16 ? user.name.substring(0, 16) : user.name,
           style: const TextStyle(fontSize: 9, color: AppTheme.textSecondary),
           maxLines: 1,
           textAlign: TextAlign.center,
@@ -672,7 +917,7 @@ class _MainShellState extends State<MainShell> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              color: AppTheme.neonBlue.withOpacity(0.2),
+              color: AppTheme.neonBlue.withValues(alpha: 0.2),
             ),
             child: const Text(
               'JEFE',
@@ -689,7 +934,7 @@ class _MainShellState extends State<MainShell> {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              color: Colors.orange.withOpacity(0.2),
+              color: Colors.orange.withValues(alpha: 0.2),
             ),
             child: const Text(
               'REPARTIDOR',
@@ -706,7 +951,7 @@ class _MainShellState extends State<MainShell> {
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              color: AppTheme.neonGreen.withOpacity(0.2),
+              color: AppTheme.neonGreen.withValues(alpha: 0.2),
             ),
             child: const Text(
               'COMERCIAL',
@@ -726,38 +971,59 @@ class _MainShellState extends State<MainShell> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
+    final isSmall = Responsive.isSmall(context);
+
+    return InkWell(
       onTap: onTap,
+      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+        padding:
+            EdgeInsets.symmetric(vertical: isSmall ? 8 : 12, horizontal: 4),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          color: isSelected 
-            ? item.color.withOpacity(0.15) 
-            : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          color: isSelected ? item.color.withValues(alpha: 0.12) : Colors.transparent,
           border: isSelected
-            ? Border.all(color: item.color.withOpacity(0.3), width: 1)
-            : null,
+              ? Border.all(color: item.color.withValues(alpha: 0.25))
+              : null,
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: item.color.withValues(alpha: 0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : [],
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isSelected ? item.selectedIcon : item.icon,
-              color: isSelected ? item.color : AppTheme.textSecondary,
-              size: 24,
+            AnimatedScale(
+              scale: isSelected ? 1.1 : 1.0,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOutCubic,
+              child: Icon(
+                isSelected ? item.selectedIcon : item.icon,
+                color: isSelected ? item.color : AppTheme.textSecondary,
+                size: isSmall ? 20 : 24,
+              ),
             ),
             const SizedBox(height: 4),
-            Text(
-              item.label,
+            AnimatedDefaultTextStyle(
+              duration: const Duration(milliseconds: 200),
               style: TextStyle(
-                fontSize: 10,
+                fontSize: isSmall ? 8 : 10,
                 color: isSelected ? item.color : AppTheme.textSecondary,
                 fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
               ),
-              textAlign: TextAlign.center,
-              maxLines: 1,
+              child: Text(
+                item.label,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),
@@ -765,15 +1031,16 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
-  Widget _buildLogoutButton(AuthProvider authProvider) {
+  Widget _buildLogoutButton() {
     return InkWell(
-      onTap: () => _showLogoutConfirmation(authProvider),
-      borderRadius: BorderRadius.circular(12),
+      onTap: () => ref.read(authProvider.notifier).logout(),
+      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: AppTheme.error.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          color: AppTheme.error.withValues(alpha: 0.08),
+          border: Border.all(color: AppTheme.error.withValues(alpha: 0.15)),
         ),
         child: const Column(
           children: [
@@ -798,12 +1065,13 @@ class _MainShellState extends State<MainShell> {
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const NetworkSettingsPage()),
       ),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: AppTheme.neonPurple.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          color: AppTheme.neonPurple.withValues(alpha: 0.08),
+          border: Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.15)),
         ),
         child: const Column(
           children: [
@@ -826,17 +1094,20 @@ class _MainShellState extends State<MainShell> {
   Widget _buildCollapseButton() {
     return InkWell(
       onTap: () => setState(() => _isNavExpanded = !_isNavExpanded),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          color: AppTheme.neonBlue.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          color: AppTheme.neonBlue.withValues(alpha: 0.08),
+          border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.15)),
         ),
         child: Column(
           children: [
             Icon(
-              _isNavExpanded ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+              _isNavExpanded
+                  ? Icons.chevron_left_rounded
+                  : Icons.chevron_right_rounded,
               color: AppTheme.neonBlue,
               size: 20,
             ),
@@ -861,181 +1132,202 @@ class _MainShellState extends State<MainShell> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
-        border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
+        border:
+            Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
       ),
       child: Row(
         children: [
-           const Row(
-             children: [
-               Icon(Icons.visibility, color: AppTheme.neonBlue, size: 16),
-               SizedBox(width: 8),
-               Text('Ver Como', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
-             ],
-           ),
-           const SizedBox(width: 16),
-           Expanded(
-             child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.neonPurple.withOpacity(0.3)),
+          const Row(
+            children: [
+              Icon(Icons.visibility, color: AppTheme.neonBlue, size: 16),
+              SizedBox(width: 8),
+              Text(
+                'Ver Como',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
                 ),
-                child: _isLoadingRepartidores
-                  ? const Center(child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonPurple)))
-                  : DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _selectedRepartidor,
-                    hint: const Text('Seleccionar Repartidor', style: TextStyle(color: Colors.white54)),
-                    isExpanded: true,
-                    dropdownColor: AppTheme.surfaceColor,
-                    icon: const Icon(Icons.keyboard_arrow_down, color: AppTheme.neonPurple),
-                    style: const TextStyle(color: Colors.white, fontSize: 13),
-                    items: [
-                      const DropdownMenuItem(
-                          value: 'ALL', 
-                          child: Text('Todos los Repartidores', style: TextStyle(fontWeight: FontWeight.bold))
+              ),
+            ],
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.05),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.3)),
+              ),
+              child: _isLoadingRepartidores
+                  ? const Center(
+                      child: SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: AppTheme.neonPurple,
+                        ),
                       ),
-                      ..._repartidoresOptions.map((r) {
-                        return DropdownMenuItem(
-                          value: r['code'].toString(),
-                          child: Text('${r['code']} - ${r['name']}'),
-                        );
-                      }),
-                    ],
-                    onChanged: (val) => setState(() => _selectedRepartidor = val),
-                  ),
-                ),
-             ),
-           ),
+                    )
+                  : DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: _selectedRepartidor,
+                        hint: const Text(
+                          'Seleccionar Repartidor',
+                          style: TextStyle(color: Colors.white54),
+                        ),
+                        isExpanded: true,
+                        dropdownColor: AppTheme.surfaceColor,
+                        icon: const Icon(
+                          Icons.keyboard_arrow_down,
+                          color: AppTheme.neonPurple,
+                        ),
+                        style:
+                            const TextStyle(color: Colors.white, fontSize: 13),
+                        items: [
+                          const DropdownMenuItem(
+                            value: 'ALL',
+                            child: Text(
+                              'Todos los Repartidores',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          ..._repartidoresOptions.map((r) {
+                            return DropdownMenuItem(
+                              value: r['code'].toString(),
+                              child: Text('${r['code']} - ${r['name']}'),
+                            );
+                          }),
+                        ],
+                        onChanged: (val) =>
+                            setState(() => _selectedRepartidor = val),
+                      ),
+                    ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildCurrentPage(List<String> vendedorCodes, bool isJefeVentas) {
-    // Obtener el rol del usuario
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
-    final user = authProvider.currentUser;
+  Widget _buildCurrentPage(bool isJefeVentas) {
+    final authState = ref.read(authProvider).value;
+    final user = authState?.user;
+    final vendedorCodes = authState?.vendedorCodes ?? [];
 
     // ===============================================
     // ALMACÉN MODE
     // ===============================================
     if (_isAlmacenEffective) {
-      switch (_currentIndex) {
-        case 0:
-          return const WarehouseDashboardPage();
-        case 1:
-          return const PersonnelPage();
-        case 2:
-          return const ComingSoonPlaceholder(
-            title: 'Nexus AI — Asistente de Almacén',
-            subtitle: 'Tu asistente inteligente para\nconsultar cargas, rutas y expediciones.',
-            icon: Icons.smart_toy,
-            accentColor: AppTheme.neonPink,
-          );
-        default:
-          return const Center(child: Text('Página no encontrada'));
-      }
+      return LazyIndexedStack(
+        index: _currentIndex,
+        children: const [
+          WarehouseDashboardPage(),
+          VehiclesPage(),
+          ArticlesPage(),
+          LoadHistoryPage(),
+          PersonnelPage(),
+        ],
+      );
     }
 
-    final isRepartidor = _isRepartidorEffective; 
-    
+    final isRepartidor = _isRepartidorEffective;
+
     // ===============================================
-    // REPARTIDOR: Dynamic indices
-    // Real rep:  0=Clientes, 1=Rutero, 2=Comisiones, 3=Histórico, 4=Chat IA  (NO Panel)
-    // Jefe mode: 0=Panel, 1=Clientes, 2=Rutero, 3=Histórico, 4=Chat IA
+    // REPARTIDOR MODE
     // ===============================================
     if (isRepartidor) {
-      // Determine effective repartidor ID
-      String effectiveRepartidorId = user?.codigoConductor ?? vendedorCodes.join(','); // Default for real repartidor
-      final isJefe = user?.isJefeVentas == true;
-      
-      // If Jefe, override with selection
+      var effectiveRepartidorId =
+          user?.codigoConductor ?? vendedorCodes.join(',');
+      final isJefe = user?.isJefeVentas ?? false;
+
       if (isJefeVentas) {
-          if (_selectedRepartidor == null || _selectedRepartidor == 'ALL') {
-             if (_repartidoresOptions.isNotEmpty) {
-                effectiveRepartidorId = _repartidoresOptions.map((e) => e['code']).join(',');
-             } else {
-                effectiveRepartidorId = vendedorCodes.join(','); 
-             }
+        if (_selectedRepartidor == null || _selectedRepartidor == 'ALL') {
+          if (_repartidoresOptions.isNotEmpty) {
+            effectiveRepartidorId =
+                _repartidoresOptions.map((e) => e['code']).join(',');
           } else {
-             effectiveRepartidorId = _selectedRepartidor!;
+            effectiveRepartidorId = vendedorCodes.join(',');
           }
+        } else {
+          effectiveRepartidorId = _selectedRepartidor!;
+        }
       }
 
-      // Build repartidor names map for child widgets
-      final Map<String, String> repNamesMap = {
-        for (var r in _repartidoresOptions)
+      final repNamesMap = <String, String>{
+        for (final r in _repartidoresOptions)
           (r['code']?.toString() ?? ''): (r['name']?.toString() ?? ''),
       };
 
-      // Map tab indices dynamically based on role
+      final navItems = _getNavItems(isJefeVentas, vendedorCodes);
+
+      int? navIndexOf(String label) {
+        for (var i = 0; i < navItems.length; i++) {
+          if (navItems[i].label == label) return i;
+        }
+        return null;
+      }
+
       Widget pageForIndex(int idx) {
-        if (!isJefe) {
-          // Real rep: 0=Clientes, 1=Rutero, 2=Comisiones, 3=Histórico, 4=Chat IA
-          if (idx == 0) return RepartidorClientesPage(
+        final label = idx < navItems.length ? navItems[idx].label : '';
+
+        if (label == 'Panel') {
+          return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
+        }
+        if (label == 'Clientes') {
+          final histIdx = navIndexOf('Histórico');
+          return RepartidorClientesPage(
             repartidorId: effectiveRepartidorId,
-            isJefeMode: false,
+            isJefeMode: isJefe,
             onNavigateToHistory: (clientId, clientName) {
               setState(() {
                 _pendingClientId = clientId;
                 _pendingClientName = clientName;
-                _currentIndex = 3; // Histórico
+                _currentIndex = histIdx ?? idx;
               });
             },
           );
-          if (idx == 1) return ChangeNotifierProvider(
-            create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
-            child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId, repartidorNames: repNamesMap),
-          );
-          if (idx == 2) return const ComingSoonPlaceholder(
-            title: 'Comisiones de Reparto',
-            subtitle: 'Aquí podrás consultar tus comisiones\nbasadas en los cobros realizados.',
-            icon: Icons.euro,
-            accentColor: AppTheme.neonGreen,
-          );
-          if (idx == 3) {
-            final cId = _pendingClientId;
-            final cName = _pendingClientName;
-            _pendingClientId = null;
-            _pendingClientName = null;
-            return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId, initialClientId: cId, initialClientName: cName);
-          }
-          if (idx == 4) return const ComingSoonPlaceholder(
-            title: 'Asistente IA de Reparto',
-            subtitle: 'Tu asistente inteligente para\noptimizar rutas y consultar datos.',
-            icon: Icons.smart_toy,
-            accentColor: AppTheme.neonPink,
-          );
-        } else {
-          // Jefe mode: 0=Panel, 1=Clientes, 2=Rutero, 3=Histórico, 4=Chat IA
-          if (idx == 0) return RepartidorPanelPage(repartidorId: effectiveRepartidorId);
-          if (idx == 1) return RepartidorClientesPage(
+        }
+        if (label == 'Rutero') {
+          return RepartidorRuteroPage(
             repartidorId: effectiveRepartidorId,
-            isJefeMode: true,
-            onNavigateToHistory: (clientId, clientName) {
-              setState(() {
-                _pendingClientId = clientId;
-                _pendingClientName = clientName;
-                _currentIndex = 3; // Histórico
-              });
-            },
+            repartidorNames: repNamesMap,
           );
-          if (idx == 2) return ChangeNotifierProvider(
-            create: (_) => EntregasProvider()..setRepartidor(effectiveRepartidorId),
-            child: RepartidorRuteroPage(repartidorId: effectiveRepartidorId, repartidorNames: repNamesMap),
+        }
+        if (label == 'Liquidacion Diaria') {
+          return RepartidorLiquidacionDiariaPage(
+            repartidorId: effectiveRepartidorId,
           );
-          if (idx == 3) {
-            final cId = _pendingClientId;
-            final cName = _pendingClientName;
-            _pendingClientId = null;
-            _pendingClientName = null;
-            return RepartidorHistoricoPage(repartidorId: effectiveRepartidorId, initialClientId: cId, initialClientName: cName);
-          }
-          if (idx == 4) return const ComingSoonPlaceholder(
+        }
+        if (label == 'Vencimientos') {
+          return RepartidorVencimientosPage(
+            repartidorId: effectiveRepartidorId,
+          );
+        }
+        if (label == 'Evolución') {
+          return RepartidorEvolutionPage(
+            repartidorId: effectiveRepartidorId,
+          );
+        }
+        if (label == 'Comisiones') {
+          return repartidor_finanzas.RepartidorComisionesFinanzasPage(
+            repartidorId: effectiveRepartidorId,
+          );
+        }
+        if (label == 'Histórico') {
+          return RepartidorHistoricoPage(
+            repartidorId: effectiveRepartidorId,
+            initialClientId: _pendingClientId,
+            initialClientName: _pendingClientName,
+          );
+        }
+        if (label == 'Chat IA') {
+          return const ComingSoonPlaceholder(
             title: 'Asistente IA de Reparto',
-            subtitle: 'Tu asistente inteligente para\noptimizar rutas y consultar datos.',
+            subtitle:
+                'Tu asistente inteligente para\noptimizar rutas y consultar datos.',
             icon: Icons.smart_toy,
             accentColor: AppTheme.neonPink,
           );
@@ -1043,53 +1335,162 @@ class _MainShellState extends State<MainShell> {
         return const Center(child: Text('Página no encontrada'));
       }
 
-      // Use KeyedSubtree to force complete widget tree rebuild when ID or client changes
-      final content = KeyedSubtree(
-        key: ValueKey('rutero_view_${effectiveRepartidorId}_${_currentIndex}_${_pendingClientId ?? ""}'),
-        child: Builder(builder: (_) => pageForIndex(_currentIndex)),
+      final content = LazyIndexedStack(
+        index: _currentIndex,
+        children: List.generate(navItems.length, (idx) {
+          return KeyedSubtree(
+            key: ValueKey(
+              'rutero_view_${effectiveRepartidorId}_${idx}_${_pendingClientId ?? ""}',
+            ),
+            child: pageForIndex(idx),
+          );
+        }),
       );
 
-      // Wrap in Column with Header only if Jefe
       if (isJefeVentas) {
-         return Column(
-           children: [
-             _buildRepartidorHeader(),
-             Expanded(child: content),
-           ],
-         );
+        return Column(
+          children: [
+            _buildRepartidorHeader(),
+            Expanded(child: content),
+          ],
+        );
       }
       return content;
     }
-    
+
     // ===============================================
-    // JEFE: 0=Panel, 1=Clientes, 2=Ruta, 3=Obj, 4=Comisiones, 5=Chat
-    // (Cobros removido - ahora exclusivo de Repartidor)
+    // JEFE MODE
     // ===============================================
     if (isJefeVentas) {
-      switch (_currentIndex) {
-        case 0:
-          // Panel de Control (Dashboard)
-          if (_dashboardProvider == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          return ChangeNotifierProvider.value(
-            value: _dashboardProvider!,
-            child: const DashboardContent(),
+      final vendedorCodes = ref.read(authProvider).value?.vendedorCodes ?? [];
+      final employeeCode = vendedorCodes.join(',');
+      return LazyIndexedStack(
+        index: _currentIndex,
+        children: [
+          const DashboardContent(),
+          SimpleClientListPage(employeeCode: employeeCode, isJefeVentas: true),
+          RuteroPage(employeeCode: employeeCode, isJefeVentas: true),
+          ObjectivesPage(employeeCode: employeeCode, isJefeVentas: true),
+          CommissionsPage(employeeCode: employeeCode, isJefeVentas: true),
+          const FacturasPage(),
+          PedidosPage(employeeCode: employeeCode, isJefeVentas: true),
+          KpiDashboardPage(employeeCode: employeeCode, isJefeVentas: true),
+          CobrosPage(employeeCode: employeeCode, isJefeVentas: true),
+          const BolsaPage(),
+          const ComingSoonPlaceholder(
+            title: 'Nexus AI – Asistente Comercial',
+            subtitle:
+                'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
+            icon: Icons.smart_toy,
+            accentColor: AppTheme.neonPink,
+          ),
+        ],
+      );
+    }
+
+    // ===============================================
+    // COMERCIAL MODE
+    // ===============================================
+
+    // Commercial 80 (Almeria lead) gets team view access
+    const commercial80TeamCodes = ['72', '73', '80', '81', '83', '86'];
+    final normalizedUserCode = (user?.code ?? '').replaceFirst(RegExp(r'^0+'), '');
+    final isCommercial80 = normalizedUserCode == '80';
+
+    // For commercial 80: extend vendedorCodes to include team members
+    final effectiveVendorCodes = isCommercial80
+        ? {...vendedorCodes, ...commercial80TeamCodes}.toList()
+        : vendedorCodes;
+
+    final hasScopedVendorAccess =
+        user != null && _hasScopedVendorAccess(user, effectiveVendorCodes);
+    final scopedDefaultCode = hasScopedVendorAccess && user != null
+        ? _defaultScopedVendor(user, effectiveVendorCodes)
+        : '';
+    final selectedScopedVendor =
+        hasScopedVendorAccess ? ref.watch(selectedVendorProvider) : null;
+    final scopedEmployeeCode = hasScopedVendorAccess
+        ? (selectedScopedVendor != null &&
+                effectiveVendorCodes.contains(selectedScopedVendor)
+            ? selectedScopedVendor
+            : scopedDefaultCode)
+        : null;
+    final empCode = scopedEmployeeCode ?? effectiveVendorCodes.join(',');
+
+    // For commercial 80: when "ALL" is selected, treat as jefe-like view
+    final isCommercial80AllMode = isCommercial80 &&
+        (selectedScopedVendor == null ||
+            selectedScopedVendor.isEmpty ||
+            selectedScopedVendor == 'ALL');
+    final comercialNav = _getNavItems(isCommercial80AllMode, effectiveVendorCodes);
+
+    Widget comercialPageForIndex(int idx) {
+      final label = idx < comercialNav.length ? comercialNav[idx].label : '';
+      switch (label) {
+        case 'Clientes':
+          return SimpleClientListPage(
+            employeeCode: empCode,
+            isJefeVentas: isCommercial80AllMode || hasScopedVendorAccess,
+            vendorSelectorCodes: (isCommercial80AllMode || hasScopedVendorAccess)
+                ? effectiveVendorCodes
+                : null,
+            includeAllVendorOption: !hasScopedVendorAccess,
+            forceShowVendorSelector: isCommercial80,
           );
-        case 1:
-          return SimpleClientListPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
-        case 2:
-          return RuteroPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
-        case 3:
-          return ObjectivesPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
-        case 4:
-          return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: true);
-        case 5:
-          return const FacturasPage();
-        case 6:
+        case 'Ruta':
+          return RuteroPage(
+            employeeCode: empCode,
+            isJefeVentas: isCommercial80AllMode,
+            forceShowVendorSelector: isCommercial80,
+          );
+        case 'Objetivos':
+          return ObjectivesPage(
+            employeeCode: empCode,
+            isJefeVentas: isCommercial80AllMode || hasScopedVendorAccess,
+            vendorSelectorCodes: (isCommercial80AllMode || hasScopedVendorAccess)
+                ? effectiveVendorCodes
+                : null,
+            includeAllVendorOption: !hasScopedVendorAccess,
+            forceShowVendorSelector: isCommercial80,
+          );
+        case 'Comisiones':
+          return CommissionsPage(
+            employeeCode: empCode,
+            isJefeVentas: isCommercial80AllMode || hasScopedVendorAccess,
+            vendorSelectorCodes: (isCommercial80AllMode || hasScopedVendorAccess)
+                ? effectiveVendorCodes
+                : null,
+            includeAllVendorOption: !hasScopedVendorAccess,
+            forceShowVendorSelector: isCommercial80,
+          );
+        case 'Facturas':
+          return FacturasPage(
+            forceShowVendorSelector: isCommercial80,
+          );
+        case 'Pedidos':
+          return PedidosPage(
+            employeeCode: empCode,
+            isJefeVentas: isCommercial80AllMode,
+            forceShowVendorSelector: isCommercial80,
+          );
+        case 'Glacius':
+          return KpiDashboardPage(
+            employeeCode: empCode,
+            isJefeVentas: isCommercial80AllMode,
+            forceShowVendorSelector: isCommercial80,
+          );
+        case 'Cobros':
+          return CobrosPage(
+            employeeCode: empCode,
+            forceShowVendorSelector: isCommercial80,
+          );
+        case 'Bolsa':
+          return const BolsaPage();
+        case 'Chat IA':
           return const ComingSoonPlaceholder(
             title: 'Nexus AI — Asistente Comercial',
-            subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
+            subtitle:
+                'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
             icon: Icons.smart_toy,
             accentColor: AppTheme.neonPink,
           );
@@ -1097,62 +1498,49 @@ class _MainShellState extends State<MainShell> {
           return const Center(child: Text('Página no encontrada'));
       }
     }
-    
-    // ===============================================
-    // COMERCIAL: 0=Clientes, 1=Ruta, 2=Obj, 3=Comisiones, 4=Facturas, 5=Chat
-    // ===============================================
-    switch (_currentIndex) {
-      case 0:
-        return SimpleClientListPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-      case 1:
-        return RuteroPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-      case 2:
-        return ObjectivesPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-      case 3:
-        return CommissionsPage(employeeCode: vendedorCodes.join(','), isJefeVentas: false);
-      case 4:
-        return const FacturasPage();
-      case 5:
-        return const ComingSoonPlaceholder(
-          title: 'Nexus AI — Asistente Comercial',
-          subtitle: 'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
-          icon: Icons.smart_toy,
-          accentColor: AppTheme.neonPink,
-        );
-      default:
-        return const Center(child: Text('Página no encontrada'));
-    }
+
+    return LazyIndexedStack(
+      index: _currentIndex,
+      children: List.generate(
+        comercialNav.length,
+        comercialPageForIndex,
+      ),
+    );
   }
 }
 
 // Helper class for nav items
 class _NavItem {
-  final IconData icon;
-  final IconData selectedIcon;
-  final String label;
-  final Color color;
-
   _NavItem({
     required this.icon,
     required this.selectedIcon,
     required this.label,
     required this.color,
   });
+  final IconData icon;
+  final IconData selectedIcon;
+  final String label;
+  final Color color;
 }
 
 // Futuristic Logout Confirmation Dialog
 class _LogoutConfirmationDialog extends StatelessWidget {
-  final String userName;
-
   const _LogoutConfirmationDialog({required this.userName});
+  final String userName;
 
   @override
   Widget build(BuildContext context) {
+    // Responsive dialog sizing
+    final dw = Responsive.dialogWidth(context, 340);
+    final dp = Responsive.padding(context, small: 20, large: 28);
+    final iconDim = Responsive.value(context, phone: 52, desktop: 72);
+    final titleFs = Responsive.fontSize(context, small: 18, large: 22);
+
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
-        width: 340,
-        padding: const EdgeInsets.all(28),
+        width: dw,
+        padding: EdgeInsets.all(dp),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
           gradient: LinearGradient(
@@ -1160,21 +1548,21 @@ class _LogoutConfirmationDialog extends StatelessWidget {
             end: Alignment.bottomRight,
             colors: [
               AppTheme.surfaceColor,
-              AppTheme.darkBase.withOpacity(0.95),
+              AppTheme.darkBase.withValues(alpha: 0.95),
             ],
           ),
           border: Border.all(
-            color: Colors.white.withOpacity(0.08),
+            color: Colors.white.withValues(alpha: 0.08),
             width: 1.5,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.5),
+              color: Colors.black.withValues(alpha: 0.5),
               blurRadius: 40,
               spreadRadius: 10,
             ),
             BoxShadow(
-              color: AppTheme.error.withOpacity(0.1),
+              color: AppTheme.error.withValues(alpha: 0.1),
               blurRadius: 30,
               spreadRadius: -5,
             ),
@@ -1183,55 +1571,55 @@ class _LogoutConfirmationDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Icon with glow effect
+            // Icon with glow effect (responsive)
             Container(
-              width: 72,
-              height: 72,
+              width: iconDim,
+              height: iconDim,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: AppTheme.error.withOpacity(0.15),
+                color: AppTheme.error.withValues(alpha: 0.15),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.error.withOpacity(0.3),
+                    color: AppTheme.error.withValues(alpha: 0.3),
                     blurRadius: 20,
                     spreadRadius: 2,
                   ),
                 ],
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.logout_rounded,
                 color: AppTheme.error,
-                size: 32,
+                size: iconDim * 0.44,
               ),
             ),
-            
+
             const SizedBox(height: 24),
-            
-            // Title
-            const Text(
+
+            // Title (responsive)
+            Text(
               '¿Cerrar Sesión?',
               style: TextStyle(
-                fontSize: 22,
+                fontSize: titleFs,
                 fontWeight: FontWeight.w600,
                 color: AppTheme.textPrimary,
               ),
             ),
-            
+
             const SizedBox(height: 12),
-            
+
             // Message
             Text(
               'Estás a punto de salir de tu cuenta, $userName. ¿Estás seguro?',
               style: TextStyle(
                 fontSize: 14,
-                color: AppTheme.textSecondary.withOpacity(0.8),
+                color: AppTheme.textSecondary.withValues(alpha: 0.8),
                 height: 1.5,
               ),
               textAlign: TextAlign.center,
             ),
-            
+
             const SizedBox(height: 32),
-            
+
             // Buttons
             Row(
               children: [
@@ -1243,7 +1631,7 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
-                        side: BorderSide(color: Colors.white.withOpacity(0.1)),
+                        side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                       ),
                     ),
                     child: const Text(
@@ -1255,20 +1643,20 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(width: 12),
-                
+
                 // Confirm Button
                 Expanded(
                   child: Container(
-                    decoration: BoxDecoration (
+                    decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(14),
                       gradient: const LinearGradient(
                         colors: [AppTheme.error, Color(0xFFB71C1C)],
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: AppTheme.error.withOpacity(0.4),
+                          color: AppTheme.error.withValues(alpha: 0.4),
                           blurRadius: 12,
                           offset: const Offset(0, 4),
                         ),
@@ -1284,7 +1672,11 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.logout_rounded, color: Colors.white, size: 18),
+                              Icon(
+                                Icons.logout_rounded,
+                                color: Colors.white,
+                                size: 18,
+                              ),
                               SizedBox(width: 8),
                               Text(
                                 'Salir',

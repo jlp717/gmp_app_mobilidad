@@ -1,28 +1,44 @@
 const nodemailer = require('nodemailer');
 const logger = require('../middleware/logger');
+const { smtpLogger, isSmtpDebugEnabled } = require('./smtpLogger');
 
 // SMTP Configuration
 const SMTP_CONFIG = {
-    host: 'mail.mari-pepa.com',
-    port: 587,
-    secure: false,
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT) || 465,
+    secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_SECURE === '1' || parseInt(process.env.SMTP_PORT) === 465,
     auth: {
-        user: 'noreply@mari-pepa.com',
-        pass: '6pVyRf3xptxiN3i'
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASSWORD
     },
+    connectionTimeout: 10000,
+    greetingTimeout: 8000,
+    socketTimeout: 15000,
     tls: {
         rejectUnauthorized: false
-    }
+    },
+    logger: smtpLogger,
+    debug: isSmtpDebugEnabled(),
+    pool: true,
+    maxConnections: 5,
+    maxMessages: 100
 };
 
 let transporter = null;
+let transporterHealthy = false;
+
+function invalidateTransporter() {
+    if (transporter) {
+        try { transporter.close(); } catch (e) { /* ignore */ }
+    }
+    transporter = null;
+    transporterHealthy = false;
+}
 
 function initEmailService() {
-    try {
+    if (!transporter) {
         transporter = nodemailer.createTransport(SMTP_CONFIG);
-        logger.info(`📧 Email service initialized for ${SMTP_CONFIG.auth.user}`);
-    } catch (e) {
-        logger.error(`❌ Email service verification failed: ${e.message}`);
+        logger.info(`Email service initialized for ${SMTP_CONFIG.auth.user}`);
     }
 }
 
@@ -38,28 +54,36 @@ function queueAuditEmail(vendorName, changeType, details) {
     if (!pendingChanges.has(vendorName)) {
         pendingChanges.set(vendorName, { changes: [] });
     }
-    
+
     const vendorQueue = pendingChanges.get(vendorName);
     vendorQueue.changes.push({ type: changeType, details, timestamp: new Date() });
-    
-    logger.info(`📧 Queued change for vendor ${vendorName} (${vendorQueue.changes.length} pending, waiting for explicit flush)`);
+
+    logger.info(`Queued change for vendor ${vendorName} (${vendorQueue.changes.length} pending, waiting for explicit flush)`);
 }
 
 /**
  * Envía todos los cambios acumulados para un vendedor (llamar al pulsar GUARDAR)
+ * Se puede desactivar con DISABLE_PLANNER_EMAILS=true en variables de entorno
  */
 async function flushVendorEmails(vendorName) {
     const vendorQueue = pendingChanges.get(vendorName);
     if (!vendorQueue || vendorQueue.changes.length === 0) {
-        logger.info(`📧 No pending changes for vendor ${vendorName}`);
+        logger.info(`No pending changes for vendor ${vendorName}`);
         return;
     }
-    
+
+    // Check if emails are disabled via environment variable
+    if (process.env.DISABLE_PLANNER_EMAILS === 'true' || process.env.DISABLE_PLANNER_EMAILS === '1') {
+        logger.info(`Emails de planner desactivados (DISABLE_PLANNER_EMAILS=true). Cambios omitidos para ${vendorName}`);
+        vendorQueue.changes = [];
+        return;
+    }
+
     const changes = [...vendorQueue.changes];
     vendorQueue.changes = [];
-    
-    logger.info(`📧 Flushing ${changes.length} changes for vendor ${vendorName}`);
-    
+
+    logger.info(`Flushing ${changes.length} changes for vendor ${vendorName}`);
+
     // Consolidar todos los cambios en un solo email
     await sendConsolidatedEmail(vendorName, changes);
 }
@@ -375,27 +399,27 @@ async function sendConsolidatedEmail(vendorName, changes) {
                         ${totalChanges} ${totalChanges === 1 ? 'Cambio' : 'Cambios'} Realizados
                     </h2>
                     <p style="margin:8px 0 0;color:#93C5FD;font-size:14px;">
-                        Comercial #${vendorName} • ${daysArray.join(', ')}
+                        Comercial #${vendorName} - ${daysArray.join(', ')}
                     </p>
                 </td>
                 <td align="right" style="vertical-align:middle;">
                     <div style="background:rgba(255,255,255,0.15);border-radius:50%;width:56px;height:56px;text-align:center;line-height:56px;">
-                        <span style="font-size:24px;">📊</span>
+                        <span style="font-size:20px;font-weight:bold;color:#FFFFFF;">GMP</span>
                     </div>
                 </td>
             </tr>
         </table>
     </div>`;
-    
+
     // Resumen rápido
     const summaryItems = [];
     if (allMovedClients.length > 0) {
-        summaryItems.push({ label: 'Clientes cambiados de día', value: allMovedClients.length, icon: '🔀' });
+        summaryItems.push({ label: 'Clientes cambiados de día', value: allMovedClients.length });
     }
     if (allReorderedClients.length > 0) {
-        summaryItems.push({ label: 'Posiciones reordenadas', value: allReorderedClients.length, icon: '↕️' });
+        summaryItems.push({ label: 'Posiciones reordenadas', value: allReorderedClients.length });
     }
-    
+
     if (summaryItems.length > 0) {
         content += `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
             <tr>`;
@@ -403,20 +427,19 @@ async function sendConsolidatedEmail(vendorName, changes) {
             const borderRight = idx < summaryItems.length - 1 ? 'border-right:1px solid #E2E8F0;' : '';
             content += `
                 <td style="text-align:center;padding:16px;${borderRight}">
-                    <div style="font-size:28px;margin-bottom:8px;">${item.icon}</div>
                     <div style="font-size:28px;font-weight:700;color:#1E293B;">${item.value}</div>
                     <div style="font-size:12px;color:#64748B;margin-top:4px;">${item.label}</div>
                 </td>`;
         });
         content += `</tr></table>`;
     }
-    
+
     // Sección: Clientes movidos de día
     if (allMovedClients.length > 0) {
         content += `
         <div style="background:#ECFDF5;border:1px solid #10B981;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
             <h3 style="margin:0 0 12px;color:#065F46;font-size:14px;font-weight:600;">
-                🔀 Cambios de Día de Visita
+                Cambios de Día de Visita
             </h3>
             <p style="margin:0 0 16px;color:#047857;font-size:12px;">
                 Estos clientes ahora serán visitados en un día diferente al anterior.
@@ -468,7 +491,7 @@ async function sendConsolidatedEmail(vendorName, changes) {
         content += `
         <div style="background:#EFF6FF;border:1px solid #3B82F6;border-radius:8px;padding:16px 20px;margin-bottom:20px;">
             <h3 style="margin:0 0 12px;color:#1E40AF;font-size:14px;font-weight:600;">
-                ↕️ Cambios de Posición en la Ruta
+                Cambios de Posición en la Ruta
             </h3>
             <p style="margin:0 0 16px;color:#1D4ED8;font-size:12px;">
                 Estos clientes han cambiado su orden de visita dentro del mismo día. El número indica la posición en la ruta (1 = primera visita del día).
@@ -567,9 +590,31 @@ async function sendConsolidatedEmail(vendorName, changes) {
     };
 
     try {
-        const info = await transporter.sendMail(mailOptions);
-        logger.info(`📧 Consolidated email sent: ${info.messageId} (${changes.length} changes)`);
-        return true;
+        const maxRetries = 3;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                if (!transporter) initEmailService();
+                const info = await transporter.sendMail(mailOptions);
+                logger.info('✅ Planner email enviado', { vendorName, messageId: info.messageId });
+                return true;
+            } catch (error) {
+                const isTimeout = ['ETIMEDOUT', 'ESOCKETTIMEDOUT'].includes(error.code);
+                const isConnection = ['ECONNREFUSED', 'ENOTFOUND', 'ECONNRESET', 'TIMEOUT'].includes(error.code);
+
+                if (isTimeout || isConnection) {
+                    invalidateTransporter();
+                    logger.warn(`⚠️ Planner email error (intento ${attempt}/${maxRetries}): ${error.code}`);
+                } else {
+                    throw error; // Re-lanzar errores no-transitorios
+                }
+
+                if (attempt < maxRetries) {
+                    await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+                }
+            }
+        }
+        logger.error('❌ Planner email fallido tras 3 intentos', { vendorName });
+        return false;
     } catch (error) {
         logger.error(`❌ Error sending consolidated email: ${error.message}`);
         return false;

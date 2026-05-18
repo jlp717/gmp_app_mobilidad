@@ -110,25 +110,39 @@ class AuthService {
    * Busca vendedor por código o por nombre (parcial)
    */
   private async buscarVendedor(usuario: string): Promise<Vendedor | null> {
-    // Primero buscar por código exacto
-    let resultado = await odbcPool.query<Record<string, unknown>[]>(
-      `SELECT 
-        CODIGOVENDEDOR, 
-        TRIM(NOMBREVENDEDOR) as NOMBREVENDEDOR,
-        TRIM(NIF) as NIF,
-        TRIM(TELEFONO1) as TELEFONO,
-        TRIM(DIRECCION) as DIRECCION,
-        TRIM(POBLACION) as POBLACION,
-        TRIM(PROVINCIA) as PROVINCIA
-       FROM DSEDAC.VDD
-       WHERE TRIM(CODIGOVENDEDOR) = ?
-       FETCH FIRST 1 ROWS ONLY`,
-      [usuario]
-    );
+    // Sanitize: only alphanumeric and spaces (matches legacy JS behavior)
+    const sanitized = usuario.replace(/[^a-zA-Z0-9 ]/g, '').trim().toUpperCase();
+    if (!sanitized) return null;
 
-    // Si no encuentra por código, buscar por nombre (parameterized LIKE)
+    let resultado: Record<string, unknown>[] | null = null;
+
+    // First try by exact code (only if short enough to fit CODIGOVENDEDOR column)
+    if (sanitized.length <= 10) {
+      try {
+        resultado = await odbcPool.query<Record<string, unknown>[]>(
+          `SELECT 
+            CODIGOVENDEDOR, 
+            TRIM(NOMBREVENDEDOR) as NOMBREVENDEDOR,
+            TRIM(NIF) as NIF,
+            TRIM(TELEFONO1) as TELEFONO,
+            TRIM(DIRECCION) as DIRECCION,
+            TRIM(POBLACION) as POBLACION,
+            TRIM(PROVINCIA) as PROVINCIA
+           FROM DSEDAC.VDD
+           WHERE TRIM(CODIGOVENDEDOR) = ?
+           FETCH FIRST 1 ROWS ONLY`,
+          [sanitized]
+        );
+      } catch (err) {
+        // DB2 may reject if value is too large for CODIGOVENDEDOR column — fall through to name search
+        logger.debug(`Code search failed for '${sanitized}', trying name search`);
+        resultado = null;
+      }
+    }
+
+    // If not found by code, search by name (parameterized LIKE)
     if (!resultado || resultado.length === 0) {
-      const searchPattern = `%${usuario.toUpperCase()}%`;
+      const searchPattern = `%${sanitized}%`;
       resultado = await odbcPool.query<Record<string, unknown>[]>(
         `SELECT
           CODIGOVENDEDOR,

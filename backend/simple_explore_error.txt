@@ -1,1 +1,0 @@
-[odbc] Error executing the sql statement

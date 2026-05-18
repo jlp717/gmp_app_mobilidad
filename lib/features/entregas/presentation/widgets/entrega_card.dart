@@ -1,16 +1,16 @@
 import 'package:flutter/material.dart';
-import '../../providers/entregas_provider.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 
 /// Tarjeta de albarán en la lista de entregas
 class EntregaCard extends StatelessWidget {
-  final AlbaranEntrega albaran;
-  final VoidCallback? onTap;
 
   const EntregaCard({
-    super.key,
-    required this.albaran,
+    required this.albaran, super.key,
     this.onTap,
   });
+  final AlbaranEntrega albaran;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -22,7 +22,9 @@ class EntregaCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(
+            Responsive.padding(context, small: 12, large: 16),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -59,9 +61,13 @@ class EntregaCard extends StatelessWidget {
                   // Número de albarán
                   Text(
                     'Alb. ${albaran.numeroAlbaran}${albaran.horaPrevista != null ? " (${albaran.horaPrevista})" : ""}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
+                      fontSize: Responsive.fontSize(
+                        context,
+                        small: 13,
+                        large: 16,
+                      ),
                     ),
                   ),
                   
@@ -71,14 +77,14 @@ class EntregaCard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
-                      color: albaran.estado.color.withOpacity(0.15),
+                      color: albaran.estado.color.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(albaran.estado.icon, 
-                             size: 14, color: albaran.estado.color),
+                             size: 14, color: albaran.estado.color,),
                         const SizedBox(width: 4),
                         Text(
                           albaran.estado.label,
@@ -221,7 +227,7 @@ class EntregaCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   Icon(Icons.chevron_right, 
-                       size: 16, color: Colors.grey.shade500),
+                       size: 16, color: Colors.grey.shade500,),
                 ],
               ),
             ],

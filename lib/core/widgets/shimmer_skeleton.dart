@@ -1,20 +1,22 @@
-/// Shimmer Loading Skeleton Widget
-/// ================================
-/// Premium loading placeholder for perceived instant performance
-/// Uses shimmer animation to indicate loading state
+/// Shimmer Loading Skeleton Widget — V2 Premium
+/// =============================================
+/// Premium loading placeholder with refined shimmer animation.
+/// Uses modern color palette and smooth easing curves.
+library;
 
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// Shimmer effect widget for loading states
 class ShimmerLoading extends StatefulWidget {
-  final Widget child;
-  final bool isLoading;
 
   const ShimmerLoading({
-    super.key,
-    required this.child,
+    required this.child, super.key,
     this.isLoading = true,
   });
+  final Widget child;
+  final bool isLoading;
 
   @override
   State<ShimmerLoading> createState() => _ShimmerLoadingState();
@@ -30,7 +32,7 @@ class _ShimmerLoadingState extends State<ShimmerLoading>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 1800),
     )..repeat();
     _animation = Tween<double>(begin: -2, end: 2).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOutSine),
@@ -56,9 +58,9 @@ class _ShimmerLoadingState extends State<ShimmerLoading>
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: const [
-                Color(0xFF1E2746),
-                Color(0xFF2D3A5C),
-                Color(0xFF1E2746),
+                Color(0xFF1F2937),
+                Color(0xFF374151),
+                Color(0xFF1F2937),
               ],
               stops: [
                 (_animation.value - 1).clamp(0.0, 1.0),
@@ -79,9 +81,6 @@ class _ShimmerLoadingState extends State<ShimmerLoading>
 
 /// Skeleton placeholder for list items (cards)
 class SkeletonCard extends StatelessWidget {
-  final double height;
-  final double? width;
-  final EdgeInsets margin;
 
   const SkeletonCard({
     super.key,
@@ -89,20 +88,23 @@ class SkeletonCard extends StatelessWidget {
     this.width,
     this.margin = const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
   });
+  final double height;
+  final double? width;
+  final EdgeInsets margin;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       height: height,
       width: width,
-      margin: margin,
+      margin: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 20), vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E2746),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white10),
+        color: AppTheme.darkCard,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -113,8 +115,8 @@ class SkeletonCard extends StatelessWidget {
                   width: 44,
                   height: 44,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -124,20 +126,20 @@ class SkeletonCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Container(
-                        height: 16,
+                        height: 14,
                         width: double.infinity,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
+                          color: Colors.white.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                       ),
                       const SizedBox(height: 8),
                       Container(
-                        height: 12,
-                        width: 150,
+                        height: 10,
+                        width: 120,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.08),
-                          borderRadius: BorderRadius.circular(4),
+                          color: Colors.white.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                       ),
                     ],
@@ -145,11 +147,11 @@ class SkeletonCard extends StatelessWidget {
                 ),
                 // Amount placeholder
                 Container(
-                  height: 20,
-                  width: 80,
+                  height: 18,
+                  width: 70,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(4),
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                 ),
               ],
@@ -161,19 +163,19 @@ class SkeletonCard extends StatelessWidget {
               children: [
                 Container(
                   height: 32,
-                  width: 90,
+                  width: 80,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Container(
                   height: 32,
-                  width: 100,
+                  width: 90,
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   ),
                 ),
               ],
@@ -187,14 +189,14 @@ class SkeletonCard extends StatelessWidget {
 
 /// Skeleton list - shows multiple skeleton cards
 class SkeletonList extends StatelessWidget {
-  final int itemCount;
-  final double itemHeight;
 
   const SkeletonList({
     super.key,
     this.itemCount = 5,
     this.itemHeight = 120,
   });
+  final int itemCount;
+  final double itemHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -217,19 +219,19 @@ class SkeletonSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     return ShimmerLoading(
       child: Container(
-        margin: const EdgeInsets.all(16),
-        padding: const EdgeInsets.all(20),
+        margin: EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
+        padding: EdgeInsets.all(Responsive.padding(context, small: 16, large: 24)),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              const Color(0xFF1E2746),
-              const Color(0xFF252B48),
+              AppTheme.darkSurface,
+              AppTheme.darkCard.withValues(alpha: 0.8),
             ],
           ),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white10),
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
         ),
         child: Column(
           children: [
@@ -251,20 +253,20 @@ class SkeletonSummary extends StatelessWidget {
     return Column(
       children: [
         Container(
-          height: 32,
-          width: 80,
+          height: 28,
+          width: 70,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
+            color: Colors.white.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           ),
         ),
         const SizedBox(height: 8),
         Container(
-          height: 14,
-          width: 60,
+          height: 12,
+          width: 50,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(4),
+            color: Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(6),
           ),
         ),
       ],

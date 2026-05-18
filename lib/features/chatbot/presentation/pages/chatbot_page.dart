@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/providers/auth_provider.dart';
-import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
-import '../../providers/chatbot_provider.dart';
-import '../widgets/chat_message_bubble.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Import Sync Header
+import 'package:gmp_app_mobilidad/features/chatbot/presentation/widgets/chat_message_bubble.dart';
+import 'package:gmp_app_mobilidad/features/chatbot/providers/chatbot_provider.dart';
 
 /// [ChatbotPage] - Professional AI Sales Assistant
 /// 
@@ -13,34 +12,31 @@ import '../widgets/chat_message_bubble.dart';
 /// - Clean professional design without childish emojis
 /// - Quick action pills with icons
 /// - Gradient accents and glowing effects
-class ChatbotPage extends StatefulWidget {
+class ChatbotPage extends ConsumerStatefulWidget {
   const ChatbotPage({
-    super.key,
-    required this.vendedorCodes,
+    required this.vendedorCodes, super.key,
   });
 
   final List<String> vendedorCodes;
 
   @override
-  State<ChatbotPage> createState() => _ChatbotPageState();
+  ConsumerState<ChatbotPage> createState() => _ChatbotPageState();
 }
 
-class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStateMixin {
+class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  late ChatbotProvider _provider;
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
   @override
   void initState() {
     super.initState();
-    _provider = ChatbotProvider(vendedorCodes: widget.vendedorCodes);
     _pulseController = AnimationController(
       duration: const Duration(milliseconds: 2000),
       vsync: this,
     )..repeat(reverse: true);
-    _pulseAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+    _pulseAnimation = Tween<double>(begin: 0.8, end: 1).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
   }
@@ -50,7 +46,6 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
     _messageController.dispose();
     _scrollController.dispose();
     _pulseController.dispose();
-    _provider.dispose();
     super.dispose();
   }
 
@@ -58,7 +53,7 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
     final text = _messageController.text.trim();
     if (text.isEmpty) return;
 
-    _provider.sendMessage(text);
+    ref.read(chatbotProvider.notifier).sendMessage(text);
     _messageController.clear();
     
     Future.delayed(const Duration(milliseconds: 100), () {
@@ -75,11 +70,15 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
   @override
   Widget build(BuildContext context) {
     // Check role for custom message
-    bool isJefe = false;
+    var isJefe = false;
     try {
-      final auth = Provider.of<AuthProvider>(context, listen: false);
-      isJefe = auth.isDirector || widget.vendedorCodes.length > 1;
+      final authState = ProviderScope.containerOf(context)
+          .read(authProvider)
+          .value;
+      isJefe = (authState?.user?.isDirector ?? false) || widget.vendedorCodes.length > 1;
     } catch (_) {}
+
+    final chatbotState = ref.watch(chatbotProvider);
 
     return Scaffold( // Wrapped in Scaffold for safety
       backgroundColor: const Color(0xFF0A0E21),
@@ -89,50 +88,44 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
               title: isJefe ? 'NEXUS AI (Supervisor)' : 'NEXUS AI',
               subtitle: 'Asistente Comercial Inteligente',
               lastSync: DateTime.now(),
-              isLoading: _provider.isLoading,
-              onSync: () => _provider.clearChat(), // Clear as sync/reset action
+              isLoading: chatbotState.isLoading,
+              onSync: () => ref.read(chatbotProvider.notifier).clearChat(), // Clear as sync/reset action
             ),
              Expanded(
-                child: ChangeNotifierProvider.value(
-                  value: _provider,
-                  child: Column(
-                    children: [
-                      _buildQuickActions(),
-                      Expanded(child: _buildMessageList()),
-                      _buildInputArea(),
-                    ],
-                  ),
+                child: Column(
+                  children: [
+                    _buildQuickActions(),
+                    Expanded(child: _buildMessageList()),
+                    _buildInputArea(),
+                  ],
                 ),
-             )
+             ),
         ],
-      )
+      ),
     );
   }
 
   // OLD CHATBOT UI - PRESERVED FOR FUTURE USE
   Widget _buildChatbotInterface(BuildContext context) {
-    return ChangeNotifierProvider.value(
-      value: _provider,
-      child: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              const Color(0xFF0A0E21),
-              const Color(0xFF0D1320),
-              const Color(0xFF0A0E21),
-            ],
-          ),
-        ),
-        child: Column(
-          children: [
-            _buildHeader(),
-            _buildQuickActions(),
-            Expanded(child: _buildMessageList()),
-            _buildInputArea(),
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            Color(0xFF0A0E21),
+            Color(0xFF0D1320),
+            Color(0xFF0A0E21),
           ],
         ),
+      ),
+      child: Column(
+        children: [
+          _buildHeader(),
+          _buildQuickActions(),
+          Expanded(child: _buildMessageList()),
+          _buildInputArea(),
+        ],
       ),
     );
   }
@@ -141,11 +134,10 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.3),
+        color: Colors.black.withValues(alpha: 0.3),
         border: Border(
           bottom: BorderSide(
-            color: AppTheme.neonBlue.withOpacity(0.2),
-            width: 1,
+            color: AppTheme.neonBlue.withValues(alpha: 0.2),
           ),
         ),
       ),
@@ -158,7 +150,7 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                gradient: LinearGradient(
+                gradient: const LinearGradient(
                   colors: [
                     AppTheme.neonBlue,
                     AppTheme.neonPurple,
@@ -167,7 +159,7 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
                 borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: AppTheme.neonBlue.withOpacity(0.3 * _pulseAnimation.value),
+                    color: AppTheme.neonBlue.withValues(alpha: 0.3 * _pulseAnimation.value),
                     blurRadius: 20,
                     spreadRadius: 2,
                   ),
@@ -176,7 +168,7 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
               child: Stack(
                 alignment: Alignment.center,
                 children: [
-                  Icon(Icons.psychology, color: Colors.white, size: 28),
+                  const Icon(Icons.psychology, color: Colors.white, size: 28),
                   Positioned(
                     right: 6,
                     bottom: 6,
@@ -202,7 +194,7 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 ShaderMask(
-                  shaderCallback: (bounds) => LinearGradient(
+                  shaderCallback: (bounds) => const LinearGradient(
                     colors: [AppTheme.neonBlue, AppTheme.neonPurple],
                   ).createShader(bounds),
                   child: const Text(
@@ -221,7 +213,7 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
                     Container(
                       width: 6,
                       height: 6,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: AppTheme.neonGreen,
                         shape: BoxShape.circle,
                       ),
@@ -242,16 +234,12 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
           ),
           
           // Clear chat
-          Consumer<ChatbotProvider>(
-            builder: (context, provider, _) {
-              if (provider.messages.isEmpty) return const SizedBox();
-              return IconButton(
-                icon: Icon(Icons.delete_outline, color: Colors.grey.shade600, size: 22),
-                onPressed: () => provider.clearChat(),
-                tooltip: 'Limpiar',
-              );
-            },
-          ),
+          if (ref.watch(chatbotProvider).messages.isNotEmpty)
+            IconButton(
+              icon: Icon(Icons.delete_outline, color: Colors.grey.shade600, size: 22),
+              onPressed: () => ref.read(chatbotProvider.notifier).clearChat(),
+              tooltip: 'Limpiar',
+            ),
         ],
       ),
     );
@@ -288,14 +276,13 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    AppTheme.neonBlue.withOpacity(0.1),
-                    AppTheme.neonPurple.withOpacity(0.05),
+                    AppTheme.neonBlue.withValues(alpha: 0.1),
+                    AppTheme.neonPurple.withValues(alpha: 0.05),
                   ],
                 ),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: AppTheme.neonBlue.withOpacity(0.3),
-                  width: 1,
+                  color: AppTheme.neonBlue.withValues(alpha: 0.3),
                 ),
               ),
               child: Row(
@@ -321,32 +308,30 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
   }
 
   Widget _buildMessageList() {
-    return Consumer<ChatbotProvider>(
-      builder: (context, provider, _) {
-        if (provider.messages.isEmpty) {
-          return _buildWelcomeScreen();
+    final chatState = ref.watch(chatbotProvider);
+    
+    if (chatState.messages.isEmpty) {
+      return _buildWelcomeScreen();
+    }
+
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      itemCount: chatState.messages.length + (chatState.isLoading ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (index == chatState.messages.length && chatState.isLoading) {
+          return const ChatMessageBubble(
+            message: '',
+            isUser: false,
+            isLoading: true,
+          );
         }
 
-        return ListView.builder(
-          controller: _scrollController,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          itemCount: provider.messages.length + (provider.isLoading ? 1 : 0),
-          itemBuilder: (context, index) {
-            if (index == provider.messages.length && provider.isLoading) {
-              return const ChatMessageBubble(
-                message: '',
-                isUser: false,
-                isLoading: true,
-              );
-            }
-            
-            final message = provider.messages[index];
-            return ChatMessageBubble(
-              message: message.content,
-              isUser: message.isUser,
-              timestamp: message.timestamp,
-            );
-          },
+        final message = chatState.messages[index];
+        return ChatMessageBubble(
+          message: message.content,
+          isUser: message.isUser,
+          timestamp: message.timestamp,
         );
       },
     );
@@ -364,20 +349,20 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
             height: 100,
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                colors: [AppTheme.neonBlue.withOpacity(0.2), AppTheme.neonPurple.withOpacity(0.1)],
+                colors: [AppTheme.neonBlue.withValues(alpha: 0.2), AppTheme.neonPurple.withValues(alpha: 0.1)],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
               ),
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+              border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
             ),
-            child: Icon(Icons.psychology, size: 50, color: AppTheme.neonBlue),
+            child: const Icon(Icons.psychology, size: 50, color: AppTheme.neonBlue),
           ),
           const SizedBox(height: 28),
           
           // Title
           ShaderMask(
-            shaderCallback: (bounds) => LinearGradient(
+            shaderCallback: (bounds) => const LinearGradient(
               colors: [AppTheme.neonBlue, AppTheme.neonPurple],
             ).createShader(bounds),
             child: const Text(
@@ -433,16 +418,16 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
           width: 160,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.03),
+            color: Colors.white.withValues(alpha: 0.03),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.08)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           ),
           child: Column(
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withOpacity(0.1),
+                  color: AppTheme.neonBlue.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(icon, color: AppTheme.neonBlue, size: 24),
@@ -506,13 +491,13 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.02),
+                color: Colors.white.withValues(alpha: 0.02),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withOpacity(0.06)),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
               ),
               child: Row(
                 children: [
-                  Icon(Icons.arrow_forward_ios, size: 12, color: AppTheme.neonBlue),
+                  const Icon(Icons.arrow_forward_ios, size: 12, color: AppTheme.neonBlue),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
@@ -527,18 +512,20 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
               ),
             ),
           ),
-        )),
+        ),),
       ],
     );
   }
 
   Widget _buildInputArea() {
+    final chatState = ref.watch(chatbotProvider);
+    
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.4),
+        color: Colors.black.withValues(alpha: 0.4),
         border: Border(
-          top: BorderSide(color: AppTheme.neonBlue.withOpacity(0.15)),
+          top: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.15)),
         ),
       ),
       child: SafeArea(
@@ -548,9 +535,9 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
+                  color: Colors.white.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: AppTheme.neonBlue.withOpacity(0.2)),
+                  border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.2)),
                 ),
                 child: TextField(
                   controller: _messageController,
@@ -567,37 +554,33 @@ class _ChatbotPageState extends State<ChatbotPage> with SingleTickerProviderStat
               ),
             ),
             const SizedBox(width: 12),
-            
-            Consumer<ChatbotProvider>(
-              builder: (context, provider, _) {
-                return GestureDetector(
-                  onTap: provider.isLoading ? null : _sendMessage,
-                  child: Container(
-                    width: 54,
-                    height: 54,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: provider.isLoading
-                            ? [Colors.grey.shade800, Colors.grey.shade800]
-                            : [AppTheme.neonBlue, AppTheme.neonPurple],
-                      ),
-                      borderRadius: BorderRadius.circular(27),
-                      boxShadow: provider.isLoading ? [] : [
-                        BoxShadow(
-                          color: AppTheme.neonBlue.withOpacity(0.4),
-                          blurRadius: 16,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      provider.isLoading ? Icons.hourglass_top : Icons.send_rounded,
-                      color: Colors.white,
-                      size: 24,
-                    ),
+
+            GestureDetector(
+              onTap: chatState.isLoading ? null : _sendMessage,
+              child: Container(
+                width: 54,
+                height: 54,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: chatState.isLoading
+                        ? [Colors.grey.shade800, Colors.grey.shade800]
+                        : [AppTheme.neonBlue, AppTheme.neonPurple],
                   ),
-                );
-              },
+                  borderRadius: BorderRadius.circular(27),
+                  boxShadow: chatState.isLoading ? [] : [
+                    BoxShadow(
+                      color: AppTheme.neonBlue.withValues(alpha: 0.4),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  chatState.isLoading ? Icons.hourglass_top : Icons.send_rounded,
+                  color: Colors.white,
+                  size: 24,
+                ),
+              ),
             ),
           ],
         ),

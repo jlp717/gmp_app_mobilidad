@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
+import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
 /// [UltimasVentasWidget] - Lista de las últimas ventas realizadas
 ///
@@ -11,8 +11,7 @@ import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 /// - Número de albarán
 class UltimasVentasWidget extends StatelessWidget {
   const UltimasVentasWidget({
-    super.key,
-    required this.ultimasVentas,
+    required this.ultimasVentas, super.key,
   });
 
   final List<UltimaVenta> ultimasVentas;
@@ -58,7 +57,7 @@ class UltimasVentasWidget extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withOpacity(0.1),
+                    color: Colors.blue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
@@ -137,7 +136,7 @@ class _VentaItem extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.grey.withOpacity(0.1),
+              color: Colors.grey.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(4),
             ),
             child: Text(

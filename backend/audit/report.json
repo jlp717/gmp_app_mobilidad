@@ -1,0 +1,23 @@
+{
+  "scanDate": "2026-03-16T12:20:59.945Z",
+  "mode": "DRY_RUN",
+  "limit": "unlimited",
+  "tables": {
+    "cac_sentinel_factura": 0,
+    "cac_anomalous_amounts": 1,
+    "cac_zero_total_nonzero_base": 1,
+    "cac_amount_mismatches": "QUERY_FAILED",
+    "delivery_status_no_firma": 0,
+    "delivery_status_duplicates": 0,
+    "cpc_sentinel_amounts": 0
+  },
+  "summary": {
+    "total": 2,
+    "critical": 0,
+    "high": 2,
+    "medium": 0,
+    "low": 0
+  },
+  "fixes": [],
+  "anomalyCount": 2
+}

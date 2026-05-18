@@ -1,5 +1,7 @@
 import java.util.Properties
 import java.io.FileInputStream
+import org.gradle.api.tasks.compile.JavaCompile
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     id("com.android.application")
@@ -72,6 +74,12 @@ flutter {
 dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
 }
+
+// Suppress obsolete source/target (Java 8) warnings coming from some plugins
+tasks.withType<JavaCompile>().configureEach {
+    options.compilerArgs.addAll(listOf("-Xlint:-options"))
+}
+
 
 
 

@@ -1,9 +1,10 @@
 /// DELIVERY ITEM LIST WIDGET
 /// Lista interactiva de items para marcar entrega individual
 /// Verde = Entregado, Rojo = No Entregado (con observaciones obligatorias)
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 /// Estado de entrega de un item individual
 enum ItemDeliveryStatus {
@@ -14,13 +15,6 @@ enum ItemDeliveryStatus {
 
 /// Modelo de item de entrega
 class DeliveryItem {
-  final String id;
-  final String code;
-  final String description;
-  final double quantityOrdered;
-  double quantityDelivered;
-  ItemDeliveryStatus status;
-  String? observations;
 
   DeliveryItem({
     required this.id,
@@ -31,6 +25,13 @@ class DeliveryItem {
     this.status = ItemDeliveryStatus.pending,
     this.observations,
   });
+  final String id;
+  final String code;
+  final String description;
+  final double quantityOrdered;
+  double quantityDelivered;
+  ItemDeliveryStatus status;
+  String? observations;
 
   bool get isCompleteDelivery => quantityDelivered >= quantityOrdered;
   bool get requiresObservations => status == ItemDeliveryStatus.notDelivered;
@@ -45,16 +46,14 @@ typedef OnItemStatusChanged = void Function(
 
 /// Widget de lista de items de entrega
 class DeliveryItemList extends StatefulWidget {
+
+  const DeliveryItemList({
+    required this.items, required this.onItemChanged, super.key,
+    this.readOnly = false,
+  });
   final List<DeliveryItem> items;
   final OnItemStatusChanged onItemChanged;
   final bool readOnly;
-
-  const DeliveryItemList({
-    super.key,
-    required this.items,
-    required this.onItemChanged,
-    this.readOnly = false,
-  });
 
   @override
   State<DeliveryItemList> createState() => _DeliveryItemListState();
@@ -89,18 +88,15 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
           item.status = ItemDeliveryStatus.delivered;
           item.quantityDelivered = item.quantityOrdered;
           widget.onItemChanged(item, ItemDeliveryStatus.delivered, null);
-          break;
         case ItemDeliveryStatus.delivered:
           item.status = ItemDeliveryStatus.notDelivered;
           item.quantityDelivered = 0;
           // Mostrar diálogo para observaciones
           _showObservationsDialog(item);
-          break;
         case ItemDeliveryStatus.notDelivered:
           item.status = ItemDeliveryStatus.pending;
           item.observations = null;
           widget.onItemChanged(item, ItemDeliveryStatus.pending, null);
-          break;
       }
     });
   }
@@ -120,7 +116,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppTheme.error.withOpacity(0.1),
+                color: AppTheme.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: const Icon(Icons.warning_amber, color: AppTheme.error, size: 20),
@@ -140,7 +136,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
           children: [
             Text(
               '${item.code} - ${item.description}',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -149,7 +145,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
               maxLines: 3,
               decoration: InputDecoration(
                 hintText: 'Ingrese el motivo de la no entrega...',
-                hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
+                hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5)),
                 filled: true,
                 fillColor: AppTheme.darkBase,
                 border: OutlineInputBorder(
@@ -166,7 +162,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
             const SizedBox(height: 8),
             Text(
               '* Las observaciones son obligatorias',
-              style: TextStyle(color: AppTheme.error.withOpacity(0.7), fontSize: 11),
+              style: TextStyle(color: AppTheme.error.withValues(alpha: 0.7), fontSize: 11),
             ),
           ],
         ),
@@ -176,9 +172,9 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
               // Si cancela, revertir a delivered
               item.status = ItemDeliveryStatus.delivered;
               item.quantityDelivered = item.quantityOrdered;
-              Navigator.of(ctx).pop(null);
+              Navigator.of(ctx).pop();
             },
-            child: Text('Cancelar', style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text('Cancelar', style: TextStyle(color: AppTheme.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -224,9 +220,9 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inventory_2_outlined, size: 48, color: AppTheme.textSecondary.withOpacity(0.5)),
+            Icon(Icons.inventory_2_outlined, size: 48, color: AppTheme.textSecondary.withValues(alpha: 0.5)),
             const SizedBox(height: 12),
-            Text(
+            const Text(
               'Sin items para entregar',
               style: TextStyle(color: AppTheme.textSecondary),
             ),
@@ -257,17 +253,14 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
         statusColor = AppTheme.success;
         statusIcon = Icons.check_circle;
         statusLabel = 'Entregado';
-        break;
       case ItemDeliveryStatus.notDelivered:
         statusColor = AppTheme.error;
         statusIcon = Icons.cancel;
         statusLabel = 'No Entregado';
-        break;
       case ItemDeliveryStatus.pending:
         statusColor = Colors.orange;
         statusIcon = Icons.pending;
         statusLabel = 'Pendiente';
-        break;
     }
 
     return GestureDetector(
@@ -276,10 +269,10 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: statusColor.withOpacity(0.1),
+          color: statusColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: statusColor.withOpacity(0.3),
+            color: statusColor.withValues(alpha: 0.3),
             width: 1.5,
           ),
         ),
@@ -293,7 +286,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.2),
+                    color: statusColor.withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
                   child: Icon(statusIcon, color: statusColor, size: 20),
@@ -310,7 +303,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
-                              color: AppTheme.neonBlue.withOpacity(0.2),
+                              color: AppTheme.neonBlue.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
@@ -383,21 +376,21 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: AppTheme.error.withOpacity(0.1),
+                  color: AppTheme.error.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.error.withOpacity(0.2)),
+                  border: Border.all(color: AppTheme.error.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.note_alt, color: AppTheme.error.withOpacity(0.7), size: 14),
+                    Icon(Icons.note_alt, color: AppTheme.error.withValues(alpha: 0.7), size: 14),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         item.observations!,
                         style: TextStyle(
                           fontSize: 11,
-                          color: AppTheme.error.withOpacity(0.9),
+                          color: AppTheme.error.withValues(alpha: 0.9),
                           fontStyle: FontStyle.italic,
                         ),
                       ),

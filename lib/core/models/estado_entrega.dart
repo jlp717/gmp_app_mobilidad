@@ -1,5 +1,6 @@
 /// EstadoEntrega - Shared enum for delivery states
 /// Used by entregas, cobros, and repartidor modules
+library;
 
 import 'package:flutter/material.dart';
 

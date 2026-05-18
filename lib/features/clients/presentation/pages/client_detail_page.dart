@@ -1,24 +1,24 @@
-import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
+import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
+import 'package:gmp_app_mobilidad/features/sales_history/presentation/widgets/sales_summary_header.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/widgets/modern_loading.dart';
-import '../../../../core/utils/currency_formatter.dart';
-import '../../data/clients_service.dart';
-import '../../../sales_history/presentation/widgets/sales_summary_header.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Client Detail Page - Shows comprehensive client information from DB2
 class ClientDetailPage extends StatefulWidget {
-  final String clientCode;
-  final String vendedorCodes;
 
   const ClientDetailPage({
-    super.key,
-    required this.clientCode,
-    required this.vendedorCodes,
+    required this.clientCode, required this.vendedorCodes, super.key,
   });
+  final String clientCode;
+  final String vendedorCodes;
 
   @override
   State<ClientDetailPage> createState() => _ClientDetailPageState();
@@ -34,8 +34,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadClientDetail();
     _loadSalesSummary();
   }
@@ -111,7 +110,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     }
 
     if (_clientData == null) {
-      return const Center(child: Text('No se encontró información del cliente'));
+      return const Center(child: Text('No se encontr³ informaci³n del cliente'));
     }
 
     final client = _clientData!['client'] as Map<String, dynamic>? ?? {};
@@ -126,9 +125,12 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
       children: [
         // Client Header Card
         _buildClientHeader(client, summary, payments),
-        
+
+        // KPI Alerts
+        ClientAlertsWidget(clientId: widget.clientCode),
+
         // Tab Bar
-        Container(
+        ColoredBox(
           color: AppTheme.surfaceColor,
           child: TabBar(
             controller: _tabController,
@@ -169,86 +171,89 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 16), vertical: Responsive.padding(context, small: 6, large: 8)),
       color: AppTheme.surfaceColor,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           // Editable Notes Banner (if exists)
-          if (editableNotes != null && editableNotes['text'] != null && (editableNotes['text'] as String).isNotEmpty) ...[
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppTheme.warning.withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.warning.withOpacity(0.5)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          editableNotes['text'] as String,
-                          style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Por: ${editableNotes['modifiedBy'] ?? 'Desconocido'}',
-                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 10),
-                        ),
-                      ],
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.edit, size: 18, color: AppTheme.warning),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => _showEditNotesDialog(code, editableNotes['text'] as String?),
-                  ),
-                ],
-              ),
-            ),
-          ] else ...[
-            // Show add notes button if no notes
-            InkWell(
-              onTap: () => _showEditNotesDialog(code, null),
-              child: Container(
+          // Editable Notes Banner (if exists and not compact landscape)
+          if (!Responsive.isLandscapeCompact(context)) ...[
+            if (editableNotes != null && editableNotes['text'] != null && (editableNotes['text'] as String).isNotEmpty) ...[
+              Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: AppTheme.neonBlue.withOpacity(0.1),
+                  color: AppTheme.warning.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.neonBlue.withOpacity(0.3)),
+                  border: Border.all(color: AppTheme.warning.withValues(alpha: 0.5)),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.note_add, size: 16, color: AppTheme.neonBlue),
-                    const SizedBox(width: 6),
-                    const Text('Añadir observaciones', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
+                    const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            editableNotes['text'] as String,
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Por: ${editableNotes['modifiedBy'] ?? 'Desconocido'}',
+                            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.edit, size: 18, color: AppTheme.warning),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => _showEditNotesDialog(code, editableNotes['text'] as String?),
+                    ),
                   ],
                 ),
               ),
-            ),
+            ] else ...[
+              // Show add notes button if no notes
+              InkWell(
+                onTap: () => _showEditNotesDialog(code, null),
+                child: Container(
+                  width: double.infinity,
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.neonBlue.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.note_add, size: 16, color: AppTheme.neonBlue),
+                      SizedBox(width: 6),
+                      Text('A±adir observaciones', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ],
           
           Row(
             children: [
               CircleAvatar(
-                radius: 20,
-                backgroundColor: AppTheme.neonGreen.withOpacity(0.2),
+                radius: Responsive.value(context, phone: 16, desktop: 20),
+                backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.2),
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                  style: const TextStyle(color: AppTheme.neonGreen, fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: AppTheme.neonGreen, fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(width: 12),
@@ -260,20 +265,23 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                       name, 
                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       maxLines: 1, 
-                      overflow: TextOverflow.ellipsis
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      'Cód: $code ${nif.isNotEmpty ? ' • NIF: $nif' : ''}', 
-                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)
-                    ),
+                    if (!Responsive.isLandscapeCompact(context))
+                      Text(
+                        'C³d: $code ${nif.isNotEmpty ? '  NIF: $nif' : ''}', 
+                        style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                      )
+                    else
+                      Text('C³d: $code', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
                   ],
                 ),
               ),
               // WhatsApp Button
               if (phones.isNotEmpty)
                 IconButton(
-                  icon: const Icon(Icons.chat, size: 20, color: Color(0xFF25D366)), // WhatsApp green
+                  icon: Icon(Icons.chat, size: Responsive.iconSize(context, phone: 18, desktop: 20), color: const Color(0xFF25D366)), // WhatsApp green
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _showWhatsAppDialog(phones),
@@ -282,14 +290,14 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
               const SizedBox(width: 8),
               if (phone.isNotEmpty)
                 IconButton(
-                  icon: const Icon(Icons.phone, size: 20, color: AppTheme.success),
+                  icon: Icon(Icons.phone, size: Responsive.iconSize(context, phone: 18, desktop: 20), color: AppTheme.success),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _launchPhone(phone),
                 ),
             ],
           ),
-          if (address.isNotEmpty || city.isNotEmpty) ...[
+          if (!Responsive.isLandscapeCompact(context) && (address.isNotEmpty || city.isNotEmpty)) ...[
             const SizedBox(height: 4),
             Row(
               children: [
@@ -297,9 +305,9 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                 Expanded(
                   child: Text(
                     [address, city].where((s) => s.isNotEmpty).join(', '),
-                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
                     maxLines: 1, 
-                    overflow: TextOverflow.ellipsis
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
@@ -325,23 +333,23 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     
     return Row(
       children: [
-        const SizedBox(width: 52), // Align with avatar
+        SizedBox(width: Responsive.value(context, phone: 44, desktop: 52)), // Align with avatar
         // Route Badge
         if (route.isNotEmpty) ...[
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AppTheme.neonPurple.withOpacity(0.15),
+              color: AppTheme.neonPurple.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.route, size: 12, color: AppTheme.neonPurple),
+                const Icon(Icons.route, size: 12, color: AppTheme.neonPurple),
                 const SizedBox(width: 4),
                 Text(
                   routeDesc.isNotEmpty ? routeDesc : 'Ruta $route',
-                  style: TextStyle(fontSize: 11, color: AppTheme.neonPurple, fontWeight: FontWeight.w500),
+                  style: const TextStyle(fontSize: 11, color: AppTheme.neonPurple, fontWeight: FontWeight.w500),
                 ),
               ],
             ),
@@ -353,17 +361,17 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AppTheme.neonBlue.withOpacity(0.15),
+              color: AppTheme.neonBlue.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.calendar_today, size: 12, color: AppTheme.neonBlue),
+                const Icon(Icons.calendar_today, size: 12, color: AppTheme.neonBlue),
                 const SizedBox(width: 4),
                 Text(
                   'Visita: $visitDays',
-                  style: TextStyle(fontSize: 11, color: AppTheme.neonBlue, fontWeight: FontWeight.w500),
+                  style: const TextStyle(fontSize: 11, color: AppTheme.neonBlue, fontWeight: FontWeight.w500),
                 ),
               ],
             ),
@@ -375,17 +383,17 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: AppTheme.neonGreen.withOpacity(0.15),
+              color: AppTheme.neonGreen.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.local_shipping, size: 12, color: AppTheme.neonGreen),
+                const Icon(Icons.local_shipping, size: 12, color: AppTheme.neonGreen),
                 const SizedBox(width: 4),
                 Text(
                   'Reparto: $deliveryDays',
-                  style: TextStyle(fontSize: 11, color: AppTheme.neonGreen, fontWeight: FontWeight.w500),
+                  style: const TextStyle(fontSize: 11, color: AppTheme.neonGreen, fontWeight: FontWeight.w500),
                 ),
               ],
             ),
@@ -456,17 +464,17 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
           children: [
             const Text('Enviar WhatsApp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 8),
-            const Text('Selecciona el número:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const Text('Selecciona el nºmero:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
             const SizedBox(height: 12),
             ...phones.map((p) => ListTile(
               leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
               title: Text((p['number'] as String?) ?? ''),
-              subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
+              subtitle: Text((p['type'] as String?) ?? 'Tel©fono'),
               onTap: () {
                 Navigator.pop(ctx);
                 _openWhatsApp((p['number'] as String?) ?? '');
               },
-            )).toList(),
+            ),),
             const SizedBox(height: 8),
           ],
         ),
@@ -474,9 +482,9 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     );
   }
 
-  void _openWhatsApp(String phone) async {
+  Future<void> _openWhatsApp(String phone) async {
     // Clean phone number
-    String cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    var cleanPhone = phone.replaceAll(RegExp('[^0-9+]'), '');
     if (!cleanPhone.startsWith('+') && !cleanPhone.startsWith('34')) {
       cleanPhone = '34$cleanPhone'; // Default to Spain
     }
@@ -487,8 +495,8 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     // Build personalized message
     final message = Uri.encodeComponent(
       'Hola, soy tu comercial de Mari Pepa. '
-      'Me gustaría saber cómo va todo y recordarte que mañana es día de visita. '
-      '¿Está todo en orden? ¿Necesitas algo en particular?'
+      'Me gustar­a saber c³mo va todo y recordarte que ma±ana es d­a de visita. '
+      '¿Est¡ todo en orden? ¿Necesitas algo en particular?'
     );
     
     final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
@@ -510,7 +518,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     final pendingCount = (payments['pendingCount'] as num?)?.toInt() ?? 0;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -522,7 +530,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                 value: CurrencyFormatter.formatWhole(totalSales),
                 icon: Icons.euro,
                 color: AppTheme.neonBlue,
-              )),
+              ),),
               const SizedBox(width: 8),
               Expanded(child: _SummaryCard(
                 title: 'Margen',
@@ -530,7 +538,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                 subtitle: CurrencyFormatter.formatWhole(totalMargin),
                 icon: Icons.trending_up,
                 color: AppTheme.success,
-              )),
+              ),),
               const SizedBox(width: 8),
               Expanded(child: _SummaryCard(
                 title: 'Pedidos',
@@ -538,14 +546,14 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                 subtitle: '$totalBoxes cajas',
                 icon: Icons.shopping_cart,
                 color: AppTheme.neonGreen,
-              )),
+              ),),
             ],
           ),
           const SizedBox(height: 16),
 
           // Payment Status
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
             decoration: AppTheme.glassMorphism(),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -555,7 +563,8 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                   children: [
                     Text('Estado de Pagos', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
                     Icon(pendingCount > 0 ? Icons.warning_amber : Icons.check_circle, 
-                         color: pendingCount > 0 ? AppTheme.warning : AppTheme.success),
+                         color: pendingCount > 0 ? AppTheme.warning : AppTheme.success,
+                         size: Responsive.iconSize(context, phone: 20, desktop: 24),),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -565,17 +574,17 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Pagado', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                          const Text('Pagado', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                           Text(CurrencyFormatter.formatWhole(paid), style: const TextStyle(color: AppTheme.success, fontWeight: FontWeight.bold, fontSize: 18)),
                         ],
                       ),
                     ),
-                    Container(width: 1, height: 40, color: AppTheme.textSecondary.withOpacity(0.3)),
+                    Container(width: 1, height: 40, color: AppTheme.textSecondary.withValues(alpha: 0.3)),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text('Pendiente ($pendingCount)', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                          Text('Pendiente ($pendingCount)', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
                           Text(CurrencyFormatter.formatWhole(pending), style: TextStyle(color: pending > 0 ? AppTheme.warning : AppTheme.textSecondary, fontWeight: FontWeight.bold, fontSize: 18)),
                         ],
                       ),
@@ -589,11 +598,11 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
 
           // Monthly Trend Chart
           if (monthlyTrend.isNotEmpty) ...[
-            Text('Evolución Ventas (12 meses)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text('Evoluci³n Ventas (12 meses)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Container(
-              height: 200,
-              padding: const EdgeInsets.all(16),
+              height: Responsive.value(context, phone: 150, desktop: 200),
+              padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
               decoration: AppTheme.glassMorphism(),
               child: _buildTrendChart(monthlyTrend),
             ),
@@ -613,11 +622,11 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
 
     return LineChart(
       LineChartData(
-        gridData: FlGridData(show: true, drawVerticalLine: false),
+        gridData: const FlGridData(drawVerticalLine: false),
         titlesData: FlTitlesData(
-          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: const AxisTitles(),
+          rightTitles: const AxisTitles(),
+          topTitles: const AxisTitles(),
           bottomTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -637,12 +646,10 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
             spots: spots,
             isCurved: true,
             color: AppTheme.neonBlue,
-            barWidth: 2,
-            dotData: FlDotData(show: true),
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
-                colors: [AppTheme.neonBlue.withOpacity(0.3), AppTheme.neonBlue.withOpacity(0.0)],
+                colors: [AppTheme.neonBlue.withValues(alpha: 0.3), AppTheme.neonBlue.withValues(alpha: 0)],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -659,7 +666,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       itemCount: topProducts.length,
       itemBuilder: (context, index) {
         final product = topProducts[index];
@@ -677,7 +684,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
               width: 42,
               height: 42,
               decoration: BoxDecoration(
-                color: AppTheme.neonPurple.withOpacity(0.2),
+                color: AppTheme.neonPurple.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Center(
@@ -685,7 +692,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
               ),
             ),
             title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14)),
-            subtitle: Text('Cód: $code • $timesOrdered ped. • $totalBoxes cj', style: const TextStyle(fontSize: 11)),
+            subtitle: Text('C³d: $code  $timesOrdered ped.  $totalBoxes cj', style: const TextStyle(fontSize: 11)),
             trailing: Text(CurrencyFormatter.formatWhole(totalSales), style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen, fontSize: 13)),
           ),
         );
@@ -699,18 +706,24 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
         if (_salesSummary != null)
            SalesSummaryHeader(summary: _salesSummary!, showMargin: false, isJefeVentas: false),
         Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: ElevatedButton.icon(
-            icon: const Icon(Icons.manage_search),
-            label: const Text('Explorador Histórico Avanzado (Trazabilidad)'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonBlue.withOpacity(0.2),
-              foregroundColor: AppTheme.neonBlue,
-              minimumSize: const Size(double.infinity, 45),
-            ),
-            onPressed: () {
-              context.push('/sales-history', extra: widget.clientCode);
-            },
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.manage_search),
+                  label: const Text('Explorador Avanzado'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.2),
+                    foregroundColor: AppTheme.neonBlue,
+                    minimumSize: const Size(double.infinity, 45),
+                  ),
+                  onPressed: () {
+                    context.push('/sales-history', extra: widget.clientCode);
+                  },
+                ),
+              ),
+            ],
           ),
         ),
         Expanded(
@@ -719,7 +732,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Padding(
-                  padding: EdgeInsets.all(20.0),
+                  padding: EdgeInsets.all(20),
                   child: Center(child: ModernLoading(message: 'Cargando historial...')),
                 );
               }
@@ -744,16 +757,21 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                     color: AppTheme.surfaceColor,
                     child: ListTile(
                       dense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
                       leading: Text(
                         date.length >= 10 ? date.substring(5) : date,
-                        style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
                       ),
-                      title: Text(productName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                      title: Text(
+                        productName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13),
+                      ),
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('$boxes cj', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                          Text('$boxes cj', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
                           const SizedBox(width: 8),
                           Text(CurrencyFormatter.formatWhole(amount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                         ],
@@ -798,7 +816,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
       }
   }
 
-  void _launchPhone(String phone) async {
+  Future<void> _launchPhone(String phone) async {
     final uri = Uri.parse('tel:$phone');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri);
@@ -808,19 +826,17 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
 }
 
 class _SummaryCard extends StatelessWidget {
+
+  const _SummaryCard({
+    required this.title,
+    required this.value,
+    required this.icon, required this.color, this.subtitle,
+  });
   final String title;
   final String value;
   final String? subtitle;
   final IconData icon;
   final Color color;
-
-  const _SummaryCard({
-    required this.title,
-    required this.value,
-    this.subtitle,
-    required this.icon,
-    required this.color,
-  });
 
   @override
   Widget build(BuildContext context) {
@@ -833,14 +849,14 @@ class _SummaryCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+              Text(title, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
               Icon(icon, color: color, size: 16),
             ],
           ),
           const SizedBox(height: 6),
           Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 15)),
           if (subtitle != null)
-            Text(subtitle!, style: TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+            Text(subtitle!, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
         ],
       ),
     );

@@ -5,25 +5,27 @@
  */
 
 const logger = require('./logger');
+const crypto = require('crypto');
 
 /**
- * Feature flags for gradual rollout
+ * Feature flags for gradual rollout (OPTIMIZED v3)
  */
 const FEATURE_FLAGS = {
     HTTP2_PUSH: process.env.ENABLE_HTTP2_PUSH === 'true',
-    AGGRESSIVE_COMPRESSION: process.env.ENABLE_AGGRESSIVE_COMPRESSION !== 'false',
+    AGGRESSIVE_COMPRESSION: true, // Always on for JSON
     ETAG_CACHING: true,
     RESPONSE_COALESCING: true,
     PREFETCH_HINTS: true,
+    FAST_304: true, // Quick 304 responses
 };
 
 /**
- * Compression thresholds by content type
+ * Compression thresholds by content type (OPTIMIZED)
  */
 const COMPRESSION_CONFIG = {
-    threshold: 1024, // Min bytes to compress
-    level: 6, // zlib compression level (1-9)
-    memLevel: 8,
+    threshold: 256, // Lower threshold for more compression (was 1024)
+    level: 9, // Maximum compression level (was 6)
+    memLevel: 9,
     contentTypes: [
         'application/json',
         'text/plain',
@@ -40,8 +42,14 @@ const CACHE_CONTROL = {
     '/api/products': 'public, max-age=86400, stale-while-revalidate=3600',
     '/api/vendedores': 'public, max-age=86400, stale-while-revalidate=3600',
     '/api/dashboard/metrics': 'private, max-age=60, stale-while-revalidate=30',
+    '/api/dashboard/sales-evolution': 'private, max-age=300, stale-while-revalidate=60',
+    '/api/dashboard/matrix-data': 'private, max-age=300, stale-while-revalidate=60',
     '/api/clients': 'private, max-age=300, stale-while-revalidate=60',
+    '/api/commissions': 'private, max-age=900, stale-while-revalidate=300',
+    '/api/analytics': 'private, max-age=300, stale-while-revalidate=60',
     '/api/objectives': 'private, max-age=180, stale-while-revalidate=60',
+    '/api/rutero/day': 'private, max-age=300, stale-while-revalidate=60',
+    '/api/rutero/week': 'private, max-age=900, stale-while-revalidate=300',
     default: 'private, no-cache',
 };
 
@@ -64,6 +72,19 @@ const PREFETCH_HINTS = {
  */
 const pendingRequests = new Map();
 const COALESCE_WINDOW_MS = 50;
+const MAX_PENDING_AGE_MS = 60000; // 60s — heavy DB2 queries (commissions ALL, clients) need this
+
+setInterval(() => {
+    const now = Date.now();
+    for (const [sig, entry] of pendingRequests) {
+        if (now - (entry.createdAt || 0) > MAX_PENDING_AGE_MS) {
+            // Suppress unhandled rejection — the .catch() at line 222 handles it
+            entry.promise.catch(() => {});
+            entry.reject(new Error('Coalescing request timed out'));
+            pendingRequests.delete(sig);
+        }
+    }
+}, 10000).unref();
 
 /**
  * Main network optimizer middleware
@@ -183,7 +204,12 @@ function responseCoalescing(req, res, next) {
     }
 
     // Create request signature
-    const signature = `${req.path}?${JSON.stringify(req.query)}`;
+    const authFingerprint = crypto
+        .createHash('sha256')
+        .update(req.get('authorization') || '')
+        .digest('hex')
+        .slice(0, 16);
+    const signature = `${authFingerprint}:${req.path}?${JSON.stringify(req.query)}`;
 
     // Check if identical request is pending
     if (pendingRequests.has(signature)) {
@@ -210,7 +236,7 @@ function responseCoalescing(req, res, next) {
         rejectPromise = reject;
     });
 
-    pendingRequests.set(signature, { promise, resolve: resolvePromise, reject: rejectPromise });
+    pendingRequests.set(signature, { promise, resolve: resolvePromise, reject: rejectPromise, createdAt: Date.now() });
 
     // Override res.json to capture response
     const originalJson = res.json.bind(res);

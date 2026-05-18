@@ -1,0 +1,137 @@
+diff --git a/backend/services/facturas.service.js b/backend/services/facturas.service.js
+--- a/backend/services/facturas.service.js
++++ b/backend/services/facturas.service.js
+@@ -36,7 +36,7 @@
+       FROM DSEDAC.CAC CAC
+       LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CAC.CODIGOCLIENTEFACTURA
+-      WHERE CAC.NUMEROFACTURA > 0
++      WHERE CAC.NUMEROFACTURA > 0 AND CAC.NUMEROFACTURA < 900000
+     `;
+
+@@ -110,13 +110,22 @@
+             const invoiceMap = new Map();
+             for (const row of rows) {
+                 const key = `${row.SERIE}-${row.NUMERO}-${row.EJERCICIO}`;
+                 if (!invoiceMap.has(key)) {
++                    // Sanitize: clamp sentinel values, normalize -0
++                    const sanitize = (v) => {
++                        const n = parseFloat(v) || 0;
++                        if (Object.is(n, -0)) return 0;
++                        if (Math.abs(n) >= 900000) return 0; // sentinel
++                        return n;
++                    };
+                     invoiceMap.set(key, {
+                         id: key,
+                         ...
+-                        total: parseFloat(row.TOTAL) || 0,
+-                        base: parseFloat(row.BASE) || 0,
+-                        iva: parseFloat(row.IVA) || 0
++                        total: sanitize(row.TOTAL),
++                        base: sanitize(row.BASE),
++                        iva: sanitize(row.IVA)
+                     });
+
+@@ -152,7 +161,7 @@
+       SELECT DISTINCT EJERCICIOFACTURA as YEAR
+       FROM DSEDAC.CAC
+-      WHERE NUMEROFACTURA > 0
++      WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
+     `;
+
+@@ -186,7 +195,7 @@
+       FROM DSEDAC.CAC
+-      WHERE NUMEROFACTURA > 0
++      WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
+     `;
+
+@@ -231,6 +240,11 @@
+     async getFacturaDetail(serie, numero, ejercicio) {
++        // AUDIT FIX: Block sentinel invoice numbers
++        if (numero >= 900000 || numero <= 0) {
++            throw new Error('Factura no encontrada');
++        }
++
+         // FIX: Aggregate across all albaranes for same invoice.
+
+diff --git a/backend/services/pdf.service.js b/backend/services/pdf.service.js
+--- a/backend/services/pdf.service.js
++++ b/backend/services/pdf.service.js
+@@ -168,6 +168,14 @@
+ async function generateInvoicePDF(facturaData) {
+     try {
+         const header = facturaData.header || {};
+         const lines = facturaData.lines || [];
++
++        // AUDIT FIX: Guard against corrupted data
++        const total = parseFloat(header.total) || 0;
++        if (Math.abs(total) >= 900000) {
++            logger.warn(`⚠️ PDF blocked: sentinel total ${total} for ${header.serie}-${header.numero}`);
++            throw new Error('Factura con datos anómalos — importe no válido');
++        }
++        if (!header.numero || !header.serie) {
++            throw new Error('Factura sin número o serie — datos incompletos');
++        }
+
+diff --git a/backend/app/services/pdfService.js b/backend/app/services/pdfService.js
+--- a/backend/app/services/pdfService.js
++++ b/backend/app/services/pdfService.js
+@@ -202,6 +202,13 @@
+ async function generateInvoicePDF(facturaData) {
+     try {
+         const header = facturaData.header || {};
+         const lines = facturaData.lines || [];
+         const ivaBreakdown = header.IVA_BREAKDOWN || null;
++
++        // AUDIT FIX: Guard against corrupted data reaching PDF
++        const checkTotal = parseFloat(header.TOTALFACTURA || header.IMPORTETOTAL || 0);
++        if (Math.abs(checkTotal) >= 900000) {
++            logger.warn(`⚠️ PDF blocked: sentinel total ${checkTotal}`);
++            throw new Error('Documento con datos anómalos — importe no válido');
++        }
+
+diff --git a/backend/routes/entregas.js b/backend/routes/entregas.js
+--- a/backend/routes/entregas.js
++++ b/backend/routes/entregas.js
+@@ -382,7 +382,12 @@
+             // Use IMPORTETOTAL (correct final amount incl. IVA)
+-            const importeTotal = parseMoney(row.IMPORTETOTAL);
++            let importeTotal = parseMoney(row.IMPORTETOTAL);
++            // AUDIT FIX: Sanitize sentinel amounts
++            if (Math.abs(importeTotal) >= 900000 || Object.is(importeTotal, -0)) {
++                importeTotal = 0;
++            }
+
+@@ -750,8 +755,16 @@
+         // Upsert into JAVIER.DELIVERY_STATUS
+-        // 1. Delete existing (if any)
+-        await query(`DELETE FROM JAVIER.DELIVERY_STATUS WHERE ID = '${itemId}'`, false);
++        // AUDIT FIX: Save old state for recovery before delete
++        let previousState = null;
++        try {
++            const prev = await query(`SELECT * FROM JAVIER.DELIVERY_STATUS WHERE ID = '${itemId}'`, false);
++            if (prev.length > 0) previousState = prev[0];
++        } catch (_) {}
++
++        // 1. Delete existing (if any)
++        await query(`DELETE FROM JAVIER.DELIVERY_STATUS WHERE ID = '${itemId}'`, false);
+
+@@ -775,8 +788,25 @@
+-        await query(insertSql, false);
+-        logger.info(`[ENTREGAS] ✅ Delivery ${itemId} updated to ${status}`);
++        try {
++            await query(insertSql, false);
++        } catch (insertErr) {
++            // AUDIT FIX: Restore previous state if INSERT fails
++            logger.error(`[ENTREGAS] INSERT failed for ${itemId}: ${insertErr.message}`);
++            if (previousState) {
++                try {
++                    // Restore previous record
++                    await query(restoreSql, false);
++                    logger.warn(`[ENTREGAS] Restored previous state for ${itemId}`);
++                } catch (restoreErr) {
++                    logger.error(`[ENTREGAS] CRITICAL: Could not restore ${itemId}`);
++                }
++            }
++            throw insertErr;
++        }
++        logger.info(`[ENTREGAS] ✅ Delivery ${itemId} updated to ${status}`);

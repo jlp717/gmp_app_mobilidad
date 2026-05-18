@@ -2,12 +2,13 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// Widget para capturar firma del cliente
 class SignaturePad extends StatefulWidget {
-  final void Function(String base64) onSave;
 
-  const SignaturePad({super.key, required this.onSave});
+  const SignaturePad({required this.onSave, super.key});
+  final void Function(String base64) onSave;
 
   @override
   State<SignaturePad> createState() => _SignaturePadState();
@@ -20,15 +21,15 @@ class _SignaturePadState extends State<SignaturePad> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: MediaQuery.of(context).size.height * 0.5,
-      padding: const EdgeInsets.all(16),
+      height: Responsive.modalHeight(context, portraitFraction: 0.5, landscapeFraction: 0.8),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Header
           Row(
             children: [
-              const Icon(Icons.draw, size: 24),
+              Icon(Icons.draw, size: Responsive.iconSize(context, phone: 20, desktop: 24)),
               const SizedBox(width: 12),
               const Expanded(
                 child: Text(
@@ -62,12 +63,12 @@ class _SignaturePadState extends State<SignaturePad> {
                 child: GestureDetector(
                   onPanUpdate: (details) {
                     setState(() {
-                      RenderBox box = context.findRenderObject() as RenderBox;
+                      final box = context.findRenderObject()! as RenderBox;
                       final localPos = box.globalToLocal(details.globalPosition);
                       _points.add(Offset(
                         localPos.dx - 16,
                         localPos.dy - 140,
-                      ));
+                      ),);
                     });
                   },
                   onPanEnd: (_) {
@@ -111,7 +112,7 @@ class _SignaturePadState extends State<SignaturePad> {
                       ? const SizedBox(
                           width: 20, height: 20,
                           child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
+                            strokeWidth: 2, color: Colors.white,),
                         )
                       : const Icon(Icons.check),
                   label: Text(_isSaving ? 'Guardando...' : 'Guardar Firma'),
@@ -133,7 +134,7 @@ class _SignaturePadState extends State<SignaturePad> {
   }
 
   void _limpiar() {
-    setState(() => _points.clear());
+    setState(_points.clear);
   }
 
   Future<void> _guardar() async {
@@ -158,7 +159,7 @@ class _SignaturePadState extends State<SignaturePad> {
         ..strokeWidth = 3.0
         ..strokeCap = StrokeCap.round;
 
-      for (int i = 0; i < _points.length - 1; i++) {
+      for (var i = 0; i < _points.length - 1; i++) {
         if (_points[i] != null && _points[i + 1] != null) {
           canvas.drawLine(_points[i]!, _points[i + 1]!, paint);
         }
@@ -185,9 +186,9 @@ class _SignaturePadState extends State<SignaturePad> {
 }
 
 class _SignaturePainter extends CustomPainter {
-  final List<Offset?> points;
 
   _SignaturePainter(this.points);
+  final List<Offset?> points;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -196,7 +197,7 @@ class _SignaturePainter extends CustomPainter {
       ..strokeWidth = 3.0
       ..strokeCap = StrokeCap.round;
 
-    for (int i = 0; i < points.length - 1; i++) {
+    for (var i = 0; i < points.length - 1; i++) {
       if (points[i] != null && points[i + 1] != null) {
         canvas.drawLine(points[i]!, points[i + 1]!, paint);
       }

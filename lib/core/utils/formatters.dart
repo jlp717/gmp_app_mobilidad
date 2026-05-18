@@ -1,5 +1,5 @@
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:intl/intl.dart';
-import 'currency_formatter.dart';
 
 /// Unified formatting facade.
 /// Delegates to CurrencyFormatter and provides date formatting helpers.

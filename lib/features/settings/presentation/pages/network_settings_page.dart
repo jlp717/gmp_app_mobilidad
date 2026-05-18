@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../../../core/services/network_service.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/services/network_service.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// Pantalla de configuración de red
 /// Permite ver y cambiar el servidor activo manualmente
@@ -106,7 +107,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
     final url = _customUrlController.text.trim();
     if (url.isEmpty) return;
 
-    String baseUrl = url;
+    var baseUrl = url;
     if (!baseUrl.startsWith('http')) {
       baseUrl = 'http://$baseUrl';
     }
@@ -136,7 +137,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
       body: _isLoading && _diagnostics == null
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(Responsive.padding(context, small: 16, large: 24)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -174,17 +175,17 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: (activeServer != null ? Colors.green : Colors.red).withOpacity(0.5),
+                        color: (activeServer != null ? Colors.green : Colors.red).withValues(alpha: 0.5),
                         blurRadius: 8,
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Text(
+                Text(
                   'Servidor Activo',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -195,10 +196,10 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
             if (activeServer != null) ...[
               Text(
                 activeServer.name,
-                style: const TextStyle(
-                  fontSize: 20,
+                style: TextStyle(
+                  fontSize: Responsive.fontSize(context, small: 18, large: 24),
                   fontWeight: FontWeight.w600,
-                  color: Color(0xFF22D3EE),
+                  color: const Color(0xFF22D3EE),
                 ),
               ),
               const SizedBox(height: 8),
@@ -251,14 +252,14 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.auto_fix_high, color: Color(0xFF22D3EE)),
-                SizedBox(width: 12),
+                const Icon(Icons.auto_fix_high, color: Color(0xFF22D3EE)),
+                const SizedBox(width: 12),
                 Text(
                   'Detección Automática',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -307,14 +308,14 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.dns, color: Color(0xFFA78BFA)),
-                SizedBox(width: 12),
+                const Icon(Icons.dns, color: Color(0xFFA78BFA)),
+                const SizedBox(width: 12),
                 Text(
                   'Servidores Disponibles',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -327,7 +328,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(
-                  color: isActive ? const Color(0xFF22D3EE).withOpacity(0.1) : Colors.transparent,
+                  color: isActive ? const Color(0xFF22D3EE).withValues(alpha: 0.1) : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: isActive ? const Color(0xFF22D3EE) : Colors.grey[700]!,
@@ -365,7 +366,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                         ),
                 ),
               );
-            }).toList(),
+            }),
           ],
         ),
       ),
@@ -380,14 +381,14 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Row(
+            Row(
               children: [
-                Icon(Icons.add_link, color: Color(0xFFF472B6)),
-                SizedBox(width: 12),
+                const Icon(Icons.add_link, color: Color(0xFFF472B6)),
+                const SizedBox(width: 12),
                 Text(
                   'Servidor Personalizado',
                   style: TextStyle(
-                    fontSize: 18,
+                    fontSize: Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -451,14 +452,14 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Row(
+                Row(
                   children: [
-                    Icon(Icons.bug_report, color: Color(0xFF4ADE80)),
-                    SizedBox(width: 12),
+                    const Icon(Icons.bug_report, color: Color(0xFF4ADE80)),
+                    const SizedBox(width: 12),
                     Text(
                       'Diagnóstico de Red',
                       style: TextStyle(
-                        fontSize: 18,
+                        fontSize: Responsive.fontSize(context, small: 16, large: 20),
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
@@ -528,7 +529,7 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                           ],
                         ),
                       );
-                    }).toList(),
+                    }),
                 ],
               ),
             ),

@@ -2,10 +2,12 @@
 /// ================================
 /// Refactored to use ApiClient with full caching support
 /// Replaces raw http.Client for consistency and performance
+library;
 
-import '../../../core/api/api_client.dart';
-import '../../../core/cache/cache_service.dart';
-import '../domain/product_history_item.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
+import 'package:gmp_app_mobilidad/features/sales_history/domain/product_history_item.dart';
 
 class SalesHistoryService {
   // Singleton pattern - no need for http.Client instance
@@ -43,7 +45,7 @@ class SalesHistoryService {
         cacheTTL: const Duration(minutes: 10),
       );
 
-      final List<dynamic> rowsJson = (response['rows'] as List?) ?? [];
+      final rowsJson = (response['rows'] as List?) ?? [];
       final items = rowsJson.map((json) => ProductHistoryItem.fromJson(json as Map<String, dynamic>)).toList();
       final count = response['count'] as int? ?? 0;
       

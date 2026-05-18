@@ -1,19 +1,18 @@
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/date_formatter.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/date_formatter.dart';
 
 /// Date range picker dialog
 class DateRangePicker extends StatelessWidget {
+
+  const DateRangePicker({
+    required this.onDateRangeSelected, super.key,
+    this.startDate,
+    this.endDate,
+  });
   final DateTime? startDate;
   final DateTime? endDate;
   final Function(DateTime? start, DateTime? end) onDateRangeSelected;
-
-  const DateRangePicker({
-    super.key,
-    this.startDate,
-    this.endDate,
-    required this.onDateRangeSelected,
-  });
 
   @override
   Widget build(BuildContext context) {
@@ -28,8 +27,8 @@ class DateRangePicker extends StatelessWidget {
   }
 
   Future<void> _showDateRangePicker(BuildContext context) async {
-    DateTime? tempStart = startDate;
-    DateTime? tempEnd = endDate;
+    var tempStart = startDate;
+    var tempEnd = endDate;
 
     await showDialog(
       context: context,
@@ -47,7 +46,7 @@ class DateRangePicker extends StatelessWidget {
                   _buildPresetChip('Este mes', () {
                     final now = DateTime.now();
                     setState(() {
-                      tempStart = DateTime(now.year, now.month, 1);
+                      tempStart = DateTime(now.year, now.month);
                       tempEnd = DateTime(now.year, now.month + 1, 0);
                     });
                   }),
@@ -55,14 +54,14 @@ class DateRangePicker extends StatelessWidget {
                     final now = DateTime.now();
                     final quarter = ((now.month - 1) ~/ 3) + 1;
                     setState(() {
-                      tempStart = DateTime(now.year, (quarter - 1) * 3 + 1, 1);
+                      tempStart = DateTime(now.year, (quarter - 1) * 3 + 1);
                       tempEnd = DateTime(now.year, quarter * 3 + 1, 0);
                     });
                   }),
                   _buildPresetChip('Este año', () {
                     final now = DateTime.now();
                     setState(() {
-                      tempStart = DateTime(now.year, 1, 1);
+                      tempStart = DateTime(now.year);
                       tempEnd = DateTime(now.year, 12, 31);
                     });
                   }),
@@ -143,7 +142,7 @@ class DateRangePicker extends StatelessWidget {
           builder: (context, child) {
             return Theme(
               data: ThemeData.dark().copyWith(
-                colorScheme: ColorScheme.dark(
+                colorScheme: const ColorScheme.dark(
                   primary: AppTheme.neonBlue,
                   surface: AppTheme.surfaceColor,
                 ),

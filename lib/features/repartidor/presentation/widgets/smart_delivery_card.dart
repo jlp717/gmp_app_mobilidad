@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:intl/intl.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../entregas/providers/entregas_provider.dart';
 
 /// Smart Delivery Card with futuristic design
 /// Features:
@@ -12,19 +13,17 @@ import '../../../entregas/providers/entregas_provider.dart';
 /// - Quick action buttons
 /// - Swipe gestures for rapid completion
 class SmartDeliveryCard extends StatefulWidget {
+  const SmartDeliveryCard({
+    required this.albaran, required this.onTap, super.key,
+    this.onSwipeComplete,
+    this.onSwipeNote,
+    this.repartidorNames,
+  });
   final AlbaranEntrega albaran;
   final VoidCallback onTap;
   final VoidCallback? onSwipeComplete;
   final VoidCallback? onSwipeNote;
   final Map<String, String>? repartidorNames;
-  const SmartDeliveryCard({
-    super.key,
-    required this.albaran,
-    required this.onTap,
-    this.onSwipeComplete,
-    this.onSwipeNote,
-    this.repartidorNames,
-  });
 
   @override
   State<SmartDeliveryCard> createState() => _SmartDeliveryCardState();
@@ -44,7 +43,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
       duration: AppTheme.animFast,
       vsync: this,
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.98).animate(
+    _scaleAnimation = Tween<double>(begin: 1, end: 0.98).animate(
       CurvedAnimation(parent: _animController, curve: Curves.easeInOut),
     );
   }
@@ -79,11 +78,11 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
     }
     
     return BoxDecoration(
-      color: baseColor.withOpacity(0.08), // Light background tint
+      color: baseColor.withValues(alpha: 0.08), // Light background tint
       borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: baseColor.withOpacity(0.6), width: 1.5),
+      border: Border.all(color: baseColor.withValues(alpha: 0.6), width: 1.5),
       boxShadow: [
-        BoxShadow(color: baseColor.withOpacity(0.1), blurRadius: 8, spreadRadius: 0),
+        BoxShadow(color: baseColor.withValues(alpha: 0.1), blurRadius: 8),
       ],
     );
   }
@@ -146,18 +145,18 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
             gradient: LinearGradient(
               colors: _isFactura
                   ? [
-                      AppTheme.neonPurple.withOpacity(0.3),
-                      AppTheme.neonPurple.withOpacity(0.1),
+                      AppTheme.neonPurple.withValues(alpha: 0.3),
+                      AppTheme.neonPurple.withValues(alpha: 0.1),
                     ]
                   : [
-                      AppTheme.darkBase.withOpacity(0.8),
-                      AppTheme.darkBase.withOpacity(0.5),
+                      AppTheme.darkBase.withValues(alpha: 0.8),
+                      AppTheme.darkBase.withValues(alpha: 0.5),
                     ],
             ),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: _isFactura
-                  ? AppTheme.neonPurple.withOpacity(0.5)
+                  ? AppTheme.neonPurple.withValues(alpha: 0.5)
                   : AppTheme.borderColor,
             ),
           ),
@@ -177,7 +176,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                 style: TextStyle(
                   color: _isFactura ? AppTheme.neonPurple : AppTheme.textSecondary,
                   fontWeight: FontWeight.bold,
-                  fontSize: 12,
+                  fontSize: Responsive.isSmall(context) ? 10 : 12,
                 ),
               ),
             ],
@@ -191,7 +190,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
           Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: AppTheme.success.withOpacity(0.2),
+              color: AppTheme.success.withValues(alpha: 0.2),
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -212,7 +211,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                   .format(widget.albaran.importeTotal),
               style: TextStyle(
                 color: _isUrgent ? AppTheme.obligatorio : AppTheme.textPrimary,
-                fontSize: 20,
+                fontSize: Responsive.isSmall(context) ? 17 : 20,
                 fontWeight: FontWeight.bold,
                 letterSpacing: -0.5,
               ),
@@ -222,10 +221,10 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               margin: const EdgeInsets.only(top: 4),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: _getPaymentColor().withOpacity(0.15),
+                color: _getPaymentColor().withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(6),
                 border: Border.all(
-                  color: _getPaymentColor().withOpacity(0.4),
+                  color: _getPaymentColor().withValues(alpha: 0.4),
                 ),
               ),
               child: Row(
@@ -266,13 +265,13 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withOpacity(0.15),
+                color: AppTheme.neonBlue.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
                 widget.albaran.codigoCliente.length > 6
                     ? widget.albaran.codigoCliente.substring(
-                        widget.albaran.codigoCliente.length - 4)
+                        widget.albaran.codigoCliente.length - 4,)
                     : widget.albaran.codigoCliente,
                 style: const TextStyle(
                   color: AppTheme.neonBlue,
@@ -283,15 +282,33 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                widget.albaran.nombreCliente,
-                style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.albaran.nombreCliente,
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w600,
+                      fontSize: Responsive.isSmall(context) ? 13 : 15,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  if (widget.albaran.nombreFiscal != null &&
+                      widget.albaran.nombreFiscal!.isNotEmpty &&
+                      widget.albaran.nombreFiscal!.toUpperCase() !=
+                          widget.albaran.nombreCliente.toUpperCase())
+                    Text(
+                      widget.albaran.nombreFiscal!,
+                      style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 10,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                ],
               ),
             ),
             // Repartidor badge for directors (shown when viewing multiple repartidores)
@@ -299,13 +316,13 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.2),
+                  color: Colors.orange.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                  border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
                 ),
                 child: Text(
                   widget.repartidorNames != null && widget.repartidorNames!.containsKey(widget.albaran.codigoRepartidor)
-                      ? 'R ${widget.albaran.codigoRepartidor} — ${widget.repartidorNames![widget.albaran.codigoRepartidor]}'
+                      ? 'R ${widget.albaran.codigoRepartidor} – ${widget.repartidorNames![widget.albaran.codigoRepartidor]}'
                       : 'R ${widget.albaran.codigoRepartidor}',
                   style: TextStyle(
                     color: Colors.orange.shade700,
@@ -322,7 +339,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
         // Address
         Row(
           children: [
-            Icon(
+            const Icon(
               Icons.location_on_outlined,
               size: 14,
               color: AppTheme.textTertiary,
@@ -333,7 +350,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                 '${widget.albaran.direccion}, ${widget.albaran.poblacion}',
                 style: TextStyle(
                   color: AppTheme.textSecondary,
-                  fontSize: 12,
+                  fontSize: Responsive.isSmall(context) ? 10 : 12,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -377,8 +394,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
   Widget _buildActionButton({
     required IconData icon,
     required String label,
-    Color? color,
-    required VoidCallback onTap,
+    required VoidCallback onTap, Color? color,
   }) {
     final buttonColor = color ?? AppTheme.neonBlue;
     
@@ -390,10 +406,10 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
-            color: buttonColor.withOpacity(0.1),
+            color: buttonColor.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: buttonColor.withOpacity(0.3),
+              color: buttonColor.withValues(alpha: 0.3),
             ),
           ),
           child: Row(

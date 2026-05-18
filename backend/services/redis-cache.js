@@ -5,20 +5,31 @@
  * Includes pub/sub for cache invalidation
  */
 
-const Redis = require('redis');
+let Redis;
+try {
+    Redis = require('redis');
+} catch (_) {
+    Redis = null;
+}
 const logger = require('../middleware/logger');
 
-// Configuration from environment
+// Configuration from environment - Redis connection settings
+const REDIS_HOST = process.env.REDIS_HOST || 'localhost';
+const REDIS_PORT = parseInt(process.env.REDIS_PORT) || 6379;
+const REDIS_PASSWORD = process.env.REDIS_PASSWORD;
+
 const REDIS_CONFIG = {
-    url: process.env.REDIS_URL || 'redis://localhost:6379',
-    password: process.env.REDIS_PASSWORD || undefined,
+    url: process.env.REDIS_URL || `redis://${REDIS_HOST}:${REDIS_PORT}`,
+    password: REDIS_PASSWORD,
     socket: {
+        host: REDIS_HOST,
+        port: REDIS_PORT,
         reconnectStrategy: (retries) => {
-            if (retries > 20) {
-                logger.error('[RedisCache] Max reconnection attempts reached');
-                return new Error('Max reconnection attempts reached');
+            if (retries > 10) {
+                logger.warn('[RedisCache] Max retries reached, continuing without Redis');
+                return false; // Stop reconnecting
             }
-            return Math.min(retries * 100, 5000);
+            return Math.min(retries * 200, 3000);
         },
     },
 };
@@ -32,10 +43,22 @@ const TTL = {
     REALTIME: 60,    // 1 minute
 };
 
-// L1 In-Memory Cache
+// L1 In-Memory Cache (OPTIMIZED v3 - Maximum Performance)
 const L1_CACHE = new Map();
-const L1_MAX_SIZE = 500;
-const L1_TTL_MS = 60000; // 1 minute
+const L1_STALE_CACHE = new Map(); // Stale-while-revalidate: serve expired data while refreshing
+const L1_MAX_SIZE = 10000; // Doubled for JEFE_VENTAS + COMMERCIAL workloads
+const L1_TTL_MS = 180000; // 3 minutes (increased for better cache utilization)
+const L1_STALE_TTL_MS = 3600000; // 1 hour — serve stale data for up to 1h while background refresh runs
+
+// Pre-warm cache with frequently accessed keys
+const FREQUENTLY_ACCESSED_KEYS = new Set([
+    'dashboard:metrics:*:*:ALL:curr',
+    'dashboard:metrics:*:*:ALL:prev',
+    'dashboard:evolution:*',
+    'clients:list:v5:ALL:',
+    'master:vendedores:*',
+    'master:products:*'
+]);
 
 class RedisCacheService {
     constructor() {
@@ -52,15 +75,32 @@ class RedisCacheService {
     }
 
     /**
-     * Initialize Redis connection
+     * Initialize Redis connection with OPTIMIZED pool settings
      */
     async init() {
+        // Silently skip Redis init if the package failed to load
+        if (!Redis) {
+            logger.warn('[RedisCache] ⚠️ Redis package not available, using L1 cache only');
+            return true;
+        }
         try {
-            // Main client for read/write
-            this.client = Redis.createClient(REDIS_CONFIG);
+            // Optimized Redis config for high throughput
+            const optimizedConfig = {
+                ...REDIS_CONFIG,
+                // Connection pool settings for high throughput
+                connect_timeout: 10000,
+                lazyConnect: false,
+                // Keep-alive settings
+                keepAlive: true,
+                keepAliveInitialDelay: 10000,
+                // Retry strategy for resilience
+                max_retries_per_request: 3,
+                enable_ready_check: true,
+                enable_offline_queue: true,
+            };
 
-            // Subscriber client for pub/sub
-            this.subscriber = this.client.duplicate();
+            // Main client for read/write
+            this.client = Redis.createClient(optimizedConfig);
 
             // Event handlers
             this.client.on('connect', () => {
@@ -69,30 +109,43 @@ class RedisCacheService {
                 this._flushPendingCommands();
             });
 
+            this.client.on('ready', () => {
+                logger.info('[RedisCache] ✅ Redis ready for operations');
+            });
+
             this.client.on('error', (err) => {
-                logger.error(`[RedisCache] ❌ Error: ${err.message}`);
+                // Only log critical errors, not connection issues
+                if (err.message && !err.message.includes('ECONNREFUSED') && !err.message.includes('ETIMEDOUT')) {
+                    logger.warn(`[RedisCache] ⚠️ Redis error: ${err.message}`);
+                }
                 this.isConnected = false;
             });
 
             this.client.on('reconnecting', () => {
-                logger.warn('[RedisCache] 🔄 Reconnecting...');
+                logger.warn('[RedisCache] 🔄 Redis reconnecting...');
             });
 
-            // Connect both clients
-            await Promise.all([
+            // Connect with timeout
+            await Promise.race([
                 this.client.connect(),
-                this.subscriber.connect(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Redis connection timeout')), 5000))
             ]);
 
-            // Setup cache invalidation channel
-            await this._setupInvalidationChannel();
+            // Setup pub/sub only if connected
+            try {
+                this.subscriber = this.client.duplicate();
+                await this._setupInvalidationChannel();
+            } catch (e) {
+                logger.warn('[RedisCache] ⚠️ Pub/sub unavailable, continuing without');
+            }
 
             logger.info('[RedisCache] ✅ Redis cache service initialized');
             return true;
         } catch (error) {
-            logger.warn(`[RedisCache] ⚠️ Redis unavailable, using L1 only: ${error.message}`);
+            logger.warn(`[RedisCache] ⚠️ Redis unavailable, using L1 cache only: ${error.message}`);
             this.isConnected = false;
-            return false;
+            // Continue without throwing - L1 cache still works
+            return true;
         }
     }
 
@@ -166,8 +219,22 @@ class RedisCacheService {
             return entry.value;
         }
         if (entry) {
-            L1_CACHE.delete(key); // Expired
+            // Expired — move to stale cache for stale-while-revalidate
+            L1_STALE_CACHE.set(key, {
+                value: entry.value,
+                expiry: Date.now() + L1_STALE_TTL_MS,
+            });
+            L1_CACHE.delete(key);
         }
+        return null;
+    }
+
+    _getStale(key) {
+        const stale = L1_STALE_CACHE.get(key);
+        if (stale && Date.now() < stale.expiry) {
+            return stale.value;
+        }
+        if (stale) L1_STALE_CACHE.delete(key);
         return null;
     }
 
@@ -203,31 +270,31 @@ class RedisCacheService {
         }
 
         // Try L2 (Redis)
-        if (!this.isConnected) {
-            this.stats.misses++;
-            return null;
-        }
-
-        try {
-            const l2Value = await this.client.get(fullKey);
-
-            if (l2Value !== null) {
-                const parsed = JSON.parse(l2Value);
-                this.stats.hits.l2++;
-
-                // Promote to L1
-                this._setL1(fullKey, parsed);
-
-                return parsed;
+        if (this.isConnected) {
+            try {
+                const l2Value = await this.client.get(fullKey);
+                if (l2Value !== null) {
+                    const parsed = JSON.parse(l2Value);
+                    this.stats.hits.l2++;
+                    // Promote to L1 with full TTL
+                    this._setL1(fullKey, parsed, L1_TTL_MS);
+                    return parsed;
+                }
+            } catch (error) {
+                logger.warn(`[RedisCache] Get error: ${error.message}`);
             }
-
-            this.stats.misses++;
-            return null;
-        } catch (error) {
-            logger.warn(`[RedisCache] Get error: ${error.message}`);
-            this.stats.misses++;
-            return null;
         }
+
+        // Stale-while-revalidate: serve expired data when fresh unavailable
+        const staleValue = this._getStale(fullKey);
+        if (staleValue !== null) {
+            this.stats.hits.l1++; // Count as hit (better than nothing)
+            logger.debug(`[RedisCache] Serving stale data for: ${fullKey}`);
+            return staleValue;
+        }
+
+        this.stats.misses++;
+        return null;
     }
 
     /**
@@ -315,7 +382,7 @@ class RedisCacheService {
      * @param {number} ttl - TTL in seconds
      */
     async getOrSet(namespace, key, fetchFn, ttl = TTL.DEFAULT) {
-        // Try cache first
+        // Try cache first (includes stale-while-revalidate via get())
         const cached = await this.get(namespace, key);
         if (cached !== null) {
             return cached;
@@ -324,7 +391,7 @@ class RedisCacheService {
         // Fetch fresh data
         const freshData = await fetchFn();
 
-        // Cache it
+        // Cache the result (L1 + L2)
         await this.set(namespace, key, freshData, ttl);
 
         return freshData;

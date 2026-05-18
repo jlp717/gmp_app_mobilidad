@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class HierarchySelector extends StatefulWidget {
-  final List<String> currentHierarchy;
-  final Function(List<String>) onChanged;
 
   const HierarchySelector({
-    super.key, 
-    required this.currentHierarchy, 
-    required this.onChanged,
+    required this.currentHierarchy, required this.onChanged, super.key,
   });
+  final List<String> currentHierarchy;
+  final Function(List<String>) onChanged;
 
   @override
   State<HierarchySelector> createState() => _HierarchySelectorState();
@@ -68,7 +66,7 @@ class _HierarchySelectorState extends State<HierarchySelector> {
               const Spacer(),
               const Text(
                 'Arrastra para ordenar', 
-                style: TextStyle(color: Colors.white30, fontSize: 10, fontStyle: FontStyle.italic)
+                style: TextStyle(color: Colors.white30, fontSize: 10, fontStyle: FontStyle.italic),
               ),
             ],
           ),
@@ -83,7 +81,7 @@ class _HierarchySelectorState extends State<HierarchySelector> {
                 if (oldIndex < newIndex) {
                   newIndex -= 1;
                 }
-                final String item = _activeDimensions.removeAt(oldIndex);
+                final item = _activeDimensions.removeAt(oldIndex);
                 _activeDimensions.insert(newIndex, item);
                 _updateHierarchy();
               });
@@ -134,9 +132,9 @@ class _HierarchySelectorState extends State<HierarchySelector> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: isActive ? AppTheme.neonBlue.withOpacity(0.15) : Colors.white10,
+              color: isActive ? AppTheme.neonBlue.withValues(alpha: 0.15) : Colors.white10,
               border: Border.all(
-                color: isActive ? AppTheme.neonBlue.withOpacity(0.5) : Colors.white10,
+                color: isActive ? AppTheme.neonBlue.withValues(alpha: 0.5) : Colors.white10,
               ),
               borderRadius: BorderRadius.circular(20),
             ),
@@ -162,7 +160,7 @@ class _HierarchySelectorState extends State<HierarchySelector> {
                 ] else if (!isActive) ...[
                    const SizedBox(width: 8),
                    const Icon(Icons.add, size: 14, color: AppTheme.neonBlue),
-                ]
+                ],
               ],
             ),
           ),

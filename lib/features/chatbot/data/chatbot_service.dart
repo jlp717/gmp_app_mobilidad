@@ -1,7 +1,7 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 
-import '../../../../core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:http/http.dart' as http;
 
 /// [ChatbotService] - API service for AI chatbot communication
 class ChatbotService {

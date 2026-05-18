@@ -1,0 +1,76 @@
+{
+  "description": "Ejemplo de respuesta API /api/kpi/alerts/client/:clientId con 5 clientes",
+  "alerts": [
+    {
+      "id": 1,
+      "clientCode": "871",
+      "type": "DESVIACION_VENTAS",
+      "severity": "warning",
+      "message": "Desviado en Ventas: -751.92€ / 52%",
+      "rawData": {
+        "cuotaAnual": 1525.14,
+        "desviacionEur": -751.92,
+        "desviacionPct": 51.92,
+        "nombreComercial": "CLIENTE 1",
+        "agrupacion": "Restaurantes"
+      },
+      "sourceFile": "Desviacion_Ventas.csv",
+      "createdAt": "2026-03-09T06:00:00.000Z"
+    },
+    {
+      "id": 2,
+      "clientCode": "11326",
+      "type": "DESVIACION_REFERENCIACION",
+      "severity": "warning",
+      "message": "Desviado en referencias: 6 menos\n- MDLZ BB TOBLERONE 20X90ML\n- MAXIBON POPSCRUN N3 12X80\n- PIRL MIKOLAPIZ N4 20x88ML",
+      "rawData": {
+        "desviacion": -6,
+        "refs": ["MDLZ BB TOBLERONE 20X90ML", "MAXIBON POPSCRUN N3 12X80", "PIRL MIKOLAPIZ N4 20x88ML"],
+        "nombreComercial": "CLIENTE 1",
+        "agrupacion": "Ocio"
+      },
+      "sourceFile": "Desviacion_Referenciacion.csv",
+      "createdAt": "2026-03-09T06:00:00.000Z"
+    },
+    {
+      "id": 3,
+      "clientCode": "106",
+      "type": "CUOTA_SIN_COMPRA",
+      "severity": "warning",
+      "message": "Con cuota sin compra.",
+      "rawData": {
+        "cuotaAnual": 1132.56,
+        "canal": "HELADO",
+        "nombreComercial": "CLIENTE 1"
+      },
+      "sourceFile": "Clientes_ConCuotaSinCompra.csv",
+      "createdAt": "2026-03-09T06:00:00.000Z"
+    },
+    {
+      "id": 4,
+      "clientCode": "12847",
+      "type": "PROMOCION",
+      "severity": "info",
+      "message": "Potencial Promo Mochila",
+      "rawData": {
+        "nombreComercial": "CLIENTE 1",
+        "agrupacion": "Conveniencia"
+      },
+      "sourceFile": "Mensaje_Promociones.csv",
+      "createdAt": "2026-03-09T06:00:00.000Z"
+    },
+    {
+      "id": 5,
+      "clientCode": "30043",
+      "type": "AVISO",
+      "severity": "info",
+      "message": "Con Vitrina Sin Compra La Lechera",
+      "rawData": {
+        "nombreComercial": "CLIENTE 400900125",
+        "agrupacion": "Bares y Cafeterías"
+      },
+      "sourceFile": "Mensajes_Clientes.csv",
+      "createdAt": "2026-03-09T06:00:00.000Z"
+    }
+  ]
+}

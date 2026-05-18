@@ -1,19 +1,24 @@
 /// REPARTIDOR CLIENTES PAGE v1.0
 /// Lista de clientes adaptada para reparto con historial de entregas
 /// Equivalente a SimpleClientListPage de ventas pero enfocado a repartidor
+library;
 
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/currency_formatter.dart';
-import '../../data/repartidor_data_service.dart';
-import 'repartidor_historico_page.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/widgets/optimized_list.dart';
+import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_service.dart';
+import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_historico_page.dart';
 
 class RepartidorClientesPage extends StatefulWidget {
+
+  const RepartidorClientesPage({required this.repartidorId, super.key, this.isJefeMode = false, this.onNavigateToHistory});
   final String repartidorId;
   final bool isJefeMode;
   final void Function(String clientId, String clientName)? onNavigateToHistory;
-
-  const RepartidorClientesPage({super.key, required this.repartidorId, this.isJefeMode = false, this.onNavigateToHistory});
 
   @override
   State<RepartidorClientesPage> createState() => _RepartidorClientesPageState();
@@ -78,7 +83,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
       list = list.where((c) =>
           c.name.toUpperCase().contains(q) ||
           c.id.toUpperCase().contains(q) ||
-          c.address.toUpperCase().contains(q)
+          c.address.toUpperCase().contains(q),
       ).toList();
     }
 
@@ -88,16 +93,12 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
       switch (_sortBy) {
         case _SortBy.name:
           cmp = a.name.compareTo(b.name);
-          break;
         case _SortBy.totalDocs:
           cmp = a.totalDocuments.compareTo(b.totalDocuments);
-          break;
         case _SortBy.totalAmount:
           cmp = a.totalAmount.compareTo(b.totalAmount);
-          break;
         case _SortBy.lastVisit:
           cmp = (a.lastVisit ?? '').compareTo(b.lastVisit ?? '');
-          break;
       }
       return _sortAsc ? cmp : -cmp;
     });
@@ -116,22 +117,14 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
           _buildSortBar(),
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: AppTheme.neonBlue))
+                ? const SkeletonList(itemCount: 6, itemHeight: 80)
                 : _error != null
-                    ? Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
-                            const SizedBox(height: 12),
-                            Text('Error: $_error', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
-                            const SizedBox(height: 12),
-                            ElevatedButton(onPressed: _loadClients, child: const Text('Reintentar')),
-                          ],
-                        ),
+                    ? ErrorStateWidget(
+                        message: 'Error: $_error',
+                        onRetry: _loadClients,
                       )
                     : RefreshIndicator(
-                        onRefresh: () => _loadClients(),
+                        onRefresh: _loadClients,
                         child: _filteredClients.isEmpty
                             ? ListView(
                                 children: const [
@@ -141,7 +134,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                                   Center(child: Text('No se encontraron clientes', style: TextStyle(color: AppTheme.textSecondary))),
                                 ],
                               )
-                            : ListView.builder(
+                            : OptimizedListView(
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                 itemCount: _filteredClients.length,
                                 itemBuilder: (context, index) => _buildClientCard(_filteredClients[index]),
@@ -155,28 +148,28 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
 
   Widget _buildHeader() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+      padding: EdgeInsets.fromLTRB(Responsive.padding(context, small: 12, large: 20), 16, Responsive.padding(context, small: 12, large: 20), 12),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
-        border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
+        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: EdgeInsets.all(Responsive.padding(context, small: 8, large: 10)),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [AppTheme.neonGreen.withOpacity(0.3), AppTheme.neonBlue.withOpacity(0.2)]),
+              gradient: LinearGradient(colors: [AppTheme.neonGreen.withValues(alpha: 0.3), AppTheme.neonBlue.withValues(alpha: 0.2)]),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.people, color: AppTheme.neonGreen, size: 24),
+            child: Icon(Icons.people, color: AppTheme.neonGreen, size: Responsive.iconSize(context, phone: 20, desktop: 24)),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Clientes de Reparto', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                Text('${_clients.length} clientes', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                Text('Clientes de Reparto', style: TextStyle(fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                Text('${_clients.length} clientes', style: TextStyle(fontSize: Responsive.fontSize(context, small: 10, large: 12), color: AppTheme.textSecondary)),
               ],
             ),
           ),
@@ -200,7 +193,7 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
         style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
         decoration: InputDecoration(
           hintText: 'Buscar por nombre, código o dirección...',
-          hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.6), fontSize: 13),
+          hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6), fontSize: 13),
           prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
@@ -262,9 +255,9 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: selected ? AppTheme.neonBlue.withOpacity(0.15) : Colors.transparent,
+            color: selected ? AppTheme.neonBlue.withValues(alpha: 0.15) : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: selected ? AppTheme.neonBlue.withOpacity(0.4) : Colors.white.withOpacity(0.1)),
+            border: Border.all(color: selected ? AppTheme.neonBlue.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.1)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -288,23 +281,23 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
         onTap: () => _navigateToHistory(client),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(14),
+          padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 14)),
           child: Row(
             children: [
               // Avatar
               Container(
-                width: 44,
-                height: 44,
+                width: Responsive.value(context, phone: 36, desktop: 44),
+                height: Responsive.value(context, phone: 36, desktop: 44),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
                   gradient: LinearGradient(
-                    colors: [AppTheme.neonGreen.withOpacity(0.3), AppTheme.neonBlue.withOpacity(0.2)],
+                    colors: [AppTheme.neonGreen.withValues(alpha: 0.3), AppTheme.neonBlue.withValues(alpha: 0.2)],
                   ),
                 ),
                 child: Center(
                   child: Text(
                     client.name.isNotEmpty ? client.name[0].toUpperCase() : '?',
-                    style: const TextStyle(color: AppTheme.neonGreen, fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(color: AppTheme.neonGreen, fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -316,37 +309,34 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                   children: [
                     Text(
                       client.name,
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                      style: TextStyle(fontSize: Responsive.fontSize(context, small: 12, large: 14), fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
                     Text(
                       '${client.id} · ${client.address}',
-                      style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                      style: TextStyle(fontSize: Responsive.fontSize(context, small: 9, large: 11), color: AppTheme.textSecondary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    Row(
+                    Wrap(
+                      spacing: 12,
+                      runSpacing: 4,
                       children: [
                         _clientStat(Icons.receipt, '${client.totalDocuments} docs', AppTheme.neonBlue),
-                        const SizedBox(width: 12),
                         _clientStat(Icons.euro, CurrencyFormatter.format(client.totalAmount), AppTheme.neonGreen),
-                        if (client.lastVisit != null) ...[
-                          const SizedBox(width: 12),
+                        if (client.lastVisit != null)
                           _clientStat(Icons.calendar_today, client.lastVisit!, AppTheme.textSecondary),
-                        ],
-                        if (widget.isJefeMode && client.repCode != null && client.repCode!.isNotEmpty) ...[
-                          const SizedBox(width: 12),
+                        if (widget.isJefeMode && client.repCode != null && client.repCode!.isNotEmpty)
                           _clientStat(
                             Icons.local_shipping,
                             client.repName != null && client.repName!.isNotEmpty
-                                ? 'Rep ${client.repCode!} — ${client.repName!}'
+                                ? 'Rep ${client.repCode!} – ${client.repName!}'
                                 : 'Rep ${client.repCode!}',
                             AppTheme.neonPurple,
                           ),
-                        ],
                       ],
                     ),
                   ],

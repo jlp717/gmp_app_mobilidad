@@ -1,0 +1,2220 @@
+{
+  "success": true,
+  "rowCount": 246,
+  "rows": [
+    {
+      "HISTORY_ID": 1,
+      "CODIGOCLIENTE": "4300000027",
+      "LOGIN_TIME": "2025-11-10 10:03:42.046463",
+      "IP_ADDRESS": "127.0.0.1",
+      "USER_AGENT": "Test Script",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 2,
+      "CODIGOCLIENTE": "4300000025",
+      "LOGIN_TIME": "2025-11-10 10:05:22.007979",
+      "IP_ADDRESS": "127.0.0.1",
+      "USER_AGENT": "Test Script",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 3,
+      "CODIGOCLIENTE": "4300000027",
+      "LOGIN_TIME": "2025-11-10 10:10:27.919455",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT; Windows NT 10.0; es-ES) WindowsPowerShell/5.1.19041.6456",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 4,
+      "CODIGOCLIENTE": "4300000025",
+      "LOGIN_TIME": "2025-11-10 10:11:12.582537",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 5,
+      "CODIGOCLIENTE": "4300000025",
+      "LOGIN_TIME": "2025-11-10 11:34:04.916984",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 6,
+      "CODIGOCLIENTE": "4300013449",
+      "LOGIN_TIME": "2025-11-11 12:36:28.668720",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 7,
+      "CODIGOCLIENTE": "4300013449",
+      "LOGIN_TIME": "2025-11-11 12:51:04.553964",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 8,
+      "CODIGOCLIENTE": "4300013449",
+      "LOGIN_TIME": "2025-11-11 13:02:11.826424",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 9,
+      "CODIGOCLIENTE": "4300013449",
+      "LOGIN_TIME": "2025-11-11 13:04:02.800455",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 10,
+      "CODIGOCLIENTE": "4300013449",
+      "LOGIN_TIME": "2025-11-11 13:16:57.570995",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 11,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-11 13:29:56.354596",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 12,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-11 13:58:42.229069",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "node-fetch/1.0 (+https://github.com/bitinn/node-fetch)",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 13,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-11 14:11:35.113576",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 14,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-13 12:47:08.904338",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Credenciales invÃ¡lidas"
+    },
+    {
+      "HISTORY_ID": 15,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-13 12:47:17.683943",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Credenciales invÃ¡lidas"
+    },
+    {
+      "HISTORY_ID": 16,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-13 12:48:46.621014",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 17,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-13 13:46:52.275302",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Credenciales invÃ¡lidas"
+    },
+    {
+      "HISTORY_ID": 18,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-13 13:46:57.144631",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Credenciales invÃ¡lidas"
+    },
+    {
+      "HISTORY_ID": 19,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-13 13:47:27.487812",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Credenciales invÃ¡lidas"
+    },
+    {
+      "HISTORY_ID": 20,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-13 13:48:20.452807",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Credenciales invÃ¡lidas"
+    },
+    {
+      "HISTORY_ID": 21,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-13 13:49:29.642816",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Credenciales invÃ¡lidas"
+    },
+    {
+      "HISTORY_ID": 22,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-13 13:56:57.476345",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 23,
+      "CODIGOCLIENTE": "4300000239",
+      "LOGIN_TIME": "2025-11-13 14:00:38.255645",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 24,
+      "CODIGOCLIENTE": "4300000260",
+      "LOGIN_TIME": "2025-11-13 14:01:37.707431",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 25,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-13 14:18:10.257479",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:145.0) Gecko/20100101 Firefox/145.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 26,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-13 14:32:19.845322",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 27,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-13 15:29:44.956939",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 28,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-13 15:51:56.423711",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 29,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-13 16:11:52.277354",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 30,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-13 16:27:36.188245",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 31,
+      "CODIGOCLIENTE": "4300003479",
+      "LOGIN_TIME": "2025-11-13 16:54:33.808918",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 32,
+      "CODIGOCLIENTE": "4300000018",
+      "LOGIN_TIME": "2025-11-13 16:56:58.824702",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 33,
+      "CODIGOCLIENTE": "4300000018",
+      "LOGIN_TIME": "2025-11-13 17:20:51.688407",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 34,
+      "CODIGOCLIENTE": "4300000018",
+      "LOGIN_TIME": "2025-11-13 17:45:11.749193",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 35,
+      "CODIGOCLIENTE": "4300000018",
+      "LOGIN_TIME": "2025-11-13 17:46:28.852687",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 36,
+      "CODIGOCLIENTE": "4300000018",
+      "LOGIN_TIME": "2025-11-13 18:22:06.591272",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 37,
+      "CODIGOCLIENTE": "4300000018",
+      "LOGIN_TIME": "2025-11-13 18:39:38.568217",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 38,
+      "CODIGOCLIENTE": "4300000018",
+      "LOGIN_TIME": "2025-11-13 18:58:35.341591",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 39,
+      "CODIGOCLIENTE": "4300000018",
+      "LOGIN_TIME": "2025-11-13 19:36:36.288749",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 40,
+      "CODIGOCLIENTE": "4300000018",
+      "LOGIN_TIME": "2025-11-14 08:56:00.649996",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 41,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-14 09:09:39.014829",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 42,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-14 09:24:58.985883",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 43,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-14 09:59:02.882452",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 44,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-14 10:07:03.407321",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 45,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-14 10:30:10.647038",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 46,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-14 10:42:38.666865",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 47,
+      "CODIGOCLIENTE": "4300000281",
+      "LOGIN_TIME": "2025-11-14 11:01:02.694283",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 48,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-14 11:48:41.950777",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 49,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-14 12:09:27.137102",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 50,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-14 12:25:06.082086",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 51,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-14 12:38:54.854999",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 52,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-14 12:41:12.612267",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 53,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-14 13:01:36.878572",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 54,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-14 13:47:23.263682",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 55,
+      "CODIGOCLIENTE": "4300003464",
+      "LOGIN_TIME": "2025-11-17 08:56:21.164260",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 56,
+      "CODIGOCLIENTE": "4300003464",
+      "LOGIN_TIME": "2025-11-17 09:12:55.510072",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 57,
+      "CODIGOCLIENTE": "4300003464",
+      "LOGIN_TIME": "2025-11-17 09:30:58.860060",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 58,
+      "CODIGOCLIENTE": "4300003464",
+      "LOGIN_TIME": "2025-11-17 09:51:06.899951",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 59,
+      "CODIGOCLIENTE": "4300003464",
+      "LOGIN_TIME": "2025-11-17 10:06:26.362821",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 60,
+      "CODIGOCLIENTE": "4300003464",
+      "LOGIN_TIME": "2025-11-17 10:14:52.299371",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 61,
+      "CODIGOCLIENTE": "4300003464",
+      "LOGIN_TIME": "2025-11-17 10:39:47.528216",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 62,
+      "CODIGOCLIENTE": "4300003464",
+      "LOGIN_TIME": "2025-11-17 10:55:24.861211",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 63,
+      "CODIGOCLIENTE": "4300003464",
+      "LOGIN_TIME": "2025-11-17 11:07:00.299806",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 64,
+      "CODIGOCLIENTE": "4300003464",
+      "LOGIN_TIME": "2025-11-17 11:28:04.888882",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 65,
+      "CODIGOCLIENTE": "4300003180",
+      "LOGIN_TIME": "2025-11-17 11:36:12.877002",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 66,
+      "CODIGOCLIENTE": "4300003180",
+      "LOGIN_TIME": "2025-11-17 13:36:09.919782",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 67,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-17 13:41:40.804982",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 68,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-17 17:39:17.216000",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 69,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-17 19:09:13.314911",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 70,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-17 19:26:24.591982",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 71,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-17 19:59:25.531763",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 72,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-17 20:14:26.250160",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 73,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-17 20:32:52.890690",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 74,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-17 20:48:55.352531",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 75,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-17 21:05:10.311249",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:146.0) Gecko/20100101 Firefox/146.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 76,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-18 08:44:34.696799",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 77,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-18 11:17:03.173184",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 78,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-18 11:29:39.887666",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 79,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-18 15:10:59.116593",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 80,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-18 15:34:47.451567",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 81,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-18 15:59:20.603600",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 82,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-18 16:20:25.585996",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 83,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-18 16:37:49.675551",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 84,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-19 11:32:10.265909",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 85,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-19 14:39:54.742779",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 86,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-19 14:40:07.094269",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 87,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-19 14:40:49.817697",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 88,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-19 14:44:48.262621",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 89,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-19 15:46:12.307040",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 90,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-19 15:46:23.932036",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 91,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-19 16:28:48.098041",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 92,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-19 16:52:08.050062",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 93,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-19 16:59:43.007580",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 94,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-19 17:45:42.067405",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 95,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-19 17:46:22.258852",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 96,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-19 17:50:49.392104",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 97,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-20 10:15:04.791723",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 98,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-20 12:28:33.980778",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 99,
+      "CODIGOCLIENTE": "4300013449",
+      "LOGIN_TIME": "2025-11-20 12:31:40.744737",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 100,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-20 13:03:56.511130",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 101,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-20 13:21:05.751780",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 102,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-20 13:36:35.056791",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 103,
+      "CODIGOCLIENTE": "4300013449",
+      "LOGIN_TIME": "2025-11-20 13:52:21.193526",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 104,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-22 11:25:23.293980",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 105,
+      "CODIGOCLIENTE": "4300008091",
+      "LOGIN_TIME": "2025-11-22 11:41:25.073205",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 106,
+      "CODIGOCLIENTE": "4300008091",
+      "LOGIN_TIME": "2025-11-22 11:41:32.215834",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 107,
+      "CODIGOCLIENTE": "4300008091",
+      "LOGIN_TIME": "2025-11-22 12:07:50.602261",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 108,
+      "CODIGOCLIENTE": "4300008091",
+      "LOGIN_TIME": "2025-11-22 12:12:47.491258",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 109,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-22 12:18:08.049049",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 110,
+      "CODIGOCLIENTE": "4300008091",
+      "LOGIN_TIME": "2025-11-22 12:19:15.477752",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 111,
+      "CODIGOCLIENTE": "4300008091",
+      "LOGIN_TIME": "2025-11-22 12:25:55.035882",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 112,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-22 12:53:45.096342",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 113,
+      "CODIGOCLIENTE": "4300013449",
+      "LOGIN_TIME": "2025-11-22 12:57:25.145273",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 114,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-27 12:36:59.669800",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 115,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-27 13:05:27.856577",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 116,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-11-29 18:37:16.599963",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 117,
+      "CODIGOCLIENTE": "4300013449",
+      "LOGIN_TIME": "2025-11-29 19:36:41.352118",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 OPR/122.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 118,
+      "CODIGOCLIENTE": "4300000087",
+      "LOGIN_TIME": "2025-12-01 07:45:16.011995",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 119,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-01 07:55:20.050842",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 120,
+      "CODIGOCLIENTE": "4300000087",
+      "LOGIN_TIME": "2025-12-01 07:55:49.020209",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 121,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-01 08:10:17.155006",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 122,
+      "CODIGOCLIENTE": "4300000615",
+      "LOGIN_TIME": "2025-12-01 08:11:52.434353",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 123,
+      "CODIGOCLIENTE": "4300032778",
+      "LOGIN_TIME": "2025-12-01 08:17:46.553165",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 124,
+      "CODIGOCLIENTE": "4300032778",
+      "LOGIN_TIME": "2025-12-01 08:32:56.263402",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 125,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-01 08:48:15.494325",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 126,
+      "CODIGOCLIENTE": "430000990 ",
+      "LOGIN_TIME": "2025-12-01 08:57:40.123071",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 127,
+      "CODIGOCLIENTE": "430000990 ",
+      "LOGIN_TIME": "2025-12-01 08:57:49.592630",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 128,
+      "CODIGOCLIENTE": "430000990 ",
+      "LOGIN_TIME": "2025-12-01 09:00:31.240860",
+      "IP_ADDRESS": "95.127.47.143",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 129,
+      "CODIGOCLIENTE": "430000990 ",
+      "LOGIN_TIME": "2025-12-01 09:01:19.235240",
+      "IP_ADDRESS": "95.127.47.143",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 130,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-01 09:03:13.023240",
+      "IP_ADDRESS": "95.127.47.143",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 131,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-01 09:04:16.721049",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 132,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-01 09:09:32.128095",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 133,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-01 09:10:15.655707",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36 Edg/142.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 134,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-01 09:37:21.287547",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 135,
+      "CODIGOCLIENTE": "4300032258",
+      "LOGIN_TIME": "2025-12-01 09:52:52.615952",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 136,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-01 09:55:43.186925",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 137,
+      "CODIGOCLIENTE": "4300007815",
+      "LOGIN_TIME": "2025-12-01 10:06:28.127988",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 138,
+      "CODIGOCLIENTE": "4300000000",
+      "LOGIN_TIME": "2025-12-01 10:45:22.945091",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT; Windows NT 10.0; es-ES) WindowsPowerShell/5.1.19041.6456",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 139,
+      "CODIGOCLIENTE": "4300000000",
+      "LOGIN_TIME": "2025-12-01 10:48:07.882052",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT; Windows NT 10.0; es-ES) WindowsPowerShell/5.1.19041.6456",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 140,
+      "CODIGOCLIENTE": "4300000000",
+      "LOGIN_TIME": "2025-12-01 10:50:21.399043",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT; Windows NT 10.0; es-ES) WindowsPowerShell/5.1.19041.6456",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 141,
+      "CODIGOCLIENTE": "4300000000",
+      "LOGIN_TIME": "2025-12-01 10:50:31.250798",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT; Windows NT 10.0; es-ES) WindowsPowerShell/5.1.19041.6456",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 142,
+      "CODIGOCLIENTE": "4300000000",
+      "LOGIN_TIME": "2025-12-01 10:52:04.153466",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 143,
+      "CODIGOCLIENTE": "4300000000",
+      "LOGIN_TIME": "2025-12-01 10:55:30.885935",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 144,
+      "CODIGOCLIENTE": "4300032258",
+      "LOGIN_TIME": "2025-12-01 10:55:54.461844",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 145,
+      "CODIGOCLIENTE": "4300032258",
+      "LOGIN_TIME": "2025-12-01 10:55:58.476257",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 146,
+      "CODIGOCLIENTE": "4300032258",
+      "LOGIN_TIME": "2025-12-01 10:56:09.441376",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 147,
+      "CODIGOCLIENTE": "4300000000",
+      "LOGIN_TIME": "2025-12-01 10:57:45.013659",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 148,
+      "CODIGOCLIENTE": "4300000000",
+      "LOGIN_TIME": "2025-12-01 11:00:16.660031",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 149,
+      "CODIGOCLIENTE": "4300000000",
+      "LOGIN_TIME": "2025-12-01 11:00:30.054925",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 150,
+      "CODIGOCLIENTE": "4300000000",
+      "LOGIN_TIME": "2025-12-01 11:02:47.902437",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 151,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-01 11:04:34.862779",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 152,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-01 11:04:38.660015",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 153,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-01 11:04:43.314331",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 154,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-01 11:04:59.488788",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 155,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-01 11:24:10.629375",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 156,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-01 11:24:52.813931",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 157,
+      "CODIGOCLIENTE": "4300000000",
+      "LOGIN_TIME": "2025-12-01 11:26:29.859247",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 158,
+      "CODIGOCLIENTE": "4300000000",
+      "LOGIN_TIME": "2025-12-01 11:26:32.458291",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 159,
+      "CODIGOCLIENTE": "4300000000",
+      "LOGIN_TIME": "2025-12-01 11:30:51.251654",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT; Windows NT 10.0; es-ES) WindowsPowerShell/5.1.19041.6456",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 160,
+      "CODIGOCLIENTE": "4300000000",
+      "LOGIN_TIME": "2025-12-01 11:31:12.032518",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 161,
+      "CODIGOCLIENTE": "4300000000",
+      "LOGIN_TIME": "2025-12-01 11:39:33.407405",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 162,
+      "CODIGOCLIENTE": "4400000160",
+      "LOGIN_TIME": "2025-12-01 11:43:04.819237",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 163,
+      "CODIGOCLIENTE": "4400000160",
+      "LOGIN_TIME": "2025-12-01 11:47:06.707154",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 164,
+      "CODIGOCLIENTE": "4300032258",
+      "LOGIN_TIME": "2025-12-01 11:57:06.374824",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 165,
+      "CODIGOCLIENTE": "4300032258",
+      "LOGIN_TIME": "2025-12-01 11:58:43.516756",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 166,
+      "CODIGOCLIENTE": "4300032258",
+      "LOGIN_TIME": "2025-12-01 12:10:23.635077",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 167,
+      "CODIGOCLIENTE": "4300032258",
+      "LOGIN_TIME": "2025-12-01 12:23:51.857605",
+      "IP_ADDRESS": "217.125.92.225",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 168,
+      "CODIGOCLIENTE": "4300032258",
+      "LOGIN_TIME": "2025-12-01 12:39:28.177394",
+      "IP_ADDRESS": "77.111.246.36",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 169,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-01 12:42:59.108705",
+      "IP_ADDRESS": "77.111.246.36",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 170,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-01 13:14:54.359279",
+      "IP_ADDRESS": "77.111.246.36",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 171,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-01 13:15:39.587521",
+      "IP_ADDRESS": "77.111.246.36",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 172,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-01 13:16:36.370240",
+      "IP_ADDRESS": "77.111.246.36",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 173,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-01 13:17:54.204153",
+      "IP_ADDRESS": "77.111.246.36",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 174,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-01 13:19:46.170772",
+      "IP_ADDRESS": "77.111.246.36",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 175,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-01 13:28:32.199060",
+      "IP_ADDRESS": "77.111.246.36",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 176,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-01 13:54:05.948116",
+      "IP_ADDRESS": "77.111.246.36",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 177,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-01 13:54:25.653057",
+      "IP_ADDRESS": "77.111.246.36",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 178,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-02 10:38:42.546634",
+      "IP_ADDRESS": "77.111.246.50",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 179,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-02 10:54:54.410680",
+      "IP_ADDRESS": "77.111.246.55",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 180,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-02 10:55:02.286323",
+      "IP_ADDRESS": "77.111.246.55",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 181,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-02 11:19:33.193050",
+      "IP_ADDRESS": "77.111.246.55",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 182,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-02 11:34:47.402020",
+      "IP_ADDRESS": "77.111.246.55",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 183,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-02 12:01:22.291169",
+      "IP_ADDRESS": "77.111.246.55",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 184,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-02 12:17:55.041185",
+      "IP_ADDRESS": "77.111.246.55",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 185,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 10:04:52.028933",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 186,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 10:21:12.612947",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 187,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 10:36:38.086943",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 188,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 11:02:14.437535",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 189,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 11:19:01.223121",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 190,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 11:40:09.267521",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 191,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 12:06:56.936993",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 192,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 12:31:22.616883",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 193,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 12:47:12.035235",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 194,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 13:00:47.522860",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 195,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 13:19:40.198518",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 196,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 13:36:05.268890",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 197,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 13:36:14.953771",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 198,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 13:52:36.003496",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 199,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 14:10:33.345408",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 200,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-04 14:27:49.217660",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 201,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-04 14:27:57.746994",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 202,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 14:35:45.119904",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 203,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-04 14:44:51.895670",
+      "IP_ADDRESS": "62.36.96.91",
+      "USER_AGENT": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_7_12 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/137.0.7151.107 Mobile/15E148 Safari/604.1",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 204,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-05 08:17:57.683292",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 205,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-05 08:18:07.321467",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 206,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-05 11:06:02.243450",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 207,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-05 11:28:07.950198",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 208,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-05 11:46:44.459847",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 209,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-05 12:02:39.678300",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 210,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-05 13:02:49.017966",
+      "IP_ADDRESS": "176.98.215.40",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 16; SM-S918B Build/BP2A.250605.031.A3; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/142.0.7444.171 Mobile Safari/537.36 Instagram 408.0.0.51.78 Android (36/16; 450dpi; 1080x2316; samsung; SM-S918B; dm3q; qcom; es_ES; 832162521; IABMV/1)",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 211,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-05 13:03:41.965018",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 212,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-05 13:56:00.847853",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 213,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-05 14:31:41.966542",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 214,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-05 14:47:42.461747",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 215,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-05 15:04:58.358422",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 216,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-05 15:56:38.705486",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 217,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-05 16:11:58.569117",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.5 Mobile/15E148 Safari/604.1",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 218,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-05 16:33:00.922864",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 219,
+      "CODIGOCLIENTE": "430000990 ",
+      "LOGIN_TIME": "2025-12-05 17:34:12.023591",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 220,
+      "CODIGOCLIENTE": "430009900 ",
+      "LOGIN_TIME": "2025-12-05 17:34:22.265816",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 221,
+      "CODIGOCLIENTE": "430009900 ",
+      "LOGIN_TIME": "2025-12-05 17:34:41.971108",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 222,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-05 17:37:11.688699",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 223,
+      "CODIGOCLIENTE": "4400000004",
+      "LOGIN_TIME": "2025-12-06 13:26:25.132703",
+      "IP_ADDRESS": "88.29.184.62",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 224,
+      "CODIGOCLIENTE": "4400000004",
+      "LOGIN_TIME": "2025-12-06 13:27:12.165150",
+      "IP_ADDRESS": "88.29.184.62",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 225,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-06 13:27:51.574556",
+      "IP_ADDRESS": "88.29.184.62",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "ContraseÃ±a incorrecta"
+    },
+    {
+      "HISTORY_ID": 226,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-06 13:28:31.630781",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 227,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-06 13:28:59.061974",
+      "IP_ADDRESS": "88.29.184.62",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Mobile Safari/537.36",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 228,
+      "CODIGOCLIENTE": "4400000040",
+      "LOGIN_TIME": "2025-12-06 13:30:00.464742",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 229,
+      "CODIGOCLIENTE": "4300008335",
+      "LOGIN_TIME": "2025-12-06 13:32:37.754933",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 230,
+      "CODIGOCLIENTE": "430000990 ",
+      "LOGIN_TIME": "2025-12-07 14:26:17.321772",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 231,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-07 14:26:37.034262",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 232,
+      "CODIGOCLIENTE": "430009900 ",
+      "LOGIN_TIME": "2025-12-07 14:49:25.092516",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 233,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-07 14:49:50.551433",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 234,
+      "CODIGOCLIENTE": "4300030420",
+      "LOGIN_TIME": "2025-12-07 18:31:21.274746",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 235,
+      "CODIGOCLIENTE": "4300008521",
+      "LOGIN_TIME": "2025-12-07 18:37:27.619401",
+      "IP_ADDRESS": "188.26.199.221",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Mobile Safari/537.36 OPR/90.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 236,
+      "CODIGOCLIENTE": "4300031925",
+      "LOGIN_TIME": "2025-12-07 18:57:47.896502",
+      "IP_ADDRESS": "77.111.246.48",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 237,
+      "CODIGOCLIENTE": "4300032741",
+      "LOGIN_TIME": "2025-12-07 19:10:30.894290",
+      "IP_ADDRESS": "77.111.246.48",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 238,
+      "CODIGOCLIENTE": "430000990 ",
+      "LOGIN_TIME": "2025-12-07 19:20:54.360811",
+      "IP_ADDRESS": "79.116.241.230",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36",
+      "SUCCESS": "N",
+      "FAILURE_REASON": "Cliente no encontrado"
+    },
+    {
+      "HISTORY_ID": 239,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-07 19:21:03.961186",
+      "IP_ADDRESS": "79.116.241.230",
+      "USER_AGENT": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Mobile Safari/537.36",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 240,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-12 07:26:06.370861",
+      "IP_ADDRESS": "95.127.47.141",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "Y",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 241,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-12 09:39:42.617800",
+      "IP_ADDRESS": "95.127.47.141",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "0",
+      "FAILURE_REASON": "Sin credenciales"
+    },
+    {
+      "HISTORY_ID": 242,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-12 09:39:54.820170",
+      "IP_ADDRESS": "95.127.47.141",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "0",
+      "FAILURE_REASON": "Sin credenciales"
+    },
+    {
+      "HISTORY_ID": 243,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-12 09:51:51.381428",
+      "IP_ADDRESS": "::1",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT; Windows NT 10.0; es-ES) WindowsPowerShell/5.1.19041.6456",
+      "SUCCESS": "1",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 244,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-12 09:55:10.318306",
+      "IP_ADDRESS": "95.127.47.141",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "1",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 245,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-12 10:07:12.848518",
+      "IP_ADDRESS": "95.127.47.141",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "1",
+      "FAILURE_REASON": null
+    },
+    {
+      "HISTORY_ID": 246,
+      "CODIGOCLIENTE": "4300009900",
+      "LOGIN_TIME": "2025-12-12 10:10:34.834354",
+      "IP_ADDRESS": "95.127.47.141",
+      "USER_AGENT": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 OPR/124.0.0.0",
+      "SUCCESS": "1",
+      "FAILURE_REASON": null
+    }
+  ]
+}

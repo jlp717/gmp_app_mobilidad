@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
-import '../../../../core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 /// KPI Dashboard widget for Rutero tab
 /// Shows deliveries completed, pending payments, and weekly progress
 class RuteroKpiDashboard extends StatelessWidget {
+
+  const RuteroKpiDashboard({required this.totalEntregas, required this.entregasCompletadas, required this.montoACobrar, required this.montoOpcional, required this.totalMonto, // New field, super.key,, super.key,, super.key,, super.key,
+    this.montoCobrado = 0,
+    this.isLoading = false,
+  });
   final int totalEntregas;
   final int entregasCompletadas;
   final double montoACobrar;
@@ -12,17 +17,6 @@ class RuteroKpiDashboard extends StatelessWidget {
   final double montoCobrado;
   final bool isLoading;
   final double totalMonto;
-
-  const RuteroKpiDashboard({
-    super.key,
-    required this.totalEntregas,
-    required this.entregasCompletadas,
-    required this.montoACobrar,
-    required this.montoOpcional,
-    required this.totalMonto, // New field
-    this.montoCobrado = 0,
-    this.isLoading = false,
-  });
 
   @override
   Widget build(BuildContext context) {
@@ -37,12 +31,11 @@ class RuteroKpiDashboard extends StatelessWidget {
         color: AppTheme.darkSurface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: AppTheme.neonBlue.withOpacity(0.3),
-          width: 1,
+          color: AppTheme.neonBlue.withValues(alpha: 0.3),
         ),
         boxShadow: [
           BoxShadow(
-            color: AppTheme.neonBlue.withOpacity(0.05),
+            color: AppTheme.neonBlue.withValues(alpha: 0.05),
             blurRadius: 10,
             spreadRadius: 1,
           ),
@@ -141,7 +134,7 @@ class RuteroKpiDashboard extends StatelessWidget {
         const SizedBox(height: 4),
         Text(
           value,
-          style: TextStyle(
+          style: const TextStyle(
             color: AppTheme.textPrimary,
             fontWeight: FontWeight.bold,
             fontSize: 12, // Reduced
@@ -149,7 +142,7 @@ class RuteroKpiDashboard extends StatelessWidget {
         ),
         Text(
           label,
-          style: TextStyle(
+          style: const TextStyle(
             color: AppTheme.textSecondary,
             fontSize: 9, // Reduced
           ),
@@ -179,7 +172,7 @@ class RuteroKpiDashboard extends StatelessWidget {
         ),
         Text(
           label,
-          style: TextStyle(
+          style: const TextStyle(
             color: AppTheme.textSecondary,
             fontSize: 9, // Reduced
           ),
@@ -191,15 +184,15 @@ class RuteroKpiDashboard extends StatelessWidget {
 
 /// Custom painter for circular progress indicator
 class _CircularProgressPainter extends CustomPainter {
-  final double progress;
-  final Color color;
-  final Color backgroundColor;
 
   _CircularProgressPainter({
     required this.progress,
     required this.color,
     required this.backgroundColor,
   });
+  final double progress;
+  final Color color;
+  final Color backgroundColor;
 
   @override
   void paint(Canvas canvas, Size size) {

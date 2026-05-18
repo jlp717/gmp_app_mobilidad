@@ -1,46 +1,48 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
-// ignore: unused_import
-import 'dart:ui'; 
+
 import 'package:flutter/foundation.dart'; // For compute
-import 'package:provider/provider.dart';
-import 'package:fl_chart/fl_chart.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/providers/dashboard_provider.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/utils/currency_formatter.dart';
-import '../../../../core/widgets/modern_loading.dart';
-import '../../../../core/widgets/multi_select_dialog.dart';
-import '../../../../core/widgets/fi_filters_widget.dart';
-import '../../../../core/widgets/error_state_widget.dart';
-import '../../../../core/utils/date_formatter.dart';
-// SmartSyncHeader already imported in line 10 theoretically, but let's just keep one. 
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/date_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
+import 'package:gmp_app_mobilidad/core/widgets/fi_filters_widget.dart';
+import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
+import 'package:gmp_app_mobilidad/core/widgets/multi_select_dialog.dart';
+// SmartSyncHeader already imported in line 10 theoretically, but let's just keep one.
 // Step 1420 lines 10 & 11 were both SmartSyncHeader.
-import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
-import '../widgets/matrix_data_table.dart';
-import '../widgets/hierarchy_selector.dart';
-import '../widgets/hierarchy_section.dart'; // New import
-import '../widgets/advanced_sales_chart.dart'; // Kept for HierarchySection internal use
-import '../widgets/dashboard_chart_factory.dart'; // Add factory import
+import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Import Sync Header
+import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/dashboard_chart_factory.dart'; // Add factory import
+import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/hierarchy_section.dart'; // New import
+import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/hierarchy_selector.dart';
+import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/matrix_data_table.dart';
 
 /// Professional Dashboard - Power BI Style for Sales Manager
 /// Multi-select filters: Years, Months, Vendors, Clients
 /// Drill-down capabilites
-class DashboardContent extends StatefulWidget {
+class DashboardContent extends ConsumerStatefulWidget {
   const DashboardContent({super.key});
 
   @override
-  State<DashboardContent> createState() => _DashboardContentState();
+  ConsumerState<DashboardContent> createState() => _DashboardContentState();
 }
 
-class _DashboardContentState extends State<DashboardContent> with AutomaticKeepAliveClientMixin {
+class _DashboardContentState extends ConsumerState<DashboardContent>
+    with AutomaticKeepAliveClientMixin {
   @override
   bool get wantKeepAlive => true;
   // Multi-select date filters
   Set<int> _selectedYears = {DateTime.now().year};
-  Set<int> _selectedMonths = {for (var i = 1; i <= DateTime.now().month; i++) i}; // Default YTD
-  
+  Set<int> _selectedMonths = {
+    for (var i = 1; i <= DateTime.now().month; i++) i
+  }; // Default YTD
+
   // Filters
   String? _selectedVendedor; // Sales Rep Code
   Set<String> _selectedClientCodes = {};
@@ -53,16 +55,19 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
   Set<int> _pendingYears = {};
   Set<int> _pendingMonths = {};
   bool _hasPendingChanges = false;
-  
+
   // Metadata for filters
   List<Map<String, dynamic>> _vendedoresDisponibles = [];
 
   List<Map<String, dynamic>> _clientsDisponibles = [];
   // REMOVED: _familiesDisponibles - now using FI API directly
-  
+
   // HIERARCHY STATE - Supports any hierarchy combination with 2-step backend approach
-  List<String> _hierarchy = ['vendor', 'client']; // User can customize via HierarchySelector
-  
+  List<String> _hierarchy = [
+    'vendor',
+    'client'
+  ]; // User can customize via HierarchySelector
+
   // Data state
   Map<String, dynamic>? _kpiData;
   List<MatrixNode> _matrixData = []; // Hierarchical Data
@@ -73,26 +78,62 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
 
   // State for Chart Drill Down
   // State for Cascading Selection
-  List<MatrixNode> _selectionPath = []; // Path of selected nodes (e.g. [VendorNode, ClientNode])
+  List<MatrixNode> _selectionPath =
+      []; // Path of selected nodes (e.g. [VendorNode, ClientNode])
+  bool _isInitialized = false;
+  ProviderSubscription<String?>? _vendorSubscription;
+  int _loadGeneration = 0;
 
-  static const List<String> _monthNamesShort = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+  static const List<String> _monthNamesShort = [
+    'Ene',
+    'Feb',
+    'Mar',
+    'Abr',
+    'May',
+    'Jun',
+    'Jul',
+    'Ago',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dic'
+  ];
 
   @override
   void initState() {
     super.initState();
     _pendingYears = Set.from(_selectedYears);
     _pendingMonths = Set.from(_selectedMonths);
+    _selectedVendedor = ref.read(selectedVendorProvider);
+    _isInitialized = true;
     _loadVendedores();
-    // Optimization: Don't load massive client list on init for Jefe de Ventas. 
-    // Wait for filter interaction or specific vendor selection.
-    // _loadClients(); 
     _fetchAllData();
+
+    _vendorSubscription =
+        ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
+      if (_isInitialized && previous != next) {
+        setState(() {
+          _selectedVendedor = next;
+          _selectedClientCodes.clear();
+          _clientsDisponibles.clear();
+          _selectionPath = [];
+        });
+        _loadClients(initial: true);
+        _fetchAllData();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _vendorSubscription?.close();
+    super.dispose();
   }
 
   /// REMOVED: _loadFamilies - FI options are loaded by FiFiltersWidget
 
   /// FI Filters Dialog (replaces Family Filter)
-  void _openFiFiltersDialog() async {
+  Future<void> _openFiFiltersDialog() async {
     final result = await showDialog<FiFilterState>(
       context: context,
       builder: (context) => Dialog(
@@ -108,7 +149,9 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
                 children: [
                   const Icon(Icons.filter_alt, color: AppTheme.neonBlue),
                   const SizedBox(width: 8),
-                  const Text('Filtros de Producto', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                  const Text('Filtros de Producto',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close, size: 20),
@@ -144,16 +187,22 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
   /// Load available vendors for filter
   Future<void> _loadVendedores() async {
     try {
-      final response = await ApiClient.get('/rutero/vendedores', cacheKey: 'vendedores_list', cacheTTL: const Duration(hours: 1));
-      debugPrint('📋 Vendedores API response: ${response.runtimeType} - keys: ${response is Map ? response.keys : 'not a map'}');
+      final response = await ApiClient.get('/rutero/vendedores',
+          cacheKey: 'vendedores_list', cacheTTL: const Duration(hours: 1));
+      debugPrint(
+          '📋 Vendedores API response: ${response.runtimeType} - keys: ${response is Map ? response.keys : 'not a map'}');
       if (mounted) {
         setState(() {
           // Safe conversion - convert each item explicitly to Map<String, dynamic>
-          final Map<String, dynamic> data = Map<String, dynamic>.from(response as Map);
+          final data = Map<String, dynamic>.from(response as Map);
           final rawList = data['vendedores'] ?? [];
-          debugPrint('📋 Raw vendedores list length: ${rawList is List ? rawList.length : 'not a list'}');
-          _vendedoresDisponibles = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
-          debugPrint('📋 Vendedores disponibles loaded: ${_vendedoresDisponibles.length}');
+          debugPrint(
+              '📋 Raw vendedores list length: ${rawList is List ? rawList.length : 'not a list'}');
+          _vendedoresDisponibles = (rawList as List)
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .toList();
+          debugPrint(
+              '📋 Vendedores disponibles loaded: ${_vendedoresDisponibles.length}');
         });
       }
     } catch (e) {
@@ -166,22 +215,26 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
     // If specific vendor selected, load all their clients (usually small subset).
     // If Jefe de Ventas (no vendor selected), load only Top 50 initially to prevent lag.
     final limit = _selectedVendedor != null ? '1000' : '50';
-    
+
     try {
       final params = <String, dynamic>{'limit': limit};
-      if (_selectedVendedor != null) params['vendedorCodes'] = _selectedVendedor;
-      
-      final response = await ApiClient.get('/clients/list', 
-        queryParameters: params, 
-        cacheKey: 'clients_dropdown_${_selectedVendedor ?? 'top50'}', 
-        cacheTTL: const Duration(minutes: 30)
+      if (_selectedVendedor != null)
+        params['vendedorCodes'] = _selectedVendedor;
+
+      final response = await ApiClient.get(
+        '/clients/list',
+        queryParameters: params,
+        cacheKey: 'clients_dropdown_${_selectedVendedor ?? 'top50'}',
+        cacheTTL: const Duration(minutes: 30),
       );
-      
+
       if (mounted) {
         setState(() {
-          final Map<String, dynamic> data = Map<String, dynamic>.from(response as Map);
+          final data = Map<String, dynamic>.from(response as Map);
           final rawList = data['clients'] ?? [];
-          _clientsDisponibles = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+          _clientsDisponibles = (rawList as List)
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .toList();
         });
       }
     } catch (e) {
@@ -190,7 +243,7 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
   }
 
   /// Open MultiSelect for Clients with Remote Search Support
-  void _openClientFilter() async {
+  Future<void> _openClientFilter() async {
     // Load initial batch if empty (e.g. first open)
     if (_clientsDisponibles.isEmpty) await _loadClients(initial: true);
 
@@ -201,20 +254,27 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
       builder: (context) => MultiSelectDialog<Map<String, dynamic>>(
         items: _clientsDisponibles,
         // Reconstruct selection from codes
-        // We might need to keep the full objects of selected clients? 
+        // We might need to keep the full objects of selected clients?
         // For now, we only have codes. We find matches in _clientsDisponibles or create dummy objects if missing (not ideal but visual only)
-        selectedItems: _clientsDisponibles.where((c) => _selectedClientCodes.contains(c['code'])).toSet(),
+        selectedItems: _clientsDisponibles
+            .where((c) => _selectedClientCodes.contains(c['code']))
+            .toSet(),
         title: 'Filtrar Clientes',
         labelBuilder: (item) => '${item['name']} (${item['code']})',
         // Server-side search implementation
         onRemoteSearch: (query) async {
-           if (query.length < 3) return _clientsDisponibles; // Return default if query too short
-           final params = <String, dynamic>{'search': query, 'limit': '50'};
-           if (_selectedVendedor != null) params['vendedorCodes'] = _selectedVendedor;
-           
-           final res = await ApiClient.get('/clients/list', queryParameters: params); // No cache for search or short TTL
-           final rawList = res['clients'] ?? [];
-           return (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+          if (query.length < 3)
+            return _clientsDisponibles; // Return default if query too short
+          final params = <String, dynamic>{'search': query, 'limit': '50'};
+          if (_selectedVendedor != null)
+            params['vendedorCodes'] = _selectedVendedor;
+
+          final res = await ApiClient.get('/clients/list',
+              queryParameters: params); // No cache for search or short TTL
+          final rawList = res['clients'] ?? [];
+          return (rawList as List)
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .toList();
         },
       ),
     );
@@ -225,33 +285,39 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
       });
       _fetchAllData();
     }
-
   }
 
   // REMOVED: _openFamilyFilter - replaced by _openFiFiltersDialog above
 
   Future<void> _fetchAllData() async {
     if (!mounted) return;
-    setState(() { 
-      _isLoading = true; 
+    final generation = ++_loadGeneration;
+    setState(() {
+      _isLoading = true;
       _error = null;
-      
+
       // Dynamic Hierarchy Optimization
       // Removed to respect User's manual hierarchy choice as requested.
       // Users can now manually add/remove 'product' or 'family' via the selector.
-
     });
-    
-    final provider = Provider.of<DashboardProvider>(context, listen: false);
-    
+
     try {
       final params = <String, String>{};
-      
+      final authState =
+          ProviderScope.containerOf(context).read(authProvider).value;
+
       // Vendor codes
       if (_selectedVendedor != null && _selectedVendedor!.isNotEmpty) {
         params['vendedorCodes'] = _selectedVendedor!;
-      } else if (provider.vendedorCodes.isNotEmpty) {
-        params['vendedorCodes'] = provider.vendedorCodes.join(',');
+      } else if (authState != null) {
+        final user = authState.user;
+        final codes = authState.vendedorCodes;
+        if (codes.isNotEmpty) {
+          final isManager = user?.isJefeVentas == true ||
+              user?.isDirector == true ||
+              codes.length > 1;
+          params['vendedorCodes'] = isManager ? 'ALL' : codes.join(',');
+        }
       }
 
       // Client Codes
@@ -270,92 +336,108 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
       if (_fiFilters.fi3 != null) params['fi3'] = _fiFilters.fi3!;
       if (_fiFilters.fi4 != null) params['fi4'] = _fiFilters.fi4!;
       if (_fiFilters.fi5 != null) params['fi5'] = _fiFilters.fi5!;
-      
+
       // Add year filter (Multi-select)
       params['years'] = _selectedYears.join(',');
-      params['year'] = _selectedYears.reduce((a, b) => a > b ? a : b).toString(); // Primary year for some legacy logic checks
-      
+      params['year'] = _selectedYears
+          .reduce((a, b) => a > b ? a : b)
+          .toString(); // Primary year for some legacy logic checks
+
       params['groupBy'] = _hierarchy.join(','); // Send full hierarchy
-      
+
       // Fetch data
       final results = await Future.wait([
-        ApiClient.get('/dashboard/matrix-data', 
+        ApiClient.get(
+          '/dashboard/matrix-data',
           queryParameters: params,
-          cacheKey: 'dash_matrix_${params.toString()}_v2', // Changed key (v2)
-          cacheTTL: const Duration(minutes: 15),
+          cacheKey: 'dash_matrix_${params}_v2',
+          cacheTTL: const Duration(minutes: 60),
         ),
-        ApiClient.get('/dashboard/metrics', 
+        ApiClient.get(
+          '/dashboard/metrics',
           queryParameters: params,
-          cacheKey: 'dashboard_metrics_${params.toString()}',
-          cacheTTL: const Duration(minutes: 5),
+          cacheKey: 'dash_metrics_${params.hashCode}',
+          cacheTTL: const Duration(minutes: 30),
+          receiveTimeout: const Duration(seconds: 20),
         ),
       ]);
-      
-      if (!mounted) return;
-      
-      if (!mounted) return;
+
+      if (!mounted || generation != _loadGeneration) return;
 
       // Safe type conversion for API response
       final matrixData = Map<String, dynamic>.from(results[0] as Map);
       final rawList = matrixData['rows'] ?? [];
-      var rawRows = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
-      
+      final rawRows = (rawList as List)
+          .map((item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+
       // Filter by selected year and months
       final filteredRows = rawRows.where((row) {
         final dynamic yearVal = row['YEAR'] ?? row['year'];
         final dynamic monthVal = row['MONTH'] ?? row['month'];
-        
+
         int? year;
         int? month;
-        
-        if (yearVal is int) year = yearVal;
-        else if (yearVal is num) year = yearVal.toInt();
+
+        if (yearVal is int) {
+          year = yearVal;
+        } else if (yearVal is num)
+          year = yearVal.toInt();
         else if (yearVal is String) year = int.tryParse(yearVal);
-        
-        if (monthVal is int) month = monthVal;
-        else if (monthVal is num) month = monthVal.toInt();
+
+        if (monthVal is int) {
+          month = monthVal;
+        } else if (monthVal is num)
+          month = monthVal.toInt();
         else if (monthVal is String) month = int.tryParse(monthVal);
-        
-        if (year == null || !_selectedYears.contains(year)) return false;
-        
+
+        if (year == null ||
+            (_selectedYears.isNotEmpty && !_selectedYears.contains(year)))
+          return false;
+
         if (_selectedMonths.isNotEmpty && month != null) {
           if (!_selectedMonths.contains(month)) return false;
         }
-        
+
         return true;
       }).toList();
-      
+
       // Process Flat Rows into Tree (Outside setState)
-      final treeData = await compute(buildTreeIsolate, TreeBuildParams(rows: filteredRows, hierarchy: _hierarchy));
-      
-      if (!mounted) return;
-      
+      final treeData = await compute(buildTreeIsolate,
+          TreeBuildParams(rows: filteredRows, hierarchy: _hierarchy));
+
+      if (!mounted || generation != _loadGeneration) return;
+
       setState(() {
         _matrixData = treeData;
         _selectionPath = []; // Reset selection on new fetch
-        _matrixPeriods = List<String>.from((matrixData['periods'] as List?) ?? []);
+        _matrixPeriods =
+            List<String>.from((matrixData['periods'] as List?) ?? []);
         _kpiData = Map<String, dynamic>.from(results[1] as Map);
         _isLoading = false;
         _lastFetchTime = DateTime.now();
       });
     } catch (e) {
       debugPrint('Error fetching dashboard: $e');
-      if (mounted) {
-        setState(() { _error = e.toString(); _isLoading = false; });
+      if (mounted && generation == _loadGeneration) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
       }
     }
   }
 
   /// Safe value extraction
   double _safeDouble(dynamic value) {
-    if (value == null) return 0.0;
+    if (value == null) return 0;
     if (value is num) return value.toDouble();
     if (value is String) return double.tryParse(value) ?? 0.0;
     if (value is Map) {
       final v = value['value'];
       if (v != null) return _safeDouble(v);
     }
-    return 0.0;
+    return 0;
   }
 
   int _safeInt(dynamic value) {
@@ -371,30 +453,29 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
 
   void _onNodeTap(MatrixNode node, int level) {
     setState(() {
-       // Check if this node is already in the selection path at this level
-       final bool isAlreadySelected = level < _selectionPath.length && 
-                                       _selectionPath[level].id == node.id;
-       
-       if (isAlreadySelected) {
-         // COLLAPSE: User tapped the same node - remove it and all deeper selections
-         _selectionPath = _selectionPath.sublist(0, level);
-       } else {
-         // EXPAND NEW: User tapped a different node at this level
-         // First, trim the path to remove any existing selection at this level and deeper
-         _selectionPath = _selectionPath.sublist(0, level);
-         
-         // Then add this node if it has children to expand
-         if (node.children.isNotEmpty) {
-            _selectionPath.add(node);
-         }
-       }
-    }); 
+      // Check if this node is already in the selection path at this level
+      final isAlreadySelected =
+          level < _selectionPath.length && _selectionPath[level].id == node.id;
+
+      if (isAlreadySelected) {
+        // COLLAPSE: User tapped the same node - remove it and all deeper selections
+        _selectionPath = _selectionPath.sublist(0, level);
+      } else {
+        // EXPAND NEW: User tapped a different node at this level
+        // First, trim the path to remove any existing selection at this level and deeper
+        _selectionPath = _selectionPath.sublist(0, level);
+
+        // Then add this node if it has children to expand
+        if (node.children.isNotEmpty) {
+          _selectionPath.add(node);
+        }
+      }
+    });
   }
 
-
-
-  
   void _resetFilters() {
+    final hadGlobalVendorFilter = ref.read(selectedVendorProvider) != null;
+
     setState(() {
       _selectedVendedor = null;
       _selectedClientCodes.clear();
@@ -404,6 +485,12 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
       _selectedMonths = {for (var i = 1; i <= DateTime.now().month; i++) i};
       _selectionPath = [];
     });
+
+    if (hadGlobalVendorFilter) {
+      ref.read(filterProvider.notifier).clear();
+      return;
+    }
+
     _loadClients(initial: true);
     _fetchAllData();
   }
@@ -422,15 +509,15 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
   @override
   Widget build(BuildContext context) {
     super.build(context); // Required for AutomaticKeepAliveClientMixin
-    final provider = Provider.of<DashboardProvider>(context);
-    final isJefeVentas = provider.isJefeVentas;
+    final isJefeVentas = ref.watch(authProvider).value?.isDirector ?? false;
 
     return Scaffold(
       backgroundColor: AppTheme.darkBase,
       body: RefreshIndicator(
         onRefresh: _fetchAllData,
         child: SingleChildScrollView(
-          padding: EdgeInsets.zero, // Zero padding because Header is top-full-width
+          padding:
+              EdgeInsets.zero, // Zero padding because Header is top-full-width
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -442,7 +529,7 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
                 isLoading: _isLoading,
                 onSync: _fetchAllData,
               ),
-              
+
               Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -456,49 +543,55 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
                     ],
                     _buildDateFilters(),
                     const SizedBox(height: 16),
-                      if (_isLoading && _matrixData.isEmpty) 
-                        const Padding(
-                          padding: EdgeInsets.all(60.0),
-                          child: ModernLoading(message: 'Analizando tendencias...'),
-                        )
-                      else if (_error != null && _matrixData.isEmpty)
-                        _buildErrorWidget()
-                      else ...[
-                        if (_isLoading) const LinearProgressIndicator(color: AppTheme.neonBlue),
-                        _buildKPISection(),
-                        const SizedBox(height: 24),
-                        // Hierarchy Selector Replaces Fixed Breadcrumbs
-                        // Loading overlay indicator when hierarchy changes
-                        Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            HierarchySelector(
-                              currentHierarchy: _hierarchy,
-                              onChanged: (newHierarchy) {
-                                setState(() {
-                                  _hierarchy = newHierarchy;
-                                  _selectionPath = []; // Clear selection on hierarchy change
-                                });
-                                _fetchAllData();
-                              },
-                            ),
-                            if (_isLoading)
-                              Positioned.fill(
-                                child: Container(
-                                  color: Colors.black.withOpacity(0.3),
-                                  child: const Center(
-                                    child: SizedBox(
-                                      width: 20, height: 20,
-                                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonBlue),
-                                    ),
+                    if (_isLoading && _matrixData.isEmpty)
+                      const Padding(
+                        padding: EdgeInsets.all(60),
+                        child:
+                            ModernLoading(message: 'Analizando tendencias...'),
+                      )
+                    else if (_error != null && _matrixData.isEmpty)
+                      _buildErrorWidget()
+                    else ...[
+                      if (_isLoading)
+                        const LinearProgressIndicator(color: AppTheme.neonBlue),
+                      _buildKPISection(),
+                      const SizedBox(height: 24),
+                      // Hierarchy Selector Replaces Fixed Breadcrumbs
+                      // Loading overlay indicator when hierarchy changes
+                      Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          HierarchySelector(
+                            currentHierarchy: _hierarchy,
+                            onChanged: (newHierarchy) {
+                              setState(() {
+                                _hierarchy = newHierarchy;
+                                _selectionPath =
+                                    []; // Clear selection on hierarchy change
+                              });
+                              _fetchAllData();
+                            },
+                          ),
+                          if (_isLoading)
+                            Positioned.fill(
+                              child: ColoredBox(
+                                color: Colors.black.withValues(alpha: 0.3),
+                                child: const Center(
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: AppTheme.neonBlue),
                                   ),
                                 ),
                               ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        if (_matrixData.isNotEmpty) _buildCascadingSections(),
-                      ],
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      if (_matrixData.isNotEmpty) _buildCascadingSections(),
+                    ],
                   ],
                 ),
               ),
@@ -510,14 +603,20 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
   }
 
   Widget _buildHeader() {
+    final small = Responsive.isSmall(context);
     return Row(
       children: [
-        const Icon(Icons.dashboard, color: AppTheme.neonBlue, size: 28),
-        const SizedBox(width: 12),
-        const Text('Panel de Control', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+        Icon(Icons.dashboard, color: AppTheme.neonBlue, size: small ? 22 : 28),
+        SizedBox(width: small ? 8 : 12),
+        Text('Panel de Control',
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: small ? 16 : 20,
+                fontWeight: FontWeight.bold)),
         const Spacer(),
         IconButton(
-          icon: const Icon(Icons.cleaning_services_outlined, color: AppTheme.neonBlue),
+          icon: const Icon(Icons.cleaning_services_outlined,
+              color: AppTheme.neonBlue),
           onPressed: _resetFilters,
           tooltip: 'Resetear Filtros',
         ),
@@ -527,163 +626,211 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
   }
 
   Widget _buildFiltersSection() {
-    return Row(
-      children: [
-        // Vendor Dropdown
-        Expanded(
-          flex: 2,
-          child: DropdownButtonFormField<String>(
-            value: _vendedoresDisponibles.any((v) => v['code'].toString() == _selectedVendedor) ? _selectedVendedor : '',
-            isExpanded: true,
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: AppTheme.surfaceColor,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: _selectedVendedor != null ? AppTheme.neonBlue : Colors.transparent)),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: const BorderSide(color: AppTheme.neonBlue)),
-              prefixIcon: const Icon(Icons.person, color: AppTheme.neonBlue, size: 20),
-            ),
-            dropdownColor: AppTheme.darkCard,
-            icon: const Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue),
-            style: const TextStyle(color: Colors.white, fontSize: 13),
-            items: [
-               const DropdownMenuItem<String>(value: '', child: Text('Todos')),
-               ..._vendedoresDisponibles.map((v) {
-                 return DropdownMenuItem<String>(
-                   value: v['code'].toString(),
-                   child: Text((v['name'] as String?) ?? v['code'].toString(), overflow: TextOverflow.ellipsis),
-                 );
-               }),
-            ],
-            onChanged: (val) async {
-                 setState(() {
-                    _selectedVendedor = val?.isEmpty == true ? null : val;
-                    // Clear dependent filters when vendor changes (interdependent filters)
-                    _selectedClientCodes.clear();
-                    _clientsDisponibles.clear(); // Force reload
-                 });
-                 // Reload clients for the new vendor selection
-                 await _loadClients();
-                 _fetchAllData();
-            },
-          ),
-        ),
-        const SizedBox(width: 8),
-        // Client Filter Button
-        Expanded(
-          flex: 2,
-          child: GestureDetector(
-            onTap: _openClientFilter, // Use dedicated method with proper loading
-            child: Container(
-              height: 44,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceColor,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _selectedClientCodes.isNotEmpty ? AppTheme.neonPurple : Colors.transparent),
+    final small = Responsive.isSmall(context);
+    final filterWidth = small ? 140.0 : 160.0;
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          // Vendor Dropdown
+          SizedBox(
+            width: filterWidth,
+            child: DropdownButtonFormField<String>(
+              key: ValueKey<String>(_selectedVendedor ?? 'ALL'),
+              initialValue: _vendedoresDisponibles
+                      .any((v) => v['code'].toString() == _selectedVendedor)
+                  ? _selectedVendedor
+                  : '',
+              isExpanded: true,
+              decoration: InputDecoration(
+                filled: true,
+                fillColor: AppTheme.surfaceColor,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none),
+                enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                        color: _selectedVendedor != null
+                            ? AppTheme.neonBlue
+                            : Colors.transparent)),
+                focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: AppTheme.neonBlue)),
+                prefixIcon: const Icon(Icons.person,
+                    color: AppTheme.neonBlue, size: 20),
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.people_alt, color: _selectedClientCodes.isNotEmpty ? AppTheme.neonPurple : AppTheme.textSecondary, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _selectedClientCodes.isEmpty 
-                        ? 'Clientes' 
-                        : '${_selectedClientCodes.length} selec.',
-                      style: TextStyle(color: _selectedClientCodes.isNotEmpty ? Colors.white : Colors.white54, fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
+              dropdownColor: AppTheme.darkCard,
+              icon: const Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue),
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              items: [
+                const DropdownMenuItem<String>(value: '', child: Text('Todos')),
+                ..._vendedoresDisponibles.map((v) {
+                  return DropdownMenuItem<String>(
+                    value: v['code'].toString(),
+                    child: Text((v['name'] as String?) ?? v['code'].toString(),
+                        overflow: TextOverflow.ellipsis),
+                  );
+                }),
+              ],
+              onChanged: (val) {
+                final normalizedValue = val?.isEmpty ?? false ? null : val;
+                if (normalizedValue == _selectedVendedor) return;
+                ref.read(filterProvider.notifier).setVendor(normalizedValue);
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Client Filter Button
+          SizedBox(
+            width: filterWidth,
+            child: GestureDetector(
+              onTap: _openClientFilter,
+              child: Container(
+                height: 44,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: _selectedClientCodes.isNotEmpty
+                          ? AppTheme.neonPurple
+                          : Colors.transparent),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.people_alt,
+                        color: _selectedClientCodes.isNotEmpty
+                            ? AppTheme.neonPurple
+                            : AppTheme.textSecondary,
+                        size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _selectedClientCodes.isEmpty
+                            ? 'Clientes'
+                            : '${_selectedClientCodes.length} selec.',
+                        style: TextStyle(
+                            color: _selectedClientCodes.isNotEmpty
+                                ? Colors.white
+                                : Colors.white54,
+                            fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                  const Icon(Icons.arrow_drop_down, color: Colors.white54),
-                ],
+                    const Icon(Icons.arrow_drop_down, color: Colors.white54),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        // FI Filters Button (replaces Family Filter)
-        Expanded(
-          flex: 2,
-          child: GestureDetector(
-            onTap: _openFiFiltersDialog,
-            child: Container(
-              height: 44,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceColor,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _fiFilters.isNotEmpty ? AppTheme.neonBlue : Colors.transparent),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.filter_alt, color: _fiFilters.isNotEmpty ? AppTheme.neonBlue : AppTheme.textSecondary, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _fiFilters.isEmpty 
-                        ? 'Categorías' 
-                        : _buildFiFilterSummary(),
-                      style: TextStyle(color: _fiFilters.isNotEmpty ? Colors.white : Colors.white54, fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
+          const SizedBox(width: 8),
+          // FI Filters Button
+          SizedBox(
+            width: filterWidth,
+            child: GestureDetector(
+              onTap: _openFiFiltersDialog,
+              child: Container(
+                height: 44,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: _fiFilters.isNotEmpty
+                          ? AppTheme.neonBlue
+                          : Colors.transparent),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.filter_alt,
+                        color: _fiFilters.isNotEmpty
+                            ? AppTheme.neonBlue
+                            : AppTheme.textSecondary,
+                        size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _fiFilters.isEmpty
+                            ? 'Categorías'
+                            : _buildFiFilterSummary(),
+                        style: TextStyle(
+                            color: _fiFilters.isNotEmpty
+                                ? Colors.white
+                                : Colors.white54,
+                            fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                  const Icon(Icons.arrow_drop_down, color: Colors.white54),
-                ],
+                    const Icon(Icons.arrow_drop_down, color: Colors.white54),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-        const SizedBox(width: 8),
-        // Product Filter Button
-        Expanded(
-          flex: 2,
-          child: GestureDetector(
-            onTap: () async {
-               // Show product search dialog
-               final result = await showDialog<Set<Map<String, dynamic>>>(
-                 context: context,
-                 builder: (context) => _ProductSearchDialog(
-                   initialSelection: _selectedProductCodes,
-                 ),
-               );
-               
-               if (result != null) {
-                 setState(() {
-                   _selectedProductCodes = result.map((m) => m['code'].toString()).toSet();
-                 });
-                 _fetchAllData();
-               }
-            },
-            child: Container(
-              height: 44,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceColor,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _selectedProductCodes.isNotEmpty ? AppTheme.neonPurple : Colors.transparent),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.inventory_2, color: _selectedProductCodes.isNotEmpty ? AppTheme.neonPurple : AppTheme.textSecondary, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _selectedProductCodes.isEmpty 
-                        ? 'Productos' 
-                        : '${_selectedProductCodes.length} selec.',
-                      style: TextStyle(color: _selectedProductCodes.isNotEmpty ? Colors.white : Colors.white54, fontSize: 13),
-                      overflow: TextOverflow.ellipsis,
+          const SizedBox(width: 8),
+          // Product Filter Button
+          SizedBox(
+            width: filterWidth,
+            child: GestureDetector(
+              onTap: () async {
+                final result = await showDialog<Set<Map<String, dynamic>>>(
+                  context: context,
+                  builder: (context) => _ProductSearchDialog(
+                    initialSelection: _selectedProductCodes,
+                  ),
+                );
+
+                if (result != null) {
+                  setState(() {
+                    _selectedProductCodes =
+                        result.map((m) => m['code'].toString()).toSet();
+                  });
+                  _fetchAllData();
+                }
+              },
+              child: Container(
+                height: 44,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: _selectedProductCodes.isNotEmpty
+                          ? AppTheme.neonPurple
+                          : Colors.transparent),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.inventory_2,
+                        color: _selectedProductCodes.isNotEmpty
+                            ? AppTheme.neonPurple
+                            : AppTheme.textSecondary,
+                        size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _selectedProductCodes.isEmpty
+                            ? 'Productos'
+                            : '${_selectedProductCodes.length} selec.',
+                        style: TextStyle(
+                            color: _selectedProductCodes.isNotEmpty
+                                ? Colors.white
+                                : Colors.white54,
+                            fontSize: 13),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                  const Icon(Icons.arrow_drop_down, color: Colors.white54),
-                ],
+                    const Icon(Icons.arrow_drop_down, color: Colors.white54),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -691,145 +838,178 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
     return ExpansionTile(
       title: Row(
         children: [
-          const Text('Filtros de Fecha', style: TextStyle(color: AppTheme.neonBlue, fontSize: 14)),
+          const Text('Filtros de Fecha',
+              style: TextStyle(color: AppTheme.neonBlue, fontSize: 14)),
           if (_hasPendingChanges) ...[
-             const SizedBox(width: 12),
-             Container(
-               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-               decoration: BoxDecoration(color: Colors.amber.withOpacity(0.2), borderRadius: BorderRadius.circular(4)),
-               child: const Text('Cambios pendientes', style: TextStyle(color: Colors.amber, fontSize: 10)),
-             )
-          ]
+            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(4)),
+              child: const Text('Cambios pendientes',
+                  style: TextStyle(color: Colors.amber, fontSize: 10)),
+            ),
+          ],
         ],
       ),
-      initiallyExpanded: false,
-      collapsedBackgroundColor: AppTheme.surfaceColor.withOpacity(0.5),
+      collapsedBackgroundColor: AppTheme.surfaceColor.withValues(alpha: 0.5),
       backgroundColor: AppTheme.surfaceColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      collapsedShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      collapsedShape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       childrenPadding: const EdgeInsets.all(12),
       children: [
         // Years
         Row(
-           crossAxisAlignment: CrossAxisAlignment.start,
-           children: [
-             const Padding(
-               padding: EdgeInsets.only(top: 8),
-               child: Text('Años:', style: TextStyle(color: Colors.white, fontSize: 12)),
-             ),
-             const SizedBox(width: 12),
-             Expanded(
-               child: Wrap(
-                 spacing: 8,
-                 children: ApiConfig.availableYears.map((year) => FilterChip(
-                   label: Text('$year', style: const TextStyle(fontSize: 11)),
-                   selected: _pendingYears.contains(year),
-                   onSelected: (selected) {
-                     setState(() {
-                       if (selected) _pendingYears.add(year);
-                       else if (_pendingYears.length > 1) _pendingYears.remove(year); // Prevent empty
-                       _hasPendingChanges = true;
-                     });
-                   },
-                   selectedColor: AppTheme.neonPurple.withOpacity(0.3),
-                   checkmarkColor: AppTheme.neonPurple,
-                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                 )).toList(),
-               ),
-             ),
-           ],
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.only(top: 8),
+              child: Text('Años:',
+                  style: TextStyle(color: Colors.white, fontSize: 12)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Wrap(
+                spacing: 8,
+                children: ApiConfig.availableYears
+                    .map(
+                      (year) => FilterChip(
+                        label:
+                            Text('$year', style: const TextStyle(fontSize: 11)),
+                        selected: _pendingYears.contains(year),
+                        onSelected: (selected) {
+                          setState(() {
+                            if (selected) {
+                              _pendingYears.add(year);
+                            } else if (_pendingYears.length > 1)
+                              _pendingYears.remove(year); // Prevent empty
+                            _hasPendingChanges = true;
+                          });
+                        },
+                        selectedColor: AppTheme.neonPurple.withValues(alpha: 0.3),
+                        checkmarkColor: AppTheme.neonPurple,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                    )
+                    .toList(),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         // Months
         Row(
           children: [
-             const Text('Meses:', style: TextStyle(color: Colors.white, fontSize: 12)),
-             const Spacer(),
-             TextButton(
-               child: const Text('YTD', style: TextStyle(fontSize: 11)),
-               onPressed: () {
-                 setState(() {
-                   _pendingMonths = {for (var i = 1; i <= DateTime.now().month; i++) i};
-                   _hasPendingChanges = true;
-                 });
-               },
-             ),
-             TextButton(
-               child: const Text('Todos', style: TextStyle(fontSize: 11)),
-               onPressed: () {
-                 setState(() {
-                   _pendingMonths = {for (var i = 1; i <= 12; i++) i};
-                   _hasPendingChanges = true;
-                 });
-               },
-             ),
-             TextButton(
-               child: const Text('Limpiar', style: TextStyle(fontSize: 11, color: AppTheme.neonBlue)),
-               onPressed: () {
-                 setState(() {
-                   _pendingMonths.clear();
-                   _hasPendingChanges = true;
-                 });
-               },
-             ),
+            const Text('Meses:',
+                style: TextStyle(color: Colors.white, fontSize: 12)),
+            const Spacer(),
+            TextButton(
+              child: const Text('YTD', style: TextStyle(fontSize: 11)),
+              onPressed: () {
+                setState(() {
+                  _pendingMonths = {
+                    for (var i = 1; i <= DateTime.now().month; i++) i
+                  };
+                  _hasPendingChanges = true;
+                });
+              },
+            ),
+            TextButton(
+              child: const Text('Todos', style: TextStyle(fontSize: 11)),
+              onPressed: () {
+                setState(() {
+                  _pendingMonths = {for (var i = 1; i <= 12; i++) i};
+                  _hasPendingChanges = true;
+                });
+              },
+            ),
+            TextButton(
+              child: const Text('Limpiar',
+                  style: TextStyle(fontSize: 11, color: AppTheme.neonBlue)),
+              onPressed: () {
+                setState(() {
+                  _pendingMonths.clear();
+                  _hasPendingChanges = true;
+                });
+              },
+            ),
           ],
         ),
         Wrap(
           spacing: 6,
           runSpacing: 6,
-          children: List.generate(12, (i) => FilterChip(
-            label: Text(_monthNamesShort[i], style: const TextStyle(fontSize: 10)),
-            selected: _pendingMonths.contains(i + 1),
-            onSelected: (selected) {
-              setState(() {
-                if (selected) _pendingMonths.add(i + 1);
-                else _pendingMonths.remove(i + 1);
-                _hasPendingChanges = true;
-              });
-            },
-            selectedColor: AppTheme.neonBlue.withOpacity(0.3),
-            checkmarkColor: AppTheme.neonBlue,
-            visualDensity: VisualDensity.compact,
-            padding: EdgeInsets.zero,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-          )),
+          children: List.generate(
+            12,
+            (i) => FilterChip(
+              label: Text(_monthNamesShort[i],
+                  style: const TextStyle(fontSize: 10)),
+              selected: _pendingMonths.contains(i + 1),
+              onSelected: (selected) {
+                setState(() {
+                  if (selected) {
+                    _pendingMonths.add(i + 1);
+                  } else {
+                    _pendingMonths.remove(i + 1);
+                  }
+                  _hasPendingChanges = true;
+                });
+              },
+              selectedColor: AppTheme.neonBlue.withValues(alpha: 0.3),
+              checkmarkColor: AppTheme.neonBlue,
+              visualDensity: VisualDensity.compact,
+              padding: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6)),
+            ),
+          ),
         ),
         const SizedBox(height: 16),
         // Apply Button
         SizedBox(
           width: double.infinity,
           child: ElevatedButton(
-            onPressed: _hasPendingChanges ? () {
-              setState(() {
-                _selectedYears = Set.from(_pendingYears);
-                _selectedMonths = Set.from(_pendingMonths);
-                _hasPendingChanges = false;
-              });
-              _fetchAllData();
-            } : null,
+            onPressed: _hasPendingChanges
+                ? () {
+                    setState(() {
+                      _selectedYears = Set.from(_pendingYears);
+                      _selectedMonths = Set.from(_pendingMonths);
+                      _hasPendingChanges = false;
+                    });
+                    _fetchAllData();
+                  }
+                : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: AppTheme.neonBlue,
               disabledBackgroundColor: Colors.white10,
               padding: const EdgeInsets.symmetric(vertical: 12),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
             ),
-            child: const Text('Aplicar Cambios', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            child: const Text('Aplicar Cambios',
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ),
       ],
     );
   }
 
-
   // Removed _buildHierarchyBreadcrumbs as we use HierarchySelector now
 
   Widget _buildKPISection() {
     if (_kpiData == null) return const SizedBox();
-    
+
     final totalSales = _safeDouble(_kpiData!['totalSales']);
     final totalOrders = _safeInt(_kpiData!['totalOrders']);
     final uniqueClients = _safeInt(_kpiData!['uniqueClients']);
     final todaySales = _safeDouble(_kpiData!['todaySales']);
+    final totalMargin = _safeDouble(_kpiData!['totalMargin']);
+    final growthPercent = _safeDouble(_kpiData!['growthPercent']);
+    final lastMonthSales = _safeDouble(_kpiData!['lastMonthSales']);
+    final marginPct = totalSales > 0 ? (totalMargin / totalSales) * 100 : 0.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -837,40 +1017,106 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Indicadores Clave', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+            const Text('Indicadores Clave',
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold)),
             if (_kpiData != null)
-               Text('${DateFormatter.getMonthName(_kpiData!['period']['month'] as int)} ${_kpiData!['period']['year']}', style: const TextStyle(color: Colors.white30, fontSize: 11)),
+              Text(
+                  '${DateFormatter.getMonthName(_kpiData!['period']['month'] as int)} ${_kpiData!['period']['year']}',
+                  style: const TextStyle(color: Colors.white30, fontSize: 11)),
           ],
         ),
         const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(child: _buildKPICard('Ventas Período', CurrencyFormatter.format(totalSales), Icons.euro, AppTheme.neonBlue)),
-            const SizedBox(width: 12),
-            Expanded(child: _buildKPICard('Cartera Activa', uniqueClients.toString(), Icons.people, AppTheme.neonPurple)),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(child: _buildKPICard('Ventas Hoy', CurrencyFormatter.format(todaySales), Icons.today, Colors.amber)),
-            const SizedBox(width: 12),
-            Expanded(child: _buildKPICard('Pedidos Hoy', totalOrders.toString(), Icons.shopping_cart, AppTheme.neonGreen)),
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final cardWidth = (constraints.maxWidth - 24) / 3;
+            return Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _buildKPICard(
+                  'Ventas Período',
+                  CurrencyFormatter.format(totalSales),
+                  Icons.euro,
+                  AppTheme.neonBlue,
+                  width: cardWidth,
+                  subtitle: growthPercent != 0
+                      ? '${growthPercent >= 0 ? "+" : ""}${growthPercent.toStringAsFixed(1)}% vs año ant.'
+                      : null,
+                  trend: growthPercent >= 0 ? 'up' : 'down',
+                ),
+                _buildKPICard(
+                  'Margen Bruto',
+                  CurrencyFormatter.format(totalMargin),
+                  Icons.trending_up,
+                  AppTheme.neonGreen,
+                  width: cardWidth,
+                  subtitle: '${marginPct.toStringAsFixed(1)}% del total',
+                  trend: marginPct >= 15
+                      ? 'up'
+                      : (marginPct >= 10 ? 'neutral' : 'down'),
+                ),
+                _buildKPICard(
+                  'Cartera Activa',
+                  uniqueClients.toString(),
+                  Icons.people,
+                  AppTheme.neonPurple,
+                  width: cardWidth,
+                ),
+                _buildKPICard(
+                  'Ventas Hoy',
+                  CurrencyFormatter.format(todaySales),
+                  Icons.today,
+                  Colors.amber,
+                  width: cardWidth,
+                ),
+                _buildKPICard(
+                  'Pedidos Hoy',
+                  totalOrders.toString(),
+                  Icons.shopping_cart,
+                  AppTheme.neonCyan,
+                  width: cardWidth,
+                ),
+                _buildKPICard(
+                  'Crec. Interanual',
+                  '${growthPercent >= 0 ? "+" : ""}${growthPercent.toStringAsFixed(1)}%',
+                  Icons.show_chart,
+                  growthPercent >= 0 ? AppTheme.neonGreen : AppTheme.error,
+                  width: cardWidth,
+                  subtitle: 'vs ${CurrencyFormatter.format(lastMonthSales)}',
+                  trend: growthPercent >= 0 ? 'up' : 'down',
+                ),
+              ],
+            );
+          },
         ),
       ],
     );
   }
 
-  Widget _buildKPICard(String title, String value, IconData icon, Color color) {
+  Widget _buildKPICard(String title, String value, IconData icon, Color color,
+      {double? width, String? subtitle, String? trend}) {
     return Container(
+      width: width,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            AppTheme.surfaceColor,
+            color.withValues(alpha: 0.08),
+          ],
+        ),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
         boxShadow: [
-          BoxShadow(color: color.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4)),
+          BoxShadow(
+              color: color.withValues(alpha: 0.08),
+              blurRadius: 12,
+              offset: const Offset(0, 4)),
         ],
       ),
       child: Column(
@@ -878,13 +1124,47 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
         children: [
           Row(
             children: [
-              Icon(icon, color: color, size: 20),
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 16),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: Text(title, style: const TextStyle(color: Colors.white70, fontSize: 11), overflow: TextOverflow.ellipsis)),
+              Expanded(
+                  child: Text(title,
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 10),
+                      overflow: TextOverflow.ellipsis)),
+              if (trend != null)
+                Icon(
+                  trend == 'up'
+                      ? Icons.trending_up
+                      : (trend == 'down'
+                          ? Icons.trending_down
+                          : Icons.trending_flat),
+                  color: trend == 'up'
+                      ? AppTheme.neonGreen
+                      : (trend == 'down' ? AppTheme.error : Colors.amber),
+                  size: 16,
+                ),
             ],
           ),
-          const SizedBox(height: 12),
-          Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 10),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(value,
+                style: TextStyle(
+                    color: color, fontSize: 17, fontWeight: FontWeight.bold)),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(subtitle,
+                style: const TextStyle(color: Colors.white38, fontSize: 9),
+                overflow: TextOverflow.ellipsis),
+          ],
         ],
       ),
     );
@@ -899,22 +1179,23 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
 
   // Calculate total margin for a list of nodes
   double _calculateTotalMargin(List<MatrixNode> nodes) {
-    return nodes.fold(0.0, (sum, node) => sum + node.margin);
-  }
-  
-  double _calculateTotalSales(List<MatrixNode> nodes) {
-    return nodes.fold(0.0, (sum, node) => sum + node.sales);
+    return nodes.fold(0, (sum, node) => sum + node.margin);
   }
 
-  Widget _buildMarginTotalBanner(String level, double margin, double sales, int depth) {
+  double _calculateTotalSales(List<MatrixNode> nodes) {
+    return nodes.fold(0, (sum, node) => sum + node.sales);
+  }
+
+  Widget _buildMarginTotalBanner(
+      String level, double margin, double sales, int depth) {
     final marginPct = sales > 0 ? (margin / sales) * 100 : 0.0;
     return Container(
       margin: EdgeInsets.only(left: depth * 16.0, bottom: 8, top: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.orange.withOpacity(0.15),
+        color: Colors.orange.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.orange.withOpacity(0.4)),
+        border: Border.all(color: Colors.orange.withValues(alpha: 0.4)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -923,11 +1204,15 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
           const SizedBox(width: 8),
           Text(
             'MARGEN $level: ',
-            style: const TextStyle(color: Colors.orange, fontSize: 11, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+                color: Colors.orange,
+                fontSize: 11,
+                fontWeight: FontWeight.bold),
           ),
           Text(
             '${CurrencyFormatter.format(margin)} (${marginPct.toStringAsFixed(1)}%)',
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+                color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -946,7 +1231,7 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
   }) {
     // IMPORTANT: Capture level in local variable for closure
     final capturedLevel = level;
-    
+
     return HierarchySection(
       title: title,
       levelName: levelName,
@@ -960,52 +1245,55 @@ class _DashboardContentState extends State<DashboardContent> with AutomaticKeepA
     );
   }
 
-
   Widget _buildCascadingSections() {
     if (_matrixData.isEmpty) return const SizedBox();
-    
+
     // Single section with tree-style table (expansion happens within the table)
     return HierarchySection(
       title: _getSectionTitle(0, null),
-      levelName: _hierarchy.isNotEmpty ? _hierarchy[0] : 'Item', 
+      levelName: _hierarchy.isNotEmpty ? _hierarchy[0] : 'Item',
       data: _matrixData,
       hierarchy: _hierarchy,
       periods: _matrixPeriods,
-      selectedNode: null, // Tree handles its own selection internally
-      color: AppTheme.neonBlue,
-      chartType: ChartType.bar,
       onNodeTap: (node) {
         // Optional: track selection if needed for other purposes
       },
     );
   }
 
-
-
-
   String _getSectionTitle(int level, MatrixNode? parent) {
-     if (level >= _hierarchy.length) return 'Detalle';
-     final type = _hierarchy[level].toLowerCase();
-     final map = {'vendor': 'Comerciales', 'client': 'Clientes', 'product': 'Productos', 'family': 'Familias'};
-     final name = map[type]?.toUpperCase() ?? type.toUpperCase();
-     
-     if (parent != null) {
-       return '$name DE ${parent.name}';
-     }
-     return 'RANKING GENERAL DE $name';
+    if (level >= _hierarchy.length) return 'Detalle';
+    final type = _hierarchy[level].toLowerCase();
+    final map = {
+      'vendor': 'Comerciales',
+      'client': 'Clientes',
+      'product': 'Productos',
+      'family': 'Familias'
+    };
+    final name = map[type]?.toUpperCase() ?? type.toUpperCase();
+
+    if (parent != null) {
+      return '$name DE ${parent.name}';
+    }
+    return 'RANKING GENERAL DE $name';
   }
 
   String get _activeHierarchyLabel {
     if (_hierarchy.isEmpty) return 'Elementos';
-    final map = {'vendor': 'Comerciales', 'client': 'Clientes', 'product': 'Productos', 'family': 'Familias'};
+    final map = {
+      'vendor': 'Comerciales',
+      'client': 'Clientes',
+      'product': 'Productos',
+      'family': 'Familias'
+    };
     return map[_hierarchy.first] ?? 'Elementos';
   }
 }
 
 // Mutable Helper Class
 class _ProductSearchDialog extends StatefulWidget {
+  const _ProductSearchDialog({required this.initialSelection, super.key});
   final Set<String> initialSelection;
-  const _ProductSearchDialog({Key? key, required this.initialSelection}) : super(key: key);
 
   @override
   State<_ProductSearchDialog> createState() => _ProductSearchDialogState();
@@ -1042,10 +1330,13 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
   Future<void> _searchProducts([String query = '']) async {
     setState(() => _isLoading = true);
     try {
-      final results = await ApiClient.getList('/dashboard/products-search', queryParameters: {'query': query, 'limit': '50'});
+      final results = await ApiClient.getList('/dashboard/products-search',
+          queryParameters: {'query': query, 'limit': '50'});
       if (mounted) {
         setState(() {
-          _searchResults = (results as List).map((i) => Map<String, dynamic>.from(i as Map)).toList();
+          _searchResults = (results as List)
+              .map((i) => Map<String, dynamic>.from(i as Map))
+              .toList();
           _isLoading = false;
         });
       }
@@ -1078,8 +1369,14 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Filtrar Productos', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                Text('${_selectedCodes.length} seleccionados', style: const TextStyle(color: AppTheme.neonBlue, fontSize: 14)),
+                const Text('Filtrar Productos',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold)),
+                Text('${_selectedCodes.length} seleccionados',
+                    style: const TextStyle(
+                        color: AppTheme.neonBlue, fontSize: 14)),
               ],
             ),
             const SizedBox(height: 16),
@@ -1093,15 +1390,21 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
                 prefixIcon: const Icon(Icons.search, color: Colors.white54),
                 filled: true,
                 fillColor: AppTheme.darkCard,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none),
               ),
             ),
             const SizedBox(height: 12),
             Expanded(
               child: _isLoading
-                  ? const Center(child: CircularProgressIndicator(color: AppTheme.neonBlue))
+                  ? const Center(
+                      child:
+                          CircularProgressIndicator(color: AppTheme.neonBlue))
                   : _searchResults.isEmpty
-                      ? const Center(child: Text('No hay resultados', style: TextStyle(color: Colors.white30)))
+                      ? const Center(
+                          child: Text('No hay resultados',
+                              style: TextStyle(color: Colors.white30)))
                       : ListView.builder(
                           itemCount: _searchResults.length,
                           itemBuilder: (context, index) {
@@ -1113,11 +1416,21 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
                             return ListTile(
                               onTap: () => _toggleSelection(code, name),
                               leading: Icon(
-                                isSelected ? Icons.check_circle : Icons.circle_outlined,
-                                color: isSelected ? AppTheme.neonBlue : Colors.white24,
+                                isSelected
+                                    ? Icons.check_circle
+                                    : Icons.circle_outlined,
+                                color: isSelected
+                                    ? AppTheme.neonBlue
+                                    : Colors.white24,
                               ),
-                              title: Text(name, style: TextStyle(color: isSelected ? Colors.white : Colors.white70)),
-                              subtitle: Text(code, style: const TextStyle(color: Colors.white30, fontSize: 12)),
+                              title: Text(name,
+                                  style: TextStyle(
+                                      color: isSelected
+                                          ? Colors.white
+                                          : Colors.white70)),
+                              subtitle: Text(code,
+                                  style: const TextStyle(
+                                      color: Colors.white30, fontSize: 12)),
                             );
                           },
                         ),
@@ -1128,20 +1441,25 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
               children: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+                  child: const Text('Cancelar',
+                      style: TextStyle(color: Colors.white54)),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: () {
-                    final selectedItems = _searchResults.where((i) => _selectedCodes.contains(i['code'])).toSet();
+                    final selectedItems = _searchResults
+                        .where((i) => _selectedCodes.contains(i['code']))
+                        .toSet();
                     // Just pass back dummy objects with code, as caller only needs codes
-                     final resultSet = _selectedCodes.map((c) => {'code': c}).toSet();
+                    final resultSet =
+                        _selectedCodes.map((c) => {'code': c}).toSet();
                     Navigator.pop(context, resultSet);
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.neonBlue,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
                   ),
                   child: const Text('Aplicar'),
                 ),
@@ -1155,14 +1473,13 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
 }
 
 class _MutableNode {
+  _MutableNode({required this.id, required this.name, required this.type});
   final String id;
   final String name;
   final String type;
   double sales = 0;
   double margin = 0;
   List<_MutableNode> children = [];
-
-  _MutableNode({required this.id, required this.name, required this.type});
 
   MatrixNode toMatrixNode() {
     return MatrixNode(
@@ -1172,89 +1489,90 @@ class _MutableNode {
       sales: sales,
       margin: margin,
       growth: 0,
-      children: children.map((c) => c.toMatrixNode()).toList()..sort((a,b) => b.sales.compareTo(a.sales)),
+      children: children.map((c) => c.toMatrixNode()).toList()
+        ..sort((a, b) => b.sales.compareTo(a.sales)),
     );
   }
 }
 
 class TreeBuildParams {
+  TreeBuildParams({required this.rows, required this.hierarchy});
   final List<Map<String, dynamic>> rows;
   final List<String> hierarchy;
-  TreeBuildParams({required this.rows, required this.hierarchy});
 }
 
 // Top level function for compute
 List<MatrixNode> buildTreeIsolate(TreeBuildParams params) {
   final rows = params.rows;
   final hierarchy = params.hierarchy;
-  
+
   if (rows.isEmpty || hierarchy.isEmpty) return [];
 
-  final Map<String, _MutableNode> encMap = {}; // Key: Path
+  final encMap = <String, _MutableNode>{}; // Key: Path
 
   for (final row in rows) {
-     String path = '';
-     double getDouble(dynamic v) {
-       if (v == null) return 0.0;
-       if (v is num) return v.toDouble();
-       return double.tryParse(v.toString()) ?? 0.0;
-     }
-     
-     double sales = getDouble(row['SALES'] ?? row['sales']);
-     double margin = getDouble(row['MARGIN'] ?? row['margin']);
-     
-     // Traverse hierarchy levels for this row
-     for (int i = 0; i < hierarchy.length; i++) {
-        final levelIndex = i + 1;
-        dynamic getVal(String k) => row[k] ?? row[k.toLowerCase()] ?? row[k.toUpperCase()];
-        
-        final idVal = getVal('ID_$levelIndex');
-        final nameVal = getVal('NAME_$levelIndex');
-        
-        if (idVal == null) break;
-        
-         final type = hierarchy[i];
-         final currentId = idVal.toString();
-         final currentName = nameVal?.toString() ?? currentId;
-         
-         // Use pipe separator to avoid conflicts with IDs containing slashes
-         path = i == 0 ? currentId : '$path|$currentId';
-         
-         if (!encMap.containsKey(path)) {
-            encMap[path] = _MutableNode(
-              id: currentId,
-              name: currentName,
-              type: type,
-            );
-            if (i > 0) {
-              final parentPath = path.substring(0, path.lastIndexOf('|'));
-              if (encMap.containsKey(parentPath)) {
-                encMap[parentPath]!.children.add(encMap[path]!);
-              }
-            }
-         }
-         
-         encMap[path]!.sales += sales;
-         encMap[path]!.margin += margin;
+    var path = '';
+    double getDouble(dynamic v) {
+      if (v == null) return 0;
+      if (v is num) return v.toDouble();
+      return double.tryParse(v.toString()) ?? 0.0;
+    }
+
+    final sales = getDouble(row['SALES'] ?? row['sales']);
+    final margin = getDouble(row['MARGIN'] ?? row['margin']);
+
+    // Traverse hierarchy levels for this row
+    for (var i = 0; i < hierarchy.length; i++) {
+      final levelIndex = i + 1;
+      dynamic getVal(String k) =>
+          row[k] ?? row[k.toLowerCase()] ?? row[k.toUpperCase()];
+
+      final idVal = getVal('ID_$levelIndex');
+      final nameVal = getVal('NAME_$levelIndex');
+
+      if (idVal == null) break;
+
+      final type = hierarchy[i];
+      final currentId = idVal.toString();
+      final currentName = nameVal?.toString() ?? currentId;
+
+      // Use pipe separator to avoid conflicts with IDs containing slashes
+      path = i == 0 ? currentId : '$path|$currentId';
+
+      if (!encMap.containsKey(path)) {
+        encMap[path] = _MutableNode(
+          id: currentId,
+          name: currentName,
+          type: type,
+        );
+        if (i > 0) {
+          final parentPath = path.substring(0, path.lastIndexOf('|'));
+          if (encMap.containsKey(parentPath)) {
+            encMap[parentPath]!.children.add(encMap[path]!);
+          }
+        }
       }
-   }
-   
-   return encMap.values
-       .where((n) => n.type == hierarchy[0])
-       .map((n) => n.toMatrixNode())
-       .toList()
-       ..sort((a,b) => b.sales.compareTo(a.sales)); // Sort root nodes too
+
+      encMap[path]!.sales += sales;
+      encMap[path]!.margin += margin;
+    }
+  }
+
+  return encMap.values
+      .where((n) => n.type == hierarchy[0])
+      .map((n) => n.toMatrixNode())
+      .toList()
+    ..sort((a, b) => b.sales.compareTo(a.sales)); // Sort root nodes too
 }
 
 /// Dialog content for FI filters
 class _FiFilterDialogContent extends StatefulWidget {
-  final FiFilterState initialFilters;
-  final Function(FiFilterState) onApply;
-
   const _FiFilterDialogContent({
     required this.initialFilters,
     required this.onApply,
   });
+  final FiFilterState initialFilters;
+  final Function(FiFilterState) onApply;
 
   @override
   State<_FiFilterDialogContent> createState() => _FiFilterDialogContentState();
@@ -1288,12 +1606,14 @@ class _FiFilterDialogContentState extends State<_FiFilterDialogContent> {
           children: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar', style: TextStyle(color: Colors.grey)),
+              child:
+                  const Text('Cancelar', style: TextStyle(color: Colors.grey)),
             ),
             const SizedBox(width: 8),
             ElevatedButton(
               onPressed: () => widget.onApply(_currentFilters),
-              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonBlue),
+              style:
+                  ElevatedButton.styleFrom(backgroundColor: AppTheme.neonBlue),
               child: const Text('Aplicar'),
             ),
           ],

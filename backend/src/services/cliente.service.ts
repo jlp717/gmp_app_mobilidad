@@ -526,34 +526,31 @@ class ClienteService {
 
   /**
    * Actualiza datos de contacto del cliente
+   * NOTE: DSEDAC.CLI is read-only (ERP table). Updates go to JAVIER.CLIENT_NOTES
    */
   async actualizarDatosContacto(
     codigoCliente: string,
     datos: { email?: string; telefono?: string }
   ): Promise<boolean> {
     try {
-      const updates: string[] = [];
-      const params: string[] = [];
+      // DSEDAC.CLI is ERP read-only — cannot update directly
+      // Store contact updates in JAVIER.CLIENT_NOTES as a workaround
+      const notes: string[] = [];
+      if (datos.email !== undefined) notes.push(`email: ${datos.email}`);
+      if (datos.telefono !== undefined) notes.push(`telefono: ${datos.telefono}`);
+      if (notes.length === 0) return false;
 
-      if (datos.email !== undefined) {
-        updates.push('TELEFONO2 = ?');
-        params.push(datos.email);
-      }
-
-      if (datos.telefono !== undefined) {
-        updates.push('TELEFONO1 = ?');
-        params.push(datos.telefono);
-      }
-
-      if (updates.length === 0) return false;
-
-      params.push(sanitizeCode(codigoCliente));
-
+      const noteText = `Contact update requested: ${notes.join(', ')}`;
       await odbcPool.query(
-        `UPDATE DSEDAC.CLI SET ${updates.join(', ')} WHERE TRIM(CODIGOCLIENTE) = ?`,
-        params
+        `MERGE INTO JAVIER.CLIENT_NOTES CN
+         USING (VALUES (?)) AS V(CLIENT_CODE)
+         ON CN.CLIENT_CODE = V.CLIENT_CODE
+         WHEN MATCHED THEN UPDATE SET CN.OBSERVACIONES = CN.OBSERVACIONES || ' | ' || ?, MODIFIED_AT = CURRENT TIMESTAMP
+         WHEN NOT MATCHED THEN INSERT (CLIENT_CODE, OBSERVACIONES, MODIFIED_AT) VALUES (?, ?, CURRENT TIMESTAMP)`,
+        [codigoCliente, noteText, codigoCliente, noteText]
       );
 
+      logger.warn(`Contact update for client ${codigoCliente} stored in CLIENT_NOTES (DSEDAC.CLI is read-only)`);
       return true;
     } catch (error) {
       logger.error('Error actualizando datos contacto:', error);

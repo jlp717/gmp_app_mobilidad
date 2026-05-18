@@ -312,21 +312,28 @@ class WebSocketCacheManager {
     /**
      * Shutdown WebSocket server
      */
-    close() {
+    shutdown() {
         if (this.heartbeatInterval) {
             clearInterval(this.heartbeatInterval);
+            this.heartbeatInterval = null;
         }
 
         if (this.wss) {
-            // Close all connections
             for (const [clientId, client] of this.clients) {
                 client.ws.close(1000, 'Server shutting down');
             }
 
             this.wss.close(() => {
-                logger.info('[WSCache] Server closed');
+                logger.info('[WSCache] Server shutdown complete');
             });
         }
+    }
+
+    /**
+     * Close WebSocket server (alias for shutdown)
+     */
+    close() {
+        this.shutdown();
     }
 }
 

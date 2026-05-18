@@ -2,18 +2,6 @@ import 'package:equatable/equatable.dart';
 
 /// Dashboard metrics model - matches new backend API format
 class DashboardMetrics extends Equatable {
-  final double totalSales;
-  final int totalBoxes;
-  final int totalOrders;
-  final int uniqueClients;
-  final double avgOrderValue;
-  final double totalMargin;
-  final double todaySales;
-  final int todayOrders;
-  final double lastMonthSales;
-  final double growthPercent;
-  final int year;
-  final int month;
 
   const DashboardMetrics({
     required this.totalSales,
@@ -47,6 +35,18 @@ class DashboardMetrics extends Equatable {
       month: period?['month'] as int? ?? DateTime.now().month,
     );
   }
+  final double totalSales;
+  final int totalBoxes;
+  final int totalOrders;
+  final int uniqueClients;
+  final double avgOrderValue;
+  final double totalMargin;
+  final double todaySales;
+  final int todayOrders;
+  final double lastMonthSales;
+  final double growthPercent;
+  final int year;
+  final int month;
 
   double get marginPercent => totalSales > 0 ? (totalMargin / totalSales) * 100 : 0;
 
@@ -54,21 +54,12 @@ class DashboardMetrics extends Equatable {
   List<Object?> get props => [
     totalSales, totalBoxes, totalOrders, uniqueClients,
     avgOrderValue, totalMargin, todaySales, todayOrders,
-    lastMonthSales, growthPercent, year, month
+    lastMonthSales, growthPercent, year, month,
   ];
 }
 
 /// Recent sale model - matches new backend format
 class RecentSale extends Equatable {
-  final String date;
-  final String clientCode;
-  final String clientName;
-  final String vendedorCode;
-  final String type;
-  final double totalEuros;
-  final double totalMargin;
-  final int totalBoxes;
-  final int numLines;
 
   const RecentSale({
     required this.date,
@@ -95,6 +86,15 @@ class RecentSale extends Equatable {
       numLines: (json['numLines'] as num?)?.toInt() ?? 0,
     );
   }
+  final String date;
+  final String clientCode;
+  final String clientName;
+  final String vendedorCode;
+  final String type;
+  final double totalEuros;
+  final double totalMargin;
+  final int totalBoxes;
+  final int numLines;
 
   DateTime get dateTime => DateTime.tryParse(date) ?? DateTime.now();
 
@@ -104,13 +104,6 @@ class RecentSale extends Equatable {
 
 /// Sales evolution data point
 class SalesEvolutionPoint extends Equatable {
-  final String period;
-  final int year;
-  final int month;
-  final double totalSales;
-  final double totalMargin;
-  final int totalBoxes;
-  final int uniqueClients;
 
   const SalesEvolutionPoint({
     required this.period,
@@ -133,6 +126,13 @@ class SalesEvolutionPoint extends Equatable {
       uniqueClients: (json['uniqueClients'] as num?)?.toInt() ?? 0,
     );
   }
+  final String period;
+  final int year;
+  final int month;
+  final double totalSales;
+  final double totalMargin;
+  final int totalBoxes;
+  final int uniqueClients;
 
   @override
   List<Object?> get props => [period, year, month, totalSales, totalMargin, totalBoxes, uniqueClients];
@@ -140,9 +140,6 @@ class SalesEvolutionPoint extends Equatable {
 
 /// YoY Comparison model - matches new backend format
 class YoYComparison extends Equatable {
-  final YearData currentYear;
-  final YearData lastYear;
-  final GrowthData growth;
 
   const YoYComparison({
     required this.currentYear,
@@ -157,17 +154,15 @@ class YoYComparison extends Equatable {
       growth: GrowthData.fromJson(json['growth'] as Map<String, dynamic>? ?? {}),
     );
   }
+  final YearData currentYear;
+  final YearData lastYear;
+  final GrowthData growth;
 
   @override
   List<Object?> get props => [currentYear, lastYear, growth];
 }
 
 class YearData extends Equatable {
-  final int year;
-  final double sales;
-  final double margin;
-  final int boxes;
-  final int clients;
 
   const YearData({
     required this.year,
@@ -186,14 +181,17 @@ class YearData extends Equatable {
       clients: (json['clients'] as num?)?.toInt() ?? 0,
     );
   }
+  final int year;
+  final double sales;
+  final double margin;
+  final int boxes;
+  final int clients;
 
   @override
   List<Object?> get props => [year, sales, margin, boxes, clients];
 }
 
 class GrowthData extends Equatable {
-  final double salesPercent;
-  final double marginPercent;
 
   const GrowthData({
     required this.salesPercent,
@@ -206,6 +204,8 @@ class GrowthData extends Equatable {
       marginPercent: (json['marginPercent'] as num?)?.toDouble() ?? 0.0,
     );
   }
+  final double salesPercent;
+  final double marginPercent;
 
   @override
   List<Object?> get props => [salesPercent, marginPercent];
@@ -213,28 +213,12 @@ class GrowthData extends Equatable {
 
 /// Top Product model
 class TopProduct extends Equatable {
-  final String code;
-  final String name;
-  final String? brand;
-  final String? family;
-  final double totalSales;
-  final double totalMargin;
-  final double marginPercent;
-  final int totalBoxes;
-  final int totalUnits;
-  final int numClients;
 
   const TopProduct({
     required this.code,
     required this.name,
-    this.brand,
+    required this.totalSales, required this.totalMargin, required this.marginPercent, required this.totalBoxes, required this.totalUnits, required this.numClients, this.brand,
     this.family,
-    required this.totalSales,
-    required this.totalMargin,
-    required this.marginPercent,
-    required this.totalBoxes,
-    required this.totalUnits,
-    required this.numClients,
   });
 
   factory TopProduct.fromJson(Map<String, dynamic> json) {
@@ -251,6 +235,16 @@ class TopProduct extends Equatable {
       numClients: (json['numClients'] as num?)?.toInt() ?? 0,
     );
   }
+  final String code;
+  final String name;
+  final String? brand;
+  final String? family;
+  final double totalSales;
+  final double totalMargin;
+  final double marginPercent;
+  final int totalBoxes;
+  final int totalUnits;
+  final int numClients;
 
   @override
   List<Object?> get props => [code, name, brand, family, totalSales, totalMargin, marginPercent, totalBoxes, totalUnits, numClients];
@@ -258,26 +252,11 @@ class TopProduct extends Equatable {
 
 /// Top Client model
 class TopClient extends Equatable {
-  final String code;
-  final String name;
-  final String? city;
-  final double totalSales;
-  final double totalMargin;
-  final double marginPercent;
-  final int totalBoxes;
-  final int numOrders;
-  final int numProducts;
 
   const TopClient({
     required this.code,
     required this.name,
-    this.city,
-    required this.totalSales,
-    required this.totalMargin,
-    required this.marginPercent,
-    required this.totalBoxes,
-    required this.numOrders,
-    required this.numProducts,
+    required this.totalSales, required this.totalMargin, required this.marginPercent, required this.totalBoxes, required this.numOrders, required this.numProducts, this.city,
   });
 
   factory TopClient.fromJson(Map<String, dynamic> json) {
@@ -293,6 +272,15 @@ class TopClient extends Equatable {
       numProducts: (json['numProducts'] as num?)?.toInt() ?? 0,
     );
   }
+  final String code;
+  final String name;
+  final String? city;
+  final double totalSales;
+  final double totalMargin;
+  final double marginPercent;
+  final int totalBoxes;
+  final int numOrders;
+  final int numProducts;
 
   @override
   List<Object?> get props => [code, name, city, totalSales, totalMargin, marginPercent, totalBoxes, numOrders, numProducts];

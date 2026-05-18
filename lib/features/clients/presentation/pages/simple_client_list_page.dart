@@ -1,31 +1,42 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:url_launcher/url_launcher.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/utils/currency_formatter.dart';
-import '../../data/clients_service.dart';
-import '../../../objectives/presentation/pages/enhanced_client_matrix_page.dart';
 
-import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
-import '../../../../core/widgets/modern_loading.dart';
-import 'package:provider/provider.dart';
-import '../../../../core/providers/filter_provider.dart';
-import '../../../../core/widgets/global_vendor_selector.dart';
-import '../../../../core/providers/auth_provider.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
+import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
+import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Import Sync Header
+import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
+import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/enhanced_client_matrix_page.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Simple Clients List Page with debounced search
-class SimpleClientListPage extends StatefulWidget {
+class SimpleClientListPage extends ConsumerStatefulWidget {
+  const SimpleClientListPage(
+      {required this.employeeCode,
+      super.key,
+      this.isJefeVentas = false,
+      this.vendorSelectorCodes,
+      this.includeAllVendorOption = true,
+      this.forceShowVendorSelector = false});
   final String employeeCode;
   final bool isJefeVentas;
-  
-  const SimpleClientListPage({super.key, required this.employeeCode, this.isJefeVentas = false});
+  final List<String>? vendorSelectorCodes;
+  final bool includeAllVendorOption;
+  final bool forceShowVendorSelector;
 
   @override
-  State<SimpleClientListPage> createState() => _SimpleClientListPageState();
+  ConsumerState<SimpleClientListPage> createState() =>
+      _SimpleClientListPageState();
 }
 
-class _SimpleClientListPageState extends State<SimpleClientListPage> {
+class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
   List<Map<String, dynamic>> _clients = [];
   bool _isLoading = true;
   String? _error;
@@ -35,19 +46,39 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
   Timer? _debounceTimer;
   final TextEditingController _searchController = TextEditingController();
 
-  List<Map<String, dynamic>> _availableVendors = [];
-  String? _selectedVendorCode = ''; // Default to empty string (All) for Manager view, so it matches dropdown item
+  String _selectedAlertType = 'ALL';
+  bool _onlyWithAlerts = false;
+  List<String>? _clientsWithAlertsCodes;
+  ProviderSubscription<String?>? _vendorSubscription;
+  int _loadGeneration = 0;
+
+  final List<Map<String, dynamic>> _availableVendors = [];
+  final String _selectedVendorCode =
+      ''; // Default to empty string (All) for Manager view, so it matches dropdown item
 
   @override
   void initState() {
     super.initState();
     _loadClients();
+    if (widget.isJefeVentas) {
+      _vendorSubscription =
+          ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
+        if (previous != next) {
+          _loadClients(
+            query: _searchController.text.trim().isEmpty
+                ? null
+                : _searchController.text.trim(),
+          );
+        }
+      });
+    }
   }
 
   // ... (dispose and _onSearchChanged remain same)
 
   @override
   void dispose() {
+    _vendorSubscription?.close();
     _debounceTimer?.cancel();
     _searchController.dispose();
     super.dispose();
@@ -64,6 +95,7 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
   }
 
   Future<void> _loadClients({String? query}) async {
+    final generation = ++_loadGeneration;
     setState(() {
       _isLoading = true;
       _error = null;
@@ -73,13 +105,19 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
       // Logic: If Manager + Selected Vendor -> Filter by that.
       // If Manager + No selection -> Show All (pass no code).
       // If Rep -> Show only theirs (pass employeeCode).
-      
+
       String? codesToPass;
       if (widget.isJefeVentas) {
-         // Use FilterProvider
-         codesToPass = context.read<FilterProvider>().selectedVendor; 
+        // Use FilterProvider
+        codesToPass = ref.read(selectedVendorProvider);
+        if (!widget.includeAllVendorOption &&
+            (codesToPass == null ||
+                codesToPass.isEmpty ||
+                codesToPass == 'ALL')) {
+          codesToPass = widget.employeeCode;
+        }
       } else {
-         codesToPass = widget.employeeCode;
+        codesToPass = widget.employeeCode;
       }
 
       final results = await ClientsService.getClientsList(
@@ -87,12 +125,29 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
         search: query,
       );
 
+      // Apply KPI Alerts filtering
+      var filteredResults = results;
+      if (_onlyWithAlerts || _selectedAlertType != 'ALL') {
+        final alertCodes = await KpiAlertsService.instance.getClientsWithAlerts(
+          vendedorCodes: codesToPass,
+          type: _selectedAlertType,
+        );
+
+        final codesSet = alertCodes.toSet();
+        filteredResults = results.where((c) {
+          final code = c['code']?.toString() ?? '';
+          return codesSet.contains(code);
+        }).toList();
+      }
+
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
-        _clients = results;
+        _clients = filteredResults;
         _isLoading = false;
         _lastFetchTime = DateTime.now();
       });
     } catch (e) {
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -102,11 +157,13 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
 
   // ... (_navigateToClientMatrix)
 
-
   void _openWhatsApp(Map<String, dynamic> client) {
     // Backend now returns phones array with simple objects
-    final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
-    
+    final phones = (client['phones'] as List?)
+            ?.map((p) => Map<String, dynamic>.from(p as Map))
+            .toList() ??
+        [];
+
     // Fallback if phones array is empty but phone fields exist (legacy compat)
     if (phones.isEmpty) {
       if (client['phone'] != null && (client['phone'] as String).isNotEmpty) {
@@ -130,24 +187,30 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Enviar WhatsApp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const Text('Enviar WhatsApp',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 8),
-            const Text('Selecciona el número:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const Text('Selecciona el número:',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
             const SizedBox(height: 12),
             if (phones.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('No hay teléfonos guardados', style: TextStyle(color: AppTheme.textSecondary)),
+                child: Text('No hay teléfonos guardados',
+                    style: TextStyle(color: AppTheme.textSecondary)),
               ),
-            ...phones.map((p) => ListTile(
-              leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
-              title: Text((p['number'] as String?) ?? ''),
-              subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _launchWhatsApp((p['number'] as String?) ?? '');
-              },
-            )),
+            ...phones.map(
+              (p) => ListTile(
+                leading:
+                    const Icon(Icons.phone_android, color: Color(0xFF25D366)),
+                title: Text((p['number'] as String?) ?? ''),
+                subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _launchWhatsApp((p['number'] as String?) ?? '');
+                },
+              ),
+            ),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.dialpad, color: AppTheme.neonPink),
@@ -191,22 +254,23 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
             style: ElevatedButton.styleFrom(
-              backgroundColor: isWhatsApp ? const Color(0xFF25D366) : AppTheme.neonBlue,
+              backgroundColor:
+                  isWhatsApp ? const Color(0xFF25D366) : AppTheme.neonBlue,
             ),
             child: Text(isWhatsApp ? 'Enviar WhatsApp' : 'Llamar'),
           ),
         ],
       ),
     );
-    
+
     if (result != null && result.trim().isNotEmpty) {
       _launchWhatsApp(result.trim());
     }
   }
 
-  void _launchWhatsApp(String phone) async {
+  Future<void> _launchWhatsApp(String phone) async {
     // Clean phone number - remove non-digits except +
-    String cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    var cleanPhone = phone.replaceAll(RegExp('[^0-9+]'), '');
     // Add Spain prefix if not present
     if (!cleanPhone.startsWith('+') && !cleanPhone.startsWith('34')) {
       cleanPhone = '34$cleanPhone';
@@ -216,23 +280,23 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
     }
 
     // Personal identification
-    final auth = context.read<AuthProvider>();
-    final nombreComercial = auth.currentUser?.name ?? 'tu comercial';
+    final authState =
+        ProviderScope.containerOf(context).read(authProvider).value;
+    final nombreComercial = authState?.user?.name ?? 'tu comercial';
     final manana = DateTime.now().add(const Duration(days: 1));
     final fecha = '${manana.day}/${manana.month}/${manana.year}';
 
     // Professional message
-    final message = Uri.encodeComponent(
-      'Hola, soy $nombreComercial de Mari Pepa. '
-      'Mañana día $fecha tenemos visita. '
-      '¿Necesitas cualquier cosilla?'
-    );
+    final message =
+        Uri.encodeComponent('Hola, soy $nombreComercial de Mari Pepa. '
+            'Mañana día $fecha tenemos visita. '
+            '¿Necesitas cualquier cosilla?');
 
     final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     } else {
-       ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No se pudo abrir WhatsApp')),
       );
     }
@@ -254,7 +318,6 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
     }
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -271,40 +334,50 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
 
         // Header & Filters
         Container(
-          padding: const EdgeInsets.all(16),
+          padding:
+              EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
           child: Column(
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.people, color: AppTheme.neonGreen, size: 28),
-                  const SizedBox(width: 12),
-                  Text('Clientes', style: Theme.of(context).textTheme.headlineMedium),
-                  const Spacer(),
-                  Text(
-                    '${_clients.length} clientes',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: AppTheme.textSecondary,
+              if (!Responsive.isLandscapeCompact(context))
+                Row(
+                  children: [
+                    Icon(Icons.people,
+                        color: AppTheme.neonGreen,
+                        size: Responsive.iconSize(context,
+                            phone: 22, desktop: 28)),
+                    const SizedBox(width: 12),
+                    Text('Clientes',
+                        style: Theme.of(context).textTheme.headlineMedium),
+                    const Spacer(),
+                    Text(
+                      '${_clients.length} clientes',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color: AppTheme.textSecondary,
+                          ),
                     ),
-                  ),
-                ],
-              ),
-              if (widget.isJefeVentas) ...[
-                 const SizedBox(height: 12),
-                 GlobalVendorSelector(
-                   isJefeVentas: true,
-                   onChanged: () {
-                     // The provider updates automatically, we just need to reload clients
-                     _loadClients();
-                   },
-                 ),
+                  ],
+                ),
+              if (widget.isJefeVentas || widget.forceShowVendorSelector) ...[
+                const SizedBox(height: 12),
+                GlobalVendorSelector(
+                  isJefeVentas: widget.isJefeVentas,
+                  allowedVendorCodes: widget.vendorSelectorCodes,
+                  includeAllOption: widget.includeAllVendorOption,
+                  defaultVendorCode: widget.employeeCode,
+                  forceShow: widget.forceShowVendorSelector,
+                ),
               ],
             ],
           ),
         ),
 
+        // KPI Filters Bar
+        _buildKpiFilters(),
+
         // Search Bar
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          padding: EdgeInsets.symmetric(
+              horizontal: Responsive.padding(context, small: 12, large: 16)),
           child: TextField(
             decoration: InputDecoration(
               hintText: 'Buscar cliente, NIF, Ciudad, Código...',
@@ -334,8 +407,9 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
   Widget _buildContent() {
     if (_isLoading) {
       return Padding(
-        padding: const EdgeInsets.all(40.0),
-        child: ModernLoading(message: 'Cargando cartera de clientes...'),
+        padding:
+            EdgeInsets.all(Responsive.padding(context, small: 24, large: 40)),
+        child: const ModernLoading(message: 'Cargando cartera de clientes...'),
       );
     }
 
@@ -344,12 +418,12 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.error_outline, size: 64, color: AppTheme.error),
+            const Icon(Icons.error_outline, size: 64, color: AppTheme.error),
             const SizedBox(height: 16),
             Text('Error: $_error'),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: () => _loadClients(),
+              onPressed: _loadClients,
               child: const Text('Reintentar'),
             ),
           ],
@@ -362,7 +436,8 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.people_outline, size: 64, color: AppTheme.textSecondary),
+            const Icon(Icons.people_outline,
+                size: 64, color: AppTheme.textSecondary),
             const SizedBox(height: 16),
             const Text('No se encontraron clientes'),
             const SizedBox(height: 8),
@@ -378,7 +453,8 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
     return RefreshIndicator(
       onRefresh: () => _loadClients(query: _searchQuery),
       child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+        padding: EdgeInsets.symmetric(
+            horizontal: Responsive.padding(context, small: 12, large: 16)),
         itemCount: _clients.length,
         itemBuilder: (context, index) {
           final client = _clients[index];
@@ -392,15 +468,138 @@ class _SimpleClientListPageState extends State<SimpleClientListPage> {
       ),
     );
   }
+
+  Widget _buildKpiFilters() {
+    final alertTypes = {
+      'ALL': 'Todas las Alertas',
+      'DESVIACION_VENTAS': 'Ventas vs Objetivo',
+      'CUOTA_SIN_COMPRA': 'Sin Compras',
+      'DESVIACION_REFERENCIACION': 'Productos Pendientes',
+      'PROMOCION': 'Promociones',
+      'ALTA_CLIENTE': 'Cliente Nuevo',
+      'AVISO': 'Avisos',
+      'MEDIOS_CLIENTE': 'Equipamiento',
+    };
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 40,
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceColor,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: _selectedAlertType != 'ALL'
+                          ? AppTheme.neonPink
+                          : AppTheme.borderColor,
+                    ),
+                  ),
+                  child: DropdownButtonHideUnderline(
+                    child: DropdownButton<String>(
+                      value: _selectedAlertType,
+                      isExpanded: true,
+                      dropdownColor: AppTheme.surfaceColor,
+                      icon: const Icon(Icons.filter_list, size: 20),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: _selectedAlertType != 'ALL'
+                            ? AppTheme.neonPink
+                            : AppTheme.textPrimary,
+                        fontWeight: _selectedAlertType != 'ALL'
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                      items: alertTypes.entries
+                          .map(
+                            (e) => DropdownMenuItem(
+                              value: e.key,
+                              child: Text(e.value),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          setState(() => _selectedAlertType = value);
+                          _loadClients(query: _searchQuery);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              FilterChip(
+                label: const Text('Con Alertas'),
+                selected: _onlyWithAlerts,
+                selectedColor: AppTheme.neonPink.withValues(alpha: 0.2),
+                checkmarkColor: AppTheme.neonPink,
+                labelStyle: TextStyle(
+                  fontSize: 12,
+                  color: _onlyWithAlerts
+                      ? AppTheme.neonPink
+                      : AppTheme.textSecondary,
+                  fontWeight:
+                      _onlyWithAlerts ? FontWeight.bold : FontWeight.normal,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(
+                    color: _onlyWithAlerts
+                        ? AppTheme.neonPink
+                        : AppTheme.borderColor,
+                  ),
+                ),
+                onSelected: (val) {
+                  setState(() => _onlyWithAlerts = val);
+                  _loadClients(query: _searchQuery);
+                },
+              ),
+            ],
+          ),
+          if (_selectedAlertType != 'ALL' || _onlyWithAlerts)
+            Padding(
+              padding: const EdgeInsets.only(top: 8, left: 4),
+              child: InkWell(
+                onTap: () {
+                  setState(() {
+                    _selectedAlertType = 'ALL';
+                    _onlyWithAlerts = false;
+                  });
+                  _loadClients(query: _searchQuery);
+                },
+                child: const Text(
+                  'Limpiar filtros KPI',
+                  style: TextStyle(
+                    color: AppTheme.neonPink,
+                    fontSize: 11,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ClientCard extends StatelessWidget {
+  const _ClientCard(
+      {required this.client,
+      this.isJefeVentas = false,
+      this.onTap,
+      this.onWhatsAppTap});
   final Map<String, dynamic> client;
   final bool isJefeVentas;
   final VoidCallback? onTap;
   final VoidCallback? onWhatsAppTap;
-
-  const _ClientCard({required this.client, this.isJefeVentas = false, this.onTap, this.onWhatsAppTap});
 
   @override
   Widget build(BuildContext context) {
@@ -413,14 +612,24 @@ class _ClientCard extends StatelessWidget {
     final numOrders = (client['numOrders'] as int?) ?? 0;
     final lastPurchase = (client['lastPurchase'] as String?) ?? '';
 
+    final avatarRadius = Responsive.value(context, phone: 20, desktop: 28);
+    final avatarFontSize = Responsive.fontSize(context, small: 15, large: 20);
+    final cardPadding = Responsive.padding(context, small: 12, large: 16);
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: AppTheme.surfaceColor,
+      color: AppTheme.darkCard.withValues(alpha: 0.92),
+      elevation: 0,
+      shadowColor: AppTheme.neonBlue.withValues(alpha: 0.08),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+      ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         child: Padding(
-          padding: const EdgeInsets.all(16.0),
+          padding: EdgeInsets.all(cardPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -428,15 +637,30 @@ class _ClientCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Avatar
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundColor: AppTheme.neonGreen.withOpacity(0.2),
+                  Container(
+                    width: avatarRadius * 2,
+                    height: avatarRadius * 2,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          AppTheme.neonGreen.withValues(alpha: 0.28),
+                          AppTheme.neonBlue.withValues(alpha: 0.16),
+                        ],
+                      ),
+                      border: Border.all(
+                        color: AppTheme.neonGreen.withValues(alpha: 0.2),
+                      ),
+                    ),
                     child: Text(
                       name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                      style: const TextStyle(
-                        color: AppTheme.neonGreen,
+                      style: TextStyle(
+                        color: Colors.white,
                         fontWeight: FontWeight.bold,
-                        fontSize: 20,
+                        fontSize: avatarFontSize,
                       ),
                     ),
                   ),
@@ -449,23 +673,28 @@ class _ClientCard extends StatelessWidget {
                       children: [
                         Text(
                           name,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                          style:
+                              Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            Icon(Icons.location_on, size: 14, color: AppTheme.textSecondary),
+                            const Icon(Icons.location_on,
+                                size: 14, color: AppTheme.textSecondary),
                             const SizedBox(width: 4),
                             Expanded(
                               child: Text(
                                 city.isNotEmpty ? city : 'Sin ciudad',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: AppTheme.textSecondary,
+                                    ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -475,14 +704,18 @@ class _ClientCard extends StatelessWidget {
                         if (phone.isNotEmpty) ...[
                           const SizedBox(height: 2),
                           Row(
-                          children: [
-                              Icon(Icons.phone, size: 14, color: AppTheme.textSecondary),
+                            children: [
+                              const Icon(Icons.phone,
+                                  size: 14, color: AppTheme.textSecondary),
                               const SizedBox(width: 4),
                               Text(
                                 phone,
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: AppTheme.textSecondary,
-                                ),
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodySmall
+                                    ?.copyWith(
+                                      color: AppTheme.textSecondary,
+                                    ),
                               ),
                             ],
                           ),
@@ -491,15 +724,19 @@ class _ClientCard extends StatelessWidget {
                           const SizedBox(height: 4),
                           Row(
                             children: [
-                              const Icon(Icons.person_outline, size: 14, color: AppTheme.neonPurple),
+                              const Icon(Icons.person_outline,
+                                  size: 14, color: AppTheme.neonPurple),
                               const SizedBox(width: 4),
                               Expanded(
                                 child: Text(
                                   'Rep: ${client['vendorName']}',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    color: AppTheme.neonPurple,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodySmall
+                                      ?.copyWith(
+                                        color: AppTheme.neonPurple,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -517,24 +754,44 @@ class _ClientCard extends StatelessWidget {
                     children: [
                       Text(
                         CurrencyFormatter.formatWhole(totalPurchases),
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.success,
-                        ),
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.success,
+                                ),
                       ),
                       const SizedBox(height: 4),
                       Text(
                         '$numOrders pedidos',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppTheme.textSecondary,
-                        ),
+                              color: AppTheme.textSecondary,
+                            ),
                       ),
                       if (lastPurchase.isNotEmpty) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          'Última: $lastPurchase',
-                          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: AppTheme.textTertiary,
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.neonBlue.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(
+                              AppTheme.radiusFull,
+                            ),
+                            border: Border.all(
+                              color: AppTheme.neonBlue.withValues(alpha: 0.14),
+                            ),
+                          ),
+                          child: Text(
+                            'Último pedido: $lastPurchase',
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  color: AppTheme.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
                           ),
                         ),
                       ],
@@ -546,15 +803,21 @@ class _ClientCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     IconButton(
                       onPressed: onWhatsAppTap,
-                      icon: const Icon(Icons.chat, color: Color(0xFF25D366), size: 24),
+                      icon: const Icon(Icons.chat,
+                          color: Color(0xFF25D366), size: 24),
                       tooltip: 'WhatsApp',
                       padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+                      constraints:
+                          const BoxConstraints(minWidth: 40, minHeight: 40),
                     ),
                   ],
                 ],
               ),
-              
+
+              // KPI Glacius badges
+              if (code.isNotEmpty)
+                ClientAlertsWidget(clientId: code, compact: true),
+
               // Route & Days Badges
               _buildRouteDaysRow(),
             ],
@@ -562,87 +825,98 @@ class _ClientCard extends StatelessWidget {
         ),
       ),
     );
-}
+  }
 
-Widget _buildRouteDaysRow() {
-final String route = client['route'] as String? ?? '';
-final String visitDays = client['visitDaysShort'] as String? ?? '';
-final String deliveryDays = client['deliveryDaysShort'] as String? ?? '';
+  Widget _buildRouteDaysRow() {
+    final route = client['route'] as String? ?? '';
+    final visitDays = client['visitDaysShort'] as String? ?? '';
+    final deliveryDays = client['deliveryDaysShort'] as String? ?? '';
 
-if (route.isEmpty && visitDays.isEmpty && deliveryDays.isEmpty) {
-  return const SizedBox.shrink();
-}
+    if (route.isEmpty && visitDays.isEmpty && deliveryDays.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
-return Padding(
-  padding: const EdgeInsets.only(top: 8),
-  child: Wrap(
-    spacing: 8,
-    runSpacing: 4,
-    children: [
-      // Route Badge
-      if (route.isNotEmpty)
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: AppTheme.neonPurple.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.route, size: 12, color: AppTheme.neonPurple),
-              const SizedBox(width: 4),
-              Text(
-                'Ruta $route', 
-                style: TextStyle(fontSize: 11, color: AppTheme.neonPurple, fontWeight: FontWeight.w500),
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 4,
+        children: [
+          // Route Badge
+          if (route.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.neonPurple.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
               ),
-            ],
-          ),
-        ),
-      
-      // Visit Days Badge
-      if (visitDays.isNotEmpty)
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: AppTheme.neonBlue.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.calendar_today, size: 12, color: AppTheme.neonBlue),
-              const SizedBox(width: 4),
-              Text(
-                'Visita: $visitDays',
-                style: TextStyle(fontSize: 11, color: AppTheme.neonBlue, fontWeight: FontWeight.w500),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.route, size: 12, color: AppTheme.neonPurple),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Ruta $route',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.neonPurple,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
-      
-      // Delivery Days Badge
-      if (deliveryDays.isNotEmpty)
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-          decoration: BoxDecoration(
-            color: AppTheme.neonGreen.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.local_shipping, size: 12, color: AppTheme.neonGreen),
-              const SizedBox(width: 4),
-              Text(
-                'Reparto: $deliveryDays',
-                style: TextStyle(fontSize: 11, color: AppTheme.neonGreen, fontWeight: FontWeight.w500),
+            ),
+
+          // Visit Days Badge
+          if (visitDays.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
               ),
-            ],
-          ),
-        ),
-    ],
-  ),
-);
-}
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.calendar_today,
+                      size: 12, color: AppTheme.neonBlue),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Visita: $visitDays',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.neonBlue,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+
+          // Delivery Days Badge
+          if (deliveryDays.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppTheme.neonGreen.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.local_shipping,
+                      size: 12, color: AppTheme.neonGreen),
+                  const SizedBox(width: 4),
+                  Text(
+                    'Reparto: $deliveryDays',
+                    style: const TextStyle(
+                        fontSize: 11,
+                        color: AppTheme.neonGreen,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }

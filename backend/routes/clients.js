@@ -1,13 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
+const { verifyToken } = require('../middleware/auth');
 const { query, queryWithParams } = require('../config/db');
 const {
   buildVendedorFilter,
   buildVendedorFilterLACLAE,
   formatCurrency,
   MIN_YEAR,
-  LACLAE_SALES_FILTER
+  LACLAE_SALES_FILTER,
+  sanitizeForSQL,
+  sanitizeCodeList,
+  handleRouteError,
+  getCurrentDate
 } = require('../utils/common');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
@@ -27,7 +32,7 @@ const getClientsHandler = async (req, res) => {
     let safeSearch = '';
     let searchFilter = '';
     if (search) {
-      safeSearch = search.replace(/'/g, "''").trim().toUpperCase();
+      safeSearch = sanitizeForSQL(search.trim()).toUpperCase();
       searchFilter = `AND(UPPER(C.NOMBRECLIENTE) LIKE '%${safeSearch}%'
                       OR UPPER(C.NOMBREALTERNATIVO) LIKE '%${safeSearch}%'
                       OR C.CODIGOCLIENTE LIKE '%${safeSearch}%'
@@ -57,9 +62,10 @@ const getClientsHandler = async (req, res) => {
     }
 
     // Generate Cache Key (v5 = optimized with pre-filtered client codes)
-    const cacheKey = `clients:list:v5:${vendedorCodes || 'all'}:${safeSearch || 'none'}:${limit}:${offset}`;
-    // Use LONG TTL for browsing, MEDIUM for search results
-    const cacheTTL = isSearchQuery ? TTL.MEDIUM : TTL.LONG;
+    const cacheKey = `clients:list:v5:${vendedorCodes || 'ALL'}:${safeSearch || 'none'}:${limit}:${offset}`;
+    // OPTIMIZATION: Longer TTL for ALL vendors (JEFE_VENTAS default)
+    const isAllVendors = !vendedorCodes || vendedorCodes === 'ALL';
+    const cacheTTL = isSearchQuery ? TTL.MEDIUM : (isAllVendors ? TTL.LONG : TTL.MEDIUM);
 
     // Execute with Cache (LONG TTL for browsing, MEDIUM for search)
     logger.info(`[CLIENTS] Starting query for vendor ${vendedorCodes || 'all'}, search: ${search || 'none'}`);
@@ -80,28 +86,49 @@ const getClientsHandler = async (req, res) => {
         COALESCE(S.TOTAL_MARGIN, 0) as totalMargin,
         C.ANOBAJA as yearInactive,
         TRIM(V.NOMBREVENDEDOR) as vendorName,
-        S.LAST_VENDOR as vendorCode
+        LV.LAST_VENDOR as vendorCode
       FROM DSEDAC.CLI C
       LEFT JOIN (
-        SELECT 
+        SELECT
           LCCDCL as CLIENT_CODE,
           SUM(LCIMVT) as TOTAL_PURCHASES,
           SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
           COUNT(DISTINCT LCAADC || LCMMDC || LCDDDC) as NUM_ORDERS,
-          MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE,
-          MAX(LCCDVD) as LAST_VENDOR
+          MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE
         FROM DSED.LACLAE
         WHERE LCAADC >= ${MIN_YEAR}
           AND TPDC = 'LAC'
           AND LCTPVT IN ('CC', 'VC')
           AND LCCLLN IN ('AB', 'VT')
           AND LCSRAB NOT IN ('N', 'Z')
-          ${vendedorFilter.replace(/L\./g, '')}
+          ${clientCodesFilter ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL') : vendedorFilter.replace(/L\./g, '')}
         GROUP BY LCCDCL
       ) S ON C.CODIGOCLIENTE = S.CLIENT_CODE
-      LEFT JOIN DSEDAC.VDD V ON S.LAST_VENDOR = V.CODIGOVENDEDOR
+      -- FIX 2026-05-15: el LATERAL JOIN original ejecutaba 1 sub-query por
+      -- cada cliente (2246 sub-queries) y hacia que la respuesta tardara 46s.
+      -- Lo sustituyo por una sola pasada con ROW_NUMBER OVER PARTITION BY
+      -- LCCDCL: DB2 for i materializa esto una sola vez y el JOIN con C es O(N).
+      LEFT JOIN (
+        SELECT CLIENT_CODE, LAST_VENDOR FROM (
+          SELECT
+            LCCDCL AS CLIENT_CODE,
+            LCCDVD AS LAST_VENDOR,
+            ROW_NUMBER() OVER (
+              PARTITION BY LCCDCL
+              ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC
+            ) AS RN
+          FROM DSED.LACLAE
+          WHERE LCAADC >= ${MIN_YEAR}
+            AND TPDC = 'LAC'
+            AND LCTPVT IN ('CC', 'VC')
+            AND LCCLLN IN ('AB', 'VT')
+            AND LCSRAB NOT IN ('N', 'Z')
+        ) X
+        WHERE RN = 1
+      ) LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE
+      LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
       WHERE C.ANOBAJA = 0
-        ${clientCodesFilter || `AND S.LAST_VENDOR IS NOT NULL`}
+        ${clientCodesFilter || (!vendedorCodes || vendedorCodes === 'ALL' || vendedorCodes.trim() === '' ? '' : `AND LV.LAST_VENDOR IS NOT NULL`)}
         ${searchFilter}
       ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
       OFFSET ${parseInt(offset)} ROWS
@@ -200,18 +227,17 @@ const getClientsHandler = async (req, res) => {
     logger.info(`[CLIENTS] Total response time: ${totalDuration}ms for ${clients.length} clients`);
 
   } catch (error) {
-    logger.error(`Clients error: ${error.message} `);
-    res.status(500).json({ error: 'Error obteniendo clientes', details: error.message });
+    handleRouteError(error, res, 'Error obteniendo clientes', 500);
   }
 };
 
-router.get('/', getClientsHandler);
-router.get('/list', getClientsHandler);
+router.get('/', verifyToken, getClientsHandler);
+router.get('/list', verifyToken, getClientsHandler);
 
 // =============================================================================
 // CLIENT NOTES
 // =============================================================================
-router.put('/notes', async (req, res) => {
+router.put('/notes', verifyToken, async (req, res) => {
   try {
     const { clientCode, notes } = req.body;
     if (!clientCode) return res.status(400).json({ error: 'Client code required' });
@@ -235,35 +261,35 @@ router.put('/notes', async (req, res) => {
       }
     }
 
-    const safeNotes = notes ? notes.replace(/'/g, "''") : '';
-    const existing = await query(`SELECT CLIENT_CODE FROM JAVIER.CLIENT_NOTES WHERE CLIENT_CODE = '${clientCode}'`, false);
+    const safeNotes = notes ? notes : '';
+    const safeClientCode = sanitizeForSQL(clientCode);
+    const existing = await queryWithParams(`SELECT CLIENT_CODE FROM JAVIER.CLIENT_NOTES WHERE CLIENT_CODE = ?`, [safeClientCode], false);
 
     if (existing.length > 0) {
-      await query(`
+      await queryWithParams(`
                 UPDATE JAVIER.CLIENT_NOTES 
-                SET OBSERVACIONES = '${safeNotes}', 
+                SET OBSERVACIONES = ?, 
                     MODIFIED_BY = 'JAVIER', 
                     MODIFIED_AT = CURRENT_TIMESTAMP 
-                WHERE CLIENT_CODE = '${clientCode}'
-            `, false);
+                WHERE CLIENT_CODE = ?
+            `, [safeNotes, safeClientCode], false);
     } else {
-      await query(`
+      await queryWithParams(`
                 INSERT INTO JAVIER.CLIENT_NOTES (CLIENT_CODE, OBSERVACIONES, MODIFIED_BY, MODIFIED_AT)
-                VALUES ('${clientCode}', '${safeNotes}', 'JAVIER', CURRENT_TIMESTAMP)
-            `, false);
+                VALUES (?, ?, 'JAVIER', CURRENT_TIMESTAMP)
+            `, [safeClientCode, safeNotes], false);
     }
 
     res.json({ success: true });
   } catch (error) {
-    logger.error(`Error saving notes: ${error.message}`);
-    res.status(500).json({ error: 'Error guardando notas', details: error.message });
+    handleRouteError(error, res, 'Error guardando notas', 500);
   }
 });
 
 // =============================================================================
 // CLIENT DETAIL
 // =============================================================================
-router.get('/:code', async (req, res) => {
+router.get('/:code', verifyToken, async (req, res) => {
   try {
     const { code } = req.params;
     const { vendedorCodes } = req.query;
@@ -285,110 +311,106 @@ router.get('/:code', async (req, res) => {
       FETCH FIRST 1 ROWS ONLY
   `);
 
-    if (clientInfo.length === 0) {
+if (clientInfo.length === 0) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
 
-    // Get editable observations from our custom table
-    let editableNotes = null;
-    try {
-      const notesResult = await query(`
-        SELECT OBSERVACIONES, MODIFIED_BY, MODIFIED_AT
-        FROM JAVIER.CLIENT_NOTES
-        WHERE CLIENT_CODE = '${clientCode}'
-        FETCH FIRST 1 ROWS ONLY
-      `, false);
-      if (notesResult[0]) {
-        editableNotes = {
-          text: notesResult[0].OBSERVACIONES,
-          modifiedBy: notesResult[0].MODIFIED_BY,
-          modifiedAt: notesResult[0].MODIFIED_AT
-        };
-      }
-    } catch (e) {
-      // Table may not exist yet, ignore
-      logger.debug(`CLIENT_NOTES table not found: ${e.message}`);
-    }
-
-    // Sales summary
-    const salesSummary = await query(`
-      SELECT 
-        SUM(IMPORTEVENTA) as totalSales,
-        SUM(IMPORTEMARGENREAL) as totalMargin,
-        SUM(CANTIDADENVASES) as totalBoxes,
-        COUNT(*) as totalLines,
-        COUNT(DISTINCT ANODOCUMENTO || '-' || MESDOCUMENTO || '-' || DIADOCUMENTO) as numOrders
-      FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' 
-        AND ANODOCUMENTO >= ${MIN_YEAR} 
-        AND TIPOVENTA IN ('CC', 'VC')
-        AND TIPOLINEA IN ('AB', 'VT') -- Assuming TIPOLINEA exists in LINDTO
-        AND SERIEALBARAN NOT IN ('N', 'Z')
-        ${vendedorFilter}
-    `);
-
-    // Monthly sales trend (last 12 months)
-    const monthlyTrend = await query(`
-      SELECT ANODOCUMENTO as year, MESDOCUMENTO as month,
-        SUM(IMPORTEVENTA) as sales, SUM(IMPORTEMARGENREAL) as margin
-      FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' 
-        AND ANODOCUMENTO >= ${MIN_YEAR} 
-        AND TIPOVENTA IN ('CC', 'VC')
-        AND TIPOLINEA IN ('AB', 'VT')
-        AND SERIEALBARAN NOT IN ('N', 'Z')
-        ${vendedorFilter}
-      GROUP BY ANODOCUMENTO, MESDOCUMENTO
-      ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC
-      FETCH FIRST 12 ROWS ONLY
-  `);
-
-    // Top products for this client
-    const topProducts = await query(`
-      SELECT L.CODIGOARTICULO as code,
+    // OPTIMIZED: Execute ALL detail queries in PARALLEL for 6x speedup
+    const queryResults = await Promise.all([
+      // Query 1: Editable observations
+      (async () => {
+        try {
+          const notesResult = await queryWithParams(`
+            SELECT OBSERVACIONES, MODIFIED_BY, MODIFIED_AT
+            FROM JAVIER.CLIENT_NOTES
+            WHERE CLIENT_CODE = ?
+            FETCH FIRST 1 ROWS ONLY
+          `, [clientCode], false);
+          return notesResult[0] || null;
+        } catch (e) { return null; }
+      })(),
+      // Query 2: Sales summary
+      query(`
+        SELECT 
+          SUM(IMPORTEVENTA) as totalSales,
+          SUM(IMPORTEMARGENREAL) as totalMargin,
+          SUM(CANTIDADENVASES) as totalBoxes,
+          COUNT(*) as totalLines,
+          COUNT(DISTINCT ANODOCUMENTO || '-' || MESDOCUMENTO || '-' || DIADOCUMENTO) as numOrders
+        FROM DSEDAC.LINDTO
+        WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' 
+          AND ANODOCUMENTO >= ${MIN_YEAR} 
+          AND TIPOVENTA IN ('CC', 'VC')
+          AND TIPOLINEA IN ('AB', 'VT')
+          AND SERIEALBARAN NOT IN ('N', 'Z')
+          ${vendedorFilter}
+      `),
+      // Query 3: Monthly trend
+      query(`
+        SELECT ANODOCUMENTO as year, MESDOCUMENTO as month,
+          SUM(IMPORTEVENTA) as sales, SUM(IMPORTEMARGENREAL) as margin
+        FROM DSEDAC.LINDTO
+        WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' 
+          AND ANODOCUMENTO >= ${MIN_YEAR} 
+          AND TIPOVENTA IN ('CC', 'VC')
+          AND TIPOLINEA IN ('AB', 'VT')
+          AND SERIEALBARAN NOT IN ('N', 'Z')
+          ${vendedorFilter}
+        GROUP BY ANODOCUMENTO, MESDOCUMENTO
+        ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC
+        FETCH FIRST 12 ROWS ONLY
+      `),
+      // Query 4: Top products
+      query(`
+        SELECT L.CODIGOARTICULO as code,
   COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.DESCRIPCION)) as name,
   SUM(L.IMPORTEVENTA) as totalSales,
   SUM(L.CANTIDADENVASES) as totalBoxes,
   COUNT(*) as timesOrdered
-      FROM DSEDAC.LINDTO L
-      LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-      WHERE L.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorFilter}
-      GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION
-      ORDER BY totalSales DESC
-      FETCH FIRST 10 ROWS ONLY
-  `);
+        FROM DSEDAC.LINDTO L
+        LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+        WHERE L.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorFilter}
+        GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION
+        ORDER BY totalSales DESC
+        FETCH FIRST 10 ROWS ONLY
+      `),
+      // Query 5: Payment status (CVC)
+      query(`
+        SELECT
+          SUM(CASE WHEN CVC.SITUACION = 'C' THEN CVC.IMPORTEVENCIMIENTO ELSE 0 END) as paid,
+          SUM(CASE WHEN CVC.SITUACION = 'P' THEN CVC.IMPORTEPENDIENTE ELSE 0 END) as pending,
+          COUNT(CASE WHEN CVC.SITUACION = 'P' THEN 1 END) as pendingCount
+        FROM DSEDAC.CVC CVC
+        WHERE CVC.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND CVC.ANOEMISION >= ${MIN_YEAR}
+      `),
+      // Query 6: CAC cross-validation (invoice totals)
+      query(`
+        SELECT
+          SUM(CAC.IMPORTETOTAL) as totalInvoiced
+        FROM DSEDAC.CAC CAC
+        WHERE TRIM(CAC.CODIGOCLIENTEFACTURA) = '${safeClientCode}'
+          AND CAC.EJERCICIOFACTURA >= ${MIN_YEAR}
+          AND CAC.NUMEROFACTURA > 0
+      `),
+    ]);
 
-    // Payment status from CVC with CAC cross-validation
-    // CVC tracks payment/vencimiento records; CAC has the actual invoice totals.
-    // We query both and log discrepancies for auditing.
-    const paymentStatus = await query(`
-      SELECT
-        SUM(CASE WHEN CVC.SITUACION = 'C' THEN CVC.IMPORTEVENCIMIENTO ELSE 0 END) as paid,
-        SUM(CASE WHEN CVC.SITUACION = 'P' THEN CVC.IMPORTEPENDIENTE ELSE 0 END) as pending,
-        COUNT(CASE WHEN CVC.SITUACION = 'P' THEN 1 END) as pendingCount
-      FROM DSEDAC.CVC CVC
-      WHERE CVC.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND CVC.ANOEMISION >= ${MIN_YEAR}
-`);
+    // Transform raw results into structured format
+    const editableNotes = queryResults[0];
+    const salesSummary = queryResults[1]?.[0] || {};
+    const monthlyTrend = queryResults[2] || [];
+    const topProducts = queryResults[3] || [];
+    const paymentStatusResult = queryResults[4]?.[0] || {};
+    const cacValidationResult = queryResults[5]?.[0] || {};
 
-    // CAC cross-validation: sum invoice totals for comparison
-    const cacValidation = await query(`
-      SELECT
-        SUM(CAC.IMPORTETOTAL) as totalInvoiced
-      FROM DSEDAC.CAC CAC
-      WHERE TRIM(CAC.CODIGOCLIENTEFACTURA) = '${safeClientCode}'
-        AND CAC.EJERCICIOFACTURA >= ${MIN_YEAR}
-        AND CAC.NUMEROFACTURA > 0
-    `);
-
-    const pendingCVC = parseFloat(paymentStatus[0]?.PENDING) || 0;
-    const totalCAC = parseFloat(cacValidation[0]?.TOTALINVOICED) || 0;
+    const pendingCVC = parseFloat(paymentStatusResult.PENDING) || 0;
+    const totalCAC = parseFloat(cacValidationResult.TOTALINVOICED) || 0;
     if (Math.abs(pendingCVC - totalCAC) > 100) {
-        logger.warn(`[CLIENT ${safeClientCode}] CVC/CAC discrepancy: CVC pending=${pendingCVC.toFixed(2)}, CAC total=${totalCAC.toFixed(2)}, diff=${(pendingCVC - totalCAC).toFixed(2)}`);
+      logger.warn(`[CLIENT ${safeClientCode}] CVC/CAC discrepancy: CVC pending=${pendingCVC.toFixed(2)}, CAC total=${totalCAC.toFixed(2)}, diff=${(pendingCVC - totalCAC).toFixed(2)}`);
     }
 
     const c = clientInfo[0];
-    const s = salesSummary[0] || {};
-    const p = paymentStatus[0] || {};
+    const s = salesSummary;
+    const p = paymentStatusResult;
 
     // Build phone list for WhatsApp feature
     const phones = [];
@@ -454,15 +476,14 @@ router.get('/:code', async (req, res) => {
     });
 
   } catch (error) {
-    logger.error(`Client detail error: ${error.message}`);
-    res.status(500).json({ error: 'Error obteniendo detalle de cliente', details: error.message });
+    handleRouteError(error, res, 'Error obteniendo detalle de cliente', 500);
   }
 });
 
 // =============================================================================
 // CLIENT EDITABLE NOTES (GET/PUT)
 // =============================================================================
-router.get('/:code/notes', async (req, res) => {
+router.get('/:code/notes', verifyToken, async (req, res) => {
   try {
     const clientCode = req.params.code.trim();
 
@@ -480,11 +501,11 @@ router.get('/:code/notes', async (req, res) => {
       // Table may already exist
     }
 
-    const result = await query(`
+    const result = await queryWithParams(`
       SELECT OBSERVACIONES, MODIFIED_BY, MODIFIED_AT
       FROM JAVIER.CLIENT_NOTES
-      WHERE CLIENT_CODE = '${clientCode}'
-    `, false);
+      WHERE CLIENT_CODE = ?
+    `, [clientCode], false);
 
     if (result[0]) {
       res.json({
@@ -501,7 +522,7 @@ router.get('/:code/notes', async (req, res) => {
   }
 });
 
-router.put('/:code/notes', async (req, res) => {
+router.put('/:code/notes', verifyToken, async (req, res) => {
   try {
     const clientCode = req.params.code.trim();
     const { notes, vendorCode, vendorName } = req.body;
@@ -510,8 +531,8 @@ router.put('/:code/notes', async (req, res) => {
       return res.status(400).json({ error: 'Campo notes requerido' });
     }
 
-    const safeNotes = notes.substring(0, 500).replace(/'/g, "''");
-    const safeVendor = (vendorName || vendorCode || 'UNKNOWN').substring(0, 50).replace(/'/g, "''");
+    const safeNotes = notes.substring(0, 500);
+    const safeVendor = (vendorName || vendorCode || 'UNKNOWN').substring(0, 50);
 
     // Ensure table exists
     try {
@@ -528,72 +549,208 @@ router.put('/:code/notes', async (req, res) => {
     }
 
     // UPSERT: Update if exists, insert if not (MERGE statement for DB2)
-    await query(`
+    const safeClientCode = sanitizeForSQL(clientCode);
+    await queryWithParams(`
       MERGE INTO JAVIER.CLIENT_NOTES AS target
-      USING (VALUES ('${clientCode}')) AS source(CLIENT_CODE)
+      USING (VALUES (?)) AS source(CLIENT_CODE)
       ON target.CLIENT_CODE = source.CLIENT_CODE
       WHEN MATCHED THEN
-        UPDATE SET OBSERVACIONES = '${safeNotes}', MODIFIED_BY = '${safeVendor}', MODIFIED_AT = CURRENT_TIMESTAMP
+        UPDATE SET OBSERVACIONES = ?, MODIFIED_BY = ?, MODIFIED_AT = CURRENT_TIMESTAMP
       WHEN NOT MATCHED THEN
         INSERT (CLIENT_CODE, OBSERVACIONES, MODIFIED_BY, MODIFIED_AT)
-        VALUES ('${clientCode}', '${safeNotes}', '${safeVendor}', CURRENT_TIMESTAMP)
-    `, false);
+        VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+    `, [safeClientCode, safeNotes, safeVendor, safeClientCode, safeNotes, safeVendor]);
 
     logger.info(`[NOTES] Client ${clientCode} notes updated by ${safeVendor}`);
     res.json({ success: true, message: 'Notas guardadas correctamente' });
   } catch (error) {
     logger.error(`Save notes error: ${error.message}`);
-    res.status(500).json({ error: 'Error guardando notas', details: error.message });
+    handleRouteError(error, res, 'Error guardando notas', 500);
+  }
+});
+
+// =============================================================================
+// CLIENT SALES HISTORY - PRODUCTS BY FAMILY
+// =============================================================================
+router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
+  try {
+    const { code } = req.params;
+    const { vendedorCodes, limit = 100, family1, family2, family3, groupLevel } = req.query;
+    const vendedorFilter = buildVendedorFilter(vendedorCodes);
+    const clientCode = code.trim();
+    const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
+    const safeFamily1 = family1?.replace(/[^a-zA-Z0-9]/g, '') || '';
+    const safeFamily2 = family2 ? family2.replace(/[^a-zA-Z0-9]/g, '') : null;
+    const safeFamily3 = family3 ? family3.replace(/[^a-zA-Z0-9]/g, '') : null;
+    const level = parseInt(groupLevel) || 1;
+
+    let whereClause = `L.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND L.ANODOCUMENTO >= ${MIN_YEAR}
+      AND L.TIPOVENTA IN ('CC', 'VC')
+      AND L.TIPOLINEA IN ('AB', 'VT')
+      AND L.SERIEALBARAN NOT IN ('N', 'Z')
+      ${vendedorFilter}`;
+
+    if (level === 1 || level === 13) {
+      whereClause += ` AND TRIM(A.CODIGOFAMILIA) = '${safeFamily1}'`;
+    }
+    if ((level >= 2 || level === 13) && safeFamily2) {
+      whereClause += ` AND COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') = '${safeFamily2}'`;
+    }
+    if ((level >= 3 || level === 13) && safeFamily3) {
+      whereClause += ` AND COALESCE(NULLIF(TRIM(A.CODIGOPREFAMILIA), ''), 'General') = '${safeFamily3}'`;
+    }
+
+    const products = await query(`
+      SELECT L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
+        L.CODIGOARTICULO as productCode,
+        COALESCE(A.DESCRIPCION, 'Sin descripción') as productName,
+        SUM(L.CANTIDADENVASES) as boxes, SUM(L.CANTIDADUNIDADES) as units,
+        SUM(L.IMPORTEVENTA) as amount, SUM(L.IMPORTEMARGENREAL) as margin,
+        L.CODIGOVENDEDOR as vendedor
+      FROM DSEDAC.LINDTO L
+      LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+      WHERE ${whereClause}
+      GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO, L.DIADOCUMENTO, L.CODIGOARTICULO, A.DESCRIPCION, L.CODIGOVENDEDOR
+      ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
+      FETCH FIRST ${parseInt(limit)} ROWS ONLY
+    `);
+
+    res.json({
+      products: products.map(p => ({
+        date: `${p.YEAR}-${String(p.MONTH).padStart(2, '0')}-${String(p.DAY).padStart(2, '0')}`,
+        productCode: p.PRODUCTCODE?.trim(),
+        productName: p.PRODUCTNAME?.trim(),
+        boxes: parseInt(p.BOXES) || 0,
+        units: parseInt(p.UNITS) || 0,
+        amount: formatCurrency(p.AMOUNT),
+        margin: formatCurrency(p.MARGIN),
+        vendedor: p.VENDEDOR?.trim()
+      }))
+    });
+
+  } catch (error) {
+    logger.error(`Products by family error: ${error.message}`);
+    handleRouteError(error, res, 'Error obteniendo productos por familia', 500);
   }
 });
 
 // =============================================================================
 // CLIENT SALES HISTORY
 // =============================================================================
-router.get('/:code/sales-history', async (req, res) => {
+router.get('/:code/sales-history', verifyToken, async (req, res) => {
   try {
     const { code } = req.params;
-    const { vendedorCodes, limit = 50, offset = 0 } = req.query;
+    const { vendedorCodes, limit = 50, offset = 0, groupByFamily = '0' } = req.query;
     const vendedorFilter = buildVendedorFilter(vendedorCodes);
     const clientCode = code.trim();
     const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
+    const familyLevel = parseInt(groupByFamily) || 0;
 
-    // Safe query for sales history
-    const sales = await query(`
-      SELECT ANODOCUMENTO as year, MESDOCUMENTO as month, DIADOCUMENTO as day,
-  CODIGOARTICULO as productCode,
-  COALESCE(DESCRIPCION, 'Sin descripción') as productName,
-  CANTIDADENVASES as boxes, CANTIDADUNIDADES as units,
-  IMPORTEVENTA as amount, IMPORTEMARGENREAL as margin,
-  CODIGOVENDEDOR as vendedor
-      FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' AND ANODOCUMENTO >= ${MIN_YEAR} 
-        AND TIPOVENTA IN ('CC', 'VC')
-        AND TIPOLINEA IN ('AB', 'VT')
-        AND SERIEALBARAN NOT IN ('N', 'Z')
-        ${vendedorFilter}
-      ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
-      OFFSET ${parseInt(offset)} ROWS
-      FETCH FIRST ${parseInt(limit)} ROWS ONLY
-    `);
+    let sales;
+    let hasMore = false;
 
-    res.json({
-      history: sales.map(s => ({
-        date: `${s.YEAR} -${String(s.MONTH).padStart(2, '0')} -${String(s.DAY).padStart(2, '0')} `,
-        productCode: s.PRODUCTCODE?.trim(),
-        productName: s.PRODUCTNAME?.trim(),
-        boxes: parseInt(s.BOXES) || 0,
-        units: parseInt(s.UNITS) || 0,
-        amount: formatCurrency(s.AMOUNT),
-        margin: formatCurrency(s.MARGIN),
-        vendedor: s.VENDEDOR?.trim()
-      })),
-      hasMore: sales.length === parseInt(limit)
-    });
+    if (familyLevel === 0) {
+      // No grouping - return individual products
+      sales = await query(`
+        SELECT ANODOCUMENTO as year, MESDOCUMENTO as month, DIADOCUMENTO as day,
+    CODIGOARTICULO as productCode,
+    COALESCE(DESCRIPCION, 'Sin descripción') as productName,
+    CANTIDADENVASES as boxes, CANTIDADUNIDADES as units,
+    IMPORTEVENTA as amount, IMPORTEMARGENREAL as margin,
+    CODIGOVENDEDOR as vendedor
+        FROM DSEDAC.LINDTO
+        WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' AND ANODOCUMENTO >= ${MIN_YEAR}
+          AND TIPOVENTA IN ('CC', 'VC')
+          AND TIPOLINEA IN ('AB', 'VT')
+          AND SERIEALBARAN NOT IN ('N', 'Z')
+          ${vendedorFilter}
+        ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
+        OFFSET ${parseInt(offset)} ROWS
+        FETCH FIRST ${parseInt(limit)} ROWS ONLY
+      `);
+      hasMore = sales.length === parseInt(limit);
+
+      res.json({
+        history: sales.map(s => ({
+          date: `${s.YEAR}-${String(s.MONTH).padStart(2, '0')}-${String(s.DAY).padStart(2, '0')}`,
+          productCode: s.PRODUCTCODE?.trim(),
+          productName: s.PRODUCTNAME?.trim(),
+          boxes: parseInt(s.BOXES) || 0,
+          units: parseInt(s.UNITS) || 0,
+          amount: formatCurrency(s.AMOUNT),
+          margin: formatCurrency(s.MARGIN),
+          vendedor: s.VENDEDOR?.trim()
+        })),
+        hasMore,
+        grouped: false
+      });
+    } else {
+      // Group by family level(s)
+      const familySelects = [];
+      const familyGroupBy = [];
+
+      if (familyLevel === 1 || familyLevel === 13) {
+        familySelects.push('TRIM(A.CODIGOFAMILIA) as family1');
+        familyGroupBy.push('A.CODIGOFAMILIA');
+      }
+      if (familyLevel >= 2 && (familyLevel !== 13)) {
+        familySelects.push('COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ""), "General") as family2');
+        familyGroupBy.push('A.CODIGOSUBFAMILIA');
+      }
+      if (familyLevel >= 3 && (familyLevel !== 13)) {
+        familySelects.push('COALESCE(NULLIF(TRIM(A.CODIGOPREFAMILIA), ""), "General") as family3');
+        familyGroupBy.push('A.CODIGOPREFAMILIA');
+      }
+      if (familyLevel === 13) {
+        familySelects.push('COALESCE(NULLIF(TRIM(A.CODIGOPREFAMILIA), ""), "General") as family3');
+        familyGroupBy.push('A.CODIGOPREFAMILIA');
+      }
+
+      const groupByClause = familyGroupBy.join(', ');
+
+      sales = await query(`
+        SELECT ${familySelects.join(', ')},
+          SUM(CANTIDADENVASES) as boxes,
+          SUM(CANTIDADUNIDADES) as units,
+          SUM(IMPORTEVENTA) as amount,
+          SUM(IMPORTEMARGENREAL) as margin,
+          COUNT(DISTINCT CODIGOARTICULO) as productCount
+        FROM DSEDAC.LINDTO L
+        LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+        WHERE L.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND L.ANODOCUMENTO >= ${MIN_YEAR}
+          AND L.TIPOVENTA IN ('CC', 'VC')
+          AND L.TIPOLINEA IN ('AB', 'VT')
+          AND L.SERIEALBARAN NOT IN ('N', 'Z')
+          ${vendedorFilter}
+        GROUP BY ${groupByClause}
+        ORDER BY amount DESC
+        FETCH FIRST ${parseInt(limit)} ROWS ONLY
+      `);
+
+      res.json({
+        history: sales.map(s => {
+          const item = {
+            family1: s.FAMILY1?.trim() || 'Sin familia',
+            boxes: parseInt(s.BOXES) || 0,
+            units: parseInt(s.UNITS) || 0,
+            amount: formatCurrency(s.AMOUNT),
+            margin: formatCurrency(s.MARGIN),
+            productCount: parseInt(s.PRODUCTCOUNT) || 0
+          };
+          if (familyLevel >= 2 && familyLevel !== 13) item.family2 = s.FAMILY2 || 'General';
+          if (familyLevel >= 3 && familyLevel !== 13) item.family3 = s.FAMILY3 || 'General';
+          if (familyLevel === 13) item.family3 = s.FAMILY3 || 'General';
+          return item;
+        }),
+        hasMore: false,
+        grouped: true,
+        groupLevel: familyLevel
+      });
+    }
 
   } catch (error) {
-    logger.error(`Client history error: ${error.message} `);
-    res.status(500).json({ error: 'Error obteniendo historial', details: error.message });
+    logger.error(`Client history error: ${error.message}`);
+    handleRouteError(error, res, 'Error obteniendo historial', 500);
   }
 });
 
@@ -601,7 +758,7 @@ router.get('/:code/sales-history', async (req, res) => {
 // =============================================================================
 // CLIENT COMPARISON
 // =============================================================================
-router.get('/compare', async (req, res) => {
+router.get('/compare', verifyToken, async (req, res) => {
   try {
     const { codes, vendedorCodes } = req.query;
     if (!codes) {
@@ -610,7 +767,7 @@ router.get('/compare', async (req, res) => {
 
     // Sanitize input for IN clause
     const clientCodes = codes.split(',')
-      .map(c => `'${c.trim().replace(/'/g, "''")}'`)
+      .map(c => `'${sanitizeForSQL(c.trim())}'`)
       .join(',');
 
     const now = getCurrentDate();
@@ -683,7 +840,7 @@ router.get('/compare', async (req, res) => {
 
   } catch (error) {
     logger.error(`Client compare error: ${error.message} `);
-    res.status(500).json({ error: 'Error comparando clientes', details: error.message });
+    handleRouteError(error, res, 'Error comparando clientes', 500);
   }
 });
 

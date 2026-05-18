@@ -1,15 +1,20 @@
 const express = require('express');
 const router = express.Router();
+const { verifyToken } = require('../middleware/auth');
 const logger = require('../middleware/logger');
-const { query } = require('../config/db');
+const { query, queryWithParams } = require('../config/db');
 const {
     getCurrentDate,
     buildVendedorFilter,
-    buildVendedorFilterLACLAE,
+    buildColumnaVendedorFilter,
+    getVendorColumn,
     MIN_YEAR,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
-    getBSales
+    getBSales,
+    sanitizeForSQL,
+    sanitizeCodeList,
+    handleRouteError
 } = require('../utils/common');
 const { getClientCodesFromCache } = require('../services/laclae');
 const { redisCache, TTL } = require('../services/redis-cache');
@@ -23,6 +28,7 @@ const {
     isCacheReady: isMetadataCacheReady
 } = require('../services/metadataCache');
 
+const OBJECTIVES_CACHE_VERSION = 'v20260512-r3-hybrid';
 
 // =============================================================================
 // INHERITED OBJECTIVES LOGIC
@@ -34,24 +40,27 @@ const {
  * Get all clients currently managed by a vendor (from current year or most recent data)
  */
 async function getVendorCurrentClients(vendorCode, currentYear) {
-    // PERF: Removed TRIM() from WHERE - DB2 CHAR comparison handles trailing spaces
-    const rows = await query(`
+    // Uses getVendorColumn(year) for date-aware column (LCCDVD before March 2026, R1_T8CDVD after)
+    const safeVendorCode = sanitizeForSQL(vendorCode);
+    const col = getVendorColumn(currentYear);
+    const rows = await queryWithParams(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
-        WHERE L.LCCDVD = '${vendorCode}'
-          AND L.LCAADC = ${currentYear}
+        WHERE L.${col} = ?
+          AND L.LCAADC = ?
           AND ${LACLAE_SALES_FILTER}
-    `, false);
+    `, [safeVendorCode, currentYear], false);
 
     // If no clients in current year, try previous year
     if (rows.length === 0) {
-        const prevRows = await query(`
+        const prevCol = getVendorColumn(currentYear - 1);
+        const prevRows = await queryWithParams(`
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
-            WHERE L.LCCDVD = '${vendorCode}'
-              AND L.LCAADC = ${currentYear - 1}
+            WHERE L.${prevCol} = ?
+              AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
-        `, false);
+        `, [safeVendorCode, currentYear - 1], false);
         return prevRows.map(r => r.CLIENT_CODE);
     }
 
@@ -65,21 +74,20 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
 async function getClientsMonthlySales(clientCodes, year) {
     if (!clientCodes || clientCodes.length === 0) return {};
 
-    const clientList = clientCodes.map(c => `'${c}'`).join(',');
+    const safeCodes = clientCodes.map(c => sanitizeForSQL(c));
 
-    // PERF: Removed TRIM(L.LCCDCL) - DB2 CHAR comparison handles trailing spaces
-    const rows = await query(`
+    const rows = await queryWithParams(`
         SELECT 
             L.LCMMDC as MONTH,
             SUM(L.LCIMVT) as SALES,
             SUM(L.LCIMCT) as COST,
             COUNT(DISTINCT L.LCCDCL) as CLIENTS
         FROM DSED.LACLAE L
-        WHERE L.LCCDCL IN (${clientList})
-          AND L.LCAADC = ${year}
+        WHERE L.LCCDCL IN (${safeCodes.map(() => '?').join(',')})
+          AND L.LCAADC = ?
           AND ${LACLAE_SALES_FILTER}
         GROUP BY L.LCMMDC
-    `, false);
+    `, [...safeCodes, year], false);
 
     // Build map: month -> {sales, cost, clients}
     const monthlyMap = {};
@@ -113,14 +121,45 @@ async function getVendorTargetConfig(vendorCode) {
     if (!vendorCode || vendorCode === 'ALL') return 0.0; // Default 0% (IPC Only)
     try {
         const code = vendorCode.split(',')[0].trim();
-        const rows = await query(`
-            SELECT TARGET_PERCENTAGE 
-            FROM JAVIER.OBJ_CONFIG 
-            WHERE CODIGOVENDEDOR = '${code}'
-        `, false);
+        const codeVariants = getVendorCodeVariants(code);
+        if (codeVariants.length === 0) return 10.0;
+        const placeholders = codeVariants.map(() => '?').join(',');
 
-        if (rows.length > 0) {
-            return parseFloat(rows[0].TARGET_PERCENTAGE) || 0.0;
+        const explicitRows = await queryWithParams(`
+            SELECT TARGET_PERCENTAGE
+            FROM JAVIER.OBJ_CONFIG
+            WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})
+              AND CODIGOCLIENTE = '*'
+            FETCH FIRST 1 ROWS ONLY
+        `, codeVariants, false);
+
+        if (explicitRows.length > 0) {
+            return parseFloat(explicitRows[0].TARGET_PERCENTAGE) || 10.0;
+        }
+
+        const vendorRows = await queryWithParams(`
+            SELECT TARGET_PERCENTAGE, COUNT(*) as CNT
+            FROM JAVIER.OBJ_CONFIG
+            WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})
+            GROUP BY TARGET_PERCENTAGE
+            ORDER BY CNT DESC, TARGET_PERCENTAGE DESC
+            FETCH FIRST 1 ROWS ONLY
+        `, codeVariants, false);
+
+        if (vendorRows.length > 0) {
+            return parseFloat(vendorRows[0].TARGET_PERCENTAGE) || 10.0;
+        }
+
+        const globalRows = await queryWithParams(`
+            SELECT TARGET_PERCENTAGE
+            FROM JAVIER.OBJ_CONFIG
+            WHERE CODIGOVENDEDOR = '*'
+              AND CODIGOCLIENTE = '*'
+            FETCH FIRST 1 ROWS ONLY
+        `, [], false);
+
+        if (globalRows.length > 0) {
+            return parseFloat(globalRows[0].TARGET_PERCENTAGE) || 10.0;
         }
         return 0.0; // Default 0%
     } catch (e) {
@@ -129,10 +168,277 @@ async function getVendorTargetConfig(vendorCode) {
     }
 }
 
+function getVendorCodeVariants(vendorCode) {
+    const raw = String(vendorCode || '').trim();
+    if (!raw) return [];
+    const unpadded = raw.replace(/^0+/, '') || raw;
+    const padded = /^[0-9]+$/.test(unpadded) ? unpadded.padStart(2, '0') : raw;
+    return [...new Set([raw, unpadded, padded])];
+}
+
+function parseVendorCodes(vendedorCodes) {
+    if (!vendedorCodes || vendedorCodes === 'ALL') return [];
+    return vendedorCodes
+        .split(',')
+        .map(v => v.replace(/[^a-zA-Z0-9]/g, '').trim())
+        .filter(Boolean);
+}
+
+async function addBSalesToRows(rows, vendorCodesArray, uniqueYears) {
+    if (!vendorCodesArray || vendorCodesArray.length === 0) return;
+
+    for (const code of vendorCodesArray) {
+        for (const yr of uniqueYears) {
+            const bSalesMap = await getBSales(code, yr);
+            for (const [month, amount] of Object.entries(bSalesMap)) {
+                const value = parseFloat(amount) || 0;
+                if (value <= 0) continue;
+
+                const m = parseInt(month);
+                const existingRow = rows.find(r => r.YEAR == yr && r.MONTH == m);
+                if (existingRow) {
+                    existingRow.SALES = (parseFloat(existingRow.SALES) || 0) + value;
+                } else {
+                    rows.push({ YEAR: yr, MONTH: m, SALES: value, COST: 0, CLIENTS: 0 });
+                }
+            }
+        }
+    }
+}
+
+async function getFixedMonthlyObjectiveTarget(vendorCode, year, month) {
+    const codeVariants = getVendorCodeVariants(vendorCode);
+    if (codeVariants.length === 0) return null;
+
+    try {
+        const placeholders = codeVariants.map(() => '?').join(',');
+        const fixedRows = await queryWithParams(`
+            SELECT IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION, MES
+            FROM JAVIER.COMMERCIAL_TARGETS
+            WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})
+              AND ANIO = ?
+              AND (MES <= ? OR MES IS NULL)
+              AND ACTIVO = 1
+            ORDER BY
+              CASE WHEN MES = ? THEN 3 WHEN MES IS NULL THEN 1 ELSE 2 END DESC,
+              MES DESC
+            FETCH FIRST 1 ROWS ONLY
+        `, [...codeVariants, year, month, month], false);
+
+        if (!fixedRows || fixedRows.length === 0) return null;
+        const fixedMonthlyTarget = parseFloat(fixedRows[0].IMPORTE_OBJETIVO) || null;
+        return fixedMonthlyTarget && fixedMonthlyTarget > 0 ? fixedMonthlyTarget : null;
+    } catch (err) {
+        logger.debug(`[OBJECTIVES] COMMERCIAL_TARGETS: ${err.message}`);
+        return null;
+    }
+}
+
+/**
+ * Get exact monthly targets (no pastRecent fallback).
+ * Used by the hybrid override logic to only override explicitly set months.
+ */
+async function getExactMonthlyTargets(vendorCode, year) {
+    const codeVariants = getVendorCodeVariants(vendorCode);
+    if (codeVariants.length === 0) return {};
+
+    try {
+        const placeholders = codeVariants.map(() => '?').join(',');
+        const rows = await queryWithParams(`
+            SELECT MES, IMPORTE_OBJETIVO
+            FROM JAVIER.COMMERCIAL_TARGETS
+            WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})
+              AND ANIO = ?
+              AND ACTIVO = 1
+              AND MES IS NOT NULL
+            ORDER BY MES
+        `, [...codeVariants, year], false);
+
+        const targets = {};
+        (rows || []).forEach(row => {
+            const mes = parseInt(row.MES, 10);
+            const val = parseFloat(row.IMPORTE_OBJETIVO) || 0;
+            if (mes > 0 && val > 0) targets[mes] = val;
+        });
+        return targets;
+    } catch (err) {
+        logger.debug(`[OBJECTIVES] getExactMonthlyTargets error: ${err.message}`);
+        return {};
+    }
+}
+
+async function getFixedMonthlyObjectiveTargets(vendorCode, year) {
+    const codeVariants = getVendorCodeVariants(vendorCode);
+    if (codeVariants.length === 0) return {};
+
+    try {
+        const placeholders = codeVariants.map(() => '?').join(',');
+        const rows = await queryWithParams(`
+            SELECT IMPORTE_OBJETIVO, MES
+            FROM JAVIER.COMMERCIAL_TARGETS
+            WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})
+              AND ANIO = ?
+              AND ACTIVO = 1
+            ORDER BY MES DESC
+        `, [...codeVariants, year], false);
+
+        const fixedRows = (rows || [])
+            .map(row => ({
+                mes: row.MES != null ? parseInt(row.MES, 10) : null,
+                importe: parseFloat(row.IMPORTE_OBJETIVO) || 0,
+            }))
+            .filter(row => row.importe > 0)
+            .sort((a, b) => (b.mes ?? 0) - (a.mes ?? 0));
+
+        const targets = {};
+        for (let m = 1; m <= 12; m++) {
+            const exact = fixedRows.find(row => row.mes === m);
+            const annual = fixedRows.find(row => row.mes === null);
+            const pastRecent = fixedRows.find(row => row.mes !== null && row.mes < m);
+            const resolved = exact?.importe || annual?.importe || pastRecent?.importe || 0;
+            if (resolved > 0) targets[m] = resolved;
+        }
+        return targets;
+    } catch (err) {
+        logger.debug(`[OBJECTIVES] COMMERCIAL_TARGETS monthly lookup: ${err.message}`);
+        return {};
+    }
+}
+
+async function buildVendorObjectiveTargets(vendorCode, yearsArray, now) {
+    const currentYear = Math.max(...yearsArray);
+    const uniqueYears = [...new Set([...yearsArray, ...yearsArray.map(y => y - 1)])];
+    const vendedorFilter = buildColumnaVendedorFilter(vendorCode, uniqueYears, 'L');
+
+    const rows = await queryWithParams(`
+        SELECT
+            L.LCAADC as YEAR,
+            L.LCMMDC as MONTH,
+            SUM(L.LCIMVT) as SALES,
+            SUM(L.LCIMCT) as COST,
+            COUNT(DISTINCT L.LCCDCL) as CLIENTS
+        FROM DSED.LACLAE L
+        WHERE L.LCAADC IN (${uniqueYears.map(() => '?').join(',')})
+          AND ${LACLAE_SALES_FILTER}
+          ${vendedorFilter}
+        GROUP BY L.LCAADC, L.LCMMDC
+    `, uniqueYears, false);
+
+    await addBSalesToRows(rows, [vendorCode], uniqueYears);
+
+    let inheritedMonthlySales = {};
+    const prevYear = currentYear - 1;
+    const monthsWithData = rows.filter(r => r.YEAR == prevYear).map(r => r.MONTH);
+    const missingMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(m => !monthsWithData.includes(m));
+
+    if (missingMonths.length > 0) {
+        const currentClients = await getVendorCurrentClients(vendorCode, currentYear);
+        if (currentClients.length > 0) {
+            inheritedMonthlySales = await getClientsMonthlySales(currentClients, prevYear);
+        }
+    }
+
+    const targetPct = await getVendorTargetConfig(vendorCode);
+    const monthlyObjectiveByYear = {};
+    const annualObjectiveByYear = {};
+
+    for (const year of yearsArray) {
+        let prevYearTotal = 0;
+        let inheritedTotal = 0;
+        let currentYearTotalSoFar = 0;
+        const prevYearMonthlySales = {};
+
+        for (let m = 1; m <= 12; m++) {
+            const row = rows.find(r => r.YEAR == year && r.MONTH == m);
+            const prevRow = rows.find(r => r.YEAR == (year - 1) && r.MONTH == m);
+            const ownPrevSales = prevRow ? parseFloat(prevRow.SALES) || 0 : 0;
+
+            if (ownPrevSales === 0 && inheritedMonthlySales[m]) {
+                inheritedTotal += inheritedMonthlySales[m].sales;
+                prevYearMonthlySales[m] = inheritedMonthlySales[m].sales;
+            } else {
+                prevYearTotal += ownPrevSales;
+                prevYearMonthlySales[m] = ownPrevSales;
+            }
+
+            if (row) currentYearTotalSoFar += parseFloat(row.SALES) || 0;
+        }
+
+        const combinedPrevTotal = prevYearTotal + inheritedTotal;
+        const fixedTargetsByMonth = await getFixedMonthlyObjectiveTargets(vendorCode, year);
+        const hasFixedTargets = Object.keys(fixedTargetsByMonth).length > 0;
+
+        let annualObjective;
+        const seasonalTargets = {};
+
+        if (hasFixedTargets) {
+            annualObjective = 0;
+            for (let m = 1; m <= 12; m++) {
+                seasonalTargets[m] = fixedTargetsByMonth[m] || 0;
+                annualObjective += seasonalTargets[m];
+            }
+        } else {
+            const growthFactor = 1 + (targetPct / 100);
+            annualObjective = combinedPrevTotal > 0
+                ? combinedPrevTotal * growthFactor
+                : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * growthFactor : 0);
+
+            if (combinedPrevTotal > 0) {
+                const avgMonthly = combinedPrevTotal / 12;
+                let rawSum = 0;
+                const tempTargets = {};
+
+                for (let m = 1; m <= 12; m++) {
+                    const sale = prevYearMonthlySales[m] || 0;
+                    const deviationRatio = avgMonthly > 0 ? (sale - avgMonthly) / avgMonthly : 0;
+                    const variableGrowthPct = (targetPct / 100) * (1 + (SEASONAL_AGGRESSIVENESS * deviationRatio));
+                    const rawTarget = sale * (1 + variableGrowthPct);
+                    tempTargets[m] = rawTarget;
+                    rawSum += rawTarget;
+                }
+
+                const correctionFactor = rawSum > 0 ? annualObjective / rawSum : 1;
+                for (let m = 1; m <= 12; m++) {
+                    seasonalTargets[m] = tempTargets[m] * correctionFactor;
+                }
+            } else {
+                for (let m = 1; m <= 12; m++) seasonalTargets[m] = annualObjective / 12;
+            }
+        }
+
+        monthlyObjectiveByYear[year] = seasonalTargets;
+        annualObjectiveByYear[year] = annualObjective;
+    }
+
+    return { monthlyObjectiveByYear, annualObjectiveByYear };
+}
+
+function mergeVendorObjectiveTargets(targetSets, yearsArray) {
+    const monthlyObjectiveByYear = {};
+    const annualObjectiveByYear = {};
+
+    for (const year of yearsArray) {
+        monthlyObjectiveByYear[year] = {};
+        annualObjectiveByYear[year] = 0;
+
+        for (let m = 1; m <= 12; m++) {
+            monthlyObjectiveByYear[year][m] = targetSets.reduce((sum, set) => (
+                sum + (set.monthlyObjectiveByYear[year]?.[m] || 0)
+            ), 0);
+        }
+
+        annualObjectiveByYear[year] = targetSets.reduce((sum, set) => (
+            sum + (set.annualObjectiveByYear[year] || 0)
+        ), 0);
+    }
+
+    return { monthlyObjectiveByYear, annualObjectiveByYear };
+}
+
 // =============================================================================
 // OBJECTIVES SUMMARY (Quota vs Actual)
 // =============================================================================
-router.get('/', async (req, res) => {
+router.get('/', verifyToken, async (req, res) => {
     try {
         const { vendedorCodes, year, month } = req.query;
         const now = getCurrentDate();
@@ -171,15 +477,15 @@ router.get('/', async (req, res) => {
         }
 
         // Intentar obtener objetivo de CMV (por vendedor) si no hay cuota global y se pide un vendedor
-        if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
+if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
             try {
                 const code = vendedorCodes.split(',')[0].trim();
-                const cmvResult = await query(`
-          SELECT COALESCE(IMPORTEOBJETIVO, 0) as objetivo,
-                 COALESCE(PORCENTAJEOBJETIVO, 0) as porcentaje
-          FROM DSEDAC.CMV 
-          WHERE CODIGOVENDEDOR = '${code}'
-        `, false);
+                const cmvResult = await queryWithParams(`
+                    SELECT COALESCE(IMPORTEOBJETIVO, 0) as objetivo,
+                           COALESCE(PORCENTAJEOBJETIVO, 0) as porcentaje
+                    FROM DSEDAC.CMV 
+                    WHERE CODIGOVENDEDOR = ?
+                `, [code], false);
 
                 if (cmvResult[0]) {
                     const cmvObjective = parseFloat(cmvResult[0].OBJETIVO) || 0;
@@ -197,33 +503,30 @@ router.get('/', async (req, res) => {
             }
         }
 
-        // Ventas del mes actual (usando LAC)
-        // Aplicamos vendedorFilter para que coincida con lo solicitado (Global o Vendedor)
-        const currentSales = await query(`
-      SELECT 
-        COALESCE(SUM(IMPORTEVENTA), 0) as sales,
-        COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
-        COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
-      FROM DSEDAC.LAC L
-      WHERE ANODOCUMENTO = ${targetYear} AND MESDOCUMENTO = ${targetMonth} ${vendedorFilter}
-    `);
-
-        // Ventas del mismo mes año anterior (usando LAC)
-        const lastYearSales = await query(`
-      SELECT 
-        COALESCE(SUM(IMPORTEVENTA), 0) as sales,
-        COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
-        COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
-      FROM DSEDAC.LAC
-      WHERE ANODOCUMENTO = ${targetYear - 1} AND MESDOCUMENTO = ${targetMonth} ${vendedorFilter}
-    `);
-
-        // NEW: Need Annual Totals of Previous Year for Seasonality Calculation
-        const prevYearAnnual = await query(`
-            SELECT COALESCE(SUM(IMPORTEVENTA), 0) as TOTAL_SALES
-            FROM DSEDAC.LAC
-            WHERE ANODOCUMENTO = ${targetYear - 1} ${vendedorFilter}
-        `, false);
+        // Parallelize 3 independent sales queries
+        const [currentSales, lastYearSales, prevYearAnnual] = await Promise.all([
+            queryWithParams(`
+                SELECT 
+                    COALESCE(SUM(IMPORTEVENTA), 0) as sales,
+                    COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
+                    COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
+                FROM DSEDAC.LAC L
+                WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? ${vendedorFilter}
+            `, [targetYear, targetMonth]),
+            queryWithParams(`
+                SELECT 
+                    COALESCE(SUM(IMPORTEVENTA), 0) as sales,
+                    COALESCE(SUM(IMPORTEVENTA - IMPORTECOSTO), 0) as margin,
+                    COUNT(DISTINCT CODIGOCLIENTEALBARAN) as clients
+                FROM DSEDAC.LAC
+                WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? ${vendedorFilter}
+            `, [targetYear - 1, targetMonth]),
+            queryWithParams(`
+                SELECT COALESCE(SUM(IMPORTEVENTA), 0) as TOTAL_SALES
+                FROM DSEDAC.LAC
+                WHERE ANODOCUMENTO = ? ${vendedorFilter}
+            `, [targetYear - 1], false)
+        ]);
 
         const curr = currentSales[0] || {};
         const last = lastYearSales[0] || {};
@@ -323,15 +626,14 @@ router.get('/', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error(`Objectives error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo objetivos', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo objetivos', 500);
     }
 });
 
 // =============================================================================
 // OBJECTIVES EVOLUTION
 // =============================================================================
-router.get('/evolution', async (req, res) => {
+router.get('/evolution', verifyToken, async (req, res) => {
     try {
         const { vendedorCodes, years } = req.query;
         const now = getCurrentDate();
@@ -339,7 +641,7 @@ router.get('/evolution', async (req, res) => {
         const { getVendorActiveDaysFromCache } = require('../services/laclae');
 
         // PERF: Route-level cache for evolution data
-        const cacheKey = `obj:evolution:${vendedorCodes || 'ALL'}:${years || 'default'}`;
+        const cacheKey = `obj:evolution:${OBJECTIVES_CACHE_VERSION}:${vendedorCodes || 'ALL'}:${years || 'default'}`;
         const cachedResult = await redisCache.get('route', cacheKey);
         if (cachedResult) {
             logger.info(`[OBJECTIVES] ⚡ Cache HIT for evolution (${cacheKey})`);
@@ -355,17 +657,18 @@ router.get('/evolution', async (req, res) => {
         const allYears = [...yearsArray, ...yearsArray.map(y => y - 1)];
         const uniqueYears = [...new Set(allYears)];
         const yearsFilter = uniqueYears.join(',');
+        const vendorCodesArray = parseVendorCodes(vendedorCodes);
 
-        // Use LACLAE-specific vendor filter (uses LCCDVD column)
-        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
+        // Use Date-Aware filter (handles LCCDVD for <March 2026 and R1_T8CDVD for >=March 2026)
+        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, uniqueYears, 'L');
 
         // Get Active Days for calculating pace 
         // Logic: if multiple vendors selected, we might average or select first? 
         // User is usually viewing ONE vendor or ALL. 
         // If ALL, standard days. If specific, specific days.
         let activeWeekDays = [];
-        if (vendedorCodes && vendedorCodes !== 'ALL') {
-            const firstCode = vendedorCodes.split(',')[0].trim();
+        if (vendorCodesArray.length === 1) {
+            const firstCode = vendorCodesArray[0];
             const rawDays = getVendorActiveDaysFromCache(firstCode);
             if (rawDays) {
                 const dayMap = {
@@ -378,40 +681,28 @@ router.get('/evolution', async (req, res) => {
 
         // Single optimized query - get monthly totals per year
         // Using DSED.LACLAE with LCIMVT for sales WITHOUT VAT (matches 15,220,182.87€ for 2025)
-        const rows = await query(`
-          SELECT 
-            L.LCAADC as YEAR,
-            L.LCMMDC as MONTH,
-            SUM(L.LCIMVT) as SALES,
-            SUM(L.LCIMCT) as COST,
-            COUNT(DISTINCT L.LCCDCL) as CLIENTS
-          FROM DSED.LACLAE L
-          WHERE L.LCAADC IN (${yearsFilter})
-            AND ${LACLAE_SALES_FILTER}
-            ${vendedorFilter}
-          GROUP BY L.LCAADC, L.LCMMDC
-          ORDER BY YEAR, MONTH
-        `);
+        const rows = await queryWithParams(`
+            SELECT 
+                L.LCAADC as YEAR,
+                L.LCMMDC as MONTH,
+                SUM(L.LCIMVT) as SALES,
+                SUM(L.LCIMCT) as COST,
+                COUNT(DISTINCT L.LCCDCL) as CLIENTS
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC IN (${uniqueYears.map(() => '?').join(',')})
+              AND ${LACLAE_SALES_FILTER}
+              ${vendedorFilter}
+            GROUP BY L.LCAADC, L.LCMMDC
+            ORDER BY YEAR, MONTH
+        `, uniqueYears);
 
 
         // =====================================================================
         // B-SALES: Add secondary channel sales from JAVIER.VENTAS_B
         // Ensures consistency with commissions endpoint
         // =====================================================================
-        if (vendedorCodes && vendedorCodes !== 'ALL') {
-            const firstCode = vendedorCodes.split(',')[0].trim();
-            for (const yr of uniqueYears) {
-                const bSalesMap = await getBSales(firstCode, yr);
-                for (const [month, amount] of Object.entries(bSalesMap)) {
-                    const m = parseInt(month);
-                    const existingRow = rows.find(r => r.YEAR == yr && r.MONTH == m);
-                    if (existingRow) {
-                        existingRow.SALES = (parseFloat(existingRow.SALES) || 0) + amount;
-                    } else if (amount > 0) {
-                        rows.push({ YEAR: yr, MONTH: m, SALES: amount, COST: 0, CLIENTS: 0 });
-                    }
-                }
-            }
+        if (vendorCodesArray.length > 0) {
+            await addBSalesToRows(rows, vendorCodesArray, uniqueYears);
         }
 
         // Organize by year
@@ -426,9 +717,17 @@ router.get('/evolution', async (req, res) => {
         let inheritedMonthlySales = {};
         const isAll = !vendedorCodes || vendedorCodes === 'ALL';
 
-        if (!isAll) {
+        let multiVendorTargets = null;
+        if (vendorCodesArray.length > 1) {
+            const targetSets = await Promise.all(
+                vendorCodesArray.map(code => buildVendorObjectiveTargets(code, yearsArray, now))
+            );
+            multiVendorTargets = mergeVendorObjectiveTargets(targetSets, yearsArray);
+        }
+
+        if (!isAll && vendorCodesArray.length === 1) {
             // Check if vendor has any months without data in previous year (for current year objectives)
-            const currentYear = yearsArray[0] || getCurrentDate().getFullYear();
+            const currentYear = Math.max(...yearsArray);
             const prevYear = currentYear - 1;
 
             const monthsWithData = rows.filter(r => r.YEAR == prevYear).map(r => r.MONTH);
@@ -438,7 +737,7 @@ router.get('/evolution', async (req, res) => {
                 // Vendor is "new" or has incomplete history - load inherited sales
                 logger.info(`[OBJECTIVES] Vendor ${vendedorCodes} has ${missingMonths.length} months without data: [${missingMonths.join(',')}]. Loading inherited targets...`);
 
-                const firstCode = vendedorCodes.split(',')[0].trim();
+                const firstCode = vendorCodesArray[0];
                 const currentClients = await getVendorCurrentClients(firstCode, currentYear);
                 if (currentClients.length > 0) {
                     inheritedMonthlySales = await getClientsMonthlySales(currentClients, prevYear);
@@ -448,35 +747,49 @@ router.get('/evolution', async (req, res) => {
         }
 
         // ==========================================================================
-        // FIXED TARGETS: Check if vendor has fixed monthly targets from COMMERCIAL_TARGETS
+        // FIXED TARGETS: Check if vendor has fixed monthly targets from COMMERCIAL_TARGETS.
+        // Single-vendor: uses exact matches with fallback to dynamic for missing months.
+        // Multi-vendor: aggregates only months that have override entries (vendor != 15).
         // ==========================================================================
-        let fixedMonthlyTarget = null;
-        if (vendedorCodes && vendedorCodes !== 'ALL') {
-            const firstCode = vendedorCodes.split(',')[0].trim();
-            const currentYear = yearsArray[0] || getCurrentDate().getFullYear();
-            const currentMonth = now.getMonth() + 1;
-
+        const fixedTargetsByYear = {};
+        if (vendorCodesArray.length === 1) {
+            const firstCode = vendorCodesArray[0];
+            for (const year of yearsArray) {
+                // Use ONLY exact month matches (no pastRecent fallback) to avoid
+                // propagating override values to months that should be dynamic.
+                fixedTargetsByYear[year] = await getExactMonthlyTargets(firstCode, year);
+            }
+            if (Object.values(fixedTargetsByYear).some(targets => Object.keys(targets).length > 0)) {
+                logger.info(`[OBJECTIVES] Vendor ${firstCode} has fixed monthly targets in COMMERCIAL_TARGETS`);
+            }
+        } else if (isAll || vendorCodesArray.length > 1) {
+            // Aggregate fixed targets for months where MULTIPLE vendors have entries.
+            // This automatically detects override months (May + Sep-Dec) without
+            // hardcoding vendor IDs or months. Months with only vendor 15 (or any
+            // single vendor) are excluded, so they fall back to dynamic calculation.
             try {
-                const fixedRows = await query(`
-                    SELECT IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION
-                    FROM JAVIER.COMMERCIAL_TARGETS
-                    WHERE CODIGOVENDEDOR = '${firstCode}'
-                      AND ANIO = ${currentYear}
-                      AND (MES = ${currentMonth} OR MES IS NULL)
-                      AND ACTIVO = 1
-                    ORDER BY MES DESC
-                    FETCH FIRST 1 ROWS ONLY
-                `, false);
-
-                if (fixedRows && fixedRows.length > 0) {
-                    fixedMonthlyTarget = parseFloat(fixedRows[0].IMPORTE_OBJETIVO) || null;
-                    if (fixedMonthlyTarget) {
-                        logger.info(`[OBJECTIVES] Vendor ${firstCode} has FIXED monthly target: ${fixedMonthlyTarget}€`);
+                for (const year of yearsArray) {
+                    const aggregated = await queryWithParams(`
+                        SELECT MES, SUM(IMPORTE_OBJETIVO) as TOTAL
+                        FROM JAVIER.COMMERCIAL_TARGETS
+                        WHERE ANIO = ? AND ACTIVO = 1
+                        GROUP BY MES
+                        HAVING COUNT(DISTINCT CODIGOVENDEDOR) > 1
+                    `, [year], false);
+                    if (aggregated && aggregated.length > 0) {
+                        const targets = {};
+                        aggregated.forEach(r => {
+                            const mes = parseInt(r.MES);
+                            const val = parseFloat(r.TOTAL) || 0;
+                            if (mes && val > 0) targets[mes] = val;
+                        });
+                        if (Object.keys(targets).length > 0) {
+                            fixedTargetsByYear[year] = targets;
+                        }
                     }
                 }
-            } catch (err) {
-                // Table might not exist - continue with percentage-based
-                logger.debug(`[OBJECTIVES] COMMERCIAL_TARGETS: ${err.message}`);
+            } catch (e) {
+                logger.debug(`[OBJECTIVES] ALL vendors fixed targets aggregation error: ${e.message}`);
             }
         }
 
@@ -516,9 +829,12 @@ router.get('/evolution', async (req, res) => {
             // FIXED TARGET OVERRIDE: Use fixed target if available, otherwise calculate from previous year
             let annualObjective, monthlyObjective;
 
-            if (fixedMonthlyTarget && fixedMonthlyTarget > 0) {
-                monthlyObjective = fixedMonthlyTarget;
-                annualObjective = fixedMonthlyTarget * 12;
+            const fixedTargetsForYear = fixedTargetsByYear[year] || {};
+            const hasFixedTargetsForYear = Object.keys(fixedTargetsForYear).length > 0;
+
+            if (multiVendorTargets) {
+                annualObjective = multiVendorTargets.annualObjectiveByYear[year] || 0;
+                monthlyObjective = annualObjective / 12;
             } else {
                 // Standard calculation: previous year * (1 + targetPct)
                 // Fallback to 10% if 0 (though normally handled by getVendorTargetConfig)
@@ -531,7 +847,7 @@ router.get('/evolution', async (req, res) => {
             // CALCULATE SEASONAL FACTORS
             // ===================================
             const seasonalTargets = {};
-            if (!fixedMonthlyTarget && combinedPrevTotal > 0) {
+            if (!multiVendorTargets && combinedPrevTotal > 0) {
                 const avgMonthly = combinedPrevTotal / 12;
                 let rawSum = 0;
 
@@ -568,9 +884,19 @@ router.get('/evolution', async (req, res) => {
                 // SEASONAL OBJECTIVE with INHERITED support:
                 let seasonalObjective = 0;
 
-                // FIXED TARGET OVERRIDE: If fixedMonthlyTarget is set, use it for all months
-                if (fixedMonthlyTarget && fixedMonthlyTarget > 0) {
-                    seasonalObjective = fixedMonthlyTarget;
+                // FIXED TARGET OVERRIDE: Use fixed target when available, fallback to dynamic.
+                if (multiVendorTargets) {
+                    seasonalObjective = multiVendorTargets.monthlyObjectiveByYear[year]?.[m] || 0;
+                } else if (hasFixedTargetsForYear) {
+                    seasonalObjective = fixedTargetsForYear[m];
+                    if (!seasonalObjective) {
+                        // Fallback: month without COMMERCIAL_TARGETS → use dynamic calculation
+                        if (combinedPrevTotal > 0) {
+                            seasonalObjective = seasonalTargets[m] || (prevYearMonthlySales[m] * 1.10);
+                        } else if (annualObjective > 0) {
+                            seasonalObjective = annualObjective / 12;
+                        }
+                    }
                 } else if (combinedPrevTotal > 0) {
                     // Use calculated seasonal target (Dynamic)
                     seasonalObjective = seasonalTargets[m] || (prevYearMonthlySales[m] * 1.10);
@@ -619,22 +945,24 @@ router.get('/evolution', async (req, res) => {
         res.json(responseData);
 
     } catch (error) {
-        logger.error(`Objectives evolution error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo evolución de objetivos', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo evolución de objetivos', 500);
     }
 });
 
 // =============================================================================
 // OBJECTIVES MATRIX
 // =============================================================================
-router.get('/matrix', async (req, res) => {
+router.get('/matrix', verifyToken, async (req, res) => {
     try {
         const {
             clientCode, years, startMonth = '1', endMonth = '12',
             productCode, productName, familyCode, subfamilyCode,
             // NEW: FI filters
-            fi1, fi2, fi3, fi4, fi5
+            fi1, fi2, fi3, fi4, fi5,
+            // NEW: Family grouping
+            groupByFamily = '0'
         } = req.query;
+        const familyLevel = parseInt(groupByFamily) || 0;
 
         if (!clientCode) {
             return res.status(400).json({ error: 'clientCode is required' });
@@ -648,134 +976,132 @@ router.get('/matrix', async (req, res) => {
         // Determine years to fetch (include previous year for YoY if needed)
         const allYearsToFetch = new Set(yearsArray);
         yearsArray.forEach(y => allYearsToFetch.add(y - 1));
-        const yearsFilter = Array.from(allYearsToFetch).join(',');
+        const uniqueYears = Array.from(allYearsToFetch);
+        const yearsFilter = uniqueYears.join(',');
 
-        // --- NEW: Client Contact & Observations ---
+        // --- NEW: Client Contact & Observations (parallelized) ---
         let contactInfo = { phone: '', phone2: '', email: '', phones: [] };
         let editableNotes = null;
 
-        // Get phones (separate try-catch to not break if one fails)
-        try {
-            const contactRows = await query(`
+        const [contactRows, notesRows] = await Promise.all([
+            queryWithParams(`
                 SELECT TELEFONO1 as PHONE, TELEFONO2 as PHONE2 
-                FROM DSEDAC.CLI WHERE CODIGOCLIENTE = '${clientCode}' FETCH FIRST 1 ROWS ONLY
-            `);
-            if (contactRows.length > 0) {
-                const c = contactRows[0];
-                const phones = [];
-                if (c.PHONE?.trim()) phones.push({ type: 'Teléfono 1', number: c.PHONE.trim() });
-                if (c.PHONE2?.trim()) phones.push({ type: 'Teléfono 2', number: c.PHONE2.trim() });
-
-                contactInfo = {
-                    phone: c.PHONE?.trim() || '',
-                    phone2: c.PHONE2?.trim() || '',
-                    email: '',
-                    phones: phones
-                };
-            }
-        } catch (e) {
-            logger.warn(`Could not load contact info: ${e.message}`);
-        }
-
-        // Get editable notes (separate try-catch - table may not exist)
-        try {
-            const notesRows = await query(`
+                FROM DSEDAC.CLI WHERE CODIGOCLIENTE = ? FETCH FIRST 1 ROWS ONLY
+            `, [clientCode]).catch(e => { logger.warn(`Could not load contact info: ${e.message}`); return []; }),
+            queryWithParams(`
                 SELECT OBSERVACIONES, MODIFIED_BY FROM JAVIER.CLIENT_NOTES 
-                WHERE CLIENT_CODE = '${clientCode}' FETCH FIRST 1 ROWS ONLY
-            `, false);
-            if (notesRows.length > 0) {
-                editableNotes = {
-                    text: notesRows[0].OBSERVACIONES,
-                    modifiedBy: notesRows[0].MODIFIED_BY
-                };
-            }
-        } catch (e) {
-            // Table may not exist - this is OK, just skip notes
-            logger.debug(`Notes table not available: ${e.message}`);
+                WHERE CLIENT_CODE = ? FETCH FIRST 1 ROWS ONLY
+            `, [clientCode], false).catch(e => { logger.debug(`Notes table not available: ${e.message}`); return []; })
+        ]);
+
+        if (contactRows.length > 0) {
+            const c = contactRows[0];
+            const phones = [];
+            if (c.PHONE?.trim()) phones.push({ type: 'Teléfono 1', number: c.PHONE.trim() });
+            if (c.PHONE2?.trim()) phones.push({ type: 'Teléfono 2', number: c.PHONE2.trim() });
+            contactInfo = {
+                phone: c.PHONE?.trim() || '',
+                phone2: c.PHONE2?.trim() || '',
+                email: '',
+                phones: phones
+            };
+        }
+        if (notesRows.length > 0) {
+            editableNotes = {
+                text: notesRows[0].OBSERVACIONES,
+                modifiedBy: notesRows[0].MODIFIED_BY
+            };
         }
         // -------------------------------------------
 
-        // Build filter conditions (using LACLAE column names)
         let filterConditions = '';
+        const filterParams = [];
         if (productCode && productCode.trim()) {
-            filterConditions += ` AND UPPER(L.LCCDRF) LIKE '%${productCode.trim().toUpperCase()}%'`;
+            const safeProdCode = `%${sanitizeForSQL(productCode.trim()).toUpperCase()}%`;
+            filterConditions += ` AND UPPER(L.LCCDRF) LIKE ?`;
+            filterParams.push(safeProdCode);
         }
         if (productName && productName.trim()) {
-            filterConditions += ` AND (UPPER(A.DESCRIPCIONARTICULO) LIKE '%${productName.trim().toUpperCase()}%' OR UPPER(L.LCDESC) LIKE '%${productName.trim().toUpperCase()}%')`;
+            const safeProdName = `%${sanitizeForSQL(productName.trim()).toUpperCase()}%`;
+            filterConditions += ` AND (UPPER(A.DESCRIPCIONARTICULO) LIKE ? OR UPPER(L.LCDESC) LIKE ?)`;
+            filterParams.push(safeProdName, safeProdName);
         }
-        // Legacy family/subfamily filters (mantener compatibilidad)
         if (familyCode && familyCode.trim()) {
-            filterConditions += ` AND A.CODIGOFAMILIA = '${familyCode.trim()}'`;
+            filterConditions += ` AND A.CODIGOFAMILIA = ?`;
+            filterParams.push(familyCode.trim());
         }
         if (subfamilyCode && subfamilyCode.trim()) {
-            filterConditions += ` AND A.CODIGOSUBFAMILIA = '${subfamilyCode.trim()}'`;
+            filterConditions += ` AND A.CODIGOSUBFAMILIA = ?`;
+            filterParams.push(subfamilyCode.trim());
         }
 
-        // NEW: FI hierarchical filters (join con ARTX)
         let needsArtxJoin = false;
         if (fi1 && fi1.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO01) = '${fi1.trim()}'`;
+            filterConditions += ` AND TRIM(AX.FILTRO01) = ?`;
+            filterParams.push(fi1.trim());
             needsArtxJoin = true;
         }
         if (fi2 && fi2.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO02) = '${fi2.trim()}'`;
+            filterConditions += ` AND TRIM(AX.FILTRO02) = ?`;
+            filterParams.push(fi2.trim());
             needsArtxJoin = true;
         }
         if (fi3 && fi3.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO03) = '${fi3.trim()}'`;
+            filterConditions += ` AND TRIM(AX.FILTRO03) = ?`;
+            filterParams.push(fi3.trim());
             needsArtxJoin = true;
         }
         if (fi4 && fi4.trim()) {
-            filterConditions += ` AND TRIM(AX.FILTRO04) = '${fi4.trim()}'`;
+            filterConditions += ` AND TRIM(AX.FILTRO04) = ?`;
+            filterParams.push(fi4.trim());
             needsArtxJoin = true;
         }
         if (fi5 && fi5.trim()) {
-            filterConditions += ` AND TRIM(A.CODIGOSECCIONLARGA) = '${fi5.trim()}'`;
+            filterConditions += ` AND TRIM(A.CODIGOSECCIONLARGA) = ?`;
+            filterParams.push(fi5.trim());
         }
 
         // Build ARTX join if needed
         const artxJoin = needsArtxJoin ? 'LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO' : '';
 
         // Get product purchases for this client - USING DSED.LACLAE (which has data for all clients including PUA)
-        const rows = await query(`
-      SELECT 
-        L.LCCDRF as PRODUCT_CODE,
-        COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.LCDESC)) as PRODUCT_NAME,
-        COALESCE(A.CODIGOFAMILIA, 'SIN_FAM') as FAMILY_CODE,
-        COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') as SUBFAMILY_CODE,
-        COALESCE(TRIM(A.UNIDADMEDIDA), 'UDS') as UNIT_TYPE,
-        L.LCAADC as YEAR,
-        L.LCMMDC as MONTH,
-        SUM(L.LCIMVT) as SALES,
-        SUM(L.LCIMCT) as COST,
-        SUM(L.LCCTUD) as UNITS,
-        -- Discount detection AND details (using LACLAE equivalents)
-        SUM(CASE WHEN L.LCPRTC <> 0 AND L.LCPRT1 <> 0 
-                  AND L.LCPRTC <> L.LCPRT1 THEN 1 ELSE 0 END) as HAS_SPECIAL_PRICE,
-        SUM(CASE WHEN L.LCPJDT <> 0 THEN 1 ELSE 0 END) as HAS_DISCOUNT,
-        AVG(CASE WHEN L.LCPJDT <> 0 THEN L.LCPJDT ELSE NULL END) as AVG_DISCOUNT_PCT,
-        CAST(NULL AS DECIMAL(10,2)) as AVG_DISCOUNT_EUR,
-        -- Average prices for comparison
-        AVG(L.LCPRTC) as AVG_CLIENT_TARIFF,
-        AVG(L.LCPRT1) as AVG_BASE_TARIFF,
-        -- FI codes for 5-level hierarchy grouping
-        COALESCE(TRIM(AX.FILTRO01), '') as FI1_CODE,
-        COALESCE(TRIM(AX.FILTRO02), '') as FI2_CODE,
-        COALESCE(TRIM(AX.FILTRO03), '') as FI3_CODE,
-        COALESCE(TRIM(AX.FILTRO04), '') as FI4_CODE,
-        COALESCE(TRIM(A.CODIGOSECCIONLARGA), '') as FI5_CODE
-      FROM DSED.LACLAE L
-      LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
-      LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO
-      WHERE L.LCCDCL = '${clientCode}'
-        AND L.LCAADC IN(${yearsFilter})
-        AND L.LCMMDC BETWEEN ${monthStart} AND ${monthEnd}
-        -- FILTERS to match LACLAE logic
-        AND ${LACLAE_SALES_FILTER}
-        ${filterConditions}
-      GROUP BY L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.LCAADC, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04, A.CODIGOSECCIONLARGA
-      ORDER BY SALES DESC
-    `);
+        const clientParams = [clientCode, ...filterParams];
+        const rows = await queryWithParams(`
+            SELECT 
+                L.LCCDRF as PRODUCT_CODE,
+                COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.LCDESC)) as PRODUCT_NAME,
+                COALESCE(A.CODIGOFAMILIA, 'SIN_FAM') as FAMILY_CODE,
+                COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') as SUBFAMILY_CODE,
+                COALESCE(TRIM(A.UNIDADMEDIDA), 'UDS') as UNIT_TYPE,
+                L.LCAADC as YEAR,
+                L.LCMMDC as MONTH,
+                SUM(L.LCIMVT) as SALES,
+                SUM(L.LCIMCT) as COST,
+                SUM(L.LCCTUD) as UNITS,
+                SUM(CASE WHEN L.LCPRTC <> 0 AND L.LCPRT1 <> 0 
+                    AND L.LCPRTC <> L.LCPRT1 THEN 1 ELSE 0 END) as HAS_SPECIAL_PRICE,
+                SUM(CASE WHEN L.LCPJDT <> 0 THEN 1 ELSE 0 END) as HAS_DISCOUNT,
+                AVG(CASE WHEN L.LCPJDT <> 0 THEN L.LCPJDT ELSE NULL END) as AVG_DISCOUNT_PCT,
+                CAST(NULL AS DECIMAL(10,2)) as AVG_DISCOUNT_EUR,
+                AVG(L.LCPRTC) as AVG_CLIENT_TARIFF,
+                AVG(L.LCPRT1) as AVG_BASE_TARIFF,
+                COALESCE(TRIM(AX.FILTRO01), '') as FI1_CODE,
+                COALESCE(TRIM(AX.FILTRO02), '') as FI2_CODE,
+                COALESCE(TRIM(AX.FILTRO03), '') as FI3_CODE,
+                COALESCE(TRIM(AX.FILTRO04), '') as FI4_CODE,
+                COALESCE(TRIM(A.CODIGOSECCIONLARGA), '') as FI5_CODE
+            FROM DSED.LACLAE L
+            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+            LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO
+            WHERE L.LCCDCL = ?
+              AND L.LCAADC IN(${uniqueYears.map(() => '?').join(',')})
+              AND L.LCMMDC BETWEEN ? AND ?
+              AND ${LACLAE_SALES_FILTER}
+              ${filterConditions}
+            GROUP BY L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.CODIGOFAMILIA, A.CODIGOSUBFAMILIA, A.UNIDADMEDIDA, L.LCAADC, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04, A.CODIGOSECCIONLARGA
+            ORDER BY SALES DESC
+            FETCH FIRST 1000 ROWS ONLY
+        `, [clientCode, ...uniqueYears, monthStart, monthEnd, ...filterParams]);
 
         // Get family names and available filters properly
         const familyNames = {};
@@ -1632,8 +1958,7 @@ router.get('/matrix', async (req, res) => {
         });
 
     } catch (error) {
-        logger.error(`Objectives matrix error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo matriz de cliente', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo matriz de cliente', 500);
     }
 });
 
@@ -1666,7 +1991,7 @@ router.get('/by-client', async (req, res) => {
 
         // PERF: Route-level cache for by-client (only when no search filters)
         const hasFilters = city || code || nif || name;
-        const cacheKey = `obj:byclient:${vendedorCodes || 'ALL'}:${years || 'default'}:${months || 'all'}:${limit || '1000'}`;
+        const cacheKey = `obj:byclient:${OBJECTIVES_CACHE_VERSION}:${vendedorCodes || 'ALL'}:${years || 'default'}:${months || 'all'}:${limit || '1000'}`;
         if (!hasFilters) {
             const cachedResult = await redisCache.get('route', cacheKey);
             if (cachedResult) {
@@ -1684,15 +2009,26 @@ router.get('/by-client', async (req, res) => {
         const monthsFilter = monthsArray.join(',');
 
         // Use LACLAE with R1_T8CDVD (route vendor) for consistency with client list and rutero
-        const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes, 'L');
+        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, yearsArray, 'L');
 
         let extraFilters = '';
-        if (city && city.trim()) extraFilters += ` AND UPPER(C.POBLACION) = '${city.trim().toUpperCase()}'`;
-        if (code && code.trim()) extraFilters += ` AND C.CODIGOCLIENTE LIKE '%${code.trim()}%'`;
-        if (nif && nif.trim()) extraFilters += ` AND C.NIF LIKE '%${nif.trim()}%'`;
+        const extraFilterParams = [];
+        if (city && city.trim()) {
+            extraFilters += ` AND UPPER(C.POBLACION) = ?`;
+            extraFilterParams.push(city.trim().toUpperCase());
+        }
+        if (code && code.trim()) {
+            extraFilters += ` AND C.CODIGOCLIENTE LIKE ?`;
+            extraFilterParams.push(`%${code.trim()}%`);
+        }
+        if (nif && nif.trim()) {
+            extraFilters += ` AND C.NIF LIKE ?`;
+            extraFilterParams.push(`%${nif.trim()}%`);
+        }
         if (name && name.trim()) {
-            const safeName = name.trim().toUpperCase().replace(/'/g, "''");
-            extraFilters += ` AND (UPPER(C.NOMBRECLIENTE) LIKE '%${safeName}%' OR UPPER(C.NOMBREALTERNATIVO) LIKE '%${safeName}%')`;
+            const safeName = `%${sanitizeForSQL(name.trim()).toUpperCase()}%`;
+            extraFilters += ` AND (UPPER(C.NOMBRECLIENTE) LIKE ? OR UPPER(C.NOMBREALTERNATIVO) LIKE ?)`;
+            extraFilterParams.push(safeName, safeName);
         }
 
         // Main year for objective calculation
@@ -1706,170 +2042,233 @@ router.get('/by-client', async (req, res) => {
         let currentRows = [];
 
         if (cachedClientCodes && cachedClientCodes.length > 0) {
-            // Use cached client codes for fast filtering
-            const clientCodesFilter = cachedClientCodes.map(c => `'${c}'`).join(',');
+            const safeClientCodes = cachedClientCodes.map(c => sanitizeForSQL(c));
 
             // Query 0: Count clients from cache (filtered by extra filters if any)
             if (extraFilters) {
-                const countResult = await query(`
+                const countResult = await queryWithParams(`
                     SELECT COUNT(*) as TOTAL
                     FROM DSEDAC.CLI C
-                    WHERE C.CODIGOCLIENTE IN (${clientCodesFilter})
+                    WHERE C.CODIGOCLIENTE IN (${safeClientCodes.map(() => '?').join(',')})
                       AND C.ANOBAJA = 0
                       ${extraFilters}
-                `, false);
+                `, [...safeClientCodes, ...extraFilterParams], false);
                 totalClientsCount = countResult[0] ? parseInt(countResult[0].TOTAL) : 0;
             } else {
                 totalClientsCount = cachedClientCodes.length;
             }
 
-            // Query 1: Get client info + sales data (optimized with IN clause)
-            currentRows = await query(`
-              SELECT 
-                C.CODIGOCLIENTE as CODE,
-                COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), C.NOMBRECLIENTE) as NAME,
-                C.DIRECCION as ADDRESS,
-                C.CODIGOPOSTAL as POSTALCODE,
-                C.POBLACION as CITY,
-                COALESCE(S.SALES, 0) as SALES,
-                COALESCE(S.COST, 0) as COST
-              FROM DSEDAC.CLI C
-              LEFT JOIN (
-                SELECT LCCDCL, SUM(LCIMVT) as SALES, SUM(LCIMCT) as COST
-                FROM DSED.LACLAE
-                WHERE LCAADC IN(${yearsFilter})
-                  AND LCMMDC IN(${monthsFilter})
-                  AND ${LACLAE_SALES_FILTER.replace(/L\./g, '')}
-                  AND LCCDCL IN (${clientCodesFilter})
-                GROUP BY LCCDCL
-              ) S ON C.CODIGOCLIENTE = S.LCCDCL
-              WHERE C.CODIGOCLIENTE IN (${clientCodesFilter})
-                AND C.ANOBAJA = 0
-                ${extraFilters}
-              ORDER BY COALESCE(S.SALES, 0) DESC
-              FETCH FIRST ${rowsLimit} ROWS ONLY
-            `);
+            if (!extraFilters) {
+                // Fast path for manager/default views: rank in LACLAE first, then
+                // fetch CLI details only for the returned top clients.
+                const salesRows = await queryWithParams(`
+                    SELECT L.LCCDCL as CODE, SUM(L.LCIMVT) as SALES, SUM(L.LCIMCT) as COST
+                    FROM DSED.LACLAE L
+                    WHERE L.LCAADC IN (${yearsArray.map(() => '?').join(',')})
+                      AND L.LCMMDC IN (${monthsArray.map(() => '?').join(',')})
+                      AND ${LACLAE_SALES_FILTER}
+                      AND L.LCCDCL IN (${safeClientCodes.map(() => '?').join(',')})
+                    GROUP BY L.LCCDCL
+                    ORDER BY SALES DESC
+                    FETCH FIRST ? ROWS ONLY
+                `, [...yearsArray, ...monthsArray, ...safeClientCodes, rowsLimit], false);
+
+                const topCodes = salesRows
+                    .map(r => (r.CODE || '').toString().trim())
+                    .filter(Boolean);
+
+                if (topCodes.length > 0) {
+                    const detailsRows = await queryWithParams(`
+                        SELECT
+                            C.CODIGOCLIENTE as CODE,
+                            COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), C.NOMBRECLIENTE) as NAME,
+                            C.DIRECCION as ADDRESS,
+                            C.CODIGOPOSTAL as POSTALCODE,
+                            C.POBLACION as CITY
+                        FROM DSEDAC.CLI C
+                        WHERE C.CODIGOCLIENTE IN (${topCodes.map(() => '?').join(',')})
+                          AND C.ANOBAJA = 0
+                    `, topCodes, false);
+
+                    const detailsMap = new Map();
+                    detailsRows.forEach(r => {
+                        const code = (r.CODE || '').toString().trim();
+                        if (code) detailsMap.set(code, r);
+                    });
+
+                    currentRows = salesRows.map(r => {
+                        const code = (r.CODE || '').toString().trim();
+                        const details = detailsMap.get(code) || {};
+                        return {
+                            CODE: code,
+                            NAME: details.NAME,
+                            ADDRESS: details.ADDRESS,
+                            POSTALCODE: details.POSTALCODE,
+                            CITY: details.CITY,
+                            SALES: r.SALES,
+                            COST: r.COST
+                        };
+                    }).filter(r => r.NAME);
+                } else {
+                    const fallbackCodes = safeClientCodes.slice(0, rowsLimit);
+                    const detailsRows = await queryWithParams(`
+                        SELECT
+                            C.CODIGOCLIENTE as CODE,
+                            COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), C.NOMBRECLIENTE) as NAME,
+                            C.DIRECCION as ADDRESS,
+                            C.CODIGOPOSTAL as POSTALCODE,
+                            C.POBLACION as CITY
+                        FROM DSEDAC.CLI C
+                        WHERE C.CODIGOCLIENTE IN (${fallbackCodes.map(() => '?').join(',')})
+                          AND C.ANOBAJA = 0
+                        FETCH FIRST ? ROWS ONLY
+                    `, [...fallbackCodes, rowsLimit], false);
+
+                    currentRows = detailsRows.map(r => ({
+                        CODE: (r.CODE || '').toString().trim(),
+                        NAME: r.NAME,
+                        ADDRESS: r.ADDRESS,
+                        POSTALCODE: r.POSTALCODE,
+                        CITY: r.CITY,
+                        SALES: 0,
+                        COST: 0
+                    }));
+                }
+            } else {
+                // Filtered path keeps the CLI predicates in SQL.
+                currentRows = await queryWithParams(`
+                    SELECT 
+                        C.CODIGOCLIENTE as CODE,
+                        COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), C.NOMBRECLIENTE) as NAME,
+                        C.DIRECCION as ADDRESS,
+                        C.CODIGOPOSTAL as POSTALCODE,
+                        C.POBLACION as CITY,
+                        COALESCE(S.SALES, 0) as SALES,
+                        COALESCE(S.COST, 0) as COST
+                    FROM DSEDAC.CLI C
+                    LEFT JOIN (
+                        SELECT LCCDCL, SUM(LCIMVT) as SALES, SUM(LCIMCT) as COST
+                        FROM DSED.LACLAE
+                        WHERE LCAADC IN (${yearsArray.map(() => '?').join(',')})
+                          AND LCMMDC IN (${monthsArray.map(() => '?').join(',')})
+                          AND ${LACLAE_SALES_FILTER.replace(/L\./g, '')}
+                          AND LCCDCL IN (${safeClientCodes.map(() => '?').join(',')})
+                        GROUP BY LCCDCL
+                    ) S ON C.CODIGOCLIENTE = S.LCCDCL
+                    WHERE C.CODIGOCLIENTE IN (${safeClientCodes.map(() => '?').join(',')})
+                      AND C.ANOBAJA = 0
+                      ${extraFilters}
+                    ORDER BY COALESCE(S.SALES, 0) DESC
+                    FETCH FIRST ? ROWS ONLY
+                `, [...yearsArray, ...monthsArray, ...safeClientCodes, ...safeClientCodes, ...extraFilterParams, rowsLimit]);
+            }
         } else {
             // Fallback: Use original query with vendedor filter if cache not available
-            const vendedorFilterSales = buildVendedorFilterLACLAE(vendedorCodes, 'L');
+            const vendedorFilterSales = buildColumnaVendedorFilter(vendedorCodes, yearsArray, 'L');
 
-            currentRows = await query(`
-              SELECT 
-                L.LCCDCL as CODE,
-                COALESCE(NULLIF(TRIM(MIN(C.NOMBREALTERNATIVO)), ''), MIN(C.NOMBRECLIENTE)) as NAME,
-                MIN(C.DIRECCION) as ADDRESS,
-                MIN(C.CODIGOPOSTAL) as POSTALCODE,
-                MIN(C.POBLACION) as CITY,
-                SUM(L.LCIMVT) as SALES,
-                SUM(L.LCIMCT) as COST
-              FROM DSED.LACLAE L
-              LEFT JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
-              WHERE L.LCAADC IN(${yearsFilter})
-                AND L.LCMMDC IN(${monthsFilter})
-                AND ${LACLAE_SALES_FILTER}
-                ${vendedorFilterSales}
-                ${extraFilters}
-              GROUP BY L.LCCDCL
-              ORDER BY SALES DESC
-              FETCH FIRST ${rowsLimit} ROWS ONLY
-            `);
+            currentRows = await queryWithParams(`
+                SELECT 
+                    L.LCCDCL as CODE,
+                    COALESCE(NULLIF(TRIM(MIN(C.NOMBREALTERNATIVO)), ''), MIN(C.NOMBRECLIENTE)) as NAME,
+                    MIN(C.DIRECCION) as ADDRESS,
+                    MIN(C.CODIGOPOSTAL) as POSTALCODE,
+                    MIN(C.POBLACION) as CITY,
+                    SUM(L.LCIMVT) as SALES,
+                    SUM(L.LCIMCT) as COST
+                FROM DSED.LACLAE L
+                LEFT JOIN DSEDAC.CLI C ON L.LCCDCL = C.CODIGOCLIENTE
+                WHERE L.LCAADC IN (${yearsArray.map(() => '?').join(',')})
+                  AND L.LCMMDC IN (${monthsArray.map(() => '?').join(',')})
+                  AND ${LACLAE_SALES_FILTER}
+                  ${vendedorFilterSales}
+                  ${extraFilters}
+                GROUP BY L.LCCDCL
+                ORDER BY SALES DESC
+                FETCH FIRST ? ROWS ONLY
+            `, [...yearsArray, ...monthsArray, ...extraFilterParams, rowsLimit]);
             totalClientsCount = currentRows.length;
         }
 
         // Query 2: Get previous year data for same period (for objective calculation)
         // Optimization: Only fetch previous data for the clients we actually retrieved in currentRows
         // to avoid huge joins if only showing top 100
-        const retrievedCodes = currentRows.map(r => `'${r.CODE}'`).join(',');
+        const retrievedCodes = currentRows.map(r => r.CODE);
+        const retrievedCodesParams = retrievedCodes.map(c => sanitizeForSQL(c));
 
         let prevSalesMap = new Map();
-
-        if (retrievedCodes.length > 0) {
-            const prevRows = await query(`
-              SELECT 
-                L.LCCDCL as CODE,
-                SUM(L.LCIMVT) as PREV_SALES
-              FROM DSED.LACLAE L
-              WHERE L.LCAADC = ${prevYear}
-                AND L.LCMMDC IN(${monthsFilter})
-                AND ${LACLAE_SALES_FILTER}
-                AND L.LCCDCL IN (${retrievedCodes})
-              GROUP BY L.LCCDCL
-            `);
-
-            prevRows.forEach(r => {
-                prevSalesMap.set(r.CODE?.trim() || '', parseFloat(r.PREV_SALES) || 0);
-            });
-        }
-
-        // Fetch Objective Configuration from JAVIER.OBJ_CONFIG
-        // Get config for retrieved clients AND the default ('*')
         let objectiveConfigMap = new Map();
-        let defaultObjectiveData = { percentage: 10 }; // Fallback hardcoded if DB empty
+        let defaultObjectiveData = { percentage: 10 };
+        let fixedTargetsMap = new Map();
+        const vendorCodesArray = vendedorCodes
+            ? vendedorCodes.split(',').map(v => v.replace(/[^a-zA-Z0-9]/g, '').trim()).filter(Boolean)
+            : [];
+        const shouldLoadFixedTargets = vendorCodesArray.length === 1;
 
         if (retrievedCodes.length > 0) {
-            const objConfQuery = `
-                SELECT CODIGOCLIENTE, TARGET_PERCENTAGE 
-                FROM JAVIER.OBJ_CONFIG 
-                WHERE CODIGOCLIENTE IN (${retrievedCodes}, '*') 
-                   OR CODIGOCLIENTE = '*'
-             `;
-
-            try {
-                const confRows = await query(objConfQuery);
-                confRows.forEach(r => {
-                    const code = r.CODIGOCLIENTE?.trim();
-                    const pct = parseFloat(r.TARGET_PERCENTAGE) || 0;
-                    if (code === '*') {
-                        defaultObjectiveData.percentage = pct;
-                    } else {
-                        objectiveConfigMap.set(code, pct);
-                    }
-                });
-            } catch (err) {
-                logger.warn(`Could not load objective config: ${err.message}`);
-            }
-        }
-
-        // NEW: Fetch fixed monthly targets from COMMERCIAL_TARGETS for vendors with fixed amounts
-        // This is for new commercials like #15 who have fixed objectives (e.g., 25,000€/month)
-        let fixedTargetsMap = new Map();
-        const vendorCodesArray = vendedorCodes ? vendedorCodes.split(',').map(v => v.trim()) : [];
-
-        if (vendorCodesArray.length > 0) {
+            // Parallelize 3 independent queries: prevSales + OBJ_CONFIG + COMMERCIAL_TARGETS
             const now = getCurrentDate();
             const currentMonth = now.getMonth() + 1;
             const currentYear = now.getFullYear();
 
-            try {
-                const vendorList = vendorCodesArray.map(v => `'${v}'`).join(',');
-                const fixedRows = await query(`
-                    SELECT CODIGOVENDEDOR, IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION, PORCENTAJE_MEJORA
-                    FROM JAVIER.COMMERCIAL_TARGETS
-                    WHERE CODIGOVENDEDOR IN (${vendorList})
-                      AND ANIO = ${currentYear}
-                      AND (MES = ${currentMonth} OR MES IS NULL)
-                      AND ACTIVO = 1
-                    ORDER BY MES DESC
-                    FETCH FIRST 1 ROWS ONLY
-                `, false);
+            const [prevRows, confRows, fixedRows] = await Promise.all([
+                queryWithParams(`
+                    SELECT 
+                        L.LCCDCL as CODE,
+                        SUM(L.LCIMVT) as PREV_SALES
+                    FROM DSED.LACLAE L
+                    WHERE L.LCAADC = ?
+                      AND L.LCMMDC IN (${monthsArray.map(() => '?').join(',')})
+                      AND ${LACLAE_SALES_FILTER}
+                      AND L.LCCDCL IN (${retrievedCodesParams.map(() => '?').join(',')})
+                    GROUP BY L.LCCDCL
+                `, [prevYear, ...monthsArray, ...retrievedCodesParams]),
+                queryWithParams(`
+                    SELECT CODIGOCLIENTE, TARGET_PERCENTAGE 
+                    FROM JAVIER.OBJ_CONFIG 
+                    WHERE CODIGOCLIENTE IN (${retrievedCodesParams.map(() => '?').join(',')}, '*') 
+                       OR CODIGOCLIENTE = '*'
+                `, [...retrievedCodesParams]).catch(err => { logger.warn(`Could not load objective config: ${err.message}`); return []; }),
+                shouldLoadFixedTargets
+                    ? queryWithParams(`
+                        SELECT CODIGOVENDEDOR, IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION, PORCENTAJE_MEJORA
+                        FROM JAVIER.COMMERCIAL_TARGETS
+                        WHERE CODIGOVENDEDOR IN (${vendorCodesArray.map(() => '?').join(',')})
+                          AND ANIO = ?
+                          AND (MES = ? OR MES IS NULL)
+                          AND ACTIVO = 1
+                        ORDER BY MES DESC
+                        FETCH FIRST 1 ROWS ONLY
+                    `, [...vendorCodesArray, currentYear, currentMonth], false).catch(err => { logger.warn(`Could not load fixed commercial targets: ${err.message}`); return []; })
+                    : Promise.resolve([])
+            ]);
 
-                fixedRows.forEach(r => {
-                    const vendorCode = r.CODIGOVENDEDOR?.trim();
-                    if (vendorCode) {
-                        // Store as vendor-level target (applies to all clients of this vendor)
-                        fixedTargetsMap.set(`VENDOR_${vendorCode}`, {
-                            importe: parseFloat(r.IMPORTE_OBJETIVO) || 0,
-                            baseComision: parseFloat(r.IMPORTE_BASE_COMISION) || 0,
-                            porcentaje: parseFloat(r.PORCENTAJE_MEJORA) || 10
-                        });
-                    }
-                });
+            prevRows.forEach(r => {
+                prevSalesMap.set(r.CODE?.trim() || '', parseFloat(r.PREV_SALES) || 0);
+            });
 
-                if (fixedTargetsMap.size > 0) {
-                    logger.info(`[OBJECTIVES] Loaded ${fixedTargetsMap.size} fixed commercial targets`);
+            confRows.forEach(r => {
+                const code = r.CODIGOCLIENTE?.trim();
+                const pct = parseFloat(r.TARGET_PERCENTAGE) || 0;
+                if (code === '*') {
+                    defaultObjectiveData.percentage = pct;
+                } else {
+                    objectiveConfigMap.set(code, pct);
                 }
-            } catch (err) {
-                logger.warn(`Could not load fixed commercial targets: ${err.message}`);
+            });
+
+            fixedRows.forEach(r => {
+                const vendorCode = r.CODIGOVENDEDOR?.trim();
+                if (vendorCode) {
+                    fixedTargetsMap.set(`VENDOR_${vendorCode}`, {
+                        importe: parseFloat(r.IMPORTE_OBJETIVO) || 0,
+                        baseComision: parseFloat(r.IMPORTE_BASE_COMISION) || 0,
+                        porcentaje: parseFloat(r.PORCENTAJE_MEJORA) || 10
+                    });
+                }
+            });
+
+            if (fixedTargetsMap.size > 0) {
+                logger.info(`[OBJECTIVES] Loaded ${fixedTargetsMap.size} fixed commercial targets`);
             }
         }
 
@@ -1959,7 +2358,7 @@ router.get('/by-client', async (req, res) => {
 
     } catch (error) {
         logger.error(`Objectives by-client error: ${error.message}`);
-        res.status(500).json({ error: 'Error obteniendo objetivos por cliente', details: error.message });
+        handleRouteError(error, res, 'Error obteniendo objetivos por cliente', 500);
     }
 });
 

@@ -51,6 +51,20 @@ class ODBCPool {
   }
 
   /**
+   * Ensure a connection uses CCSID 1208 (UTF-8).
+   * Mirrors the JS pool ensureUtf8() from config/db.js.
+   */
+  private async ensureUtf8(connection: PoolConnection): Promise<void> {
+    try {
+      await connection.query("CALL QSYS.QCMDEXC('CHGJOB CCSID(1208)', 0000000018.00000)");
+      logger.debug('[DB-TS] Connection CCSID set to 1208 (UTF-8)');
+    } catch {
+      // Non-fatal: CCSID=1208 in connection string may already handle it
+      logger.debug('[DB-TS] CHGJOB CCSID(1208) skipped (may already be set)');
+    }
+  }
+
+  /**
    * Adquiere una conexión del pool
    */
   async acquire(): Promise<PoolConnection> {
@@ -60,7 +74,9 @@ class ODBCPool {
 
     try {
       const connection = await this.pool.connect();
-      return connection as unknown as PoolConnection;
+      const conn = connection as unknown as PoolConnection;
+      await this.ensureUtf8(conn);
+      return conn;
     } catch (error) {
       logger.error('Error adquiriendo conexión ODBC:', error);
       throw error;

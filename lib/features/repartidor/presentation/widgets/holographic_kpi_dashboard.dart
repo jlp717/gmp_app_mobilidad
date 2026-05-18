@@ -1,6 +1,8 @@
-import 'package:flutter/material.dart';
 import 'dart:math' as math;
-import '../../../../core/theme/app_theme.dart';
+
+import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// Holographic KPI Dashboard with futuristic design
 /// Features:
@@ -9,6 +11,14 @@ import '../../../../core/theme/app_theme.dart';
 /// - Gamification badges and streaks
 /// - AI suggestion banner (optional)
 class HolographicKpiDashboard extends StatefulWidget {
+  
+
+
+  const HolographicKpiDashboard({
+    required this.totalEntregas, required this.entregasCompletadas, required this.montoACobrar, required this.montoOpcional, required this.totalMonto, super.key,
+    this.montoCobrado = 0,
+    this.isLoading = false,
+  });
   final int totalEntregas;
   final int entregasCompletadas;
   final double montoACobrar;
@@ -16,19 +26,6 @@ class HolographicKpiDashboard extends StatefulWidget {
   final double totalMonto;
   final double montoCobrado;
   final bool isLoading;
-  
-
-
-  const HolographicKpiDashboard({
-    super.key,
-    required this.totalEntregas,
-    required this.entregasCompletadas,
-    required this.montoACobrar,
-    required this.montoOpcional,
-    required this.totalMonto,
-    this.montoCobrado = 0,
-    this.isLoading = false,
-  });
 
   @override
   State<HolographicKpiDashboard> createState() => _HolographicKpiDashboardState();
@@ -65,7 +62,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
       vsync: this,
     )..repeat(reverse: true);
     
-    _pulseAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+    _pulseAnimation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
     
@@ -105,13 +102,12 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
           end: Alignment.bottomRight,
           colors: [
             AppTheme.darkSurface,
-            AppTheme.darkCard.withOpacity(0.8),
+            AppTheme.darkCard.withValues(alpha: 0.8),
           ],
         ),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: AppTheme.neonBlue.withOpacity(0.2),
-          width: 1,
+          color: AppTheme.neonBlue.withValues(alpha: 0.2),
         ),
       ),
       child: widget.isLoading ? _buildLoadingState() : _buildContent(),
@@ -131,6 +127,19 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
   }
 
   Widget _buildContent() {
+    final isSmall = MediaQuery.of(context).size.width < 380 || Responsive.isSmall(context); // Extra small phone check
+    
+    if (isSmall) {
+      return Column(
+        children: [
+          _buildDeliveryProgress(isSmall: true),
+          const SizedBox(height: 8),
+          const Divider(color: Colors.white10),
+          _buildMoneyMetrics(isSmall: true),
+        ],
+      );
+    }
+
     return Row(
       children: [
         // Circular progress for deliveries
@@ -152,10 +161,12 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
     );
   }
 
-  Widget _buildDeliveryProgress() {
+  Widget _buildDeliveryProgress({bool isSmall = false}) {
     final progress = widget.totalEntregas > 0
         ? widget.entregasCompletadas / widget.totalEntregas
         : 0.0;
+    
+    final size = isSmall ? 50.0 : 70.0;
 
     return AnimatedBuilder(
       animation: Listenable.merge([_scannerAnimation, _progressController]),
@@ -164,37 +175,40 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
           mainAxisSize: MainAxisSize.min,
           children: [
             SizedBox(
-              width: 70,
-              height: 70,
+              width: size,
+              height: size,
               child: Stack(
                 alignment: Alignment.center,
                 children: [
                   // Background ring
                   CustomPaint(
-                    size: const Size(70, 70),
+                    size: Size(size, size),
                     painter: _HoloRingPainter(
                       progress: progress * _progressController.value,
                       scannerAngle: _scannerAnimation.value,
                       backgroundColor: AppTheme.borderColor,
                       progressColor: AppTheme.neonBlue,
                       glowColor: AppTheme.neonCyan,
+                      strokeWidth: isSmall ? 4.0 : 6.0,
                     ),
                   ),
                   // Center content
                   Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.local_shipping_outlined,
                         color: AppTheme.neonBlue,
-                        size: 14,
+                        size: isSmall ? 10 : 14,
                       ),
-                      Text(
-                        '${widget.entregasCompletadas}/${widget.totalEntregas}',
-                        style: const TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 10,
+                      FittedBox(
+                        child: Text(
+                          '${widget.entregasCompletadas}/${widget.totalEntregas}',
+                          style: TextStyle(
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.bold,
+                            fontSize: isSmall ? 8 : 10,
+                          ),
                         ),
                       ),
                     ],
@@ -211,17 +225,17 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
                   'ENTREGAS',
                   style: TextStyle(
                     color: AppTheme.textSecondary,
-                    fontSize: 9,
+                    fontSize: isSmall ? 8 : 9,
                     fontWeight: FontWeight.bold,
                     letterSpacing: 1,
                   ),
                 ),
                  Text(
                    '${(progress * 100).toInt()}%',
-                   style: const TextStyle(
+                   style: TextStyle(
                      color: AppTheme.neonBlue,
                      fontWeight: FontWeight.bold,
-                     fontSize: 18,
+                     fontSize: isSmall ? 14 : 18,
                    ),
                  ),
               ],
@@ -232,7 +246,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
     );
   }
 
-  Widget _buildMoneyMetrics() {
+  Widget _buildMoneyMetrics({bool isSmall = false}) {
     return Row(
       children: [
         Expanded(
@@ -241,6 +255,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
             amount: widget.totalMonto,
             icon: Icons.functions,
             color: AppTheme.textPrimary,
+            isSmall: isSmall || Responsive.isSmall(context),
           ),
         ),
         Expanded(
@@ -250,6 +265,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
             icon: Icons.payment_outlined,
             color: AppTheme.obligatorio,
             isUrgent: widget.montoACobrar > 0,
+            isSmall: isSmall || Responsive.isSmall(context),
           ),
         ),
         Expanded(
@@ -258,6 +274,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
             amount: widget.montoOpcional,
             icon: Icons.attach_money_outlined,
             color: AppTheme.opcional,
+            isSmall: isSmall || Responsive.isSmall(context),
           ),
         ),
       ],
@@ -270,6 +287,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
     required IconData icon,
     required Color color,
     bool isUrgent = false,
+    bool isSmall = false,
   }) {
     return AnimatedBuilder(
       animation: _pulseAnimation,
@@ -277,46 +295,50 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
         final glowOpacity = isUrgent ? 0.1 + _pulseAnimation.value * 0.15 : 0.0;
         
         return Container(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          padding: EdgeInsets.symmetric(vertical: isSmall ? 4 : 8, horizontal: 2),
           decoration: isUrgent
               ? BoxDecoration(
-                  color: color.withOpacity(glowOpacity),
+                  color: color.withValues(alpha: glowOpacity),
                   borderRadius: BorderRadius.circular(12),
-                  border: isUrgent ? Border.all(color: color.withOpacity(0.3)) : null,
+                  border: isUrgent ? Border.all(color: color.withValues(alpha: 0.3)) : null,
                 )
               : null,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: EdgeInsets.all(isSmall ? 4 : 8),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
+                  color: color.withValues(alpha: 0.15),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, color: color, size: 18),
+                child: Icon(icon, color: color, size: isSmall ? 12 : 18),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 4),
               AnimatedBuilder(
                 animation: _progressController,
                 builder: (context, child) {
                   final displayAmount = amount * _progressController.value;
-                  return Text(
-                    '${displayAmount.toStringAsFixed(0)}€',
-                    style: TextStyle(
-                      color: color,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                  return FittedBox(
+                    child: Text(
+                      '${displayAmount.toStringAsFixed(0)}€',
+                      style: TextStyle(
+                        color: color,
+                        fontWeight: FontWeight.bold,
+                        fontSize: isSmall ? 11 : 14,
+                      ),
                     ),
                   );
                 },
               ),
-              Text(
-                label,
-                style: TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontSize: 9,
-                  fontWeight: FontWeight.w500,
+              FittedBox(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: isSmall ? 7 : 9,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
             ],
@@ -336,10 +358,10 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: color.withOpacity(0.3),
+          color: color.withValues(alpha: 0.3),
         ),
       ),
       child: Row(
@@ -364,13 +386,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
 
 }
 
-/// Custom painter for holographic ring progress
 class _HoloRingPainter extends CustomPainter {
-  final double progress;
-  final double scannerAngle;
-  final Color backgroundColor;
-  final Color progressColor;
-  final Color glowColor;
 
   _HoloRingPainter({
     required this.progress,
@@ -378,13 +394,19 @@ class _HoloRingPainter extends CustomPainter {
     required this.backgroundColor,
     required this.progressColor,
     required this.glowColor,
+    this.strokeWidth = 6.0,
   });
+  final double progress;
+  final double scannerAngle;
+  final Color backgroundColor;
+  final Color progressColor;
+  final Color glowColor;
+  final double strokeWidth;
 
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 6;
-    const strokeWidth = 6.0;
+    final radius = size.width / 2 - strokeWidth;
 
     // Background ring
     final bgPaint = Paint()
@@ -422,7 +444,7 @@ class _HoloRingPainter extends CustomPainter {
         endAngle: scannerAngle + 0.3,
         colors: [
           Colors.transparent,
-          glowColor.withOpacity(0.6),
+          glowColor.withValues(alpha: 0.6),
           Colors.transparent,
         ],
         stops: const [0.0, 0.5, 1.0],
@@ -435,7 +457,7 @@ class _HoloRingPainter extends CustomPainter {
     
     // Outer glow
     final glowPaint = Paint()
-      ..color = progressColor.withOpacity(0.2)
+      ..color = progressColor.withValues(alpha: 0.2)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 4);

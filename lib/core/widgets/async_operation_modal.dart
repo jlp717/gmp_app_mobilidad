@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 /// ⏳ ASYNC OPERATION MODAL
@@ -26,15 +27,6 @@ import '../theme/app_theme.dart';
 enum _ModalState { loading, success, error }
 
 class AsyncOperationModalController {
-  final BuildContext _context;
-  final _stateNotifier = ValueNotifier<_ModalState>(_ModalState.loading);
-  final _textNotifier = ValueNotifier<String>('');
-  final _errorTextNotifier = ValueNotifier<String>('');
-  final _showCancelNotifier = ValueNotifier<bool>(false);
-  VoidCallback? _onRetry;
-  bool _closed = false;
-  Timer? _timeoutTimer;
-  Timer? _cancelButtonTimer;
 
   AsyncOperationModalController(this._context, String initialText, {
     Duration timeout = const Duration(seconds: 45),
@@ -56,6 +48,15 @@ class AsyncOperationModalController {
       }
     });
   }
+  final BuildContext _context;
+  final _stateNotifier = ValueNotifier<_ModalState>(_ModalState.loading);
+  final _textNotifier = ValueNotifier<String>('');
+  final _errorTextNotifier = ValueNotifier<String>('');
+  final _showCancelNotifier = ValueNotifier<bool>(false);
+  VoidCallback? _onRetry;
+  bool _closed = false;
+  Timer? _timeoutTimer;
+  Timer? _cancelButtonTimer;
 
   /// Transition to success state → auto-closes after 1.5s
   void success([String? text]) {
@@ -64,7 +65,7 @@ class AsyncOperationModalController {
     _cancelButtonTimer?.cancel();
     _textNotifier.value = text ?? '¡Completado!';
     _stateNotifier.value = _ModalState.success;
-    Future.delayed(const Duration(milliseconds: 1500), () => close());
+    Future.delayed(const Duration(milliseconds: 1500), close);
   }
 
   /// Transition to error state with retry option
@@ -104,9 +105,9 @@ class AsyncOperationModalController {
 }
 
 class AsyncOperationModal extends StatelessWidget {
-  final AsyncOperationModalController controller;
 
-  const AsyncOperationModal({super.key, required this.controller});
+  const AsyncOperationModal({required this.controller, super.key});
+  final AsyncOperationModalController controller;
 
   /// Show the modal and return a controller
   static AsyncOperationModalController show(
@@ -118,7 +119,7 @@ class AsyncOperationModal extends StatelessWidget {
     showDialog(
       context: context,
       barrierDismissible: false,
-      barrierColor: Colors.black.withOpacity(0.7),
+      barrierColor: Colors.black.withValues(alpha: 0.7),
       builder: (_) => AsyncOperationModal(controller: controller),
     );
 
@@ -149,8 +150,9 @@ class AsyncOperationModal extends StatelessWidget {
   Widget _buildContent(BuildContext context, _ModalState state) {
     return Container(
       key: ValueKey(state),
-      width: 320,
-      padding: const EdgeInsets.all(28),
+      width: Responsive.clampWidth(context, 320),
+      // Responsive padding
+      padding: EdgeInsets.all(Responsive.padding(context, small: 20, large: 28)),
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
         borderRadius: BorderRadius.circular(20),
@@ -160,7 +162,7 @@ class AsyncOperationModal extends StatelessWidget {
         ),
         boxShadow: [
           BoxShadow(
-            color: _borderColor(state).withOpacity(0.3),
+            color: _borderColor(state).withValues(alpha: 0.3),
             blurRadius: 30,
             spreadRadius: 2,
           ),
@@ -181,7 +183,7 @@ class AsyncOperationModal extends StatelessWidget {
                 return Padding(
                   padding: const EdgeInsets.only(top: 16),
                   child: TextButton(
-                    onPressed: () => controller.close(),
+                    onPressed: controller.close,
                     style: TextButton.styleFrom(
                       foregroundColor: AppTheme.textSecondary,
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -221,7 +223,7 @@ class AsyncOperationModal extends StatelessWidget {
           child: CircularProgressIndicator(
             color: AppTheme.neonBlue,
             strokeWidth: 3,
-            backgroundColor: AppTheme.neonBlue.withOpacity(0.15),
+            backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.15),
           ),
         );
       case _ModalState.success:
@@ -230,7 +232,7 @@ class AsyncOperationModal extends StatelessWidget {
           height: 56,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: AppTheme.success.withOpacity(0.15),
+            color: AppTheme.success.withValues(alpha: 0.15),
             border: Border.all(color: AppTheme.success, width: 2),
           ),
           child: const Icon(Icons.check_rounded, color: AppTheme.success, size: 32),
@@ -241,7 +243,7 @@ class AsyncOperationModal extends StatelessWidget {
           height: 56,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: AppTheme.error.withOpacity(0.15),
+            color: AppTheme.error.withValues(alpha: 0.15),
             border: Border.all(color: AppTheme.error, width: 2),
           ),
           child: const Icon(Icons.error_outline_rounded, color: AppTheme.error, size: 32),
@@ -312,7 +314,7 @@ class AsyncOperationModal extends StatelessWidget {
           const SizedBox(width: 12),
         ],
         TextButton(
-          onPressed: () => controller.close(),
+          onPressed: controller.close,
           style: TextButton.styleFrom(
             foregroundColor: AppTheme.textSecondary,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),

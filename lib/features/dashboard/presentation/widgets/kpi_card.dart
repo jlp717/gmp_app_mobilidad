@@ -1,24 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 
 class KPICard extends StatelessWidget {
+
+  const KPICard({
+    required this.title, required this.value, required this.icon, super.key,
+    this.color,
+    this.isPositive = true,
+    this.subtitle,
+  });
   final String title;
   final String value;
   final IconData icon;
   final Color? color;
   final bool isPositive;
   final String? subtitle;
-
-  const KPICard({
-    super.key,
-    required this.title,
-    required this.value,
-    required this.icon,
-    this.color,
-    this.isPositive = true,
-    this.subtitle,
-  });
 
   @override
   Widget build(BuildContext context) {
@@ -30,10 +26,10 @@ class KPICard extends StatelessWidget {
       color: AppColors.surfaceColor,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: AppColors.cardColor.withOpacity(0.5)),
+        side: BorderSide(color: AppColors.cardColor.withValues(alpha: 0.5)),
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -43,7 +39,7 @@ class KPICard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: cardColor.withOpacity(0.1),
+                    color: cardColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(icon, color: cardColor, size: 20),
@@ -52,7 +48,7 @@ class KPICard extends StatelessWidget {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: isPositive ? AppColors.success.withOpacity(0.1) : AppColors.error.withOpacity(0.1),
+                      color: isPositive ? AppColors.success.withValues(alpha: 0.1) : AppColors.error.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(

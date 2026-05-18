@@ -1,12 +1,11 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 
 class RevenueChart extends StatelessWidget {
-  final List<double> data;
   
-  const RevenueChart({super.key, required this.data});
+  const RevenueChart({required this.data, super.key});
+  final List<double> data;
 
   @override
   Widget build(BuildContext context) {
@@ -31,8 +30,8 @@ class RevenueChart extends StatelessWidget {
               show: true,
               gradient: LinearGradient(
                 colors: [
-                  AppColors.primary.withOpacity(0.3),
-                  AppColors.primary.withOpacity(0.0),
+                  AppColors.primary.withValues(alpha: 0.3),
+                  AppColors.primary.withValues(alpha: 0),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,

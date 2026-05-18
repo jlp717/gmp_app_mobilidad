@@ -205,6 +205,13 @@ async function generateInvoicePDF(facturaData) {
         const lines = facturaData.lines || [];
         const ivaBreakdown = header.IVA_BREAKDOWN || null;
 
+        // AUDIT FIX: Guard against corrupted/sentinel data reaching PDF
+        const checkTotal = parseFloat(header.TOTALFACTURA || header.IMPORTETOTAL || 0);
+        if (Math.abs(checkTotal) >= 900000) {
+            logger.warn(`⚠️ PDF blocked: sentinel total ${checkTotal}`);
+            throw new Error('Documento con datos anómalos — importe no válido');
+        }
+
         // Detect document type: albaran vs factura
         const isAlbaran = facturaData.documentType === 'albaran' || 
             (!facturaData.documentType && (!header.NUMEROFACTURA || parseInt(header.NUMEROFACTURA) === 0));
@@ -381,21 +388,29 @@ async function generateInvoicePDF(facturaData) {
                 .font('Helvetica-Bold')
                 .fillColor(COLORS.white);
 
-            // Columnas de la tabla - INCLUYE LOTE y CAJAS
-            doc.text('CÓDIGO', 42, y + 5, { width: 50 });
-            doc.text('DESCRIPCIÓN', 95, y + 5, { width: 170 });
-            doc.text('LOTE', 270, y + 5, { width: 45 });
-            doc.text('CAJAS', 320, y + 5, { width: 35, align: 'right' });
-            doc.text('CANT.', 360, y + 5, { width: 38, align: 'right' });
-            doc.text('PRECIO', 403, y + 5, { width: 42, align: 'right' });
-            doc.text('% DTO', 450, y + 5, { width: 30, align: 'center' });
-            doc.text('% IVA', 485, y + 5, { width: 25, align: 'center' });
-            doc.text('IMPORTE', 515, y + 5, { width: 40, align: 'right' });
+            // Columnas de la tabla - layout depends on document type
+            if (isAlbaran) {
+                // Simpler layout for delivery notes: wide description
+                doc.text('Ptda', 42, y + 5, { width: 28 });
+                doc.text('Artículo / Descripción', 72, y + 5, { width: 275 });
+                doc.text('Bultos', 350, y + 5, { width: 55, align: 'right' });
+                doc.text('Imp.Neto', 500, y + 5, { width: 55, align: 'right' });
+            } else {
+                doc.text('CÓDIGO', 42, y + 5, { width: 50 });
+                doc.text('DESCRIPCIÓN', 95, y + 5, { width: 170 });
+                doc.text('LOTE', 270, y + 5, { width: 45 });
+                doc.text('CAJAS', 320, y + 5, { width: 35, align: 'right' });
+                doc.text('CANT.', 360, y + 5, { width: 38, align: 'right' });
+                doc.text('PRECIO', 403, y + 5, { width: 42, align: 'right' });
+                doc.text('% DTO', 450, y + 5, { width: 30, align: 'center' });
+                doc.text('% IVA', 485, y + 5, { width: 25, align: 'center' });
+                doc.text('IMPORTE', 515, y + 5, { width: 40, align: 'right' });
+            }
 
             y += 18;
 
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-            // LÍNEAS DE PRODUCTOS
+            // LÍNEAS DE PRODUCTOS - Agrupar por albarán si es factura
             // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
             doc.fontSize(7)
                 .font('Helvetica')
@@ -403,10 +418,41 @@ async function generateInvoicePDF(facturaData) {
 
             let alternateRow = true;
 
-            lines.forEach((line, index) => {
-                const descripcion = (line.DESCRIPCIONARTICULO || '').substring(0, 50);
-                const descHeight = doc.heightOfString(descripcion, { width: 170 });
-                const rowHeight = Math.max(20, descHeight + 12);
+            // Group lines by albaran if this is a factura with albaran data
+            let linesToRender = lines;
+            let albaranGroups = null;
+
+            if (!isAlbaran && lines.length > 0 && lines[0].albaranNum) {
+                const groups = {};
+                lines.forEach(line => {
+                    const key = `${line.albaranSerie || ''}-${line.albaranTerminal || ''}-${line.albaranNum}-${line.albaranEjercicio || ''}`;
+                    if (!groups[key]) {
+                        groups[key] = {
+                            albaranNum: line.albaranNum,
+                            albaranSerie: line.albaranSerie,
+                            albaranTerminal: line.albaranTerminal,
+                            albaranEjercicio: line.albaranEjercicio,
+                            albaranFecha: line.albaranFecha || '',
+                            lines: [],
+                            subtotal: 0
+                        };
+                    }
+                    groups[key].lines.push(line);
+                    groups[key].subtotal += parseFloat(line.importeNeto || line.importe || 0);
+                });
+                albaranGroups = Object.values(groups);
+                logger.info(`[PDF] Factura grouped into ${albaranGroups.length} albaranes`);
+            }
+
+            const renderLine = (line, index, isGroupHeader = false, groupSubtotal = null) => {
+                const descripcion = isAlbaran
+                    ? (line.DESCRIPCIONARTICULO || '').trim()
+                    : (line.DESCRIPCIONARTICULO || '').substring(0, 50);
+                const descWidth = isAlbaran ? 275 : 170;
+                const descHeight = doc.heightOfString(descripcion, { width: descWidth });
+                const rowHeight = isAlbaran
+                    ? Math.max(28, descHeight + 18)
+                    : Math.max(20, descHeight + 12);
 
                 // Comprobar si necesitamos una nueva página con la nueva altura
                 if (y + rowHeight > 700) {
@@ -421,15 +467,22 @@ async function generateInvoicePDF(facturaData) {
                         .font('Helvetica-Bold')
                         .fillColor(COLORS.white);
 
-                    doc.text('CÓDIGO', 42, y + 5, { width: 50 });
-                    doc.text('DESCRIPCIÓN', 95, y + 5, { width: 170 });
-                    doc.text('LOTE', 270, y + 5, { width: 45 });
-                    doc.text('CAJAS', 320, y + 5, { width: 35, align: 'right' });
-                    doc.text('CANT.', 360, y + 5, { width: 38, align: 'right' });
-                    doc.text('PRECIO', 403, y + 5, { width: 42, align: 'right' });
-                    doc.text('% DTO', 450, y + 5, { width: 30, align: 'center' });
-                    doc.text('% IVA', 485, y + 5, { width: 25, align: 'center' });
-                    doc.text('IMPORTE', 515, y + 5, { width: 40, align: 'right' });
+                    if (isAlbaran) {
+                        doc.text('Ptda', 42, y + 5, { width: 28 });
+                        doc.text('Artículo / Descripción', 72, y + 5, { width: 275 });
+                        doc.text('Bultos', 350, y + 5, { width: 55, align: 'right' });
+                        doc.text('Imp.Neto', 500, y + 5, { width: 55, align: 'right' });
+                    } else {
+                        doc.text('CÓDIGO', 42, y + 5, { width: 50 });
+                        doc.text('DESCRIPCIÓN', 95, y + 5, { width: 170 });
+                        doc.text('LOTE', 270, y + 5, { width: 45 });
+                        doc.text('CAJAS', 320, y + 5, { width: 35, align: 'right' });
+                        doc.text('CANT.', 360, y + 5, { width: 38, align: 'right' });
+                        doc.text('PRECIO', 403, y + 5, { width: 42, align: 'right' });
+                        doc.text('% DTO', 450, y + 5, { width: 30, align: 'center' });
+                        doc.text('% IVA', 485, y + 5, { width: 25, align: 'center' });
+                        doc.text('IMPORTE', 515, y + 5, { width: 40, align: 'right' });
+                    }
 
                     y += 18;
                     alternateRow = true;
@@ -440,41 +493,105 @@ async function generateInvoicePDF(facturaData) {
                     .font('Helvetica')
                     .fillColor(COLORS.darkGray);
 
-                const codigo = (line.CODIGOARTICULO || '').substring(0, 12);
-                doc.text(codigo, 42, y + 3, { width: 50 });
+                if (isAlbaran) {
+                    // Albaran layout: Ptda | Code+Desc | Bultos | Imp.Neto
+                    doc.font('Helvetica-Bold');
+                    doc.text(String(index + 1), 44, y + 8, { width: 25 });
 
-                doc.text(descripcion, 95, y + 3, { width: 170 });
+                    const codigo = (line.CODIGOARTICULO || '').trim();
+                    doc.fontSize(7).font('Helvetica-Bold');
+                    doc.text(codigo, 72, y + 3, { width: 275 });
+                    doc.fontSize(7).font('Helvetica');
+                    doc.text(descripcion, 72, y + 13, { width: 275 });
 
-                // COLUMNA LOTE
-                const lote = (line.LOTEARTICULO || line.LOTE || '').substring(0, 10);
-                doc.text(lote || '-', 270, y + 3, { width: 45 });
+                    const bultos = parseFloat(line.CAJASARTICULO || line.CANTIDADARTICULO || 0);
+                    doc.text(bultos > 0 ? formatNumber(bultos, 2) : '-', 350, y + 8, { width: 55, align: 'right' });
 
-                // COLUMNA CAJAS
-                const cajas = line.CAJASARTICULO ?? line.NUMEROCAJAS ?? 0;
-                const cajasDisplay = Number(cajas) === 0 ? '-' : formatNumber(cajas, 0);
-                doc.text(cajasDisplay, 320, y + 3, { width: 35, align: 'right' });
+                    const importe = parseFloat(line.IMPORTENETOARTICULO || 0);
+                    doc.font('Helvetica-Bold');
+                    doc.text(formatNumber(importe, 2) + ' €', 500, y + 8, { width: 55, align: 'right' });
+                    doc.font('Helvetica');
+                } else {
+                    const codigo = (line.codigo || line.CODIGOARTICULO || '').substring(0, 12);
+                    doc.text(codigo, 42, y + 3, { width: 50 });
 
-                const cantidad = line.CANTIDADARTICULO || 0;
-                doc.text(formatNumber(cantidad, 3), 360, y + 3, { width: 38, align: 'right' });
+                    doc.text(descripcion, 95, y + 3, { width: 170 });
 
-                const precio = line.PRECIOARTICULO || 0;
-                doc.text(formatNumber(precio, 3) + ' €', 403, y + 3, { width: 42, align: 'right' });
+                    // COLUMNA LOTE
+                    const lote = (line.lote || line.LOTEARTICULO || line.LOTE || '').substring(0, 10);
+                    doc.text(lote || '-', 270, y + 3, { width: 45 });
 
-                const dto = line.PORCENTAJEDESCUENTOARTICULO || 0;
-                doc.text(dto > 0 ? formatNumber(dto, 2) : '-', 450, y + 3, { width: 30, align: 'center' });
+                    // COLUMNA CAJAS
+                    const cajas = line.cajas ?? line.CAJASARTICULO ?? line.NUMEROCAJAS ?? 0;
+                    const cajasDisplay = Number(cajas) === 0 ? '-' : formatNumber(cajas, 0);
+                    doc.text(cajasDisplay, 320, y + 3, { width: 35, align: 'right' });
 
-                const iva = line.CODIGOIVA ? (IVA_MAP[line.CODIGOIVA.trim()] || 0) : (parseFloat(line.PORCENTAJEIVAARTICULO) || 0);
-                doc.text(formatNumber(iva, 2), 485, y + 3, { width: 25, align: 'center' });
+                    const cantidad = (line.cantidad ?? line.CANTIDADARTICULO) || 0;
+                    doc.text(formatNumber(cantidad, 3), 360, y + 3, { width: 38, align: 'right' });
 
-                const importe = line.IMPORTENETOARTICULO || 0;
-                doc.font('Helvetica-Bold');
-                doc.text(formatNumber(importe, 2) + ' €', 515, y + 3, { width: 40, align: 'right' });
-                doc.font('Helvetica');
+                    const precio = (line.precio ?? line.PRECIOARTICULO) || 0;
+                    doc.text(formatNumber(precio, 3) + ' €', 403, y + 3, { width: 42, align: 'right' });
+
+                    const dto = (line.descuento ?? line.PORCENTAJEDESCUENTOARTICULO) || 0;
+                    doc.text(dto > 0 ? formatNumber(dto, 2) : '-', 450, y + 3, { width: 30, align: 'center' });
+
+                    const iva = (line.codigoIva || line.CODIGOIVA) ? (IVA_MAP[(line.codigoIva || line.CODIGOIVA || '').trim()] || 0) : (parseFloat(line.PORCENTAJEIVAARTICULO) || 0);
+                    doc.text(formatNumber(iva, 2), 485, y + 3, { width: 25, align: 'center' });
+
+                    const importe = line.importeNeto || line.IMPORTENETOARTICULO || 0;
+                    doc.font('Helvetica-Bold');
+                    doc.text(formatNumber(parseFloat(importe), 2) + ' €', 515, y + 3, { width: 40, align: 'right' });
+                    doc.font('Helvetica');
+                }
 
                 // Incrementar Y dinámicamente
                 y += rowHeight;
                 alternateRow = !alternateRow;
-            });
+            };
+
+            // Render lines - either grouped by albaran or flat
+            if (albaranGroups && albaranGroups.length > 0) {
+                // Render each albaran group with header
+                albaranGroups.forEach((group, groupIdx) => {
+                    // Draw albaran header with subtotal
+                    if (y + 25 > 700) {
+                        doc.addPage();
+                        y = drawHeader(doc, 10) + 10;
+                    }
+
+                    // Albaran header box
+                    doc.rect(40, y, 515, 20)
+                        .fillAndStroke('#E3F2FD', '#1a5490');
+
+                    doc.fontSize(8)
+                        .font('Helvetica-Bold')
+                        .fillColor('#003d7a');
+
+                    const albaranLabel = `Albarán: ${group.albaranSerie || ''}-${group.albaranTerminal || ''}-${group.albaranNum}`;
+                    const fechaLabel = group.albaranFecha ? `Fecha: ${group.albaranFecha}` : '';
+                    doc.text(albaranLabel, 45, y + 5, { width: 250 });
+
+                    if (fechaLabel) {
+                        doc.text(fechaLabel, 250, y + 5, { width: 150 });
+                    }
+
+                    const subtotalLabel = `SUBTOTAL ALBARÁN ${formatNumber(group.subtotal, 2)} €`;
+                    doc.text(subtotalLabel, 400, y + 5, { width: 150, align: 'right' });
+
+                    y += 24;
+                    alternateRow = true;
+
+                    // Render lines for this albaran
+                    group.lines.forEach((line, idx) => {
+                        renderLine(line, idx);
+                    });
+                });
+            } else {
+                // Regular flat rendering for albaran or invoices without albaran grouping
+                lines.forEach((line, index) => {
+                    renderLine(line, index);
+                });
+            }
 
             // Línea final de productos
             doc.moveTo(40, y)

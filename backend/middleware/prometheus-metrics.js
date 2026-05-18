@@ -6,13 +6,48 @@
 
 const logger = require('./logger');
 
+class CircularBuffer {
+    constructor(size) {
+        this.size = size;
+        this.buffer = new Array(size);
+        this.head = 0;
+        this.count = 0;
+    }
+
+    push(item) {
+        this.buffer[this.head] = item;
+        this.head = (this.head + 1) % this.size;
+        if (this.count < this.size) {
+            this.count++;
+        }
+    }
+
+    toArray() {
+        if (this.count === 0) return [];
+        if (this.count < this.size) {
+            return this.buffer.slice(0, this.count);
+        }
+        return [...this.buffer.slice(this.head), ...this.buffer.slice(0, this.head)];
+    }
+
+    get length() {
+        return this.count;
+    }
+
+    clear() {
+        this.buffer = new Array(this.size);
+        this.head = 0;
+        this.count = 0;
+    }
+}
+
 // Metrics storage
 const metrics = {
     // HTTP request metrics
     httpRequestsTotal: new Map(),
-    httpRequestDuration: [],
-    httpRequestSize: [],
-    httpResponseSize: [],
+    httpRequestDuration: new CircularBuffer(1000),
+    httpRequestSize: new CircularBuffer(1000),
+    httpResponseSize: new CircularBuffer(1000),
 
     // Cache metrics
     cacheHits: 0,
@@ -21,12 +56,12 @@ const metrics = {
 
     // Database metrics
     dbQueriesTotal: 0,
-    dbQueryDuration: [],
+    dbQueryDuration: new CircularBuffer(1000),
     dbErrorsTotal: 0,
 
     // Custom metrics
     activeConnections: 0,
-    memoryUsage: [],
+    memoryUsage: new CircularBuffer(1000),
 
     // Timestamps
     startTime: Date.now(),
@@ -36,8 +71,42 @@ const metrics = {
 const CONFIG = {
     durationBuckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10],
     sizeBuckets: [100, 500, 1000, 5000, 10000, 50000, 100000],
-    historyLimit: 10000,
 };
+
+// Periodic cleanup - remove entries older than 1 hour
+const CLEANUP_INTERVAL_MS = 60000;
+const MAX_METRIC_AGE_MS = 3600000;
+let cleanupTimer = null;
+
+function startPeriodicCleanup() {
+    if (cleanupTimer) return;
+    cleanupTimer = setInterval(performMetricCleanup, CLEANUP_INTERVAL_MS);
+    cleanupTimer.unref();
+}
+
+function performMetricCleanup() {
+    const now = Date.now();
+    const cutoff = now - MAX_METRIC_AGE_MS;
+
+    for (const metricName of ['httpRequestDuration', 'httpRequestSize', 'httpResponseSize', 'dbQueryDuration', 'memoryUsage']) {
+        const buffer = metrics[metricName];
+        const arr = buffer.toArray();
+        const filtered = arr.filter(item => item.timestamp > cutoff);
+        if (filtered.length !== arr.length) {
+            buffer.clear();
+            for (const item of filtered) {
+                buffer.push(item);
+            }
+        }
+    }
+}
+
+function stopPeriodicCleanup() {
+    if (cleanupTimer) {
+        clearInterval(cleanupTimer);
+        cleanupTimer = null;
+    }
+}
 
 /**
  * Increment counter metric
@@ -52,12 +121,9 @@ function incrementCounter(name, labels = {}) {
  * Record histogram value
  */
 function recordHistogram(name, value) {
-    const arr = metrics[name];
-    if (arr) {
-        arr.push({ value, timestamp: Date.now() });
-        if (arr.length > CONFIG.historyLimit) {
-            arr.shift();
-        }
+    const buffer = metrics[name];
+    if (buffer && typeof buffer.push === 'function') {
+        buffer.push({ value, timestamp: Date.now() });
     }
 }
 
@@ -94,6 +160,7 @@ function calculatePercentiles(values, percentiles = [50, 90, 95, 99]) {
  * Prometheus metrics middleware
  */
 function prometheusMetrics(req, res, next) {
+    startPeriodicCleanup();
     const startTime = Date.now();
     const startHrTime = process.hrtime();
 
@@ -207,13 +274,14 @@ function getPrometheusMetrics() {
     if (metrics.httpRequestDuration.length > 0) {
         lines.push('# HELP http_request_duration_ms HTTP request duration in ms');
         lines.push('# TYPE http_request_duration_ms histogram');
-        const buckets = calculateBuckets(metrics.httpRequestDuration, CONFIG.durationBuckets.map(b => b * 1000));
+        const durationArr = metrics.httpRequestDuration.toArray();
+        const buckets = calculateBuckets(durationArr, CONFIG.durationBuckets.map(b => b * 1000));
         for (const [bucket, count] of Object.entries(buckets)) {
             lines.push(`http_request_duration_ms_bucket{le="${bucket}"} ${count}`);
         }
-        const sum = metrics.httpRequestDuration.reduce((acc, v) => acc + v.value, 0);
+        const sum = durationArr.reduce((acc, v) => acc + v.value, 0);
         lines.push(`http_request_duration_ms_sum ${sum}`);
-        lines.push(`http_request_duration_ms_count ${metrics.httpRequestDuration.length}`);
+        lines.push(`http_request_duration_ms_count ${durationArr.length}`);
     }
 
     // Cache metrics
@@ -253,7 +321,7 @@ function getPrometheusMetrics() {
  * Get metrics in JSON format (for internal dashboard)
  */
 function getJsonMetrics() {
-    const recentDurations = metrics.httpRequestDuration.slice(-1000);
+    const recentDurations = metrics.httpRequestDuration.toArray();
 
     return {
         uptime: Date.now() - metrics.startTime,
@@ -280,7 +348,7 @@ function getJsonMetrics() {
         database: {
             queries: metrics.dbQueriesTotal,
             errors: metrics.dbErrorsTotal,
-            latency: calculatePercentiles(metrics.dbQueryDuration.slice(-1000)),
+            latency: calculatePercentiles(metrics.dbQueryDuration.toArray()),
         },
         connections: {
             active: metrics.activeConnections,
@@ -307,13 +375,13 @@ function metricsHandler(req, res) {
  */
 function resetMetrics() {
     metrics.httpRequestsTotal.clear();
-    metrics.httpRequestDuration.length = 0;
-    metrics.httpRequestSize.length = 0;
-    metrics.httpResponseSize.length = 0;
+    metrics.httpRequestDuration.clear();
+    metrics.httpRequestSize.clear();
+    metrics.httpResponseSize.clear();
     metrics.cacheHits = 0;
     metrics.cacheMisses = 0;
     metrics.dbQueriesTotal = 0;
-    metrics.dbQueryDuration.length = 0;
+    metrics.dbQueryDuration.clear();
     metrics.dbErrorsTotal = 0;
     metrics.startTime = Date.now();
 }
@@ -326,4 +394,5 @@ module.exports = {
     getJsonMetrics,
     metricsHandler,
     resetMetrics,
+    stopPeriodicCleanup,
 };

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-/// 📱 WHATSAPP FORM MODAL
+/// ðŸ“± WHATSAPP FORM MODAL
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ///
 /// Modal con formulario para compartir por WhatsApp.
@@ -23,22 +24,22 @@ import '../theme/app_theme.dart';
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class WhatsAppFormResult {
-  final String phone;
-  final String message;
 
   const WhatsAppFormResult({
     required this.phone,
     required this.message,
   });
+  final String phone;
+  final String message;
 }
 
 class WhatsAppFormModal extends StatefulWidget {
-  final String defaultMessage;
 
   const WhatsAppFormModal({
     super.key,
     this.defaultMessage = '',
   });
+  final String defaultMessage;
 
   /// Show the modal and return the form result, or null if cancelled
   static Future<WhatsAppFormResult?> show(
@@ -47,7 +48,6 @@ class WhatsAppFormModal extends StatefulWidget {
   }) {
     return showDialog<WhatsAppFormResult>(
       context: context,
-      barrierDismissible: true,
       builder: (ctx) => WhatsAppFormModal(defaultMessage: defaultMessage),
     );
   }
@@ -108,15 +108,15 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
     return Dialog(
       backgroundColor: Colors.transparent,
       child: Container(
-        width: 400,
+        width: Responsive.clampWidth(context, 400),
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: AppTheme.darkSurface,
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: whatsAppGreen.withOpacity(0.3)),
+          border: Border.all(color: whatsAppGreen.withValues(alpha: 0.3)),
           boxShadow: [
             BoxShadow(
-              color: whatsAppGreen.withOpacity(0.15),
+              color: whatsAppGreen.withValues(alpha: 0.15),
               blurRadius: 30,
               spreadRadius: 2,
             ),
@@ -134,7 +134,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: whatsAppGreen.withOpacity(0.15),
+                      color: whatsAppGreen.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: const Icon(Icons.chat, color: whatsAppGreen, size: 22),
@@ -160,7 +160,7 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
               const Padding(
                 padding: EdgeInsets.only(left: 2),
                 child: Text(
-                  'Se abrirá el selector de apps para compartir el PDF con el mensaje.',
+                  'Se compartirá el PDF automáticamente. Seleccione WhatsApp en el menú que aparece.',
                   style: TextStyle(color: AppTheme.textTertiary, fontSize: 12),
                 ),
               ),
@@ -255,18 +255,18 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
   }) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5), fontSize: 13),
+      hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5), fontSize: 13),
       prefixIcon: Icon(icon, color: AppTheme.textSecondary, size: 18),
       filled: true,
       fillColor: AppTheme.darkBase,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppTheme.borderColor.withOpacity(0.5)),
+        borderSide: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.5)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppTheme.borderColor.withOpacity(0.3)),
+        borderSide: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.3)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),

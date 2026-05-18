@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/features/authentication/domain/entities/user.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
+import 'package:gmp_app_mobilidad/features/authentication/domain/entities/user.dart';
 
 /// [DashboardHeader] - Header del dashboard con saludo y último acceso
 ///
@@ -69,13 +69,13 @@ class DashboardHeader extends StatelessWidget {
                       Icon(
                         Icons.access_time,
                         size: 14,
-                        color: theme.colorScheme.onPrimaryContainer.withOpacity(0.7),
+                        color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
                       ),
                       const SizedBox(width: 4),
                       Text(
                         'Último acceso: ${Formatters.dateTimeShort(user?.lastLoginAt ?? now)}',
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onPrimaryContainer.withOpacity(0.7),
+                          color: theme.colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
                         ),
                       ),
                     ],

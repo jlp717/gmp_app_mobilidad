@@ -1,0 +1,635 @@
+# ============================================================================
+# CI Self-Heal — GMP App Movilidad
+# ============================================================================
+# Automatically detects CI failures, classifies them, attempts auto-fix for
+# known patterns, and creates PRs/issues with detailed reports.
+#
+# Trigger: When the main CI/CD Pipeline workflow fails
+#
+# Flow:
+#   1. Triggered by CI workflow_run completion (failure only)
+#   2. Gets failed jobs + logs from the trigger run
+#   3. Classifies the failure (transient vs permanent, category)
+#   4. Attempts auto-fix for known patterns (format, lint, codegen, deps)
+#   5a. Fix succeeds → creates PR with fix + report
+#   5b. Fix fails / not auto-fixable → creates Issue with full analysis
+#
+# Permissions needed:
+#   actions: read     — to list jobs and download logs
+#   contents: write   — to push fix branches
+#   pull-requests: write — to create PRs
+#   issues: write     — to create issues
+# ============================================================================
+
+name: CI Self-Heal
+
+on:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      workflow_run_id:
+        description: 'Workflow run ID to analyze and fix'
+        required: false
+        type: string
+
+# Don't cancel in-progress — concurrent failures are independent
+concurrency:
+  group: ci-self-heal-${{ github.event.workflow_run.id || github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: write
+  pull-requests: write
+  issues: write
+  checks: read
+
+jobs:
+  # ==========================================================================
+  # ANALYZE: Collect failed jobs, download logs, classify
+  # ==========================================================================
+  analyze:
+    name: Analyze Failure
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      classification: ${{ steps.classify.outputs.classification }}
+      has_failure: ${{ steps.check.outputs.has_failure }}
+      run_id: ${{ steps.meta.outputs.run_id }}
+      branch: ${{ steps.meta.outputs.branch }}
+      commit_sha: ${{ steps.meta.outputs.commit_sha }}
+      failed_jobs: ${{ steps.meta.outputs.failed_jobs }}
+      run_url: ${{ steps.meta.outputs.run_url }}
+      should_auto_fix: ${{ steps.decide.outputs.should_auto_fix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Get workflow run info
+        id: meta
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let run;
+            if (context.payload.workflow_run) {
+              run = context.payload.workflow_run;
+            } else if ('${{ github.event.inputs.workflow_run_id }}') {
+              const { data } = await github.rest.actions.getWorkflowRun({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                run_id: parseInt('${{ github.event.inputs.workflow_run_id }}'),
+              });
+              run = data;
+            } else {
+              core.setFailed('No workflow run to analyze');
+              return;
+            }
+            
+            core.setOutput('run_id', run.id.toString());
+            core.setOutput('branch', run.head_branch);
+            core.setOutput('commit_sha', run.head_sha);
+            core.setOutput('run_url', run.html_url);
+            core.setOutput('conclusion', run.conclusion);
+            
+            core.info(`Analyzing run #${run.id} on ${run.head_branch} (${run.conclusion})`);
+
+      - name: Check if workflow actually failed
+        id: check
+        run: |
+          CONCLUSION="${{ steps.meta.outputs.conclusion }}"
+          if [ "$CONCLUSION" = "failure" ]; then
+            echo "has_failure=true" >> "$GITHUB_OUTPUT"
+            echo "CI workflow FAILED — proceeding with analysis"
+          else
+            echo "has_failure=false" >> "$GITHUB_OUTPUT"
+            echo "CI workflow ${CONCLUSION} — no action needed"
+          fi
+
+      - name: Get failed jobs
+        id: jobs
+        if: steps.check.outputs.has_failure == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runId = parseInt('${{ steps.meta.outputs.run_id }}');
+            
+            // List all jobs in the workflow run
+            const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+            });
+            
+            const failed = jobsData.jobs.filter(j => j.conclusion === 'failure');
+            const skipped = jobsData.jobs.filter(j => j.conclusion === 'skipped' || j.conclusion === 'cancelled');
+            
+            core.setOutput('failed_count', failed.length.toString());
+            core.setOutput('failed_names', JSON.stringify(failed.map(j => j.name)));
+            core.setOutput('failed_ids', JSON.stringify(failed.map(j => j.id)));
+            core.setOutput('all_jobs', JSON.stringify(jobsData.jobs.map(j => ({
+              name: j.name,
+              status: j.status,
+              conclusion: j.conclusion,
+              id: j.id,
+            }))));
+            
+            core.info(`Failed jobs: ${failed.length}`);
+            failed.forEach(j => core.info(`  ❌ ${j.name} (id: ${j.id})`));
+            skipped.forEach(j => core.info(`  ⏭️ ${j.name} (${j.conclusion})`));
+
+      - name: Download logs from failed jobs
+        id: logs
+        if: steps.check.outputs.has_failure == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            const runId = parseInt('${{ steps.meta.outputs.run_id }}');
+            const failedIds = JSON.parse('${{ steps.jobs.outputs.failed_ids }}');
+            
+            const logDir = '/tmp/ci-logs';
+            fs.mkdirSync(logDir, { recursive: true });
+            
+            let allLogs = '';
+            
+            for (const jobId of failedIds) {
+              try {
+                // Get job logs (they come as a stream)
+                const logStream = await github.rest.actions.downloadJobLogsForWorkflowRun({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  job_id: jobId,
+                });
+                
+                // Logs are returned as a byte array (text)
+                const decoder = new TextDecoder('utf-8');
+                const logText = typeof logStream.data === 'string' 
+                  ? logStream.data 
+                  : decoder.decode(logStream.data);
+                
+                const logFile = path.join(logDir, `job-${jobId}.log`);
+                fs.writeFileSync(logFile, logText);
+                
+                allLogs += `\n===== JOB ${jobId} =====\n${logText}\n`;
+                core.info(`Downloaded logs for job ${jobId} (${(logText.length / 1024).toFixed(1)} KB)`);
+              } catch (err) {
+                core.warning(`Could not download logs for job ${jobId}: ${err.message}`);
+              }
+            }
+            
+            // Write combined logs
+            fs.writeFileSync('/tmp/ci-logs/combined.log', allLogs);
+            core.info(`Total log size: ${(allLogs.length / 1024).toFixed(1)} KB`);
+            core.setOutput('log_path', '/tmp/ci-logs/combined.log');
+
+      - name: Classify failure
+        id: classify
+        if: steps.check.outputs.has_failure == 'true'
+        run: |
+          # Run the classifier on the combined logs
+          node .github/scripts/classify-failure.js --file /tmp/ci-logs/combined.log > /tmp/classification.json
+          
+          # Store the classification
+          CLASSIFICATION=$(cat /tmp/classification.json)
+          echo "classification<<EOF_DELIM" >> "$GITHUB_OUTPUT"
+          echo "$CLASSIFICATION" >> "$GITHUB_OUTPUT"
+          echo "EOF_DELIM" >> "$GITHUB_OUTPUT"
+          
+          echo "=== CLASSIFICATION ==="
+          echo "$CLASSIFICATION" | python3 -c "
+import json,sys
+d=json.load(sys.stdin)
+print(f\"Category: {d['category']}\")
+print(f\"Confidence: {d['confidence']}%\")
+print(f\"Transient: {d['transient']}\")
+print(f\"Auto-fixable: {d['autoFixable']}\")
+print(f\"Fix type: {d['fixType']}\")
+print(f\"Summary: {d['summary']}\")
+" 2>/dev/null || echo "Raw: $(cat /tmp/classification.json | head -c 200)"
+
+      - name: Decide action
+        id: decide
+        if: steps.check.outputs.has_failure == 'true'
+        run: |
+          CLASSIFICATION=$(cat /tmp/classification.json 2>/dev/null || echo '{}')
+          CATEGORY=$(echo "$CLASSIFICATION" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('category',''))" 2>/dev/null || echo "")
+          TRANSIENT=$(echo "$CLASSIFICATION" | python3 -c "import json,sys; d=json.load(sys.stdin); print(str(d.get('transient',False)).lower())" 2>/dev/null || echo "false")
+          AUTO_FIXABLE=$(echo "$CLASSIFICATION" | python3 -c "import json,sys; d=json.load(sys.stdin); print(str(d.get('autoFixable',False)).lower())" 2>/dev/null || echo "false")
+          
+          echo "category=$CATEGORY" >> "$GITHUB_OUTPUT"
+          echo "transient=$TRANSIENT" >> "$GITHUB_OUTPUT"
+          echo "auto_fixable=$AUTO_FIXABLE" >> "$GITHUB_OUTPUT"
+          
+          if [ "$TRANSIENT" = "true" ]; then
+            echo "🔄 Transient failure — will retry"
+            echo "should_auto_fix=false" >> "$GITHUB_OUTPUT"
+          elif [ "$AUTO_FIXABLE" = "true" ]; then
+            echo "🤖 Auto-fixable ($CATEGORY) — attempting fix"
+            echo "should_auto_fix=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "👤 Manual fix required ($CATEGORY) — creating issue"
+            echo "should_auto_fix=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload classification artifact
+        if: steps.check.outputs.has_failure == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: self-heal-classification-${{ steps.meta.outputs.run_id }}
+          path: |
+            /tmp/classification.json
+            /tmp/ci-logs/combined.log
+          retention-days: 7
+
+  # ==========================================================================
+  # AUTO-FIX: Apply known fixes and create PR
+  # ==========================================================================
+  auto-fix:
+    name: Auto-Fix (${{ needs.analyze.outputs.category || '?' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [analyze]
+    if: >
+      needs.analyze.outputs.has_failure == 'true' &&
+      needs.analyze.outputs.should_auto_fix == 'true' &&
+      github.event.workflow_run.head_repository.fork == false
+    steps:
+      - name: Checkout (at failing branch)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.analyze.outputs.branch }}
+          fetch-depth: 2
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.35.6'
+          channel: 'stable'
+          cache: true
+
+      - name: Download classification
+        uses: actions/download-artifact@v4
+        with:
+          name: self-heal-classification-${{ needs.analyze.outputs.run_id }}
+          path: /tmp/self-heal
+
+      - name: Attempt auto-fix
+        id: fix
+        continue-on-error: true
+        run: |
+          # Run the auto-fix engine
+          bash .github/scripts/auto-fix.sh /tmp/self-heal/classification.json 2>&1 | tee /tmp/fix-output.txt
+          
+          # Capture exit code
+          FIX_EXIT=$?
+          
+          # Check if changes were made
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changes_made=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Fix created changes"
+          else
+            echo "changes_made=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️ No changes from fix attempt"
+          fi
+          
+          echo "exit_code=$FIX_EXIT" >> "$GITHUB_OUTPUT"
+          
+          # Read the last few lines for fix result
+          tail -5 /tmp/fix-output.txt
+
+      - name: Generate fix report
+        id: report
+        run: |
+          # Generate markdown report
+          CLASSIFICATION=$(cat /tmp/self-heal/classification.json)
+          
+          # Build context JSON
+          python3 -c "
+import json
+ctx = {
+    'workflow': 'CI/CD Pipeline',
+    'runId': '${{ needs.analyze.outputs.run_id }}',
+    'runUrl': '${{ needs.analyze.outputs.run_url }}',
+    'branch': '${{ needs.analyze.outputs.branch }}',
+    'commitSha': '${{ needs.analyze.outputs.commit_sha }}',
+    'failedJobs': $(echo '${{ needs.analyze.outputs.failed_jobs }}' | python3 -c 'import json,sys; print(sys.stdin.read())' 2>/dev/null || echo '[]'),
+    'fixApplied': '${{ steps.fix.outputs.changes_made }}',
+    'fixExitCode': '${{ steps.fix.outputs.exit_code }}',
+}
+print(json.dumps(ctx))
+" > /tmp/context.json
+
+          node .github/scripts/failure-report.js \
+            --classification /tmp/self-heal/classification.json \
+            --context /tmp/context.json > /tmp/fix-report.md
+
+          echo "report<<EOF_DELIM" >> "$GITHUB_OUTPUT"
+          cat /tmp/fix-report.md >> "$GITHUB_OUTPUT"
+          echo "EOF_DELIM" >> "$GITHUB_OUTPUT"
+
+      - name: Create PR with fix
+        id: create-pr
+        if: steps.fix.outputs.changes_made == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: |
+            fix(ci): auto-heal ${{ needs.analyze.outputs.category }} failure
+            
+            Automated fix applied by CI Self-Heal workflow.
+            
+            Root cause: ${{ fromJson(needs.analyze.outputs.classification).summary }}
+            
+            Co-authored-by: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
+          branch: self-heal/${{ needs.analyze.outputs.run_id }}
+          base: ${{ needs.analyze.outputs.branch }}
+          title: '[auto-fix] ${{ fromJson(needs.analyze.outputs.classification).category }}: ${{ fromJson(needs.analyze.outputs.classification).summary }}'
+          body: |
+            ## 🤖 Auto-Fix Applied
+            
+            ${{ steps.report.outputs.report }}
+            
+            ---
+            _Generated by CI Self-Heal workflow | Run #${{ needs.analyze.outputs.run_id }}_
+          labels: |
+            automated-fix
+            ci-self-heal
+          delete-branch: true
+
+      - name: Comment on existing PR (if this was a PR failure)
+        if: >
+          steps.fix.outputs.changes_made == 'true' &&
+          github.event.workflow_run.pull_requests[0] != null
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.workflow_run.pull_requests[0];
+            if (!pr) {
+              core.info('Not a PR-triggered run');
+              return;
+            }
+            
+            const fs = require('fs');
+            const report = fs.readFileSync('/tmp/fix-report.md', 'utf-8');
+            
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: pr.number,
+              body: `## 🤖 Auto-Fix Applied\n\n${report}\n\n_A fix has been pushed to this branch. CI will re-trigger._`,
+            });
+            
+            core.info(`Commented on PR #${pr.number}`);
+
+      - name: Re-run CI if fix was pushed
+        if: steps.fix.outputs.changes_made == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const branch = 'self-heal/${{ needs.analyze.outputs.run_id }}';
+            // The push itself triggers CI — no explicit rerun needed
+            core.info(`Fix pushed to ${branch}. CI will trigger automatically.`);
+
+  # ==========================================================================
+  # REPORT: Create issue for non-auto-fixable failures
+  # ==========================================================================
+  report-failure:
+    name: Report Failure
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [analyze]
+    if: >
+      needs.analyze.outputs.has_failure == 'true' &&
+      needs.analyze.outputs.should_auto_fix == 'false' &&
+      fromJson(needs.analyze.outputs.classification).transient == false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Download classification
+        uses: actions/download-artifact@v4
+        with:
+          name: self-heal-classification-${{ needs.analyze.outputs.run_id }}
+          path: /tmp/self-heal
+
+      - name: Generate failure report
+        id: report
+        run: |
+          # Build context
+          python3 -c "
+import json
+ctx = {
+    'workflow': 'CI/CD Pipeline',
+    'runId': '${{ needs.analyze.outputs.run_id }}',
+    'runUrl': '${{ needs.analyze.outputs.run_url }}',
+    'branch': '${{ needs.analyze.outputs.branch }}',
+    'commitSha': '${{ needs.analyze.outputs.commit_sha }}',
+    'failedJobs': $(echo '${{ needs.analyze.outputs.failed_jobs }}' | python3 -c 'import json,sys; print(sys.stdin.read())' 2>/dev/null || echo '[]'),
+    'repoUrl': '${{ github.server_url }}/${{ github.repository }}',
+}
+print(json.dumps(ctx))
+" > /tmp/context.json
+
+          node .github/scripts/failure-report.js \
+            --classification /tmp/self-heal/classification.json \
+            --context /tmp/context.json > /tmp/failure-report.md
+          
+          echo "report<<EOF_DELIM" >> "$GITHUB_OUTPUT"
+          cat /tmp/failure-report.md >> "$GITHUB_OUTPUT"
+          echo "EOF_DELIM" >> "$GITHUB_OUTPUT"
+
+      - name: Check for existing issue
+        id: existing
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'ci-failure',
+              per_page: 10,
+            });
+            
+            const branch = '${{ needs.analyze.outputs.branch }}';
+            const category = JSON.parse('${{ needs.analyze.outputs.classification }}').category;
+            
+            // Find existing issue for same branch+category
+            const existing = issues.find(i => 
+              i.body && i.body.includes(`**Branch**: \`${branch}\``) &&
+              i.body && i.body.includes(`\`${category}\``)
+            );
+            
+            if (existing) {
+              core.setOutput('exists', 'true');
+              core.setOutput('issue_number', existing.number.toString());
+              core.info(`Found existing issue #${existing.number}`);
+            } else {
+              core.setOutput('exists', 'false');
+              core.info('No existing issue for this failure');
+            }
+
+      - name: Create issue
+        if: steps.existing.outputs.exists == 'false'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('/tmp/failure-report.md', 'utf-8');
+            const category = JSON.parse('${{ needs.analyze.outputs.classification }}').category;
+            
+            const { data: issue } = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[ci-failure] ${category}: ${{ needs.analyze.outputs.branch }} — ${{ fromJson(needs.analyze.outputs.classification).summary }}`,
+              body: report,
+              labels: ['ci-failure', `category-${category}`],
+            });
+            
+            core.info(`Created issue #${issue.number}: ${issue.html_url}`);
+
+      - name: Update existing issue
+        if: steps.existing.outputs.exists == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.readFileSync('/tmp/failure-report.md', 'utf-8');
+            const issueNumber = parseInt('${{ steps.existing.outputs.issue_number }}');
+            
+            // Append as a comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              body: `## 🔄 Recurrence\n\nAnother failure detected with the same pattern.\n\n${report}`,
+            });
+            
+            // Re-open if was closed
+            await github.rest.issues.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              state: 'open',
+            });
+            
+            core.info(`Updated issue #${issueNumber}`);
+
+  # ==========================================================================
+  # RETRY: Re-run the CI workflow for transient failures
+  # ==========================================================================
+  retry:
+    name: Retry CI (Transient)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [analyze]
+    if: >
+      needs.analyze.outputs.has_failure == 'true' &&
+      fromJson(needs.analyze.outputs.classification).transient == true
+    steps:
+      - name: Retry workflow
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const runId = parseInt('${{ needs.analyze.outputs.run_id }}');
+            
+            core.info(`Re-running workflow #${runId} (transient failure)`);
+            
+            await github.rest.actions.reRunWorkflow({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: runId,
+            });
+            
+            core.info(`Re-triggered workflow #${runId}`);
+            
+            // Add a summary note
+            core.summary = `## 🔄 CI Re-Run Initiated\n\nTransient failure detected in workflow run. Automatic retry triggered.\n\n[View Run](${{ needs.analyze.outputs.run_url }})`;
+
+  # ==========================================================================
+  # NOTIFICATION: Post summary for all outcomes
+  # ==========================================================================
+  notify:
+    name: Self-Heal Summary
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [analyze, auto-fix, report-failure, retry]
+    if: always()
+    steps:
+      - name: Build summary
+        run: |
+          HAS_FAILURE='${{ needs.analyze.outputs.has_failure }}'
+          
+          if [ "$HAS_FAILURE" != "true" ]; then
+            echo "## ✅ CI Workflow Succeeded" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "No failures detected. Self-heal workflow took no action." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+          
+          echo "## 🤖 CI Self-Heal Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Aspect | Detail |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| CI Run | [#${{ needs.analyze.outputs.run_id }}](${{ needs.analyze.outputs.run_url }}) |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | \`${{ needs.analyze.outputs.branch }}\` |" >> $GITHUB_STEP_SUMMARY
+          
+          CLASSIFICATION=$(echo '${{ needs.analyze.outputs.classification }}' | head -c 500)
+          CATEGORY=$(echo "$CLASSIFICATION" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('category','?'))" 2>/dev/null || echo "?")
+          TRANSIENT=$(echo "$CLASSIFICATION" | python3 -c "import json,sys; d=json.load(sys.stdin); print('Yes' if d.get('transient') else 'No')" 2>/dev/null || echo "?")
+          AUTO_FIXABLE=$(echo "$CLASSIFICATION" | python3 -c "import json,sys; d=json.load(sys.stdin); print('Yes' if d.get('autoFixable') else 'No')" 2>/dev/null || echo "?")
+          SUMMARY=$(echo "$CLASSIFICATION" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('summary','?'))" 2>/dev/null || echo "?")
+          
+          echo "| Category | \`${CATEGORY}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Transient | ${TRANSIENT} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Auto-Fixable | ${AUTO_FIXABLE} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Summary | ${SUMMARY} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check auto-fix result
+          if [ "${{ needs.auto-fix.result }}" = "success" ] || [ "${{ needs.auto-fix.result }}" = "skipped" ]; then
+            echo "### Auto-Fix Status" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            if [ "${{ needs.auto-fix.outputs.pr_url }}" != "" ]; then
+              echo "✅ **Fix applied** → [PR #${{ needs.auto-fix.outputs.pr_number }}](${{ needs.auto-fix.outputs.pr_url }})" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "⚠️ Fix attempted (manual review recommended)" >> $GITHUB_STEP_SUMMARY
+            fi
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Check report-failure result
+          if [ "${{ needs.report-failure.result }}" = "success" ]; then
+            echo "### Issue Created" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "📋 A GitHub issue has been created with full failure analysis and fix instructions." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Check retry result
+          if [ "${{ needs.retry.result }}" = "success" ]; then
+            echo "### Transient Retry" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "🔄 CI workflow re-triggered automatically." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi

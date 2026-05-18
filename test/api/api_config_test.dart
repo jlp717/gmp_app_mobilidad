@@ -5,14 +5,14 @@ void main() {
   group('ApiConfig', () {
     test('should have correct base URL format', () {
       expect(ApiConfig.baseUrl, contains('/api'));
-      expect(ApiConfig.baseUrl, startsWith('http://'));
+      expect(ApiConfig.baseUrl, startsWith('https://'));
     });
 
     test('should have correct endpoint paths', () {
       expect(ApiConfig.login, '/auth/login');
       expect(ApiConfig.dashboardMetrics, '/dashboard/metrics');
       expect(ApiConfig.salesEvolution, '/dashboard/sales-evolution');
-      expect(ApiConfig.yoyComparison, '/dashboard/yoy-comparison');
+      expect(ApiConfig.yoyComparison, '/analytics/yoy-comparison');
       expect(ApiConfig.recentSales, '/dashboard/recent-sales');
       expect(ApiConfig.clientsList, '/clients');
       expect(ApiConfig.clientDetail, '/clients');
@@ -30,7 +30,7 @@ void main() {
     });
 
     test('should have correct min year for data filtering', () {
-      expect(ApiConfig.minYear, 2023);
+      expect(ApiConfig.minYear, ApiConfig.currentYear - 2);
     });
 
     test('should have valid pagination defaults', () {

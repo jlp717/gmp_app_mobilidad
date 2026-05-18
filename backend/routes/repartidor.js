@@ -8,10 +8,28 @@
 
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
 const { query, queryWithParams } = require('../config/db');
+const { cachedQuery } = require('../services/query-optimizer');
+const { TTL } = require('../services/redis-cache');
 const logger = require('../middleware/logger');
+const { sanitizeCodeListForParams, sanitizeForSQL, chunkedInQuery } = require('../utils/common');
 const { generateInvoicePDF } = require('../app/services/pdfService');
-const { isDeliveryStatusAvailable } = require('../utils/delivery-status-check');
+const { isDeliveryStatusAvailable, isDeliveryStatusNewSchema, getDeliveryStatusJoin, getDeliveryStatusColumns } = require('../utils/delivery-status-check');
+const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
+const { verifyToken } = require('../middleware/auth');
+const { CircuitBreaker: RepartidorCircuitBreaker } = require('../services/circuit-breaker');
+
+const repartidorBreaker = new RepartidorCircuitBreaker({
+    name: 'repartidor',
+    failureThreshold: 3,
+    successThreshold: 2,
+    timeout: 10000
+});
+const { generateDeliveryReceipt } = require('../app/services/deliveryReceiptService');
+const facturasService = require('../services/facturas.service');
+const pdfService = require('../services/pdf.service');
 
 // Commission configuration (30% threshold for repartidores)
 const REPARTIDOR_CONFIG = {
@@ -28,7 +46,7 @@ const REPARTIDOR_CONFIG = {
 // GET /collections/summary/:repartidorId
 // Resumen de cobros por cliente para un repartidor
 // =============================================================================
-router.get('/collections/summary/:repartidorId', async (req, res) => {
+router.get('/collections/summary/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { year, month } = req.query;
@@ -46,9 +64,16 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
 
         const selectedYear = parseInt(year) || new Date().getFullYear();
         const selectedMonth = parseInt(month) || new Date().getMonth() + 1;
-        const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+        const repartidorParams = sanitizeCodeListForParams(repartidorId);
 
-        logger.info(`[REPARTIDOR] Getting collections summary for ${cleanIds} (${selectedMonth}/${selectedYear})`);
+        if (repartidorParams.length === 0) {
+            return res.status(400).json({ error: 'Invalid repartidor ID format' });
+        }
+
+        const repartidorKey = repartidorParams.join(',');
+        logger.info(`[REPARTIDOR] Getting collections summary for ${repartidorKey} (${selectedMonth}/${selectedYear})`);
+
+        const cacheKey = `repartidor:collections:summary:${repartidorKey}:${selectedYear}:${selectedMonth}`;
 
         // CORRECTO: Usar OPP → CPC → CAC para repartidores
         // OPP tiene CODIGOREPARTIDOR, CPC vincula con documentos de CAC
@@ -73,17 +98,19 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
                 AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
                 AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-            WHERE OPP.MESREPARTO = ${selectedMonth}
-              AND OPP.ANOREPARTO = ${selectedYear}
-              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})
+            WHERE OPP.MESREPARTO = ?
+              AND OPP.ANOREPARTO = ?
+              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorParams.map(() => '?').join(',')})
             GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), CPC.CODIGOFORMAPAGO
             ORDER BY TOTAL_COBRABLE DESC
             FETCH FIRST 100 ROWS ONLY
         `;
 
+        const sqlParams = [selectedMonth, selectedYear, ...repartidorParams];
+
         let rows = [];
         try {
-            rows = await query(sql, true, false) || [];
+            rows = await cachedQuery(queryWithParams, sql, cacheKey, TTL.MEDIUM, sqlParams) || [];
         } catch (queryError) {
             logger.warn(`[REPARTIDOR] Query error in collections/summary: ${queryError.message}`);
             // Devolver respuesta vacía en lugar de error 500
@@ -171,7 +198,7 @@ router.get('/collections/summary/:repartidorId', async (req, res) => {
 // GET /collections/daily/:repartidorId
 // Acumulado diario de cobros del mes
 // =============================================================================
-router.get('/collections/daily/:repartidorId', async (req, res) => {
+router.get('/collections/daily/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { year, month } = req.query;
@@ -179,9 +206,15 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
         const selectedYear = parseInt(year) || new Date().getFullYear();
         const selectedMonth = parseInt(month) || new Date().getMonth() + 1;
 
-        logger.info(`[REPARTIDOR] Getting daily collections for ${repartidorId}`);
+        const repartidorIdList = sanitizeCodeListForParams(repartidorId);
+        if (repartidorIdList.length === 0) {
+            return res.status(400).json({ error: 'Invalid repartidor ID format' });
+        }
 
-        const cleanRepartidorId = repartidorId.toString().trim();
+        const repartidorKey = repartidorIdList.join(',');
+        logger.info(`[REPARTIDOR] Getting daily collections for ${repartidorKey}`);
+
+        const cacheKey = `repartidor:collections:daily:${repartidorKey}:${selectedYear}:${selectedMonth}`;
 
         // CORRECTO: Usar OPP → CPC para repartidores
         const sql = `
@@ -201,16 +234,16 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
                 AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
                 AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-            WHERE OPP.ANOREPARTO = ${selectedYear}
-              AND OPP.MESREPARTO = ${selectedMonth}
-              AND TRIM(OPP.CODIGOREPARTIDOR) = '${cleanRepartidorId}'
+            WHERE OPP.ANOREPARTO = ?
+              AND OPP.MESREPARTO = ?
+              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
             GROUP BY OPP.DIAREPARTO
             ORDER BY OPP.DIAREPARTO
         `;
 
         let rows = [];
         try {
-            rows = await query(sql, false) || [];
+            rows = await cachedQuery(queryWithParams, sql, cacheKey, TTL.MEDIUM, [selectedYear, selectedMonth, ...repartidorIdList]) || [];
         } catch (queryError) {
             logger.warn(`[REPARTIDOR] Query error in collections/daily: ${queryError.message}`);
             return res.json({ success: true, daily: [] });
@@ -242,7 +275,7 @@ router.get('/collections/daily/:repartidorId', async (req, res) => {
 // Historial de documentos (albaranes/facturas) de un cliente
 // FIX: GROUP BY to eliminate duplicates, JOIN DELIVERY_STATUS for real status
 // =============================================================================
-router.get('/history/documents/:clientId', async (req, res) => {
+router.get('/history/documents/:clientId', verifyToken, async (req, res) => {
     try {
         const { clientId } = req.params;
         const { repartidorId, limit, offset, dateFrom, dateTo } = req.query;
@@ -250,28 +283,37 @@ router.get('/history/documents/:clientId', async (req, res) => {
         logger.info(`[REPARTIDOR] Getting documents for client ${clientId} (dateFrom=${dateFrom}, dateTo=${dateTo})`);
 
         let repartidorJoin = '';
+        const repartidorParams = [];
         if (repartidorId) {
-            const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+            const ids = sanitizeCodeListForParams(repartidorId);
+            if (ids.length === 0) {
+                return res.status(400).json({ error: 'Invalid repartidor ID format' });
+            }
+
+            repartidorParams.push(...ids);
             repartidorJoin = `
                 INNER JOIN DSEDAC.OPP OPP
                     ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
-                    AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})`;
+                    AND TRIM(OPP.CODIGOREPARTIDOR) IN (${ids.map(() => '?').join(',')})`;
         }
 
         // Date range filter (YYYY-MM-DD format)
         let dateFilter = '';
+        const dateParams = [];
         if (dateFrom) {
             const parts = dateFrom.split('-');
             if (parts.length === 3) {
                 const numFrom = parseInt(parts[0]) * 10000 + parseInt(parts[1]) * 100 + parseInt(parts[2]);
-                dateFilter += ` AND (CPC.ANODOCUMENTO * 10000 + CPC.MESDOCUMENTO * 100 + CPC.DIADOCUMENTO) >= ${numFrom}`;
+                dateFilter += ` AND (CPC.ANODOCUMENTO * 10000 + CPC.MESDOCUMENTO * 100 + CPC.DIADOCUMENTO) >= ?`;
+                dateParams.push(numFrom);
             }
         }
         if (dateTo) {
             const parts = dateTo.split('-');
             if (parts.length === 3) {
                 const numTo = parseInt(parts[0]) * 10000 + parseInt(parts[1]) * 100 + parseInt(parts[2]);
-                dateFilter += ` AND (CPC.ANODOCUMENTO * 10000 + CPC.MESDOCUMENTO * 100 + CPC.DIADOCUMENTO) <= ${numTo}`;
+                dateFilter += ` AND (CPC.ANODOCUMENTO * 10000 + CPC.MESDOCUMENTO * 100 + CPC.DIADOCUMENTO) <= ?`;
+                dateParams.push(numTo);
             }
         }
 
@@ -282,16 +324,17 @@ router.get('/history/documents/:clientId', async (req, res) => {
         const yearParam = req.query.year;
         const clientCode = clientId;
 
-        // Conditionally include DELIVERY_STATUS join
+        // Conditionally include DELIVERY_STATUS join (auto-detects OLD vs NEW schema)
+        const dsJoin = getDeliveryStatusJoin('CPC', 'DS');
+        const dsCols = getDeliveryStatusColumns('DS');
         const dsAvail = isDeliveryStatusAvailable();
-        const dsJoin = dsAvail
-            ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS ON 
-                DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))`
-            : '';
-        const dsStatusCol = dsAvail ? 'DS.STATUS as DELIVERY_STATUS' : "CAST(NULL AS VARCHAR(20)) as DELIVERY_STATUS";
-        const dsUpdatedCol = dsAvail ? 'DS.UPDATED_AT as DELIVERY_UPDATED_AT' : "CAST(NULL AS TIMESTAMP) as DELIVERY_UPDATED_AT";
-        const dsFirmaCol = dsAvail ? 'DS.FIRMA_PATH' : "CAST(NULL AS VARCHAR(255)) as FIRMA_PATH";
-        const dsObsCol = dsAvail ? 'DS.OBSERVACIONES' : "CAST(NULL AS VARCHAR(512)) as OBSERVACIONES";
+
+        let yearFilter = '';
+        const yearFilterParams = [];
+        if (yearParam) {
+            yearFilter = ` AND CPC.EJERCICIOALBARAN = ?`;
+            yearFilterParams.push(parseInt(yearParam));
+        }
 
         const sql = `
             SELECT 
@@ -299,154 +342,112 @@ router.get('/history/documents/:clientId', async (req, res) => {
                 CPC.ANODOCUMENTO as ANO, CPC.MESDOCUMENTO as MES, CPC.DIADOCUMENTO as DIA,
                 CPC.CODIGOCLIENTEALBARAN,
                 CPC.IMPORTETOTAL,
-                COALESCE((
-                    SELECT SUM(CV.IMPORTEPENDIENTE) 
-                    FROM DSEDAC.CVC CV 
-                    WHERE CV.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
-                      AND CV.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
-                      AND CV.SERIEDOCUMENTO = CPC.SERIEALBARAN
-                      AND CV.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-                ), 0) as IMPORTE_PENDIENTE,
+                CAC_J.IMPORTETOTAL as IMPORTETOTAL_FACTURA,
                 CPC.CONFORMADOSN,
                 CPC.SITUACIONALBARAN,
                 CPC.HORALLEGADA,
                 CPC.HORACREACION,
-                ${dsStatusCol},
-                ${dsUpdatedCol},
-                ${dsFirmaCol},
-                ${dsObsCol},
-                COALESCE((SELECT CAC2.NUMEROFACTURA FROM DSEDAC.CAC CAC2
-                    WHERE CAC2.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND CAC2.SERIEALBARAN = CPC.SERIEALBARAN
-                      AND CAC2.TERMINALALBARAN = CPC.TERMINALALBARAN AND CAC2.NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY), 0) as NUMEROFACTURA,
-                COALESCE((SELECT TRIM(CAC2.SERIEFACTURA) FROM DSEDAC.CAC CAC2
-                    WHERE CAC2.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND CAC2.SERIEALBARAN = CPC.SERIEALBARAN
-                      AND CAC2.TERMINALALBARAN = CPC.TERMINALALBARAN AND CAC2.NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY), '') as SERIEFACTURA,
-                COALESCE((SELECT CAC2.EJERCICIOFACTURA FROM DSEDAC.CAC CAC2
-                    WHERE CAC2.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND CAC2.SERIEALBARAN = CPC.SERIEALBARAN
-                      AND CAC2.TERMINALALBARAN = CPC.TERMINALALBARAN AND CAC2.NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY), 0) as EJERCICIOFACTURA,
-                COALESCE((SELECT FIRMANOMBRE FROM DSEDAC.CACFIRMAS 
-                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND TRIM(SERIEALBARAN) = TRIM(CPC.SERIEALBARAN) 
-                      AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY), '') as LEGACY_FIRMA_NOMBRE,
-                (SELECT DIA FROM DSEDAC.CACFIRMAS 
-                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND TRIM(SERIEALBARAN) = TRIM(CPC.SERIEALBARAN) 
-                      AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY) as LEGACY_DIA,
-                (SELECT MES FROM DSEDAC.CACFIRMAS 
-                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND TRIM(SERIEALBARAN) = TRIM(CPC.SERIEALBARAN) 
-                      AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY) as LEGACY_MES,
-                (SELECT ANO FROM DSEDAC.CACFIRMAS 
-                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND TRIM(SERIEALBARAN) = TRIM(CPC.SERIEALBARAN) 
-                      AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY) as LEGACY_ANO,
-                (SELECT HORA FROM DSEDAC.CACFIRMAS 
-                    WHERE EJERCICIOALBARAN = CPC.EJERCICIOALBARAN AND TRIM(SERIEALBARAN) = TRIM(CPC.SERIEALBARAN) 
-                      AND TERMINALALBARAN = CPC.TERMINALALBARAN AND NUMEROALBARAN = CPC.NUMEROALBARAN
-                    FETCH FIRST 1 ROW ONLY) as LEGACY_HORA
+                ${dsCols},
+                COALESCE(CAC_J.NUMEROFACTURA, 0) as NUMEROFACTURA,
+                COALESCE(TRIM(CAC_J.SERIEFACTURA), '') as SERIEFACTURA,
+                COALESCE(CAC_J.EJERCICIOFACTURA, 0) as EJERCICIOFACTURA,
+                COALESCE(CF_J.FIRMANOMBRE, '') as LEGACY_FIRMA_NOMBRE,
+                CF_J.DIA as LEGACY_DIA,
+                CF_J.MES as LEGACY_MES,
+                CF_J.ANO as LEGACY_ANO,
+                CF_J.HORA as LEGACY_HORA
             FROM DSEDAC.CPC CPC
             ${repartidorJoin}
             ${dsJoin}
-            WHERE CPC.CODIGOCLIENTEALBARAN = '${clientCode}'
-              ${yearParam ? `AND CPC.EJERCICIOALBARAN = ${parseInt(yearParam)}` : ''}
+            LEFT JOIN DSEDAC.CAC CAC_J
+                ON CAC_J.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+                AND CAC_J.SERIEALBARAN = CPC.SERIEALBARAN
+                AND CAC_J.TERMINALALBARAN = CPC.TERMINALALBARAN
+                AND CAC_J.NUMEROALBARAN = CPC.NUMEROALBARAN
+            LEFT JOIN DSEDAC.CACFIRMAS CF_J
+                ON CF_J.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+                AND TRIM(CF_J.SERIEALBARAN) = TRIM(CPC.SERIEALBARAN)
+                AND CF_J.TERMINALALBARAN = CPC.TERMINALALBARAN
+                AND CF_J.NUMEROALBARAN = CPC.NUMEROALBARAN
+            WHERE CPC.CODIGOCLIENTEALBARAN = ?
+              AND CPC.NUMEROALBARAN < 900000 AND CPC.EJERCICIOALBARAN > 0
+              ${yearFilter}
               ${dateFilter}
             ORDER BY CPC.EJERCICIOALBARAN DESC, CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC, CPC.NUMEROALBARAN DESC
         `;
 
-        const rows = await query(sql);
+        const allParams = [...repartidorParams, clientCode, ...yearFilterParams, ...dateParams];
+        const rows = await queryWithParams(sql, allParams);
 
-        // --- DEDUPLICATION v2: Group by unique albaran key AND factura key to eliminate all duplicates ---
+        // --- DEDUPLICATION PASS 1: Eliminate duplicate CPC rows per albaran ---
+        // JOINs with CAC/CACFIRMAS can produce multiple rows per albaran
         const uniqueMap = new Map();
         rows.forEach(row => {
             const serie = (row.SERIEALBARAN || '').toString().trim();
-            const numFactura = parseInt(row.NUMEROFACTURA) || 0;
-            // Use factura key if this is a factura to avoid same factura appearing from different albaranes
-            const key = numFactura > 0
-                ? `FAC-${row.EJERCICIOALBARAN}-${(row.SERIEFACTURA || serie).toString().trim()}-${numFactura}`
-                : `ALB-${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`;
+            const key = `ALB-${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`;
+
             if (!uniqueMap.has(key)) {
-                uniqueMap.set(key, row);
-            } else if (numFactura > 0) {
-                // For facturas, prefer row with highest albaran number (latest)
-                const existing = uniqueMap.get(key);
-                if ((row.NUMEROALBARAN || 0) > (existing.NUMEROALBARAN || 0)) {
-                    uniqueMap.set(key, row);
-                }
+                uniqueMap.set(key, { ...row });
             }
+            // Duplicate CPC rows for same albaran are ignored (first wins)
         });
         const uniqueRows = Array.from(uniqueMap.values());
         if (uniqueRows.length < rows.length) {
-            logger.info(`[REPARTIDOR] Deduplication v2: ${rows.length} raw rows -> ${uniqueRows.length} unique documents for client ${clientId}`);
+            logger.info(`[REPARTIDOR] Dedup pass 1: ${rows.length} raw rows -> ${uniqueRows.length} unique albaranes for client ${clientId}`);
         }
 
-        const documents = uniqueRows.map(row => {
-            const importe = parseFloat(row.IMPORTETOTAL) || 0;
-            const pendiente = parseFloat(row.IMPORTE_PENDIENTE) || 0;
-
-            // --- SENIOR STATUS LOGIC ---
-            // --- SENIOR STATUS LOGIC v2 (Time-Aware) ---
-            // 1. App Status (Highest Priority - Real Time)
+        // --- Helper: compute status for a row ---
+        function computeRowStatus(row) {
             let status = 'pending';
             const appStatus = (row.DELIVERY_STATUS || '').trim().toLowerCase();
-            const legacyStatus = (row.SITUACIONALBARAN || '').trim().toUpperCase(); // F=Facturado, R=Repartido, X=Printed/Active
+            const legacyStatus = (row.SITUACIONALBARAN || '').trim().toUpperCase();
             const isDispatched = (row.CONFORMADOSN || '').trim().toUpperCase() === 'S';
 
-            // Current Date for comparison
             const now = new Date();
             const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
             const docDate = new Date(row.ANO, row.MES - 1, row.DIA);
 
-            if (appStatus === 'delivered') {
+            if (appStatus === 'delivered' || appStatus === 'entregado') {
                 status = 'delivered';
-            } else if (appStatus === 'no_delivered' || appStatus === 'absent') {
+            } else if (appStatus === 'no_delivered' || appStatus === 'no_entregado' || appStatus === 'absent' || appStatus === 'rechazado') {
                 status = 'no_delivered';
+            } else if (appStatus === 'en_ruta') {
+                status = 'en_ruta';
+            } else if (appStatus === 'parcial') {
+                status = 'partial';
             } else {
-                // 2. Legacy ERP Status
                 if (legacyStatus === 'F' || legacyStatus === 'R') {
-                    // F: Facturado, R: Realizado/Repartido -> Green
                     status = 'delivered';
                 } else if (isDispatched) {
-                    // S: Salido de Almacén.
-                    // Logic: If it's a past date, assume Delivered (Green). If Today, assume En Ruta (Blue).
                     if (docDate < today) {
                         status = 'delivered';
                     } else {
                         status = 'en_ruta';
                     }
                 }
-                // Default remains 'pending' (Red)
             }
+            return status;
+        }
 
+        // --- Helper: build document from row ---
+        function buildDocument(row, overrides = {}) {
+            // Prefer CAC factura amount over CPC albaran amount when available
+            const rawAmount = parseFloat(row.IMPORTETOTAL_FACTURA) || parseFloat(row.IMPORTETOTAL) || 0;
+            const importe = overrides.amount !== undefined ? overrides.amount : rawAmount;
+            const status = computeRowStatus(row);
             const hasFirmaPath = !!row.FIRMA_PATH;
             const numFactura = parseInt(row.NUMEROFACTURA) || 0;
             const serieFactura = (row.SERIEFACTURA || '').trim();
             const ejercicioFactura = parseInt(row.EJERCICIOFACTURA) || 0;
             const isFactura = numFactura > 0;
-
-            // Legacy signature detection (from CACFIRMAS)
             const legacyNombre = (row.LEGACY_FIRMA_NOMBRE || '').trim();
-            const hasLegacySig = legacyNombre.length > 0 || (row.LEGACY_ANO && row.LEGACY_ANO > 0);
-
-            // Format Time (HORALLEGADA is HHMMS or HHMMSS)
-            let timeFormatted = null;
-            if (row.HORALLEGADA && row.HORALLEGADA > 0) {
-                let hStr = row.HORALLEGADA.toString().padStart(6, '0'); // Confirm 6 digits for HHMMSS
-                // 130202 -> 13:02
-                const hh = hStr.substring(0, 2);
-                const mm = hStr.substring(2, 4);
-                timeFormatted = `${hh}:${mm}`;
-            }
-            if (pendiente > 0 && pendiente < importe) status = 'partial';
-
+            const hasLegacySig = legacyNombre.length > 0;
             const serie = (row.SERIEALBARAN || 'A').trim();
 
             return {
                 id: `${row.EJERCICIOALBARAN}-${serie}-${row.TERMINALALBARAN}-${row.NUMEROALBARAN}`,
-                type: isFactura ? 'factura' : 'albaran',
-                number: isFactura ? numFactura : row.NUMEROALBARAN,
+                type: overrides.type || (isFactura ? 'factura' : 'albaran'),
+                number: overrides.number !== undefined ? overrides.number : (isFactura ? numFactura : row.NUMEROALBARAN),
                 albaranNumber: row.NUMEROALBARAN,
                 facturaNumber: numFactura || null,
                 serieFactura: serieFactura || null,
@@ -459,19 +460,88 @@ router.get('/history/documents/:clientId', async (req, res) => {
                     ? `${String(row.HORALLEGADA).padStart(6, '0').substring(0, 2)}:${String(row.HORALLEGADA).padStart(6, '0').substring(2, 4)}`
                     : null,
                 amount: importe,
-                pending: pendiente,
-                status,
+                pending: 0,
+                status: overrides.status || status,
                 hasSignature: hasFirmaPath || hasLegacySig,
                 signaturePath: row.FIRMA_PATH || null,
-                deliveryDate: row.DELIVERY_DATE || null,
+                deliveryDate: row.DELIVERY_UPDATED_AT || null,
                 deliveryRepartidor: row.DELIVERY_REPARTIDOR || null,
                 deliveryObs: row.OBSERVACIONES || null,
                 legacySignatureName: legacyNombre || null,
                 hasLegacySignature: hasLegacySig,
                 legacyDate: (row.LEGACY_ANO > 0)
                     ? `${row.LEGACY_ANO}-${String(row.LEGACY_MES).padStart(2, '0')}-${String(row.LEGACY_DIA).padStart(2, '0')} ${String(row.LEGACY_HORA).padStart(6, '0').substring(0, 2)}:${String(row.LEGACY_HORA).padStart(6, '0').substring(2, 4)}`
-                    : null
+                    : null,
+                // When grouped by factura, include constituent albaranes
+                ...(overrides.albaranes ? { albaranes: overrides.albaranes } : {})
             };
+        }
+
+        // --- DEDUPLICATION PASS 2: Group albaranes by factura ---
+        // When multiple albaranes share the same factura number, show ONE factura entry
+        // with the summed amount (matching the factura PDF total).
+        const facturaGroups = new Map(); // facturaKey -> [rows]
+        const noFacturaRows = [];
+        uniqueRows.forEach(row => {
+            const numFactura = parseInt(row.NUMEROFACTURA) || 0;
+            if (numFactura > 0) {
+                const serieF = (row.SERIEFACTURA || '').trim();
+                const ejercicioF = parseInt(row.EJERCICIOFACTURA) || 0;
+                const fKey = `F-${ejercicioF}-${serieF}-${numFactura}`;
+                if (!facturaGroups.has(fKey)) {
+                    facturaGroups.set(fKey, []);
+                }
+                facturaGroups.get(fKey).push(row);
+            } else {
+                noFacturaRows.push(row);
+            }
+        });
+
+        const documents = [];
+
+        // Add grouped factura entries
+        for (const [fKey, fRows] of facturaGroups.entries()) {
+            // Use CAC IMPORTETOTAL_FACTURA (actual invoiced amount) instead of CPC IMPORTETOTAL (albaran total)
+            // CPC.IMPORTETOTAL is the albaran total which can differ from the factura amount
+            const totalAmount = fRows.reduce((sum, r) => sum + (parseFloat(r.IMPORTETOTAL_FACTURA) || parseFloat(r.IMPORTETOTAL) || 0), 0);
+
+            // Use the most recent row for display metadata (date, status, etc.)
+            const primaryRow = fRows[0]; // Already sorted by date DESC
+
+            // Determine best status: if any delivered, factura is delivered; else most recent status
+            const statuses = fRows.map(r => computeRowStatus(r));
+            let bestStatus = statuses[0];
+            if (statuses.includes('delivered')) bestStatus = 'delivered';
+            else if (statuses.includes('partial')) bestStatus = 'partial';
+            else if (statuses.includes('en_ruta')) bestStatus = 'en_ruta';
+
+            const albaranes = fRows.map(r => {
+                const s = (r.SERIEALBARAN || 'A').trim();
+                return { serie: s, terminal: r.TERMINALALBARAN, numero: r.NUMEROALBARAN, ejercicio: r.EJERCICIOALBARAN, amount: parseFloat(r.IMPORTETOTAL_FACTURA) || parseFloat(r.IMPORTETOTAL) || 0 };
+            });
+
+            documents.push(buildDocument(primaryRow, {
+                type: 'factura',
+                number: parseInt(primaryRow.NUMEROFACTURA),
+                amount: totalAmount,
+                status: bestStatus,
+                albaranes: albaranes.length > 1 ? albaranes : undefined
+            }));
+
+            if (fRows.length > 1) {
+                logger.info(`[REPARTIDOR] Factura ${fKey}: grouped ${fRows.length} albaranes, total=${totalAmount.toFixed(2)}`);
+            }
+        }
+
+        // Add non-factura albaranes as individual entries
+        noFacturaRows.forEach(row => {
+            documents.push(buildDocument(row));
+        });
+
+        // Sort by date DESC, then number DESC
+        documents.sort((a, b) => {
+            if (a.date !== b.date) return b.date.localeCompare(a.date);
+            return (b.number || 0) - (a.number || 0);
         });
 
         res.json({
@@ -491,7 +561,7 @@ router.get('/history/documents/:clientId', async (req, res) => {
 // GET /history/objectives/:repartidorId
 // Seguimiento del objetivo 30% por mes
 // =============================================================================
-router.get('/history/objectives/:repartidorId', async (req, res) => {
+router.get('/history/objectives/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { clientId } = req.query;
@@ -499,13 +569,19 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
         logger.info(`[REPARTIDOR] Getting objectives for ${repartidorId}${clientId ? ` client ${clientId}` : ''}`);
 
         // Handle comma-separated repartidor IDs
-        const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+        const cleanRepartidorIds = sanitizeCodeListForParams(repartidorId);
+        if (cleanRepartidorIds.length === 0) {
+            return res.status(400).json({ error: 'Invalid repartidor ID format' });
+        }
         let clientFilter = '';
+        const queryParams = [...cleanRepartidorIds];
         if (clientId) {
-            clientFilter = `AND TRIM(CPC.CODIGOCLIENTEALBARAN) = '${clientId.trim()}'`;
+            clientFilter = `AND TRIM(CPC.CODIGOCLIENTEALBARAN) = ?`;
+            queryParams.push(clientId.trim());
         }
 
         // SENIOR: No date restriction, no row limit - fetch all historical data
+        const placeholders = cleanRepartidorIds.map(() => '?').join(',');
         const sql = `
             SELECT 
                 OPP.ANOREPARTO as ANO,
@@ -524,13 +600,14 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
                 AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
                 AND CVC.SERIEDOCUMENTO = CPC.SERIEALBARAN
                 AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
-            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
+            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${placeholders})
               ${clientFilter}
             GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO
             ORDER BY OPP.ANOREPARTO DESC, OPP.MESREPARTO DESC
+            FETCH FIRST 500 ROWS ONLY
         `;
 
-        const rows = await query(sql, false);
+        const rows = await cachedQuery(queryWithParams, sql, `repartidor:objectives:${cleanRepartidorIds.join(',')}`, TTL.REALTIME, queryParams);
 
         const months = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
             'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -566,20 +643,28 @@ router.get('/history/objectives/:repartidorId', async (req, res) => {
 // GET /history/objectives-detail/:repartidorId
 // Desglose jerárquico: Año → Cliente → FI1 → FI2 → FI3 → FI4 → Productos
 // =============================================================================
-router.get('/history/objectives-detail/:repartidorId', async (req, res) => {
+router.get('/history/objectives-detail/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { year, clientId } = req.query;
 
         const selectedYear = parseInt(year) || new Date().getFullYear();
-        const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+        const repartidorIdList = sanitizeCodeListForParams(repartidorId);
+
+        if (repartidorIdList.length === 0) {
+            return res.status(400).json({ error: 'Invalid repartidor ID format' });
+        }
+
+        const repartidorKey = repartidorIdList.join(',');
 
         logger.info(`[REPARTIDOR] Objectives detail for ${repartidorId}, year ${selectedYear}${clientId ? `, client ${clientId}` : ''}`);
 
         // 1. Get client codes delivered by this repartidor in this year
         let clientFilter = '';
+        const clientFilterParams = [];
         if (clientId) {
-            clientFilter = `AND TRIM(CPC.CODIGOCLIENTEALBARAN) = '${clientId.trim()}'`;
+            clientFilter = `AND TRIM(CPC.CODIGOCLIENTEALBARAN) = ?`;
+            clientFilterParams.push(clientId.trim());
         }
 
         const clientsSql = `
@@ -588,12 +673,14 @@ router.get('/history/objectives-detail/:repartidorId', async (req, res) => {
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})
-              AND OPP.ANOREPARTO = ${selectedYear}
+            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
+              AND OPP.ANOREPARTO = ?
               ${clientFilter}
+            FETCH FIRST 1000 ROWS ONLY
         `;
 
-        const clientRows = await query(clientsSql, false);
+        const clientSqlParams = [...repartidorIdList, selectedYear, ...clientFilterParams];
+        const clientRows = await cachedQuery(queryWithParams, clientsSql, `repartidor:objDetail:${repartidorKey}:${selectedYear}:${clientId || 'all'}`, TTL.REALTIME, clientSqlParams);
         if (clientRows.length === 0) {
             return res.json({ success: true, clients: [], year: selectedYear });
         }
@@ -608,10 +695,12 @@ router.get('/history/objectives-detail/:repartidorId', async (req, res) => {
         // 2. Query LACLAE for all those clients with FI hierarchy
         const CHUNK_SIZE = 500;
         const allCodes = Object.keys(clientNames);
+        const laclaeParams = [];
         const chunks = [];
         for (let i = 0; i < allCodes.length; i += CHUNK_SIZE) {
-            const chunk = allCodes.slice(i, i + CHUNK_SIZE).map(c => `'${c}'`).join(',');
-            chunks.push(`L.LCCDCL IN (${chunk})`);
+            const chunk = allCodes.slice(i, i + CHUNK_SIZE);
+            chunks.push(`L.LCCDCL IN (${chunk.map(() => '?').join(',')})`);
+            laclaeParams.push(...chunk);
         }
         const clientInFilter = `(${chunks.join(' OR ')})`;
 
@@ -635,13 +724,14 @@ router.get('/history/objectives-detail/:repartidorId', async (req, res) => {
             LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
             LEFT JOIN DSEDAC.ARTX AX ON L.LCCDRF = AX.CODIGOARTICULO
             WHERE ${clientInFilter}
-              AND L.LCAADC = ${selectedYear}
+              AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
             GROUP BY L.LCCDCL, L.LCCDRF, A.DESCRIPCIONARTICULO, L.LCDESC, A.UNIDADMEDIDA, L.LCMMDC, AX.FILTRO01, AX.FILTRO02, AX.FILTRO03, AX.FILTRO04
             ORDER BY SALES DESC
         `;
 
-        const rows = await query(dataSql, false);
+        const dataParams = [...laclaeParams, selectedYear];
+        const rows = await queryWithParams(dataSql, dataParams, false);
 
         // 3. Load FI names from metadata cache
         let fi1Names = {}, fi2Names = {}, fi3Names = {}, fi4Names = {};
@@ -653,13 +743,15 @@ router.get('/history/objectives-detail/:repartidorId', async (req, res) => {
                 fi3Names = getCachedFi3Names() || {};
                 fi4Names = getCachedFi4Names() || {};
             } else {
-                const fi1Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI1`, false, false);
+                const [fi1Rows, fi2Rows, fi3Rows, fi4Rows] = await Promise.all([
+                    query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI1`, false, false),
+                    query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI2`, false, false),
+                    query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI3`, false, false),
+                    query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI4`, false, false),
+                ]);
                 fi1Rows.forEach(r => { fi1Names[(r.CODIGOFILTRO || '').trim()] = (r.DESCRIPCIONFILTRO || '').trim(); });
-                const fi2Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI2`, false, false);
                 fi2Rows.forEach(r => { fi2Names[(r.CODIGOFILTRO || '').trim()] = (r.DESCRIPCIONFILTRO || '').trim(); });
-                const fi3Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI3`, false, false);
                 fi3Rows.forEach(r => { fi3Names[(r.CODIGOFILTRO || '').trim()] = (r.DESCRIPCIONFILTRO || '').trim(); });
-                const fi4Rows = await query(`SELECT CODIGOFILTRO, DESCRIPCIONFILTRO FROM DSEDAC.FI4`, false, false);
                 fi4Rows.forEach(r => { fi4Names[(r.CODIGOFILTRO || '').trim()] = (r.DESCRIPCIONFILTRO || '').trim(); });
             }
         } catch (e) {
@@ -825,7 +917,7 @@ router.get('/history/objectives-detail/:repartidorId', async (req, res) => {
 // GET /history/signature
 // Retrieve real signature (base64) for a given albaran
 // =============================================================================
-router.get('/history/signature', async (req, res) => {
+router.get('/history/signature', verifyToken, async (req, res) => {
     try {
         const { ejercicio, serie, terminal, numero } = req.query;
         if (!ejercicio || !numero) {
@@ -836,15 +928,18 @@ router.get('/history/signature', async (req, res) => {
         logger.info(`[REPARTIDOR] Getting signature for albaran ${albId}`);
         let signatureSource = null; // Track where we found the signature
 
-        // 1. Check DELIVERY_STATUS for FIRMA_PATH
+        // 1. Check DELIVERY_STATUS for FIRMA_PATH (OLD schema only)
         let firmaPath = null;
         try {
-            const dsRows = await query(`
-                SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'
-            `, false);
-            logger.info(`[REPARTIDOR] Step 1 DELIVERY_STATUS: ${dsRows.length} rows for ID='${albId}'`);
-            if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
-                firmaPath = dsRows[0].FIRMA_PATH;
+            const dsOldAvail = isDeliveryStatusAvailable() && !isDeliveryStatusNewSchema();
+            if (dsOldAvail) {
+                const dsRows = await queryWithParams(`
+                    SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?
+                `, [albId], false);
+                logger.info(`[REPARTIDOR] Step 1 DELIVERY_STATUS: ${dsRows.length} rows for ID='${albId}'`);
+                if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
+                    firmaPath = dsRows[0].FIRMA_PATH;
+                }
             }
         } catch (e) {
             logger.warn(`[REPARTIDOR] DELIVERY_STATUS query error: ${e.message}`);
@@ -855,19 +950,21 @@ router.get('/history/signature', async (req, res) => {
         let firmante = null;
         let fechaFirma = null;
         try {
-            const firmaRows = await query(`
-                SELECT RF.FIRMA_BASE64, RF.FIRMANTE_NOMBRE, RF.FECHA_FIRMA
+            const firmaRows = await queryWithParams(`
+                SELECT RF.FIRMABASE64, RF.FIRMANOMBRE, RF.DIA, RF.MES, RF.ANO, RF.HORA
                 FROM JAVIER.REPARTIDOR_FIRMAS RF
                 INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
-                WHERE RE.NUMERO_ALBARAN = ${numero}
-                  AND RE.EJERCICIO_ALBARAN = ${ejercicio}
-                  AND TRIM(RE.SERIE_ALBARAN) = '${(serie || 'A').trim()}'
+                WHERE RE.NUMEROORDENPREPARACION = ?
+                  AND RE.EJERCICIOALBARAN = ?
+                  AND TRIM(RE.SERIEALBARAN) = ?
                 FETCH FIRST 1 ROW ONLY
-            `, false);
+            `, [parseInt(numero), parseInt(ejercicio), (serie || 'A').trim()], false);
             if (firmaRows.length > 0) {
-                firmaBase64 = firmaRows[0].FIRMA_BASE64;
-                firmante = firmaRows[0].FIRMANTE_NOMBRE;
-                fechaFirma = firmaRows[0].FECHA_FIRMA;
+                firmaBase64 = firmaRows[0].FIRMABASE64;
+                firmante = firmaRows[0].FIRMANOMBRE;
+                fechaFirma = (firmaRows[0].ANO > 0)
+                    ? `${firmaRows[0].ANO}-${String(firmaRows[0].MES).padStart(2, '0')}-${String(firmaRows[0].DIA).padStart(2, '0')} ${String(firmaRows[0].HORA).padStart(6, '0').substring(0, 2)}:${String(firmaRows[0].HORA).padStart(6, '0').substring(2, 4)}`
+                    : null;
                 if (firmaBase64) signatureSource = 'REPARTIDOR_FIRMAS';
                 logger.info(`[REPARTIDOR] Step 2 REPARTIDOR_FIRMAS: found row, hasBase64=${!!firmaBase64}`);
             } else {
@@ -880,8 +977,6 @@ router.get('/history/signature', async (req, res) => {
         // 3. If no base64, try reading from FIRMA_PATH file
         if (!firmaBase64 && firmaPath) {
             try {
-                const fs = require('fs');
-                const path = require('path');
                 const pathsToTry = [];
 
                 // If FIRMA_PATH is an absolute path, try it directly first
@@ -922,16 +1017,16 @@ router.get('/history/signature', async (req, res) => {
         if (!firmaBase64) {
             try {
                 // Query ALL CACFIRMAS rows for this albaran (no FIRMABASE64 filter)
-                const cacRows = await query(`
+                const cacRows = await queryWithParams(`
                     SELECT FIRMABASE64, TRIM(FIRMANOMBRE) as FIRMANOMBRE, DIA, MES, ANO, HORA,
                            LENGTH(FIRMABASE64) as FIRMA_LEN
                     FROM DSEDAC.CACFIRMAS
-                    WHERE EJERCICIOALBARAN = ${ejercicio}
-                      AND TRIM(SERIEALBARAN) = '${(serie || 'A').trim()}'
-                      AND TERMINALALBARAN = ${terminal || 0}
-                      AND NUMEROALBARAN = ${numero}
+                    WHERE EJERCICIOALBARAN = ?
+                      AND TRIM(SERIEALBARAN) = ?
+                      AND TERMINALALBARAN = ?
+                      AND NUMEROALBARAN = ?
                     FETCH FIRST 5 ROWS ONLY
-                `, false);
+                `, [parseInt(ejercicio), (serie || 'A').trim(), parseInt(terminal || 0), parseInt(numero)], false);
                 logger.info(`[REPARTIDOR] Step 4 CACFIRMAS: ${cacRows.length} rows for ej=${ejercicio}, serie='${(serie || 'A').trim()}', term=${terminal || 0}, num=${numero}`);
 
                 // Try to find one with actual base64 data
@@ -1005,7 +1100,7 @@ router.get('/history/signature', async (req, res) => {
 // GET /debug/signatures - Find albaranes with actual signatures in CACFIRMAS
 // Temporary diagnostic endpoint
 // =============================================================================
-router.get('/debug/signatures', async (req, res) => {
+router.get('/debug/signatures', verifyToken, async (req, res) => {
     try {
         // Find recent albaranes that have signatures in CACFIRMAS
         const rows = await query(`
@@ -1016,7 +1111,7 @@ router.get('/debug/signatures', async (req, res) => {
                 CF.ANO, CF.MES, CF.DIA,
                 LENGTH(CF.FIRMABASE64) as FIRMA_SIZE,
                 TRIM(CPC.CODIGOCLIENTEALBARAN) as CLIENTE,
-                TRIM(COALESCE(CLI.NOMBRECLIENTE, '')) as NOMBRE_CLIENTE
+                TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRE_CLIENTE
             FROM DSEDAC.CACFIRMAS CF
             INNER JOIN DSEDAC.CPC CPC 
                 ON CPC.EJERCICIOALBARAN = CF.EJERCICIOALBARAN
@@ -1056,60 +1151,70 @@ router.get('/debug/signatures', async (req, res) => {
 // GET /history/delivery-summary/:repartidorId
 // Summary of deliveries: totals entregados/pendientes by date range
 // =============================================================================
-router.get('/history/delivery-summary/:repartidorId', async (req, res) => {
+router.get('/history/delivery-summary/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { year, month } = req.query;
 
         const selectedYear = parseInt(year) || new Date().getFullYear();
         const selectedMonth = parseInt(month) || new Date().getMonth() + 1;
-        const cleanIds = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+        const repartidorIdList = sanitizeCodeListForParams(repartidorId);
+
+        if (repartidorIdList.length === 0) {
+            return res.status(400).json({ error: 'Invalid repartidor ID format' });
+        }
 
         // Only include days up to today if viewing current month/year
         // This prevents future pre-loaded albaranes from inflating the % entrega
         const now = new Date();
         const isCurrentPeriod = selectedYear === now.getFullYear() && selectedMonth === (now.getMonth() + 1);
-        const dayFilter = isCurrentPeriod ? `AND OPP.DIAREPARTO <= ${now.getDate()}` : '';
+        const dayFilter = isCurrentPeriod ? `AND OPP.DIAREPARTO <= ?` : '';
+        const dayFilterParams = isCurrentPeriod ? [now.getDate()] : [];
 
         logger.info(`[REPARTIDOR] Delivery summary for ${repartidorId}, ${selectedMonth}/${selectedYear}${isCurrentPeriod ? ` (capped to day ${now.getDate()})` : ''}`);
 
         // Subquery deduplicates by unique albaran key FIRST, then outer query aggregates by day.
         // This prevents inflated counts when multiple CPC rows exist per albaran.
         const dsAvail = isDeliveryStatusAvailable();
-        const dsJoinSub = dsAvail
-            ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS 
-                ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))`
-            : '';
+        const dsJoinSub = getDeliveryStatusJoin('CPC', 'DS');
 
-        const sql = `
+        const baseSql = `
             SELECT DIA,
                 COUNT(*) as TOTAL_ALBARANES,
                 SUM(ENTREGADO) as ENTREGADOS,
                 SUM(NO_ENTREGADO) as NO_ENTREGADOS,
                 SUM(PARCIAL) as PARCIALES,
-                SUM(IMPORTE) as IMPORTE_TOTAL
+                CAST(SUM(IMPORTE) AS DECIMAL(15,2)) as IMPORTE_TOTAL
             FROM (
                 SELECT 
                     OPP.DIAREPARTO as DIA,
                     CPC.EJERCICIOALBARAN, TRIM(CPC.SERIEALBARAN) as SERIE, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
-                    MAX(CPC.IMPORTETOTAL) as IMPORTE,
+                    CAST(MAX(CPC.IMPORTETOTAL) AS DECIMAL(15,2)) as IMPORTE,
                     MAX(CASE WHEN TRIM(CPC.CONFORMADOSN) = 'S' ${dsAvail ? "OR DS.STATUS = 'ENTREGADO'" : ''} THEN 1 ELSE 0 END) as ENTREGADO,
                     MAX(CASE WHEN ${dsAvail ? "DS.STATUS = 'NO_ENTREGADO'" : '1=0'} THEN 1 ELSE 0 END) as NO_ENTREGADO,
                     MAX(CASE WHEN ${dsAvail ? "DS.STATUS = 'PARCIAL'" : '1=0'} THEN 1 ELSE 0 END) as PARCIAL
                 FROM DSEDAC.OPP OPP
                 INNER JOIN DSEDAC.CPC CPC ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
                 ${dsJoinSub}
-                WHERE OPP.ANOREPARTO = ${selectedYear}
-                  AND OPP.MESREPARTO = ${selectedMonth}
+                WHERE OPP.ANOREPARTO = ?
+                  AND OPP.MESREPARTO = ?
                   ${dayFilter}
-                  AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanIds})
+                  AND @IN_IDS@
                 GROUP BY OPP.DIAREPARTO, CPC.EJERCICIOALBARAN, TRIM(CPC.SERIEALBARAN), CPC.TERMINALALBARAN, CPC.NUMEROALBARAN
             ) ALBS
             GROUP BY DIA
             ORDER BY DIA
         `;
 
-        const rows = await query(sql, false) || [];
+        const rows = await chunkedInQuery(
+            baseSql,
+            'TRIM(OPP.CODIGOREPARTIDOR)',
+            repartidorIdList,
+            async (sql, batchParams) => {
+                const params = [selectedYear, selectedMonth, ...dayFilterParams, ...batchParams];
+                return queryWithParams(sql, params, false) || [];
+            }
+        );
 
         let totalAlbaranes = 0, totalEntregados = 0, totalNoEntregados = 0, totalParciales = 0, totalImporte = 0;
 
@@ -1163,20 +1268,31 @@ router.get('/history/delivery-summary/:repartidorId', async (req, res) => {
 // GET /document/albaran/:year/:serie/:terminal/:number/pdf
 // Generate Albaran PDF with optional embedded signature
 // =============================================================================
-router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, res) => {
+router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', verifyToken, async (req, res) => {
     try {
-        const { year, serie, terminal, number } = req.params;
+        const { year, terminal, number } = req.params;
+        const parsedYear = parseInt(year);
+        const parsedTerminal = parseInt(terminal);
+        const parsedNumber = parseInt(number);
+        if (!parsedYear || !parsedNumber) {
+            return res.status(400).json({ success: false, error: 'Parámetros year/number/terminal inválidos' });
+        }
+        const SENTINEL_SERIES = new Set(['UNK', 'NONE', 'NULL', 'N/A', '0', 'undefined', 'null']);
+        const rawSerie = req.params.serie || '';
+        const serie = SENTINEL_SERIES.has(rawSerie.toUpperCase()) ? '' : rawSerie.replace(/[^A-Z0-9]/gi, '').substring(0, 3);
 
-        logger.info(`[PDF] Generating Albaran PDF: ${year}-${serie}-${terminal}-${number}`);
+        logger.info(`[PDF] Generating Albaran PDF: ${parsedYear}-${serie}-${parsedTerminal}-${parsedNumber}`);
 
         // 1. Fetch Header from CAC + IVA breakdown from CPC
-        const headerSql = `
+        const headers = await queryWithParams(`
             SELECT 
                 CAC.EJERCICIOALBARAN, CAC.SERIEALBARAN, CAC.NUMEROALBARAN, CAC.TERMINALALBARAN,
                 CAC.NUMEROFACTURA, CAC.SERIEFACTURA, CAC.EJERCICIOFACTURA,
                 CAC.DIADOCUMENTO as DIAFACTURA, CAC.MESDOCUMENTO as MESFACTURA, CAC.ANODOCUMENTO as ANOFACTURA,
                 TRIM(CAC.CODIGOCLIENTEALBARAN) as CODIGOCLIENTEFACTURA,
-                TRIM(COALESCE(CLI.NOMBRECLIENTE, '')) as NOMBRECLIENTEFACTURA,
+                TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRECLIENTEFACTURA,
+                TRIM(CLI.NOMBREALTERNATIVO) as NOMBRECOMERCIALFACTURA,
+                TRIM(CLI.NOMBRECLIENTE) as NOMBREFISCALFACTURA,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCIONCLIENTEFACTURA,
                 TRIM(COALESCE(CLI.POBLACION, '')) as POBLACIONCLIENTEFACTURA,
                 TRIM(COALESCE(CLI.PROVINCIA, '')) as PROVINCIACLIENTEFACTURA,
@@ -1184,35 +1300,45 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
                 TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA
             FROM DSEDAC.CAC CAC
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
-            WHERE CAC.NUMEROALBARAN = ${number} 
-              AND TRIM(CAC.SERIEALBARAN) = '${(serie || '').trim()}' 
-              AND CAC.EJERCICIOALBARAN = ${year}
-              AND CAC.TERMINALALBARAN = ${terminal}
+            WHERE CAC.NUMEROALBARAN = ?
+              AND (? = '' OR TRIM(CAC.SERIEALBARAN) = ?)
+              AND CAC.EJERCICIOALBARAN = ?
+              AND CAC.TERMINALALBARAN = ?
             FETCH FIRST 1 ROW ONLY
-        `;
-        const headers = await query(headerSql, false);
+        `, [parsedNumber, serie, serie, parsedYear, parsedTerminal], false);
 
         if (!headers || headers.length === 0) {
             return res.status(404).json({ success: false, error: 'Albarán no encontrado' });
         }
-        const header = headers[0];
+        const header = {
+            ...headers[0],
+            clienteNombre: headers[0].NOMBRECLIENTEFACTURA,
+            nombreComercial: headers[0].NOMBRECOMERCIALFACTURA || headers[0].NOMBRECLIENTEFACTURA,
+            nombreFiscal: headers[0].NOMBREFISCALFACTURA || headers[0].NOMBRECLIENTEFACTURA,
+            clienteId: headers[0].CODIGOCLIENTEFACTURA,
+            clienteDireccion: headers[0].DIRECCIONCLIENTEFACTURA,
+            clientePoblacion: headers[0].POBLACIONCLIENTEFACTURA,
+            clienteNif: headers[0].CIFCLIENTEFACTURA,
+            serie: headers[0].SERIEALBARAN,
+            numero: headers[0].NUMEROALBARAN,
+            total: parseFloat(headers[0].IMPORTETOTAL) || 0,
+        };
 
         // Fetch IVA breakdown from CPC (header-level, LAC has no IVA columns)
         try {
-            const ivaSql = `
+            const ivaRows = await queryWithParams(`
                 SELECT 
                     IMPORTEBASEIMPONIBLE1 as BI1, PORCENTAJEIVA1 as IVA1_PCT, IMPORTEIVA1 as IVA1_IMP,
                     IMPORTEBASEIMPONIBLE2 as BI2, PORCENTAJEIVA2 as IVA2_PCT, IMPORTEIVA2 as IVA2_IMP,
                     IMPORTEBASEIMPONIBLE3 as BI3, PORCENTAJEIVA3 as IVA3_PCT, IMPORTEIVA3 as IVA3_IMP,
                     IMPORTETOTAL
                 FROM DSEDAC.CPC
-                WHERE EJERCICIOALBARAN = ${year}
-                  AND TRIM(SERIEALBARAN) = '${(serie || '').trim()}'
-                  AND TERMINALALBARAN = ${terminal}
-                  AND NUMEROALBARAN = ${number}
+                WHERE EJERCICIOALBARAN = ?
+                  AND TRIM(SERIEALBARAN) = ?
+                  AND TERMINALALBARAN = ?
+                  AND NUMEROALBARAN = ?
                 FETCH FIRST 1 ROW ONLY
-            `;
-            const ivaRows = await query(ivaSql, false);
+            `, [year, (serie || '').trim(), terminal, number], false);
             if (ivaRows.length > 0) {
                 header.IVA_BREAKDOWN = ivaRows[0];
             }
@@ -1221,7 +1347,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
         }
 
         // 2. Fetch Lines from LAC
-        const linesSql = `
+        const lines = await queryWithParams(`
             SELECT 
                 LAC.CODIGOARTICULO,
                 LAC.DESCRIPCION as DESCRIPCIONARTICULO,
@@ -1234,36 +1360,36 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
                 LAC.PORCENTAJEDESCUENTO as PORCENTAJEDESCUENTOARTICULO,
                 LAC.PRECIOVENTA as PRECIOARTICULO
             FROM DSEDAC.LAC LAC
-            WHERE LAC.EJERCICIOALBARAN = ${year}
-              AND TRIM(LAC.SERIEALBARAN) = '${(serie || '').trim()}'
-              AND LAC.TERMINALALBARAN = ${terminal}
-              AND LAC.NUMEROALBARAN = ${number}
+            WHERE LAC.EJERCICIOALBARAN = ?
+              AND TRIM(LAC.SERIEALBARAN) = ?
+              AND LAC.TERMINALALBARAN = ?
+              AND LAC.NUMEROALBARAN = ?
             ORDER BY LAC.SECUENCIA
-        `;
-        const lines = await query(linesSql, false) || [];
+        `, [parsedYear, serie, parsedTerminal, parsedNumber], false) || [];
 
         // 3. Try to get signature - comprehensive cascade lookup
         let signatureBase64 = null;
         let signatureSource = null;
-        const albId = `${year}-${serie.trim()}-${terminal}-${number}`;
-        const fs = require('fs');
-        const pathModule = require('path');
+        const albId = `${parsedYear}-${serie}-${parsedTerminal}-${parsedNumber}`;
 
-        // Step 3a: Check DELIVERY_STATUS for FIRMA_PATH
+        // Step 3a: Check DELIVERY_STATUS for FIRMA_PATH (OLD schema only)
         try {
-            const dsRows = await query(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'`, false);
-            if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
-                const basePaths = [
-                    pathModule.join(__dirname, '../../uploads'),
-                    pathModule.join(__dirname, '../../uploads/photos')
-                ];
-                for (const basePath of basePaths) {
-                    const fullPath = pathModule.join(basePath, dsRows[0].FIRMA_PATH);
-                    if (fs.existsSync(fullPath)) {
-                        signatureBase64 = fs.readFileSync(fullPath).toString('base64');
-                        signatureSource = 'FILE';
-                        logger.info(`[PDF] Found signature file at ${fullPath}`);
-                        break;
+            const dsOldAvail = isDeliveryStatusAvailable() && !isDeliveryStatusNewSchema();
+            if (dsOldAvail) {
+                const dsRows = await queryWithParams(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [albId], false);
+                if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
+                    const basePaths = [
+                        path.join(__dirname, '../../uploads'),
+                        path.join(__dirname, '../../uploads/photos')
+                    ];
+                    for (const basePath of basePaths) {
+                        const fullPath = path.join(basePath, dsRows[0].FIRMA_PATH);
+                        if (fs.existsSync(fullPath)) {
+                            signatureBase64 = fs.readFileSync(fullPath).toString('base64');
+                            signatureSource = 'FILE';
+                            logger.info(`[PDF] Found signature file at ${fullPath}`);
+                            break;
+                        }
                     }
                 }
             }
@@ -1274,16 +1400,16 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
         // Step 3b: Try REPARTIDOR_FIRMAS if no file signature
         if (!signatureBase64) {
             try {
-                const firmaRows = await query(`
-                    SELECT RF.FIRMA_BASE64 FROM JAVIER.REPARTIDOR_FIRMAS RF
+                const firmaRows = await queryWithParams(`
+                    SELECT RF.FIRMABASE64 FROM JAVIER.REPARTIDOR_FIRMAS RF
                     INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
-                    WHERE RE.NUMERO_ALBARAN = ${number}
-                      AND RE.EJERCICIO_ALBARAN = ${year}
-                      AND RE.SERIE_ALBARAN = '${serie.trim()}'
+                    WHERE RE.NUMEROORDENPREPARACION = ?
+                      AND RE.EJERCICIOALBARAN = ?
+                      AND TRIM(RE.SERIEALBARAN) = ?
                     FETCH FIRST 1 ROW ONLY
-                `, false);
-                if (firmaRows.length > 0 && firmaRows[0].FIRMA_BASE64) {
-                    signatureBase64 = firmaRows[0].FIRMA_BASE64;
+                `, [parsedNumber, parsedYear, serie], false);
+                if (firmaRows.length > 0 && firmaRows[0].FIRMABASE64) {
+                    signatureBase64 = firmaRows[0].FIRMABASE64;
                     signatureSource = 'REPARTIDOR_FIRMAS';
                     logger.info(`[PDF] Using signature from REPARTIDOR_FIRMAS`);
                 }
@@ -1295,14 +1421,14 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
         // Step 3c: Try CACFIRMAS (legacy ERP signatures) as last resort
         if (!signatureBase64) {
             try {
-                const cacRows = await query(`
+                const cacRows = await queryWithParams(`
                     SELECT FIRMABASE64 FROM DSEDAC.CACFIRMAS
-                    WHERE EJERCICIOALBARAN = ${year}
-                      AND TRIM(SERIEALBARAN) = '${serie.trim()}'
-                      AND TERMINALALBARAN = ${terminal}
-                      AND NUMEROALBARAN = ${number}
+                    WHERE EJERCICIOALBARAN = ?
+                      AND TRIM(SERIEALBARAN) = ?
+                      AND TERMINALALBARAN = ?
+                      AND NUMEROALBARAN = ?
                     FETCH FIRST 1 ROW ONLY
-                `, false);
+                `, [parsedYear, serie, parsedTerminal, parsedNumber], false);
                 if (cacRows.length > 0 && cacRows[0].FIRMABASE64) {
                     let b64 = cacRows[0].FIRMABASE64;
                     b64 = b64.replace(/^data:image\/\w+;base64,/, '');
@@ -1320,10 +1446,13 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
         // 4. Generate PDF with optional signature (documentType = albaran)
         const buffer = await generateInvoicePDF({ header, lines, signatureBase64, signatureSource, documentType: 'albaran' });
 
+        const safeFilename = `Albaran_${parsedYear}_${serie}_${parsedNumber}.pdf`.replace(/[^a-zA-Z0-9._-]/g, '_');
         res.set({
             'Content-Type': 'application/pdf',
-            'Content-Disposition': `attachment; filename=Albaran_${year}_${serie}_${number}.pdf`,
-            'Content-Length': buffer.length
+            'Content-Disposition': `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(safeFilename)}`,
+            'Content-Length': buffer.length,
+            'Accept-Ranges': 'bytes',
+            'Cache-Control': 'no-cache, no-store, must-revalidate'
         });
         res.send(buffer);
 
@@ -1337,7 +1466,7 @@ router.get('/document/albaran/:year/:serie/:terminal/:number/pdf', async (req, r
 // GET /config
 // Get commission configuration
 // =============================================================================
-router.get('/config', (req, res) => {
+router.get('/config', verifyToken, (req, res) => {
     res.json({
         success: true,
         config: {
@@ -1356,7 +1485,7 @@ router.get('/config', (req, res) => {
 // POST /entregas
 // Crear o actualizar una entrega
 // =============================================================================
-router.post('/entregas', async (req, res) => {
+router.post('/entregas', verifyToken, async (req, res) => {
     try {
         const {
             numeroAlbaran,
@@ -1376,49 +1505,70 @@ router.post('/entregas', async (req, res) => {
         logger.info(`[REPARTIDOR] Creating/updating entrega for albaran ${numeroAlbaran}`);
 
         // Check if delivery already exists
-        const checkSql = `
+        const existing = await queryWithParams(`
             SELECT ID FROM JAVIER.REPARTIDOR_ENTREGAS 
-            WHERE NUMERO_ALBARAN = ${numeroAlbaran} 
-              AND EJERCICIO_ALBARAN = ${ejercicioAlbaran} 
-              AND SERIE_ALBARAN = '${serieAlbaran}'
-        `;
-        const existing = await query(checkSql, false);
+            WHERE NUMEROORDENPREPARACION = ? 
+              AND EJERCICIOALBARAN = ? 
+              AND SERIEALBARAN = ?
+        `, [numeroAlbaran, ejercicioAlbaran, serieAlbaran]);
 
         let entregaId;
 
         if (existing.length > 0) {
             // Update existing
             entregaId = existing[0].ID;
-            const updateSql = `
+            await queryWithParams(`
                 UPDATE JAVIER.REPARTIDOR_ENTREGAS SET
-                    ESTADO = '${estado}',
-                    FECHA_ENTREGA = ${estado === 'ENTREGADO' ? 'CURRENT_TIMESTAMP' : 'NULL'},
-                    OBSERVACIONES = ${observaciones ? `'${observaciones.replace(/'/g, "''")}'` : 'NULL'}
-                WHERE ID = ${entregaId}
-            `;
-            await query(updateSql, false);
+                    ESTADOENTREGA = ?,
+                    FECHAENTREGA = ${estado === 'ENTREGADO' ? 'CURRENT_TIMESTAMP' : 'NULL'},
+                    OBSERVACIONES = ?
+                WHERE ID = ?
+            `, [estado, observaciones || null, entregaId]);
         } else {
             // Insert new
-            const insertSql = `
+            await queryWithParams(`
                 INSERT INTO JAVIER.REPARTIDOR_ENTREGAS (
-                    NUMERO_ALBARAN, EJERCICIO_ALBARAN, SERIE_ALBARAN,
-                    CODIGO_CLIENTE, NOMBRE_CLIENTE,
-                    CODIGO_REPARTIDOR, CODIGO_CONDUCTOR,
-                    ESTADO, FECHA_PREVISTA, IMPORTE_TOTAL, ES_CTR, OBSERVACIONES
-                ) VALUES (
-                    ${numeroAlbaran}, ${ejercicioAlbaran}, '${serieAlbaran}',
-                    '${codigoCliente}', ${nombreCliente ? `'${nombreCliente.replace(/'/g, "''")}'` : 'NULL'},
-                    '${codigoRepartidor}', ${codigoConductor ? `'${codigoConductor}'` : 'NULL'},
-                    '${estado}', ${fechaPrevista ? `'${fechaPrevista}'` : 'CURRENT_DATE'},
-                    ${importeTotal || 0}, '${esCTR ? 'S' : 'N'}',
-                    ${observaciones ? `'${observaciones.replace(/'/g, "''")}'` : 'NULL'}
-                )
-            `;
-            await query(insertSql, false);
+                    NUMEROORDENPREPARACION, EJERCICIOALBARAN, SERIEALBARAN,
+                    CODIGOCLIENTE, NOMBRECLIENTE,
+                    CODIGOREPARTIDOR, CODIGOCONDUCTOR,
+                    ESTADOENTREGA, FECHAPREVISTAENTREGA, IMPORTEVENCIMIENTO, ESCTR, OBSERVACIONES
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                numeroAlbaran, ejercicioAlbaran, serieAlbaran,
+                codigoCliente, nombreCliente || null,
+                codigoRepartidor, codigoConductor || null,
+                estado, fechaPrevista || null,
+                importeTotal || 0, esCTR ? 'S' : 'N',
+                observaciones || null
+            ]);
 
             // Get the new ID
-            const newIdResult = await query(checkSql, false);
+            const newIdResult = await queryWithParams(`
+                SELECT ID FROM JAVIER.REPARTIDOR_ENTREGAS 
+                WHERE NUMEROORDENPREPARACION = ? 
+                  AND EJERCICIOALBARAN = ? 
+                  AND SERIEALBARAN = ?
+            `, [numeroAlbaran, ejercicioAlbaran, serieAlbaran]);
             entregaId = newIdResult[0]?.ID;
+        }
+
+        // EXPORT al ERP DSEDAC (best-effort, no rompe el flujo).
+        // Solo se ejecuta si PEDIDOS_EXPORT_TO_SYSTEM=true en .env.
+        try {
+            const dsedacExports = require('../services/dsedac-exports.service');
+            const idempotencyToken = `ENT:${ejercicioAlbaran}:${serieAlbaran}:${numeroAlbaran}`;
+            await dsedacExports.exportEntregaToSystem(
+                {
+                    IDEMPOTENCY_TOKEN: idempotencyToken,
+                    CODIGOCLIENTEALBARAN: codigoCliente,
+                    CODIGOCLIENTE: codigoCliente,
+                    CODIGOVENDEDOR: codigoRepartidor,
+                    IMPORTETOTAL: importeTotal || 0,
+                },
+                [], // las lineas se exportarian aparte si la app las pasara
+            );
+        } catch (exportErr) {
+            logger.warn(`[REPARTIDOR] dsedac CAC export best-effort fail: ${exportErr.message}`);
         }
 
         res.json({
@@ -1437,7 +1587,7 @@ router.post('/entregas', async (req, res) => {
 // POST /entregas/:entregaId/firma
 // Guardar firma digital de una entrega
 // =============================================================================
-router.post('/entregas/:entregaId/firma', async (req, res) => {
+router.post('/entregas/:entregaId/firma', verifyToken, async (req, res) => {
     try {
         const { entregaId } = req.params;
         const {
@@ -1456,33 +1606,31 @@ router.post('/entregas/:entregaId/firma', async (req, res) => {
         }
 
         // Delete existing signature if any
-        await query(`DELETE FROM JAVIER.REPARTIDOR_FIRMAS WHERE ENTREGA_ID = ${entregaId}`, false);
+        await queryWithParams(`DELETE FROM JAVIER.REPARTIDOR_FIRMAS WHERE ENTREGA_ID = ?`, [entregaId]);
 
         // Insert new signature
-        const insertSql = `
+        await queryWithParams(`
             INSERT INTO JAVIER.REPARTIDOR_FIRMAS (
-                ENTREGA_ID, FIRMA_BASE64, FIRMANTE_NOMBRE, FIRMANTE_DNI,
+                ENTREGA_ID, FIRMABASE64, FIRMANOMBRE, FIRMADNI,
                 DISPOSITIVO, LATITUD, LONGITUD
-            ) VALUES (
-                ${entregaId},
-                '${firmaBase64.substring(0, 1000000)}',
-                ${firmaNombre ? `'${firmaNombre.replace(/'/g, "''")}'` : 'NULL'},
-                ${firmaDNI ? `'${firmaDNI}'` : 'NULL'},
-                ${dispositivo ? `'${dispositivo}'` : 'NULL'},
-                ${latitud || 'NULL'},
-                ${longitud || 'NULL'}
-            )
-        `;
-
-        await query(insertSql, false);
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [
+            entregaId,
+            (firmaBase64 || '').substring(0, 1000000),
+            firmaNombre || null,
+            firmaDNI || null,
+            dispositivo || null,
+            latitud || null,
+            longitud || null
+        ]);
 
         // Update entrega status to delivered
-        await query(`
+        await queryWithParams(`
             UPDATE JAVIER.REPARTIDOR_ENTREGAS SET 
-                ESTADO = 'ENTREGADO', 
-                FECHA_ENTREGA = CURRENT_TIMESTAMP 
-            WHERE ID = ${entregaId}
-        `, false);
+                ESTADOENTREGA = 'ENTREGADO', 
+                FECHAENTREGA = CURRENT_TIMESTAMP 
+            WHERE ID = ?
+        `, [entregaId]);
 
         res.json({
             success: true,
@@ -1499,7 +1647,7 @@ router.post('/entregas/:entregaId/firma', async (req, res) => {
 // POST /entregas/:entregaId/lineas
 // Guardar estado de líneas de artículos
 // =============================================================================
-router.post('/entregas/:entregaId/lineas', async (req, res) => {
+router.post('/entregas/:entregaId/lineas', verifyToken, async (req, res) => {
     try {
         const { entregaId } = req.params;
         const { lineas } = req.body;
@@ -1511,29 +1659,28 @@ router.post('/entregas/:entregaId/lineas', async (req, res) => {
         }
 
         // Delete existing lines
-        await query(`DELETE FROM JAVIER.REPARTIDOR_ENTREGA_LINEAS WHERE ENTREGA_ID = ${entregaId}`, false);
+        await queryWithParams(`DELETE FROM JAVIER.REPARTIDOR_ENTREGA_LINEAS WHERE ENTREGA_ID = ?`, [entregaId]);
 
         // Insert new lines
         for (const linea of lineas) {
-            const insertSql = `
+            await queryWithParams(`
                 INSERT INTO JAVIER.REPARTIDOR_ENTREGA_LINEAS (
-                    ENTREGA_ID, LINEA_ALBARAN, CODIGO_ARTICULO, DESCRIPCION_ARTICULO,
-                    CANTIDAD_PEDIDA, CANTIDAD_ENTREGADA, CANTIDAD_RECHAZADA,
-                    ESTADO, OBSERVACIONES, MOTIVO_NO_ENTREGA
-                ) VALUES (
-                    ${entregaId},
-                    ${linea.lineaAlbaran || 0},
-                    '${linea.codigoArticulo || ''}',
-                    ${linea.descripcion ? `'${linea.descripcion.replace(/'/g, "''").substring(0, 200)}'` : 'NULL'},
-                    ${linea.cantidadPedida || 0},
-                    ${linea.cantidadEntregada || 0},
-                    ${linea.cantidadRechazada || 0},
-                    '${linea.estado || 'PENDIENTE'}',
-                    ${linea.observaciones ? `'${linea.observaciones.replace(/'/g, "''")}'` : 'NULL'},
-                    ${linea.motivoNoEntrega ? `'${linea.motivoNoEntrega}'` : 'NULL'}
-                )
-            `;
-            await query(insertSql, false);
+                    ENTREGA_ID, LINEAALBARAN, CODIGOARTICULO, DESCRIPCION,
+                    CANTIDADPEDIDA, CANTIDADENTREGADA, CANTIDADRECHAZADA,
+                    ESTADO, OBSERVACIONES, MOTIVONOENTREGA
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+                entregaId,
+                linea.lineaAlbaran || 0,
+                linea.codigoArticulo || '',
+                linea.descripcion ? linea.descripcion.substring(0, 200) : null,
+                linea.cantidadPedida || 0,
+                linea.cantidadEntregada || 0,
+                linea.cantidadRechazada || 0,
+                linea.estado || 'PENDIENTE',
+                linea.observaciones || null,
+                linea.motivoNoEntrega || null
+            ]);
         }
 
         // Determine overall delivery status
@@ -1541,9 +1688,9 @@ router.post('/entregas/:entregaId/lineas', async (req, res) => {
         const noneDelivered = lineas.every(l => l.estado === 'NO_ENTREGADO');
         const overallStatus = allDelivered ? 'ENTREGADO' : (noneDelivered ? 'NO_ENTREGADO' : 'PARCIAL');
 
-        await query(`
-            UPDATE JAVIER.REPARTIDOR_ENTREGAS SET ESTADO = '${overallStatus}' WHERE ID = ${entregaId}
-        `, false);
+        await queryWithParams(`
+            UPDATE JAVIER.REPARTIDOR_ENTREGAS SET ESTADOENTREGA = ? WHERE ID = ?
+        `, [overallStatus, entregaId]);
 
         res.json({
             success: true,
@@ -1561,7 +1708,7 @@ router.post('/entregas/:entregaId/lineas', async (req, res) => {
 // POST /cobros
 // Registrar un cobro realizado
 // =============================================================================
-router.post('/cobros', async (req, res) => {
+router.post('/cobros', verifyToken, async (req, res) => {
     try {
         const {
             entregaId,
@@ -1571,44 +1718,72 @@ router.post('/cobros', async (req, res) => {
             tipoDocumento,
             numeroDocumento,
             ejercicioDocumento,
+            origenDocumento = 'B',
+            subempresaDocumento = 'GMP',
+            serieDocumento = '',
+            terminalDocumento = 0,
+            xdeDocumento = 1,
             importeCobrado,
             importePendiente = 0,
             formaPago,
-            notas
+            notas,
+            idempotencyToken
         } = req.body;
 
         logger.info(`[REPARTIDOR] Recording cobro for ${tipoDocumento} ${numeroDocumento}`);
 
         const insertSql = `
             INSERT INTO JAVIER.REPARTIDOR_COBROS (
-                ENTREGA_ID, CODIGO_CLIENTE, NOMBRE_CLIENTE,
-                CODIGO_REPARTIDOR, TIPO_DOCUMENTO, NUMERO_DOCUMENTO, EJERCICIO_DOCUMENTO,
-                IMPORTE_COBRADO, IMPORTE_PENDIENTE, FORMA_PAGO, NOTAS
-            ) VALUES (
-                ${entregaId || 'NULL'},
-                '${codigoCliente}',
-                ${nombreCliente ? `'${nombreCliente.replace(/'/g, "''")}'` : 'NULL'},
-                '${codigoRepartidor}',
-                '${tipoDocumento}',
-                ${numeroDocumento},
-                ${ejercicioDocumento},
-                ${importeCobrado},
-                ${importePendiente},
-                ${formaPago ? `'${formaPago}'` : 'NULL'},
-                ${notas ? `'${notas.replace(/'/g, "''")}'` : 'NULL'}
-            )
+                ENTREGA_ID, ENTREGA_APP_ID, CODIGOCLIENTE, NOMBRECLIENTE,
+                CODIGOREPARTIDOR, TIPODOCUMENTO, ORIGENDOCUMENTO,
+                SUBEMPRESADOCUMENTO, SERIEDOCUMENTO, TERMINALDOCUMENTO,
+                NUMERODOCUMENTO, EJERCICIODOCUMENTO, XDEDOCUMENTO,
+                IMPORTECOBRADO, IMPORTEPENDIENTE, FORMAPAGO,
+                IDEMPOTENCYTOKEN, PANTALLAORIGEN, OPERADOR, NOTAS
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `;
+        const numericEntregaId =
+            entregaId !== undefined &&
+            entregaId !== null &&
+            String(entregaId).trim() !== '' &&
+            Number.isInteger(Number(entregaId))
+                ? Number(entregaId)
+                : null;
+        const generatedToken = idempotencyToken ||
+            `legacy:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+        const operador = (req.user && (req.user.code || req.user.id)) || 'unknown';
 
-        await query(insertSql, false);
+        await queryWithParams(insertSql, [
+            numericEntregaId,
+            entregaId ? entregaId.toString() : null,
+            codigoCliente,
+            nombreCliente || null,
+            codigoRepartidor,
+            tipoDocumento,
+            origenDocumento,
+            subempresaDocumento,
+            serieDocumento,
+            terminalDocumento,
+            numeroDocumento,
+            ejercicioDocumento,
+            xdeDocumento,
+            importeCobrado,
+            importePendiente,
+            formaPago || null,
+            generatedToken,
+            'RUTERO',
+            operador,
+            notas || null
+        ]);
 
         // Update CTR status if applicable
         if (entregaId) {
-            await query(`
+            await queryWithParams(`
                 UPDATE JAVIER.REPARTIDOR_ENTREGAS SET 
-                    CTR_COBRADO = 'S',
-                    IMPORTE_COBRADO = IMPORTE_COBRADO + ${importeCobrado}
-                WHERE ID = ${entregaId} AND ES_CTR = 'S'
-            `, false);
+                    CTRCOBRADO = 'S',
+                    IMPORTECOBRADO = IMPORTECOBRADO + ?
+                WHERE ID = ? AND ESCTR = 'S'
+            `, [importeCobrado, entregaId]);
         }
 
         res.json({
@@ -1626,30 +1801,32 @@ router.post('/cobros', async (req, res) => {
 // GET /entregas/:entregaId/firma
 // Obtener firma de una entrega
 // =============================================================================
-router.get('/entregas/:entregaId/firma', async (req, res) => {
+router.get('/entregas/:entregaId/firma', verifyToken, async (req, res) => {
     try {
         const { entregaId } = req.params;
 
-        const sql = `
-            SELECT FIRMA_BASE64, FIRMANTE_NOMBRE, FECHA_FIRMA
+        const rows = await queryWithParams(`
+            SELECT FIRMABASE64, FIRMANOMBRE, DIA, MES, ANO, HORA
             FROM JAVIER.REPARTIDOR_FIRMAS 
-            WHERE ENTREGA_ID = ${entregaId}
+            WHERE ENTREGA_ID = ?
             FETCH FIRST 1 ROW ONLY
-        `;
-
-        const rows = await query(sql, false);
+        `, [entregaId], false);
 
         if (rows.length === 0) {
             return res.json({ success: true, hasSignature: false });
         }
 
+        const fechaFirma = (rows[0].ANO > 0)
+            ? `${rows[0].ANO}-${String(rows[0].MES).padStart(2, '0')}-${String(rows[0].DIA).padStart(2, '0')} ${String(rows[0].HORA).padStart(6, '0').substring(0, 2)}:${String(rows[0].HORA).padStart(6, '0').substring(2, 4)}`
+            : null;
+
         res.json({
             success: true,
             hasSignature: true,
             signature: {
-                base64: rows[0].FIRMA_BASE64,
-                firmante: rows[0].FIRMANTE_NOMBRE,
-                fecha: rows[0].FECHA_FIRMA
+                base64: rows[0].FIRMABASE64,
+                firmante: rows[0].FIRMANOMBRE,
+                fecha: fechaFirma
             }
         });
 
@@ -1664,7 +1841,7 @@ router.get('/entregas/:entregaId/firma', async (req, res) => {
 // Resumen semanal para el calendario (LUN 30, MAR 31...)
 // Estado basado en cobros de CONTADO, REPOSICION, MENSUAL
 // =============================================================================
-router.get('/rutero/week/:repartidorId', async (req, res) => {
+router.get('/rutero/week/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { date } = req.query; // Fecha de referencia (ej. hoy)
@@ -1693,7 +1870,12 @@ router.get('/rutero/week/:repartidorId', async (req, res) => {
             d.setDate(d.getDate() + 1);
         }
 
-        const cleanRepartidorId = repartidorId.toString().trim();
+        const repartidorIdList = sanitizeCodeListForParams(repartidorId);
+        if (repartidorIdList.length === 0) {
+            return res.status(400).json({ error: 'Invalid repartidor ID format' });
+        }
+
+        const cleanRepartidorId = repartidorIdList.join(',');
         const startDateStr = weekDays[0].formatted;
         const endDateStr = weekDays[6].formatted;
 
@@ -1702,10 +1884,13 @@ router.get('/rutero/week/:repartidorId', async (req, res) => {
         // Today's numeric date for past-date logic
         const now = new Date();
         const todayNum = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+        const weekStartNum = weekDays[0].syear * 10000 + weekDays[0].smonth * 100 + weekDays[0].sday;
+        const weekEndNum = weekDays[6].syear * 10000 + weekDays[6].smonth * 100 + weekDays[6].sday;
 
         // Query to get daily aggregates
         // ENTREGADOS: ERP-confirmed (CONFORMADOSN) + app-confirmed (DELIVERY_STATUS) + past dates
         const dsWeekAvail = isDeliveryStatusAvailable();
+        const dsWeekJoin = getDeliveryStatusJoin('CPC', 'DS');
         const sql = `
             SELECT
                 OPP.DIAREPARTO as DIA,
@@ -1715,23 +1900,22 @@ router.get('/rutero/week/:repartidorId', async (req, res) => {
                 COUNT(DISTINCT CASE
                     WHEN TRIM(CPC.CONFORMADOSN) = 'S' OR CPC.SITUACIONALBARAN IN ('F', 'R') THEN CPC.NUMEROALBARAN
                     ${dsWeekAvail ? "WHEN DS.STATUS = 'ENTREGADO' THEN CPC.NUMEROALBARAN" : ''}
-                    WHEN (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) < ${todayNum}
+                    WHEN (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) < ?
                          THEN CPC.NUMEROALBARAN
                     ELSE NULL
                 END) as ENTREGADOS
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-            ${dsWeekAvail ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS
-                ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))` : ''}
+            ${dsWeekAvail ? dsWeekJoin : ''}
             WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO)
-                BETWEEN ${weekDays[0].syear * 10000 + weekDays[0].smonth * 100 + weekDays[0].sday}
-                    AND ${weekDays[6].syear * 10000 + weekDays[6].smonth * 100 + weekDays[6].sday}
-              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId.split(',').map(id => `'${id.trim()}'`).join(',')})
+                BETWEEN ? AND ?
+              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
             GROUP BY OPP.ANOREPARTO, OPP.MESREPARTO, OPP.DIAREPARTO
         `;
 
-        const rows = await query(sql, false);
+        const sqlParams = [todayNum, weekStartNum, weekEndNum, ...repartidorIdList];
+        const rows = await queryWithParams(sql, sqlParams, false);
 
         // Map results to weekDays
         const days = weekDays.map(wd => {
@@ -1779,7 +1963,7 @@ router.get('/rutero/week/:repartidorId', async (req, res) => {
 // GET /history/:repartidorId
 // Retrieve historical deliveries with filtering
 // =============================================================================
-router.get('/history/:repartidorId', async (req, res) => {
+router.get('/history/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { startDate, endDate, search } = req.query;
@@ -1791,11 +1975,15 @@ router.get('/history/:repartidorId', async (req, res) => {
         // Convert dates to integers YYYYMMDD
         const startInt = parseInt(startDate.replace(/-/g, ''));
         const endInt = parseInt(endDate.replace(/-/g, ''));
-        const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
+        const repartidorIdList = sanitizeCodeListForParams(repartidorId);
+        if (repartidorIdList.length === 0) {
+            return res.status(400).json({ success: false, error: 'Invalid repartidor ID format' });
+        }
 
         logger.info(`[REPARTIDOR] History for ${repartidorId} from ${startInt} to ${endInt}`);
 
         const dsHistAvail = isDeliveryStatusAvailable();
+        const dsHistJoin = getDeliveryStatusJoin('CPC', 'DS');
         let sql = `
             SELECT 
                 CPC.ANODOCUMENTO || '-' || RIGHT('0' || CPC.MESDOCUMENTO, 2) || '-' || RIGHT('0' || CPC.DIADOCUMENTO, 2) as FECHA,
@@ -1809,7 +1997,7 @@ router.get('/history/:repartidorId', async (req, res) => {
                 TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRE_CLIENTE,
                 CPC.IMPORTETOTAL as TOTAL,
                 ${dsHistAvail ? "DS.STATUS as ESTADO_ENTREGA" : "CAST(NULL AS VARCHAR(20)) as ESTADO_ENTREGA"},
-                ${dsHistAvail ? "DS.FIRMA_PATH" : "CAST(NULL AS VARCHAR(255)) as FIRMA_PATH"}
+                ${dsHistAvail && !isDeliveryStatusNewSchema() ? "DS.FIRMA_PATH" : "CAST(NULL AS VARCHAR(255)) as FIRMA_PATH"}
             FROM DSEDAC.OPP OPP
             INNER JOIN DSEDAC.CPC CPC 
                 ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
@@ -1820,25 +2008,27 @@ router.get('/history/:repartidorId', async (req, res) => {
                 AND CAC.NUMEROALBARAN = CPC.NUMEROALBARAN
             LEFT JOIN DSEDAC.CLI CLI 
                 ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-            ${dsHistAvail ? `LEFT JOIN JAVIER.DELIVERY_STATUS DS 
-                ON DS.ID = TRIM(CAST(CPC.EJERCICIOALBARAN AS VARCHAR(10))) || '-' || TRIM(CPC.SERIEALBARAN) || '-' || TRIM(CAST(CPC.TERMINALALBARAN AS VARCHAR(10))) || '-' || TRIM(CAST(CPC.NUMEROALBARAN AS VARCHAR(10)))` : ''}
-            WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ${startInt} AND ${endInt}
-              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
+            ${dsHistAvail ? dsHistJoin : ''}
+            WHERE (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ? AND ?
+              AND TRIM(OPP.CODIGOREPARTIDOR) IN (${repartidorIdList.map(() => '?').join(',')})
         `;
 
+        const sqlParams = [startInt, endInt, ...repartidorIdList];
+
         if (search) {
-            const cleanSearch = search.toUpperCase().replace(/'/g, "''");
+            const cleanSearch = `%${search.toUpperCase()}%`;
             sql += ` AND (
-                UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR 
-                UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR
-                CAST(CPC.NUMEROALBARAN AS CHAR(20)) LIKE '%${cleanSearch}%' OR
-                CAST(CAC.NUMEROFACTURA AS CHAR(20)) LIKE '%${cleanSearch}%'
+                UPPER(CLI.NOMBRECLIENTE) LIKE ? OR 
+                UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR
+                CAST(CPC.NUMEROALBARAN AS CHAR(20)) LIKE ? OR
+                CAST(CAC.NUMEROFACTURA AS CHAR(20)) LIKE ?
             )`;
+            sqlParams.push(cleanSearch, cleanSearch, cleanSearch, cleanSearch);
         }
 
         sql += ` ORDER BY FECHA DESC, CPC.NUMEROALBARAN DESC FETCH FIRST 200 ROWS ONLY`;
 
-        const rows = await query(sql, false) || [];
+        const rows = await queryWithParams(sql, sqlParams, false) || [];
 
         res.json({ success: true, count: rows.length, data: rows });
     } catch (e) {
@@ -1851,11 +2041,19 @@ router.get('/history/:repartidorId', async (req, res) => {
 // GET /document/invoice/:year/:serie/:number/pdf
 // Generate formal Invoice PDF
 // =============================================================================
-router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
+router.get('/document/invoice/:year/:serie/:number/pdf', verifyToken, async (req, res) => {
     try {
-        const { year, serie, number } = req.params;
-        // Optional query params for albaran-level fallback lookup
+        const { year, number } = req.params;
         const { albaranNumber, albaranSerie, albaranTerminal, albaranYear } = req.query;
+
+        const parsedYear = parseInt(req.params.year);
+        const parsedNumber = parseInt(req.params.number);
+        if (!parsedYear || !parsedNumber) {
+            return res.status(400).json({ success: false, error: 'Parámetros year/number inválidos' });
+        }
+        const SENTINEL_SERIES = new Set(['UNK', 'NONE', 'NULL', 'N/A', '0', 'undefined', 'null']);
+        const rawSerie = req.params.serie || '';
+        const serie = SENTINEL_SERIES.has(rawSerie.toUpperCase()) ? '' : rawSerie.replace(/[^A-Z0-9]/gi, '').substring(0, 3);
 
         logger.info(`[PDF] Generating Invoice PDF: ${year}-${serie}-${number} (albaran fallback: ${albaranNumber || 'none'})`);
 
@@ -1866,61 +2064,74 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
                 CAC.TERMINALALBARAN,
                 CAC.DIADOCUMENTO as DIAFACTURA, CAC.MESDOCUMENTO as MESFACTURA, CAC.ANODOCUMENTO as ANOFACTURA,
                 TRIM(CAC.CODIGOCLIENTEALBARAN) as CODIGOCLIENTEFACTURA,
-                TRIM(COALESCE(CLI.NOMBRECLIENTE, '')) as NOMBRECLIENTEFACTURA,
+                TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRECLIENTEFACTURA,
+                TRIM(CLI.NOMBREALTERNATIVO) as NOMBRECOMERCIALFACTURA,
+                TRIM(CLI.NOMBRECLIENTE) as NOMBREFISCALFACTURA,
                 TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCIONCLIENTEFACTURA,
                 TRIM(COALESCE(CLI.POBLACION, '')) as POBLACIONCLIENTEFACTURA,
                 TRIM(COALESCE(CLI.PROVINCIA, '')) as PROVINCIACLIENTEFACTURA,
                 TRIM(COALESCE(CLI.CODIGOPOSTAL, '')) as CPCLIENTEFACTURA,
                 TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA`;
 
-        // 1A. Primary: Try by NUMEROFACTURA/SERIEFACTURA/EJERCICIOFACTURA
-        let headerSql = `
+        let headers = await queryWithParams(`
             SELECT ${headerCols}
             FROM DSEDAC.CAC CAC
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
-            WHERE CAC.NUMEROFACTURA = ${number} 
-              AND TRIM(CAC.SERIEFACTURA) = '${(serie || '').trim()}' 
-              AND CAC.EJERCICIOFACTURA = ${year}
+            WHERE CAC.NUMEROFACTURA = ?
+              AND (? = '' OR TRIM(CAC.SERIEFACTURA) = ?)
+              AND CAC.EJERCICIOFACTURA = ?
             FETCH FIRST 1 ROW ONLY
-        `;
-        let headers = await query(headerSql, false);
+        `, [parsedNumber, serie, serie, parsedYear], false);
 
-        // 1B. Fallback: Try by albaran fields if factura query failed
-        if ((!headers || headers.length === 0) && albaranNumber) {
-            logger.info(`[PDF] Factura query returned 0 rows, trying albaran fallback: ${albaranYear || year}-${albaranSerie || serie}-${albaranTerminal || 0}-${albaranNumber}`);
-            headerSql = `
+        const parsedAlbaranNumber = parseInt(albaranNumber);
+        const parsedAlbaranYear = parseInt(albaranYear || year);
+        const parsedAlbaranTerminal = parseInt(albaranTerminal || 0);
+        const albaranSerieNorm = albaranNumber
+            ? (SENTINEL_SERIES.has((albaranSerie || '').toUpperCase()) ? '' : (albaranSerie || '').replace(/[^A-Z0-9]/gi, '').substring(0, 3))
+            : null;
+
+        if ((!headers || headers.length === 0) && parsedAlbaranNumber) {
+            logger.info(`[PDF] Factura query returned 0 rows, trying albaran fallback: ${parsedAlbaranYear}-${albaranSerieNorm}-${parsedAlbaranTerminal}-${parsedAlbaranNumber}`);
+            headers = await queryWithParams(`
                 SELECT ${headerCols}
                 FROM DSEDAC.CAC CAC
                 LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
-                WHERE CAC.NUMEROALBARAN = ${albaranNumber} 
-                  AND TRIM(CAC.SERIEALBARAN) = '${(albaranSerie || serie || '').trim()}'
-                  AND CAC.EJERCICIOALBARAN = ${albaranYear || year}
-                  AND CAC.TERMINALALBARAN = ${albaranTerminal || 0}
+                WHERE CAC.NUMEROALBARAN = ?
+                  AND (? = '' OR TRIM(CAC.SERIEALBARAN) = ?)
+                  AND CAC.EJERCICIOALBARAN = ?
+                  AND CAC.TERMINALALBARAN = ?
                 FETCH FIRST 1 ROW ONLY
-            `;
-            headers = await query(headerSql, false);
+            `, [parsedAlbaranNumber, albaranSerieNorm, albaranSerieNorm, parsedAlbaranYear, parsedAlbaranTerminal], false);
         }
 
         // 1C. Last resort: Try factura number as albaran number (Flutter may pass albaran number)
         if (!headers || headers.length === 0) {
-            logger.info(`[PDF] Both queries failed, trying albaran-as-number fallback: ${year}-${serie}-${number}`);
-            headerSql = `
+            logger.info(`[PDF] Both queries failed, trying albaran-as-number fallback: ${parsedYear}-${serie}-${parsedNumber}`);
+            headers = await queryWithParams(`
                 SELECT ${headerCols}
                 FROM DSEDAC.CAC CAC
                 LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTEALBARAN)
-                WHERE CAC.NUMEROALBARAN = ${number}
-                  AND TRIM(CAC.SERIEALBARAN) = '${(serie || '').trim()}'
-                  AND CAC.EJERCICIOALBARAN = ${year}
+                WHERE CAC.NUMEROALBARAN = ?
+                  AND (? = '' OR TRIM(CAC.SERIEALBARAN) = ?)
+                  AND CAC.EJERCICIOALBARAN = ?
                 FETCH FIRST 1 ROW ONLY
-            `;
-            headers = await query(headerSql, false);
+            `, [parsedNumber, serie, serie, parsedYear], false);
         }
 
         if (!headers || headers.length === 0) {
             logger.warn(`[PDF] Invoice not found for any query combination: ${year}-${serie}-${number}`);
             return res.status(404).json({ success: false, error: 'Factura no encontrada (CAC)' });
         }
-        const header = headers[0];
+        const header = {
+            ...headers[0],
+            clienteNombre: headers[0].NOMBRECLIENTEFACTURA,
+            nombreComercial: headers[0].NOMBRECOMERCIALFACTURA || headers[0].NOMBRECLIENTEFACTURA,
+            nombreFiscal: headers[0].NOMBREFISCALFACTURA || headers[0].NOMBRECLIENTEFACTURA,
+            clienteId: headers[0].CODIGOCLIENTEFACTURA,
+            clienteDireccion: headers[0].DIRECCIONCLIENTEFACTURA,
+            clientePoblacion: headers[0].POBLACIONCLIENTEFACTURA,
+            clienteNif: headers[0].CIFCLIENTEFACTURA,
+        };
         const actualEjAlb = header.EJERCICIOALBARAN;
         const actualSerieAlb = (header.SERIEALBARAN || '').toString().trim();
         const actualTermAlb = header.TERMINALALBARAN || 0;
@@ -1930,20 +2141,19 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
 
         // Fetch IVA breakdown from CPC
         try {
-            const ivaSql = `
+            const ivaRows = await queryWithParams(`
                 SELECT 
                     IMPORTEBASEIMPONIBLE1 as BI1, PORCENTAJEIVA1 as IVA1_PCT, IMPORTEIVA1 as IVA1_IMP,
                     IMPORTEBASEIMPONIBLE2 as BI2, PORCENTAJEIVA2 as IVA2_PCT, IMPORTEIVA2 as IVA2_IMP,
                     IMPORTEBASEIMPONIBLE3 as BI3, PORCENTAJEIVA3 as IVA3_PCT, IMPORTEIVA3 as IVA3_IMP,
                     IMPORTETOTAL
                 FROM DSEDAC.CPC
-                WHERE EJERCICIOALBARAN = ${actualEjAlb}
-                  AND TRIM(SERIEALBARAN) = '${actualSerieAlb}'
-                  AND TERMINALALBARAN = ${actualTermAlb}
-                  AND NUMEROALBARAN = ${actualNumAlb}
+                WHERE EJERCICIOALBARAN = ?
+                  AND TRIM(SERIEALBARAN) = ?
+                  AND TERMINALALBARAN = ?
+                  AND NUMEROALBARAN = ?
                 FETCH FIRST 1 ROW ONLY
-            `;
-            const ivaRows = await query(ivaSql, false);
+            `, [actualEjAlb, actualSerieAlb, actualTermAlb, actualNumAlb], false);
             if (ivaRows.length > 0) {
                 header.IVA_BREAKDOWN = ivaRows[0];
             }
@@ -1952,7 +2162,7 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
         }
 
         // 2. Fetch Lines - use albaran fields from found header for reliable join
-        const linesSql = `
+        const lines = await queryWithParams(`
             SELECT 
                 LAC.CODIGOARTICULO,
                 LAC.DESCRIPCION as DESCRIPCIONARTICULO,
@@ -1965,35 +2175,35 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
                 LAC.PORCENTAJEDESCUENTO as PORCENTAJEDESCUENTOARTICULO,
                 LAC.PRECIOVENTA as PRECIOARTICULO
             FROM DSEDAC.LAC LAC
-            WHERE LAC.EJERCICIOALBARAN = ${actualEjAlb}
-              AND TRIM(LAC.SERIEALBARAN) = '${actualSerieAlb}'
-              AND LAC.TERMINALALBARAN = ${actualTermAlb}
-              AND LAC.NUMEROALBARAN = ${actualNumAlb}
+            WHERE LAC.EJERCICIOALBARAN = ?
+              AND TRIM(LAC.SERIEALBARAN) = ?
+              AND LAC.TERMINALALBARAN = ?
+              AND LAC.NUMEROALBARAN = ?
             ORDER BY LAC.SECUENCIA
-        `;
-        const lines = await query(linesSql, false) || [];
+        `, [actualEjAlb, actualSerieAlb, actualTermAlb, actualNumAlb], false) || [];
 
         // 3. Try to get signature - comprehensive cascade (same as albaran PDF)
         let signatureBase64 = null;
         let signatureSource = null;
         const albId = `${actualEjAlb}-${actualSerieAlb}-${actualTermAlb}-${actualNumAlb}`;
 
-        // Step 3a: DELIVERY_STATUS
+        // Step 3a: DELIVERY_STATUS (OLD schema only)
         try {
-            const dsRows = await query(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = '${albId}'`, false);
-            if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
-                const fs = require('fs');
-                const pathModule = require('path');
-                const basePaths = [
-                    pathModule.join(__dirname, '../../uploads'),
-                    pathModule.join(__dirname, '../../uploads/photos')
-                ];
-                for (const basePath of basePaths) {
-                    const fullPath = pathModule.join(basePath, dsRows[0].FIRMA_PATH);
-                    if (fs.existsSync(fullPath)) {
-                        signatureBase64 = fs.readFileSync(fullPath).toString('base64');
-                        signatureSource = 'FILE';
-                        break;
+            const dsOldAvail = isDeliveryStatusAvailable() && !isDeliveryStatusNewSchema();
+            if (dsOldAvail) {
+                const dsRows = await queryWithParams(`SELECT FIRMA_PATH FROM JAVIER.DELIVERY_STATUS WHERE ID = ?`, [albId], false);
+                if (dsRows.length > 0 && dsRows[0].FIRMA_PATH) {
+                    const basePaths = [
+                        path.join(__dirname, '../../uploads'),
+                        path.join(__dirname, '../../uploads/photos')
+                    ];
+                    for (const basePath of basePaths) {
+                        const fullPath = path.join(basePath, dsRows[0].FIRMA_PATH);
+                        if (fs.existsSync(fullPath)) {
+                            signatureBase64 = fs.readFileSync(fullPath).toString('base64');
+                            signatureSource = 'FILE';
+                            break;
+                        }
                     }
                 }
             }
@@ -2002,16 +2212,16 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
         // Step 3b: REPARTIDOR_FIRMAS
         if (!signatureBase64) {
             try {
-                const firmaRows = await query(`
-                    SELECT RF.FIRMA_BASE64 FROM JAVIER.REPARTIDOR_FIRMAS RF
+                const firmaRows = await queryWithParams(`
+                    SELECT RF.FIRMABASE64 FROM JAVIER.REPARTIDOR_FIRMAS RF
                     INNER JOIN JAVIER.REPARTIDOR_ENTREGAS RE ON RE.ID = RF.ENTREGA_ID
-                    WHERE RE.NUMERO_ALBARAN = ${actualNumAlb}
-                      AND RE.EJERCICIO_ALBARAN = ${actualEjAlb}
-                      AND TRIM(RE.SERIE_ALBARAN) = '${actualSerieAlb}'
+                    WHERE RE.NUMEROORDENPREPARACION = ?
+                      AND RE.EJERCICIOALBARAN = ?
+                      AND TRIM(RE.SERIEALBARAN) = ?
                     FETCH FIRST 1 ROW ONLY
-                `, false);
-                if (firmaRows.length > 0 && firmaRows[0].FIRMA_BASE64) {
-                    signatureBase64 = firmaRows[0].FIRMA_BASE64;
+                `, [actualNumAlb, actualEjAlb, actualSerieAlb], false);
+                if (firmaRows.length > 0 && firmaRows[0].FIRMABASE64) {
+                    signatureBase64 = firmaRows[0].FIRMABASE64;
                     signatureSource = 'REPARTIDOR_FIRMAS';
                 }
             } catch (e) { logger.warn(`[PDF] Invoice sig REPARTIDOR_FIRMAS error: ${e.message}`); }
@@ -2020,14 +2230,14 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
         // Step 3c: CACFIRMAS legacy
         if (!signatureBase64) {
             try {
-                const cacRows = await query(`
+                const cacRows = await queryWithParams(`
                     SELECT FIRMABASE64 FROM DSEDAC.CACFIRMAS
-                    WHERE EJERCICIOALBARAN = ${actualEjAlb}
-                      AND TRIM(SERIEALBARAN) = '${actualSerieAlb}'
-                      AND TERMINALALBARAN = ${actualTermAlb}
-                      AND NUMEROALBARAN = ${actualNumAlb}
+                    WHERE EJERCICIOALBARAN = ?
+                      AND TRIM(SERIEALBARAN) = ?
+                      AND TERMINALALBARAN = ?
+                      AND NUMEROALBARAN = ?
                     FETCH FIRST 1 ROW ONLY
-                `, false);
+                `, [actualEjAlb, actualSerieAlb, actualTermAlb, actualNumAlb], false);
                 if (cacRows.length > 0 && cacRows[0].FIRMABASE64) {
                     let b64 = cacRows[0].FIRMABASE64.toString();
                     b64 = b64.replace(/^data:image\/\w+;base64,/, '');
@@ -2045,10 +2255,13 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
         // 5. Send Response
         const factNum = header.NUMEROFACTURA || number;
         const factSerie = (header.SERIEFACTURA || serie || '').toString().trim();
+        const safeFilename = `Factura_${year}_${factSerie}_${factNum}.pdf`.replace(/[^a-zA-Z0-9._-]/g, '_');
         res.set({
             'Content-Type': 'application/pdf',
-            'Content-Disposition': `attachment; filename=Factura_${year}_${factSerie}_${factNum}.pdf`,
-            'Content-Length': buffer.length
+            'Content-Disposition': `attachment; filename="${safeFilename}"; filename*=UTF-8''${encodeURIComponent(safeFilename)}`,
+            'Content-Length': buffer.length,
+            'Accept-Ranges': 'bytes',
+            'Cache-Control': 'no-cache, no-store, must-revalidate'
         });
         res.send(buffer);
 
@@ -2065,52 +2278,60 @@ router.get('/document/invoice/:year/:serie/:number/pdf', async (req, res) => {
 // Uses ONLY columns verified to exist: OPP.CODIGOREPARTIDOR, CLI.CODIGOCLIENTE,
 // CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, CLI.DIRECCION, CLI.ANOBAJA
 // =============================================================================
-router.get('/history/clients/:repartidorId', async (req, res) => {
+router.get('/history/clients/:repartidorId', verifyToken, async (req, res) => {
     try {
         const { repartidorId } = req.params;
         const { search } = req.query;
 
-        const cleanRepartidorId = repartidorId.split(',').map(id => `'${id.trim()}'`).join(',');
-
-        // Single query: OPP/CPC for delivery data + JOIN CLI for client names
-        // Only uses columns known to exist in DB2
-        const now = new Date();
-        const cutoffYear = now.getMonth() < 6 ? now.getFullYear() - 1 : now.getFullYear();
-        const cutoffMonth = ((now.getMonth() - 5 + 12) % 12) || 12;
-        const cutoffDate = cutoffYear * 10000 + cutoffMonth * 100 + 1;
-
-        let mainSql = `
-            SELECT
-                TRIM(CPC.CODIGOCLIENTEALBARAN) as ID,
-                TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as NAME,
-                TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
-                TRIM(OPP.CODIGOREPARTIDOR) as REP_CODE,
-                TRIM(COALESCE(VDD.NOMBREVENDEDOR, '')) as REP_NAME,
-                COUNT(*) as TOTAL_DOCS,
-                COALESCE(SUM(CPC.IMPORTETOTAL), 0) as TOTAL_AMOUNT,
-                MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) as LAST_VISIT
-            FROM DSEDAC.OPP OPP
-            INNER JOIN DSEDAC.CPC CPC
-                ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
-            LEFT JOIN DSEDAC.CLI CLI
-                ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CPC.CODIGOCLIENTEALBARAN)
-            LEFT JOIN DSEDAC.VDD VDD
-                ON TRIM(VDD.CODIGOVENDEDOR) = TRIM(OPP.CODIGOREPARTIDOR)
-            WHERE TRIM(OPP.CODIGOREPARTIDOR) IN (${cleanRepartidorId})
-              AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) >= ${cutoffDate}
-              AND (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL OR CLI.ANOBAJA IS NULL)
-        `;
-
-        if (search) {
-            const cleanSearch = search.toUpperCase().replace(/'/g, "''");
-            mainSql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE '%${cleanSearch}%' OR UPPER(CLI.NOMBREALTERNATIVO) LIKE '%${cleanSearch}%' OR TRIM(CPC.CODIGOCLIENTEALBARAN) LIKE '%${cleanSearch}%')`;
+        const repartidorIdList = sanitizeCodeListForParams(repartidorId);
+        if (repartidorIdList.length === 0) {
+            return res.status(400).json({ error: 'Invalid repartidor ID format' });
         }
 
-        mainSql += ` GROUP BY TRIM(CPC.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, '')), TRIM(OPP.CODIGOREPARTIDOR), TRIM(COALESCE(VDD.NOMBREVENDEDOR, ''))`;
-        mainSql += ` ORDER BY MAX(OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) DESC`;
-
-        logger.info(`[REPARTIDOR] Clients SQL for repartidorId ${repartidorId}`);
-        const rows = await query(mainSql, false);
+        // FIX: Use chunkedInQuery to handle 90+ repartidor IDs without exceeding DB2 ODBC parameter limits
+        const rows = await chunkedInQuery(
+            `
+            SELECT
+                TRIM(UNIQ.CODIGOCLIENTEALBARAN) as ID,
+                TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')) as NAME,
+                TRIM(COALESCE(CLI.DIRECCION, '')) as ADDRESS,
+                COUNT(*) as TOTAL_DOCS,
+                COALESCE(SUM(UNIQ.IMPORTETOTAL), 0) as TOTAL_AMOUNT,
+                MAX(UNIQ.ANODOCUMENTO * 10000 + UNIQ.MESDOCUMENTO * 100 + UNIQ.DIADOCUMENTO) as LAST_VISIT
+            FROM (
+                SELECT DISTINCT
+                    CPC.CODIGOCLIENTEALBARAN,
+                    CPC.EJERCICIOALBARAN, CPC.SERIEALBARAN, CPC.TERMINALALBARAN, CPC.NUMEROALBARAN,
+                    CPC.IMPORTETOTAL,
+                    CPC.ANODOCUMENTO, CPC.MESDOCUMENTO, CPC.DIADOCUMENTO
+                FROM DSEDAC.CPC CPC
+                INNER JOIN DSEDAC.OPP OPP ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+                WHERE @IN_IDS@
+                  AND CPC.NUMEROALBARAN < 900000
+                  AND CPC.EJERCICIOALBARAN > 0
+            ) UNIQ
+            LEFT JOIN DSEDAC.CLI CLI
+                ON TRIM(CLI.CODIGOCLIENTE) = TRIM(UNIQ.CODIGOCLIENTEALBARAN)
+            WHERE (CLI.ANOBAJA = 0 OR CLI.ANOBAJA IS NULL)
+            GROUP BY TRIM(UNIQ.CODIGOCLIENTEALBARAN), TRIM(COALESCE(NULLIF(TRIM(CLI.NOMBREALTERNATIVO), ''), CLI.NOMBRECLIENTE, '')), TRIM(COALESCE(CLI.DIRECCION, ''))
+            ORDER BY LAST_VISIT DESC
+            FETCH FIRST 500 ROWS ONLY
+            `,
+            'TRIM(OPP.CODIGOREPARTIDOR)',
+            repartidorIdList,
+            async (sql, params) => {
+                // Apply search filter to each chunk query
+                let finalSql = sql;
+                let finalParams = [...params];
+                if (search) {
+                    const cleanSearch = `%${search.toUpperCase()}%`;
+                    finalSql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR TRIM(UNIQ.CODIGOCLIENTEALBARAN) LIKE ?)`;
+                    finalParams.push(cleanSearch, cleanSearch, cleanSearch);
+                }
+                return cachedQuery(queryWithParams, finalSql, `repartidor:clients:${repartidorIdList.join(',')}:${search || ''}`, TTL.REALTIME, finalParams);
+            },
+            20
+        );
         logger.info(`[REPARTIDOR] Found ${rows.length} clients with deliveries for ${repartidorId}`);
 
         // Deduplicate by client ID (a client may appear with different repartidors)
@@ -2142,8 +2363,8 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
                 totalDocuments: parseInt(r.TOTAL_DOCS) || 0,
                 totalAmount: parseFloat(r.TOTAL_AMOUNT) || 0,
                 lastVisit: lastVisitStr,
-                repCode: (r.REP_CODE || '').trim() || null,
-                repName: (r.REP_NAME || '').trim() || null
+                repCode: null,
+                repName: null
             };
         });
 
@@ -2157,8 +2378,8 @@ router.get('/history/clients/:repartidorId', async (req, res) => {
 // =============================================================================
 // GET /history/legacy-signature/:id
 // Returns the Base64 signature from CACFIRMAS as an image
-// ===================================
-router.get('/history/legacy-signature/:id', async (req, res) => {
+// =============================================================================
+router.get('/history/legacy-signature/:id', verifyToken, async (req, res) => {
     try {
         const { id } = req.params; // Format: YEAR-SERIES-TERMINAL-NUMBER
         const parts = id.split('-');
@@ -2166,16 +2387,14 @@ router.get('/history/legacy-signature/:id', async (req, res) => {
 
         const [year, series, terminal, number] = parts;
 
-        const sql = `
+        const rows = await queryWithParams(`
             SELECT FIRMABASE64
             FROM DSEDAC.CACFIRMAS
-            WHERE EJERCICIOALBARAN = ${year}
-              AND TRIM(SERIEALBARAN) = '${(series || '').trim()}'
-              AND TERMINALALBARAN = ${terminal}
-              AND NUMEROALBARAN = ${number}
-        `;
-
-        const rows = await query(sql, false);
+            WHERE EJERCICIOALBARAN = ?
+              AND TRIM(SERIEALBARAN) = ?
+              AND TERMINALALBARAN = ?
+              AND NUMEROALBARAN = ?
+        `, [year, (series || '').trim(), terminal, number], false);
         if (rows.length === 0 || !rows[0].FIRMABASE64) {
             return res.status(404).send('Signature not found');
         }
@@ -2200,7 +2419,7 @@ router.get('/history/legacy-signature/:id', async (req, res) => {
 // POST /document/send-email
 // Server-side email sending with PDF attachment for repartidor documents
 // =============================================================================
-router.post('/document/send-email', async (req, res) => {
+router.post('/document/send-email', verifyToken, async (req, res) => {
     try {
         const { ejercicio, serie, terminal, numero, type, destinatario, asunto, cuerpo, clienteNombre } = req.body;
 
@@ -2217,7 +2436,6 @@ router.post('/document/send-email', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Email destinatario inválido' });
         }
 
-        const { sendEmailWithPdf, generateInvoiceEmailHtml, generateDeliveryEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
         const docType = (type || 'albaran').toLowerCase();
         const isFactura = docType === 'factura';
         const typeLabel = isFactura ? 'Factura' : 'Albarán';
@@ -2229,8 +2447,6 @@ router.post('/document/send-email', async (req, res) => {
         if (!pdfBuffer) {
             if (isFactura) {
                 // Generate invoice PDF
-                const facturasService = require('../services/facturas.service');
-                const pdfService = require('../services/pdf.service');
                 const factura = await facturasService.getFacturaDetail(serie, parseInt(numero), parseInt(ejercicio));
                 if (!factura) {
                     return res.status(404).json({ success: false, error: 'Factura no encontrada' });
@@ -2238,7 +2454,6 @@ router.post('/document/send-email', async (req, res) => {
                 pdfBuffer = await pdfService.generateInvoicePDF(factura);
             } else {
                 // Generate albaran/delivery receipt PDF
-                const { generateDeliveryReceipt } = require('../app/services/deliveryReceiptService');
                 try {
                     pdfBuffer = await generateDeliveryReceipt({
                         ejercicio: parseInt(ejercicio),
@@ -2249,8 +2464,6 @@ router.post('/document/send-email', async (req, res) => {
                 } catch (pdfErr) {
                     logger.warn(`[REPARTIDOR] DeliveryReceipt generation failed, trying invoice PDF: ${pdfErr.message}`);
                     // Fallback: try generating as invoice
-                    const facturasService = require('../services/facturas.service');
-                    const pdfService = require('../services/pdf.service');
                     try {
                         const factura = await facturasService.getFacturaDetail(serie, parseInt(numero), parseInt(ejercicio));
                         pdfBuffer = await pdfService.generateInvoicePDF(factura);
@@ -2301,4 +2514,97 @@ router.post('/document/send-email', async (req, res) => {
     }
 });
 
+// =============================================================================
+// POST /document/share/whatsapp
+// WhatsApp share with PDF base64 for repartidor documents (albaranes/facturas)
+// =============================================================================
+router.post('/document/share/whatsapp', verifyToken, async (req, res) => {
+    try {
+        const { ejercicio, serie, terminal, numero, type, telefono, clienteNombre } = req.body;
+
+        // Validate required fields
+        if (!ejercicio || !serie || !numero || !telefono) {
+            return res.status(400).json({
+                success: false,
+                error: 'Campos requeridos: ejercicio, serie, numero, telefono'
+            });
+        }
+
+        const docType = (type || 'albaran').toLowerCase();
+        const isFactura = docType === 'factura';
+        const typeLabel = isFactura ? 'Factura' : 'Albarán';
+
+        // Generate or retrieve cached PDF
+        const cacheKey = `${docType}_${serie}_${numero}_${ejercicio}`;
+        let pdfBuffer = getCachedPdf(cacheKey);
+
+        if (!pdfBuffer) {
+            if (isFactura) {
+                // Generate invoice PDF
+                const factura = await facturasService.getFacturaDetail(serie, parseInt(numero), parseInt(ejercicio));
+                if (!factura) {
+                    return res.status(404).json({ success: false, error: 'Factura no encontrada' });
+                }
+                pdfBuffer = await pdfService.generateInvoicePDF(factura);
+            } else {
+                // Generate albaran/delivery receipt PDF
+                try {
+                    pdfBuffer = await generateDeliveryReceipt({
+                        ejercicio: parseInt(ejercicio),
+                        serie: serie,
+                        terminal: parseInt(terminal) || 0,
+                        numero: parseInt(numero)
+                    });
+                } catch (pdfErr) {
+                    logger.warn(`[REPARTIDOR] DeliveryReceipt generation failed, trying invoice PDF: ${pdfErr.message}`);
+                    // Fallback: try generating as invoice
+                    try {
+                        const factura = await facturasService.getFacturaDetail(serie, parseInt(numero), parseInt(ejercicio));
+                        pdfBuffer = await pdfService.generateInvoicePDF(factura);
+                    } catch (invErr) {
+                        return res.status(500).json({ success: false, error: `No se pudo generar el PDF: ${pdfErr.message}` });
+                    }
+                }
+            }
+
+            if (pdfBuffer) {
+                cachePdf(cacheKey, pdfBuffer);
+            }
+        }
+
+        if (!pdfBuffer) {
+            return res.status(500).json({ success: false, error: 'No se pudo generar el PDF del documento' });
+        }
+
+        // Convert PDF to base64 for Flutter to share
+        const pdfBase64 = pdfBuffer.toString('base64');
+        const pdfFilename = `${typeLabel}_${serie}_${numero}_${ejercicio}.pdf`;
+
+        // Generate WhatsApp message
+        const message = `Granja Mari Pepa\n\n` +
+            `${typeLabel}: ${serie}-${numero}\n` +
+            `Ejercicio: ${ejercicio}\n` +
+            `Cliente: ${clienteNombre || 'Cliente'}\n\n` +
+            `Gracias por su confianza.`;
+
+        const phoneClean = telefono.replace(/\D/g, '');
+        const whatsappUrl = `https://wa.me/${phoneClean}?text=${encodeURIComponent(message)}`;
+
+        logger.info(`[REPARTIDOR] WhatsApp generated: ${typeLabel} ${serie}-${numero} to ${phoneClean}`);
+
+        res.json({
+            success: true,
+            whatsappUrl,
+            message,
+            pdfBase64,
+            pdfFilename,
+            mimeType: 'application/pdf'
+        });
+    } catch (error) {
+        logger.error(`[REPARTIDOR] Error in document/share/whatsapp: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 module.exports = router;
+module.exports.repartidorBreaker = repartidorBreaker;

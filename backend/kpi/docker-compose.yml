@@ -1,0 +1,67 @@
+# docker-compose.yml: Stack completo KPI Glacius — PostgreSQL + Redis + Backend
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: kpi-postgres
+    environment:
+      POSTGRES_DB: kpi_glacius
+      POSTGRES_USER: kpi_user
+      POSTGRES_PASSWORD: kpi_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - kpi_pgdata:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kpi_user -d kpi_glacius"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: kpi-redis
+    ports:
+      - "6379:6379"
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ..
+      dockerfile: kpi/Dockerfile
+    container_name: kpi-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: 3334
+      KPI_DATABASE_URL: postgresql://kpi_user:kpi_pass@postgres:5432/kpi_glacius
+      REDIS_URL: redis://redis:6379
+      KPI_SCHEDULER_ENABLED: "true"
+      KPI_ETL_CRON: "0 6 * * 1"
+      # SFTP (usar vault en producción)
+      KPI_SFTP_HOST: ${KPI_SFTP_HOST:-}
+      KPI_SFTP_PORT: ${KPI_SFTP_PORT:-990}
+      KPI_SFTP_USER: ${KPI_SFTP_USER:-}
+      KPI_SFTP_PASS: ${KPI_SFTP_PASS:-}
+      KPI_SFTP_FOLDER: ${KPI_SFTP_FOLDER:-/IN}
+    ports:
+      - "3334:3334"
+    volumes:
+      - kpi_csv_tmp:/app/kpi/tmp
+    restart: unless-stopped
+
+volumes:
+  kpi_pgdata:
+    driver: local
+  kpi_csv_tmp:
+    driver: local

@@ -1,21 +1,21 @@
 /// COBROS FILTERS WIDGET
 /// Panel de filtros para entregas/cobros
+library;
 
 import 'package:flutter/material.dart';
 
-import '../../../../core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 class CobrosFilters extends StatefulWidget {
+
+  const CobrosFilters({
+    required this.onEstadoChanged, required this.onClienteChanged, super.key,
+    this.estadoActual = 'todos',
+  });
   final Function(String) onEstadoChanged;
   final Function(String) onClienteChanged;
   final String estadoActual;
-
-  const CobrosFilters({
-    super.key,
-    required this.onEstadoChanged,
-    required this.onClienteChanged,
-    this.estadoActual = 'todos',
-  });
 
   @override
   State<CobrosFilters> createState() => _CobrosFiltersState();
@@ -41,25 +41,25 @@ class _CobrosFiltersState extends State<CobrosFilters> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Título
-          Row(
+          const Row(
             children: [
               Icon(
                 Icons.filter_list,
                 color: AppTheme.neonPurple,
                 size: 18,
               ),
-              const SizedBox(width: 8),
-              const Text(
+              SizedBox(width: 8),
+              Text(
                 'Filtros',
                 style: TextStyle(
                   color: AppTheme.textPrimary,
@@ -75,19 +75,19 @@ class _CobrosFiltersState extends State<CobrosFilters> {
           // Buscador
           Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
+              color: Colors.white.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
             ),
             child: TextField(
               controller: _searchController,
               style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
               decoration: InputDecoration(
                 hintText: 'Buscar cliente...',
-                hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.5)),
+                hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5)),
                 prefixIcon: Icon(
                   Icons.search,
-                  color: AppTheme.textSecondary.withOpacity(0.5),
+                  color: AppTheme.textSecondary.withValues(alpha: 0.5),
                   size: 18,
                 ),
                 border: InputBorder.none,
@@ -116,26 +116,26 @@ class _CobrosFiltersState extends State<CobrosFilters> {
             children: _estados.map((estado) {
               final isSelected = widget.estadoActual == estado['value'];
               return GestureDetector(
-                onTap: () => widget.onEstadoChanged(estado['value'] as String),
+                onTap: () => widget.onEstadoChanged(estado['value']! as String),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: isSelected
-                        ? AppTheme.neonPurple.withOpacity(0.2)
-                        : Colors.white.withOpacity(0.05),
+                        ? AppTheme.neonPurple.withValues(alpha: 0.2)
+                        : Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: isSelected
-                          ? AppTheme.neonPurple.withOpacity(0.5)
-                          : Colors.white.withOpacity(0.1),
+                          ? AppTheme.neonPurple.withValues(alpha: 0.5)
+                          : Colors.white.withValues(alpha: 0.1),
                     ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(
-                        estado['icon'] as IconData,
+                        estado['icon']! as IconData,
                         size: 12,
                         color: isSelected
                             ? AppTheme.neonPurple
@@ -143,7 +143,7 @@ class _CobrosFiltersState extends State<CobrosFilters> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        estado['label'] as String,
+                        estado['label']! as String,
                         style: TextStyle(
                           color: isSelected
                               ? AppTheme.neonPurple

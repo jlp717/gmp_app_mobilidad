@@ -1,86 +1,477 @@
+/**
+ * GMP App Enhanced Authentication Middleware
+ * HMAC-signed JWT tokens with refresh token rotation
+ */
+
 const crypto = require('crypto');
+const bcrypt = require('bcrypt');
 const logger = require('./logger');
 
 // =============================================================================
-// TOKEN SECURITY — HMAC-SHA256 signed tokens
+// CONFIGURATION
 // =============================================================================
-const TOKEN_SECRET = process.env.TOKEN_SECRET || crypto.randomBytes(32).toString('hex');
-const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+const NODE_ENV = process.env.NODE_ENV || 'development';
+const isProduction = NODE_ENV === 'production';
+
+if (isProduction && !process.env.JWT_ACCESS_SECRET) {
+    throw new Error('[AUTH] FATAL: JWT_ACCESS_SECRET must be set in production. Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+}
+if (isProduction && !process.env.JWT_REFRESH_SECRET) {
+    throw new Error('[AUTH] FATAL: JWT_REFRESH_SECRET must be set in production. Generate with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"');
+}
+
+const ACCESS_SECRET = process.env.JWT_ACCESS_SECRET || crypto.randomBytes(32).toString('hex');
+const REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || crypto.randomBytes(32).toString('hex');
+
+if (!isProduction && !process.env.JWT_ACCESS_SECRET) {
+    logger.warn('[AUTH] ⚠️ JWT_ACCESS_SECRET not set — using ephemeral secret (dev only, all sessions reset on restart)');
+}
+if (!isProduction && !process.env.JWT_REFRESH_SECRET) {
+    logger.warn('[AUTH] ⚠️ JWT_REFRESH_SECRET not set — using ephemeral secret (dev only, all sessions reset on restart)');
+}
+
+if (ACCESS_SECRET.length < 32) {
+    logger.warn('[AUTH] WARNING: JWT_ACCESS_SECRET is too short. Use at least 32 characters.');
+}
+if (REFRESH_SECRET.length < 32) {
+    logger.warn('[AUTH] WARNING: JWT_REFRESH_SECRET is too short. Use at least 32 characters.');
+}
 
 /**
- * Sign a payload into an HMAC token: base64(payload).signature
- * Prevents token forgery — only the server can produce valid signatures.
+ * Parse a TTL value that may come as:
+ *   - plain milliseconds (e.g. "3600000")
+ *   - suffixed duration ("15m", "1h", "7d", "30s")
+ * Returns milliseconds. Defaults to `fallbackMs` if input is invalid/empty.
  */
-function signToken(payload) {
+function parseTtlMs(raw, fallbackMs, label) {
+    if (raw === undefined || raw === null || raw === '') return fallbackMs;
+    const value = String(raw).trim();
+    // Pure integer → already milliseconds
+    if (/^\d+$/.test(value)) {
+        const ms = parseInt(value, 10);
+        if (Number.isFinite(ms) && ms > 0) return ms;
+    }
+    // Suffixed duration (e.g. 15m, 1h, 7d)
+    const m = value.match(/^(\d+)\s*(ms|s|m|h|d)$/i);
+    if (m) {
+        const n = parseInt(m[1], 10);
+        const unit = m[2].toLowerCase();
+        const mult = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 }[unit];
+        if (Number.isFinite(n) && n > 0 && mult) return n * mult;
+    }
+    logger.warn(`[AUTH] Invalid ${label}='${raw}', falling back to ${fallbackMs}ms`);
+    return fallbackMs;
+}
+
+const ACCESS_TTL_MS = parseTtlMs(process.env.JWT_ACCESS_EXPIRES, 86_400_000, 'JWT_ACCESS_EXPIRES'); // 24h default
+const REFRESH_TTL_MS = parseTtlMs(process.env.JWT_REFRESH_EXPIRES, 604_800_000, 'JWT_REFRESH_EXPIRES'); // 7d default
+const MAX_SESSIONS_PER_USER = parseInt(process.env.MAX_SESSIONS_PER_USER || '5', 10);
+const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+
+logger.info(`[AUTH] Access TTL: ${ACCESS_TTL_MS}ms (${Math.round(ACCESS_TTL_MS / 60000)}min), Refresh TTL: ${REFRESH_TTL_MS}ms (${Math.round(REFRESH_TTL_MS / 86400000)}d)`);
+
+// =============================================================================
+// SESSION STORAGE
+// =============================================================================
+
+const activeSessions = new Map();
+let sessionCleanupInterval = null;
+
+function startSessionCleanup() {
+    if (sessionCleanupInterval) return; // Already running
+    sessionCleanupInterval = setInterval(() => {
+        const now = Date.now();
+        let cleanedCount = 0;
+        
+        for (const [userId, sessions] of activeSessions.entries()) {
+            const validSessions = sessions.filter(s => s.expiresAt > now);
+            if (validSessions.length !== sessions.length) {
+                activeSessions.set(userId, validSessions);
+                cleanedCount += sessions.length - validSessions.length;
+            }
+            if (validSessions.length === 0) {
+                activeSessions.delete(userId);
+            }
+        }
+        
+        if (cleanedCount > 0) {
+            logger.info(`[AUTH] Cleaned up ${cleanedCount} expired sessions`);
+        }
+    }, SESSION_CLEANUP_INTERVAL_MS);
+}
+
+function stopSessionCleanup() {
+    if (sessionCleanupInterval) {
+        clearInterval(sessionCleanupInterval);
+        sessionCleanupInterval = null;
+        logger.info('[AUTH] Session cleanup stopped');
+    }
+}
+
+startSessionCleanup();
+
+// Deduplicate noisy auth warnings per IP (signature mismatches, etc.)
+const _authWarnTracker = new Map();
+const _AUTH_WARN_WINDOW_MS = 5 * 60 * 1000;
+
+function _dedupWarn(ip, key, message) {
+    const now = Date.now();
+    const entry = _authWarnTracker.get(`${ip}:${key}`);
+    if (entry && now - entry.last < _AUTH_WARN_WINDOW_MS) {
+        entry.count++;
+        if (entry.count === 10 || entry.count % 50 === 0) {
+            logger.warn(`[AUTH-DEBUG] ${message} (from ${ip}, count=${entry.count}, suppressed ${entry.count - 1} similar)`);
+        }
+        return;
+    }
+    _authWarnTracker.set(`${ip}:${key}`, { count: 1, last: now });
+    logger.warn(`[AUTH-DEBUG] ${message}`);
+    // Cleanup old entries periodically
+    if (_authWarnTracker.size > 500) {
+        for (const [k, v] of _authWarnTracker) {
+            if (now - v.last > _AUTH_WARN_WINDOW_MS * 4) _authWarnTracker.delete(k);
+        }
+    }
+}
+
+// Graceful shutdown helper - call this on server shutdown
+function shutdown() {
+    stopSessionCleanup();
+    activeSessions.clear();
+    logger.info('[AUTH] Auth subsystem shut down');
+}
+
+exports.shutdown = shutdown;
+exports.stopSessionCleanup = stopSessionCleanup;
+exports.startSessionCleanup = startSessionCleanup;
+
+// =============================================================================
+// TOKEN SIGNING & VERIFICATION
+// =============================================================================
+
+function signToken(payload, secret) {
     const data = Buffer.from(JSON.stringify(payload)).toString('base64');
-    const sig = crypto.createHmac('sha256', TOKEN_SECRET).update(data).digest('hex');
+    const sig = crypto.createHmac('sha256', secret).update(data).digest('hex');
     return `${data}.${sig}`;
 }
 
-/**
- * Middleware to verify Authentication Token
- * Accepts HMAC-signed tokens (new) and legacy Base64 tokens (backward-compatible)
- * Header: Authorization: Bearer <token>
- */
-function verifyToken(req, res, next) {
-    // 1. Check Header
-    const authHeader = req.headers['authorization'];
-    if (!authHeader) {
-        logger.warn(`⛔ Access attempt without token: ${req.method} ${req.path} (${req.ip})`);
-        return res.status(401).json({ error: 'Acceso denegado. Se requiere autenticación.' });
+function verifyTokenData(token, secret, ttlMs) {
+    if (!token || !token.includes('.')) return null;
+    
+    const parts = token.split('.');
+    if (parts.length !== 2) return null;
+    
+    const [data, sig] = parts;
+    if (!data || !sig) return null;
+    
+    const expectedSig = crypto.createHmac('sha256', secret).update(data).digest('hex');
+    
+    if (sig.length !== expectedSig.length) {
+        _dedupWarn('global', 'sig_length', 'Token rejected: sig length mismatch (wrong secret?)');
+        return null;
     }
-
-    // 2. Parse Bearer Token
-    const token = authHeader.split(' ')[1];
-    if (!token) {
-        return res.status(401).json({ error: 'Token con formato inválido.' });
-    }
-
+    
     try {
-        // Attempt HMAC-signed token first (new format: base64payload.signature)
-        if (token.includes('.')) {
-            const [data, sig] = token.split('.');
-            if (data && sig) {
-                const expectedSig = crypto.createHmac('sha256', TOKEN_SECRET).update(data).digest('hex');
-                // Timing-safe comparison to prevent timing attacks
-                if (sig.length === expectedSig.length &&
-                    crypto.timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expectedSig, 'hex'))) {
-                    const payload = JSON.parse(Buffer.from(data, 'base64').toString('utf8'));
-                    if (Date.now() - payload.timestamp > TOKEN_TTL_MS) {
-                        logger.warn(`⛔ Expired HMAC token: ${payload.user}`);
-                        return res.status(401).json({ error: 'Sesión expirada. Por favor, inicia sesión de nuevo.' });
-                    }
-                    req.user = { id: payload.id, code: payload.user };
-                    return next();
-                }
-            }
+        const sigBuffer = Buffer.from(sig, 'hex');
+        const expectedBuffer = Buffer.from(expectedSig, 'hex');
+        
+        if (!crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
+            _dedupWarn('global', 'sig_mismatch', 'Token rejected: SIGNATURE MISMATCH (secret changed after token was issued?)');
+            return null;
         }
-
-        // Fallback: Legacy Base64 token (backward-compatible for existing sessions)
-        const decoded = Buffer.from(token, 'base64').toString('ascii');
-        const parts = decoded.split(':');
-
-        if (parts.length < 3) {
-            logger.warn(`⛔ Invalid token format: ${req.ip}`);
-            return res.status(403).json({ error: 'Token inválido.' });
+    } catch (e) {
+        _dedupWarn('global', 'hmac_error', `Token rejected: HMAC comparison error: ${e.message}`);
+        return null;
+    }
+    
+    try {
+        const payload = JSON.parse(Buffer.from(data, 'base64').toString('utf8'));
+        if (!payload.timestamp) {
+            _dedupWarn('global', 'no_timestamp', 'Token rejected: no timestamp field');
+            return null;
         }
-
-        const [id, user, timestamp] = parts;
-        const tokenTime = parseInt(timestamp);
-
-        if (isNaN(tokenTime) || (Date.now() - tokenTime > TOKEN_TTL_MS)) {
-            logger.warn(`⛔ Expired legacy token: ${user}`);
-            return res.status(401).json({ error: 'Sesión expirada. Por favor, inicia sesión de nuevo.' });
+        
+        const age = Date.now() - payload.timestamp;
+        if (age > ttlMs) {
+            _dedupWarn('global', 'expired', `Token rejected: EXPIRED age=${age}ms ttl=${ttlMs}ms user=${payload.user || '?'}`);
+            return null;
         }
-
-        req.user = { id, code: user };
-        next();
-
-    } catch (error) {
-        logger.error(`Auth middleware error: ${error.message}`);
-        return res.status(403).json({ error: 'Fallo de autenticación.' });
+        
+        return payload;
+    } catch (e) {
+        _dedupWarn('global', 'parse_error', `Token rejected: JSON parse error: ${e.message}`);
+        return null;
     }
 }
 
-module.exports = verifyToken;
-module.exports.signToken = signToken;
+exports.signAccessToken = (payload) => {
+    return signToken({ ...payload, type: 'access', timestamp: Date.now() }, ACCESS_SECRET);
+};
+
+exports.signRefreshToken = (payload) => {
+    return signToken({ ...payload, type: 'refresh', timestamp: Date.now() }, REFRESH_SECRET);
+};
+
+exports.verifyAccessToken = (token) => {
+    const payload = verifyTokenData(token, ACCESS_SECRET, ACCESS_TTL_MS);
+    if (!payload || payload.type !== 'access') return null;
+    return payload;
+};
+
+exports.verifyRefreshToken = (token) => {
+    const payload = verifyTokenData(token, REFRESH_SECRET, REFRESH_TTL_MS);
+    if (!payload || payload.type !== 'refresh') return null;
+    return payload;
+};
+
+// =============================================================================
+// SESSION MANAGEMENT
+// =============================================================================
+
+function registerSession(userId, refreshToken, userAgent, ip) {
+    const now = Date.now();
+    const session = {
+        refreshToken,
+        userId,
+        userAgent,
+        ip,
+        createdAt: now,
+        expiresAt: now + REFRESH_TTL_MS
+    };
+    
+    const userSessions = activeSessions.get(userId) || [];
+    
+    if (userSessions.length >= MAX_SESSIONS_PER_USER) {
+        userSessions.sort((a, b) => a.createdAt - b.createdAt);
+        userSessions.shift();
+        logger.info(`[AUTH] Removed oldest session for user ${userId}`);
+    }
+    
+    userSessions.push(session);
+    activeSessions.set(userId, userSessions);
+    
+    logger.info(`[AUTH] Registered new session for user ${userId} from ${ip}`);
+}
+
+exports.registerSession = registerSession;
+
+exports.invalidateAllSessions = (userId) => {
+    activeSessions.delete(userId);
+    logger.info(`[AUTH] Invalidated all sessions for user ${userId}`);
+};
+
+function isRefreshTokenValid(userId, refreshToken) {
+    const sessions = activeSessions.get(userId);
+    if (!sessions) return false;
+    return sessions.some(s => s.refreshToken === refreshToken && s.expiresAt > Date.now());
+}
+
+function revokeRefreshToken(userId, refreshToken) {
+    const sessions = activeSessions.get(userId);
+    if (sessions) {
+        const filtered = sessions.filter(s => s.refreshToken !== refreshToken);
+        if (filtered.length > 0) {
+            activeSessions.set(userId, filtered);
+        } else {
+            activeSessions.delete(userId);
+        }
+    }
+}
+
+// =============================================================================
+// PASSWORD HASHING
+// =============================================================================
+
+exports.hashPassword = async (password, saltRounds = 12) => {
+    return bcrypt.hash(password, saltRounds);
+};
+
+exports.verifyPassword = async (password, hash) => {
+    return bcrypt.compare(password, hash);
+};
+
+exports.validatePasswordStrength = (password) => {
+    const errors = [];
+    
+    if (password.length < 8) errors.push('Password must be at least 8 characters');
+    if (password.length > 100) errors.push('Password must be less than 100 characters');
+    if (!/[A-Z]/.test(password)) errors.push('Password must contain at least one uppercase letter');
+    if (!/[a-z]/.test(password)) errors.push('Password must contain at least one lowercase letter');
+    if (!/[0-9]/.test(password)) errors.push('Password must contain at least one number');
+    
+    return { valid: errors.length === 0, errors };
+};
+
+// =============================================================================
+// EXPRESS MIDDLEWARE
+// =============================================================================
+
+exports.verifyToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    
+    if (!authHeader) {
+        _dedupWarn(req.ip, 'no_token', `Access attempt without token: ${req.method} ${req.path}`);
+        return res.status(401).json({ error: 'Acceso denegado. Se requiere autenticación.', code: 'MISSING_TOKEN' });
+    }
+    
+    const parts = authHeader.split(' ');
+    if (parts.length !== 2 || parts[0] !== 'Bearer') {
+        return res.status(401).json({ error: 'Token con formato inválido.', code: 'INVALID_FORMAT' });
+    }
+    
+    const token = parts[1];
+    
+    try {
+        const payload = exports.verifyAccessToken(token);
+        
+        if (!payload) {
+            _dedupWarn(req.ip, 'invalid_token', `Invalid or expired token from ${req.ip}`);
+            return res.status(401).json({ error: 'Sesión expirada. Por favor, inicia sesión de nuevo.', code: 'TOKEN_EXPIRED' });
+        }
+        
+        req.user = {
+            id: payload.id,
+            code: payload.user,
+            name: payload.name, // INCLUDE name from token
+            role: payload.role || 'COMERCIAL',
+            isJefeVentas: payload.isJefeVentas || false
+        };
+
+        req.tokenPayload = payload;
+        next();
+    } catch (error) {
+        logger.error(`[AUTH] Middleware error: ${error.message}`);
+        res.status(403).json({ error: 'Fallo de autenticación.', code: 'AUTH_FAILED' });
+    }
+};
+
+exports.optionalAuth = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader) return next();
+
+    const parts = authHeader.split(' ');
+    if (parts.length !== 2 || parts[0] !== 'Bearer') return next();
+
+    const token = parts[1];
+    const payload = exports.verifyAccessToken(token);
+
+    if (payload) {
+        req.user = {
+            id: payload.id,
+            code: payload.user,
+            name: payload.name, // INCLUDE name from token
+            role: payload.role || 'COMERCIAL',
+            isJefeVentas: payload.isJefeVentas || false
+        };
+        req.tokenPayload = payload;
+    }
+
+    next();
+};
+
+exports.requireRoles = (...roles) => {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({ error: 'Autenticación requerida', code: 'MISSING_TOKEN' });
+        }
+        
+        if (!roles.includes(req.user.role)) {
+            logger.warn(`[AUTH] Role check failed: ${req.user.role} not in [${roles.join(', ')}]`);
+            return res.status(403).json({ error: 'No tienes permisos para realizar esta acción', code: 'INSUFFICIENT_ROLE' });
+        }
+        
+        next();
+    };
+};
+
+exports.requireJefeVentas = (req, res, next) => {
+    if (!req.user?.isJefeVentas) {
+        logger.warn(`[AUTH] Jefe Ventas access denied for user: ${req.user?.code}`);
+        return res.status(403).json({ error: 'Acceso restringido a Jefes de Ventas', code: 'INSUFFICIENT_ROLE' });
+    }
+    next();
+};
+
+// =============================================================================
+// REFRESH TOKEN HANDLER
+// =============================================================================
+
+exports.handleRefreshToken = async (req, res) => {
+    try {
+        const { refreshToken } = req.body;
+        
+        if (!refreshToken) {
+            return res.status(400).json({ error: 'Refresh token required', code: 'MISSING_REFRESH_TOKEN' });
+        }
+        
+        const payload = exports.verifyRefreshToken(refreshToken);
+        
+        if (!payload) {
+            _dedupWarn(req.ip, 'invalid_refresh', `Invalid or expired refresh token from IP: ${req.ip}`);
+            return res.status(401).json({ error: 'Refresh token inválido o expirado', code: 'INVALID_REFRESH_TOKEN' });
+        }
+        
+        const userId = payload.id;
+        const userCode = payload.user;
+        
+        if (!isRefreshTokenValid(userId, refreshToken)) {
+            _dedupWarn(req.ip, 'revoked_refresh', `Revoked refresh token used from IP: ${req.ip}`);
+            exports.invalidateAllSessions(userId);
+            return res.status(401).json({ error: 'Sesión revocada. Por favor, inicia sesión de nuevo.', code: 'SESSION_REVOKED' });
+        }
+        
+        revokeRefreshToken(userId, refreshToken);
+        
+        const newAccessToken = exports.signAccessToken({
+            id: userId,
+            user: userCode,
+            role: payload.role,
+            isJefeVentas: payload.isJefeVentas
+        });
+        
+        const newRefreshToken = exports.signRefreshToken({
+            id: userId,
+            user: userCode,
+            role: payload.role,
+            isJefeVentas: payload.isJefeVentas
+        });
+        
+        registerSession(userId, newRefreshToken, req.get('user-agent') || 'unknown', req.ip || 'unknown');
+        
+        logger.info(`[AUTH] Token refreshed for user ${userCode}`);
+        
+        res.json({
+            success: true,
+            accessToken: newAccessToken,
+            refreshToken: newRefreshToken,
+            expiresIn: ACCESS_TTL_MS / 1000
+        });
+        
+    } catch (error) {
+        logger.error(`[AUTH] Refresh token error: ${error.message}`);
+        res.status(500).json({ error: 'Error refreshing token', code: 'REFRESH_ERROR' });
+    }
+};
+
+exports.handleLogout = async (req, res) => {
+    try {
+        const userId = req.user?.id;
+        if (userId) {
+            exports.invalidateAllSessions(userId);
+            logger.info(`[AUTH] User ${userId} logged out`);
+        }
+        res.json({ success: true, message: 'Logged out successfully' });
+    } catch (error) {
+        logger.error(`[AUTH] Logout error: ${error.message}`);
+        res.status(500).json({ error: 'Error during logout' });
+    }
+};
+
+// =============================================================================
+// EXPORTS
+// =============================================================================
+
+exports.ACCESS_TTL_MS = ACCESS_TTL_MS;
+exports.REFRESH_TTL_MS = REFRESH_TTL_MS;
+exports.activeSessions = activeSessions;

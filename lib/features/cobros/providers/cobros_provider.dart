@@ -1,40 +1,56 @@
-/// COBROS PROVIDER
-/// Estado global para el módulo de cobros y entregas
+/// COBROS PROVIDER — 100% Riverpod (ChangeNotifierProvider.family.autoDispose)
+///
+/// State management for cobros/entregas module.
+/// Uses family pattern to parameterize by employeeCode + isRepartidor.
+/// No overrideWithValue, no UnimplementedError, no null checks.
+library;
 
-import 'package:flutter/material.dart';
-import '../data/models/cobros_models.dart';
-import '../../../core/api/api_client.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart';
+
+/// Builds a backend-safe idempotency token for one commercial payment attempt.
+String buildCobroIdempotencyToken({
+  required String employeeCode,
+  required String codigoCliente,
+  required String referencia,
+  DateTime? now,
+}) {
+  String clean(String value, {int max = 32}) {
+    final sanitized = value.trim().replaceAll(RegExp('[^A-Za-z0-9_.:-]'), '-');
+    if (sanitized.length <= max) return sanitized;
+    return sanitized.substring(0, max);
+  }
+
+  final timestamp = (now ?? DateTime.now()).microsecondsSinceEpoch;
+  return 'cobro:${clean(employeeCode, max: 12)}:'
+      '${clean(codigoCliente, max: 24)}:'
+      '${clean(referencia)}:$timestamp';
+}
 
 class CobrosProvider extends ChangeNotifier {
-  final String employeeCode;
-  final bool isRepartidor;
-
-  // Estado
-  bool _isLoading = false;
-  String? _error;
-  
-  // Datos del repartidor
-  List<Albaran> _albaranesPendientes = [];
-  Albaran? _albaranActual;
-  
-  // Datos del comercial
-  List<CobroPendiente> _cobrosPendientes = [];
-  ResumenCobros? _resumenCobros;
-  EstadoCliente? _estadoClienteActual;
-  
-  // Filtros
-  String _filtroEstado = 'todos';
-  String _filtroCliente = '';
-  DateTime? _filtroFecha;
-
   CobrosProvider({
     required this.employeeCode,
     this.isRepartidor = false,
   });
+  final String employeeCode;
+  final bool isRepartidor;
 
-  // ============================================
-  // GETTERS
-  // ============================================
+  bool _isLoading = false;
+  String? _error;
+
+  List<Albaran> _albaranesPendientes = [];
+  Albaran? _albaranActual;
+  List<CobroPendiente> _cobrosPendientes = [];
+  ResumenCobros? _resumenCobros;
+  EstadoCliente? _estadoClienteActual;
+  Map<String, Map<String, dynamic>> _pendingSummary = {};
+  double _grandTotal = 0;
+  double _grandTotalVencido = 0;
+  String _filtroEstado = 'todos';
+  String _filtroCliente = '';
+  DateTime? _filtroFecha;
 
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -45,46 +61,50 @@ class CobrosProvider extends ChangeNotifier {
   EstadoCliente? get estadoClienteActual => _estadoClienteActual;
   String get filtroEstado => _filtroEstado;
   String get filtroCliente => _filtroCliente;
+  Map<String, Map<String, dynamic>> get pendingSummary => _pendingSummary;
+  double get grandTotal => _grandTotal;
+  double get grandTotalVencido => _grandTotalVencido;
+  /// Numero de clientes con cualquier importe pendiente (>0).
+  int get clientsWithDebt => _pendingSummary.values
+      .where((v) => ((v['total'] as num?)?.toDouble() ?? 0) > 0)
+      .length;
+  /// Numero de clientes con importe vencido (>0).
+  int get clientsWithVencido => _pendingSummary.values
+      .where((v) => ((v['vencido'] as num?)?.toDouble() ?? 0) > 0)
+      .length;
 
-  // Estadísticas calculadas
   int get totalEntregasPendientes => _albaranesPendientes
       .where((a) => a.estado == EstadoEntrega.pendiente)
       .length;
-  
   int get totalEntregasCompletadas => _albaranesPendientes
       .where((a) => a.estado == EstadoEntrega.entregado)
       .length;
-
   double get totalImportePendiente => _albaranesPendientes
       .where((a) => a.estado != EstadoEntrega.entregado)
-      .fold(0.0, (sum, a) => sum + a.importeTotal);
-
+      .fold(0, (sum, a) => sum + a.importeTotal);
   int get totalCTRPendientes => _albaranesPendientes
       .where((a) => a.esCTR && a.estado != EstadoEntrega.entregado)
       .length;
 
-  // Albaranes filtrados
   List<Albaran> get albaranesFiltrados {
     var resultado = _albaranesPendientes;
-    
     if (_filtroEstado != 'todos') {
       final estado = EstadoEntrega.fromString(_filtroEstado);
       resultado = resultado.where((a) => a.estado == estado).toList();
     }
-    
     if (_filtroCliente.isNotEmpty) {
-      resultado = resultado.where((a) => 
-        a.nombreCliente.toLowerCase().contains(_filtroCliente.toLowerCase()) ||
-        a.codigoCliente.contains(_filtroCliente)
-      ).toList();
+      resultado = resultado
+          .where(
+            (a) =>
+                a.nombreCliente
+                    .toLowerCase()
+                    .contains(_filtroCliente.toLowerCase()) ||
+                a.codigoCliente.contains(_filtroCliente),
+          )
+          .toList();
     }
-    
     return resultado;
   }
-
-  // ============================================
-  // SETTERS / FILTROS
-  // ============================================
 
   void setFiltroEstado(String estado) {
     _filtroEstado = estado;
@@ -103,48 +123,39 @@ class CobrosProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  // ============================================
-  // API - REPARTIDOR
-  // ============================================
-
-  /// Carga albaranes pendientes del día
   Future<void> cargarAlbaranesPendientes() async {
     _isLoading = true;
     _error = null;
     notifyListeners();
-
     try {
-      final response = await ApiClient.get('/entregas/pendientes/$employeeCode');
-      
+      final response =
+          await ApiClient.get('/entregas/pendientes/$employeeCode');
       if (response['success'] == true) {
-        final albaranes = (response['albaranes'] as List<dynamic>?)
-            ?.map((e) => Albaran.fromJson(e as Map<String, dynamic>))
-            .toList() ?? [];
-        
-        _albaranesPendientes = albaranes;
+        _albaranesPendientes = (response['albaranes'] as List<dynamic>?)
+                ?.map((e) => Albaran.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            [];
       } else {
         _error = (response['error'] as String?) ?? 'Error cargando albaranes';
       }
     } catch (e) {
       _error = 'Error de conexión: $e';
-      // Cargar datos de ejemplo para desarrollo
-      _cargarDatosEjemplo();
+      if (kDebugMode) _cargarDatosEjemplo();
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  /// Obtiene detalle de un albarán con items
   Future<void> cargarDetalleAlbaran(int numeroAlbaran, int ejercicio) async {
     _isLoading = true;
     notifyListeners();
-
     try {
-      final response = await ApiClient.get('/entregas/albaran/$numeroAlbaran/$ejercicio');
-      
+      final response =
+          await ApiClient.get('/entregas/albaran/$numeroAlbaran/$ejercicio');
       if (response['success'] == true && response['albaran'] != null) {
-        _albaranActual = Albaran.fromJson(response['albaran'] as Map<String, dynamic>);
+        _albaranActual =
+            Albaran.fromJson(response['albaran'] as Map<String, dynamic>);
       }
     } catch (e) {
       _error = 'Error cargando albarán: $e';
@@ -154,7 +165,6 @@ class CobrosProvider extends ChangeNotifier {
     }
   }
 
-  /// Actualiza estado de una entrega
   Future<bool> actualizarEstadoEntrega({
     required String itemId,
     required EstadoEntrega estado,
@@ -173,25 +183,17 @@ class CobrosProvider extends ChangeNotifier {
         'latitud': latitud,
         'longitud': longitud,
       });
-
       if (response['success'] == true) {
-        // Actualizar estado local
-        final index = _albaranesPendientes.indexWhere(
-          (a) => a.items.any((i) => i.itemId == itemId)
-        );
+        final index = _albaranesPendientes
+            .indexWhere((a) => a.items.any((i) => i.itemId == itemId));
         if (index >= 0) {
-          final item = _albaranesPendientes[index].items.firstWhere(
-            (i) => i.itemId == itemId
-          );
+          final item = _albaranesPendientes[index]
+              .items
+              .firstWhere((i) => i.itemId == itemId);
           item.estado = estado;
           item.cantidadEntregada = cantidadEntregada ?? item.cantidadEntregada;
-          
-          // Verificar si el albarán está completo
           final albaran = _albaranesPendientes[index];
-          if (albaran.completo) {
-            albaran.estado = EstadoEntrega.entregado;
-          }
-          
+          if (albaran.completo) albaran.estado = EstadoEntrega.entregado;
           notifyListeners();
         }
         return true;
@@ -204,14 +206,12 @@ class CobrosProvider extends ChangeNotifier {
     }
   }
 
-  /// Registra firma del cliente
   Future<bool> registrarFirma(String entregaId, String base64Firma) async {
     try {
       final response = await ApiClient.post('/entregas/uploads/signature', {
         'entregaId': entregaId,
         'firma': base64Firma,
       });
-
       if (response['success'] == true) {
         if (_albaranActual != null) {
           _albaranActual!.firmaBase64 = base64Firma;
@@ -226,50 +226,113 @@ class CobrosProvider extends ChangeNotifier {
     }
   }
 
-  /// Marca albarán como completamente entregado
-  Future<bool> completarEntrega(String albaranId, {String? observaciones}) async {
+  Future<bool> completarEntrega(
+    String albaranId, {
+    String? observaciones,
+  }) async {
     final albaran = _albaranesPendientes.firstWhere(
       (a) => a.id == albaranId,
       orElse: () => throw Exception('Albarán no encontrado'),
     );
-
-    // Marcar todos los items como entregados
+    var allSucceeded = true;
     for (final item in albaran.items) {
       if (item.estado != EstadoEntrega.entregado) {
-        await actualizarEstadoEntrega(
+        final ok = await actualizarEstadoEntrega(
           itemId: item.itemId,
           estado: EstadoEntrega.entregado,
           cantidadEntregada: item.cantidadPedida,
           observaciones: observaciones,
         );
+        if (!ok) allSucceeded = false;
       }
     }
-
-    albaran.estado = EstadoEntrega.entregado;
+    if (allSucceeded) {
+      albaran.estado = EstadoEntrega.entregado;
+    } else {
+      _error = 'No se pudieron completar todos los ítems de la entrega';
+    }
     notifyListeners();
-    return true;
+    return allSucceeded;
   }
 
-  // ============================================
-  // API - COMERCIAL
-  // ============================================
+  Future<void> cargarPendingSummary(
+    String? vendedorCode, {
+    List<String>? vendedorCodes,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+    try {
+      String endpoint;
+      if (vendedorCodes != null && vendedorCodes.isNotEmpty) {
+        endpoint = '/cobros/pending-summary/${vendedorCodes.join(',')}';
+      } else if (vendedorCode != null && vendedorCode.isNotEmpty) {
+        endpoint = '/cobros/pending-summary/$vendedorCode';
+      } else {
+        endpoint = '/cobros/pending-summary/ALL';
+      }
+      final response = await ApiClient.get(endpoint);
+      if (response['success'] == true) {
+        final raw = response['summary'] as Map<String, dynamic>? ?? {};
+        _pendingSummary =
+            raw.map((k, v) => MapEntry(k, Map<String, dynamic>.from(v as Map)));
+        _grandTotal = (response['grandTotal'] as num?)?.toDouble() ?? 0;
+        _grandTotalVencido =
+            (response['grandTotalVencido'] as num?)?.toDouble() ?? 0;
+        _error = null;
+      } else {
+        _error = 'Error al cargar resumen de pendientes';
+      }
+    } catch (e) {
+      _error = 'Error de conexión: $e';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 
-  /// Carga cobros pendientes de un cliente
+  double pendingForClient(String code) {
+    final entry = _pendingSummary[code.trim()];
+    return (entry?['total'] as num?)?.toDouble() ?? 0;
+  }
+
+  /// Req #15: importe vencido por cliente (subset de pending).
+  double vencidoForClient(String code) {
+    final entry = _pendingSummary[code.trim()];
+    return (entry?['vencido'] as num?)?.toDouble() ?? 0;
+  }
+
+  /// Req #15: estado consolidado por cliente — VENCIDO | PENDIENTE | AL_DIA.
+  String estadoForClient(String code) {
+    final entry = _pendingSummary[code.trim()];
+    if (entry == null) return 'AL_DIA';
+    final estado = (entry['estado'] as String?)?.toUpperCase();
+    if (estado != null && estado.isNotEmpty) return estado;
+    final vencido = (entry['vencido'] as num?)?.toDouble() ?? 0;
+    final total = (entry['total'] as num?)?.toDouble() ?? 0;
+    if (vencido > 0) return 'VENCIDO';
+    if (total > 0) return 'PENDIENTE';
+    return 'AL_DIA';
+  }
+
   Future<void> cargarCobrosPendientes(String codigoCliente) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
-
     try {
       final response = await ApiClient.get('/cobros/$codigoCliente/pendientes');
-      
       if (response['success'] == true) {
-        _cobrosPendientes = (response['cobros'] as List<dynamic>?)
-            ?.map((e) => CobroPendiente.fromJson(e as Map<String, dynamic>))
-            .toList() ?? [];
-        
-        if (response['resumen'] != null) {
-          _resumenCobros = ResumenCobros.fromJson(response['resumen'] as Map<String, dynamic>);
+        final payload = response['pendientes'] is Map
+            ? Map<String, dynamic>.from(response['pendientes'] as Map)
+            : response;
+        _cobrosPendientes = (payload['cobros'] as List<dynamic>?)
+                ?.map((e) => CobroPendiente.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            [];
+        if (payload['resumen'] != null) {
+          _resumenCobros = ResumenCobros.fromJson(
+            payload['resumen'] as Map<String, dynamic>,
+          );
         }
       }
     } catch (e) {
@@ -280,13 +343,13 @@ class CobrosProvider extends ChangeNotifier {
     }
   }
 
-  /// Verifica estado del cliente (moroso, bloqueado, etc)
   Future<void> verificarEstadoCliente(String codigoCliente) async {
     try {
       final response = await ApiClient.get('/cobros/$codigoCliente/estado');
-      
       if (response['success'] == true && response['estadoCliente'] != null) {
-        _estadoClienteActual = EstadoCliente.fromJson(response['estadoCliente'] as Map<String, dynamic>);
+        _estadoClienteActual = EstadoCliente.fromJson(
+          response['estadoCliente'] as Map<String, dynamic>,
+        );
         notifyListeners();
       }
     } catch (e) {
@@ -294,37 +357,51 @@ class CobrosProvider extends ChangeNotifier {
     }
   }
 
-  /// Registra un cobro
   Future<bool> registrarCobro({
     required String codigoCliente,
     required String referencia,
     required double importe,
     required String formaPago,
+    required TipoVenta tipoVenta,
+    required TipoModoCobro tipoModo,
+    String? codigoUsuario,
     String? observaciones,
   }) async {
     try {
-      final response = await ApiClient.post('/cobros/$codigoCliente/registrar', {
+      final response =
+          await ApiClient.post('/cobros/$codigoCliente/registrar', {
         'referencia': referencia,
         'importe': importe,
         'formaPago': formaPago,
+        'tipoVenta': tipoVenta.code,
+        'tipoModo': tipoModo.code,
+        'tipoUsuario': isRepartidor ? 'REPARTIDOR' : 'COMERCIAL',
+        'codigoUsuario': codigoUsuario ?? employeeCode,
         'observaciones': observaciones,
+        'idempotencyToken': buildCobroIdempotencyToken(
+          employeeCode: codigoUsuario ?? employeeCode,
+          codigoCliente: codigoCliente,
+          referencia: referencia,
+        ),
       });
-
       if (response['success'] == true) {
-        // Recargar cobros pendientes
         await cargarCobrosPendientes(codigoCliente);
+        // Refresca el summary agregado para que la lista principal se actualice.
+        // Solo si ya teniamos un summary cargado (vendedor conocido).
+        if (_pendingSummary.isNotEmpty) {
+          // No bloqueamos el flujo de UI con await: fire-and-forget.
+          // ignore: unawaited_futures
+          cargarPendingSummary(employeeCode);
+        }
         return true;
       }
       return false;
     } catch (e) {
       _error = 'Error registrando cobro: $e';
+      notifyListeners();
       return false;
     }
   }
-
-  // ============================================
-  // DATOS DE EJEMPLO (DESARROLLO)
-  // ============================================
 
   void _cargarDatosEjemplo() {
     final now = DateTime.now();
@@ -361,7 +438,6 @@ class CobrosProvider extends ChangeNotifier {
         direccion: 'Plaza España, 3 - Madrid',
         fecha: now,
         importeTotal: 532.40,
-        esCTR: false,
         items: [
           EntregaItem(
             itemId: '1002-1',
@@ -370,17 +446,6 @@ class CobrosProvider extends ChangeNotifier {
             cantidadPedida: 8,
           ),
         ],
-      ),
-      Albaran(
-        id: '2026-A-1003',
-        numeroAlbaran: 1003,
-        codigoCliente: '7755',
-        nombreCliente: 'CAFETERÍA CENTRAL',
-        direccion: 'Av. Libertad, 42 - Madrid',
-        fecha: now,
-        importeTotal: 128.50,
-        estado: EstadoEntrega.enRuta,
-        esCTR: true,
       ),
     ];
   }
@@ -394,4 +459,38 @@ class CobrosProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
   }
+
+  @override
+  void dispose() {
+    super.dispose();
+  }
+}
+
+// ============================================================
+// Riverpod provider — clean family, no hacks, no null checks
+// ============================================================
+
+final cobrosProvider =
+    ChangeNotifierProvider.family.autoDispose<CobrosProvider, CobrosParams>(
+  (ref, params) => CobrosProvider(
+    employeeCode: params.employeeCode,
+    isRepartidor: params.isRepartidor,
+  ),
+);
+
+class CobrosParams {
+  const CobrosParams({required this.employeeCode, this.isRepartidor = false});
+  final String employeeCode;
+  final bool isRepartidor;
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is CobrosParams &&
+            other.employeeCode == employeeCode &&
+            other.isRepartidor == isRepartidor;
+  }
+
+  @override
+  int get hashCode => Object.hash(employeeCode, isRepartidor);
 }

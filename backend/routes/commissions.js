@@ -1,17 +1,22 @@
 const express = require('express');
-const router = express.Router();
-const { query, queryWithParams } = require('../config/db');
+const crypto = require('crypto');
+const { query, queryWithParams, getPool } = require('../config/db');
+const { cachedQuery } = require('../services/query-optimizer');
 const logger = require('../middleware/logger');
+const { auditDataAccess } = require('../middleware/audit');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
-const { getCurrentDate, LACLAE_SALES_FILTER, buildVendedorFilterLACLAE, getVendorName, calculateDaysPassed, getBSales } = require('../utils/common');
-const { redisCache, TTL } = require('../services/redis-cache');
+const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, SNAPSHOT_UNTIL_MONTH, getVendorColumn, getVendorColumnExpr, buildVendedorFilterLACLAE, buildColumnaVendedorFilter, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL, handleRouteError } = require('../utils/common');
+const { resolveHistoricalCommissionMonth } = require('../utils/commission-snapshot');
+const { verifyToken } = require('../middleware/auth');
+const { redisCache, TTL, invalidateCachePattern } = require('../services/redis-cache');
 
+const router = express.Router();
 
 // =============================================================================
-// CONFIGURATION & CONSTANTS
+// ROUTES & HELPER FUNCTIONS
 // =============================================================================
 // FIX #1: Dynamic excluded vendors - loaded from DB with safety fallback
-const DEFAULT_EXCLUDED = ['3', '13', '93', '80'];
+const DEFAULT_EXCLUDED = ['3', '13', '93'];
 let EXCLUDED_VENDORS = [...DEFAULT_EXCLUDED];
 let _excludedVendorsLastLoad = 0;
 const EXCLUDED_CACHE_TTL = 5 * 60 * 1000; // Reload every 5 min
@@ -57,169 +62,144 @@ const DEFAULT_CONFIG_2026 = {
         { min: 110.01, max: 999.99, pct: 2.0 }
     ]
 };
+const COMMISSIONS_CACHE_VERSION = 'v20260508-r2-r1default';
 
 // =============================================================================
 // DATABASE INITIALIZATION (JAVIER Schema)
+// Uses DIRECT pool connections to avoid query() retry/pool-recreation logic.
 // =============================================================================
 async function initCommissionTables() {
-    // 1. Initialize COMM_CONFIG table
+    const pool = getPool();
+    if (!pool) { logger.warn('⚠️ Commission init: no DB pool'); return; }
+    let conn;
     try {
-        let commConfigExists = false;
+        conn = await pool.connect();
+
+        // 1. COMM_CONFIG table
         try {
-            await query(`SELECT 1 FROM JAVIER.COMM_CONFIG FETCH FIRST 1 ROWS ONLY`, false, false);
-            commConfigExists = true;
+            await conn.query(`SELECT 1 FROM JAVIER.COMM_CONFIG FETCH FIRST 1 ROWS ONLY`);
             logger.info('✅ JAVIER.COMM_CONFIG found and ready.');
         } catch (e) {
-            // Table likely not found, proceed to create
+            // Close dirty connection, get fresh one
+            if (conn) try { await conn.close(); } catch (_) { }
+            conn = await pool.connect();
             logger.info('⚙️ Initializing JAVIER.COMM_CONFIG table...');
-        }
-
-        if (!commConfigExists) {
-            // 2. Create Table (DB2 syntax)
-            await query(`
-                 CREATE TABLE JAVIER.COMM_CONFIG (
-                     ID INT NOT NULL,
-                     YEAR INT NOT NULL,
-                     IPC_PCT DECIMAL(5,2) DEFAULT 3.00,
-                     TIER1_MAX DECIMAL(5,2) DEFAULT 103.00,
-                     TIER1_PCT DECIMAL(5,2) DEFAULT 1.00,
-                     TIER2_MAX DECIMAL(5,2) DEFAULT 106.00,
-                     TIER2_PCT DECIMAL(5,2) DEFAULT 1.30,
-                     TIER3_MAX DECIMAL(5,2) DEFAULT 110.00,
-                     TIER3_PCT DECIMAL(5,2) DEFAULT 1.60,
-                     TIER4_PCT DECIMAL(5,2) DEFAULT 2.00,
-                     PRIMARY KEY (ID)
-                 )
-            `);
-            logger.info('✅ JAVIER.COMM_CONFIG table created.');
-
-            // 3. Seed Data
-            await query(`
-                INSERT INTO JAVIER.COMM_CONFIG (ID, YEAR, IPC_PCT, TIER1_MAX, TIER1_PCT, TIER2_MAX, TIER2_PCT, TIER3_MAX, TIER3_PCT, TIER4_PCT)
-                VALUES (1, 2026, 3.00, 103.00, 1.00, 106.00, 1.30, 110.00, 1.60, 2.00)
-            `);
-            logger.info('🌱 JAVIER.COMM_CONFIG seeded default values.');
-        }
-    } catch (error) {
-        // If it fails (e.g., race condition or permission), we log but don't crash.
-        // Logic will fall back to DEFAULT_CONFIG_2026.
-        logger.warn(`⚠️ DB Init Warning: ${error.message}. Using default memory config.`);
-    }
-
-    // FIX #1: Ensure EXCLUIDO_COMISIONES column exists in COMMISSION_EXCEPTIONS
-    try {
-        await query(`SELECT EXCLUIDO_COMISIONES FROM JAVIER.COMMISSION_EXCEPTIONS FETCH FIRST 1 ROWS ONLY`, false, false);
-        logger.info('✅ EXCLUIDO_COMISIONES column exists.');
-    } catch (colErr) {
-        logger.info('⚙️ Adding EXCLUIDO_COMISIONES column to COMMISSION_EXCEPTIONS...');
-        try {
-            await query(`ALTER TABLE JAVIER.COMMISSION_EXCEPTIONS ADD COLUMN EXCLUIDO_COMISIONES CHAR(1) DEFAULT 'N'`);
-            logger.info('✅ EXCLUIDO_COMISIONES column added.');
-        } catch (alterErr) {
-            logger.warn(`⚠️ Could not add column (may already exist): ${alterErr.message}`);
-        }
-    }
-
-    // Seed default excluded vendors - ONLY if table is empty to avoid overriding user changes
-    try {
-        const count = await query(`SELECT COUNT(*) as CNT FROM JAVIER.COMMISSION_EXCEPTIONS`, false, false);
-        if (count && count[0].CNT == 0) {
-            const defaultExcluded = ['03', '13', '93', '80']; // Use '03' to match typical DB format
-            for (const code of defaultExcluded) {
-                await query(`INSERT INTO JAVIER.COMMISSION_EXCEPTIONS (CODIGOVENDEDOR, HIDE_COMMISSIONS, EXCLUIDO_COMISIONES) VALUES ('${code}', 'N', 'Y')`);
+            try {
+                await conn.query(`
+                     CREATE TABLE JAVIER.COMM_CONFIG (
+                         ID INT NOT NULL,
+                         YEAR INT NOT NULL,
+                         IPC_PCT DECIMAL(5,2) DEFAULT 3.00,
+                         TIER1_MAX DECIMAL(5,2) DEFAULT 103.00,
+                         TIER1_PCT DECIMAL(5,2) DEFAULT 1.00,
+                         TIER2_MAX DECIMAL(5,2) DEFAULT 106.00,
+                         TIER2_PCT DECIMAL(5,2) DEFAULT 1.30,
+                         TIER3_MAX DECIMAL(5,2) DEFAULT 110.00,
+                         TIER3_PCT DECIMAL(5,2) DEFAULT 1.60,
+                         TIER4_PCT DECIMAL(5,2) DEFAULT 2.00,
+                         PRIMARY KEY (ID)
+                     )
+                `);
+                logger.info('✅ JAVIER.COMM_CONFIG table created.');
+                await conn.query(`
+                    INSERT INTO JAVIER.COMM_CONFIG (ID, YEAR, IPC_PCT, TIER1_MAX, TIER1_PCT, TIER2_MAX, TIER2_PCT, TIER3_MAX, TIER3_PCT, TIER4_PCT)
+                    VALUES (1, 2026, 3.00, 103.00, 1.00, 106.00, 1.30, 110.00, 1.60, 2.00)
+                `);
+                logger.info('🌱 JAVIER.COMM_CONFIG seeded default values.');
+            } catch (createErr) {
+                logger.warn(`⚠️ COMM_CONFIG init: ${createErr.message}`);
             }
-            logger.info(`🌱 Seeded default excluded vendors [${defaultExcluded.join(',')}] into empty table.`);
         }
-    } catch (seedErr) {
-        logger.debug(`Seed check error: ${seedErr.message}`);
-    }
 
-    // FIX #4: Create COMMISSION_PAYMENTS table if not exists
-    try {
-        await query(`SELECT 1 FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`, false, false);
-        logger.info('✅ JAVIER.COMMISSION_PAYMENTS table exists.');
-    } catch (e) {
-        logger.info('⚙️ Creating JAVIER.COMMISSION_PAYMENTS table...');
+        // 2. EXCLUIDO_COMISIONES column
         try {
-            await query(`
-                CREATE TABLE JAVIER.COMMISSION_PAYMENTS (
-                    ID INT NOT NULL GENERATED ALWAYS AS IDENTITY,
-                    VENDEDOR_CODIGO VARCHAR(10) NOT NULL,
-                    ANIO INT NOT NULL,
-                    MES INT NOT NULL,
-                    VENTAS_REAL DECIMAL(14,2) NOT NULL DEFAULT 0,
-                    OBJETIVO_MES DECIMAL(14,2) NOT NULL DEFAULT 0,
-                    VENTAS_SOBRE_OBJETIVO DECIMAL(14,2) NOT NULL DEFAULT 0,
-                    COMISION_GENERADA DECIMAL(12,2) NOT NULL DEFAULT 0,
-                    IMPORTE_PAGADO DECIMAL(12,2) NOT NULL DEFAULT 0,
-                    FECHA_PAGO TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    OBSERVACIONES VARCHAR(1000) NOT NULL DEFAULT '',
-                    CREADO_POR VARCHAR(50) NOT NULL DEFAULT 'unknown',
-                    FECHA_CREACION TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (ID)
-                )
-            `);
-            logger.info('✅ JAVIER.COMMISSION_PAYMENTS table created.');
-        } catch (createErr) {
-            logger.warn(`⚠️ Could not create COMMISSION_PAYMENTS: ${createErr.message}`);
+            await conn.query(`SELECT EXCLUIDO_COMISIONES FROM JAVIER.COMMISSION_EXCEPTIONS FETCH FIRST 1 ROWS ONLY`);
+            logger.info('✅ EXCLUIDO_COMISIONES column exists.');
+        } catch (colErr) {
+            if (conn) try { await conn.close(); } catch (_) { }
+            conn = await pool.connect();
+            try {
+                await conn.query(`ALTER TABLE JAVIER.COMMISSION_EXCEPTIONS ADD COLUMN EXCLUIDO_COMISIONES CHAR(1) DEFAULT 'N'`);
+                logger.info('✅ EXCLUIDO_COMISIONES column added.');
+            } catch (alterErr) {
+                // may already exist
+            }
         }
-    }
 
-    // Add OBJETIVO_MES column for snapshot (idempotent - skipped if exists)
-    try {
-        await query(`SELECT OBJETIVO_MES FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`, false, false);
-    } catch (colErr) {
-        logger.info('⚙️ Adding OBJETIVO_MES column to COMMISSION_PAYMENTS...');
+        // 3. Seed default excluded vendors
         try {
-            await query(`ALTER TABLE JAVIER.COMMISSION_PAYMENTS ADD COLUMN OBJETIVO_MES DECIMAL(12,2) DEFAULT 0`);
-            logger.info('✅ OBJETIVO_MES column added.');
-        } catch (alterErr) {
-            logger.warn(`⚠️ Could not add OBJETIVO_MES column: ${alterErr.message}`);
+            const count = await conn.query(`SELECT COUNT(*) as CNT FROM JAVIER.COMMISSION_EXCEPTIONS`);
+            if (count && count[0].CNT == 0) {
+                const defaultExcluded = ['03', '13', '93'];
+                for (const code of defaultExcluded) {
+                    await conn.query(`INSERT INTO JAVIER.COMMISSION_EXCEPTIONS (CODIGOVENDEDOR, HIDE_COMMISSIONS, EXCLUIDO_COMISIONES) VALUES (?, 'N', 'Y')`, [code]);
+                }
+                logger.info(`🌱 Seeded default excluded vendors.`);
+            }
+        } catch (seedErr) {
+            logger.debug(`Seed check: ${seedErr.message}`);
         }
-    }
 
-    // Add VENTAS_SOBRE_OBJETIVO column for snapshot
-    try {
-        await query(`SELECT VENTAS_SOBRE_OBJETIVO FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`, false, false);
-    } catch (colErr) {
-        logger.info('⚙️ Adding VENTAS_SOBRE_OBJETIVO column to COMMISSION_PAYMENTS...');
+        // 4. COMMISSION_PAYMENTS table
         try {
-            await query(`ALTER TABLE JAVIER.COMMISSION_PAYMENTS ADD COLUMN VENTAS_SOBRE_OBJETIVO DECIMAL(12,2) DEFAULT 0`);
-            logger.info('✅ VENTAS_SOBRE_OBJETIVO column added.');
-        } catch (alterErr) {
-            logger.warn(`⚠️ Could not add VENTAS_SOBRE_OBJETIVO column: ${alterErr.message}`);
+            await conn.query(`SELECT 1 FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`);
+            logger.info('✅ JAVIER.COMMISSION_PAYMENTS table exists.');
+        } catch (e) {
+            // Close dirty connection, get fresh one
+            if (conn) try { await conn.close(); } catch (_) { }
+            conn = await pool.connect();
+            try {
+                await conn.query(`
+                    CREATE TABLE JAVIER.COMMISSION_PAYMENTS (
+                        ID INT NOT NULL GENERATED ALWAYS AS IDENTITY,
+                        VENDEDOR_CODIGO VARCHAR(10) NOT NULL,
+                        ANIO INT NOT NULL,
+                        MES INT NOT NULL,
+                        VENTAS_REAL DECIMAL(14,2) NOT NULL DEFAULT 0,
+                        OBJETIVO_MES DECIMAL(14,2) NOT NULL DEFAULT 0,
+                        VENTAS_SOBRE_OBJETIVO DECIMAL(14,2) NOT NULL DEFAULT 0,
+                        COMISION_GENERADA DECIMAL(12,2) NOT NULL DEFAULT 0,
+                        IMPORTE_PAGADO DECIMAL(12,2) NOT NULL DEFAULT 0,
+                        FECHA_PAGO TIMESTAMP NOT NULL DEFAULT CURRENT TIMESTAMP,
+                        OBSERVACIONES VARCHAR(1000) NOT NULL DEFAULT '',
+                        CREADO_POR VARCHAR(50) NOT NULL DEFAULT 'unknown',
+                        FECHA_CREACION TIMESTAMP NOT NULL DEFAULT CURRENT TIMESTAMP,
+                        PRIMARY KEY (ID)
+                    )
+                `);
+                logger.info('✅ JAVIER.COMMISSION_PAYMENTS table created.');
+            } catch (createErr) {
+                logger.warn(`⚠️ COMMISSION_PAYMENTS: ${createErr.message}`);
+            }
         }
+
+        // 5. Columns idempotent additions (fresh connection after any potential failures)
+        try { await conn.query(`SELECT OBJETIVO_MES FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`); } catch (e) {
+            if (conn) try { await conn.close(); } catch (_) { }
+            conn = await pool.connect();
+            try { await conn.query(`ALTER TABLE JAVIER.COMMISSION_PAYMENTS ADD COLUMN OBJETIVO_MES DECIMAL(12,2) DEFAULT 0`); } catch (_) { }
+        }
+        try { await conn.query(`SELECT VENTAS_SOBRE_OBJETIVO FROM JAVIER.COMMISSION_PAYMENTS FETCH FIRST 1 ROWS ONLY`); } catch (e) {
+            if (conn) try { await conn.close(); } catch (_) { }
+            conn = await pool.connect();
+            try { await conn.query(`ALTER TABLE JAVIER.COMMISSION_PAYMENTS ADD COLUMN VENTAS_SOBRE_OBJETIVO DECIMAL(12,2) DEFAULT 0`); } catch (_) { }
+        }
+
+        // 6. Index
+        try { await conn.query(`CREATE INDEX IDX_CP_VENDOR_YEAR ON JAVIER.COMMISSION_PAYMENTS(VENDEDOR_CODIGO, ANIO)`); } catch (_) { }
+
+    } catch (error) {
+        logger.warn(`⚠️ Commission tables init error: ${error.message}`);
+    } finally {
+        if (conn) try { await conn.close(); } catch (_) { }
     }
 
-    // Performance index for payment lookups
-    try {
-        await query(`CREATE INDEX IDX_CP_VENDOR_YEAR ON JAVIER.COMMISSION_PAYMENTS(VENDEDOR_CODIGO, ANIO)`, false, false);
-        logger.info('✅ Index IDX_CP_VENDOR_YEAR created.');
-    } catch (idxErr) {
-        // Index may already exist - expected after first run
-        logger.debug(`Index creation note: ${idxErr.message}`);
-    }
-
-    // Load excluded vendors into memory
+    // Load excluded vendors into memory (uses query() which is fine here — pool is stable)
     await loadExcludedVendors();
     logger.info(`✅ Commission system initialized. Excluded vendors: [${EXCLUDED_VENDORS.join(', ')}]`);
 }
 
-// Run initialization on module load (with retry on failure)
-setTimeout(async () => {
-    try {
-        await initCommissionTables();
-    } catch (err) {
-        logger.warn(`Commission tables init failed, retrying in 10s: ${err.message}`);
-        setTimeout(async () => {
-            try {
-                await initCommissionTables();
-            } catch (retryErr) {
-                logger.error(`Commission tables init retry failed: ${retryErr.message}`);
-            }
-        }, 10000);
-    }
-}, 3000);
+// Exported for server.js to call during startup sequence (no more fire-and-forget setTimeout)
 
 // =============================================================================
 // HELPER FUNCTIONS
@@ -231,24 +211,24 @@ setTimeout(async () => {
 async function getVendorCurrentClients(vendorCode, currentYear) {
     const safeCode = vendorCode.replace(/[^a-zA-Z0-9]/g, '');
     const safeYear = parseInt(currentYear);
-    // PERF: Removed TRIM() from WHERE - DB2 CHAR comparison handles trailing spaces
-    const rows = await query(`
+    const col = getVendorColumn(safeYear);
+    const rows = await queryWithParams(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
-        WHERE L.LCCDVD = '${safeCode}'
-          AND L.LCAADC = ${safeYear}
+        WHERE L.${col} = ?
+          AND L.LCAADC = ?
           AND ${LACLAE_SALES_FILTER}
-    `, false);
+    `, [safeCode, safeYear], false);
 
-    // If no clients in current year, try previous year
     if (rows.length === 0) {
-        const prevRows = await query(`
+        const prevCol = getVendorColumn(safeYear - 1);
+        const prevRows = await queryWithParams(`
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
-            WHERE L.LCCDVD = '${safeCode}'
-              AND L.LCAADC = ${safeYear - 1}
+            WHERE L.${prevCol} = ?
+              AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
-        `, false);
+        `, [safeCode, safeYear - 1], false);
         return prevRows.map(r => r.CLIENT_CODE);
     }
 
@@ -262,20 +242,19 @@ async function getVendorCurrentClients(vendorCode, currentYear) {
 async function getClientsMonthlySales(clientCodes, year) {
     if (!clientCodes || clientCodes.length === 0) return {};
 
-    // Build safe IN-clause with sanitized values
-    const safeInClause = clientCodes.map(c => `'${String(c).replace(/[^a-zA-Z0-9]/g, '')}'`).join(',');
+    const placeholders = clientCodes.map(() => '?').join(',');
+    const safeCodes = clientCodes.map(c => String(c).replace(/[^a-zA-Z0-9]/g, ''));
 
-    // PERF: Removed TRIM(L.LCCDCL) - DB2 CHAR comparison handles trailing spaces
-    const rows = await query(`
+    const rows = await queryWithParams(`
         SELECT 
             L.LCMMDC as MONTH,
             SUM(L.LCIMVT) as SALES
         FROM DSED.LACLAE L
-        WHERE L.LCCDCL IN (${safeInClause})
-          AND L.LCAADC = ${parseInt(year)}
+        WHERE L.LCCDCL IN (${placeholders})
+          AND L.LCAADC = ?
           AND ${LACLAE_SALES_FILTER}
         GROUP BY L.LCMMDC
-    `, false);
+    `, [...safeCodes, parseInt(year)], false);
 
     // Build map: month -> total sales
     const monthlyMap = {};
@@ -305,10 +284,9 @@ async function getVendorPayments(vendorCode, year) {
     const normalizedCode = vendorCode.trim().replace(/^0+/, '') || vendorCode.trim();
 
     try {
-        // Get all payment records with new columns
         const safeVCode = vendorCode.trim().replace(/[^a-zA-Z0-9]/g, '');
         const safeNCode = normalizedCode.replace(/[^a-zA-Z0-9]/g, '');
-        const rows = await query(`
+        const rows = await queryWithParams(`
             SELECT
                 MES,
                 IMPORTE_PAGADO,
@@ -318,14 +296,15 @@ async function getVendorPayments(vendorCode, year) {
                 OBSERVACIONES,
                 FECHA_PAGO
             FROM JAVIER.COMMISSION_PAYMENTS
-            WHERE (VENDEDOR_CODIGO = '${safeVCode}' OR VENDEDOR_CODIGO = '${safeNCode}')
-              AND ANIO = ${parseInt(year)}
+            WHERE (VENDEDOR_CODIGO = ? OR VENDEDOR_CODIGO = ?)
+              AND ANIO = ?
             ORDER BY MES, FECHA_PAGO
-        `, false, false);
+        `, [safeVCode, safeNCode, parseInt(year)], false, false);
 
         rows.forEach(r => {
             const amount = parseFloat(r.IMPORTE_PAGADO) || 0;
             const mes = r.MES;
+            const rowDate = r.FECHA_PAGO ? new Date(r.FECHA_PAGO) : null;
 
             payments.total += amount;
 
@@ -335,17 +314,21 @@ async function getVendorPayments(vendorCode, year) {
                 if (!payments.details[mes]) {
                     payments.details[mes] = {
                         totalPaid: 0,
-                        ventaComision: parseFloat(r.VENTAS_REAL) || 0,
-                        objetivoReal: parseFloat(r.OBJETIVO_MES) || 0,
+                        comisionGenerada: 0,
+                        ventaComision: 0,
+                        objetivoReal: 0,
                         observaciones: [],
-                        ultimaFecha: r.FECHA_PAGO
+                        ultimaFecha: null
                     };
                 }
                 payments.details[mes].totalPaid += amount;
+                payments.details[mes].comisionGenerada += parseFloat(r.COMISION_GENERADA) || 0;
                 if (r.OBSERVACIONES && r.OBSERVACIONES.trim()) {
                     payments.details[mes].observaciones.push(r.OBSERVACIONES.trim());
                 }
-                if (r.FECHA_PAGO && new Date(r.FECHA_PAGO) > new Date(payments.details[mes].ultimaFecha || 0)) {
+                if (!payments.details[mes].ultimaFecha || (rowDate && rowDate >= new Date(payments.details[mes].ultimaFecha || 0))) {
+                    payments.details[mes].ventaComision = parseFloat(r.VENTAS_REAL) || 0;
+                    payments.details[mes].objetivoReal = parseFloat(r.OBJETIVO_MES) || 0;
                     payments.details[mes].ultimaFecha = r.FECHA_PAGO;
                 }
             }
@@ -355,6 +338,271 @@ async function getVendorPayments(vendorCode, year) {
     }
 
     return payments;
+}
+
+/**
+ * Read the immutable sales snapshot for pre-transition months (Jan/Feb 2026).
+ * Returns { snapshotMap, monthsWithData } where:
+ *   snapshotMap: { [normalizedVendorCode]: { [month]: { ventasTotales, objetivo, comisionGenerada } } }
+ *   monthsWithData: Set<number> of months for which the snapshot table has at least one row.
+ *
+ * Uses JAVIER.COMMISSION_SNAPSHOT_2026_0102 (existing table with VENTAS_REAL = LAC + CONDOR combined).
+ * No LAC/CONDOR split is available — ventasTotales carries the full amount.
+ *
+ * Only queries if year === 2026 and SNAPSHOT_UNTIL_MONTH > 0.
+ *
+ * @param {string[]} vendorCodes - Vendor codes to fetch (empty → fetch all)
+ * @param {number} year - Year to fetch
+ * @returns {{ snapshotMap: Object, monthsWithData: Set<number> }}
+ */
+async function getVendorSalesSnapshot(vendorCodes, year) {
+    if (year !== 2026 || SNAPSHOT_UNTIL_MONTH <= 0) return { snapshotMap: {}, monthsWithData: new Set() };
+
+    try {
+        const monthList = Array.from({ length: SNAPSHOT_UNTIL_MONTH }, (_, i) => i + 1);
+        const monthPlaceholders = monthList.map(() => '?').join(',');
+
+        let rows;
+        let coverageRows;
+        if (!vendorCodes || vendorCodes.length === 0) {
+            // Fetch all vendors (ALL mode) — no vendor filter
+            rows = await queryWithParams(`
+                SELECT TRIM(VENDEDOR_CODIGO) as VENDEDOR_CODIGO, MES, VENTAS_REAL,
+                       OBJETIVO_MES, COMISION_GENERADA
+                FROM JAVIER.COMMISSION_SNAPSHOT_2026_0102
+                WHERE ANIO = ?
+                  AND MES IN (${monthPlaceholders})
+            `, [year, ...monthList], false, false);
+            coverageRows = rows;
+        } else {
+            const safeCodes = [...new Set(vendorCodes.flatMap(c => {
+                const safe = String(c || '').replace(/[^a-zA-Z0-9]/g, '');
+                if (!safe) return [];
+                const unpadded = safe.replace(/^0+/, '') || safe;
+                const padded = /^\d{1,2}$/.test(unpadded) ? unpadded.padStart(2, '0') : unpadded;
+                return [safe, unpadded, padded];
+            }).filter(Boolean))];
+            if (safeCodes.length === 0) return { snapshotMap: {}, monthsWithData: new Set() };
+            const codePlaceholders = safeCodes.map(() => '?').join(',');
+            rows = await queryWithParams(`
+                SELECT TRIM(VENDEDOR_CODIGO) as VENDEDOR_CODIGO, MES, VENTAS_REAL,
+                       OBJETIVO_MES, COMISION_GENERADA
+                FROM JAVIER.COMMISSION_SNAPSHOT_2026_0102
+                WHERE ANIO = ?
+                  AND MES IN (${monthPlaceholders})
+                  AND VENDEDOR_CODIGO IN (${codePlaceholders})
+            `, [year, ...monthList, ...safeCodes], false, false);
+            coverageRows = await queryWithParams(`
+                SELECT DISTINCT MES
+                FROM JAVIER.COMMISSION_SNAPSHOT_2026_0102
+                WHERE ANIO = ?
+                  AND MES IN (${monthPlaceholders})
+            `, [year, ...monthList], false, false);
+        }
+
+        // Track which months have at least one row — used to distinguish
+        // "table empty for this month" from "vendor not present this month".
+        const monthsWithData = new Set();
+        const snapshotMap = {};
+
+        (coverageRows || rows).forEach(r => {
+            const mes = parseInt(r.MES);
+            if (!Number.isNaN(mes)) monthsWithData.add(mes);
+        });
+
+        rows.forEach(r => {
+            const rawCode = (r.VENDEDOR_CODIGO || '').trim();
+            // Normalize: strip leading zeros so '02' === '2'. Keep both forms as keys
+            // to handle whatever format the rest of the code uses.
+            const normalizedCode = rawCode.replace(/^0+/, '') || rawCode;
+            const mes = parseInt(r.MES);
+
+            const entry = {
+                ventasTotales: parseFloat(r.VENTAS_REAL) || 0,
+                objetivo: parseFloat(r.OBJETIVO_MES) || 0,
+                comisionGenerada: parseFloat(r.COMISION_GENERADA) || 0,
+            };
+
+            // Store under both the raw padded code ('02') and normalized ('2')
+            // so lookups succeed regardless of which format callers use.
+            for (const key of [rawCode, normalizedCode]) {
+                if (!snapshotMap[key]) snapshotMap[key] = {};
+                snapshotMap[key][mes] = entry;
+            }
+        });
+
+        logger.info(`[COMMISSIONS] Snapshot loaded from COMMISSION_SNAPSHOT_2026_0102: ${rows.length} rows, ${Object.keys(snapshotMap).length / 2} vendors, months [${[...monthsWithData].join(',')}] of ${year}`);
+        return { snapshotMap, monthsWithData };
+    } catch (e) {
+        logger.warn(`[COMMISSIONS] getVendorSalesSnapshot failed: ${e.message}`);
+        return { snapshotMap: {}, monthsWithData: new Set() };
+    }
+}
+
+/**
+ * BATCH FETCH: Load all vendor data in parallel queries instead of N×7 sequential.
+ * Reduces 145+ queries → 5 queries for ALL mode.
+ */
+async function batchFetchAllVendorData(vendorCodes, year) {
+    // Use CASE expression to handle LCCDVD→R1_T8CDVD transition per-row (Jan/Feb 2026 use LCCDVD)
+    const vendorColExpr = getVendorColumnExpr('L');
+    const safeCodes = vendorCodes.map(c => c.replace(/[^a-zA-Z0-9]/g, '')).filter(Boolean);
+    const placeholders = safeCodes.map(() => '?').join(',');
+
+    // Build code variants (both padded "05" and unpadded "5") for VENTAS_B and COMMISSION_PAYMENTS.
+    // These tables may store vendor codes in a different format than LACLAE.
+    // getBSales (single-vendor mode) uses OR clause for both formats — replicate that here.
+    const codeVariants = [...new Set(safeCodes.flatMap(c => {
+        const unpadded = c.replace(/^0+/, '') || c;
+        const padded = /^\d{1,2}$/.test(unpadded) ? unpadded.padStart(2, '0') : unpadded;
+        return [c, unpadded, padded];
+    }))];
+    const variantPlaceholders = codeVariants.map(() => '?').join(',');
+
+    const [allSalesRows, allBSalesRows, allPaymentsRows, allFixedTargets, allVendorNames] = await Promise.all([
+        // 1. LACLAE sales for ALL vendors (current + prev year)
+        // NOTE: GROUP BY must use the same month-based CASE expression as SELECT.
+        // Jan/Feb use LCCDVD and Mar+ use R1_T8CDVD for both current sales and
+        // prior-year commission baselines.
+        queryWithParams(`
+            SELECT TRIM(${vendorColExpr}) as VENDOR_CODE, L.LCAADC as YEAR, LCMMDC as MONTH, SUM(L.LCIMVT) as SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC IN (?, ?)
+              AND ${LACLAE_SALES_FILTER}
+              AND TRIM(${vendorColExpr}) IN (${placeholders})
+            GROUP BY TRIM(${vendorColExpr}), L.LCAADC, LCMMDC
+        `, [year, year - 1, ...safeCodes], false),
+
+        // 2. B-Sales for ALL vendors (current + prev year) from JAVIER.VENTAS_B
+        // Use codeVariants (both padded + unpadded) to match however codes are stored in VENTAS_B.
+        queryWithParams(`
+            SELECT TRIM(CODIGOVENDEDOR) as VENDOR_CODE, MES, IMPORTE as SALES, EJERCICIO as YEAR
+            FROM JAVIER.VENTAS_B
+            WHERE EJERCICIO IN (?, ?)
+              AND TRIM(CODIGOVENDEDOR) IN (${variantPlaceholders})
+        `, [year, year - 1, ...codeVariants], false),
+
+        // 3. Payments for ALL vendors
+        // Use codeVariants (both padded + unpadded) to match however codes are stored in COMMISSION_PAYMENTS.
+        queryWithParams(`
+            SELECT VENDEDOR_CODIGO as VENDOR_CODE, MES, IMPORTE_PAGADO, COMISION_GENERADA,
+                   VENTAS_REAL, OBJETIVO_MES, OBSERVACIONES, FECHA_PAGO
+            FROM JAVIER.COMMISSION_PAYMENTS
+            WHERE ANIO = ?
+              AND VENDEDOR_CODIGO IN (${variantPlaceholders})
+            ORDER BY VENDEDOR_CODIGO, MES, FECHA_PAGO
+        `, [year, ...codeVariants], false),
+
+        // 4. Fixed targets for ALL vendors
+        // Use codeVariants (both '05' and '5') because COMMERCIAL_TARGETS may store
+        // vendor codes in a different format than the LACLAE CASE expression returns.
+        queryWithParams(`
+            SELECT CODIGOVENDEDOR as VENDOR_CODE, IMPORTE_BASE_COMISION, MES
+            FROM JAVIER.COMMERCIAL_TARGETS
+            WHERE ANIO = ?
+              AND CODIGOVENDEDOR IN (${variantPlaceholders})
+              AND ACTIVO = 1
+        `, [year, ...codeVariants], false),
+
+        // 5. Vendor names for ALL vendors (also use variants for code format tolerance)
+        queryWithParams(`
+            SELECT TRIM(CODIGOVENDEDOR) as VENDOR_CODE, TRIM(NOMBREVENDEDOR) as VENDOR_NAME
+            FROM DSEDAC.VDD
+            WHERE TRIM(CODIGOVENDEDOR) IN (${variantPlaceholders})
+        `, [...codeVariants], false),
+    ]);
+
+    // Partition data by vendor in memory
+    const dataByVendor = {};
+    for (const code of vendorCodes) {
+        const normalized = code.trim().replace(/^0+/, '') || code.trim();
+        const salesRows = allSalesRows.filter(r => {
+            const vc = (r.VENDOR_CODE || '').trim().replace(/^0+/, '') || (r.VENDOR_CODE || '').trim();
+            return vc === normalized || vc === code.trim();
+        });
+        const bSalesRows = allBSalesRows.filter(r => {
+            const vc = (r.VENDOR_CODE || '').trim().replace(/^0+/, '') || (r.VENDOR_CODE || '').trim();
+            return vc === normalized || vc === code.trim();
+        });
+        const paymentRows = allPaymentsRows.filter(r => {
+            const vc = (r.VENDOR_CODE || '').trim().replace(/^0+/, '') || (r.VENDOR_CODE || '').trim();
+            return vc === normalized || vc === code.trim();
+        });
+        const fixedRows = allFixedTargets.filter(r => {
+            const vc = (r.VENDOR_CODE || '').trim().replace(/^0+/, '') || (r.VENDOR_CODE || '').trim();
+            return vc === normalized || vc === code.trim();
+        });
+        const vendorName = allVendorNames.find(r => {
+            const vc = (r.VENDOR_CODE || '').trim().replace(/^0+/, '') || (r.VENDOR_CODE || '').trim();
+            return vc === normalized || vc === code.trim();
+        });
+
+        // Build B-sales maps
+        const bSalesCurr = {};
+        const bSalesPrev = {};
+        bSalesRows.forEach(r => {
+            const m = r.MES;
+            const s = parseFloat(r.SALES) || 0;
+            const yr = parseInt(r.YEAR);
+            if (yr === year) {
+                bSalesCurr[m] = (bSalesCurr[m] || 0) + s;
+            } else {
+                bSalesPrev[m] = (bSalesPrev[m] || 0) + s;
+            }
+        });
+
+        // Build payments structure
+        const payments = { monthly: {}, quarterly: {}, total: 0, details: {} };
+        paymentRows.forEach(r => {
+            const m = r.MES;
+            const rowDate = r.FECHA_PAGO ? new Date(r.FECHA_PAGO) : null;
+            if (!payments.details[m]) {
+                payments.details[m] = {
+                    totalPaid: 0,
+                    comisionGenerada: 0,
+                    observaciones: [],
+                    ventaComision: 0,
+                    objetivoReal: 0,
+                    ultimaFecha: null
+                };
+            }
+            payments.details[m].comisionGenerada += parseFloat(r.COMISION_GENERADA) || 0;
+            if (r.OBSERVACIONES && r.OBSERVACIONES.trim()) {
+                payments.details[m].observaciones.push(r.OBSERVACIONES.trim());
+            }
+            if (!payments.details[m].ultimaFecha || (rowDate && rowDate >= new Date(payments.details[m].ultimaFecha || 0))) {
+                payments.details[m].ventaComision = parseFloat(r.VENTAS_REAL) || 0;
+                payments.details[m].objetivoReal = parseFloat(r.OBJETIVO_MES) || 0;
+                payments.details[m].ultimaFecha = r.FECHA_PAGO;
+            }
+            payments.monthly[m] = (payments.monthly[m] || 0) + (parseFloat(r.IMPORTE_PAGADO) || 0);
+            payments.total += parseFloat(r.IMPORTE_PAGADO) || 0;
+            payments.details[m].totalPaid += parseFloat(r.IMPORTE_PAGADO) || 0;
+        });
+
+        // Build fixed target map: keep ALL rows so the month loop can pick the
+        // most appropriate entry per month (month-specific > annual > most recent past).
+        // Sorting by MES desc (treating null as 0 so annual entries sort last).
+        const sortedFixed = fixedRows
+            .map(r => ({
+                mes: r.MES != null ? parseInt(r.MES, 10) : null,
+                importe: parseFloat(r.IMPORTE_BASE_COMISION) || 0,
+            }))
+            .filter(r => r.importe > 0)
+            .sort((a, b) => (b.mes ?? 0) - (a.mes ?? 0));
+
+        dataByVendor[code] = {
+            salesRows,
+            bSalesCurr,
+            bSalesPrev,
+            payments,
+            fixedTargets: sortedFixed,   // per-month lookup (replaces fixedCommissionBase)
+            vendorName: vendorName?.VENDOR_NAME || '',
+        };
+    }
+
+    logger.info(`[COMMISSIONS] Batch fetch: ${vendorCodes.length} vendors, ${allSalesRows.length} sales rows, ${allBSalesRows.length} B-sales rows in 5 queries`);
+    return dataByVendor;
 }
 
 /**
@@ -448,10 +696,50 @@ function calculateCommission(actual, target, config) {
     };
 }
 
+function roundMoney(value) {
+    const parsed = parseFloat(value);
+    if (!Number.isFinite(parsed)) return 0;
+    return Math.round(parsed * 100) / 100;
+}
+
+async function loadCommissionConfig(year) {
+    try {
+        const dbConfig = await queryWithParams(
+            `SELECT * FROM JAVIER.COMM_CONFIG WHERE YEAR = ? FETCH FIRST 1 ROWS ONLY`,
+            [parseInt(year)],
+            false,
+            false
+        );
+        if (dbConfig && dbConfig.length > 0) {
+            const row = dbConfig[0];
+            return {
+                ipc: parseFloat(row.IPC_PCT),
+                TIER1_MAX: parseFloat(row.TIER1_MAX),
+                TIER1_PCT: parseFloat(row.TIER1_PCT),
+                TIER2_MAX: parseFloat(row.TIER2_MAX),
+                TIER2_PCT: parseFloat(row.TIER2_PCT),
+                TIER3_MAX: parseFloat(row.TIER3_MAX),
+                TIER3_PCT: parseFloat(row.TIER3_PCT),
+                TIER4_PCT: parseFloat(row.TIER4_PCT)
+            };
+        }
+    } catch (e) {
+        logger.warn(`[COMMISSIONS] COMM_CONFIG lookup failed for ${year}: ${e.message}. Using defaults.`);
+    }
+
+    return {
+        ipc: 3.0,
+        TIER1_MAX: 103.00, TIER1_PCT: 1.0,
+        TIER2_MAX: 106.00, TIER2_PCT: 1.3,
+        TIER3_MAX: 110.00, TIER3_PCT: 1.6,
+        TIER4_PCT: 2.0
+    };
+}
+
 /**
  * Core Logic to Calculate Metrics for ONE Vendor
  */
-async function calculateVendorData(vendedorCode, selectedYear, config) {
+async function calculateVendorData(vendedorCode, selectedYear, config, preloadedData = null) {
     const prevYear = selectedYear - 1;
     const normalizedCode = vendedorCode.trim().replace(/^0+/, '') || vendedorCode.trim();
     // FIX #1: Use dynamic excluded list (refreshed from DB)
@@ -472,34 +760,101 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
         logger.debug(`⚠️ Vendor ${vendedorCode} no cache data, using company calendar (L-V)`);
     }
 
-    // D. Fetch Sales Data (Using LACLAE with LCIMVT = sin IVA)
-    const vendedorFilter = buildVendedorFilterLACLAE(vendedorCode, 'L');
-    const salesQuery = `
-        SELECT 
-            L.LCAADC as YEAR,
-            LCMMDC as MONTH,
-            SUM(L.LCIMVT) as SALES
-        FROM DSED.LACLAE L
-        WHERE L.LCAADC IN (${selectedYear}, ${prevYear})
-            AND ${LACLAE_SALES_FILTER}
-            ${vendedorFilter}
-        GROUP BY L.LCAADC, LCMMDC
-        ORDER BY YEAR, MONTH
-    `;
-    const salesRows = await query(salesQuery, false);
+    // D. Fetch Sales Data — use preloaded or query DB
+    let salesRows, bSalesCurrYear, bSalesPrevYear, fixedCommissionBase, fixedTargets, payments;
+
+    if (preloadedData) {
+        // Use batch-fetched data (no DB queries)
+        salesRows = preloadedData.salesRows;
+        bSalesCurrYear = preloadedData.bSalesCurr;
+        bSalesPrevYear = preloadedData.bSalesPrev;
+        // fixedCommissionBase is resolved per-month inside the month loop (see below)
+        fixedCommissionBase = null; // Will be overridden per-month
+        fixedTargets = preloadedData.fixedTargets || [];
+        payments = preloadedData.payments;
+    } else {
+        // Original per-vendor queries (single vendor mode)
+        const safeYear = parseInt(selectedYear);
+        const safePrevYear = parseInt(prevYear);
+        const vendedorFilter = buildColumnaVendedorFilter(vendedorCode, [safeYear, safePrevYear], 'L');
+        const salesQuery = `
+            SELECT 
+                L.LCAADC as YEAR,
+                LCMMDC as MONTH,
+                SUM(L.LCIMVT) as SALES
+            FROM DSED.LACLAE L
+            WHERE L.LCAADC IN (?, ?)
+                AND ${LACLAE_SALES_FILTER}
+                ${vendedorFilter}
+            GROUP BY L.LCAADC, LCMMDC
+            ORDER BY YEAR, MONTH
+        `;
+        const cacheKey = `commissions:${COMMISSIONS_CACHE_VERSION}:sales:${vendedorCode}:${safeYear}`;
+        salesRows = await redisCache.get('route', cacheKey);
+        if (!salesRows) {
+            salesRows = await queryWithParams(salesQuery, [safeYear, safePrevYear], false);
+            if (salesRows.length > 0) {
+                redisCache.set('route', cacheKey, salesRows, TTL.SHORT).catch(() => {});
+            }
+        }
+
+        // Fire independent queries in parallel: inherited clients, fixed targets, B-sales
+        const [currentClients, fixedCommissionRows, bSalesCurr, bSalesPrev] = await Promise.all([
+            Promise.resolve([]), // Skip inherited clients in single mode (rarely needed)
+            (async () => {
+                try {
+                    if (!vendedorCode || vendedorCode.indexOf(',') !== -1) return [];
+                    const safeVendor = vendedorCode.replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
+                    if (!safeVendor) return [];
+                    const fixedTargetCacheKey = `commissions:${COMMISSIONS_CACHE_VERSION}:fixedTarget:${safeVendor}:${safeYear}`;
+                    let rows = await redisCache.get('route', fixedTargetCacheKey);
+                    if (!rows) {
+                        // Query with both padded ('05') and unpadded ('5') vendor codes
+                        // to tolerate code format differences between LACLAE and COMMERCIAL_TARGETS.
+                        const safeUnpadded = safeVendor.replace(/^0+/, '') || safeVendor;
+                        rows = await queryWithParams(`
+                            SELECT IMPORTE_BASE_COMISION, MES
+                            FROM JAVIER.COMMERCIAL_TARGETS
+                            WHERE (CODIGOVENDEDOR = ? OR CODIGOVENDEDOR = ?)
+                              AND ANIO = ?
+                              AND ACTIVO = 1
+                            ORDER BY MES DESC
+                        `, [safeVendor, safeUnpadded, safeYear], false);
+                        if (rows.length > 0) {
+                            redisCache.set('route', fixedTargetCacheKey, rows, TTL.MEDIUM).catch(() => {});
+                        }
+                    }
+                    return rows;
+                } catch (err) {
+                    logger.debug(`📊 [COMMISSIONS] COMMERCIAL_TARGETS lookup error: ${err.message}`);
+                    return [];
+                }
+            })(),
+            getBSales(vendedorCode, selectedYear),
+            getBSales(vendedorCode, prevYear)
+        ]);
+
+        bSalesCurrYear = bSalesCurr;
+        bSalesPrevYear = bSalesPrev;
+        fixedTargets = (fixedCommissionRows || [])
+            .map(r => ({
+                mes: r.MES != null ? parseInt(r.MES, 10) : null,
+                importe: parseFloat(r.IMPORTE_BASE_COMISION) || 0,
+            }))
+            .filter(r => r.importe > 0)
+            .sort((a, b) => (b.mes ?? 0) - (a.mes ?? 0));
+        fixedCommissionBase = null;
+        payments = await getVendorPayments(vendedorCode, selectedYear);
+    }
 
     // =====================================================================
     // INHERITED OBJECTIVES: Pre-load inherited sales for new vendors
     // =====================================================================
     let inheritedMonthlySales = {};
-    // Check if vendor has any months without data in prevYear
     const monthsWithData = salesRows.filter(r => r.YEAR == prevYear).map(r => r.MONTH);
     const missingMonths = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].filter(m => !monthsWithData.includes(m));
 
-    if (missingMonths.length > 0) {
-        // Vendor is "new" or has incomplete history - load inherited sales
-        logger.debug(`📊 Vendor ${vendedorCode} has ${missingMonths.length} months without data: [${missingMonths.join(',')}]. Loading inherited targets...`);
-
+    if (!preloadedData && missingMonths.length > 0) {
         const currentClients = await getVendorCurrentClients(vendedorCode, selectedYear);
         if (currentClients.length > 0) {
             inheritedMonthlySales = await getClientsMonthlySales(currentClients, prevYear);
@@ -508,43 +863,8 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
     }
 
     // =====================================================================
-    // FIXED TARGETS: Check if vendor has fixed monthly targets from COMMERCIAL_TARGETS
+    // FIXED TARGETS: Already resolved from preloadedData or queried above
     // =====================================================================
-    let fixedCommissionBase = null;
-    try {
-        const currentMonth = new Date().getMonth() + 1;
-        const safeVendor = vendedorCode.replace(/[^a-zA-Z0-9]/g, '');
-        const fixedRows = await query(`
-            SELECT IMPORTE_BASE_COMISION
-            FROM JAVIER.COMMERCIAL_TARGETS
-            WHERE CODIGOVENDEDOR = '${safeVendor}'
-              AND ANIO = ${parseInt(selectedYear)}
-              AND (MES = ${parseInt(currentMonth)} OR MES IS NULL)
-              AND ACTIVO = 1
-            ORDER BY MES DESC
-            FETCH FIRST 1 ROWS ONLY
-        `, false);
-
-        if (fixedRows && fixedRows.length > 0) {
-            fixedCommissionBase = parseFloat(fixedRows[0].IMPORTE_BASE_COMISION) || null;
-            if (fixedCommissionBase) {
-                logger.debug(`📊 [COMMISSIONS] Vendor ${vendedorCode} has FIXED commission base: ${fixedCommissionBase}€`);
-            }
-        }
-    } catch (err) {
-        logger.debug(`📊 [COMMISSIONS] COMMERCIAL_TARGETS lookup error: ${err.message}`);
-    }
-
-    // =====================================================================
-    // B-SALES: Load B-sales for this vendor (from JAVIER.VENTAS_B)
-    // =====================================================================
-    const bSalesCurrYear = await getBSales(vendedorCode, selectedYear);
-    const bSalesPrevYear = await getBSales(vendedorCode, prevYear);
-    const currTotalBSales = Object.values(bSalesCurrYear).reduce((s, v) => s + v, 0);
-    const prevTotalBSales = Object.values(bSalesPrevYear).reduce((s, v) => s + v, 0);
-    if (currTotalBSales > 0 || prevTotalBSales > 0) {
-        logger.debug(`📊 [COMMISSIONS] B-Sales for ${vendedorCode}: ${selectedYear}=${currTotalBSales.toFixed(2)}€, ${prevYear}=${prevTotalBSales.toFixed(2)}€`);
-    }
 
     // E. Build Logic
     const months = [];
@@ -557,16 +877,41 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
     let grandTotalCommission = 0;
     const now = new Date(); // To restrict "future coverage"
 
+    // =====================================================================
+    // SALES SNAPSHOT: Load authoritative data for pre-transition months.
+    // This covers ALL comerciales including those with 0 commission (e.g. vendor 05).
+    // When snapshot exists for a month, it overrides live LACLAE calculations.
+    // In batch mode, salesSnapshotData is pre-loaded by the caller (1 query for all).
+    // In single mode, query the snapshot table directly.
+    // =====================================================================
+    // salesSnapshot shape: { snapshotMap, monthsWithData }
+    // snapshotForVendor: month → { ventasTotales, objetivo, comisionGenerada }
+    let snapshotForVendor = {};
+    let snapshotMonthsWithData = new Set();
+
+    if (preloadedData && preloadedData.salesSnapshotData) {
+        // Batch mode: snapshot already loaded — preloadedData carries the vendor slice + Set
+        snapshotForVendor = preloadedData.salesSnapshotData;
+        snapshotMonthsWithData = preloadedData.snapshotMonthsWithData || new Set();
+    } else {
+        // Single vendor mode: query now
+        const salesSnapshot = await getVendorSalesSnapshot([vendedorCode], selectedYear);
+        snapshotForVendor = salesSnapshot.snapshotMap[vendedorCode.trim()]
+            || salesSnapshot.snapshotMap[normalizedCode]
+            || {};
+        snapshotMonthsWithData = salesSnapshot.monthsWithData;
+    }
+
     for (let m = 1; m <= 12; m++) {
         const prevRow = salesRows.find(r => r.YEAR == prevYear && r.MONTH == m);
         const currRow = salesRows.find(r => r.YEAR == selectedYear && r.MONTH == m);
 
         // Base sales from LACLAE
         let prevSales = prevRow ? parseFloat(prevRow.SALES) : 0;
+        prevSales += (bSalesPrevYear[m] || 0); // Include prev-year B-channel sales in objective baseline
         let currentSales = currRow ? parseFloat(currRow.SALES) : 0;
 
-        // ADD B-SALES to both totals
-        prevSales += (bSalesPrevYear[m] || 0);
+        // ADD B-SALES to current sales.
         currentSales += (bSalesCurrYear[m] || 0);
 
         // INHERITED OBJECTIVES: Use inherited sales when vendor has no own sales for this month
@@ -574,19 +919,82 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
             prevSales = inheritedMonthlySales[m];
         }
 
-        // Target 2026: 
+        // Resolve fixed target for THIS specific month.
+        // fixedTargets[] contains all COMMERCIAL_TARGETS rows for this vendor.
+        // Pick the best entry for month m:
+        //   1. Exact month match (MES = m)
+        //   2. Annual entry (MES IS NULL)
+        //   3. Most recent past entry (MES < m, already sorted desc)
+        let resolvedFixedBase = fixedCommissionBase;
+        if (fixedTargets && fixedTargets.length > 0) {
+            const ft = fixedTargets;
+            const exact = ft.find(r => r.mes === m);
+            const annual = ft.find(r => r.mes === null);
+            const pastRecent = ft.find(r => r.mes !== null && r.mes < m);
+            resolvedFixedBase = exact?.importe || annual?.importe || pastRecent?.importe || null;
+        }
+
+        // Target 2026:
         // - If vendor has FIXED commission base from COMMERCIAL_TARGETS, use that
         // - Otherwise: prevSales * (1 + IPC)
         let target;
-        if (fixedCommissionBase && fixedCommissionBase > 0) {
-            target = fixedCommissionBase;
+        if (resolvedFixedBase && resolvedFixedBase > 0) {
+            target = resolvedFixedBase;
         } else {
             target = prevSales * (1 + (config.ipc / 100));
         }
 
-        // Commission for this month
-        const result = calculateCommission(currentSales, target, config);
-        const commValue = isExcluded ? 0 : result.commission;
+        // Commission for this month (live calculation as baseline)
+        let result = calculateCommission(currentSales, target, config);
+        let commValue = isExcluded ? 0 : result.commission;
+
+        // =====================================================================
+        // Jan/Feb 2026 are closed commission months. The historical table only
+        // stores vendors that generated commission; absence means zero generated
+        // commission, while sales/target stay calculated with the historical
+        // vendor column so the figures remain explainable.
+        const snap = snapshotForVendor[m] || null;
+        const historicalMonth = resolveHistoricalCommissionMonth({
+            year: selectedYear,
+            month: m,
+            snapshotUntilMonth: SNAPSHOT_UNTIL_MONTH,
+            monthsWithSnapshotData: snapshotMonthsWithData,
+            snapshotEntry: snap,
+            liveMetrics: {
+                actual: currentSales,
+                target,
+                commission: result.commission,
+            },
+            isExcluded,
+        });
+
+        const isSnapshotMonth = (selectedYear === 2026 && m <= SNAPSHOT_UNTIL_MONTH && SNAPSHOT_UNTIL_MONTH > 0);
+        let snapshotApplied = historicalMonth.isHistoricalSnapshot;
+        let snapshotSource = historicalMonth.snapshotSource;
+
+        if (snapshotApplied) {
+            if (historicalMonth.status === 'recorded') {
+                // Vendor present in snapshot → authoritative values
+                currentSales = historicalMonth.actual;
+                target = historicalMonth.target;
+                commValue = historicalMonth.commission;
+                snapshotSource = historicalMonth.snapshotSource;
+                logger.debug(`[COMMISSIONS] SNAPSHOT month ${m}/2026 for ${vendedorCode}: total=${snap.ventasTotales.toFixed(2)} obj=${snap.objetivo.toFixed(2)} comm=${snap.comisionGenerada.toFixed(2)} (live was ${result.commission.toFixed(2)})`);
+            } else {
+                // Month has snapshot data globally but this vendor has NO row →
+                // vendor was not commissioning that month → force commission = 0.
+                // Do not keep live sales here; this month is closed historically.
+                currentSales = historicalMonth.actual;
+                target = historicalMonth.target;
+                commValue = historicalMonth.commission;
+                snapshotSource = historicalMonth.snapshotSource;
+                logger.debug(`[COMMISSIONS] SNAPSHOT month ${m}/2026: vendor ${vendedorCode} not in snapshot → commission forced to 0`);
+            }
+            result = calculateCommission(currentSales, target, config);
+        } else if (isSnapshotMonth) {
+            // Snapshot month but table has NO rows for this month at all → fall back to live.
+            logger.warn(`[COMMISSIONS] No snapshot data found for month ${m}/2026 — using live calc (table may be empty for this month).`);
+        }
 
         // Add to totals
         grandTotalCommission += commValue;
@@ -625,9 +1033,13 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
         // Daily Flag: "Green if accumulated sales >= pro-rated target"
         const isOnTrack = currentSales >= proRatedTarget;
 
-        // Calculate provisional / actual commission on current accumulated amount
+        // Calculate provisional commission on current accumulated amount
         const provisionalResult = calculateCommission(currentSales, proRatedTarget, config);
-        const provisionalCommission = isExcluded ? 0 : provisionalResult.commission;
+        // For snapshot months, provisional = confirmed commission (month is closed)
+        let provisionalCommission = isExcluded ? 0 : provisionalResult.commission;
+        if (snapshotApplied) {
+            provisionalCommission = commValue;
+        }
 
         months.push({
             month: m,
@@ -640,21 +1052,25 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
             dailyTarget: dailyTarget,
             dailyActual: dailyActual,
             isFuture: isFuture,
+            snapshotApplied: snapshotApplied,
+            snapshotSource: snapshotSource,
             complianceCtx: {
                 pct: (target > 0) ? (currentSales / target) * 100 : 0,
                 increment: result.increment,
                 tier: result.tier,
                 rate: result.rate,
                 commission: commValue,
-                isExcluded: isExcluded
+                isExcluded: isExcluded,
+                snapshotApplied: snapshotApplied,
+                snapshotSource: snapshotSource
             },
             dailyComplianceCtx: {
                 pct: (proRatedTarget > 0) ? (currentSales / proRatedTarget) * 100 : 0,
-                tier: provisionalResult.tier,
-                rate: provisionalResult.rate,
+                tier: snapshotApplied ? result.tier : provisionalResult.tier,
+                rate: snapshotApplied ? result.rate : provisionalResult.rate,
                 isGreen: isOnTrack,
                 provisionalCommission: provisionalCommission,
-                increment: provisionalResult.increment
+                increment: snapshotApplied ? result.increment : provisionalResult.increment
             }
         });
     }
@@ -680,14 +1096,13 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
         };
     });
 
-    // FIX #4: Load payment data
-    const payments = await getVendorPayments(vendedorCode, selectedYear);
-
     logger.debug(`[COMMISSIONS] Result for ${vendedorCode}: grandTotal=${grandTotalCommission.toFixed(2)}, totalPaid=${payments.total.toFixed(2)}, excluded=${isExcluded}`);
+
+    const resolvedVendorName = preloadedData?.vendorName || await getVendorName(vendedorCode);
 
     return {
         vendedorCode,
-        vendorName: await getVendorName(vendedorCode),
+        vendorName: resolvedVendorName,
         months,
         quarters,
         grandTotalCommission,
@@ -696,15 +1111,176 @@ async function calculateVendorData(vendedorCode, selectedYear, config) {
     };
 }
 
+async function getCurrentPaymentSnapshot(vendedorCode, year, month) {
+    const safeYear = parseInt(year);
+    const safeMonth = parseInt(month);
+    if (!vendedorCode || !safeYear || !safeMonth || safeMonth < 1 || safeMonth > 12) {
+        return null;
+    }
+
+    const config = await loadCommissionConfig(safeYear);
+    await ensureExcludedVendorsLoaded();
+    const data = await calculateVendorData(vendedorCode, safeYear, config);
+    const monthData = data.months.find(item => parseInt(item.month) === safeMonth);
+    if (!monthData) return null;
+
+    const actual = roundMoney(monthData.actual);
+    const target = roundMoney(monthData.target);
+    const generated = roundMoney(monthData.complianceCtx?.commission || 0);
+
+    return {
+        ventaComision: actual,
+        objetivoMes: target,
+        ventasSobreObjetivo: roundMoney(actual - target),
+        generatedAmount: generated
+    };
+}
+
+function buildAggregatedYearResult(results, config) {
+    const sortedResults = [...(results || [])].sort((a, b) => {
+        const valA = a.grandTotalCommission || 0;
+        const valB = b.grandTotalCommission || 0;
+        return valB - valA;
+    });
+
+    const globalTotal = sortedResults.reduce((sum, item) => {
+        return sum + (item.grandTotalCommission || 0);
+    }, 0);
+    const totalPaid = sortedResults.reduce((sum, item) => {
+        return sum + (item.payments?.total || 0);
+    }, 0);
+
+    const aggMonths = [];
+    for (let month = 1; month <= 12; month++) {
+        let target = 0;
+        let actual = 0;
+        let commission = 0;
+
+        sortedResults.forEach(result => {
+            const monthData = result.months.find(x => x.month === month);
+            if (monthData) {
+                target += monthData.target;
+                actual += monthData.actual;
+                commission += (monthData.complianceCtx?.commission || 0);
+            }
+        });
+
+        aggMonths.push({
+            month,
+            target,
+            actual,
+            complianceCtx: { commission }
+        });
+    }
+
+    const aggQuarters = [1, 2, 3].map(quarterId => {
+        let target = 0;
+        let actual = 0;
+        let commission = 0;
+
+        sortedResults.forEach(result => {
+            const quarterData = result.quarters.find(x => x.id === quarterId);
+            if (quarterData) {
+                target += quarterData.target;
+                actual += quarterData.actual;
+                commission += ((quarterData.commission || 0) + (quarterData.additionalPayment || 0));
+            }
+        });
+
+        return { id: quarterId, target, actual, commission };
+    });
+
+    return {
+        config,
+        grandTotalCommission: globalTotal,
+        totals: { commission: globalTotal },
+        breakdown: sortedResults,
+        months: aggMonths,
+        quarters: aggQuarters,
+        payments: { total: totalPaid, monthly: {}, quarterly: {} }
+    };
+}
+
+async function discoverVendorCodesForYear(year) {
+    const safeYr = parseInt(year);
+    const cacheKey = `comm:${COMMISSIONS_CACHE_VERSION}:vendorCodes:${safeYr}`;
+
+    const cachedCodes = await redisCache.get('route', cacheKey);
+    if (cachedCodes) {
+        return cachedCodes;
+    }
+
+    const colExpr = getVendorColumnExpr('L');
+    const vendorRows = await queryWithParams(`
+        SELECT DISTINCT RTRIM(${colExpr}) as VENDOR_CODE
+        FROM DSED.LACLAE L
+        WHERE L.LCAADC IN (?, ?)
+          AND ${colExpr} IS NOT NULL
+          AND ${colExpr} <> ''
+    `, [safeYr, safeYr - 1], false);
+
+    // Deduplicate by normalizing leading zeros: '05' and '5' are the same vendor.
+    // When VENDOR_COLUMN=R1_T8CDVD, the CASE expression returns LCCDVD for Jan/Feb
+    // and R1_T8CDVD for March+, so the same vendor can appear under two different
+    // codes (e.g. '05' from LCCDVD and '5' from R1_T8CDVD). Keep the first seen.
+    const seenNormalized = new Set();
+    const codes = vendorRows
+        .map(r => (r.VENDOR_CODE || '').trim())
+        .filter(code => {
+            if (!code || code === '0') return false;
+            const normalized = code.replace(/^0+/, '') || code;
+            if (seenNormalized.has(normalized)) return false;
+            seenNormalized.add(normalized);
+            return true;
+        });
+
+    await redisCache.set('route', cacheKey, codes, TTL.LONG);
+    return codes;
+}
+
+async function calculateGroupedVendorSummary(vendorCodes, year, config) {
+    const safeCodes = [...new Set((vendorCodes || [])
+        .map(code => String(code || '').trim())
+        .filter(code => /^[a-zA-Z0-9]+$/.test(code))
+        .filter(code => code !== '0'))];
+
+    if (safeCodes.length === 0) {
+        return buildAggregatedYearResult([], config);
+    }
+
+    const settled = await Promise.allSettled(
+        safeCodes.map(code => calculateVendorData(code, year, config))
+    );
+
+    const results = settled
+        .filter(result => result.status === 'fulfilled')
+        .map(result => result.value);
+
+    const failed = settled.filter(result => result.status === 'rejected');
+    if (failed.length > 0) {
+        logger.warn(
+            `[COMMISSIONS] ${failed.length} vendor(s) failed in grouped mode: ` +
+            failed.map(f => f.reason?.message || f.reason).join('; ')
+        );
+    }
+
+    return buildAggregatedYearResult(results, config);
+}
+
 
 // =============================================================================
 // ROUTES
 // =============================================================================
 
-router.get('/summary', async (req, res) => {
+router.get('/summary', verifyToken, async (req, res) => {
     try {
-        const { vendedorCode, year } = req.query;
+        const { vendedorCode, year, forceRefresh, limit, offset } = req.query;
         if (!vendedorCode) return res.status(400).json({ success: false, error: 'Falta codigo vendedor' });
+
+        const pageLimit = Math.min(Math.max(parseInt(limit) || 0, 0), 1000);
+        const pageOffset = Math.max(parseInt(offset) || 0, 0);
+
+        const shouldForceRefresh = forceRefresh === 'true' || forceRefresh === '1';
 
         // Input sanitization — prevent injection via query params
         const safeVendorCode = vendedorCode.toString().replace(/[^a-zA-Z0-9,]/g, '').substring(0, 50);
@@ -712,7 +1288,17 @@ router.get('/summary', async (req, res) => {
 
         // FIX #1: Refresh excluded vendors from DB (with TTL cache)
         await ensureExcludedVendorsLoaded();
-        logger.info(`[COMMISSIONS] /summary request: vendedorCode=${safeVendorCode}, year=${year}`);
+        if (shouldForceRefresh) {
+            logger.info(`[COMMISSIONS] 🔄 Force refresh requested for ${safeVendorCode}`);
+        }
+        logger.info(`[COMMISSIONS] /summary request: vendedorCode=${safeVendorCode}, year=${year}, forceRefresh=${shouldForceRefresh}`);
+
+        // AUDIT: Log exactly what data this user is requesting
+        auditDataAccess(req, 'COMMISSIONS_VIEW', {
+            requestedVendorCode: safeVendorCode,
+            requestedYear: year || new Date().getFullYear(),
+            authenticatedUser: req.user?.code || 'anonymous',
+        });
 
         // Parse Years (Multi-Select) with bounds validation
         const currentYear = new Date().getFullYear();
@@ -725,11 +1311,36 @@ router.get('/summary', async (req, res) => {
         if (years.length === 0) years.push(currentYear);
 
         const selectedYear = years[0]; // Primary year for reference (Config loading)
+        const requestedVendorCodes = safeVendorCode === 'ALL'
+            ? []
+            : [...new Set(
+                safeVendorCode
+                    .split(',')
+                    .map(code => code.trim())
+                    .filter(code => /^[a-zA-Z0-9]+$/.test(code))
+            )];
+        const isGroupedRequest = safeVendorCode === 'ALL' || requestedVendorCodes.length > 1;
+        const groupHash = requestedVendorCodes.length > 0
+            ? crypto.createHash('md5').update(requestedVendorCodes.slice().sort().join(',')).digest('hex').substring(0, 12)
+            : 'all';
+        const aggregatedCacheKey = isGroupedRequest
+            ? (safeVendorCode === 'ALL'
+                ? `comm:summary:${COMMISSIONS_CACHE_VERSION}:ALL:${years.join(',')}`
+                : `comm:summary:${COMMISSIONS_CACHE_VERSION}:GROUP:${groupHash}:${years.join(',')}`)
+            : null;
+
+        if (aggregatedCacheKey && !shouldForceRefresh) {
+            const cachedResult = await redisCache.get('route', aggregatedCacheKey);
+            if (cachedResult) {
+                logger.info(`[COMMISSIONS] ⚡ Cache HIT for grouped summary (${aggregatedCacheKey})`);
+                return res.json({ success: true, ...cachedResult });
+            }
+        }
 
         // A. Load Config
         let config = DEFAULT_CONFIG_2026;
         try {
-            const dbConfig = await query(`SELECT * FROM JAVIER.COMM_CONFIG WHERE YEAR = ${selectedYear} FETCH FIRST 1 ROWS ONLY`, false, false);
+            const dbConfig = await queryWithParams(`SELECT * FROM JAVIER.COMM_CONFIG WHERE YEAR = ? FETCH FIRST 1 ROWS ONLY`, [selectedYear], false, false);
             if (dbConfig && dbConfig.length > 0) {
                 // Map DB columns to config object
                 const row = dbConfig[0];
@@ -870,31 +1481,51 @@ router.get('/summary', async (req, res) => {
         // Execution
         let aggregatedResult = null;
 
-        for (const yr of years) {
+        const yearPromises = years.map(async (yr) => {
             // Process Year
             let yearResult;
 
-            if (safeVendorCode === 'ALL') {
+            if (isGroupedRequest) {
                 // PERF: Check route-level cache first for ALL mode (most expensive)
-                const allSummaryCacheKey = `comm:summary:ALL:${years.join(',')}`;
+                const allSummaryCacheKey = aggregatedCacheKey;
                 const cachedResult = await redisCache.get('route', allSummaryCacheKey);
-                if (cachedResult) {
-                    logger.info(`[COMMISSIONS] ⚡ Cache HIT for ALL summary (${allSummaryCacheKey})`);
-                    return res.json({ success: true, ...cachedResult });
+                if (cachedResult && !shouldForceRefresh) {
+                    logger.info(`[COMMISSIONS] ⚡ Route Cache HIT for ALL summary (${allSummaryCacheKey})`);
+                    return { success: true, ...cachedResult };
+                }
+                if (shouldForceRefresh) {
+                    logger.info(`[COMMISSIONS] 🔄 Force refresh bypassing grouped cache (${aggregatedCacheKey})`);
                 }
 
-                // FIX: Use LCCDVD (same column used by calculateVendorData for filtering)
-                // PERF: Removed TRIM from WHERE clause - use RTRIM only in SELECT
-                const safeYr = parseInt(yr);
-                const vendorRows = await query(`
-                    SELECT DISTINCT RTRIM(L.LCCDVD) as VENDOR_CODE
-                    FROM DSED.LACLAE L
-                    WHERE L.LCAADC IN (${safeYr}, ${safeYr - 1})
-                      AND L.LCCDVD IS NOT NULL
-                      AND L.LCCDVD <> ''
-                `, false);
-                const vendorCodes = vendorRows.map(r => r.VENDOR_CODE).filter(c => c && c !== '0');
-                const promises = vendorCodes.map(code => calculateVendorData(code, yr, config));
+                const vendorCodes = safeVendorCode === 'ALL'
+                    ? await discoverVendorCodesForYear(yr)
+                    : requestedVendorCodes;
+
+                // PERF: Batch fetch ALL vendor data in 5 queries instead of N×7
+                const batchStart = Date.now();
+                // Also pre-load sales snapshot once for all vendors (1 query instead of N)
+                const [allVendorData, allSnapshotResult] = await Promise.all([
+                    batchFetchAllVendorData(vendorCodes, yr),
+                    getVendorSalesSnapshot(vendorCodes, yr)
+                ]);
+                // allSnapshotResult = { snapshotMap, monthsWithData }
+                const { snapshotMap: allSnapshotMap, monthsWithData: allMonthsWithData } = allSnapshotResult;
+                // Attach each vendor's snapshot slice + shared monthsWithData to their preloaded data object
+                for (const code of vendorCodes) {
+                    if (allVendorData[code]) {
+                        const trimmed = code.trim();
+                        const normalized = trimmed.replace(/^0+/, '') || trimmed;
+                        allVendorData[code].salesSnapshotData = allSnapshotMap[trimmed] || allSnapshotMap[normalized] || {};
+                        // Share the same Set — it's read-only in calculateVendorData
+                        allVendorData[code].snapshotMonthsWithData = allMonthsWithData;
+                    }
+                }
+                logger.info(`[COMMISSIONS] Batch fetch completed in ${Date.now() - batchStart}ms for ${vendorCodes.length} vendors`);
+
+                // Process each vendor with preloaded data (no DB queries)
+                const promises = vendorCodes.map(code =>
+                    calculateVendorData(code, yr, config, allVendorData[code])
+                );
                 const settled = await Promise.allSettled(promises);
                 const results = settled
                     .filter(r => r.status === 'fulfilled')
@@ -903,7 +1534,7 @@ router.get('/summary', async (req, res) => {
                 // Log failed vendors for debugging (does not break the page)
                 const failed = settled.filter(r => r.status === 'rejected');
                 if (failed.length > 0) {
-                    logger.warn(`[COMMISSIONS] ${failed.length} vendor(s) failed in ALL mode: ${failed.map(f => f.reason?.message || f.reason).join('; ')}`);
+                    logger.warn(`[COMMISSIONS] ${failed.length} vendor(s) failed in grouped mode: ${failed.map(f => f.reason?.message || f.reason).join('; ')}`);
                 }
 
                 results.sort((a, b) => {
@@ -948,9 +1579,8 @@ router.get('/summary', async (req, res) => {
                     payments: { total: totalPaid, monthly: {}, quarterly: {} }
                 };
 
-                // PERF: Cache the ALL result for 5 minutes
-                await redisCache.set('route', allSummaryCacheKey, yearResult, TTL.SHORT);
-                logger.info(`[COMMISSIONS] 💾 Cached ALL summary (${allSummaryCacheKey})`);
+                // PERF: Cache the ALL result for 15 minutes (expensive computation)
+                logger.debug(`[COMMISSIONS] Year result prepared for grouped cache (${allSummaryCacheKey})`);
 
             } else {
                 // Single Vendor
@@ -968,6 +1598,12 @@ router.get('/summary', async (req, res) => {
                 };
             }
 
+            return yearResult;
+        });
+
+        const yearResults = await Promise.all(yearPromises);
+
+        for (const yearResult of yearResults) {
             if (!aggregatedResult) {
                 aggregatedResult = yearResult;
             } else {
@@ -975,33 +1611,63 @@ router.get('/summary', async (req, res) => {
             }
         }
 
-        return res.json({
-            success: true,
-            ...aggregatedResult
+        if (aggregatedCacheKey && aggregatedResult) {
+            await redisCache.set('route', aggregatedCacheKey, aggregatedResult, 900);
+            logger.info(`[COMMISSIONS] Cached grouped summary for 15min (${aggregatedCacheKey})`);
+        }
+
+        // Apply pagination to breakdown when vendor=ALL or grouped request
+        let paginatedResult = { ...aggregatedResult };
+        if (isGroupedRequest && pageLimit > 0) {
+            const totalBreakdown = paginatedResult.breakdown?.length || 0;
+            const slicedBreakdown = (paginatedResult.breakdown || []).slice(pageOffset, pageOffset + pageLimit);
+            paginatedResult.breakdown = slicedBreakdown;
+            paginatedResult.pagination = {
+                total: totalBreakdown,
+                limit: pageLimit,
+                offset: pageOffset,
+                hasMore: pageOffset + pageLimit < totalBreakdown
+            };
+        }
+
+        // AUDIT: Log what data the server actually returned (proof of response)
+        const responsePayload = { success: true, ...paginatedResult };
+        const responseHash = crypto.createHash('sha256')
+            .update(JSON.stringify(responsePayload))
+            .digest('hex')
+            .substring(0, 16); // Short hash for readability
+
+        auditDataAccess(req, 'COMMISSIONS_RESPONSE', {
+            requestedVendorCode: safeVendorCode,
+            returnedVendor: aggregatedResult?.vendor || safeVendorCode,
+            grandTotalCommission: aggregatedResult?.grandTotalCommission?.toFixed(2) || '0',
+            totalPaid: aggregatedResult?.payments?.total?.toFixed(2) || '0',
+            responseHash,
         });
 
+        return res.json(responsePayload);
+
     } catch (error) {
-        logger.error(`Commissions error: ${error.message}`);
-        res.status(500).json({ success: false, error: 'Error calculando comisiones', details: error.message });
+        handleRouteError(error, res, 'Error calculando comisiones', 500, { success: false });
     }
 });
 
 // FIX #5: Endpoint to register a payment (Restricted to ADMIN users via TIPOVENDEDOR lookup)
 // NEW: Validates observaciones requirement and captures venta_comision snapshot
 // Pagos son solo INSERT – no UPDATE. Snapshot histórico intencional.
-router.post('/pay', async (req, res) => {
-    const { vendedorCode, year, month, quarter, amount, generatedAmount, concept, adminCode, observaciones, objetivoMes, ventasSobreObjetivo } = req.body;
+router.post('/pay', verifyToken, async (req, res) => {
+    const { vendedorCode, year, month, quarter, amount, generatedAmount, concept, adminCode, observaciones, objetivoMes, ventaActual, ventasSobreObjetivo } = req.body;
 
     // Security check: Verify that the user has TIPOVENDEDOR = 'ADMIN' or is specifically authorized (code 98 = DIEGO)
     try {
         const trimmedAdmin = adminCode ? adminCode.trim() : '';
-        const adminRows = await query(`
+        const adminRows = await queryWithParams(`
             SELECT TIPOVENDEDOR
             FROM DSEDAC.VDC
-            WHERE TRIM(CODIGOVENDEDOR) = '${trimmedAdmin.replace(/[^a-zA-Z0-9]/g, '')}'
+            WHERE TRIM(CODIGOVENDEDOR) = ?
               AND SUBEMPRESA = 'GMP'
             FETCH FIRST 1 ROWS ONLY
-        `, false);
+        `, [trimmedAdmin.replace(/[^a-zA-Z0-9]/g, '')], false);
 
         const adminTipo = (adminRows && adminRows.length > 0)
             ? (adminRows[0].TIPOVENDEDOR || '').trim()
@@ -1024,39 +1690,50 @@ router.post('/pay', async (req, res) => {
         return res.status(400).json({ success: false, error: 'Faltan datos obligatorios (Comercial, Año, Importe)' });
     }
 
-    // NEW: Validate observaciones if paying less than generated amount
-    const amountNum = parseFloat(amount);
-    const generatedNum = parseFloat(generatedAmount) || 0;
-    if (amountNum < generatedNum && (!observaciones || observaciones.trim() === '')) {
-        logger.warn(`[COMMISSIONS] Payment validation failed: Missing observaciones for partial payment ${vendedorCode}`);
-        return res.status(400).json({
-            success: false,
-            error: 'Debes indicar una observación explicando por qué se paga menos de lo correspondiente'
-        });
-    }
-
     try {
-        // NEW: Get venta_comision (snapshot of sales for the specific month)
-        let ventaComision = 0;
-        if (month && month > 0) {
+        const amountNum = parseFloat(amount);
+        const safeYearNum = parseInt(year);
+        const safeMonthNum = parseInt(month) || 0;
+        let generatedNum = parseFloat(generatedAmount) || 0;
+        let ventaComision = parseFloat(ventaActual) || 0;
+        let objetivoMesNum = parseFloat(objetivoMes) || 0;
+        let ventasSobreObjetivoNum = parseFloat(ventasSobreObjetivo) || 0;
+
+        // Prefer the same backend calculation path as /summary for payment snapshots.
+        // This keeps the blue columns aligned with snapshots, B-sales, fixed targets,
+        // and the LCC/R1 monthly transition.
+        if (safeMonthNum > 0) {
+            const currentSnapshot = await getCurrentPaymentSnapshot(vendedorCode, safeYearNum, safeMonthNum);
+            if (currentSnapshot) {
+                ventaComision = currentSnapshot.ventaComision;
+                objetivoMesNum = currentSnapshot.objetivoMes;
+                ventasSobreObjetivoNum = currentSnapshot.ventasSobreObjetivo;
+                generatedNum = currentSnapshot.generatedAmount;
+                logger.info(`[COMMISSIONS] Captured backend payment snapshot for ${vendedorCode} ${safeYearNum}/${safeMonthNum}: venta=${ventaComision.toFixed(2)} obj=${objetivoMesNum.toFixed(2)} comm=${generatedNum.toFixed(2)}`);
+            }
+        }
+
+        // Fallback only if the full summary path could not provide sales.
+        if (safeMonthNum > 0 && ventaComision === 0) {
             try {
-                const vendedorFilter = buildVendedorFilterLACLAE(vendedorCode, 'L');
+                const vendedorFilter = buildVendedorFilterLACLAE(vendedorCode, 'L', safeYearNum, safeMonthNum);
                 const salesQuery = `
                     SELECT SUM(L.LCIMVT) as SALES
                     FROM DSED.LACLAE L
-                    WHERE L.LCAADC = ${year}
-                      AND L.LCMMDC = ${month}
+                    WHERE L.LCAADC = ?
+                      AND L.LCMMDC = ?
                       AND ${LACLAE_SALES_FILTER}
                       ${vendedorFilter}
                 `;
-                const salesRows = await query(salesQuery, false, false);
+                const salesRows = await queryWithParams(salesQuery, [safeYearNum, safeMonthNum], false);
                 if (salesRows && salesRows.length > 0) {
                     ventaComision = parseFloat(salesRows[0].SALES) || 0;
                 }
 
                 // Add B-Sales if exist
                 const bSales = await getBSales(vendedorCode, year);
-                ventaComision += (bSales[month] || 0);
+                ventaComision += (bSales[safeMonthNum] || 0);
+                ventasSobreObjetivoNum = roundMoney(ventaComision - objetivoMesNum);
 
                 logger.info(`[COMMISSIONS] Captured venta_comision for ${vendedorCode} ${year}/${month}: ${ventaComision.toFixed(2)}€`);
             } catch (salesErr) {
@@ -1064,19 +1741,37 @@ router.post('/pay', async (req, res) => {
             }
         }
 
-        // Snapshot fields from request
-        const objetivoMesNum = parseFloat(objetivoMes) || 0;
-        const ventasSobreObjetivoNum = parseFloat(ventasSobreObjetivo) || 0;
+        // Validate observaciones if paying less than generated amount.
+        // Use epsilon tolerance (0.01 EUR = 1 cent) to avoid floating-point false positives.
+        if ((generatedNum - amountNum) > 0.01 && (!observaciones || observaciones.trim() === '')) {
+            logger.warn(`[COMMISSIONS] Payment validation failed: Missing observaciones for partial payment ${vendedorCode}`);
+            return res.status(400).json({
+                success: false,
+                error: 'Debes indicar una observación explicando por qué se paga menos de lo correspondiente'
+            });
+        }
 
         // Pagos son solo INSERT – no UPDATE. Snapshot histórico intencional.
-        const safePayVendor = vendedorCode.trim().replace(/'/g, "''").replace(/[^a-zA-Z0-9']/g, '');
-        const safePayObs = (observaciones || '').substring(0, 1000).replace(/'/g, "''");
-        const safePayAdmin = (adminCode || 'unknown').substring(0, 50).replace(/'/g, "''");
-        await query(`
+        const safePayVendor = sanitizeForSQL(vendedorCode.trim());
+        const safePayObs = sanitizeForSQL((observaciones || '').substring(0, 1000));
+        const safePayAdmin = sanitizeForSQL((adminCode || 'unknown').substring(0, 50));
+        await queryWithParams(`
             INSERT INTO JAVIER.COMMISSION_PAYMENTS
             (VENDEDOR_CODIGO, ANIO, MES, VENTAS_REAL, OBJETIVO_MES, VENTAS_SOBRE_OBJETIVO, COMISION_GENERADA, IMPORTE_PAGADO, FECHA_PAGO, OBSERVACIONES, CREADO_POR)
-            VALUES ('${safePayVendor}', ${parseInt(year)}, ${parseInt(month) || 0}, ${parseFloat(ventaComision) || 0}, ${parseFloat(objetivoMesNum) || 0}, ${parseFloat(ventasSobreObjetivoNum) || 0}, ${parseFloat(generatedNum) || 0}, ${parseFloat(amountNum) || 0}, CURRENT_TIMESTAMP, '${safePayObs}', '${safePayAdmin}')
-        `, false);
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, ?)
+        `, [safePayVendor, safeYearNum, safeMonthNum, roundMoney(ventaComision), roundMoney(objetivoMesNum), roundMoney(ventasSobreObjetivoNum), roundMoney(generatedNum), roundMoney(amountNum), safePayObs, safePayAdmin]);
+
+        // INVALIDATE CACHE: Clear summary cache for this vendor/year so next request fetches fresh data
+        try {
+            await invalidateCachePattern(`comm:summary:${vendedorCode.trim()}:${year}`);
+            await invalidateCachePattern(`comm:summary:${COMMISSIONS_CACHE_VERSION}:ALL:*`);
+            await invalidateCachePattern(`comm:summary:${COMMISSIONS_CACHE_VERSION}:GROUP:*`);
+            await invalidateCachePattern('comm:summary:ALL:*');
+            await invalidateCachePattern('comm:summary:GROUP:*');
+            logger.info(`[COMMISSIONS] Cache invalidated for ${vendedorCode}:${year}`);
+        } catch (cacheErr) {
+            logger.warn(`[COMMISSIONS] Cache invalidation failed: ${cacheErr.message}`);
+        }
 
         logger.info(`[COMMISSIONS] Payment registered for ${vendedorCode}: ${amount}€ (vs ${generatedNum}€ gen, venta: ${ventaComision.toFixed(2)}€) by ${adminCode}${observaciones ? ' [with observaciones]' : ''}`);
         res.json({ success: true, message: 'Pago registrado correctamente' });
@@ -1086,8 +1781,215 @@ router.post('/pay', async (req, res) => {
     }
 });
 
+// =============================================================================
+// PDF REPORT — DIEGO ONLY
+// =============================================================================
+
+async function loadCommissionConfigForPdf(year) {
+    try {
+        const dbConfig = await queryWithParams(
+            `SELECT * FROM JAVIER.COMM_CONFIG WHERE YEAR = ? FETCH FIRST 1 ROWS ONLY`,
+            [parseInt(year)],
+            false,
+            false
+        );
+        if (dbConfig && dbConfig.length > 0) {
+            const row = dbConfig[0];
+            return {
+                ipc: parseFloat(row.IPC_PCT),
+                TIER1_MAX: parseFloat(row.TIER1_MAX),
+                TIER1_PCT: parseFloat(row.TIER1_PCT),
+                TIER2_MAX: parseFloat(row.TIER2_MAX),
+                TIER2_PCT: parseFloat(row.TIER2_PCT),
+                TIER3_MAX: parseFloat(row.TIER3_MAX),
+                TIER3_PCT: parseFloat(row.TIER3_PCT),
+                TIER4_PCT: parseFloat(row.TIER4_PCT)
+            };
+        }
+    } catch (e) {
+        logger.warn(`[PDF] COMM_CONFIG lookup failed: ${e.message}. Using defaults.`);
+    }
+
+    return {
+        ipc: 3.0,
+        TIER1_MAX: 103.00, TIER1_PCT: 1.0,
+        TIER2_MAX: 106.00, TIER2_PCT: 1.3,
+        TIER3_MAX: 110.00, TIER3_PCT: 1.6,
+        TIER4_PCT: 2.0
+    };
+}
+
+async function buildPdfSummaryVendors(vendorCode, year, config) {
+    const safeVendorCode = (vendorCode || 'ALL').toString().replace(/[^a-zA-Z0-9,]/g, '').substring(0, 50) || 'ALL';
+    const requestedVendorCodes = safeVendorCode === 'ALL'
+        ? []
+        : [...new Set(
+            safeVendorCode
+                .split(',')
+                .map(code => code.trim())
+                .filter(code => /^[a-zA-Z0-9]+$/.test(code))
+        )];
+    const isGroupedRequest = safeVendorCode === 'ALL' || requestedVendorCodes.length > 1;
+
+    if (!isGroupedRequest) {
+        return [await calculateVendorData(safeVendorCode, year, config)];
+    }
+
+    const vendorCodes = safeVendorCode === 'ALL'
+        ? await discoverVendorCodesForYear(year)
+        : requestedVendorCodes;
+
+    const [allVendorData, allSnapshotResult] = await Promise.all([
+        batchFetchAllVendorData(vendorCodes, year),
+        getVendorSalesSnapshot(vendorCodes, year)
+    ]);
+
+    const { snapshotMap, monthsWithData } = allSnapshotResult;
+    for (const code of vendorCodes) {
+        if (allVendorData[code]) {
+            const trimmed = code.trim();
+            const normalized = trimmed.replace(/^0+/, '') || trimmed;
+            allVendorData[code].salesSnapshotData = snapshotMap[trimmed] || snapshotMap[normalized] || {};
+            allVendorData[code].snapshotMonthsWithData = monthsWithData;
+        }
+    }
+
+    const settled = await Promise.allSettled(
+        vendorCodes.map(code => calculateVendorData(code, year, config, allVendorData[code]))
+    );
+    const failed = settled.filter(result => result.status === 'rejected');
+    if (failed.length > 0) {
+        logger.warn(`[PDF] ${failed.length} vendor(s) failed building PDF summary: ${failed.map(f => f.reason?.message || f.reason).join('; ')}`);
+    }
+
+    return settled
+        .filter(result => result.status === 'fulfilled')
+        .map(result => result.value);
+}
+
+router.get('/pdf', verifyToken, async (req, res) => {
+    try {
+        const { year, months, range, vendorCode } = req.query;
+        
+        // FIX: Use user code (req.user.code) instead of name, as name is not in JWT payload
+        // The middleware auth.js sets: req.user = { id, code, role, isJefeVentas }
+        const userCode = req.user?.code || '';
+        const userId = req.user?.id || '';
+        
+        logger.info(`[PDF] Request received from user: code=${userCode}, id=${userId}, ip=${req.ip}`);
+
+        // AUTHORIZATION: Only DIEGO (code 98) can access
+        const pdfService = require('../services/commissions-pdf.service');
+        
+        // Check both the code (normalized, without leading zeros) and user ID
+        const normalizedCode = userCode.replace(/^0+/, '');
+        const isAuthorized = normalizedCode === '98' || userId === 'V98';
+        
+        if (!isAuthorized) {
+            logger.warn(`[PDF] Unauthorized PDF attempt by user code: ${userCode} (${userId}) from IP: ${req.ip}`);
+            return res.status(403).json({ 
+                success: false, 
+                error: 'Solo DIEGO puede generar este informe',
+                userCode: userCode
+            });
+        }
+        
+        logger.info(`[PDF] Authorization granted for DIEGO (code: ${userCode})`);
+
+        // Parse date range
+        const currentYear = new Date().getFullYear();
+        const currentMonth = new Date().getMonth() + 1;
+        const targetYear = year ? parseInt(year) : currentYear;
+
+        let startMonth, endMonth;
+        if (range === '1') {
+            startMonth = currentMonth;
+            endMonth = currentMonth;
+        } else if (range === '2') {
+            startMonth = Math.max(1, currentMonth - 1);
+            endMonth = currentMonth;
+        } else if (range === '3') {
+            startMonth = Math.max(1, currentMonth - 2);
+            endMonth = currentMonth;
+        } else if (months) {
+            // Specific months (e.g., "1,2,3")
+            const monthList = months.split(',').map(m => parseInt(m.trim())).filter(m => !isNaN(m) && m >= 1 && m <= 12);
+            if (monthList.length === 0) {
+                logger.warn(`[PDF] Invalid months parameter: ${months}`);
+                return res.status(400).json({ success: false, error: 'Meses inválidos' });
+            }
+            startMonth = Math.min(...monthList);
+            endMonth = Math.max(...monthList);
+        } else {
+            // Default: up to current month
+            startMonth = 1;
+            endMonth = currentMonth;
+        }
+
+        logger.info(`[PDF] Generating for DIEGO: year=${targetYear}, months ${startMonth}-${endMonth}`);
+
+        // Fetch data with same calculation path as /summary.
+        let vendorData, condorData;
+        try {
+            const config = await loadCommissionConfigForPdf(targetYear);
+            [vendorData, condorData] = await Promise.all([
+                buildPdfSummaryVendors(vendorCode || 'ALL', targetYear, config),
+                pdfService.getCondorSalesData(targetYear, startMonth, endMonth)
+            ]);
+            
+            logger.info(`[PDF] Summary data fetched successfully: ${vendorData.length} vendors, ${condorData.size} B-sales vendors`);
+        } catch (dataError) {
+            logger.error(`[PDF] Error fetching sales data: ${dataError.message}`);
+            return res.status(500).json({ 
+                success: false, 
+                error: 'Error obteniendo datos de ventas', 
+                details: dataError.message 
+            });
+        }
+
+        // Generate PDF with error handling
+        let pdfBuffer;
+        try {
+            pdfBuffer = await pdfService.generateCommissionsPdfFromSummary(vendorData, condorData, targetYear, startMonth, endMonth);
+            logger.info(`[PDF] PDF generated successfully (${(pdfBuffer.length / 1024).toFixed(2)} KB)`);
+        } catch (pdfError) {
+            logger.error(`[PDF] Error generating PDF: ${pdfError.message}`);
+            logger.error(`[PDF] Stack trace: ${pdfError.stack}`);
+            return res.status(500).json({ 
+                success: false, 
+                error: 'Error generando PDF', 
+                details: pdfError.message 
+            });
+        }
+
+        // Send PDF with proper headers
+        try {
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename=comisiones_${targetYear}_${startMonth}-${endMonth}.pdf`);
+            res.setHeader('Content-Length', pdfBuffer.length);
+            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            res.setHeader('Pragma', 'no-cache');
+            res.send(pdfBuffer);
+
+            logger.info(`[PDF] PDF sent successfully for DIEGO (${vendorData.length} vendors)`);
+        } catch (sendError) {
+            logger.error(`[PDF] Error sending PDF: ${sendError.message}`);
+            // Don't throw error here as response may already be partially sent
+        }
+    } catch (e) {
+        logger.error(`[PDF] Unexpected generation error: ${e.message}`);
+        logger.error(`[PDF] Stack trace: ${e.stack}`);
+        res.status(500).json({ 
+            success: false, 
+            error: 'Error generando PDF', 
+            details: e.message,
+            stack: process.env.NODE_ENV === 'development' ? e.stack : undefined
+        });
+    }
+});
+
 // FIX #1: Route to get excluded vendor codes (for frontend dynamic loading)
-router.get('/excluded-vendors', async (req, res) => {
+router.get('/excluded-vendors', verifyToken, async (req, res) => {
     try {
         await loadExcludedVendors(); // Force fresh load
         logger.debug(`[COMMISSIONS] /excluded-vendors returning: [${EXCLUDED_VENDORS.join(', ')}]`);
@@ -1098,4 +2000,14 @@ router.get('/excluded-vendors', async (req, res) => {
     }
 });
 
-module.exports = router;
+module.exports = {
+    router,
+    initCommissionTables,
+    _private: {
+        calculateVendorData,
+        getCurrentPaymentSnapshot,
+        loadCommissionConfig,
+        buildPdfSummaryVendors,
+        loadCommissionConfigForPdf,
+    },
+};

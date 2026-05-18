@@ -28,12 +28,6 @@ enum TaskPriority { low, normal, high, critical }
 
 /// Task wrapper for queue management
 class _IsolateTask<T, R> {
-  final T Function(R message) computation;
-  final R message;
-  final TaskPriority priority;
-  final Completer<T> completer;
-  final DateTime createdAt;
-  final String? debugLabel;
 
   _IsolateTask({
     required this.computation,
@@ -42,12 +36,20 @@ class _IsolateTask<T, R> {
     required this.completer,
     this.debugLabel,
   }) : createdAt = DateTime.now();
+  final T Function(R message) computation;
+  final R message;
+  final TaskPriority priority;
+  final Completer<T> completer;
+  final DateTime createdAt;
+  final String? debugLabel;
 
   Duration get queueTime => DateTime.now().difference(createdAt);
 }
 
 /// Worker state tracking
 class _IsolateWorker {
+
+  _IsolateWorker(this.id);
   final int id;
   Isolate? isolate;
   SendPort? sendPort;
@@ -55,8 +57,6 @@ class _IsolateWorker {
   int taskCount = 0;
   DateTime? lastUsed;
   int failureCount = 0;
-
-  _IsolateWorker(this.id);
 
   bool get isHealthy => failureCount < 3;
   bool get isAvailable => !isBusy && isHealthy && sendPort != null;
@@ -91,7 +91,7 @@ class IsolatePoolService {
     _poolSize = poolSize ?? _calculateOptimalPoolSize();
     debugPrint('[IsolatePool] Initializing pool with $_poolSize workers...');
 
-    for (int i = 0; i < _poolSize; i++) {
+    for (var i = 0; i < _poolSize; i++) {
       await _spawnWorker(i);
     }
 
@@ -144,14 +144,14 @@ class IsolatePoolService {
             taskId: message.taskId,
             result: result,
             success: true,
-          ));
+          ),);
         } catch (e, stack) {
           message.responsePort.send(_WorkerResponse(
             taskId: message.taskId,
             error: e.toString(),
             stackTrace: stack.toString(),
             success: false,
-          ));
+          ),);
         }
       }
     });
@@ -169,7 +169,7 @@ class IsolatePoolService {
 
     // Fallback to main thread compute for web
     if (kIsWeb) {
-      return await Future(() => computation(message));
+      return Future(() => computation(message));
     }
 
     final completer = Completer<T>();
@@ -203,7 +203,7 @@ class IsolatePoolService {
     // Warn if queue is getting full
     final totalQueued = _taskQueue.values.fold<int>(0, (sum, q) => sum + q.length);
     if (totalQueued > _maxTaskQueue * 0.8) {
-      debugPrint('[IsolatePool] ⚠️ Task queue at ${totalQueued}/$_maxTaskQueue');
+      debugPrint('[IsolatePool] ⚠️ Task queue at $totalQueued/$_maxTaskQueue');
     }
   }
 
@@ -250,7 +250,7 @@ class IsolatePoolService {
         computation: task.computation,
         data: task.message,
         responsePort: responsePort.sendPort,
-      ));
+      ),);
 
       // Wait for response with timeout
       final response = await responsePort.first.timeout(
@@ -371,10 +371,6 @@ class IsolatePoolService {
 
 /// Message sent to worker
 class _WorkerMessage<T, R> {
-  final String taskId;
-  final T Function(R) computation;
-  final R data;
-  final SendPort responsePort;
 
   _WorkerMessage({
     required this.taskId,
@@ -382,21 +378,24 @@ class _WorkerMessage<T, R> {
     required this.data,
     required this.responsePort,
   });
+  final String taskId;
+  final T Function(R) computation;
+  final R data;
+  final SendPort responsePort;
 }
 
 /// Response from worker
 class _WorkerResponse<T> {
+
+  _WorkerResponse({
+    required this.taskId,
+    required this.success, this.result,
+    this.error,
+    this.stackTrace,
+  });
   final String taskId;
   final T? result;
   final bool success;
   final String? error;
   final String? stackTrace;
-
-  _WorkerResponse({
-    required this.taskId,
-    this.result,
-    required this.success,
-    this.error,
-    this.stackTrace,
-  });
 }

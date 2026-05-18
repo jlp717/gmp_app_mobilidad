@@ -1,0 +1,239 @@
+/// Bolsa - Histórico mensual (últimos 12 meses)
+/// ==============================================
+/// Tarjeta con gráfico de barras agrupado: acumulado (verde) vs consumido
+/// (ámbar) para cada uno de los últimos 12 meses. Permite al jefe ver la
+/// evolución de la bolsa de un vendedor de un vistazo.
+library;
+
+import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_models.dart';
+
+class BolsaMonthlyChart extends StatelessWidget {
+  const BolsaMonthlyChart({super.key, required this.history});
+
+  final List<BolsaMonthlyPoint> history;
+
+  static const _monthsAbbr = [
+    'E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    if (history.isEmpty) return const SizedBox.shrink();
+    final maxVal = history.fold<double>(0, (acc, p) {
+      final localMax =
+          p.acumulado > p.consumido ? p.acumulado : p.consumido;
+      return localMax > acc ? localMax : acc;
+    });
+    if (maxVal <= 0) return const SizedBox.shrink();
+
+    final totalAcum = history.fold<double>(0, (a, p) => a + p.acumulado);
+    final totalCons = history.fold<double>(0, (a, p) => a + p.consumido);
+    final saldoNeto = totalAcum - totalCons;
+    final now = DateTime.now();
+    final currentKey = '${now.year}-${now.month}';
+
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.darkSurface.withValues(alpha: 0.9),
+            AppTheme.darkBase.withValues(alpha: 0.6),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: AppTheme.neonBlue.withValues(alpha: 0.18),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.show_chart,
+                  color: AppTheme.neonBlue, size: 18,),
+              const SizedBox(width: 6),
+              const Text(
+                'Histórico 12 meses',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+              const Spacer(),
+              _legendDot('Acum.', AppTheme.neonGreen),
+              const SizedBox(width: 8),
+              _legendDot('Cons.', AppTheme.warning),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 110,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: history.map((p) {
+                final isCurrent = '${p.ejercicio}-${p.mes}' == currentKey;
+                final acumH = (p.acumulado / maxVal) * 90;
+                final consH = (p.consumido / maxVal) * 90;
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 1),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        // Importes mini-tooltips (solo si hay algo)
+                        if (p.acumulado > 0 || p.consumido > 0)
+                          Text(
+                            _kFormat(p.acumulado),
+                            style: TextStyle(
+                              fontSize: 7,
+                              color: Colors.white.withValues(alpha: 0.45),
+                            ),
+                          ),
+                        const SizedBox(height: 1),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            _bar(
+                              height: acumH,
+                              color: AppTheme.neonGreen,
+                              glow: isCurrent,
+                            ),
+                            const SizedBox(width: 1),
+                            _bar(
+                              height: consH,
+                              color: AppTheme.warning,
+                              glow: isCurrent,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _monthsAbbr[(p.mes - 1).clamp(0, 11)],
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight:
+                                isCurrent ? FontWeight.w800 : FontWeight.w500,
+                            color: isCurrent
+                                ? AppTheme.neonBlue
+                                : Colors.white.withValues(alpha: 0.55),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _stat('Acumulado total', _eur(totalAcum), AppTheme.neonGreen),
+              const SizedBox(width: 8),
+              _stat('Consumido total', _eur(totalCons), AppTheme.warning),
+              const SizedBox(width: 8),
+              _stat(
+                'Saldo neto',
+                _eur(saldoNeto),
+                saldoNeto >= 0 ? AppTheme.neonBlue : AppTheme.error,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _bar({required double height, required Color color, bool glow = false}) {
+    final h = height.isFinite && height > 0 ? height : 0.0;
+    return Container(
+      width: 6,
+      height: h,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.85),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+        boxShadow: glow
+            ? [BoxShadow(color: color.withValues(alpha: 0.55), blurRadius: 6)]
+            : null,
+      ),
+    );
+  }
+
+  Widget _legendDot(String label, Color color) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 8, height: 8,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 4),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.65),
+            fontSize: 10,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _stat(String label, String value, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+        decoration: BoxDecoration(
+          color: AppTheme.darkSurface.withValues(alpha: 0.5),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.55),
+                fontSize: 9,
+              ),
+            ),
+            const SizedBox(height: 2),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _kFormat(double v) {
+    if (v >= 1000) return '${(v / 1000).toStringAsFixed(v >= 10000 ? 0 : 1)}k';
+    return v.toStringAsFixed(0);
+  }
+
+  static String _eur(double v) {
+    return '${v.toStringAsFixed(0).replaceAllMapped(
+      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+      (m) => '${m[1]}.',
+    )}€';
+  }
+}

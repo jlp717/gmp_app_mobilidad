@@ -1,88 +1,144 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
+import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
+import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Import Sync Header
+import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
+import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/enhanced_client_matrix_page.dart';
+import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_dialogs.dart';
+import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_filter_bar.dart';
+import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_header.dart';
+import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_week_summary.dart';
+import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_client_list_item.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/api/api_config.dart';
-import '../../../objectives/presentation/pages/enhanced_client_matrix_page.dart';
-import '../widgets/rutero_reorder_modal.dart';
-import '../widgets/rutero_dialogs.dart'; // NEW: Import dialogs
-import '../../../../core/widgets/smart_sync_header.dart'; // Import Sync Header
-import '../../../../core/widgets/modern_loading.dart';
-import 'package:provider/provider.dart';
-import '../../../../core/providers/filter_provider.dart';
-import '../../../../core/widgets/global_vendor_selector.dart';
-import '../../../../core/providers/auth_provider.dart';
 
 /// Rutero Page - Premium Design with Visit/Delivery Toggle
 /// Shows clients to visit/deliver each day with YoY comparison
-class RuteroPage extends StatefulWidget {
+class RuteroPage extends ConsumerStatefulWidget {
+  const RuteroPage({
+    required this.employeeCode,
+    super.key,
+    this.isJefeVentas = false,
+    this.forceShowVendorSelector = false,
+  });
   final String employeeCode;
   final bool isJefeVentas;
-  
-  const RuteroPage({super.key, required this.employeeCode, this.isJefeVentas = false});
+  final bool forceShowVendorSelector;
 
   @override
-  State<RuteroPage> createState() => _RuteroPageState();
+  ConsumerState<RuteroPage> createState() => _RuteroPageState();
 }
 
-class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateMixin {
+class _RuteroPageState extends ConsumerState<RuteroPage>
+    with SingleTickerProviderStateMixin {
   // Data state
   Map<String, int> _weekData = {};
-  int _totalUniqueClients = 0; // Total de clientes únicos (no suma duplicada por días)
+  int _totalUniqueClients =
+      0; // Total de clientes únicos (no suma duplicada por días)
   int _completedWeeks = 0; // NEW: Track completed weeks for YoY label
   String _periodLabel = ''; // NEW: Period label like "1 Ene - 12 Ene"
   List<Map<String, dynamic>> _dayClients = [];
   bool _isLoadingWeek = true;
   bool _isLoadingClients = false;
+  bool _isCacheLoading = false; // true while backend cache is still warming up
+  int _cacheRetryCount = 0;
+  static const int _maxCacheRetries =
+      8; // Increased from 4 to ensure cache warming
   String? _error;
   String _searchQuery = '';
   String _sortMode = 'custom'; // 'sales_desc', 'sales_asc', 'route', 'custom'
   DateTime? _lastFetchTime; // Track last sync
   final TextEditingController _searchController = TextEditingController();
-  
+
+  // Guards to prevent redundant/cascading refreshes
+  bool _isInitialized = false;
+  bool _isLoadingInProgress = false;
+  Timer? _retryTimer; // Cancelable retry timer
+  ProviderSubscription<String?>? _vendorSubscription;
+  int _loadGeneration = 0;
+
+  String _selectedAlertType = 'ALL';
+  bool _onlyWithAlerts = false;
+  Set<String> _kpiFilteredCodes = {};
   // Sort mode options - Professional labels
   static const Map<String, String> _sortModeLabels = {
     'sales_desc': 'Mayor Acumulado',
-    'sales_asc': 'Menor Acumulado', 
+    'sales_asc': 'Menor Acumulado',
     'route': 'Ruta Original',
     'custom': 'Orden Personalizado',
   };
-  
+
   // Selection state
-  String _selectedRole = 'comercial'; // 'comercial' (visita) or 'repartidor' (reparto)
+  String _selectedRole =
+      'comercial'; // 'comercial' (visita) or 'repartidor' (reparto)
   String _selectedDay = 'lunes';
   String _todayName = 'lunes';
-  
+
   late TabController _tabController;
-  
+
   // Filters
   int _selectedYear = DateTime.now().year;
   int _selectedMonth = DateTime.now().month;
   int _selectedWeek = 1; // Week within the month (1-5)
   int _weeksInMonth = 4;
-  
+
   // Jefe de ventas - Ver rutero como
-  List<Map<String, dynamic>> _vendedoresDisponibles = [];
+  final List<Map<String, dynamic>> _vendedoresDisponibles = [];
   String? _selectedVendedor; // null = ver su propio rutero
-  
+
   final List<String> _monthNames = const [
-    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre',
   ];
-  
+
   static const List<String> _weekdays = [
-    'lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'
+    'lunes',
+    'martes',
+    'miercoles',
+    'jueves',
+    'viernes',
+    'sabado',
+    'domingo',
   ];
-  
+
   static const Map<String, String> _weekdayLabels = {
-    'lunes': 'LUN', 'martes': 'MAR', 'miercoles': 'MIÉ', 
-    'jueves': 'JUE', 'viernes': 'VIE', 'sabado': 'SÁB', 'domingo': 'DOM'
+    'lunes': 'LUN',
+    'martes': 'MAR',
+    'miercoles': 'MIÉ',
+    'jueves': 'JUE',
+    'viernes': 'VIE',
+    'sabado': 'SÁB',
+    'domingo': 'DOM',
   };
-  
+
   static const Map<String, String> _weekdayFullLabels = {
-    'lunes': 'Lunes', 'martes': 'Martes', 'miercoles': 'Miércoles', 
-    'jueves': 'Jueves', 'viernes': 'Viernes', 'sabado': 'Sábado', 'domingo': 'Domingo'
+    'lunes': 'Lunes',
+    'martes': 'Martes',
+    'miercoles': 'Miércoles',
+    'jueves': 'Jueves',
+    'viernes': 'Viernes',
+    'sabado': 'Sábado',
+    'domingo': 'Domingo',
   };
 
   @override
@@ -90,27 +146,46 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _initToday();
-    // Si es jefe de ventas, cargar lista de vendedores
-    _refreshData();
+    _isInitialized = true;
+    _loadWeekData();
+
+    // Listen for vendor changes from OTHER pages (cross-page sync)
+    // Do NOT use onChanged in GlobalVendorSelector - that would cause double refresh
+    _vendorSubscription =
+        ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
+      if (_isInitialized && previous != next) {
+        _retryTimer?.cancel();
+        _cacheRetryCount = 0;
+        _loadWeekData();
+      }
+    });
   }
 
   Future<void> _refreshData() async {
-    await _loadWeekData();
-    // _loadWeekData calls _loadDayClients internally, so we assume completion updates
+    if (_isLoadingInProgress) return;
+    _isLoadingInProgress = true;
+    _retryTimer?.cancel();
+    _retryTimer = null;
+
+    _cacheRetryCount = 0;
+    await _loadWeekData(useDirectEndpoint: true);
     if (mounted) {
       setState(() => _lastFetchTime = DateTime.now());
     }
+    _isLoadingInProgress = false;
   }
-  
+
   // ... (dispose, initToday, formatters etc. same)
 
   @override
   void dispose() {
+    _vendorSubscription?.close();
+    _retryTimer?.cancel();
     _tabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
-  
+
   void _initToday() {
     final now = DateTime.now();
     _selectedYear = now.year;
@@ -122,36 +197,36 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     _weeksInMonth = _getWeeksInMonth(_selectedYear, _selectedMonth);
     _selectedWeek = _getCurrentWeekInMonth(now);
   }
-  
+
   int _getWeeksInMonth(int year, int month) {
-    final firstDay = DateTime(year, month, 1);
+    final firstDay = DateTime(year, month);
     final lastDay = DateTime(year, month + 1, 0);
     // Calculate weeks: ceiling of (days + first day offset) / 7
     final firstWeekday = firstDay.weekday; // 1=Mon
     final totalDays = lastDay.day;
     return ((totalDays + firstWeekday - 1) / 7).ceil();
   }
-  
+
   int _getCurrentWeekInMonth(DateTime date) {
-    final firstDay = DateTime(date.year, date.month, 1);
+    final firstDay = DateTime(date.year, date.month);
     final firstWeekday = firstDay.weekday;
     return ((date.day + firstWeekday - 2) ~/ 7) + 1;
   }
 
   /// Obtiene las fechas de inicio y fin de la semana seleccionada dentro del mes
   (int startDay, int endDay) _getWeekDates(int year, int month, int weekNum) {
-    final firstOfMonth = DateTime(year, month, 1);
+    final firstOfMonth = DateTime(year, month);
     final lastOfMonth = DateTime(year, month + 1, 0);
     final firstWeekday = firstOfMonth.weekday; // 1=Lunes
-    
+
     // Calcular día de inicio de la semana (Lunes de esa semana)
-    int startDay = 1 + (weekNum - 1) * 7 - (firstWeekday - 1);
+    var startDay = 1 + (weekNum - 1) * 7 - (firstWeekday - 1);
     if (startDay < 1) startDay = 1;
-    
+
     // Día fin (Domingo o último día del mes)
-    int endDay = startDay + 6;
+    var endDay = startDay + 6;
     if (endDay > lastOfMonth.day) endDay = lastOfMonth.day;
-    
+
     return (startDay, endDay);
   }
 
@@ -170,7 +245,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     _selectedWeek = 1; // Reset to first week when changing month
     _loadWeekData();
   }
-  
+
   void _changeWeek(int delta) {
     setState(() {
       _selectedWeek += delta;
@@ -191,23 +266,35 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
       _loadWeekData();
     }
   }
-  
+
   /// Obtiene el código del vendedor a usar (seleccionado o el propio)
+  /// Para GETs: puede ser una lista comma-separated (todos los vendedores)
   String get _activeVendedorCode {
     if (!mounted) return widget.employeeCode;
-    final filterCode = context.read<FilterProvider>().selectedVendor;
+    final filterCode = ref.read(filterProvider).selectedVendor;
     return filterCode ?? widget.employeeCode;
   }
-  
 
-  
+  /// Para operaciones de escritura (POST): devuelve un ÚNICO código de vendedor.
+  /// Retorna null si hay múltiples vendedores y no se ha seleccionado uno específico.
+  String? get _singleVendedorCode {
+    if (!mounted) return null;
+    final filterCode = ref.read(filterProvider).selectedVendor;
+    if (filterCode != null) return filterCode;
+    // Si employeeCode no contiene comas, es un solo vendedor
+    if (!widget.employeeCode.contains(',')) return widget.employeeCode;
+    // Jefe de ventas sin selección específica → no se puede escribir
+    return null;
+  }
+
   /// Cambia el vendedor seleccionado para "Ver rutero como"
   void _onVendedorChanged(String? vendedorCode) {
     setState(() => _selectedVendedor = vendedorCode);
     _loadWeekData();
   }
 
-  Future<void> _loadWeekData() async {
+  Future<void> _loadWeekData({bool useDirectEndpoint = false}) async {
+    final generation = ++_loadGeneration;
     setState(() {
       _isLoadingWeek = true;
       _error = null;
@@ -221,21 +308,49 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
           'role': _selectedRole,
           'year': _selectedYear,
           'month': _selectedMonth,
+          'ignoreOverrides': _sortMode == 'route',
         },
       );
 
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _weekData = Map<String, int>.from(
-          (response['week'] as Map).map((k, v) => MapEntry(k.toString(), (v as num).toInt()))
+          (response['week'] as Map)
+              .map((k, v) => MapEntry(k.toString(), (v as num).toInt())),
         );
         // Usar totalUniqueClients del backend para el conteo real de clientes
-        _totalUniqueClients = (response['totalUniqueClients'] as num?)?.toInt() ?? 
-          _weekData.values.fold(0, (a, b) => a + b);
+        _totalUniqueClients =
+            (response['totalUniqueClients'] as num?)?.toInt() ??
+                _weekData.values.fold(0, (a, b) => a + b);
         _isLoadingWeek = false;
       });
-      
-      await _loadDayClients();
+
+      // If the backend cache is still warming, show indicator and schedule retry
+      final weekCacheStatus = response['cacheStatus'] as String?;
+      if (weekCacheStatus == 'loading' && _cacheRetryCount < _maxCacheRetries) {
+        setState(() => _isCacheLoading = true);
+        _cacheRetryCount++;
+        _retryTimer?.cancel();
+        _retryTimer = Timer(const Duration(seconds: 6), () {
+          if (mounted && generation == _loadGeneration) {
+            _loadWeekData(useDirectEndpoint: useDirectEndpoint);
+          }
+        });
+        return;
+      } else {
+        if (!mounted || generation != _loadGeneration) return;
+        setState(() {
+          _isCacheLoading = false;
+          _cacheRetryCount = 0;
+        });
+      }
+
+      await _loadDayClients(
+        useDirectEndpoint: useDirectEndpoint,
+        generation: generation,
+      );
     } catch (e) {
+      if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _error = e.toString();
         _isLoadingWeek = false;
@@ -243,13 +358,113 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     }
   }
 
-  Future<void> _loadDayClients() async {
+  Future<void> _loadDayClients({
+    bool useDirectEndpoint = false,
+    int? generation,
+  }) async {
+    if (!mounted) return;
+    final currentGeneration = generation ?? ++_loadGeneration;
     setState(() {
       _isLoadingClients = true;
     });
 
     try {
+      // If KPI filters are active, fetch the codes first
+      if (_onlyWithAlerts || _selectedAlertType != 'ALL') {
+        final alertCodes = await KpiAlertsService.instance.getClientsWithAlerts(
+          vendedorCodes: _activeVendedorCode,
+          type: _selectedAlertType,
+        );
+        _kpiFilteredCodes = alertCodes.toSet();
+      } else {
+        _kpiFilteredCodes = {};
+      }
+
+      // Use direct endpoint when refreshing to bypass cache
+      final endpoint = useDirectEndpoint
+          ? '${ApiConfig.ruteroDay}-direct/$_selectedDay'
+          : '${ApiConfig.ruteroDay}/$_selectedDay';
+
       final response = await ApiClient.get(
+        endpoint,
+        queryParameters: {
+          'vendedorCodes': _activeVendedorCode,
+          'role': _selectedRole,
+          'year': _selectedYear,
+          'month': _selectedMonth,
+          'week': _selectedWeek,
+          'ignoreOverrides': _sortMode == 'route' ? 'true' : 'false',
+        },
+      );
+
+      if (!mounted || currentGeneration != _loadGeneration) return;
+      setState(() {
+        final rawList = response['clients'] ?? <dynamic>[];
+        _dayClients = (rawList as List)
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .toList();
+        // Parse completed weeks and period label from metadata
+        if (response['period'] != null) {
+          final period = response['period'] as Map<String, dynamic>;
+          _completedWeeks = (period['weeks'] as num?)?.toInt() ?? 0;
+          _periodLabel = period['current'] as String? ?? '';
+        }
+        _isLoadingClients = false;
+      });
+
+      // If the backend cache is still warming OR data is empty, retry
+      final dayCacheStatus = response['cacheStatus'] as String?;
+      final hasAnySales = _dayClients.any((client) {
+        final status = client['status'] as Map<String, dynamic>?;
+        final ytdSales = (status?['ytdSales'] as num?)?.toDouble() ?? 0;
+        return ytdSales > 0.01;
+      });
+
+      // Only retry while the backend cache is still warming up.
+      final isBackendCacheLoading = dayCacheStatus == 'loading';
+      if (isBackendCacheLoading && _cacheRetryCount < _maxCacheRetries) {
+        setState(() => _isCacheLoading = true);
+        _cacheRetryCount++;
+        _retryTimer?.cancel();
+        _retryTimer = Timer(const Duration(seconds: 6), () {
+          if (mounted && currentGeneration == _loadGeneration) {
+            _loadDayClients(
+              useDirectEndpoint: useDirectEndpoint,
+              generation: currentGeneration,
+            );
+          }
+        });
+      } else {
+        if (!mounted || currentGeneration != _loadGeneration) return;
+        setState(() {
+          _isCacheLoading = false;
+          _cacheRetryCount = 0;
+        });
+
+        // day-direct is intentionally fast and can omit sales KPIs.
+        // Enrich once from the cached endpoint, but do not enter a retry loop.
+        if (useDirectEndpoint &&
+            _dayClients.isNotEmpty &&
+            !hasAnySales &&
+            mounted) {
+          debugPrint(
+              '[Rutero] Day-direct returned clients without sales. Fetching sales data from normal endpoint...');
+          await _enrichWithSalesData(generation: currentGeneration);
+        }
+      }
+    } catch (e) {
+      if (!mounted || currentGeneration != _loadGeneration) return;
+      setState(() {
+        _dayClients = [];
+        _isLoadingClients = false;
+      });
+    }
+  }
+
+  /// Fetch sales data from normal endpoint and merge into existing clients
+  Future<void> _enrichWithSalesData({required int generation}) async {
+    try {
+      final normalResponse = await ApiClient.get(
         '${ApiConfig.ruteroDay}/$_selectedDay',
         queryParameters: {
           'vendedorCodes': _activeVendedorCode,
@@ -261,33 +476,46 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
         },
       );
 
-      setState(() {
-        final rawList = response['clients'] ?? <dynamic>[];
-        _dayClients = (rawList as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
-        // Parse completed weeks and period label from metadata
-        if (response['period'] != null) {
-           final period = response['period'] as Map<String, dynamic>;
-           _completedWeeks = (period['weeks'] as num?)?.toInt() ?? 0;
-           _periodLabel = period['current'] as String? ?? '';
+      if (!mounted || generation != _loadGeneration) return;
+
+      final enrichedClients =
+          (normalResponse['clients'] ?? <dynamic>[]) as List;
+      if (enrichedClients.isEmpty) return;
+
+      // Merge sales data into existing clients
+      final salesMap = <String, Map<String, dynamic>>{};
+      for (final item in enrichedClients) {
+        final client = item as Map<String, dynamic>;
+        final code = client['code'] as String?;
+        final status = client['status'] as Map<String, dynamic>?;
+        if (code != null && status != null) {
+          salesMap[code] = status;
         }
-        _isLoadingClients = false;
-      });
-    } catch (e) {
+      }
+
+      // Update existing clients with sales data
       setState(() {
-        _dayClients = [];
-        _isLoadingClients = false;
+        for (var i = 0; i < _dayClients.length; i++) {
+          final code = _dayClients[i]['code'] as String?;
+          if (code != null && salesMap.containsKey(code)) {
+            _dayClients[i]['status'] = salesMap[code];
+          }
+        }
       });
+
+      debugPrint('[Rutero] Sales data enriched for ${salesMap.length} clients');
+    } catch (e) {
+      debugPrint('[Rutero] Failed to enrich with sales data: $e');
     }
   }
 
   void _onDaySelected(String day) {
     if (day != _selectedDay) {
+      _cacheRetryCount = 0; // Reset retry counter when changing day
       setState(() => _selectedDay = day);
       _loadDayClients();
     }
   }
-
-
 
   // Currency formatting WITHOUT rounding
   String _formatCurrency(double value) {
@@ -303,320 +531,98 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    // Responsive sizing based on screen height
     final screenHeight = MediaQuery.of(context).size.height;
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isSmallScreen = screenHeight < 850; // Smaller tablet threshold
-    final isVerySmallScreen = screenHeight < 700;
-    
+    final isSmallScreen = screenHeight < 850;
+
     return Scaffold(
       backgroundColor: AppTheme.darkBase,
       body: SafeArea(
         child: Column(
           children: [
-            // Smart Sync Header
             SmartSyncHeader(
               title: 'Rutero Comercial',
-              subtitle: _periodLabel.isNotEmpty ? _periodLabel : 'Planificación Semanal',
+              subtitle: _periodLabel.isNotEmpty
+                  ? _periodLabel
+                  : 'Planificación Semanal',
               lastSync: _lastFetchTime,
               isLoading: _isLoadingWeek || _isLoadingClients,
               onSync: _refreshData,
             ),
-            
-            // Unified Compact Header Region
-            _buildUnifiedHeader(isSmallScreen),
-            
-            // Search Bar (dense)
-            _buildSearchBar(isSmallScreen: isSmallScreen),
-            
-            // Sort Selector
-            _buildSortSelector(),
-            
-            // List Area
-            Expanded(child: _buildClientList()),
+            if (_isCacheLoading) _buildCacheBanner(),
+            RuteroHeader(
+              selectedRole: _selectedRole,
+              isJefeVentas: widget.isJefeVentas,
+              isSmallScreen: isSmallScreen,
+              onRoleChanged: _onRoleChanged,
+              onSortTap: _openReorderModal,
+              forceShowVendorSelector: widget.forceShowVendorSelector,
+            ),
+            RuteroWeekSummary(
+              selectedYear: _selectedYear,
+              selectedMonth: _selectedMonth,
+              selectedWeek: _selectedWeek,
+              weeksInMonth: _weeksInMonth,
+              totalUniqueClients: _totalUniqueClients,
+              weekData: _weekData,
+              selectedDay: _selectedDay,
+              onWeekChange: _changeWeek,
+              onDaySelected: _onDaySelected,
+              monthNames: _monthNames,
+            ),
+            Expanded(
+              child: Column(
+                children: [
+                  RuteroFilterBar(
+                    searchQuery: _searchQuery,
+                    searchController: _searchController,
+                    sortMode: _sortMode,
+                    selectedAlertType: _selectedAlertType,
+                    onlyWithAlerts: _onlyWithAlerts,
+                    onSearchChanged: (v) =>
+                        setState(() => _searchQuery = v.toLowerCase()),
+                    onSortChanged: _onSortChanged,
+                    onAlertTypeChanged: (v) => setState(() {
+                      _selectedAlertType = v;
+                      _loadDayClients();
+                    }),
+                    onOnlyWithAlertsChanged: (v) => setState(() {
+                      _onlyWithAlerts = v;
+                      _loadDayClients();
+                    }),
+                  ),
+                  Expanded(
+                    child: _buildClientList(),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  // Main layout wrapper to organize header elements effectively
-  Widget _buildUnifiedHeader(bool isSmallScreen) {
+  Widget _buildCacheBanner() {
     return Container(
-      color: AppTheme.darkBase,
-      child: Column(
-        mainAxisSize: MainAxisSize.min, // Shrink to fit children
-        children: [
-             // 1. Top Bar: Back, Title, Role Toggle, Sort
-             Padding(
-               padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-               child: Row(
-                 children: [
-                   // Title + Role Switcher in one row
-                   const SizedBox(width: 12), // Spacing from left edge
-                   // Title + Role Switcher in one row
-                   Expanded(
-                     child: InkWell(
-                        onTap: () {
-                           // Toggle role on title tap
-                           _onRoleChanged(_selectedRole == 'comercial' ? 'repartidor' : 'comercial');
-                        },
-                        child: Row(
-                          children: [
-                             ShaderMask(
-                                shaderCallback: (bounds) => LinearGradient(
-                                  colors: [AppTheme.neonPink, AppTheme.neonPurple],
-                                ).createShader(bounds),
-                                child: Text(
-                                  'RUTERO',
-                                  style: TextStyle(
-                                    fontSize: isSmallScreen ? 18 : 20,
-                                    fontWeight: FontWeight.bold,
-                                    letterSpacing: 1,
-                                    color: Colors.white,
-                                  ),
-                                ),
-                             ),
-                             const SizedBox(width: 8),
-                             // Current Role Badge (Compact)
-                             Container(
-                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                               decoration: BoxDecoration(
-                                 color: (_selectedRole == 'comercial' ? AppTheme.neonPink : AppTheme.neonBlue).withOpacity(0.2),
-                                 borderRadius: BorderRadius.circular(8),
-                                 border: Border.all(color: (_selectedRole == 'comercial' ? AppTheme.neonPink : AppTheme.neonBlue).withOpacity(0.5), width: 1),
-                               ),
-                               child: Row(
-                                 mainAxisSize: MainAxisSize.min,
-                                 children: [
-                                   Icon(
-                                      _selectedRole == 'comercial' ? Icons.shopping_bag_outlined : Icons.local_shipping_outlined,
-                                      size: 12,
-                                      color: _selectedRole == 'comercial' ? AppTheme.neonPink : AppTheme.neonBlue,
-                                   ),
-                                   const SizedBox(width: 4),
-                                   Text(
-                                     _selectedRole == 'comercial' ? 'VISITA' : 'REPARTO',
-                                     style: TextStyle(
-                                       fontSize: 10, 
-                                       fontWeight: FontWeight.bold,
-                                       color: _selectedRole == 'comercial' ? AppTheme.neonPink : AppTheme.neonBlue
-                                      ),
-                                   ),
-                                 ],
-                               ),
-                             ),
-                          ],
-                        ),
-                     ),
-                   ),
-                   // Sort Action
-                   IconButton(
-                     onPressed: _openReorderModal,
-                     icon: const Icon(Icons.sort, color: Colors.white, size: 22),
-                     tooltip: 'Ordenar',
-                     padding: EdgeInsets.zero,
-                     constraints: const BoxConstraints(),
-                   ),
-                 ],
-               ),
-             ),
-             
-             // 2. Vendor Selector for Manager
-             if (widget.isJefeVentas)
-               GlobalVendorSelector(
-                 isJefeVentas: true,
-                 onChanged: _refreshData,
-               ),
-
-             // 3. Compact Week/Month Navigator
-             _buildCompactWeekSelector(),
-             
-             // 4. Horizontal Day Strip (Very compact)
-             SizedBox(
-               height: 50, // Fixed small height
-               child: ListView.separated(
-                 scrollDirection: Axis.horizontal,
-                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                 itemCount: _weekdays.length,
-                 separatorBuilder: (_, __) => const SizedBox(width: 8),
-                 itemBuilder: (context, index) {
-                   final day = _weekdays[index];
-                   final isSelected = day == _selectedDay;
-                   final count = _weekData[day] ?? 0;
-                   return _buildCompactDayChip(day, count, isSelected);
-                 },
-               ),
-             ),
-             const SizedBox(height: 4),
-        ],
-      ),
-    );
-  }
-
-  // Replacement for _buildHeader - removed to avoid duplication error if I kept the name
-  // keeping empty to satisfy potential calls I missed replacing if any, but I replaced the call site.
-  // Actually, I'll just rely on the new _buildUnifiedHeader.
-
-
-
-  Widget _buildCompactWeekSelector() {
-      // Obtener fechas de la semana
-      final (startDay, endDay) = _getWeekDates(_selectedYear, _selectedMonth, _selectedWeek);
-      final monthName = _monthNames[_selectedMonth - 1];
-      
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-             // Month/Week info con fechas
-             Row(
-               children: [
-                 IconButton(
-                    onPressed: () => _changeWeek(-1),
-                    icon: const Icon(Icons.chevron_left, size: 20, color: Colors.white),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                 ),
-                 const SizedBox(width: 8),
-                  Text(
-                   'Semana $_selectedWeek ($startDay - $endDay $monthName)', 
-                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)
-                 ),
-                 const SizedBox(width: 8),
-                 IconButton(
-                    onPressed: () => _changeWeek(1),
-                    icon: const Icon(Icons.chevron_right, size: 20, color: Colors.white),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                 ),
-               ],
-             ),
-             // Total clients badge
-             Container(
-               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-               decoration: BoxDecoration(
-                 color: AppTheme.neonPink.withOpacity(0.2),
-                 borderRadius: BorderRadius.circular(12),
-               ),
-               child: Text('Total: $_totalUniqueClients', style: TextStyle(color: AppTheme.neonPink, fontSize: 11, fontWeight: FontWeight.bold)),
-             ),
-          ],
-        ),
-      );
-  }
-
-  Widget _buildCompactDayChip(String day, int count, bool isSelected) {
-      final label = _weekdayLabels[day] ?? day.substring(0,3).toUpperCase();
-      return GestureDetector(
-        onTap: () => _onDaySelected(day),
-        child: Container(
-           width: 50,
-           decoration: BoxDecoration(
-             color: isSelected ? AppTheme.neonPink : AppTheme.surfaceColor,
-             borderRadius: BorderRadius.circular(8),
-             border: isSelected ? null : Border.all(color: AppTheme.borderColor),
-           ),
-           child: Column(
-             mainAxisAlignment: MainAxisAlignment.center,
-             children: [
-               Text(label, style: TextStyle(
-                 fontSize: 10, 
-                 color: isSelected ? Colors.white : AppTheme.textSecondary,
-                 fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
-               )),
-               const SizedBox(height: 2),
-               Text('$count', style: TextStyle(
-                 fontSize: 12,
-                 color: isSelected ? Colors.white : AppTheme.textPrimary,
-                 fontWeight: FontWeight.bold
-               )),
-             ],
-           ),
-        ),
-      );
-  }
-
-
-  // Removed obsolete methods (_buildVendedorSelector, _buildRoleToggle, _buildMonthSelector, _buildDayHeader)
-  // Replaced by _buildUnifiedHeader and compact components.
-
-
-
-  Widget _buildSearchBar({bool isSmallScreen = false}) {
-    return Container(
-      height: 36, // Force compact height
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-      child: TextField(
-        controller: _searchController,
-        style: const TextStyle(fontSize: 13),
-        textAlignVertical: TextAlignVertical.center,
-        onChanged: (value) {
-          setState(() {
-            _searchQuery = value.toLowerCase();
-          });
-        },
-        decoration: InputDecoration(
-          hintText: 'Buscar...',
-          hintStyle: TextStyle(color: AppTheme.textSecondary.withOpacity(0.7), fontSize: 13),
-          prefixIcon: const Icon(Icons.search, size: 16, color: AppTheme.textSecondary),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 0),
-          isDense: true,
-          filled: true,
-          fillColor: AppTheme.surfaceColor,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide.none,
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSortSelector() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 12),
+      color: AppTheme.neonBlue.withValues(alpha: 0.15),
       child: Row(
         children: [
-          Icon(Icons.sort, size: 16, color: AppTheme.textSecondary),
+          const SizedBox(
+            width: 12,
+            height: 12,
+            child: CircularProgressIndicator(
+              strokeWidth: 1.5,
+              color: AppTheme.neonBlue,
+            ),
+          ),
           const SizedBox(width: 8),
-          Text('Ordenar:', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Container(
-              height: 32,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceColor,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.borderColor),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _sortMode,
-                  isExpanded: true,
-                  icon: Icon(Icons.arrow_drop_down, size: 16, color: AppTheme.textSecondary),
-                  dropdownColor: AppTheme.surfaceColor,
-                  style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary),
-                  items: _sortModeLabels.entries.map((e) => DropdownMenuItem(
-                    value: e.key,
-                    child: Text(e.value, style: const TextStyle(fontSize: 12)),
-                  )).toList(),
-                  onChanged: (value) {
-                    if (value != null) {
-                      final oldMode = _sortMode;
-                      setState(() => _sortMode = value);
-                      
-                      // If we are switching TO or FROM 'route' (Original), we need to fetch fresh data
-                      // because the backend returns different datasets (ignored vs respected overrides).
-                      if (value == 'route' || oldMode == 'route') {
-                        _loadDayClients();
-                      }
-                    }
-                  },
-                ),
-              ),
+          Text(
+            'Preparando datos… se actualizará automáticamente',
+            style: TextStyle(
+              color: AppTheme.neonBlue.withValues(alpha: 0.9),
+              fontSize: 11,
             ),
           ),
         ],
@@ -624,22 +630,29 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     );
   }
 
+  void _onSortChanged(String value) {
+    final oldMode = _sortMode;
+    setState(() => _sortMode = value);
+    if (value == 'route' || oldMode == 'route') {
+      _loadWeekData();
+    }
+  }
 
   Widget _buildClientList() {
     if (_isLoadingWeek || _isLoadingClients) {
       return const Padding(
-        padding: EdgeInsets.all(40.0),
+        padding: EdgeInsets.all(40),
         child: ModernLoading(message: 'Cargando rutas...'),
       );
     }
 
     if (_error != null) {
-      return Center(
+      return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.error_outline, size: 48, color: AppTheme.error),
-            const SizedBox(height: 16),
+            SizedBox(height: 16),
             Text('Error al cargar', style: TextStyle(color: AppTheme.error)),
           ],
         ),
@@ -652,9 +665,11 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              _selectedRole == 'comercial' ? Icons.shopping_bag_outlined : Icons.local_shipping_outlined,
-              size: 64, 
-              color: AppTheme.neonPink.withOpacity(0.3),
+              _selectedRole == 'comercial'
+                  ? Icons.shopping_bag_outlined
+                  : Icons.local_shipping_outlined,
+              size: 64,
+              color: AppTheme.neonPink.withValues(alpha: 0.3),
             ),
             const SizedBox(height: 16),
             Text(
@@ -663,74 +678,152 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
             ),
             const SizedBox(height: 8),
             Text(
-              'Selecciona otro día',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+              'Prueba a cambiar de día o sincronizar',
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
             ),
           ],
         ),
       );
     }
 
-    // Filter clients based on search query
-    List<Map<String, dynamic>> filteredClients = _searchQuery.isEmpty
-        ? List<Map<String, dynamic>>.from(_dayClients)
-        : _dayClients.where((client) {
-            final code = (client['code'] as String? ?? '').toLowerCase();
-            final name = (client['name'] as String? ?? '').toLowerCase();
-            return code.contains(_searchQuery) || name.contains(_searchQuery);
-          }).toList();
+    // Filter clients based on search query AND KPI alerts
+    final filteredClients = _dayClients.where((client) {
+      final code = (client['code'] as String?) ?? '';
+
+      // 1. KPI Filter (Alerts)
+      if (_onlyWithAlerts || _selectedAlertType != 'ALL') {
+        if (!_kpiFilteredCodes.contains(code)) return false;
+      }
+
+      // 2. Search Filter
+      if (_searchQuery.isNotEmpty) {
+        final name = (client['name'] as String?)?.toLowerCase() ?? '';
+        final address = (client['address'] as String?)?.toLowerCase() ?? '';
+        final city = (client['city'] as String?)?.toLowerCase() ?? '';
+
+        final q = _searchQuery.toLowerCase();
+        return name.contains(q) ||
+            code.contains(q) ||
+            address.contains(q) ||
+            city.contains(q);
+      }
+
+      return true;
+    }).toList();
 
     // Apply sorting based on _sortMode
     switch (_sortMode) {
       case 'sales_desc':
         filteredClients.sort((a, b) {
-          final salesA = ((a['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)?.toDouble() ?? 0;
-          final salesB = ((b['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)?.toDouble() ?? 0;
+          final salesA =
+              ((a['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)
+                      ?.toDouble() ??
+                  0;
+          final salesB =
+              ((b['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)
+                      ?.toDouble() ??
+                  0;
           return salesB.compareTo(salesA); // Descending
         });
-        break;
       case 'sales_asc':
         filteredClients.sort((a, b) {
-          final salesA = ((a['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)?.toDouble() ?? 0;
-          final salesB = ((b['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)?.toDouble() ?? 0;
-          return salesA.compareTo(salesB); // Ascending  
+          final salesA =
+              ((a['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)
+                      ?.toDouble() ??
+                  0;
+          final salesB =
+              ((b['status'] as Map<String, dynamic>?)?['ytdSales'] as num?)
+                      ?.toDouble() ??
+                  0;
+          return salesA.compareTo(salesB); // Ascending
         });
-        break;
       case 'route':
-        // Original route order (no user customizations) - use original API order
-        // Already sorted by API default order (no-op)
+        // Already sorted by API order
         break;
       case 'custom':
       default:
-        // Custom order - use 'order' field set by user
         filteredClients.sort((a, b) {
           final orderA = (a['order'] as int?) ?? 9999;
           final orderB = (b['order'] as int?) ?? 9999;
-          return orderA.compareTo(orderB);
+          if (orderA != orderB) return orderA.compareTo(orderB);
+          final nameA = (a['name'] as String?) ?? '';
+          final nameB = (b['name'] as String?) ?? '';
+          return nameA.compareTo(nameB);
         });
-        break;
     }
 
+    // --- Empty States for Filtered Results ---
+
+    // Case A: No results due to Alert filters
+    if (filteredClients.isEmpty &&
+        (_onlyWithAlerts || _selectedAlertType != 'ALL')) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.notifications_off_outlined,
+              size: 60,
+              color: AppTheme.neonPink.withValues(alpha: 0.3),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Sin clientes con alertas',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.white.withValues(alpha: 0.9),
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _selectedAlertType == 'ALL'
+                  ? 'Este día no tiene alertas detectadas'
+                  : 'No hay alertas de tipo\n"${KpiAlertsService.instance.getKpiAlertTypeName(_selectedAlertType)}"',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+            ),
+            const SizedBox(height: 24),
+            TextButton.icon(
+              onPressed: () => setState(() {
+                _onlyWithAlerts = false;
+                _selectedAlertType = 'ALL';
+              }),
+              icon: const Icon(Icons.filter_list_off),
+              label: const Text('Limpiar filtros de KPI'),
+              style: TextButton.styleFrom(foregroundColor: AppTheme.neonPink),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Case B: No results due to Search query
     if (filteredClients.isEmpty && _searchQuery.isNotEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.search_off, size: 48, color: AppTheme.neonPink.withOpacity(0.4)),
+            Icon(
+              Icons.search_off,
+              size: 48,
+              color: AppTheme.neonPink.withValues(alpha: 0.4),
+            ),
             const SizedBox(height: 16),
             Text(
-              'No se encontraron clientes para "$_searchQuery"',
+              'No se encontró ningún cliente para "$_searchQuery"',
               style: TextStyle(color: Colors.grey.shade400),
             ),
             const SizedBox(height: 8),
             TextButton(
-              onPressed: () {
-                setState(() {
-                  _searchController.clear();
-                  _searchQuery = '';
-                });
-              },
-              child: Text('Limpiar búsqueda', style: TextStyle(color: AppTheme.neonPink)),
+              onPressed: () => setState(() {
+                _searchController.clear();
+                _searchQuery = '';
+              }),
+              child: const Text(
+                'Limpiar búsqueda',
+                style: TextStyle(color: AppTheme.neonPink),
+              ),
             ),
           ],
         ),
@@ -745,8 +838,9 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
         itemCount: filteredClients.length,
         itemBuilder: (context, index) {
           final client = filteredClients[index];
-          return _ClientCard(
+          return RuteroClientListItem(
             client: client,
+            index: index + 1,
             formatCurrency: _formatCurrency,
             formatVariation: _formatVariation,
             onTap: () => _navigateToMatrix(client),
@@ -757,7 +851,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
             showMargin: widget.isJefeVentas,
             selectedYear: _selectedYear,
             completedWeeks: _completedWeeks,
-            periodLabel: _periodLabel, // Pass period label like "1 Ene - 12 Ene"
+            periodLabel: _periodLabel,
           );
         },
       ),
@@ -783,47 +877,51 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     final address = (client['address'] as String?) ?? '';
     final city = (client['city'] as String?) ?? '';
     final name = (client['name'] as String?) ?? '';
-    
+
     // If we have GPS coordinates, use them directly
-    if (latitude != null && longitude != null && latitude != 0 && longitude != 0) {
+    if (latitude != null &&
+        longitude != null &&
+        latitude != 0 &&
+        longitude != 0) {
       final urls = [
         'geo:$latitude,$longitude?q=$latitude,$longitude',
         'https://www.google.com/maps/dir/?api=1&destination=$latitude,$longitude',
       ];
-      
+
       for (final urlStr in urls) {
         try {
           final uri = Uri.parse(urlStr);
-          final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+          final launched =
+              await launchUrl(uri, mode: LaunchMode.externalApplication);
           if (launched) return;
         } catch (e) {
           // Try next
         }
       }
     }
-    
+
     // Fallback to address search
-    final searchQuery = name.isNotEmpty 
-        ? '$name, $address, $city'
-        : '$address, $city';
-    
+    final searchQuery =
+        name.isNotEmpty ? '$name, $address, $city' : '$address, $city';
+
     if (searchQuery.trim().length < 3) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('No hay dirección disponible')),
       );
       return;
     }
-    
+
     final encoded = Uri.encodeComponent(searchQuery);
     final urls = [
       'geo:0,0?q=$encoded',
       'https://www.google.com/maps/dir/?api=1&destination=$encoded',
     ];
-    
+
     for (final urlStr in urls) {
       try {
         final uri = Uri.parse(urlStr);
-        final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+        final launched =
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
         if (launched) return;
       } catch (e) {
         // Try next
@@ -832,8 +930,11 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   }
 
   Future<void> _makeCall(Map<String, dynamic> client) async {
-    final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
-    
+    final phones = (client['phones'] as List?)
+            ?.map((p) => Map<String, dynamic>.from(p as Map))
+            .toList() ??
+        [];
+
     // Show selector with all phones + custom option
     showModalBottomSheet<void>(
       context: context,
@@ -847,24 +948,35 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Llamar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const Text(
+              'Llamar',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
             const SizedBox(height: 8),
-            const Text('Selecciona el número:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const Text(
+              'Selecciona el número:',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            ),
             const SizedBox(height: 12),
             if (phones.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('No hay teléfonos guardados', style: TextStyle(color: AppTheme.textSecondary)),
+                child: Text(
+                  'No hay teléfonos guardados',
+                  style: TextStyle(color: AppTheme.textSecondary),
+                ),
               ),
-            ...phones.map((p) => ListTile(
-              leading: const Icon(Icons.phone, color: AppTheme.neonBlue),
-              title: Text((p['number'] as String?) ?? ''),
-              subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _launchPhoneCall((p['number'] as String?) ?? '');
-              },
-            )),
+            ...phones.map(
+              (p) => ListTile(
+                leading: const Icon(Icons.phone, color: AppTheme.neonBlue),
+                title: Text((p['number'] as String?) ?? ''),
+                subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _launchPhoneCall((p['number'] as String?) ?? '');
+                },
+              ),
+            ),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.dialpad, color: AppTheme.neonPink),
@@ -882,8 +994,8 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     );
   }
 
-  void _launchPhoneCall(String phone) async {
-    final cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+  Future<void> _launchPhoneCall(String phone) async {
+    final cleanPhone = phone.replaceAll(RegExp('[^0-9+]'), '');
     try {
       await launchUrl(Uri.parse('tel:$cleanPhone'));
     } catch (e) {
@@ -917,14 +1029,15 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
             style: ElevatedButton.styleFrom(
-              backgroundColor: isWhatsApp ? const Color(0xFF25D366) : AppTheme.neonBlue,
+              backgroundColor:
+                  isWhatsApp ? const Color(0xFF25D366) : AppTheme.neonBlue,
             ),
             child: Text(isWhatsApp ? 'Enviar WhatsApp' : 'Llamar'),
           ),
         ],
       ),
     );
-    
+
     if (result != null && result.trim().isNotEmpty) {
       if (isWhatsApp) {
         _launchWhatsApp(result.trim());
@@ -935,7 +1048,8 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   }
 
   Future<void> _openNotesDialog(Map<String, dynamic> client) async {
-    final Map<String, dynamic> currentNotes = Map<String, dynamic>.from((client['observaciones'] as Map?) ?? {});
+    final currentNotes =
+        Map<String, dynamic>.from((client['observaciones'] as Map?) ?? {});
     final text = currentNotes['text'] as String? ?? '';
     final ctrl = TextEditingController(text: text);
 
@@ -974,14 +1088,16 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
   Future<void> _saveNotes(Map<String, dynamic> client, String notes) async {
     // Optimistic update locally
     final updatedClient = Map<String, dynamic>.from(client);
-    final obs = Map<String, dynamic>.from((updatedClient['observaciones'] as Map?) ?? {});
+    final obs = Map<String, dynamic>.from(
+      (updatedClient['observaciones'] as Map?) ?? {},
+    );
     obs['text'] = notes;
     updatedClient['observaciones'] = obs;
-    
+
     // Find index to update
     // Actually simpler: reload data or just show success for now.
     // _loadDayClients(); // This would refresh the full list.
-    
+
     // Let's call API first
     try {
       await ApiClient.put(
@@ -991,7 +1107,7 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
           'notes': notes,
         },
       );
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Observaciones guardadas')),
@@ -1001,14 +1117,20 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error guardando notas: $e'), backgroundColor: AppTheme.error),
+          SnackBar(
+            content: Text('Error guardando notas: $e'),
+            backgroundColor: AppTheme.error,
+          ),
         );
       }
     }
   }
 
   void _openWhatsApp(Map<String, dynamic> client) {
-    final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
+    final phones = (client['phones'] as List?)
+            ?.map((p) => Map<String, dynamic>.from(p as Map))
+            .toList() ??
+        [];
 
     // Always show selector with custom option
     showModalBottomSheet<void>(
@@ -1023,24 +1145,36 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Enviar WhatsApp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const Text(
+              'Enviar WhatsApp',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
             const SizedBox(height: 8),
-            const Text('Selecciona el número:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const Text(
+              'Selecciona el número:',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            ),
             const SizedBox(height: 12),
             if (phones.isEmpty)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 8),
-                child: Text('No hay teléfonos guardados', style: TextStyle(color: AppTheme.textSecondary)),
+                child: Text(
+                  'No hay teléfonos guardados',
+                  style: TextStyle(color: AppTheme.textSecondary),
+                ),
               ),
-            ...phones.map((p) => ListTile(
-              leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
-              title: Text((p['number'] as String?) ?? ''),
-              subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _launchWhatsApp((p['number'] as String?) ?? '');
-              },
-            )),
+            ...phones.map(
+              (p) => ListTile(
+                leading:
+                    const Icon(Icons.phone_android, color: Color(0xFF25D366)),
+                title: Text((p['number'] as String?) ?? ''),
+                subtitle: Text((p['type'] as String?) ?? 'Teléfono'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _launchWhatsApp((p['number'] as String?) ?? '');
+                },
+              ),
+            ),
             const Divider(),
             ListTile(
               leading: const Icon(Icons.dialpad, color: AppTheme.neonPink),
@@ -1058,9 +1192,9 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     );
   }
 
-  void _launchWhatsApp(String phone) async {
+  Future<void> _launchWhatsApp(String phone) async {
     // Clean phone number - remove non-digits except +
-    String cleanPhone = phone.replaceAll(RegExp(r'[^0-9+]'), '');
+    var cleanPhone = phone.replaceAll(RegExp('[^0-9+]'), '');
     // Add Spain prefix if not present
     if (!cleanPhone.startsWith('+') && !cleanPhone.startsWith('34')) {
       cleanPhone = '34$cleanPhone';
@@ -1070,43 +1204,56 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
     }
 
     // Personal identification
-    final auth = context.read<AuthProvider>();
-    final nombreComercial = auth.currentUser?.name ?? 'tu comercial';
+    final authState =
+        ProviderScope.containerOf(context).read(authProvider).value;
+    final nombreComercial = authState?.user?.name ?? 'tu comercial';
     final manana = DateTime.now().add(const Duration(days: 1));
     final fecha = '${manana.day}/${manana.month}/${manana.year}';
 
     // Professional message
-    final message = Uri.encodeComponent(
-      'Hola, soy $nombreComercial de Mari Pepa. '
-      'Mañana día $fecha tenemos visita. '
-      '¿Necesitas cualquier cosilla?'
-    );
+    final message =
+        Uri.encodeComponent('Hola, soy $nombreComercial de Mari Pepa. '
+            'Mañana día $fecha tenemos visita. '
+            '¿Necesitas cualquier cosilla?');
 
     final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
-  void _openReorderModal() async {
+
+  Future<void> _openReorderModal() async {
+    final vendedor = _singleVendedorCode;
+    if (vendedor == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Selecciona un vendedor específico para reordenar'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+      return;
+    }
+
     // Show FULL list in reorder dialog to ensure consistency
     final clientsToOrder = List<Map<String, dynamic>>.from(_dayClients);
-    
+
     final result = await showDialog<List<Map<String, dynamic>>>(
       context: context,
       barrierDismissible: false,
       builder: (ctx) => ReorderDialog(
-          clients: clientsToOrder, 
-          activeVendedor: _activeVendedorCode,
-          currentDay: _selectedDay,
+        clients: clientsToOrder,
+        activeVendedor: vendedor,
+        currentDay: _selectedDay,
       ),
     );
-    
+
     if (result != null) {
-       await _saveNewOrder(result);
+      await _saveNewOrder(result);
     }
-    
-    // SIEMPRE refrescar después de cerrar el diálogo para actualizar contadores
-    // ya que pueden haberse movido clientes a otros días
+
+    // SIEMPRE refrescar después de cerrar el diálogo
     await _refreshDataAndCounts();
   }
 
@@ -1121,14 +1268,16 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
           'role': _selectedRole,
         },
       );
-      
+
       if (countsResponse['counts'] != null && mounted) {
         setState(() {
           _weekData = Map<String, int>.from(
-            (countsResponse['counts'] as Map).map((k, v) => MapEntry(k.toString(), (v as num).toInt()))
+            (countsResponse['counts'] as Map)
+                .map((k, v) => MapEntry(k.toString(), (v as num).toInt())),
           );
-          _totalUniqueClients = (countsResponse['totalUniqueClients'] as num?)?.toInt() ?? 
-            _weekData.values.fold(0, (a, b) => a + b);
+          _totalUniqueClients =
+              (countsResponse['totalUniqueClients'] as num?)?.toInt() ??
+                  _weekData.values.fold(0, (a, b) => a + b);
         });
       }
     } catch (e) {
@@ -1136,513 +1285,76 @@ class _RuteroPageState extends State<RuteroPage> with SingleTickerProviderStateM
       await _loadWeekData();
       return;
     }
-    
+
     // Luego refrescar la lista del día actual
     await _loadDayClients();
-    
+
     if (mounted) {
       setState(() => _lastFetchTime = DateTime.now());
     }
   }
 
   Future<void> _saveNewOrder(List<Map<String, dynamic>> newOrder) async {
-      setState(() => _isLoadingWeek = true);
-      try {
-          final orderPayload = newOrder.asMap().entries.map((e) => <String, dynamic>{
+    final vendedor = _singleVendedorCode;
+    if (vendedor == null) return;
+
+    setState(() => _isLoadingWeek = true);
+    try {
+      final orderPayload = newOrder
+          .asMap()
+          .entries
+          .map(
+            (e) => <String, dynamic>{
               'cliente': (e.value['code'] as String?) ?? '',
               'posicion': e.key,
-              'posicionOriginal': (e.value['posicionOriginal'] as int?) ?? e.key,
-          }).toList();
-          
-          await ApiClient.post('/rutero/config', {
-              'vendedor': _activeVendedorCode,
-              'dia': _selectedDay.toLowerCase(),
-              'orden': orderPayload
-          });
-          
-          // Refrescar contadores y datos
-          await _refreshDataAndCounts();
-          
-          if (mounted) {
-            setState(() => _isLoadingWeek = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-               const SnackBar(
-                 content: Text('✅ Orden actualizado correctamente'),
-                 backgroundColor: AppTheme.success,
-               ),
-            );
-          }
-      } catch (e) {
-          if (mounted) {
-            setState(() => _isLoadingWeek = false);
-            ScaffoldMessenger.of(context).showSnackBar(
-               SnackBar(
-                 content: Text('Error guardando orden: $e'),
-                 backgroundColor: AppTheme.error,
-               ),
-            );
-          }
-      }
-  }
-}
+              'posicionOriginal':
+                  (e.value['posicionOriginal'] as int?) ?? e.key,
+            },
+          )
+          .toList();
 
-// Role toggle button widget
-class _RoleButton extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool isSelected;
-  final Color color;
-  final VoidCallback onTap;
+      await ApiClient.post('/rutero/config', {
+        'vendedor': vendedor,
+        'dia': _selectedDay.toLowerCase(),
+        'orden': orderPayload,
+      });
 
-  const _RoleButton({
-    required this.label,
-    required this.icon,
-    required this.isSelected,
-    required this.color,
-    required this.onTap,
-  });
+      // Refrescar contadores y datos
+      await _refreshDataAndCounts();
 
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          gradient: isSelected ? LinearGradient(
-            colors: [color.withOpacity(0.3), color.withOpacity(0.1)],
-          ) : null,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, color: isSelected ? color : Colors.grey, size: 18),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                color: isSelected ? color : Colors.grey,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// Premium client card with YoY display
-class _ClientCard extends StatelessWidget {
-  final Map<String, dynamic> client;
-  final String Function(double) formatCurrency;
-  final String Function(double) formatVariation;
-  final VoidCallback onTap;
-  final VoidCallback onMapTap;
-  final VoidCallback onCallTap;
-  final VoidCallback? onWhatsAppTap;
-  final VoidCallback? onNotesTap;
-  final bool showMargin;
-  final int selectedYear;
-  final int completedWeeks;
-  final String periodLabel; // NEW: "1 Ene - 12 Ene"
-
-  const _ClientCard({
-    required this.client,
-    required this.formatCurrency,
-    required this.formatVariation,
-    required this.onTap,
-    required this.onMapTap,
-    required this.onCallTap,
-    this.onWhatsAppTap,
-    this.onNotesTap,
-    this.showMargin = false,
-    required this.selectedYear,
-    this.completedWeeks = 0,
-    this.periodLabel = '',
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final name = client['name'] as String? ?? 'Sin nombre';
-    final code = client['code'] as String? ?? '';
-    final address = client['address'] as String? ?? '';
-    final city = client['city'] as String? ?? '';
-    final status = client['status'] as Map<String, dynamic>? ?? {};
-    final observaciones = client['observaciones'] as Map<String, dynamic>?;
-    final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
-    
-    final isPositive = status['isPositive'] == true;
-    // Use ytdSales (YTD accumulated sales) as main value
-    final ytdSales = (status['ytdSales'] as num?)?.toDouble() ?? 
-                     (status['currentMonthSales'] as num?)?.toDouble() ?? 0;
-    final margin = (status['margin'] as num?)?.toDouble() ?? 0;
-    // Use yoyVariation (Year-over-Year % change)
-    final yoyVariation = (status['yoyVariation'] as num?)?.toDouble() ?? 
-                         (status['variation'] as num?)?.toDouble() ?? 0;
-    final ytdPrevYear = (status['ytdPrevYear'] as num?)?.toDouble() ?? 
-                        (status['prevMonthSales'] as num?)?.toDouble() ?? 0;
-    // NEW: Total sales in entire previous year (for NEW client detection)
-    final prevYearTotal = (status['prevYearTotal'] as num?)?.toDouble() ?? 0;
-
-    // Lógica de colores CORREGIDA:
-    // 1) Gris "SIN VENTAS": Sin ventas en las semanas comparadas de ambos años (ytdSales ≈ 0 Y ytdPrevYear ≈ 0)
-    // 2) Azul "NUEVO": Tiene ventas este período, pero NO tuvo ventas en TODO el año anterior (prevYearTotal ≈ 0)
-    // 3) Verde/Rojo: En cualquier otro caso, compara las semanas equivalentes
-    final bool noSalesThisPeriod = ytdSales < 0.01;
-    final bool noSalesLastPeriod = ytdPrevYear < 0.01;
-    final bool noSalesEntireLastYear = prevYearTotal < 0.01;
-    
-    final bool isInactive = noSalesThisPeriod && noSalesLastPeriod; // Gris - sin ventas ambos períodos
-    final bool isNewClient = !noSalesThisPeriod && noSalesEntireLastYear; // Azul - ventas ahora, pero 0 en TODO el año anterior
-    
-    Color accentColor;
-    if (isInactive) {
-      accentColor = AppTheme.error; // Rojo para sin ventas
-    } else if (isNewClient) {
-      accentColor = AppTheme.success; // Verde para nuevo
-    } else if (isPositive) {
-      accentColor = AppTheme.success;
-    } else {
-      accentColor = AppTheme.error;
-    }
-    
-    // Check if has observations
-    final hasObservaciones = observaciones != null && 
-        observaciones['text'] != null && 
-        (observaciones['text'] as String).isNotEmpty;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: hasObservaciones ? AppTheme.warning.withOpacity(0.8) : accentColor.withOpacity(0.5),
-          width: hasObservaciones ? 2 : 1.5,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: (hasObservaciones ? AppTheme.warning : accentColor).withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+      if (mounted) {
+        setState(() => _isLoadingWeek = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('✅ Orden actualizado correctamente'),
+            backgroundColor: AppTheme.success,
           ),
-        ],
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Observations Banner
-            if (hasObservaciones) 
-              InkWell( // Make banner clickable to edit
-                onTap: onNotesTap, 
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: const BoxDecoration(
-                    color: AppTheme.warning,
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(12),
-                      topRight: Radius.circular(12),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.warning_amber_rounded, color: Colors.black87, size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          observaciones!['text'] as String,
-                          style: const TextStyle(color: Colors.black87, fontSize: 11, fontWeight: FontWeight.bold),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const Icon(Icons.edit, size: 14, color: Colors.black54), // Edit hint
-                    ],
-                  ),
-                ),
-              ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-              // Progress indicator - shows YoY variation, NEW badge, or inactive state
-              Container(
-                width: 85,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: accentColor.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Column(
-                  children: [
-                    Icon(
-                      isInactive ? Icons.remove_circle_outline 
-                        : (isNewClient ? Icons.star : (isPositive ? Icons.trending_up : Icons.trending_down)),
-                      color: accentColor,
-                      size: 26,
-                    ),
-                    const SizedBox(height: 4),
-                    // Show different states: INACTIVE, NUEVO, or YoY percentage
-                    if (isInactive) ...[
-                      Text(
-                        'SIN VENTAS',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.error,
-                        ),
-                      ),
-                      Text(
-                        'Este período (acumulativo de semanas)',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 8,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ] else if (isNewClient) ...[
-                      const Text(
-                        'NUEVO',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.success,
-                        ),
-                      ),
-                      Text(
-                        'No vendió en ${selectedYear - 1}',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 8,
-                          color: accentColor.withOpacity(0.8),
-                        ),
-                      ),
-                    ] else ...[
-                      Text(
-                        '${yoyVariation >= 0 ? '+' : ''}${yoyVariation.toStringAsFixed(1)}%',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: accentColor,
-                        ),
-                      ),
-                      Text(
-                        'vs ${selectedYear - 1}',
-                        style: TextStyle(
-                          fontSize: 9,
-                          color: accentColor.withOpacity(0.8),
-                        ),
-                      ),
-                    ],
-                    // Margin badge - only for jefe de ventas
-                    if (margin > 0 && showMargin)
-                      Container(
-                        margin: const EdgeInsets.only(top: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: margin >= 15 ? AppTheme.success.withOpacity(0.2) : AppTheme.warning.withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'M:${margin.toStringAsFixed(0)}%',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                            color: margin >= 15 ? AppTheme.success : AppTheme.warning,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 16),
-              
-              // Client info - larger fonts
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Client name - larger
-                    Text(
-                      name,
-                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 6),
-                    // Code badge
-                    if (code.isNotEmpty)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppTheme.neonBlue.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Text(
-                          code,
-                          style: TextStyle(fontSize: 11, color: AppTheme.neonBlue, fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                    const SizedBox(height: 6),
-                    if (address.isNotEmpty || city.isNotEmpty)
-                      Row(
-                        children: [
-                          Icon(Icons.place, size: 14, color: Colors.grey.shade500),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              [address, city].where((s) => s.isNotEmpty).join(', '),
-                              style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        ],
-                      ),
-                    // Sales and comparison row with clear year labels
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          completedWeeks > 1 
-                            ? 'Acumulado Sem. 1-$completedWeeks${periodLabel.isNotEmpty ? ' (hasta ${periodLabel.split(' - ').last})' : ''}:' 
-                            : completedWeeks == 1 
-                              ? 'Acumulado Sem. 1${periodLabel.isNotEmpty ? ' (hasta ${periodLabel.split(' - ').last})' : ''}:'
-                              : 'Sin semanas completadas:',
-                          style: TextStyle(fontSize: 11, color: Colors.grey.shade500)
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            // Current Year
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppTheme.neonBlue.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text('$selectedYear', style: TextStyle(fontSize: 10, color: AppTheme.neonBlue, fontWeight: FontWeight.bold)),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              formatCurrency(ytdSales),
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(width: 12),
-                            // Previous Year
-                            if (ytdPrevYear > 0) ...[
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.shade700,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text('${selectedYear - 1}', style: TextStyle(fontSize: 10, color: Colors.grey.shade300, fontWeight: FontWeight.bold)),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                formatCurrency(ytdPrevYear),
-                                style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                              ),
-                            ] else if (selectedYear == DateTime.now().year && DateTime.now().day <= 7 && DateTime.now().month == 1) ...[
-                               const SizedBox(width: 4),
-                               Tooltip(
-                                 triggerMode: TooltipTriggerMode.tap,
-                                 showDuration: const Duration(seconds: 4),
-                                 margin: const EdgeInsets.symmetric(horizontal: 20),
-                                 padding: const EdgeInsets.all(12),
-                                 decoration: BoxDecoration(color: AppTheme.darkBase, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade700)),
-                                 textStyle: const TextStyle(color: Colors.white, fontSize: 13),
-                                 message: 'El acumulado del año anterior aparecerá a partir de la 2ª semana.',
-                                 child: Icon(Icons.info_outline, size: 14, color: Colors.grey.shade600),
-                               ),
-                            ],
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              
-              // Action buttons - larger
-              Column(
-                children: [
-                  IconButton(
-                    onPressed: onMapTap,
-                    icon: Icon(Icons.directions, color: AppTheme.neonPink, size: 26),
-                    tooltip: 'Cómo llegar',
-                    splashRadius: 24,
-                    padding: const EdgeInsets.all(4),
-                    constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                  ),
-                  if (onNotesTap != null)
-                     IconButton(
-                      onPressed: onNotesTap,
-                      icon: Icon(
-                        hasObservaciones ? Icons.edit_note : Icons.note_add, 
-                        color: hasObservaciones ? AppTheme.warning : Colors.grey.shade400,
-                        size: 26
-                      ),
-                      tooltip: 'Observaciones',
-                      splashRadius: 24,
-                      padding: const EdgeInsets.all(4),
-                      constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                    ),
-                  // Compact Contact Row
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                        if (phones.isNotEmpty && onWhatsAppTap != null)
-                            IconButton(
-                              onPressed: onWhatsAppTap,
-                              icon: const Icon(Icons.chat, color: Color(0xFF25D366), size: 26),
-                              tooltip: 'WhatsApp',
-                              splashRadius: 24,
-                              padding: const EdgeInsets.all(4),
-                              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                            ),
-                        IconButton(
-                            onPressed: onCallTap,
-                            icon: Icon(Icons.phone, color: AppTheme.neonBlue, size: 26),
-                            tooltip: 'Llamar',
-                            splashRadius: 24,
-                            padding: const EdgeInsets.all(4),
-                            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingWeek = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error guardando orden: $e'),
+            backgroundColor: AppTheme.error,
+          ),
+        );
+      }
+    }
   }
 }
 
 class ReorderDialog extends StatefulWidget {
+  const ReorderDialog({
+    required this.clients,
+    required this.activeVendedor,
+    required this.currentDay,
+    super.key,
+  });
   final List<Map<String, dynamic>> clients;
   final String activeVendedor;
   final String currentDay;
-
-  const ReorderDialog({
-    Key? key, 
-    required this.clients, 
-    required this.activeVendedor,
-    required this.currentDay,
-  }) : super(key: key);
 
   @override
   _ReorderDialogState createState() => _ReorderDialogState();
@@ -1653,7 +1365,8 @@ class _ReorderDialogState extends State<ReorderDialog> {
   final ScrollController _scrollController = ScrollController();
   bool _hasChanges = false; // Track if order has changed
   List<String> _originalOrder = []; // Store original order to detect changes
-  Map<String, int> _originalPositions = {}; // Store original position of each client
+  final Map<String, int> _originalPositions =
+      {}; // Store original position of each client
 
   @override
   void initState() {
@@ -1662,7 +1375,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
     // Store original order for comparison
     _originalOrder = _items.map((c) => c['code'] as String).toList();
     // Store original position (index) of each client
-    for (int i = 0; i < _items.length; i++) {
+    for (var i = 0; i < _items.length; i++) {
       _originalPositions[_items[i]['code'] as String] = i;
     }
   }
@@ -1675,94 +1388,94 @@ class _ReorderDialogState extends State<ReorderDialog> {
       _checkForChanges();
     });
   }
-  
+
   void _checkForChanges() {
     final currentOrder = _items.map((c) => c['code'] as String).toList();
     _hasChanges = !_listEquals(currentOrder, _originalOrder);
   }
-  
+
   bool _listEquals(List<String> a, List<String> b) {
     if (a.length != b.length) return false;
-    for (int i = 0; i < a.length; i++) {
+    for (var i = 0; i < a.length; i++) {
       if (a[i] != b[i]) return false;
     }
     return true;
   }
-  
+
   void _moveItem(int index, int delta) {
-      final newIndex = index + delta;
-      if (newIndex >= 0 && newIndex < _items.length) {
-          _onReorder(index, delta > 0 ? newIndex + 1 : newIndex);
-      }
+    final newIndex = index + delta;
+    if (newIndex >= 0 && newIndex < _items.length) {
+      _onReorder(index, delta > 0 ? newIndex + 1 : newIndex);
+    }
   }
 
   void _updatePositionManual(int index, String val) {
-     final newPos = int.tryParse(val);
-     if (newPos != null) {
-         // Convert form 1-based user input to 0-based index
-         int targetIndex = newPos - 1;
-         if (targetIndex < 0) targetIndex = 0;
-         if (targetIndex >= _items.length) targetIndex = _items.length - 1;
-         
-         if (targetIndex != index) {
-             setState(() {
-                 final item = _items.removeAt(index);
-                 _items.insert(targetIndex, item);
-                 _checkForChanges();
-             });
-         }
-     }
+    final newPos = int.tryParse(val);
+    if (newPos != null) {
+      // Convert form 1-based user input to 0-based index
+      var targetIndex = newPos - 1;
+      if (targetIndex < 0) targetIndex = 0;
+      if (targetIndex >= _items.length) targetIndex = _items.length - 1;
+
+      if (targetIndex != index) {
+        setState(() {
+          final item = _items.removeAt(index);
+          _items.insert(targetIndex, item);
+          _checkForChanges();
+        });
+      }
+    }
   }
 
   /// NUEVO FLUJO: Mover cliente a otro día con confirmación completa
   Future<void> _moveClientToDay(int index) async {
-      final client = _items[index];
-      final clientName = (client['name'] as String?) ?? 'Cliente';
-      final clientCode = (client['code'] as String?) ?? '';
-      
-      // PASO 1: Selector de día destino (excluye Domingo)
-      final selectedDay = await showDialog<String>(
-          context: context,
-          builder: (ctx) => DaySelectorDialog(
-            currentDay: widget.currentDay,
-            clientName: clientName,
-            clientCode: clientCode,
-          ),
-      );
-      
-      if (selectedDay == null) return; // Usuario canceló
-      
-      // PASO 2: Selector de posición en día destino
-      final selectedPosition = await showDialog<String>(
-          context: context,
-          builder: (ctx) => PositionSelectorDialog(
-            targetDay: selectedDay,
-            vendorCode: widget.activeVendedor,
-            role: 'comercial',
-            clientName: clientName,
-          ),
-      );
-      
-      if (selectedPosition == null) return; // Usuario canceló
-      
-      // PASO 3: Confirmación final con resumen
-      final confirmed = await showDialog<bool>(
-          context: context,
-          builder: (ctx) => MoveConfirmationDialog(
-            clientName: clientName,
-            clientCode: clientCode,
-            fromDay: widget.currentDay,
-            toDay: selectedDay,
-            position: selectedPosition,
-          ),
-      );
-      
-      if (confirmed != true) return; // Usuario canceló
-      
-      // PASO 4: Ejecutar el movimiento
-      await _executeMove(client, selectedDay, selectedPosition, index);
+    final client = _items[index];
+    final clientName = (client['name'] as String?) ?? 'Cliente';
+    final clientCode = (client['code'] as String?) ?? '';
+
+    // PASO 1: Selector de día destino (excluye Domingo)
+    final selectedDay = await showDialog<String>(
+      context: context,
+      builder: (ctx) => DaySelectorDialog(
+        currentDay: widget.currentDay,
+        clientName: clientName,
+        clientCode: clientCode,
+      ),
+    );
+
+    if (selectedDay == null) return; // Usuario canceló
+
+    // PASO 2: Selector de posición en día destino
+    final selectedPosition = await showDialog<String>(
+      context: context,
+      builder: (ctx) => PositionSelectorDialog(
+        targetDay: selectedDay,
+        vendorCode: widget.activeVendedor,
+        role: 'comercial',
+        clientName: clientName,
+      ),
+    );
+
+    if (selectedPosition == null) return; // Usuario canceló
+
+    // PASO 3: Confirmación final con resumen
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => MoveConfirmationDialog(
+        clientName: clientName,
+        clientCode: clientCode,
+        fromDay: widget.currentDay,
+        toDay: selectedDay,
+        position: selectedPosition,
+      ),
+    );
+
+    if (confirmed != true) return; // Usuario canceló
+
+    // PASO 4: Ejecutar el movimiento
+    await _executeMove(client, selectedDay, selectedPosition, index);
   }
-  
+
   Future<void> _executeMove(
     Map<String, dynamic> client,
     String toDay,
@@ -1784,7 +1497,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
         ),
       ),
     );
-    
+
     try {
       // Determinar la posición numérica
       dynamic targetPosition;
@@ -1795,33 +1508,36 @@ class _ReorderDialogState extends State<ReorderDialog> {
       } else {
         targetPosition = int.tryParse(position) ?? 'end';
       }
-      
+
       await ApiClient.post('/rutero/move_clients', {
         'vendedor': widget.activeVendedor,
         'moves': [
           {
             'client': (client['code'] as String?) ?? '',
             'toDay': toDay.toLowerCase(),
+            'fromDay': widget.currentDay.toLowerCase(),
             'clientName': (client['name'] as String?) ?? '',
             'position': targetPosition,
           }
         ],
         'targetPosition': targetPosition,
       });
-      
+
       // Cerrar loading
       if (mounted) Navigator.pop(context);
-      
+
       // Actualizar lista local
       setState(() {
         _items.removeAt(index);
         _checkForChanges();
       });
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${(client['name'] as String?) ?? ''} movido al ${toDay.toUpperCase()}'),
+            content: Text(
+              '${(client['name'] as String?) ?? ''} movido al ${toDay.toUpperCase()}',
+            ),
             backgroundColor: AppTheme.success,
           ),
         );
@@ -1829,7 +1545,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
     } catch (e) {
       // Cerrar loading
       if (mounted) Navigator.pop(context);
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -1840,7 +1556,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
       }
     }
   }
-  
+
   /// Confirmación antes de guardar el nuevo orden
   Future<void> _confirmSave() async {
     if (!_hasChanges && _items.length == widget.clients.length) {
@@ -1848,7 +1564,7 @@ class _ReorderDialogState extends State<ReorderDialog> {
       Navigator.pop(context);
       return;
     }
-    
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => ReorderConfirmationDialog(
@@ -1856,8 +1572,8 @@ class _ReorderDialogState extends State<ReorderDialog> {
         day: widget.currentDay,
       ),
     );
-    
-    if (confirmed == true) {
+
+    if (confirmed ?? false) {
       // Añadir posición original a cada item antes de retornar
       final itemsWithOriginalPos = _items.map((item) {
         final code = item['code'] as String;
@@ -1866,23 +1582,26 @@ class _ReorderDialogState extends State<ReorderDialog> {
           'posicionOriginal': _originalPositions[code] ?? 0,
         };
       }).toList();
-      Navigator.pop(context, itemsWithOriginalPos); // Retornar items con posición original
+      Navigator.pop(
+        context,
+        itemsWithOriginalPos,
+      ); // Retornar items con posición original
     }
   }
-  
+
   /// Confirmar descarte de cambios al cerrar
   Future<bool> _confirmDiscard() async {
     if (!_hasChanges) return true;
-    
+
     final discard = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppTheme.surfaceColor,
-        title: Row(
+        title: const Row(
           children: [
             Icon(Icons.warning_amber_rounded, color: AppTheme.warning),
-            const SizedBox(width: 8),
-            const Text('¿Descartar cambios?'),
+            SizedBox(width: 8),
+            Text('¿Descartar cambios?'),
           ],
         ),
         content: const Text(
@@ -1901,166 +1620,224 @@ class _ReorderDialogState extends State<ReorderDialog> {
         ],
       ),
     );
-    
-    return discard == true;
+
+    return discard ?? false;
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: _confirmDiscard,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (!didPop) {
+          await _confirmDiscard();
+        }
+      },
       child: Dialog(
         insetPadding: const EdgeInsets.all(10),
         backgroundColor: AppTheme.darkBase,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         child: Column(
-            children: [
-                // Header
-                Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                        children: [
-                            const Text('Organizar Rutero', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                            if (_hasChanges)
-                              Container(
-                                margin: const EdgeInsets.only(left: 8),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.warning.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  'Cambios sin guardar',
-                                  style: TextStyle(fontSize: 10, color: AppTheme.warning),
-                                ),
-                              ),
-                            const Spacer(),
-                            IconButton(
-                              icon: const Icon(Icons.close),
-                              onPressed: () async {
-                                if (await _confirmDiscard()) {
-                                  Navigator.pop(context);
-                                }
-                              },
-                            ),
-                        ],
-                    ),
-                ),
-                const Divider(height: 1),
-                
-                // Hint
-                Container(
-                    width: double.infinity,
-                    color: AppTheme.surfaceColor,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    child: Text(
-                      'Arrastra para ordenar o usa las flechas. Usa el icono 📅 para mover a otro día.\n'
-                      '⚠️ Los cambios solo se aplican al pulsar GUARDAR CAMBIOS.',
-                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                    ),
-                ),
-                
-                // List
-                Expanded(
-                    child: _items.isEmpty 
-                      ? Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.inbox, size: 48, color: Colors.grey.shade600),
-                              const SizedBox(height: 8),
-                              const Text('No hay clientes en este día'),
-                            ],
-                          ),
-                        )
-                      : ReorderableListView.builder(
-                          scrollController: _scrollController,
-                          onReorder: _onReorder,
-                          itemCount: _items.length,
-                          itemBuilder: (ctx, index) {
-                              final item = _items[index];
-                              final pos = index + 1;
-                              
-                              return Container(
-                                  key: ValueKey(item['code']),
-                                  decoration: const BoxDecoration(
-                                      border: Border(bottom: BorderSide(color: Colors.black12))
-                                  ),
-                                  child: ListTile(
-                                      contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-                                      leading: ReorderableDragStartListener(
-                                          index: index,
-                                          child: const Padding(
-                                              padding: EdgeInsets.all(12),
-                                              child: Icon(Icons.drag_handle, color: Colors.grey),
-                                          ),
-                                      ),
-                                      title: Text((item['name'] as String?) ?? '', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                                      subtitle: Text((item['code'] as String?) ?? '', style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                                      trailing: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                              // Arrows
-                                              Column(
-                                                  mainAxisAlignment: MainAxisAlignment.center,
-                                                  children: [
-                                                      InkWell(onTap: () => _moveItem(index, -1), child: const Icon(Icons.arrow_drop_up, size: 20)),
-                                                      InkWell(onTap: () => _moveItem(index, 1), child: const Icon(Icons.arrow_drop_down, size: 20)),
-                                                  ],
-                                              ),
-                                              const SizedBox(width: 8),
-                                              // Numeric Input
-                                              SizedBox(
-                                                  width: 40,
-                                                  height: 35,
-                                                  child: TextField(
-                                                      keyboardType: TextInputType.number,
-                                                      textAlign: TextAlign.center,
-                                                      decoration: const InputDecoration(
-                                                          contentPadding: EdgeInsets.zero,
-                                                          border: OutlineInputBorder(),
-                                                          isDense: true
-                                                      ),
-                                                      controller: TextEditingController(text: '$pos')
-                                                        ..selection = TextSelection.collapsed(offset: '$pos'.length),
-                                                      onSubmitted: (val) => _updatePositionManual(index, val),
-                                                  ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              // Change Day Button
-                                              IconButton(
-                                                  icon: const Icon(Icons.calendar_month, color: AppTheme.neonBlue),
-                                                  tooltip: 'Mover a otro día',
-                                                  onPressed: () => _moveClientToDay(index),
-                                              ),
-                                          ],
-                                      ),
-                                  ),
-                              );
-                          },
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  const Text(
+                    'Organizar Rutero',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  if (_hasChanges)
+                    Container(
+                      margin: const EdgeInsets.only(left: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
                       ),
-                ),
-                
-                // Footer
-                Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: SizedBox(
-                        width: double.infinity,
-                        height: 48,
-                        child: ElevatedButton.icon(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: _hasChanges ? AppTheme.neonPink : Colors.grey,
-                            ),
-                            onPressed: _confirmSave,
-                            icon: const Icon(Icons.save),
-                            label: Text(
-                              _hasChanges ? 'GUARDAR CAMBIOS' : 'CERRAR',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                        ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.warning.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Text(
+                        'Cambios sin guardar',
+                        style: TextStyle(fontSize: 10, color: AppTheme.warning),
+                      ),
                     ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () async {
+                      if (await _confirmDiscard()) {
+                        Navigator.pop(context);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+
+            // Hint
+            Container(
+              width: double.infinity,
+              color: AppTheme.surfaceColor,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: const Text(
+                'Arrastra para ordenar o usa las flechas. Usa el icono ðŸ“… para mover a otro día.\n'
+                '⚠️ Los cambios solo se aplican al pulsar GUARDAR CAMBIOS.',
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              ),
+            ),
+
+            // List
+            Expanded(
+              child: _items.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.inbox,
+                            size: 48,
+                            color: Colors.grey.shade600,
+                          ),
+                          const SizedBox(height: 8),
+                          const Text('No hay clientes en este día'),
+                        ],
+                      ),
+                    )
+                  : ReorderableListView.builder(
+                      scrollController: _scrollController,
+                      onReorder: _onReorder,
+                      itemCount: _items.length,
+                      itemBuilder: (ctx, index) {
+                        final item = _items[index];
+                        final pos = index + 1;
+
+                        return Container(
+                          key: ValueKey(item['code']),
+                          decoration: const BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(color: Colors.black12),
+                            ),
+                          ),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                            ),
+                            leading: ReorderableDragStartListener(
+                              index: index,
+                              child: const Padding(
+                                padding: EdgeInsets.all(12),
+                                child:
+                                    Icon(Icons.drag_handle, color: Colors.grey),
+                              ),
+                            ),
+                            title: Text(
+                              (item['name'] as String?) ?? '',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            subtitle: Text(
+                              (item['code'] as String?) ?? '',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Arrows
+                                Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    InkWell(
+                                      onTap: () => _moveItem(index, -1),
+                                      child: const Icon(
+                                        Icons.arrow_drop_up,
+                                        size: 20,
+                                      ),
+                                    ),
+                                    InkWell(
+                                      onTap: () => _moveItem(index, 1),
+                                      child: const Icon(
+                                        Icons.arrow_drop_down,
+                                        size: 20,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(width: 8),
+                                // Numeric Input
+                                SizedBox(
+                                  width: 40,
+                                  height: 35,
+                                  child: TextField(
+                                    keyboardType: TextInputType.number,
+                                    textAlign: TextAlign.center,
+                                    decoration: const InputDecoration(
+                                      contentPadding: EdgeInsets.zero,
+                                      border: OutlineInputBorder(),
+                                      isDense: true,
+                                    ),
+                                    controller:
+                                        TextEditingController(text: '$pos')
+                                          ..selection = TextSelection.collapsed(
+                                            offset: '$pos'.length,
+                                          ),
+                                    onSubmitted: (val) =>
+                                        _updatePositionManual(index, val),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                // Change Day Button
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.calendar_month,
+                                    color: AppTheme.neonBlue,
+                                  ),
+                                  tooltip: 'Mover a otro día',
+                                  onPressed: () => _moveClientToDay(index),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+
+            // Footer
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        _hasChanges ? AppTheme.neonPink : Colors.grey,
+                  ),
+                  onPressed: _confirmSave,
+                  icon: const Icon(Icons.save),
+                  label: Text(
+                    _hasChanges ? 'GUARDAR CAMBIOS' : 'CERRAR',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
-            ],
+              ),
+            ),
+          ],
         ),
       ),
     );

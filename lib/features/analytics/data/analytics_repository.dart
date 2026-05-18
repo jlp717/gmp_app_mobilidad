@@ -3,10 +3,6 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 
 /// Data model for analytics information.
 class AnalyticsData extends Equatable {
-  final double totalSales;
-  final int totalOrders;
-  final int totalClients;
-  final Map<String, dynamic> rawData;
 
   const AnalyticsData({
     this.totalSales = 0,
@@ -23,6 +19,10 @@ class AnalyticsData extends Equatable {
       rawData: json,
     );
   }
+  final double totalSales;
+  final int totalOrders;
+  final int totalClients;
+  final Map<String, dynamic> rawData;
 
   @override
   List<Object?> get props => [totalSales, totalOrders, totalClients];

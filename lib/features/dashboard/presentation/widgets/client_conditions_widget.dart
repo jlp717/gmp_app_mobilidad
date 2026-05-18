@@ -47,7 +47,7 @@ class ClientConditionsWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
+            color: Colors.black.withValues(alpha: 0.15),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -68,9 +68,9 @@ class ClientConditionsWidget extends StatelessWidget {
                 topRight: Radius.circular(12),
               ),
             ),
-            child: Text(
+            child: const Text(
               'Diversos',
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white,
                 fontSize: 16,
                 fontWeight: FontWeight.w600,
@@ -143,12 +143,12 @@ class ClientConditionsWidget extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: isDark 
-                ? const Color(0xFF1E293B).withOpacity(0.5)
+                ? const Color(0xFF1E293B).withValues(alpha: 0.5)
                 : Colors.grey.shade50,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
               color: isDark 
-                  ? Colors.white.withOpacity(0.1)
+                  ? Colors.white.withValues(alpha: 0.1)
                   : Colors.grey.shade200,
             ),
           ),
@@ -158,7 +158,7 @@ class ClientConditionsWidget extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: iconColor.withOpacity(0.1),
+                  color: iconColor.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
@@ -199,7 +199,7 @@ class ClientConditionsWidget extends StatelessWidget {
               Icon(
                 Icons.chevron_right_rounded,
                 color: isDark 
-                    ? Colors.white.withOpacity(0.4)
+                    ? Colors.white.withValues(alpha: 0.4)
                     : Colors.grey.shade400,
                 size: 20,
               ),
@@ -219,7 +219,7 @@ class ClientConditionsWidget extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
+            color: Colors.black.withValues(alpha: 0.15),
             blurRadius: 8,
             offset: const Offset(0, 2),
           ),
@@ -298,12 +298,12 @@ class ClientConditionsWidget extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: isDark 
-            ? const Color(0xFF1E293B).withOpacity(0.5)
+            ? const Color(0xFF1E293B).withValues(alpha: 0.5)
             : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isDark 
-              ? Colors.white.withOpacity(0.1)
+              ? Colors.white.withValues(alpha: 0.1)
               : Colors.grey.shade200,
         ),
       ),
@@ -319,7 +319,7 @@ class ClientConditionsWidget extends StatelessWidget {
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                     color: isDark 
-                        ? Colors.white.withOpacity(0.6)
+                        ? Colors.white.withValues(alpha: 0.6)
                         : Colors.grey.shade600,
                   ),
                 ),

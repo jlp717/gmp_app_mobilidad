@@ -1,24 +1,21 @@
-import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/core/api/api_config.dart';
-import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../../../../core/theme/app_theme.dart';
-import '../../../../core/api/api_client.dart';
-import '../../../../core/api/api_config.dart';
-import '../../../../core/utils/currency_formatter.dart';
+import 'package:flutter/material.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
+import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 
 /// Comprehensive Client Detail Page for Rutero
 /// Shows exhaustive breakdown with charts, statistics, purchase history
 /// NO objectives data - purely sales/purchases analysis
 class RuteroClientDetailPage extends StatefulWidget {
-  final String clientCode;
-  final String clientName;
 
   const RuteroClientDetailPage({
-    super.key,
-    required this.clientCode,
-    required this.clientName,
+    required this.clientCode, required this.clientName, super.key,
   });
+  final String clientCode;
+  final String clientName;
 
   @override
   State<RuteroClientDetailPage> createState() => _RuteroClientDetailPageState();
@@ -42,7 +39,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
 
   static const List<String> _monthNames = [
     'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
   ];
 
   @override
@@ -106,7 +103,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
             ),
             Text(
               'Código: ${widget.clientCode}',
-              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -126,8 +123,8 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                           style: TextStyle(
                               fontWeight: y == _selectedYear
                                   ? FontWeight.bold
-                                  : FontWeight.normal)),
-                    ))
+                                  : FontWeight.normal,),),
+                    ),)
                 .toList(),
           ),
         ],
@@ -139,7 +136,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
               : Column(
                   children: [
                     // Tab bar
-                    Container(
+                    ColoredBox(
                       color: AppTheme.surfaceColor,
                       child: TabBar(
                         controller: _tabController,
@@ -175,7 +172,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.error_outline, size: 64, color: AppTheme.error),
+          const Icon(Icons.error_outline, size: 64, color: AppTheme.error),
           const SizedBox(height: 16),
           Text('Error: $_error', textAlign: TextAlign.center),
           const SizedBox(height: 16),
@@ -205,6 +202,9 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // KPI Alerts Section
+            ClientAlertsWidget(clientId: widget.clientCode),
+
             // Year Total Card
             _buildYearTotalCard(totals),
 
@@ -288,7 +288,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [accentColor.withOpacity(0.2), accentColor.withOpacity(0.1)],
+          colors: [accentColor.withValues(alpha: 0.2), accentColor.withValues(alpha: 0.1)],
         ),
         borderRadius: BorderRadius.circular(16),
       ),
@@ -337,7 +337,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
             children: [
               _buildStatColumn('Año Anterior', isNew ? 'Sin ventas' : ((totals['lastYearFormatted'] as String?) ?? '0 €')),
               _buildStatColumn(
-                  'Promedio Mensual', (totals['monthlyAverageFormatted'] as String?) ?? '0 €'),
+                  'Promedio Mensual', (totals['monthlyAverageFormatted'] as String?) ?? '0 €',),
             ],
           ),
         ],
@@ -348,7 +348,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
   Widget _buildStatColumn(String label, String value) {
     return Column(
       children: [
-        Text(label, style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+        Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
         const SizedBox(height: 4),
         Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
       ],
@@ -388,7 +388,6 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
             ),
           ),
           titlesData: FlTitlesData(
-            show: true,
             bottomTitles: AxisTitles(
               sideTitles: SideTitles(
                 showTitles: true,
@@ -423,15 +422,14 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                 },
               ),
             ),
-            topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-            rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            topTitles: const AxisTitles(),
+            rightTitles: const AxisTitles(),
           ),
           gridData: FlGridData(
-            show: true,
             drawVerticalLine: false,
             horizontalInterval: maxY / 4,
             getDrawingHorizontalLine: (value) => FlLine(
-              color: Colors.grey.withOpacity(0.2),
+              color: Colors.grey.withValues(alpha: 0.2),
               strokeWidth: 1,
             ),
           ),
@@ -453,7 +451,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                 ),
                 BarChartRodData(
                   toY: last,
-                  color: AppTheme.textSecondary.withOpacity(0.4),
+                  color: AppTheme.textSecondary.withValues(alpha: 0.4),
                   width: 6,
                   borderRadius: BorderRadius.circular(2),
                 ),
@@ -516,7 +514,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
             dense: true,
             leading: CircleAvatar(
               radius: 16,
-              backgroundColor: accentColor.withOpacity(0.2),
+              backgroundColor: accentColor.withValues(alpha: 0.2),
               child: Icon(accentIcon, size: 16, color: accentColor),
             ),
             title: Text(
@@ -524,10 +522,10 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
               style: const TextStyle(fontWeight: FontWeight.w500),
             ),
             subtitle: (isClientNew && current > 0)
-              ? Text('Cliente nuevo en $_selectedYear', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary))
+              ? Text('Cliente nuevo en $_selectedYear', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary))
               : isMonthNew
-                ? Text('Sin ventas en ${_selectedYear - 1}', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary))
-                : Text('Anterior: ${month['lastYearFormatted']}', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                ? Text('Sin ventas en ${_selectedYear - 1}', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary))
+                : Text('Anterior: ${month['lastYearFormatted']}', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
             trailing: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -539,7 +537,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
-                    color: accentColor.withOpacity(0.15),
+                    color: accentColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
@@ -587,14 +585,14 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                       ),
                       Text(
                         'Prom. mensual: ${y['monthlyAverageFormatted']}',
-                        style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
                       ),
                     ],
                   ),
                 ),
                 Text(
                   '${y['activeMonths']} meses activos',
-                  style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                  style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
                 ),
               ],
             ),
@@ -613,7 +611,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isFrequent ? AppTheme.success.withOpacity(0.3) : Colors.transparent,
+          color: isFrequent ? AppTheme.success.withValues(alpha: 0.3) : Colors.transparent,
         ),
       ),
       child: Row(
@@ -634,7 +632,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                 ),
                 Text(
                   '${freq['avgPurchasesPerMonth'] ?? 0} compras/mes promedio',
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
                 ),
               ],
             ),
@@ -644,7 +642,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
           ),
           const SizedBox(width: 4),
-          Text('días', style: TextStyle(color: AppTheme.textSecondary)),
+          const Text('días', style: TextStyle(color: AppTheme.textSecondary)),
         ],
       ),
     );
@@ -696,11 +694,11 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                           children: [
                             Text(
                               'Código: ${p['productCode']} | Lote: ${p['lote'] ?? '-'}',
-                              style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                              style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
                             ),
                             Text(
                               'Fecha: ${p['date']} | Factura: ${p['invoice'] ?? '-'}',
-                              style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                              style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
                             ),
                           ],
                         ),
@@ -714,7 +712,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                             ),
                             Text(
                               '${p['quantity']} uds',
-                              style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                              style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
                             ),
                           ],
                         ),
@@ -733,7 +731,7 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: ChoiceChip(
-        label: Text(label, style: TextStyle(fontSize: 11)),
+        label: Text(label, style: const TextStyle(fontSize: 11)),
         selected: isSelected,
         selectedColor: AppTheme.neonPurple,
         onSelected: (selected) {
@@ -766,11 +764,11 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
             child: Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: AppTheme.neonPurple.withOpacity(0.2),
+                  backgroundColor: AppTheme.neonPurple.withValues(alpha: 0.2),
                   child: Text(
                     '${index + 1}',
                     style: const TextStyle(
-                        fontWeight: FontWeight.bold, color: AppTheme.neonPurple),
+                        fontWeight: FontWeight.bold, color: AppTheme.neonPurple,),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -786,11 +784,11 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                       ),
                       Text(
                         'Código: ${p['code']}',
-                        style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
                       ),
                       Text(
                         '${p['purchases']} compras | ${p['totalUnits']} unidades',
-                        style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
                       ),
                     ],
                   ),

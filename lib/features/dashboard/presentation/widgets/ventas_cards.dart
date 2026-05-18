@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
+import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_metrics.dart';
 
 /// [VentasCards] - Tarjetas de métricas de ventas del vendedor
 ///
@@ -11,12 +11,7 @@ import 'package:gmp_app_mobilidad/core/utils/formatters.dart';
 /// - Clientes Atendidos (hoy, mes)
 class VentasCards extends StatelessWidget {
   const VentasCards({
-    super.key,
-    required this.ventasHoy,
-    required this.ventasMes,
-    required this.ventasAnio,
-    required this.clientesAtendidos,
-    required this.pedidosPendientes,
+    required this.ventasHoy, required this.ventasMes, required this.ventasAnio, required this.clientesAtendidos, required this.pedidosPendientes, super.key,
   });
 
   final VentasMetrics ventasHoy;
@@ -124,7 +119,7 @@ class _VentaCardCompact extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
+                    color: color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Icon(
@@ -241,7 +236,7 @@ class _ClientesCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.orange.withOpacity(0.1),
+                    color: Colors.orange.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
@@ -308,7 +303,7 @@ class _ClientesCard extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.red.withOpacity(0.1),
+                color: Colors.red.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Row(
