@@ -39,8 +39,10 @@ CREATE INDEX JAVIER.IDX_DELIVERY_STATUS_REP
 -- ---------------------------------------------------------------------------
 -- 2. LQD shadow table for test mode.
 --    Same physical structure as DSEDAC.LQD, but isolated in JAVIER.
---    Backend default: REPARTIDOR_FINANCE_ERP_SCHEMA=JAVIER.
---    Production cutover: set REPARTIDOR_FINANCE_ERP_SCHEMA=DSEDAC.
+--    Backend development: REPARTIDOR_FINANCE_ERP_SCHEMA=JAVIER.
+--    Backend production cutover: REPARTIDOR_FINANCE_ERP_SCHEMA=DSEDAC.
+--    ERP read tables (CLI/CVC/CPC/OPP/LAC/ART) are controlled separately
+--    with REPARTIDOR_FINANCE_READ_SCHEMA and normally stay DSEDAC.
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE JAVIER.LQD LIKE DSEDAC.LQD;

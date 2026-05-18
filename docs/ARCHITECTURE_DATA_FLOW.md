@@ -77,7 +77,7 @@ Pregúntate:
 
 | Flujo | Implementado | Función |
 |-------|-------------|---------|
-| Pedidos comerciales → `DSEDAC.CPC`/`LPC`/`OCPC` | ✅ Sí, con feature flag | `exportCommercialOrderToSystem` en `pedidos.service.js:887`. Se activa cuando `PEDIDOS_CONFIRMATION_SCHEMA=DSEDAC`. |
+| Pedidos comerciales → `DSEDAC.CPC`/`LPC`/`OCPC` | ✅ Sí, con feature flag | `exportCommercialOrderToSystem` en `pedidos.service.js:887`. Se activa solo cuando `PEDIDOS_CONFIRMATION_SCHEMA=DSEDAC` y `PEDIDOS_EXPORT_TO_SYSTEM=true`. |
 | Cobros → `DSEDAC.CRC` (cabecera) y `DSEDAC.CRCA` (aplicación a albarán) | ⏳ No implementado | Pendiente: añadir `exportCobroToSystem` análogo, mapeando JAVIER.COBROS → CRC y JAVIER.REPARTIDOR_COBROS → CRCA. |
 | Liquidaciones diarias → `DSEDAC.LQD` (cabecera) + `DSEDAC.CLV` (líneas) | ⏳ No implementado | Pendiente: análogo. CLV requiere desnormalizar los importes de JAVIER (EFECTIVO, CHEQUES, etc.) a N filas por concepto. |
 | Entregas/albaranes → `DSEDAC.CAC` + `DSEDAC.LAC` | ⏳ No implementado | Pendiente: análogo. La línea ya está alineada 126/126, la cabecera necesita backfill de columnas. |
@@ -98,8 +98,10 @@ NODE_ENV=development
 ODBC_DSN=GMP
 ODBC_UID=JAVIER
 ODBC_PWD=<dev-password>
-PEDIDOS_CONFIRMATION_SCHEMA=JAVIER       # toda escritura va a JAVIER
-REPARTIDOR_FINANCE_ERP_SCHEMA=DSEDAC     # lecturas de ERP siempre DSEDAC
+PEDIDOS_CONFIRMATION_SCHEMA=JAVIER       # pedidos/cobros app en JAVIER
+REPARTIDOR_FINANCE_READ_SCHEMA=DSEDAC    # lecturas ERP reales
+REPARTIDOR_FINANCE_ERP_SCHEMA=JAVIER     # LQD sombra/canary
+REPARTIDOR_FINANCE_APP_SCHEMA=JAVIER     # tablas app de repartidor
 PEDIDOS_EXPORT_TO_SYSTEM=false
 JWT_ACCESS_SECRET=dev-only-secret
 JWT_REFRESH_SECRET=dev-only-secret-2
@@ -116,7 +118,9 @@ ODBC_DSN=GMP
 ODBC_UID=<prod-user>
 ODBC_PWD=<prod-password-strong>
 PEDIDOS_CONFIRMATION_SCHEMA=DSEDAC       # cuando los exports estén completos
+REPARTIDOR_FINANCE_READ_SCHEMA=DSEDAC
 REPARTIDOR_FINANCE_ERP_SCHEMA=DSEDAC
+REPARTIDOR_FINANCE_APP_SCHEMA=JAVIER     # cambiar a DSEDAC solo si esas tablas existen alli
 PEDIDOS_EXPORT_TO_SYSTEM=true            # activa exportCommercialOrderToSystem
 JWT_ACCESS_SECRET=<rotated-strong-64-chars>
 JWT_REFRESH_SECRET=<another-strong-64-chars>

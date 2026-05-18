@@ -197,6 +197,47 @@ describe('Repartidor finanzas routes', () => {
     expect(mockQueryWithParams).not.toHaveBeenCalled();
   });
 
+  test('GET /evolution uses app cobros schema and delivered products from ERP LAC', async () => {
+    mockAuthUser = { id: 'V94', code: '94', role: 'REPARTIDOR' };
+    mockQueryWithParams
+      .mockResolvedValueOnce(alignedSchemaRows)
+      .mockResolvedValueOnce([{
+        CODIGO: 'ART001',
+        NOMBRE: 'HELADO TEST',
+        UNIDADES: '12',
+        IMPORTE: '240.50',
+      }])
+      .mockResolvedValueOnce([{
+        ANO: 2026,
+        MES: 4,
+        TOTAL: '222.79',
+        NUM_COBROS: '2',
+      }]);
+
+    const res = await request(app).get('/finanzas/evolution/94');
+
+    expect(res.status).toBe(200);
+    expect(res.body.evolution).toEqual([{
+      ano: 2026,
+      mes: 4,
+      total: 222.79,
+      numCobros: 2,
+    }]);
+    expect(res.body.topProducts[0]).toMatchObject({
+      codigo: 'ART001',
+      nombre: 'HELADO TEST',
+      unidades: 12,
+      importe: 240.5,
+    });
+
+    const sqlText = mockQueryWithParams.mock.calls.map(([sql]) => sql).join('\n');
+    expect(sqlText).toContain('FROM JAVIER.REPARTIDOR_COBROS');
+    expect(sqlText).toContain('FROM DSEDAC.CPC CPC');
+    expect(sqlText).toContain('INNER JOIN DSEDAC.LAC LAC');
+    expect(sqlText).not.toContain('INNER JOIN DSEDAC.LPC LPC');
+    expect(sqlText).toContain('YEAR(CURRENT DATE) - 1');
+  });
+
   test('GET /vencimientos builds due dates from CLCL1 credit-day rules', async () => {
     mockQueryWithParams
       .mockResolvedValueOnce(alignedSchemaRows)
