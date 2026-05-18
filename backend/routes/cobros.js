@@ -211,16 +211,29 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         let total = 0;
         let totalVencido = 0;
         let numVencidos = 0;
+        let numCobrado = 0;
+        let totalAppDiscount = 0;
         cobros.forEach(c => {
+            if (c.appPaymentApplied) {
+                totalAppDiscount += c.appPaymentApplied;
+            }
             // H4: COBRADO entries (totalmente cobrados app-side) NO suman al
             // pendiente; siguen visibles para que el usuario sepa que ya pago.
-            if (c.estado === 'COBRADO') return;
+            if (c.estado === 'COBRADO') {
+                numCobrado += 1;
+                return;
+            }
             total += c.importePendiente;
             if (c.estado === 'VENCIDO') {
                 totalVencido += c.importePendiente;
                 numVencidos += 1;
             }
         });
+
+        // Debug: log when app-side discount significantly reduces pending amounts
+        if (totalAppDiscount > 0) {
+            logger.info(`[COBROS] ${codigoCliente}: ${numCobrado} docs fully paid app-side, total discount=${totalAppDiscount.toFixed(2)}, remaining pending=${total.toFixed(2)}`);
+        }
 
         res.json({
             success: true,
@@ -481,18 +494,18 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
             ? [] 
             : vendedorCodeParam.split(',').map(v => v.trim()).filter(v => v.length > 0);
         
-        // For many vendor codes, embed directly in SQL to avoid ODBC parameter limit (CWB0111)
+                // For many vendor codes, embed directly in SQL to avoid ODBC parameter limit (CWB0111)
         // IBM i ODBC driver has issues with 90+ parameters in IN clause
         const MAX_PARAMS = 50;
         const useParamBinding = vendorCodes.length <= MAX_PARAMS;
         
-        let vendorClause = '';
+        let vendorClauseJoin = '';
         let vendorParams = [];
         
         if (!isAll) {
             if (useParamBinding) {
                 const placeholders = vendorCodes.map(() => '?').join(',');
-                vendorClause = ` AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${placeholders})`;
+                vendorClauseJoin = ` AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${placeholders})`;
                 vendorParams = vendorCodes;
             } else {
                 // For >50 vendor codes, embed safely (codes are 2-char alphanumeric)
@@ -500,12 +513,13 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
                     .filter(v => /^[a-zA-Z0-9]{1,10}$/.test(v))
                     .map(v => `'${v.replace(/'/g, "''")}'`)
                     .join(',');
-                vendorClause = ` AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${safeCodes})`;
+                vendorClauseJoin = ` AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${safeCodes})`;
             }
         }
 
         // FIX 2026-05-16: LEFT JOIN con CLI para incluir nombres reales de clientes
-        // que tienen deuda pero no aparecen en la lista de clientes del comercial.
+        // FIX 2026-05-18: vendor filter moved to JOIN ON (was in WHERE → INNER JOIN encubierta)
+        // Clients without CLP record were excluded despite having real debt in CVC.
         const sql = `
           SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
                  SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
@@ -516,11 +530,10 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
                  TRIM(CLI.NOMBREALTERNATIVO) AS NOMBRE_ALT,
                  TRIM(CLI.DESCRIPCIONCLIENTE) AS NOMBRE_CLI
             FROM DSEDAC.CVC CVC
-            LEFT JOIN DSEDAC.CLP CLP ON TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+            LEFT JOIN DSEDAC.CLP CLP ON TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)${vendorClauseJoin}
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
             WHERE CVC.IMPORTEPENDIENTE <> 0
               AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
-              ${vendorClause}
             GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CLI.NOMBREALTERNATIVO), TRIM(CLI.DESCRIPCIONCLIENTE)
             ORDER BY TOTAL_PENDIENTE DESC
         `;
