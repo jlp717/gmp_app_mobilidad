@@ -38,6 +38,7 @@ jest.mock('../services/emailPdfService', () => ({
 }));
 
 const finanzasRoutes = require('../routes/repartidor-finanzas');
+const financeService = require('../services/repartidor-finance-service');
 
 function makeApp() {
   const app = express();
@@ -272,12 +273,61 @@ describe('Repartidor finanzas routes', () => {
     expect(res.body.deliveredAmount).toBe(1000);
     expect(res.body.collectedAmount).toBe(275);
     expect(res.body.collectedPct).toBe(27.5);
+    expect(res.body.commission).toBe(0.75);
+    expect(res.body.reached).toEqual([{
+      thresholdPct: 20,
+      commissionPct: 1,
+      thresholdAmount: 200,
+      excess: 75,
+      commission: 0.75,
+    }]);
 
     const collectedCall = mockQueryWithParams.mock.calls.find(([sql]) =>
       /CVC\.IMPORTEPENDIENTE/i.test(sql)
     );
     expect(collectedCall[0]).toContain('TRIM(OPP.CODIGOREPARTIDOR) IN (?, ?)');
     expect(collectedCall[1]).toEqual(['94', '95', 20260401, 20260430]);
+  });
+
+  test('calculateCommission applies only the highest reached repartidor tier', () => {
+    const tiers = [
+      { thresholdPct: 20, commissionPct: 0.5, sortOrder: 1 },
+      { thresholdPct: 30, commissionPct: 0.7, sortOrder: 2 },
+      { thresholdPct: 50, commissionPct: 0.8, sortOrder: 3 },
+      { thresholdPct: 70, commissionPct: 1, sortOrder: 4 },
+    ];
+
+    expect(financeService.calculateCommission({
+      deliveredAmount: 100000,
+      collectedAmount: 21000,
+      tiers,
+    })).toMatchObject({
+      collectedPct: 21,
+      commission: 5,
+      reached: [{
+        thresholdPct: 20,
+        commissionPct: 0.5,
+        thresholdAmount: 20000,
+        excess: 1000,
+        commission: 5,
+      }],
+    });
+
+    expect(financeService.calculateCommission({
+      deliveredAmount: 100000,
+      collectedAmount: 71000,
+      tiers,
+    })).toMatchObject({
+      collectedPct: 71,
+      commission: 10,
+      reached: [{
+        thresholdPct: 70,
+        commissionPct: 1,
+        thresholdAmount: 70000,
+        excess: 1000,
+        commission: 10,
+      }],
+    });
   });
 
    test('POST /liquidaciones closes in configured LQD once and replays by idempotency token', async () => {

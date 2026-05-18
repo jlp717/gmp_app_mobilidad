@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
+import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_models.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/domain/repartidor_finanzas_providers.dart';
 import 'package:gmp_app_mobilidad/features/repartidor_finanzas/presentation/finance_error_message.dart';
@@ -116,9 +117,11 @@ class _RepartidorComisionesFinanzasPageState
       backgroundColor: AppTheme.darkBase,
       body: Column(
         children: [
-          _SmartSyncHeader(
+          SmartSyncHeader(
+            title: 'Comisiones',
+            subtitle: 'Seguimiento y Objetivos',
             isLoading: _isLoading,
-            lastFetchTime: _lastFetchTime,
+            lastSync: _lastFetchTime,
             onSync: () => _loadData(forceRefresh: true),
           ),
           _Header(period: DateFormat('MM/yyyy').format(now)),
@@ -151,22 +154,27 @@ class _RepartidorComisionesFinanzasPageState
               data: (summary) => tiersAsync.when(
                 data: (tiers) =>
                     _Content(summary: summary, tiers: tiers, now: now),
-                loading: () =>
-                    const Expanded(child: Center(child: CircularProgressIndicator())),
+                loading: () => const Expanded(
+                  child: Center(child: CircularProgressIndicator()),
+                ),
                 error: (e, st) {
                   Sentry.captureException(e, stackTrace: st);
                   return Expanded(
                     child: Center(
                       child: Text(
-                        financeErrorMessage(e, 'No se pudieron cargar los tramos'),
+                        financeErrorMessage(
+                          e,
+                          'No se pudieron cargar los tramos',
+                        ),
                         style: const TextStyle(color: AppTheme.textSecondary),
                       ),
                     ),
                   );
                 },
               ),
-              loading: () =>
-                  const Expanded(child: Center(child: CircularProgressIndicator())),
+              loading: () => const Expanded(
+                child: Center(child: CircularProgressIndicator()),
+              ),
               error: (e, st) {
                 Sentry.captureException(e, stackTrace: st);
                 return Expanded(
@@ -185,63 +193,6 @@ class _RepartidorComisionesFinanzasPageState
   }
 }
 
-class _SmartSyncHeader extends StatelessWidget {
-  const _SmartSyncHeader({
-    required this.isLoading,
-    this.lastFetchTime,
-    required this.onSync,
-  });
-
-  final bool isLoading;
-  final DateTime? lastFetchTime;
-  final VoidCallback onSync;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
-        border: Border(
-          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
-        ),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.euro, color: AppTheme.neonGreen, size: 20),
-          const SizedBox(width: 8),
-          const Text(
-            'Comisiones',
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-          const Spacer(),
-          if (lastFetchTime != null)
-            Text(
-              'Última: ${DateFormat('HH:mm').format(lastFetchTime!)}',
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-            ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: isLoading
-                ? const SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.refresh, color: AppTheme.neonBlue),
-            onPressed: isLoading ? null : onSync,
-            tooltip: 'Actualizar',
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _Header extends StatelessWidget {
   const _Header({required this.period});
 
@@ -254,7 +205,7 @@ class _Header extends StatelessWidget {
       color: AppTheme.surfaceColor,
       child: Row(
         children: [
-          const Icon(Icons.trending_up, color: AppTheme.neonGreen, size: 24),
+          const Icon(Icons.euro, color: AppTheme.neonGreen, size: 24),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
@@ -329,153 +280,148 @@ class _Content extends StatelessWidget {
     RepartidorCommissionSummary summary,
   ) {
     final rows = <DataRow>[];
-    final monthNames = [
-      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-    ];
+    final orderedTiers = [...tiers]..sort((a, b) {
+        final byThreshold = a.thresholdPct.compareTo(b.thresholdPct);
+        if (byThreshold != 0) return byThreshold;
+        return a.sortOrder.compareTo(b.sortOrder);
+      });
+    final appliedTier =
+        summary.reached.isNotEmpty ? summary.reached.last : null;
+    final firstTier = orderedTiers.isNotEmpty ? orderedTiers.first : null;
+    final tierIndex = appliedTier == null
+        ? 0
+        : orderedTiers.indexWhere(
+              (tier) =>
+                  tier.thresholdPct == appliedTier.thresholdPct &&
+                  tier.commissionPct == appliedTier.commissionPct,
+            ) +
+            1;
+    final isPositive = appliedTier != null;
+    final color = isPositive ? AppTheme.success : AppTheme.error;
+    final thresholdAmount = appliedTier?.thresholdAmount ??
+        (firstTier == null
+            ? 0.0
+            : summary.deliveredAmount * (firstTier.thresholdPct / 100));
+    final tierText = appliedTier == null
+        ? '-'
+        : 'F$tierIndex > '
+            '${appliedTier.thresholdPct.toStringAsFixed(0)}%';
+    final rateText = appliedTier == null
+        ? '-'
+        : '${appliedTier.commissionPct.toStringAsFixed(1)}%';
 
-    final currentMonth = now.month;
-
-    for (var m = 1; m <= 12; m++) {
-      final isFuture = m > currentMonth;
-      final monthName = monthNames[m - 1];
-
-      final target = isFuture ? 0.0 : summary.deliveredAmount / currentMonth;
-      final actual = isFuture ? 0.0 : summary.collectedAmount;
-      final pct = target > 0 ? (actual / target) * 100 : 0;
-      final isPositive = actual >= target && target > 0;
-      final color = isFuture
-          ? Colors.grey
-          : (isPositive ? AppTheme.success : AppTheme.error);
-      final textOpacity = isFuture ? 0.4 : 1.0;
-
-      final pctText = isFuture
-          ? '-'
-          : (pct > 100
-              ? '+${(pct - 100).toStringAsFixed(1)}%'
-              : '${pct.toStringAsFixed(1)}%');
-
-      final tierReached = tiers.where((t) => pct >= t.thresholdPct).toList();
-      final tierChip = tierReached.isNotEmpty
-          ? 'F${tierReached.length}'
-          : '-';
-
-      rows.add(
-        DataRow(
-          color: WidgetStateProperty.all(
-            isFuture ? Colors.black38 : AppTheme.surfaceColor,
+    rows.add(
+      DataRow(
+        color: WidgetStateProperty.all(Colors.transparent),
+        cells: [
+          DataCell(
+            Text(
+              DateFormat('MMMM').format(now),
+              style: const TextStyle(color: Colors.white, fontSize: 11),
+            ),
           ),
-          cells: [
-            DataCell(
-              Row(
-                children: [
+          DataCell(
+            Text(
+              CurrencyFormatter.format(summary.deliveredAmount),
+              style: const TextStyle(color: Colors.white, fontSize: 10),
+            ),
+          ),
+          DataCell(
+            Text(
+              CurrencyFormatter.format(summary.collectedAmount),
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+                fontSize: 10,
+              ),
+            ),
+          ),
+          DataCell(
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  isPositive ? Icons.check_circle : Icons.cancel,
+                  color: color,
+                  size: 12,
+                ),
+                if (isPositive) ...[
+                  const SizedBox(width: 4),
                   Text(
-                    monthName,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white.withValues(alpha: textOpacity),
+                    tierText,
+                    style: const TextStyle(
+                      fontSize: 8,
+                      color: AppTheme.neonBlue,
                     ),
                   ),
-                  if (isFuture) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 4,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        'PENDIENTE',
-                        style: TextStyle(fontSize: 8, color: Colors.grey),
-                      ),
-                    ),
-                  ],
                 ],
+              ],
+            ),
+          ),
+          DataCell(
+            Text(
+              '${summary.collectedPct.toStringAsFixed(1)}%',
+              style: TextStyle(color: color, fontSize: 9),
+            ),
+          ),
+          DataCell(
+            Text(
+              CurrencyFormatter.format(summary.commission),
+              style: const TextStyle(
+                color: AppTheme.neonGreen,
+                fontWeight: FontWeight.bold,
+                fontSize: 10,
               ),
             ),
-            DataCell(
-              Text(
-                isFuture ? '-' : CurrencyFormatter.format(target),
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: textOpacity),
-                ),
+          ),
+          DataCell(
+            Text(
+              tierText,
+              style: const TextStyle(
+                color: AppTheme.neonBlue,
+                fontSize: 9,
               ),
             ),
-            DataCell(
-              Text(
-                isFuture ? '-' : CurrencyFormatter.format(actual),
-                style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.bold,
-                ),
+          ),
+          DataCell(
+            Text(
+              CurrencyFormatter.format(thresholdAmount),
+              style: const TextStyle(color: Colors.white70, fontSize: 9),
+            ),
+          ),
+          DataCell(
+            Text(
+              appliedTier == null
+                  ? '-'
+                  : CurrencyFormatter.format(appliedTier.excess),
+              style: TextStyle(
+                color: isPositive ? AppTheme.success : AppTheme.textSecondary,
+                fontWeight: FontWeight.bold,
+                fontSize: 9,
               ),
             ),
-            DataCell(
-              isFuture
-                  ? const Text('-', style: TextStyle(color: Colors.grey))
-                  : Row(
-                      children: [
-                        Icon(
-                          isPositive ? Icons.check_circle : Icons.cancel,
-                          color: color,
-                          size: 16,
-                        ),
-                        if (isPositive && tierReached.isNotEmpty) ...[
-                          const SizedBox(width: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 2,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppTheme.neonBlue.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              tierChip,
-                              style: const TextStyle(
-                                fontSize: 9,
-                                color: AppTheme.neonBlue,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
+          ),
+          DataCell(
+            Text(
+              rateText,
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 9),
             ),
-            DataCell(
-              Text(
-                pctText,
-                style: TextStyle(
-                  color: isFuture ? Colors.grey : color,
-                  fontSize: 11,
-                ),
-              ),
-            ),
-            DataCell(
-              Text(
-                isFuture ? '-' : CurrencyFormatter.format(summary.commission),
-                style: TextStyle(
-                  color: isFuture ? Colors.grey : AppTheme.neonGreen,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
+          ),
+        ],
+      ),
+    );
 
     return SingleChildScrollView(
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: DataTable(
-          columnSpacing: 20,
+          columnSpacing: 10,
+          dataRowMinHeight: 28,
+          dataRowMaxHeight: 44,
+          headingRowHeight: 36,
           headingRowColor: WidgetStateProperty.all(
-            AppTheme.surfaceColor.withValues(alpha: 0.8),
+            AppTheme.darkBase,
           ),
           columns: const [
             DataColumn(
@@ -484,15 +430,17 @@ class _Content extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: AppTheme.textSecondary,
+                  fontSize: 10,
                 ),
               ),
             ),
             DataColumn(
               label: Text(
-                'OBJ. MES',
+                'OBJETIVO',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: AppTheme.textSecondary,
+                  fontSize: 10,
                 ),
               ),
             ),
@@ -502,15 +450,17 @@ class _Content extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: AppTheme.textSecondary,
+                  fontSize: 10,
                 ),
               ),
             ),
             DataColumn(
               label: Text(
-                'ESTADO',
+                'EST.',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: AppTheme.textSecondary,
+                  fontSize: 10,
                 ),
               ),
             ),
@@ -520,6 +470,7 @@ class _Content extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: AppTheme.textSecondary,
+                  fontSize: 10,
                 ),
               ),
             ),
@@ -529,6 +480,47 @@ class _Content extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: AppTheme.neonGreen,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'TRAMO',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.neonBlue,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'UMBRAL',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.neonBlue,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'EXCESO',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.neonBlue,
+                  fontSize: 10,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'TIPO',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.neonBlue,
+                  fontSize: 10,
                 ),
               ),
             ),
@@ -582,8 +574,9 @@ class _SummaryCards extends StatelessWidget {
               progressValue: totalTarget > 0
                   ? (totalActual / totalTarget).clamp(0.01, double.infinity)
                   : 0.01,
-              progressColor:
-                  totalActual >= totalTarget ? AppTheme.success : AppTheme.neonBlue,
+              progressColor: totalActual >= totalTarget
+                  ? AppTheme.success
+                  : AppTheme.neonBlue,
             ),
           ),
           const SizedBox(width: 8),
@@ -594,7 +587,7 @@ class _SummaryCards extends StatelessWidget {
                 AppTheme.success.withValues(alpha: 0.1),
               ],
               borderColor: AppTheme.neonGreen.withValues(alpha: 0.3),
-              icon: Icons.attach_money,
+              icon: Icons.trending_up,
               iconColor: AppTheme.neonGreen,
               title: 'COMISIÓN',
               value: CurrencyFormatter.format(commission),

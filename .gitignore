@@ -230,3 +230,7 @@ backend/scripts/testing/
 .dolt/
 *.db
 .beads-credential-key
+
+# AcouZ — voice dictation tool (standalone, not tracked)
+acouz/
+.acouz/
