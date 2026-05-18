@@ -3,8 +3,10 @@
 'use strict';
 
 const schedule = require('node-schedule');
-const { runETL } = require('./etl_orchestrator');
+const { runETL, generateLoadId } = require('./etl_orchestrator');
+const { kpiQuery } = require('../config/db');
 const logger = require('../../middleware/logger');
+const SCHEMA = process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER';
 
 let scheduledJob = null;
 
@@ -14,8 +16,50 @@ const TZ = process.env.KPI_ETL_TZ || 'Europe/Madrid';
 const DEFAULT_CRON = '0 7 * * 1-5';
 
 /**
+ * Verifica en el arranque si la ejecución ETL de la semana actual fue omitida
+ * (p.ej. por reinicio de PM2 después de la hora programada).
+ * Si no se completó y es día laborable, ejecuta el ETL inmediatamente.
+ */
+async function checkMissedRun() {
+  try {
+    const now = new Date();
+    const tzNow = new Date(now.toLocaleString('en-US', { timeZone: TZ }));
+    const dow = tzNow.getDay(); // 0=Sun
+
+    // Solo lunes a viernes
+    if (dow === 0 || dow === 6) {
+      logger.debug('[kpi:scheduler] Catch-up: fin de semana, skip');
+      return;
+    }
+
+    const currentLoadId = generateLoadId();
+    const existing = await kpiQuery(
+      `SELECT ID, STATUS FROM ${SCHEMA}.KPI_LOADS WHERE LOAD_ID = ?`,
+      [currentLoadId]
+    );
+
+    if (existing.rows.length > 0 && existing.rows[0].STATUS === 'COMPLETED') {
+      logger.info(`[kpi:scheduler] Catch-up: ${currentLoadId} ya completado`);
+      return;
+    }
+
+    logger.info(`[kpi:scheduler] Catch-up: ejecutando ETL para ${currentLoadId} (semana pendiente)...`);
+    const result = await runETL();
+    if (result.skipped) {
+      logger.info(`[kpi:scheduler] Catch-up: ETL omitido (${result.loadId})`);
+    } else {
+      logger.info(`[kpi:scheduler] Catch-up completado: ${result.totalAlerts} alertas de ${result.fileResults.length} archivos`);
+    }
+  } catch (err) {
+    logger.error(`[kpi:scheduler] Error en catch-up ETL: ${err.message}`);
+  }
+}
+
+/**
  * Inicia el job programado para ejecutar el ETL diariamente.
  * Por defecto: 7:00 AM Europe/Madrid, lunes a viernes.
+ * Además ejecuta checkMissedRun() para recuperar ejecuciones
+ * perdidas por reinicios antes de la hora programada.
  */
 function startScheduler() {
   const cronExpr = process.env.KPI_ETL_CRON || DEFAULT_CRON;
@@ -60,6 +104,10 @@ function startScheduler() {
     ? new Date(nextRun).toLocaleString('es-ES', { timeZone: TZ })
     : 'desconocido';
   logger.info(`[kpi:scheduler] Job programado: ${cronExpr} (${TZ}). Próxima ejecución: ${nextRunStr}`);
+
+  // Catch-up: recuperar ejecución perdida por reinicio (no bloquea el startup)
+  checkMissedRun();
+
   return scheduledJob;
 }
 
