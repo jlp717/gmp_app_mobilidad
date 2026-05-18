@@ -1,38 +1,51 @@
-import 'dart:convert';
+import 'dart:developer' as developer;
 
-import 'package:gmp_app_mobilidad/core/api/api_config.dart';
-import 'package:http/http.dart' as http;
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 
-/// [ChatbotService] - API service for AI chatbot communication
+/// ChatbotService — Authenticated API service for NEXUS AI chatbot.
+///
+/// Uses ApiClient which attaches the Bearer token automatically via
+/// the Dio interceptor.
 class ChatbotService {
-  /// Send message to chatbot API
+  /// Send message to chatbot API with conversation context.
+  ///
+  /// [message] — User's text input.
+  /// [conversationHistory] — Last N messages for context (role + content).
   Future<String> sendMessage({
     required String message,
-    required List<String> vendedorCodes,
-    String? clientCode,
+    List<Map<String, String>>? conversationHistory,
   }) async {
     try {
-      final response = await http.post(
-        Uri.parse('${ApiConfig.baseUrl}/chatbot/message'),
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'message': message,
-          'vendedorCodes': vendedorCodes.join(','),
-          'clientCode': clientCode,
-        }),
-      ).timeout(const Duration(seconds: 30));
+      final body = <String, dynamic>{
+        'message': message,
+        if (conversationHistory != null && conversationHistory.isNotEmpty)
+          'conversationHistory': conversationHistory,
+      };
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return (data['response'] as String?) ?? 'No se recibió respuesta del asistente.';
-      } else {
-        final error = jsonDecode(response.body);
-        throw Exception(error['error'] ?? 'Error desconocido');
+      final response = await ApiClient.post(
+        '/chatbot/message',
+        body,
+      );
+
+      if (response['response'] != null) {
+        return response['response'] as String;
       }
+
+      return 'No se recibio respuesta del asistente.';
+    } on Exception catch (e) {
+      developer.log('Chatbot error: $e', name: 'chatbot');
+      throw Exception('Error de conexion: $e');
+    }
+  }
+
+  /// Check chatbot health (no auth required).
+  Future<Map<String, dynamic>> checkHealth() async {
+    try {
+      final response = await ApiClient.get('/chatbot/health');
+      return response;
     } catch (e) {
-      throw Exception('Error de conexión: $e');
+      developer.log('Chatbot health check failed: $e', name: 'chatbot');
+      return {'status': 'error', 'detail': e.toString()};
     }
   }
 }

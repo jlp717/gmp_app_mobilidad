@@ -1,18 +1,41 @@
 /**
- * CHATBOT TOOLS - AI Sales Assistant Functions
- * Comprehensive tools for sales reps to query DB in real-time
+ * NEXUS AI — Chatbot Tools (Parameterized Queries)
+ * 
+ * All queries use parameterized statements to prevent SQL injection.
+ * New modules: commissionTools, objectivesTools, invoiceTools
+ * 
+ * SECURITY: Never use string concatenation for SQL values.
  */
 
-const odbc = require('odbc');
+const logger = require('../../middleware/logger');
 
-// Database query helper
-async function safeQuery(conn, sql) {
+// ── Safe Query Helper (Parameterized) ────────────────────────────────────────
+
+async function safeQuery(conn, sql, params = []) {
     try {
+        if (params.length > 0) {
+            return await conn.query(sql, params);
+        }
         return await conn.query(sql);
     } catch (error) {
-        console.error(`Query error: ${error.message}`);
+        logger.error(`[CHATBOT-DB] Query error: ${error.message} | SQL: ${sql.substring(0, 120)}`);
         return [];
     }
+}
+
+// ── Vendor Code Normalization ────────────────────────────────────────────────
+
+function normalizeVendorCode(code) {
+    if (!code) return '';
+    const raw = String(code).trim();
+    const unpadded = raw.replace(/^0+/, '') || raw;
+    const padded = /^\d{1,2}$/.test(unpadded) ? unpadded.padStart(2, '0') : unpadded;
+    return { raw, unpadded, padded };
+}
+
+function buildCodeVariants(code) {
+    const { raw, unpadded, padded } = normalizeVendorCode(code);
+    return [...new Set([raw, unpadded, padded])];
 }
 
 // ============================================================================
@@ -20,31 +43,73 @@ async function safeQuery(conn, sql) {
 // ============================================================================
 
 const dbDiscoveryTools = {
-    async listAllTables(conn) {
-        const result = await safeQuery(conn, `
-      SELECT TABLE_NAME FROM SYSIBM.TABLES 
-      WHERE TABLE_SCHEMA = 'DSEDAC' 
-      ORDER BY TABLE_NAME
-    `);
-        return result.map(r => r.TABLE_NAME?.trim());
-    },
-
-    async describeTable(conn, tableName) {
-        const cols = await safeQuery(conn, `
-      SELECT COLUMN_NAME, DATA_TYPE, LENGTH, SCALE
-      FROM SYSIBM.COLUMNS
-      WHERE TABLE_SCHEMA = 'DSEDAC' AND TABLE_NAME = '${tableName}'
-      ORDER BY ORDINAL_POSITION
-    `);
-        return cols.map(c => ({
-            name: c.COLUMN_NAME?.trim(),
-            type: c.DATA_TYPE?.trim(),
-            length: c.LENGTH
+    async searchClients(conn, query) {
+        const searchTerm = `%${query}%`;
+        const rows = await safeQuery(conn, `
+            SELECT TRIM(CODIGOCLIENTE) as CODIGO, TRIM(NOMBRECLIENTE) as NOMBRE,
+                   TRIM(POBLACION) as POBLACION, TRIM(PROVINCIA) as PROVINCIA
+            FROM DSEDAC.CLI
+            WHERE TRIM(NOMBRECLIENTE) LIKE ? OR TRIM(CODIGOCLIENTE) LIKE ?
+            ORDER BY NOMBRECLIENTE
+            FETCH FIRST 20 ROWS ONLY
+        `, [searchTerm, searchTerm]);
+        return rows.map(r => ({
+            CODIGO: r.CODIGO,
+            NOMBRE: r.NOMBRE,
+            POBLACION: r.POBLACION
         }));
     },
 
-    async sampleTableData(conn, tableName, limit = 5) {
-        return await safeQuery(conn, `SELECT * FROM DSEDAC.${tableName} FETCH FIRST ${limit} ROWS ONLY`);
+    async searchProducts(conn, query) {
+        const searchTerm = `%${query}%`;
+        const rows = await safeQuery(conn, `
+            SELECT TRIM(CODIGOARTICULO) as CODIGO, TRIM(DESCRIPCIONARTICULO) as NOMBRE,
+                   TRIM(FAMILIA) as FAMILIA
+            FROM DSEDAC.ART
+            WHERE TRIM(DESCRIPCIONARTICULO) LIKE ? OR TRIM(CODIGOARTICULO) LIKE ?
+            ORDER BY DESCRIPCIONARTICULO
+            FETCH FIRST 20 ROWS ONLY
+        `, [searchTerm, searchTerm]);
+        return rows.map(r => ({
+            CODIGO: r.CODIGO,
+            NOMBRE: r.NOMBRE,
+            FAMILIA: r.FAMILIA
+        }));
+    },
+
+    async lookupClient(conn, clientCode) {
+        const rows = await safeQuery(conn, `
+            SELECT TRIM(CODIGOCLIENTE) as CODIGO, TRIM(NOMBRECLIENTE) as NOMBRE,
+                   TRIM(DIRECCION) as DIRECCION, TRIM(POBLACION) as POBLACION,
+                   TRIM(PROVINCIA) as PROVINCIA, TRIM(TARIFA) as TARIFA,
+                   TRIM(CODIGOVENDEDOR) as VENDEDOR
+            FROM DSEDAC.CLI
+            WHERE TRIM(CODIGOCLIENTE) = ?
+            FETCH FIRST 1 ROWS ONLY
+        `, [clientCode]);
+        if (rows.length === 0) return null;
+        const r = rows[0];
+        return {
+            CODIGO: r.CODIGO, NOMBRE: r.NOMBRE, DIRECCION: r.DIRECCION,
+            POBLACION: r.POBLACION, PROVINCIA: r.PROVINCIA,
+            TARIFA: r.TARIFA, VENDEDOR: r.VENDEDOR
+        };
+    },
+
+    async lookupProduct(conn, productCode) {
+        const rows = await safeQuery(conn, `
+            SELECT TRIM(CODIGOARTICULO) as CODIGO, TRIM(DESCRIPCIONARTICULO) as NOMBRE,
+                   TRIM(FAMILIA) as FAMILIA, PRECIOVENTA as PRECIO
+            FROM DSEDAC.ART
+            WHERE TRIM(CODIGOARTICULO) = ?
+            FETCH FIRST 1 ROWS ONLY
+        `, [productCode]);
+        if (rows.length === 0) return null;
+        const r = rows[0];
+        return {
+            CODIGO: r.CODIGO, NOMBRE: r.NOMBRE, FAMILIA: r.FAMILIA,
+            PRECIO: parseFloat(r.PRECIO) || 0
+        };
     }
 };
 
@@ -54,44 +119,43 @@ const dbDiscoveryTools = {
 
 const pricingTools = {
     async getProductPrice(conn, productCode) {
-        // Get tariff price
         const tariff = await safeQuery(conn, `
-      SELECT CODIGOARTICULO, DESCRIPCIONARTICULO, PRECIOVENTA, COSTEPROMEDIO
-      FROM DSEDAC.ART
-      WHERE CODIGOARTICULO = '${productCode}'
-      FETCH FIRST 1 ROWS ONLY
-    `);
+            SELECT CODIGOARTICULO, DESCRIPCIONARTICULO, PRECIOVENTA, COSTEPROMEDIO
+            FROM DSEDAC.ART
+            WHERE TRIM(CODIGOARTICULO) = ?
+            FETCH FIRST 1 ROWS ONLY
+        `, [productCode]);
 
-        // Get last sold price
         const lastSale = await safeQuery(conn, `
-      SELECT PRECIOVENTAUNITARIO, CODIGOCLIENTEALBARAN, ANODOCUMENTO, MESDOCUMENTO
-      FROM DSEDAC.LAC
-      WHERE CODIGOARTICULO = '${productCode}'
-      ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
-      FETCH FIRST 1 ROWS ONLY
-    `);
+            SELECT PRECIOVENTAUNITARIO, TRIM(CODIGOCLIENTEALBARAN) as CLIENTE,
+                   ANODOCUMENTO, MESDOCUMENTO
+            FROM DSEDAC.LAC
+            WHERE TRIM(CODIGOARTICULO) = ?
+            ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
+            FETCH FIRST 1 ROWS ONLY
+        `, [productCode]);
 
         return {
             product: tariff[0] || {},
-            tariffPrice: tariff[0]?.PRECIOVENTA || 0,
-            cost: tariff[0]?.COSTEPROMEDIO || 0,
-            lastSoldPrice: lastSale[0]?.PRECIOVENTAUNITARIO || 0,
-            lastSoldTo: lastSale[0]?.CODIGOCLIENTEALBARAN?.trim()
+            tariffPrice: parseFloat(tariff[0]?.PRECIOVENTA) || 0,
+            cost: parseFloat(tariff[0]?.COSTEPROMEDIO) || 0,
+            lastSoldPrice: parseFloat(lastSale[0]?.PRECIOVENTAUNITARIO) || 0,
+            lastSoldTo: lastSale[0]?.CLIENTE
         };
     },
 
     async calculateBreakeven(conn, productCode) {
         const art = await safeQuery(conn, `
-      SELECT CODIGOARTICULO, COSTEPROMEDIO, PRECIOVENTA
-      FROM DSEDAC.ART WHERE CODIGOARTICULO = '${productCode}'
-      FETCH FIRST 1 ROWS ONLY
-    `);
+            SELECT COSTEPROMEDIO, PRECIOVENTA
+            FROM DSEDAC.ART WHERE TRIM(CODIGOARTICULO) = ?
+            FETCH FIRST 1 ROWS ONLY
+        `, [productCode]);
 
         if (!art[0]) return { error: 'Producto no encontrado' };
 
         const cost = parseFloat(art[0].COSTEPROMEDIO) || 0;
         const tariff = parseFloat(art[0].PRECIOVENTA) || 0;
-        const minMargin = 0.05; // 5% minimum margin
+        const minMargin = 0.05;
         const floorPrice = cost * (1 + minMargin);
 
         return {
@@ -106,9 +170,9 @@ const pricingTools = {
 
     async simulateDiscount(conn, productCode, discountPercent) {
         const art = await safeQuery(conn, `
-      SELECT COSTEPROMEDIO, PRECIOVENTA FROM DSEDAC.ART 
-      WHERE CODIGOARTICULO = '${productCode}' FETCH FIRST 1 ROWS ONLY
-    `);
+            SELECT COSTEPROMEDIO, PRECIOVENTA FROM DSEDAC.ART 
+            WHERE TRIM(CODIGOARTICULO) = ? FETCH FIRST 1 ROWS ONLY
+        `, [productCode]);
 
         if (!art[0]) return { error: 'Producto no encontrado' };
 
@@ -118,8 +182,6 @@ const pricingTools = {
         const newPrice = tariff * (1 - discount);
         const oldMargin = tariff - cost;
         const newMargin = newPrice - cost;
-        const marginLoss = oldMargin - newMargin;
-        const extraVolumeNeeded = oldMargin / newMargin;
 
         return {
             productCode,
@@ -128,30 +190,9 @@ const pricingTools = {
             newPrice: Math.round(newPrice * 100) / 100,
             originalMargin: Math.round(oldMargin * 100) / 100,
             newMargin: Math.round(newMargin * 100) / 100,
-            marginLoss: Math.round(marginLoss * 100) / 100,
-            extraVolumeNeededMultiplier: Math.round(extraVolumeNeeded * 100) / 100,
+            marginLoss: Math.round((oldMargin - newMargin) * 100) / 100,
+            extraVolumeNeededMultiplier: newMargin !== 0 ? Math.round((oldMargin / newMargin) * 100) / 100 : 0,
             profitable: newMargin > 0
-        };
-    },
-
-    async compareYearlyPrices(conn, productCode, year1, year2) {
-        const getData = async (year) => {
-            const result = await safeQuery(conn, `
-        SELECT AVG(PRECIOVENTAUNITARIO) as AVG_PRICE, SUM(IMPORTEVENTA) as TOTAL_SALES
-        FROM DSEDAC.LAC
-        WHERE CODIGOARTICULO = '${productCode}' AND ANODOCUMENTO = ${year}
-      `);
-            return result[0] || {};
-        };
-
-        const data1 = await getData(year1);
-        const data2 = await getData(year2);
-
-        return {
-            productCode,
-            [year1]: { avgPrice: data1.AVG_PRICE || 0, totalSales: data1.TOTAL_SALES || 0 },
-            [year2]: { avgPrice: data2.AVG_PRICE || 0, totalSales: data2.TOTAL_SALES || 0 },
-            priceChange: ((data2.AVG_PRICE - data1.AVG_PRICE) / (data1.AVG_PRICE || 1)) * 100
         };
     }
 };
@@ -162,51 +203,49 @@ const pricingTools = {
 
 const riskTools = {
     async getClientDebt(conn, clientCode) {
-        // Get all pending invoices from CVC
         const debt = await safeQuery(conn, `
-      SELECT 
-        SUM(CASE WHEN IMPORTEPENDIENTE > 0 THEN IMPORTEPENDIENTE ELSE 0 END) as TOTAL_DEBT,
-        SUM(CASE WHEN FECHAVENCIMIENTO < CURRENT DATE THEN IMPORTEPENDIENTE ELSE 0 END) as OVERDUE,
-        COUNT(*) as NUM_INVOICES
-      FROM DSEDAC.CVC
-      WHERE CODIGOCLIENTEALBARAN = '${clientCode}' AND IMPORTEPENDIENTE > 0
-    `);
+            SELECT 
+                SUM(CASE WHEN IMPORTEPENDIENTE > 0 THEN IMPORTEPENDIENTE ELSE 0 END) as TOTAL_DEBT,
+                SUM(CASE WHEN FECHAVENCIMIENTO < CURRENT DATE THEN IMPORTEPENDIENTE ELSE 0 END) as OVERDUE,
+                COUNT(*) as NUM_INVOICES
+            FROM DSEDAC.CVC
+            WHERE TRIM(CODIGOCLIENTEALBARAN) = ? AND IMPORTEPENDIENTE > 0
+        `, [clientCode]);
 
-        // Aging breakdown
         const aging = await safeQuery(conn, `
-      SELECT 
-        SUM(CASE WHEN DAYS(CURRENT DATE) - DAYS(FECHAVENCIMIENTO) BETWEEN 1 AND 30 THEN IMPORTEPENDIENTE ELSE 0 END) as DAYS_30,
-        SUM(CASE WHEN DAYS(CURRENT DATE) - DAYS(FECHAVENCIMIENTO) BETWEEN 31 AND 60 THEN IMPORTEPENDIENTE ELSE 0 END) as DAYS_60,
-        SUM(CASE WHEN DAYS(CURRENT DATE) - DAYS(FECHAVENCIMIENTO) BETWEEN 61 AND 90 THEN IMPORTEPENDIENTE ELSE 0 END) as DAYS_90,
-        SUM(CASE WHEN DAYS(CURRENT DATE) - DAYS(FECHAVENCIMIENTO) > 90 THEN IMPORTEPENDIENTE ELSE 0 END) as DAYS_OVER_90
-      FROM DSEDAC.CVC
-      WHERE CODIGOCLIENTEALBARAN = '${clientCode}' AND IMPORTEPENDIENTE > 0
-    `);
+            SELECT 
+                SUM(CASE WHEN DAYS(CURRENT DATE) - DAYS(FECHAVENCIMIENTO) BETWEEN 1 AND 30 THEN IMPORTEPENDIENTE ELSE 0 END) as DAYS_30,
+                SUM(CASE WHEN DAYS(CURRENT DATE) - DAYS(FECHAVENCIMIENTO) BETWEEN 31 AND 60 THEN IMPORTEPENDIENTE ELSE 0 END) as DAYS_60,
+                SUM(CASE WHEN DAYS(CURRENT DATE) - DAYS(FECHAVENCIMIENTO) BETWEEN 61 AND 90 THEN IMPORTEPENDIENTE ELSE 0 END) as DAYS_90,
+                SUM(CASE WHEN DAYS(CURRENT DATE) - DAYS(FECHAVENCIMIENTO) > 90 THEN IMPORTEPENDIENTE ELSE 0 END) as DAYS_OVER_90
+            FROM DSEDAC.CVC
+            WHERE TRIM(CODIGOCLIENTEALBARAN) = ? AND IMPORTEPENDIENTE > 0
+        `, [clientCode]);
 
         const d = debt[0] || {};
         const a = aging[0] || {};
 
         return {
             clientCode,
-            totalDebt: d.TOTAL_DEBT || 0,
-            overdueDebt: d.OVERDUE || 0,
-            numInvoices: d.NUM_INVOICES || 0,
+            totalDebt: parseFloat(d.TOTAL_DEBT) || 0,
+            overdueDebt: parseFloat(d.OVERDUE) || 0,
+            numInvoices: parseInt(d.NUM_INVOICES) || 0,
             aging: {
-                days_1_30: a.DAYS_30 || 0,
-                days_31_60: a.DAYS_60 || 0,
-                days_61_90: a.DAYS_90 || 0,
-                days_over_90: a.DAYS_OVER_90 || 0
+                days_1_30: parseFloat(a.DAYS_30) || 0,
+                days_31_60: parseFloat(a.DAYS_60) || 0,
+                days_61_90: parseFloat(a.DAYS_90) || 0,
+                days_over_90: parseFloat(a.DAYS_OVER_90) || 0
             },
-            riskLevel: (d.OVERDUE || 0) > 5000 ? 'ALTO' : (d.OVERDUE || 0) > 1000 ? 'MEDIO' : 'BAJO'
+            riskLevel: (parseFloat(d.OVERDUE) || 0) > 5000 ? 'ALTO' : (parseFloat(d.OVERDUE) || 0) > 1000 ? 'MEDIO' : 'BAJO'
         };
     },
 
     async getClientCreditLimit(conn, clientCode) {
         const client = await safeQuery(conn, `
-      SELECT LIMITECREDITO, RIESGOACUMULADO
-      FROM DSEDAC.CLI WHERE CODIGOCLIENTE = '${clientCode}'
-      FETCH FIRST 1 ROWS ONLY
-    `);
+            SELECT LIMITECREDITO, RIESGOACUMULADO
+            FROM DSEDAC.CLI WHERE TRIM(CODIGOCLIENTE) = ?
+            FETCH FIRST 1 ROWS ONLY
+        `, [clientCode]);
 
         const c = client[0] || {};
         const limit = parseFloat(c.LIMITECREDITO) || 0;
@@ -223,16 +262,16 @@ const riskTools = {
 
     async checkClientBlocked(conn, clientCode) {
         const client = await safeQuery(conn, `
-      SELECT CLIENTEBLOQUEADO, MOTIVOBLOQUEO
-      FROM DSEDAC.CLI WHERE CODIGOCLIENTE = '${clientCode}'
-      FETCH FIRST 1 ROWS ONLY
-    `);
+            SELECT CLIENTEBLOQUEADO, MOTIVOBLOQUEO
+            FROM DSEDAC.CLI WHERE TRIM(CODIGOCLIENTE) = ?
+            FETCH FIRST 1 ROWS ONLY
+        `, [clientCode]);
 
         const c = client[0] || {};
         return {
             clientCode,
             isBlocked: c.CLIENTEBLOQUEADO === 'S',
-            blockReason: c.MOTIVOBLOQUEO?.trim() || 'Sin razón especificada'
+            blockReason: c.MOTIVOBLOQUEO?.trim() || 'Sin razon especificada'
         };
     },
 
@@ -242,13 +281,13 @@ const riskTools = {
         const blocked = await this.checkClientBlocked(conn, clientCode);
 
         let score = 100;
-        let alerts = [];
+        const alerts = [];
 
-        if (blocked.isBlocked) { score -= 50; alerts.push('⛔ Cliente BLOQUEADO'); }
-        if (debt.overdueDebt > 5000) { score -= 30; alerts.push('🔴 Deuda vencida > 5000€'); }
-        else if (debt.overdueDebt > 1000) { score -= 15; alerts.push('🟡 Deuda vencida > 1000€'); }
-        if (credit.utilizationPercent > 90) { score -= 20; alerts.push('⚠️ Crédito utilizado > 90%'); }
-        if (debt.aging.days_over_90 > 0) { score -= 25; alerts.push('🚨 Deuda > 90 días'); }
+        if (blocked.isBlocked) { score -= 50; alerts.push('Cliente BLOQUEADO'); }
+        if (debt.overdueDebt > 5000) { score -= 30; alerts.push('Deuda vencida > 5000€'); }
+        else if (debt.overdueDebt > 1000) { score -= 15; alerts.push('Deuda vencida > 1000€'); }
+        if (credit.utilizationPercent > 90) { score -= 20; alerts.push('Credito utilizado > 90%'); }
+        if (debt.aging.days_over_90 > 0) { score -= 25; alerts.push('Deuda > 90 dias'); }
 
         return {
             clientCode,
@@ -268,21 +307,20 @@ const riskTools = {
 
 const commercialTools = {
     async detectChurn(conn, clientCode, months = 6) {
-        // Products bought before but not recently
         const oldProducts = await safeQuery(conn, `
-      SELECT DISTINCT L.CODIGOARTICULO, A.DESCRIPCIONARTICULO
-      FROM DSEDAC.LAC L
-      LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-      WHERE L.CODIGOCLIENTEALBARAN = '${clientCode}'
-        AND L.ANODOCUMENTO = YEAR(CURRENT DATE) - 1
-        AND L.CODIGOARTICULO NOT IN (
-          SELECT DISTINCT CODIGOARTICULO FROM DSEDAC.LAC
-          WHERE CODIGOCLIENTEALBARAN = '${clientCode}'
-            AND (ANODOCUMENTO = YEAR(CURRENT DATE) 
-              OR (ANODOCUMENTO = YEAR(CURRENT DATE) - 1 AND MESDOCUMENTO > MONTH(CURRENT DATE) - ${months}))
-        )
-      FETCH FIRST 20 ROWS ONLY
-    `);
+            SELECT DISTINCT L.CODIGOARTICULO, A.DESCRIPCIONARTICULO
+            FROM DSEDAC.LAC L
+            LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+            WHERE TRIM(L.CODIGOCLIENTEALBARAN) = ?
+              AND L.ANODOCUMENTO = YEAR(CURRENT DATE) - 1
+              AND L.CODIGOARTICULO NOT IN (
+                SELECT DISTINCT CODIGOARTICULO FROM DSEDAC.LAC
+                WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
+                  AND (ANODOCUMENTO = YEAR(CURRENT DATE) 
+                    OR (ANODOCUMENTO = YEAR(CURRENT DATE) - 1 AND MESDOCUMENTO > MONTH(CURRENT DATE) - ?))
+              )
+            FETCH FIRST 20 ROWS ONLY
+        `, [clientCode, clientCode, months]);
 
         return {
             clientCode,
@@ -297,78 +335,18 @@ const commercialTools = {
         };
     },
 
-    async suggestCrossSell(conn, clientCode) {
-        // Find products that similar clients buy but this one doesn't
-        const suggestions = await safeQuery(conn, `
-      SELECT L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, COUNT(*) as POPULARITY
-      FROM DSEDAC.LAC L
-      LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-      WHERE L.CODIGOVENDEDOR = (
-        SELECT CODIGOVENDEDOR FROM DSEDAC.LAC 
-        WHERE CODIGOCLIENTEALBARAN = '${clientCode}' 
-        FETCH FIRST 1 ROWS ONLY
-      )
-      AND L.CODIGOARTICULO NOT IN (
-        SELECT DISTINCT CODIGOARTICULO FROM DSEDAC.LAC
-        WHERE CODIGOCLIENTEALBARAN = '${clientCode}'
-      )
-      AND L.ANODOCUMENTO >= YEAR(CURRENT DATE) - 1
-      GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO
-      ORDER BY POPULARITY DESC
-      FETCH FIRST 10 ROWS ONLY
-    `);
-
-        return {
-            clientCode,
-            suggestions: suggestions.map(s => ({
-                code: s.CODIGOARTICULO?.trim(),
-                description: s.DESCRIPCIONARTICULO?.trim(),
-                popularity: s.POPULARITY
-            }))
-        };
-    },
-
-    async getSeasonalTrends(conn, clientCode, quarter) {
-        const currentYear = new Date().getFullYear();
-        const lastYear = currentYear - 1;
-        const startMonth = (quarter - 1) * 3 + 1;
-        const endMonth = quarter * 3;
-
-        const getData = async (year) => {
-            const result = await safeQuery(conn, `
-        SELECT SUM(IMPORTEVENTA) as SALES, COUNT(DISTINCT CODIGOARTICULO) as PRODUCTS
-        FROM DSEDAC.LAC
-        WHERE CODIGOCLIENTEALBARAN = '${clientCode}'
-          AND ANODOCUMENTO = ${year}
-          AND MESDOCUMENTO BETWEEN ${startMonth} AND ${endMonth}
-      `);
-            return result[0] || {};
-        };
-
-        const current = await getData(currentYear);
-        const last = await getData(lastYear);
-
-        return {
-            clientCode,
-            quarter: `Q${quarter}`,
-            currentYear: { year: currentYear, sales: current.SALES || 0, products: current.PRODUCTS || 0 },
-            lastYear: { year: lastYear, sales: last.SALES || 0, products: last.PRODUCTS || 0 },
-            growth: last.SALES > 0 ? ((current.SALES - last.SALES) / last.SALES) * 100 : 0
-        };
-    },
-
     async compareClientYoY(conn, clientCode) {
         const currentYear = new Date().getFullYear();
         const years = [currentYear, currentYear - 1, currentYear - 2];
-
         const results = {};
+
         for (const year of years) {
             const data = await safeQuery(conn, `
-        SELECT SUM(IMPORTEVENTA) as SALES, SUM(CANTIDADENVASES) as BOXES
-        FROM DSEDAC.LAC
-        WHERE CODIGOCLIENTEALBARAN = '${clientCode}' AND ANODOCUMENTO = ${year}
-      `);
-            results[year] = { sales: data[0]?.SALES || 0, boxes: data[0]?.BOXES || 0 };
+                SELECT SUM(IMPORTEVENTA) as SALES, SUM(CANTIDADENVASES) as BOXES
+                FROM DSEDAC.LAC
+                WHERE TRIM(CODIGOCLIENTEALBARAN) = ? AND ANODOCUMENTO = ?
+            `, [clientCode, year]);
+            results[year] = { sales: parseFloat(data[0]?.SALES) || 0, boxes: parseFloat(data[0]?.BOXES) || 0 };
         }
 
         return { clientCode, yearlyData: results };
@@ -376,25 +354,111 @@ const commercialTools = {
 
     async getClientPurchaseHistory(conn, clientCode, limit = 20) {
         const history = await safeQuery(conn, `
-      SELECT ANODOCUMENTO, MESDOCUMENTO, DIADOCUMENTO, 
-             CODIGOARTICULO, DESCRIPCIONARTICULO,
-             CANTIDADENVASES, IMPORTEVENTA, PRECIOVENTAUNITARIO
-      FROM DSEDAC.LAC
-      WHERE CODIGOCLIENTEALBARAN = '${clientCode}'
-      ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
-      FETCH FIRST ${limit} ROWS ONLY
-    `);
+            SELECT ANODOCUMENTO, MESDOCUMENTO, DIADOCUMENTO, 
+                   TRIM(CODIGOARTICULO) as CODIGOARTICULO, DESCRIPCIONARTICULO,
+                   CANTIDADENVASES, IMPORTEVENTA, PRECIOVENTAUNITARIO
+            FROM DSEDAC.LAC
+            WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
+            ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
+            FETCH FIRST ? ROWS ONLY
+        `, [clientCode, limit]);
 
         return {
             clientCode,
             purchases: history.map(h => ({
                 date: `${h.ANODOCUMENTO}-${String(h.MESDOCUMENTO).padStart(2, '0')}-${String(h.DIADOCUMENTO).padStart(2, '0')}`,
-                product: h.CODIGOARTICULO?.trim(),
+                product: h.CODIGOARTICULO,
                 description: h.DESCRIPCIONARTICULO?.trim(),
                 quantity: h.CANTIDADENVASES,
-                amount: h.IMPORTEVENTA,
-                unitPrice: h.PRECIOVENTAUNITARIO
+                amount: parseFloat(h.IMPORTEVENTA) || 0,
+                unitPrice: parseFloat(h.PRECIOVENTAUNITARIO) || 0
             }))
+        };
+    },
+
+    async getMarginGlobal(conn, userCode, isJefeVentas, month, year) {
+        const currentYear = year || new Date().getFullYear();
+        const currentMonth = month || new Date().getMonth() + 1;
+
+        let sql, params;
+        if (isJefeVentas) {
+            sql = `
+                SELECT 
+                    SUM(IMPORTEVENTA) as VENTAS,
+                    SUM(IMPORTECOSTE) as COSTE,
+                    COUNT(DISTINCT CODIGOCLIENTEALBARAN) as CLIENTES,
+                    COUNT(*) as OPERACIONES
+                FROM DSEDAC.LAC
+                WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
+            `;
+            params = [currentYear, currentMonth];
+        } else {
+            sql = `
+                SELECT 
+                    SUM(IMPORTEVENTA) as VENTAS,
+                    SUM(IMPORTECOSTE) as COSTE,
+                    COUNT(DISTINCT CODIGOCLIENTEALBARAN) as CLIENTES,
+                    COUNT(*) as OPERACIONES
+                FROM DSEDAC.LAC
+                WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
+                  AND TRIM(CODIGOVENDEDOR) = ?
+            `;
+            params = [currentYear, currentMonth, userCode];
+        }
+
+        const result = await safeQuery(conn, sql, params);
+        const ventas = parseFloat(result[0]?.VENTAS) || 0;
+        const coste = parseFloat(result[0]?.COSTE) || 0;
+        const clientes = parseInt(result[0]?.CLIENTES) || 0;
+        const operations = parseInt(result[0]?.OPERACIONES) || 0;
+        const marginPct = ventas > 0 ? ((ventas - coste) / ventas * 100) : 0;
+
+        return {
+            month: currentMonth,
+            year: currentYear,
+            sales: ventas,
+            cost: coste,
+            profit: ventas - coste,
+            marginPercent: Math.round(marginPct * 10) / 10,
+            clients: clientes,
+            operations: operations
+        };
+    },
+
+    async getMarginByClient(conn, clientCode, userCode, isJefeVentas) {
+        const currentYear = new Date().getFullYear();
+
+        let sql, params;
+        if (isJefeVentas) {
+            sql = `
+                SELECT SUM(IMPORTEVENTA) as VENTAS, SUM(IMPORTECOSTE) as COSTE, COUNT(*) as OPERACIONES
+                FROM DSEDAC.LAC
+                WHERE TRIM(CODIGOCLIENTEALBARAN) = ? AND ANODOCUMENTO = ?
+            `;
+            params = [clientCode, currentYear];
+        } else {
+            sql = `
+                SELECT SUM(IMPORTEVENTA) as VENTAS, SUM(IMPORTECOSTE) as COSTE, COUNT(*) as OPERACIONES
+                FROM DSEDAC.LAC
+                WHERE TRIM(CODIGOCLIENTEALBARAN) = ? AND ANODOCUMENTO = ?
+                  AND TRIM(CODIGOVENDEDOR) = ?
+            `;
+            params = [clientCode, currentYear, userCode];
+        }
+
+        const result = await safeQuery(conn, sql, params);
+        const ventas = parseFloat(result[0]?.VENTAS) || 0;
+        const coste = parseFloat(result[0]?.COSTE) || 0;
+        const ops = parseInt(result[0]?.OPERACIONES) || 0;
+        const marginPct = ventas > 0 ? ((ventas - coste) / ventas * 100) : 0;
+
+        return {
+            clientCode,
+            sales: ventas,
+            cost: coste,
+            profit: ventas - coste,
+            marginPercent: Math.round(marginPct * 10) / 10,
+            operations: ops
         };
     }
 };
@@ -406,60 +470,327 @@ const commercialTools = {
 const logisticsTools = {
     async getStockByWarehouse(conn, productCode) {
         const stock = await safeQuery(conn, `
-      SELECT CODIGOALMACEN, EXISTENCIAS
-      FROM DSEDAC.ARTALM
-      WHERE CODIGOARTICULO = '${productCode}'
-    `);
+            SELECT TRIM(CODIGOALMACEN) as CODIGOALMACEN, EXISTENCIAS
+            FROM DSEDAC.ARTALM
+            WHERE TRIM(CODIGOARTICULO) = ?
+        `, [productCode]);
 
         return {
             productCode,
             warehouses: stock.map(s => ({
-                warehouse: s.CODIGOALMACEN?.trim(),
-                stock: s.EXISTENCIAS || 0
+                warehouse: s.CODIGOALMACEN,
+                stock: parseInt(s.EXISTENCIAS) || 0
             })),
-            totalStock: stock.reduce((sum, s) => sum + (s.EXISTENCIAS || 0), 0)
-        };
-    },
-
-    async getOrderStatus(conn, orderNumber) {
-        const order = await safeQuery(conn, `
-      SELECT NUMERODOCUMENTO, FECHAEMISION, ESTADOPEDIDO, CODIGOCLIENTE
-      FROM DSEDAC.CABPEDIDO
-      WHERE NUMERODOCUMENTO = '${orderNumber}'
-      FETCH FIRST 1 ROWS ONLY
-    `);
-
-        return order[0] ? {
-            orderNumber,
-            date: order[0].FECHAEMISION,
-            status: order[0].ESTADOPEDIDO?.trim(),
-            clientCode: order[0].CODIGOCLIENTE?.trim()
-        } : { error: 'Pedido no encontrado' };
-    },
-
-    async getDeliveryHistory(conn, clientCode, months = 12) {
-        const deliveries = await safeQuery(conn, `
-      SELECT COUNT(*) as TOTAL, 
-             SUM(CASE WHEN FECHAENTREGA <= FECHAPREVISTA THEN 1 ELSE 0 END) as ON_TIME
-      FROM DSEDAC.ENTREGAS
-      WHERE CODIGOCLIENTE = '${clientCode}'
-        AND FECHAENTREGA >= CURRENT DATE - ${months} MONTHS
-    `);
-
-        const d = deliveries[0] || {};
-        return {
-            clientCode,
-            totalDeliveries: d.TOTAL || 0,
-            onTimeDeliveries: d.ON_TIME || 0,
-            onTimePercent: d.TOTAL > 0 ? (d.ON_TIME / d.TOTAL) * 100 : 0
+            totalStock: stock.reduce((sum, s) => sum + (parseInt(s.EXISTENCIAS) || 0), 0)
         };
     }
 };
+
+// ============================================================================
+// COMMISSION TOOLS
+// ============================================================================
+
+const commissionTools = {
+    async getCommissions(conn, userCode, isJefeVentas, month, year) {
+        const currentYear = year || new Date().getFullYear();
+        const currentMonth = month || new Date().getMonth() + 1;
+
+        // Try snapshot table first (2026 data)
+        const snapshotRows = await safeQuery(conn, `
+            SELECT VENTAS_REAL, OBJETIVO_MES, COMISION_GENERADA
+            FROM JAVIER.COMMISSION_SNAPSHOT_2026_0102
+            WHERE ANIO = ? AND MES = ? AND TRIM(VENDEDOR_CODIGO) = ?
+        `, [currentYear, currentMonth, userCode]);
+
+        if (snapshotRows.length > 0) {
+            const r = snapshotRows[0];
+            const sales = parseFloat(r.VENTAS_REAL) || 0;
+            const commission = parseFloat(r.COMISION_GENERADA) || 0;
+            const commissionPercent = sales > 0 ? (commission / sales * 100) : 0;
+
+            // Get active clients count
+            const clientRows = await safeQuery(conn, `
+                SELECT COUNT(DISTINCT TRIM(CODIGOCLIENTEALBARAN)) as CLIENTES
+                FROM DSEDAC.LAC
+                WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
+                  AND TRIM(CODIGOVENDEDOR) = ?
+            `, [currentYear, currentMonth, userCode]);
+
+            const opsRows = await safeQuery(conn, `
+                SELECT COUNT(*) as OPS
+                FROM DSEDAC.LAC
+                WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
+                  AND TRIM(CODIGOVENDEDOR) = ?
+            `, [currentYear, currentMonth, userCode]);
+
+            return {
+                month: currentMonth,
+                year: currentYear,
+                sales: sales,
+                commission: commission,
+                commissionPercent: Math.round(commissionPercent * 100) / 100,
+                activeClients: parseInt(clientRows[0]?.CLIENTES) || 0,
+                operations: parseInt(opsRows[0]?.OPS) || 0
+            };
+        }
+
+        // Fallback: calculate from LAC table
+        const salesRows = await safeQuery(conn, `
+            SELECT SUM(IMPORTEVENTA) as VENTAS, COUNT(DISTINCT CODIGOCLIENTEALBARAN) as CLIENTES, COUNT(*) as OPS
+            FROM DSEDAC.LAC
+            WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
+              AND TRIM(CODIGOVENDEDOR) = ?
+        `, [currentYear, currentMonth, userCode]);
+
+        const ventas = parseFloat(salesRows[0]?.VENTAS) || 0;
+        const targetPercent = 10; // Default commission rate
+        const commission = ventas * (targetPercent / 100);
+
+        return {
+            month: currentMonth,
+            year: currentYear,
+            sales: ventas,
+            commission: Math.round(commission * 100) / 100,
+            commissionPercent: targetPercent,
+            activeClients: parseInt(salesRows[0]?.CLIENTES) || 0,
+            operations: parseInt(salesRows[0]?.OPS) || 0
+        };
+    },
+
+    async getCommissionDetails(conn, userCode, isJefeVentas, clientCode, month, year) {
+        const currentYear = year || new Date().getFullYear();
+        const currentMonth = month || new Date().getMonth() + 1;
+
+        let sql, params;
+        if (clientCode) {
+            sql = `
+                SELECT TRIM(CODIGOCLIENTEALBARAN) as CLIENTE, SUM(IMPORTEVENTA) as VENTAS
+                FROM DSEDAC.LAC
+                WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
+                  AND TRIM(CODIGOVENDEDOR) = ?
+                  AND TRIM(CODIGOCLIENTEALBARAN) = ?
+                GROUP BY CODIGOCLIENTEALBARAN
+                ORDER BY VENTAS DESC
+            `;
+            params = [currentYear, currentMonth, userCode, clientCode];
+        } else {
+            sql = `
+                SELECT TRIM(CODIGOCLIENTEALBARAN) as CLIENTE, SUM(IMPORTEVENTA) as VENTAS
+                FROM DSEDAC.LAC
+                WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
+                  AND TRIM(CODIGOVENDEDOR) = ?
+                GROUP BY CODIGOCLIENTEALBARAN
+                ORDER BY VENTAS DESC
+                FETCH FIRST 50 ROWS ONLY
+            `;
+            params = [currentYear, currentMonth, userCode];
+        }
+
+        const rows = await safeQuery(conn, sql, params);
+        const details = rows.map(r => ({
+            clientCode: r.CLIENTE,
+            sales: parseFloat(r.VENTAS) || 0,
+            commission: Math.round((parseFloat(r.VENTAS) || 0) * 0.10 * 100) / 100
+        }));
+
+        const totalSales = details.reduce((sum, d) => sum + d.sales, 0);
+        const totalCommission = totalSales * 0.10;
+
+        return {
+            month: currentMonth,
+            year: currentYear,
+            totalSales,
+            totalCommission: Math.round(totalCommission * 100) / 100,
+            details
+        };
+    }
+};
+
+// ============================================================================
+// OBJECTIVES TOOLS
+// ============================================================================
+
+const objectivesTools = {
+    async getObjectives(conn, userCode, isJefeVentas, month, year) {
+        const currentYear = year || new Date().getFullYear();
+        const currentMonth = month || new Date().getMonth() + 1;
+
+        // Get target from OBJ_CONFIG
+        const configRows = await safeQuery(conn, `
+            SELECT TARGET_PERCENTAGE
+            FROM JAVIER.OBJ_CONFIG
+            WHERE TRIM(CODIGOVENDEDOR) = ? AND CODIGOCLIENTE = '*'
+            FETCH FIRST 1 ROWS ONLY
+        `, [userCode]);
+
+        const targetPercent = configRows.length > 0 ? parseFloat(configRows[0].TARGET_PERCENTAGE) || 10 : 10;
+
+        // Get actual sales for the month
+        const salesRows = await safeQuery(conn, `
+            SELECT SUM(IMPORTEVENTA) as VENTAS
+            FROM DSEDAC.LAC
+            WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
+              AND TRIM(CODIGOVENDEDOR) = ?
+        `, [currentYear, currentMonth, userCode]);
+
+        const achieved = parseFloat(salesRows[0]?.VENTAS) || 0;
+        // Target = previous year same month sales * (1 + targetPercent/100)
+        const prevSalesRows = await safeQuery(conn, `
+            SELECT SUM(IMPORTEVENTA) as VENTAS
+            FROM DSEDAC.LAC
+            WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
+              AND TRIM(CODIGOVENDEDOR) = ?
+        `, [currentYear - 1, currentMonth, userCode]);
+
+        const prevSales = parseFloat(prevSalesRows[0]?.VENTAS) || 0;
+        const target = prevSales > 0 ? prevSales * (1 + targetPercent / 100) : achieved * 1.1;
+        const achievementPct = target > 0 ? Math.round((achieved / target) * 1000) / 10 : 0;
+
+        return {
+            month: currentMonth,
+            year: currentYear,
+            target: Math.round(target * 100) / 100,
+            achieved: achieved,
+            achievementPercent: achievementPct,
+            remaining: Math.round((target - achieved) * 100) / 100
+        };
+    },
+
+    async getObjectivesByFamily(conn, userCode, isJefeVentas, familyCode, month, year) {
+        const currentYear = year || new Date().getFullYear();
+        const currentMonth = month || new Date().getMonth() + 1;
+
+        let sql, params;
+        if (familyCode) {
+            sql = `
+                SELECT TRIM(A.FAMILIA) as FAMILIA, SUM(L.IMPORTEVENTA) as VENTAS
+                FROM DSEDAC.LAC L
+                LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+                WHERE L.ANODOCUMENTO = ? AND L.MESDOCUMENTO = ?
+                  AND TRIM(L.CODIGOVENDEDOR) = ?
+                  AND TRIM(A.FAMILIA) = ?
+                GROUP BY A.FAMILIA
+            `;
+            params = [currentYear, currentMonth, userCode, familyCode];
+        } else {
+            sql = `
+                SELECT TRIM(A.FAMILIA) as FAMILIA, SUM(L.IMPORTEVENTA) as VENTAS
+                FROM DSEDAC.LAC L
+                LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+                WHERE L.ANODOCUMENTO = ? AND L.MESDOCUMENTO = ?
+                  AND TRIM(L.CODIGOVENDEDOR) = ?
+                GROUP BY A.FAMILIA
+                ORDER BY VENTAS DESC
+            `;
+            params = [currentYear, currentMonth, userCode];
+        }
+
+        const rows = await safeQuery(conn, sql, params);
+        const families = rows.map(r => ({
+            family: r.FAMILIA || 'Sin familia',
+            achieved: parseFloat(r.VENTAS) || 0,
+            target: Math.round((parseFloat(r.VENTAS) || 0) * 1.1 * 100) / 100,
+            achievementPercent: 0
+        }));
+
+        families.forEach(f => {
+            if (f.target > 0) {
+                f.achievementPercent = Math.round((f.achieved / f.target) * 1000) / 10;
+            }
+        });
+
+        return { month: currentMonth, year: currentYear, families };
+    }
+};
+
+// ============================================================================
+// INVOICE & ALBARAN TOOLS
+// ============================================================================
+
+const invoiceTools = {
+    async getInvoiceDetails(conn, invoiceNumber) {
+        const rows = await safeQuery(conn, `
+            SELECT TRIM(NUMERODOCUMENTO) as NUMERO, TRIM(CODIGOCLIENTEALBARAN) as CLIENTE,
+                   IMPORTETOTAL as IMPORTE, ESTADO, FECHAEMISION
+            FROM DSEDAC.CVC
+            WHERE TRIM(NUMERODOCUMENTO) = ?
+            FETCH FIRST 1 ROWS ONLY
+        `, [invoiceNumber]);
+
+        if (rows.length === 0) {
+            return { error: `Factura ${invoiceNumber} no encontrada` };
+        }
+
+        const r = rows[0];
+        const albaranCount = await safeQuery(conn, `
+            SELECT COUNT(*) as CNT
+            FROM DSEDAC.CVC
+            WHERE TRIM(NUMERODOCUMENTO) = ?
+        `, [invoiceNumber]);
+
+        return {
+            invoiceNumber: r.NUMERO,
+            clientCode: r.CLIENTE,
+            amount: parseFloat(r.IMPORTE) || 0,
+            status: r.ESTADO?.trim() || 'Desconocido',
+            date: r.FECHAEMISION ? String(r.FECHAEMISION) : null,
+            albaranCount: parseInt(albaranCount[0]?.CNT) || 0
+        };
+    },
+
+    async getAlbaranesByInvoice(conn, invoiceNumber) {
+        const rows = await safeQuery(conn, `
+            SELECT TRIM(NUMEROALBARAN) as NUMERO, IMPORTEPENDIENTE as IMPORTE,
+                   FECHAEMISION as FECHA
+            FROM DSEDAC.CVC
+            WHERE TRIM(NUMERODOCUMENTO) = ?
+            ORDER BY FECHAEMISION DESC
+        `, [invoiceNumber]);
+
+        return {
+            invoiceNumber,
+            albaranes: rows.map(r => ({
+                number: r.NUMERO,
+                amount: parseFloat(r.IMPORTE) || 0,
+                date: r.FECHA ? String(r.FECHA) : null
+            }))
+        };
+    },
+
+    async getClientInvoices(conn, clientCode) {
+        const rows = await safeQuery(conn, `
+            SELECT TRIM(NUMERODOCUMENTO) as NUMERO, IMPORTEPENDIENTE as IMPORTE,
+                   FECHAVENCIMIENTO as VENCIMIENTO, ESTADO
+            FROM DSEDAC.CVC
+            WHERE TRIM(CODIGOCLIENTEALBARAN) = ? AND IMPORTEPENDIENTE > 0
+            ORDER BY FECHAVENCIMIENTO ASC
+            FETCH FIRST 50 ROWS ONLY
+        `, [clientCode]);
+
+        const totalAmount = rows.reduce((sum, r) => sum + (parseFloat(r.IMPORTE) || 0), 0);
+
+        return {
+            clientCode,
+            invoices: rows.map(r => ({
+                number: r.NUMERO,
+                amount: parseFloat(r.IMPORTE) || 0,
+                dueDate: r.VENCIMIENTO ? String(r.VENCIMIENTO) : null,
+                status: r.ESTADO?.trim() || 'Pendiente'
+            })),
+            totalAmount: Math.round(totalAmount * 100) / 100
+        };
+    }
+};
+
+// ── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
     dbDiscoveryTools,
     pricingTools,
     riskTools,
     commercialTools,
-    logisticsTools
+    logisticsTools,
+    commissionTools,
+    objectivesTools,
+    invoiceTools
 };

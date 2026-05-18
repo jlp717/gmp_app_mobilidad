@@ -1,53 +1,93 @@
+/**
+ * NEXUS AI — Chatbot Route
+ * 
+ * Security: verifyToken middleware required for all endpoints.
+ * LLM-first with regex fallback.
+ */
+
 const express = require('express');
 const router = express.Router();
 const logger = require('../middleware/logger');
+const { verifyToken } = require('../middleware/auth');
 const { getPool } = require('../config/db');
-const { handleChatMessage } = require('../src/chatbot/chatbot_handler');
+const { processMessage } = require('../src/chatbot/llm-orchestrator');
+const { logChatEvent } = require('../src/chatbot/moderation');
 
-// =============================================================================
-// AI CHATBOT ENDPOINT
-// =============================================================================
+// All chatbot endpoints require authentication
+router.use(verifyToken);
+
+// ── Chat Message Endpoint ────────────────────────────────────────────────────
+
 router.post('/message', async (req, res) => {
     let conn;
     try {
-        const { message, vendedorCodes, clientCode } = req.body;
+        const { message, conversationHistory } = req.body;
 
         if (!message || message.trim().length === 0) {
             return res.status(400).json({ error: 'Mensaje requerido' });
         }
 
-        // Get database connection using shared pool for transaction/session
-        // The chatbot handler requires a raw connection object
+        // Extract user context from JWT token (set by verifyToken middleware)
+        const userContext = {
+            userCode: req.user.code,
+            isJefeVentas: req.user.isJefeVentas,
+            role: req.user.role,
+            vendedorCodes: [req.user.code] // Single vendor scope from auth
+        };
+
+        // Get database connection
         const pool = getPool();
         if (!pool) throw new Error("Database pool not initialized");
 
         conn = await pool.connect();
 
         try {
-            const response = await handleChatMessage(
+            const response = await processMessage(
                 conn,
-                message,
-                vendedorCodes ? (Array.isArray(vendedorCodes) ? vendedorCodes : vendedorCodes.split(',')) : [],
-                clientCode
+                message.trim(),
+                userContext,
+                conversationHistory || []
             );
-            res.json({ response, timestamp: new Date().toISOString() });
+
+            // Audit log
+            logChatEvent(req.user.code, message, response, {
+                llmUsed: true,
+                moderationBlocked: response.includes('Solo puedo ayudarte')
+            });
+
+            res.json({
+                response,
+                timestamp: new Date().toISOString(),
+                user: req.user.code
+            });
         } finally {
-            // Always close local connection obtained from pool.connect()
-            await conn.close();
+            if (conn) {
+                try { await conn.close(); } catch (e) { }
+            }
         }
     } catch (error) {
-        logger.error(`Chatbot error: ${error.message}`);
-        // If conn wasn't closed in inner try, close it here (though inner finally handles it)
-        // Safety check just in case
+        logger.error(`[CHATBOT] Route error: ${error.message}`);
         if (conn && conn.connected) {
             try { await conn.close(); } catch (e) { }
         }
 
         res.status(500).json({
             error: 'Error procesando mensaje',
-            response: '❌ Lo siento, hubo un error. Intenta de nuevo.'
+            response: 'Lo siento, hubo un error interno. Intenta de nuevo.'
         });
     }
+});
+
+// ── Health Check (no auth needed) ────────────────────────────────────────────
+
+router.get('/health', (req, res) => {
+    const hasGroqKey = !!process.env.GROQ_API_KEY;
+    res.json({
+        status: 'ok',
+        llm: hasGroqKey ? 'enabled' : 'disabled (using regex fallback)',
+        model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+        timestamp: new Date().toISOString()
+    });
 });
 
 module.exports = router;

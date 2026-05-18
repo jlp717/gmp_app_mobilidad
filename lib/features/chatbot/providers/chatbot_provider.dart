@@ -1,6 +1,16 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/features/chatbot/data/chatbot_service.dart';
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+extension ListExt<T> on List<T> {
+  /// Returns the last [n] elements (or all if list is shorter).
+  List<T> takeLast(int n) {
+    if (n >= length) return this;
+    return sublist(length - n);
+  }
+}
+
 // ── State ────────────────────────────────────────────────────────────────────
 
 class ChatMessage {
@@ -78,10 +88,18 @@ class ChatbotNotifier extends Notifier<ChatbotState> {
     );
 
     try {
+      // Build conversation history from last 5 messages for LLM context
+      final history = state.messages
+          .takeLast(5)
+          .map((m) => {
+                'role': m.isUser ? 'user' : 'assistant',
+                'content': m.content,
+              })
+          .toList();
+
       final response = await _service.sendMessage(
         message: text,
-        vendedorCodes: state.vendedorCodes,
-        clientCode: state.currentClientCode,
+        conversationHistory: history,
       );
 
       state = state.copyWith(

@@ -675,6 +675,34 @@ async function getDeliveryOptions({ clientCode, vendedorCode, deliveryDate }) {
     };
 }
 
+async function getAvailableVehicles() {
+    try {
+        const sql = `
+            SELECT 
+                ACC.ID as code,
+                ACC.MATRICULA as matricula,
+                ACC.CAPACIDAD_PESO as capacidadPeso,
+                ACC.CAPACIDAD_VOLUMEN as capacidadVolumen,
+                ACC.NOTAS as description,
+                '1' as activo
+            FROM JAVIER.ALMACEN_CAMIONES_CONFIG ACC
+            WHERE ACC.ACTIVO = 1
+            ORDER BY ACC.MATRICULA
+        `;
+        const result = await getPool().request().query(sql);
+        return (result.recordset || []).map(row => ({
+            code: trimString(row.code || '').substring(0, 10),
+            matricula: trimString(row.matricula || ''),
+            description: trimString(row.description || ''),
+            capacidadPeso: numberValue(row.capacidadPeso),
+            capacidadVolumen: numberValue(row.capacidadVolumen),
+        }));
+    } catch (error) {
+        logger.error(`[PEDIDOS] getAvailableVehicles error: ${error.message}`);
+        return [];
+    }
+}
+
 function numberValue(raw) {
     const num = Number(raw);
     return Number.isFinite(num) ? num : 0;
@@ -1125,16 +1153,38 @@ async function getProducts({ search, clientCode, family, marca, prefamily, limit
         params.push(likeStart, likeStart, likeAny);
     }
 
-    const currentYear = new Date().getFullYear();
+    const now = new Date();
+    const currentYear = now.getFullYear();
     const prevYear = currentYear - 1;
     const clientCodeTrimmed = (clientCode || '').trim();
 
+    // Week-based accumulation logic (same as rutero in planner.js:1135-1145)
+    const startOfCurrentYear = new Date(currentYear, 0, 1);
+    const daysSinceStart = Math.floor((now - startOfCurrentYear) / 86400000);
+    const weekNumber = Math.floor(daysSinceStart / 7) + 1;
+    const endMonthCurrent = now.getMonth() + 1;
+    const endDayCurrent = now.getDate();
+
+    // Find equivalent Sunday (same week number) in previous year
+    const startOfPreviousYear = new Date(prevYear, 0, 1);
+    const firstSundayOffsetPrev = (7 - startOfPreviousYear.getDay()) % 7;
+    const equivalentSundayPrev = new Date(prevYear, 0, 1 + firstSundayOffsetPrev + (weekNumber - 1) * 7);
+    const endMonthPrevious = equivalentSundayPrev.getMonth() + 1;
+    const endDayPrevious = equivalentSundayPrev.getDate();
+
     const historyParams = [
-        currentYear,
-        prevYear,
+        // CASE WHEN SALES_THIS_YEAR: year, month_lt, month_eq, day (4)
+        currentYear, endMonthCurrent, endMonthCurrent, endDayCurrent,
+        // CASE WHEN SALES_PREV_YEAR: year, month_lt, month_eq, day (4)
+        prevYear, endMonthPrevious, endMonthPrevious, endDayPrevious,
+        // WHERE client code (1)
         clientCodeTrimmed,
-        currentYear,
-        prevYear,
+        // WHERE L.LCAADC IN (2)
+        currentYear, prevYear,
+        // WHERE date filter current year: year, month_lt, month_eq, day (4)
+        currentYear, endMonthCurrent, endMonthCurrent, endDayCurrent,
+        // WHERE date filter prev year: year, month_lt, month_eq, day (4)
+        prevYear, endMonthPrevious, endMonthPrevious, endDayPrevious,
     ];
 
     const sql = `
@@ -1163,12 +1213,15 @@ async function getProducts({ search, clientCode, family, marca, prefamily, limit
         LEFT JOIN (
             SELECT
                 TRIM(L.LCCDRF) AS CODIGOARTICULO,
-                SUM(CASE WHEN L.LCAADC = ? THEN L.LCIMVT ELSE 0 END) AS SALES_THIS_YEAR,
-                SUM(CASE WHEN L.LCAADC = ? THEN L.LCIMVT ELSE 0 END) AS SALES_PREV_YEAR,
+                SUM(CASE WHEN L.LCAADC = ? AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?)) THEN L.LCIMVT ELSE 0 END) AS SALES_THIS_YEAR,
+                SUM(CASE WHEN L.LCAADC = ? AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?)) THEN L.LCIMVT ELSE 0 END) AS SALES_PREV_YEAR,
                 COUNT(*) AS PURCHASE_COUNT
             FROM DSED.LACLAE L
             WHERE TRIM(L.LCCDCL) = ?
               AND L.LCAADC IN (?, ?)
+              AND ((L.LCAADC = ? AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?)))
+                OR (L.LCAADC = ? AND (L.LCMMDC < ? OR (L.LCMMDC = ? AND L.LCDDDC <= ?)))
+              )
               AND ${LACLAE_SALES_FILTER}
             GROUP BY TRIM(L.LCCDRF)
         ) PH ON TRIM(A.CODIGOARTICULO) = PH.CODIGOARTICULO
@@ -3247,10 +3300,17 @@ async function getActivePromotions(clientCode) {
         const src = await detectPromoSource();
         if (src.table === 'NONE') return [];
 
+        const now = new Date();
+        const today = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+
+        // ── PMR schema: gift promotions (client-specific, no product-level data) ──
+        if (src.table === 'PMR') {
+            return getActivePromotionsPMR(trimmedClientCode, today);
+        }
+
+        // ── PRD schema: product-level price promotions (original logic) ──
         const has = (col) => src.cols.has(col);
 
-        // Heuristica: detecta el "esquema PRD" (campos estandar de promocion)
-        // y, si faltan, intenta variantes habituales.
         const colArticulo  = has('CODIGOARTICULO') ? 'P.CODIGOARTICULO' : (has('CDARTICULO') ? 'P.CDARTICULO' : `''`);
         const colDescrip   = has('DESCRIPCION')    ? 'P.DESCRIPCION'    : (has('DESCRIPCIONPROMOCION') ? 'P.DESCRIPCIONPROMOCION' : `''`);
         const colTipo      = has('TIPOPROMOCION')  ? 'P.TIPOPROMOCION'  : `''`;
@@ -3266,9 +3326,6 @@ async function getActivePromotions(clientCode) {
         const colAnoHasta  = has('ANOHASTA')       ? 'P.ANOHASTA'       : '9999';
 
         const hasDateRange = has('ANOHASTA') && has('ANODESDE');
-
-        const now = new Date();
-        const today = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
 
         const sql = `
             SELECT ${colArticulo} AS CODIGOARTICULO,
@@ -3331,6 +3388,67 @@ async function getActivePromotions(clientCode) {
         logger.warn('[PEDIDOS] getActivePromotions error (returning []): ' + error.message);
         return [];
     }
+}
+
+/**
+ * Query promociones de regalo desde DSEDAC.PMR.
+ * PMR es una tabla de cabecera: cada fila = una promocion regalo para un cliente especifico.
+ * No tiene datos a nivel de producto; el nombre de la promocion describe la oferta.
+ */
+async function getActivePromotionsPMR(clientCode, today) {
+    // Filtrar por cliente y rango de fechas (0 = sin limite)
+    const sql = `
+        SELECT
+            TRIM(P.CODIGOPROMOCIONREGALO) AS PROMO_CODE,
+            TRIM(P.NOMBREPROMOCIONREGALO) AS PROMO_NAME,
+            P.DIAINICIO, P.MESINICIO, P.ANOINICIO,
+            P.DIAFIN, P.MESFIN, P.ANOFIN,
+            P.CANTIDADMINIMAPROMOCION,
+            P.CANTIDADMAXIMAREGALO,
+            P.PROMOCIONACUMULATIVASN
+        FROM DSEDAC.PMR P
+        WHERE TRIM(P.CODIGOCLIENTE) = ?
+          AND (P.ANOINICIO = 0 OR (P.ANOINICIO * 10000 + P.MESINICIO * 100 + P.DIAINICIO) <= ?)
+          AND (P.ANOFIN = 0 OR (P.ANOFIN * 10000 + P.MESFIN * 100 + P.DIAFIN) >= ?)
+        FETCH FIRST 200 ROWS ONLY
+    `;
+
+    let rows = [];
+    try {
+        rows = await queryWithParams(sql, [clientCode, today, today]);
+        logger.info(`[PEDIDOS] Promociones PMR para cliente=${clientCode}, hoy=${today}: ${rows?.length || 0} fila(s)`);
+    } catch (e) {
+        logger.warn(`[PEDIDOS] Query promociones PMR fallo: ${e.message}`);
+        return [];
+    }
+
+    return (rows || []).map(r => {
+        const promoCode = String(r.PROMO_CODE || '').trim();
+        const promoName = String(r.PROMO_NAME || '').trim();
+        const diaDesde = parseInt(r.DIAINICIO) || 1;
+        const mesDesde = parseInt(r.MESINICIO) || 1;
+        const anoDesde = parseInt(r.ANOINICIO) || 0;
+        const diaHasta = parseInt(r.DIAFIN) || 0;
+        const mesHasta = parseInt(r.MESFIN) || 0;
+        const anoHasta = parseInt(r.ANOFIN) || 0;
+
+        return {
+            code: promoCode,
+            name: promoName,
+            promoDesc: promoName,
+            promoType: 'GIFT',
+            promoCode: promoCode,
+            promoPrice: 0,
+            regularPrice: 0,
+            dateFrom: anoDesde > 0 ? `${diaDesde}/${mesDesde}/${anoDesde}` : '',
+            dateTo: anoHasta > 0 ? `${diaHasta}/${mesHasta}/${anoHasta}` : '',
+            minQty: parseFloat(r.CANTIDADMINIMAPROMOCION) || 0,
+            giftQty: parseFloat(r.CANTIDADMAXIMAREGALO) || 0,
+            cumulative: String(r.PROMOCIONACUMULATIVASN || '').trim() === 'S',
+            stockEnvases: 0,
+            stockUnidades: 0,
+        };
+    });
 }
 
 // ============================================================================
@@ -4284,6 +4402,7 @@ module.exports = {
     getProductStock,
     getClientPricing,
     getDeliveryOptions,
+    getAvailableVehicles,
     getPedidosConfirmationTarget,
     createOrder,
     getOrders,
