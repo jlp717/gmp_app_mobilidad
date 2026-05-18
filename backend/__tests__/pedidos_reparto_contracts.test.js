@@ -164,6 +164,7 @@ beforeEach(() => {
   mockConnClose.mockResolvedValue();
   mockPool = null;
   delete process.env.PEDIDOS_CONFIRMATION_SCHEMA;
+  delete process.env.PEDIDOS_EXPORT_TO_SYSTEM;
   delete process.env.PEDIDOS_SYSTEM_TERMINAL;
 });
 
@@ -221,8 +222,25 @@ describe('pedidos reparto confirmation contract', () => {
     expect(mockConnQuery).not.toHaveBeenCalled();
   });
 
+  test('PEDIDOS_EXPORT_TO_SYSTEM=false disables DSEDAC order export', async () => {
+    process.env.PEDIDOS_CONFIRMATION_SCHEMA = 'DSEDAC';
+    process.env.PEDIDOS_EXPORT_TO_SYSTEM = 'false';
+    mockGetClientDays.mockReturnValue({
+      deliveryDays: ['martes', 'jueves'],
+      deliveryDaysShort: 'MJ',
+    });
+    mockSuccessfulConfirmationQueries({ includeLine: true });
+
+    await pedidosService.confirmOrder(42, 'CC', { deliveryDate: '2026-05-05' });
+
+    const sqlText = mockQueryWithParams.mock.calls.map(([sql]) => sql).join('\n');
+    expect(sqlText).not.toMatch(/INSERT\s+INTO\s+DSEDAC\.(CPC|LPC|OCPC)/i);
+    expect(mockConnQuery).not.toHaveBeenCalled();
+  });
+
   test('DSEDAC target exports commercial order to CPC/LPC with ERP column names', async () => {
     process.env.PEDIDOS_CONFIRMATION_SCHEMA = 'DSEDAC';
+    process.env.PEDIDOS_EXPORT_TO_SYSTEM = 'true';
     process.env.PEDIDOS_SYSTEM_TERMINAL = '10';
     mockGetClientDays.mockReturnValue({
       deliveryDays: ['martes', 'jueves'],

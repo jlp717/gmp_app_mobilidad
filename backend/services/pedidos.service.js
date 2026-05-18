@@ -253,13 +253,15 @@ function getPedidosConfirmationTarget() {
         process.env.PEDIDOS_TARGET_SCHEMA ||
         'JAVIER'
     );
+    const exportEnabled = String(process.env.PEDIDOS_EXPORT_TO_SYSTEM || 'false').trim().toLowerCase() === 'true';
+    const shouldExportToSystem = schema === 'DSEDAC' && exportEnabled;
     const subempresa = trimString(process.env.PEDIDOS_SYSTEM_SUBEMPRESA || 'GMP').substring(0, 3) || 'GMP';
     const serie = trimString(process.env.PEDIDOS_SYSTEM_SERIE || 'P').substring(0, 1) || 'P';
     const terminal = parseIntConfig(process.env.PEDIDOS_SYSTEM_TERMINAL, 10);
     return {
         schema,
-        mode: schema === 'DSEDAC' ? 'SYSTEM' : 'LOCAL',
-        shouldExportToSystem: schema === 'DSEDAC',
+        mode: shouldExportToSystem ? 'SYSTEM' : 'LOCAL',
+        shouldExportToSystem,
         subempresa,
         serie,
         terminal,

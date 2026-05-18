@@ -41,7 +41,7 @@ por encima de ese tramo. Ejemplo: base 100000, cobrado 21000. Umbral 20% =
 
 | Tabla | Esquema | Uso | Origen de esquema |
 | --- | --- | --- | --- |
-| `OPP` | `ERP_DATA_SCHEMA` | Relaciona orden/preparacion con repartidor y fecha de reparto. | `REPARTIDOR_FINANCE_ERP_SCHEMA`, `FINANCE_ERP_SCHEMA` o `PEDIDOS_CONFIRMATION_SCHEMA`; solo `JAVIER`/`DSEDAC`. |
+| `OPP` | `ERP_DATA_SCHEMA` | Relaciona orden/preparacion con repartidor y fecha de reparto. | `REPARTIDOR_FINANCE_READ_SCHEMA`, `FINANCE_ERP_READ_SCHEMA` o `ERP_READ_SCHEMA`; por defecto `DSEDAC`. |
 | `CPC` | `ERP_DATA_SCHEMA` | Importe total repartido (`IMPORTETOTAL`) y claves de documento. | Mismo origen que `OPP`. |
 | `CVC` | `ERP_DATA_SCHEMA` | Pendiente del documento; permite inferir cobrado real: `IMPORTETOTAL - IMPORTEPENDIENTE`, o total si pendiente es 0. | Mismo origen que `OPP`. |
 | `REPARTIDOR_COMMISSION_TIERS` | `COMMISSION_CONFIG_SCHEMA` | Configuracion editable de tramos 20/30/50/70. | `REPARTIDOR_COMMISSION_CONFIG_SCHEMA`, `COMMISSION_APP_SCHEMA` o `JAVIER` por defecto. |

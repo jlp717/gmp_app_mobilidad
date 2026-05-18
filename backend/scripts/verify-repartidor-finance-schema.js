@@ -18,77 +18,97 @@ function erpSchemaName(raw) {
 const erpSchema = erpSchemaName(
   process.env.REPARTIDOR_FINANCE_ERP_SCHEMA || process.env.FINANCE_ERP_SCHEMA,
 );
+const erpReadSchema = erpSchemaName(
+  process.env.REPARTIDOR_FINANCE_READ_SCHEMA ||
+  process.env.FINANCE_ERP_READ_SCHEMA ||
+  process.env.ERP_READ_SCHEMA ||
+  'DSEDAC',
+);
+const appSchema = erpSchemaName(
+  process.env.REPARTIDOR_FINANCE_APP_SCHEMA ||
+  process.env.PEDIDOS_CONFIRMATION_SCHEMA ||
+  'JAVIER',
+);
 
 const tableChecks = [
-  ['JAVIER', 'REPARTIDOR_COBROS'],
-  ['JAVIER', 'DELIVERY_STATUS'],
-  ['JAVIER', 'REPARTIDOR_FINANCIAL_BALANCES'],
-  ['JAVIER', 'REPARTIDOR_LIQUIDACION_OPS'],
-  ['JAVIER', 'REPARTIDOR_LIQUIDACION_EMAILS'],
-  ['JAVIER', 'REPARTIDOR_COMMISSION_TIERS'],
-  ['DSEDAC', 'CLCL1'],
-  ['DSEDAC', 'CLX'],
-  ['DSEDAC', 'CVC'],
-  ['DSEDAC', 'LQD'],
+  [appSchema, 'REPARTIDOR_COBROS'],
+  [appSchema, 'DELIVERY_STATUS'],
+  [appSchema, 'REPARTIDOR_FINANCIAL_BALANCES'],
+  [appSchema, 'REPARTIDOR_LIQUIDACION_OPS'],
+  [appSchema, 'REPARTIDOR_LIQUIDACION_EMAILS'],
+  [appSchema, 'REPARTIDOR_COMMISSION_TIERS'],
+  [erpReadSchema, 'CLI'],
+  [erpReadSchema, 'CVC'],
+  [erpReadSchema, 'CPC'],
+  [erpReadSchema, 'OPP'],
+  [erpReadSchema, 'LAC'],
+  [erpReadSchema, 'ART'],
+  [erpReadSchema, 'CLCL1'],
+  [erpReadSchema, 'CLX'],
   [erpSchema, 'LQD'],
 ];
 
 const columnChecks = [
-  ['JAVIER', 'REPARTIDOR_COBROS', 'IDEMPOTENCY_TOKEN'],
-  ['JAVIER', 'REPARTIDOR_COBROS', 'PANTALLA_ORIGEN'],
-  ['JAVIER', 'REPARTIDOR_COBROS', 'OPERADOR'],
-  ['JAVIER', 'REPARTIDOR_COBROS', 'CREATED_AT'],
-  ['JAVIER', 'REPARTIDOR_LIQUIDACION_OPS', 'IDEMPOTENCY_TOKEN'],
-  ['JAVIER', 'REPARTIDOR_LIQUIDACION_OPS', 'CODIGOVENDEDOR'],
-  ['JAVIER', 'REPARTIDOR_COMMISSION_TIERS', 'THRESHOLD_PCT'],
-  ['DSEDAC', 'CLCL1', 'DIASLIMITECREDITO'],
-  ['DSEDAC', 'CLCL1', 'DIASLIMITECREDITOCONFECHAALB'],
-  ['DSEDAC', 'CLX', 'COBRORIGUROSOSN'],
-  ['DSEDAC', 'LQD', 'IDMARCALIQUIDACION'],
+  [appSchema, 'REPARTIDOR_COBROS', 'IDEMPOTENCY_TOKEN'],
+  [appSchema, 'REPARTIDOR_COBROS', 'PANTALLA_ORIGEN'],
+  [appSchema, 'REPARTIDOR_COBROS', 'OPERADOR'],
+  [appSchema, 'REPARTIDOR_COBROS', 'CREATED_AT'],
+  [appSchema, 'REPARTIDOR_LIQUIDACION_OPS', 'IDEMPOTENCY_TOKEN'],
+  [appSchema, 'REPARTIDOR_LIQUIDACION_OPS', 'CODIGOVENDEDOR'],
+  [appSchema, 'REPARTIDOR_COMMISSION_TIERS', 'THRESHOLD_PCT'],
+  [erpReadSchema, 'CLI', 'CODIGOCLIENTE'],
+  [erpReadSchema, 'CVC', 'IMPORTEPENDIENTE'],
+  [erpReadSchema, 'CPC', 'NUMEROORDENPREPARACION'],
+  [erpReadSchema, 'OPP', 'CODIGOREPARTIDOR'],
+  [erpReadSchema, 'LAC', 'CODIGOARTICULO'],
+  [erpReadSchema, 'ART', 'DESCRIPCIONARTICULO'],
+  [erpReadSchema, 'CLCL1', 'DIASLIMITECREDITO'],
+  [erpReadSchema, 'CLCL1', 'DIASLIMITECREDITOCONFECHAALB'],
+  [erpReadSchema, 'CLX', 'COBRORIGUROSOSN'],
   [erpSchema, 'LQD', 'IDMARCALIQUIDACION'],
 ];
 
 const columnGroupChecks = [
   {
-    label: 'JAVIER.REPARTIDOR_COBROS document layout',
+    label: `${appSchema}.REPARTIDOR_COBROS document layout`,
     alternatives: [
       [
-        ['JAVIER', 'REPARTIDOR_COBROS', 'CODIGOVENDEDOR'],
-        ['JAVIER', 'REPARTIDOR_COBROS', 'CODIGOCLIENTEALBARAN'],
-        ['JAVIER', 'REPARTIDOR_COBROS', 'IMPORTEVENCIMIENTO'],
-        ['JAVIER', 'REPARTIDOR_COBROS', 'NUMEROLIQUIDACION'],
+        [appSchema, 'REPARTIDOR_COBROS', 'CODIGOVENDEDOR'],
+        [appSchema, 'REPARTIDOR_COBROS', 'CODIGOCLIENTEALBARAN'],
+        [appSchema, 'REPARTIDOR_COBROS', 'IMPORTEVENCIMIENTO'],
+        [appSchema, 'REPARTIDOR_COBROS', 'NUMEROLIQUIDACION'],
       ],
       [
-        ['JAVIER', 'REPARTIDOR_COBROS', 'CODIGO_REPARTIDOR'],
-        ['JAVIER', 'REPARTIDOR_COBROS', 'CODIGO_CLIENTE'],
-        ['JAVIER', 'REPARTIDOR_COBROS', 'IMPORTE_COBRADO'],
-        ['JAVIER', 'REPARTIDOR_COBROS', 'LIQUIDADO_SN'],
+        [appSchema, 'REPARTIDOR_COBROS', 'CODIGO_REPARTIDOR'],
+        [appSchema, 'REPARTIDOR_COBROS', 'CODIGO_CLIENTE'],
+        [appSchema, 'REPARTIDOR_COBROS', 'IMPORTE_COBRADO'],
+        [appSchema, 'REPARTIDOR_COBROS', 'LIQUIDADO_SN'],
       ],
     ],
   },
   {
-    label: 'JAVIER.REPARTIDOR_FINANCIAL_BALANCES repartidor key',
+    label: `${appSchema}.REPARTIDOR_FINANCIAL_BALANCES repartidor key`,
     alternatives: [
-      [['JAVIER', 'REPARTIDOR_FINANCIAL_BALANCES', 'CODIGO_REPARTIDOR']],
-      [['JAVIER', 'REPARTIDOR_FINANCIAL_BALANCES', 'CODIGOVENDEDOR']],
+      [[appSchema, 'REPARTIDOR_FINANCIAL_BALANCES', 'CODIGO_REPARTIDOR']],
+      [[appSchema, 'REPARTIDOR_FINANCIAL_BALANCES', 'CODIGOVENDEDOR']],
     ],
   },
 ];
 
 const indexChecks = [
-  ['JAVIER', 'UX_REP_COBROS_TOKEN'],
-  ['JAVIER', 'IDX_REP_COBROS_REP_LIQ_FECHA'],
-  ['JAVIER', 'IDX_REP_LIQ_REP_FECHA'],
-  ['JAVIER', 'IDX_REP_COMM_ACTIVE'],
+  [appSchema, 'UX_REP_COBROS_TOKEN'],
+  [appSchema, 'IDX_REP_COBROS_REP_LIQ_FECHA'],
+  [appSchema, 'IDX_REP_LIQ_REP_FECHA'],
+  [appSchema, 'IDX_REP_COMM_ACTIVE'],
 ];
 
 const optionalIndexChecks = [
-  ['JAVIER', 'IDX_REP_COBROS_LIQ_TOKEN'],
+  [appSchema, 'IDX_REP_COBROS_LIQ_TOKEN'],
 ];
 
 const optionalConstraintChecks = [
-  ['JAVIER', 'UK_REP_LIQ_TOKEN'],
-  ['JAVIER', 'UK_REP_LIQ_NUMERO'],
+  [appSchema, 'UK_REP_LIQ_TOKEN'],
+  [appSchema, 'UK_REP_LIQ_NUMERO'],
 ];
 
 async function tableExists(schema, tableName) {

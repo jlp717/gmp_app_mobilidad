@@ -18,20 +18,24 @@ La salida va a `backend/tmp/db-exploration/` y no debe subirse a Git.
 
 ## Regla De Entorno
 
-La tabla ERP de liquidaciones se controla por variable:
+La suite separa tres destinos para evitar mezclar lecturas de ERP, escritura de
+liquidaciones y tablas internas de la app:
 
 ```env
+REPARTIDOR_FINANCE_READ_SCHEMA=DSEDAC
 REPARTIDOR_FINANCE_ERP_SCHEMA=JAVIER
+REPARTIDOR_FINANCE_APP_SCHEMA=JAVIER
 ```
 
 Valores permitidos:
 
-| Valor | Destino de LQD | Uso |
+| Variable | Valor dev | Valor prod/cutover | Uso |
 | --- | --- | --- |
-| `JAVIER` | `JAVIER.LQD` | Test/canary. Misma estructura que `DSEDAC.LQD`, sin contaminar ERP. |
-| `DSEDAC` | `DSEDAC.LQD` | Produccion real ERP. |
+| `REPARTIDOR_FINANCE_READ_SCHEMA` | `DSEDAC` | `DSEDAC` | Lee maestros y documentos ERP (`CLI`, `CVC`, `CPC`, `OPP`, `LAC`, `ART`, `CLCL1`, `CLX`). |
+| `REPARTIDOR_FINANCE_ERP_SCHEMA` | `JAVIER` | `DSEDAC` | Destino de `LQD`: sombra/canary en dev, ERP real en produccion. |
+| `REPARTIDOR_FINANCE_APP_SCHEMA` | `JAVIER` | `JAVIER` salvo migracion explicita | Tablas app (`REPARTIDOR_COBROS`, balances, OPS, `DELIVERY_STATUS`). |
 
-El backend valida este valor contra una whitelist. No acepta otros esquemas.
+El backend valida estos valores contra una whitelist. No acepta otros esquemas.
 
 ## Estado Verificado En DB2
 
@@ -617,4 +621,3 @@ La limpieza bloquea casos peligrosos:
    Vencimientos de repartidor. Hoy se mantienen fuera por seguridad.
 4. Confirmar significado de `CLX.COBRORIGUROSOSN` valores `C` y `M`.
 5. Validar con ERP que `JAVIER.LQD LIKE DSEDAC.LQD` es suficiente para test.
-

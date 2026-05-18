@@ -78,7 +78,7 @@ async function getFinanceSchemaInfo() {
     return _financeSchemaInfo;
   }
 
-  const APP_SCHEMA = process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER';
+  const APP_SCHEMA = getAppSchema();
   const tables = [
     'REPARTIDOR_COBROS',
     'REPARTIDOR_FINANCIAL_BALANCES',
@@ -373,13 +373,37 @@ const INTERNAL_LIQUIDATION_RECIPIENTS = [
   'diegocorbalan@mari-pepa.com',
 ];
 
+function normalizeKnownSchema(raw, fallback = 'JAVIER') {
+  const schema = String(raw || fallback).trim().toUpperCase();
+  return schema === 'DSEDAC' ? 'DSEDAC' : 'JAVIER';
+}
+
 function getErpDataSchema() {
-  const schema = String(process.env.REPARTIDOR_FINANCE_ERP_SCHEMA || process.env.FINANCE_ERP_SCHEMA || process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'DSEDAC').trim().toUpperCase();
-  return schema === 'JAVIER' ? 'JAVIER' : 'DSEDAC';
+  return normalizeKnownSchema(
+    process.env.REPARTIDOR_FINANCE_READ_SCHEMA ||
+    process.env.FINANCE_ERP_READ_SCHEMA ||
+    process.env.ERP_READ_SCHEMA ||
+    'DSEDAC',
+    'DSEDAC',
+  );
+}
+
+function getErpLqdSchema() {
+  return normalizeKnownSchema(
+    process.env.REPARTIDOR_FINANCE_ERP_SCHEMA ||
+    process.env.FINANCE_ERP_SCHEMA ||
+    'JAVIER',
+    'JAVIER',
+  );
 }
 
 function getAppSchema() {
-  return String(process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER').trim().toUpperCase();
+  return normalizeKnownSchema(
+    process.env.REPARTIDOR_FINANCE_APP_SCHEMA ||
+    process.env.PEDIDOS_CONFIRMATION_SCHEMA ||
+    'JAVIER',
+    'JAVIER',
+  );
 }
 
 function getCommissionConfigSchema() {
@@ -392,9 +416,10 @@ function getCommissionConfigSchema() {
 }
 
 const ERP_DATA_SCHEMA = getErpDataSchema();
+const ERP_LQD_SCHEMA = getErpLqdSchema();
 const ERP_FINANCE_SCHEMA = getAppSchema();
 const COMMISSION_CONFIG_SCHEMA = getCommissionConfigSchema();
-const LQD_TABLE = `${ERP_DATA_SCHEMA}.LQD`;
+const LQD_TABLE = `${ERP_LQD_SCHEMA}.LQD`;
 
 function value(row, key, fallback = undefined) {
   if (!row) return fallback;
@@ -1203,6 +1228,7 @@ async function getSummary({ repartidorId, year, month }) {
       AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
     INNER JOIN ${ERP_DATA_SCHEMA}.OPP OPP
       ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+      AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
     WHERE TRIM(OPP.CODIGOREPARTIDOR) = ?
       AND CVC.ANOEMISION = ?
       AND CVC.MESEMISION = ?
@@ -1286,6 +1312,7 @@ async function getVencimientos({ repartidorId, from, to, limit, clientCode, esta
         AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
       INNER JOIN ${ERP_DATA_SCHEMA}.OPP OPP
         ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+        AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
       LEFT JOIN ${ERP_DATA_SCHEMA}.CLI CLI
         ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
       LEFT JOIN ${ERP_DATA_SCHEMA}.CLCL1 CLCL1
@@ -1451,6 +1478,7 @@ async function validateCobroDocument(input, conn = null) {
       AND CVC.NUMERODOCUMENTO = CPC.NUMEROALBARAN
     INNER JOIN ${ERP_DATA_SCHEMA}.OPP OPP
       ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+      AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
     WHERE TRIM(CVC.TIPODOCUMENTO) = ?
       AND TRIM(CVC.ORIGENDOCUMENTO) = ?
       AND TRIM(CVC.SUBEMPRESADOCUMENTO) = ?
@@ -2076,6 +2104,7 @@ async function getCommissionSummaryLegacyUnused({ repartidorId, from, to }) {
     FROM ${ERP_DATA_SCHEMA}.OPP OPP
     INNER JOIN ${ERP_DATA_SCHEMA}.CPC CPC
       ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+      AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
     WHERE TRIM(OPP.CODIGOREPARTIDOR) = ?
       AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ? AND ?
   `, [repartidorId, compactDate(from), compactDate(to)], false, false);
@@ -2115,6 +2144,7 @@ async function getCommissionSummary({ repartidorId, from, to }) {
     FROM ${ERP_DATA_SCHEMA}.OPP OPP
     INNER JOIN ${ERP_DATA_SCHEMA}.CPC CPC
       ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+      AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
     WHERE ${repFilter.sql}
       AND (OPP.ANOREPARTO * 10000 + OPP.MESREPARTO * 100 + OPP.DIAREPARTO) BETWEEN ? AND ?
   `, [...repFilter.params, fromYmd, toYmd], false, false);
@@ -2128,6 +2158,7 @@ async function getCommissionSummary({ repartidorId, from, to }) {
     FROM ${ERP_DATA_SCHEMA}.OPP OPP
     INNER JOIN ${ERP_DATA_SCHEMA}.CPC CPC
       ON CPC.NUMEROORDENPREPARACION = OPP.NUMEROORDENPREPARACION
+      AND CPC.EJERCICIOORDENPREPARACION = OPP.EJERCICIOORDENPREPARACION
     LEFT JOIN ${ERP_DATA_SCHEMA}.CVC CVC
       ON CVC.SUBEMPRESADOCUMENTO = CPC.SUBEMPRESAALBARAN
       AND CVC.EJERCICIODOCUMENTO = CPC.EJERCICIOALBARAN
@@ -2446,12 +2477,12 @@ async function getDetalleVencimiento(docKey) {
 async function getSaldoActual(repartidorId) {
   const rep = normalizeText(repartidorId);
   if (!rep) return 0;
-  const APP_SCHEMA = process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER';
+  const info = await getFinanceSchemaInfo();
   const currentYear = new Date().getFullYear();
   try {
     const rows = await queryWithParams(
       `SELECT COALESCE(SALDO_ACUMULADO, 0) AS SALDO
-       FROM ${APP_SCHEMA}.CUENTAS_LIQUIDACION
+       FROM ${ERP_FINANCE_SCHEMA}.CUENTAS_LIQUIDACION
        WHERE TRIM(CODIGO_REPARTIDOR) = ? AND EJERCICIO = ?
        FETCH FIRST 1 ROW ONLY`,
       [rep, currentYear], false, false
@@ -2459,12 +2490,20 @@ async function getSaldoActual(repartidorId) {
     if (rows && rows.length > 0) return roundMoney(value(rows[0], 'SALDO'));
   } catch (_) { /* tabla no existe aún */ }
   // Fallback: agregar cobros no liquidados
+  if (!info.cobrosAligned && !info.cobrosLegacy) return 0;
   try {
+    const codeColumn = cobrosCodeColumn(info);
+    const pendingColumn = info.cobrosAligned
+      ? 'IMPORTEPENDIENTE'
+      : info.has('REPARTIDOR_COBROS', 'IMPORTE_PENDIENTE')
+        ? 'IMPORTE_PENDIENTE'
+        : cobrosAmountColumn(info);
+    const notLiquidated = cobrosNotLiquidatedCondition(info);
     const rows = await queryWithParams(
-      `SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS SALDO
-       FROM ${APP_SCHEMA}.REPARTIDOR_COBROS
-       WHERE TRIM(CODIGOVENDEDOR) = ?
-         AND (LIQUIDADO_SN IS NULL OR LIQUIDADO_SN <> 'S')`,
+      `SELECT COALESCE(SUM(${pendingColumn}), 0) AS SALDO
+       FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
+       WHERE TRIM(${codeColumn}) = ?
+         AND ${notLiquidated}`,
       [rep], false, false
     );
     return roundMoney(value(rows[0], 'SALDO'));
@@ -2480,17 +2519,33 @@ async function getSaldoActual(repartidorId) {
 async function getEvolution(repartidorId) {
   const rep = normalizeText(repartidorId);
   if (!rep) return [];
-  const APP_SCHEMA = process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER';
+  const info = await getFinanceSchemaInfo();
+  if (!info.cobrosAligned && !info.cobrosLegacy) return [];
+
+  const codeColumn = cobrosCodeColumn(info);
+  const amountColumn = cobrosAmountColumn(info);
+  const yearExpr = info.cobrosHasCollectionDate
+    ? 'ANOCOBRO'
+    : info.cobrosHasFechaCobro
+      ? 'YEAR(FECHA_COBRO)'
+      : 'ANOVENCIMIENTO';
+  const monthExpr = info.cobrosHasCollectionDate
+    ? 'MESCOBRO'
+    : info.cobrosHasFechaCobro
+      ? 'MONTH(FECHA_COBRO)'
+      : 'MESVENCIMIENTO';
   try {
     const rows = await queryWithParams(
-      `SELECT ANOCOBRO AS ANO, MESCOBRO AS MES,
-              COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL,
+      `SELECT ${yearExpr} AS ANO,
+              ${monthExpr} AS MES,
+              COALESCE(SUM(${amountColumn}), 0) AS TOTAL,
               COUNT(*) AS NUM_COBROS
-       FROM ${APP_SCHEMA}.REPARTIDOR_COBROS
-       WHERE TRIM(CODIGOVENDEDOR) = ?
-         AND ANOCOBRO IS NOT NULL
-       GROUP BY ANOCOBRO, MESCOBRO
-       ORDER BY ANOCOBRO DESC, MESCOBRO DESC
+       FROM ${ERP_FINANCE_SCHEMA}.REPARTIDOR_COBROS
+       WHERE TRIM(${codeColumn}) = ?
+         AND ${yearExpr} IS NOT NULL
+         AND ${monthExpr} BETWEEN 1 AND 12
+       GROUP BY ${yearExpr}, ${monthExpr}
+       ORDER BY ${yearExpr} DESC, ${monthExpr} DESC
        FETCH FIRST 6 ROWS ONLY`,
       [rep], false, false
     );
@@ -2515,22 +2570,27 @@ async function getTopProducts(repartidorId, { limit = 10 } = {}) {
   if (!rep) return [];
   try {
     const rows = await queryWithParams(
-      `SELECT TRIM(LPC.CODIGOARTICULO) AS CODIGO,
-              TRIM(LPC.DESCRIPCIONARTICULO) AS NOMBRE,
-              COALESCE(SUM(LPC.CANTIDADENVASES), 0) AS UNIDADES,
-              COALESCE(SUM(LPC.IMPORTEVENTA), 0) AS IMPORTE
+      `SELECT TRIM(LAC.CODIGOARTICULO) AS CODIGO,
+              TRIM(COALESCE(NULLIF(TRIM(ART.DESCRIPCIONARTICULO), ''), NULLIF(TRIM(LAC.DESCRIPCION), ''), LAC.CODIGOARTICULO)) AS NOMBRE,
+              COALESCE(SUM(LAC.CANTIDADENVASES), 0) AS UNIDADES,
+              COALESCE(SUM(LAC.IMPORTEVENTA), 0) AS IMPORTE
        FROM ${ERP_DATA_SCHEMA}.CPC CPC
-       INNER JOIN ${ERP_DATA_SCHEMA}.LPC LPC
-         ON LPC.SUBEMPRESAALBARAN = CPC.SUBEMPRESAALBARAN
-        AND LPC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
-        AND LPC.SERIEALBARAN = CPC.SERIEALBARAN
-        AND LPC.TERMINALALBARAN = CPC.TERMINALALBARAN
-        AND LPC.NUMEROALBARAN = CPC.NUMEROALBARAN
+       INNER JOIN ${ERP_DATA_SCHEMA}.LAC LAC
+         ON LAC.SUBEMPRESAALBARAN = CPC.SUBEMPRESAALBARAN
+        AND LAC.EJERCICIOALBARAN = CPC.EJERCICIOALBARAN
+        AND LAC.SERIEALBARAN = CPC.SERIEALBARAN
+        AND LAC.TERMINALALBARAN = CPC.TERMINALALBARAN
+        AND LAC.NUMEROALBARAN = CPC.NUMEROALBARAN
+       LEFT JOIN ${ERP_DATA_SCHEMA}.ART ART
+         ON TRIM(ART.CODIGOARTICULO) = TRIM(LAC.CODIGOARTICULO)
        INNER JOIN ${ERP_DATA_SCHEMA}.OPP OPP
          ON OPP.NUMEROORDENPREPARACION = CPC.NUMEROORDENPREPARACION
+        AND OPP.EJERCICIOORDENPREPARACION = CPC.EJERCICIOORDENPREPARACION
        WHERE TRIM(OPP.CODIGOREPARTIDOR) = ?
-         AND CPC.ANODOCUMENTO >= YEAR(CURRENT_DATE) - 1
-       GROUP BY TRIM(LPC.CODIGOARTICULO), TRIM(LPC.DESCRIPCIONARTICULO)
+         AND CPC.ANODOCUMENTO >= YEAR(CURRENT DATE) - 1
+         AND TRIM(LAC.CODIGOARTICULO) <> ''
+       GROUP BY TRIM(LAC.CODIGOARTICULO),
+                TRIM(COALESCE(NULLIF(TRIM(ART.DESCRIPCIONARTICULO), ''), NULLIF(TRIM(LAC.DESCRIPCION), ''), LAC.CODIGOARTICULO))
        ORDER BY IMPORTE DESC
        FETCH FIRST ${Math.max(1, Math.min(50, Number(limit) || 10))} ROWS ONLY`,
       [rep], false, false
