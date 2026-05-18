@@ -271,7 +271,9 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           ),
         ],
         border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.1) : Colors.grey.shade200,
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.1)
+              : Colors.grey.shade200,
         ),
       ),
       child: Stack(
@@ -315,10 +317,12 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                           width: 48, // Slightly larger
                           height: 48,
                           decoration: BoxDecoration(
-                            color: const Color(0xFF2D5A87).withValues(alpha: 0.15),
+                            color:
+                                const Color(0xFF2D5A87).withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: const Color(0xFF2D5A87).withValues(alpha: 0.5),
+                              color: const Color(0xFF2D5A87)
+                                  .withValues(alpha: 0.5),
                             ),
                           ),
                           child: const Icon(
@@ -336,7 +340,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                factura.nombreComercial ?? factura.clienteNombre,
+                                factura.nombreComercial ??
+                                    factura.clienteNombre,
                                 style: TextStyle(
                                   fontWeight: FontWeight.w900,
                                   fontSize:
@@ -352,7 +357,9 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                               if (factura.nombreFiscal != null &&
                                   factura.nombreFiscal!.isNotEmpty &&
                                   factura.nombreFiscal!.toUpperCase() !=
-                                      (factura.nombreComercial ?? factura.clienteNombre).toUpperCase())
+                                      (factura.nombreComercial ??
+                                              factura.clienteNombre)
+                                          .toUpperCase())
                                 Padding(
                                   padding: const EdgeInsets.only(top: 2),
                                   child: Text(
@@ -764,7 +771,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         decoration: BoxDecoration(
           color: AppTheme.darkSurface,
           borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-          border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
+          border: Border(
+              top: BorderSide(color: Colors.white.withValues(alpha: 0.1))),
         ),
         child: SafeArea(
           child: Column(
@@ -965,7 +973,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               decoration: BoxDecoration(
                 color: AppTheme.surfaceColor,
                 border: Border(
-                  bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+                  bottom:
+                      BorderSide(color: Colors.white.withValues(alpha: 0.05)),
                 ),
                 boxShadow: const [
                   BoxShadow(
@@ -1011,7 +1020,8 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                       ),
                     ],
                   ),
-                  if ((authState?.user?.isJefeVentas ?? false) || widget.forceShowVendorSelector) ...[
+                  if ((authState?.user?.isJefeVentas ?? false) ||
+                      widget.forceShowVendorSelector) ...[
                     const SizedBox(height: 12),
                     Container(
                       constraints: const BoxConstraints(minHeight: 50),
@@ -1031,8 +1041,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               child: Column(
                 children: [
                   // Summary Cards
-                  if (!Responsive.isLandscapeCompact(context))
-                    _buildSummaryCards(),
+                  _buildSummaryCards(),
 
                   // Inputs & Filters
                   _buildFilters(context),
@@ -1076,42 +1085,37 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   Widget _buildSummaryCards() {
     if (_summary == null) return const SizedBox.shrink();
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          // Responsive: 2 columns on very narrow screens, 3 on wider
-          final columns = constraints.maxWidth < 400 ? 2 : 3;
-          final itemWidth =
-              (constraints.maxWidth - (columns - 1) * 8) / columns;
-          return Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildSummaryItem(
-                icon: Icons.receipt_long,
-                label: 'Facturas',
-                value: '${_summary!.totalFacturas}',
-                color: Colors.blue,
-                width: itemWidth,
-              ),
-              _buildSummaryItem(
-                icon: Icons.euro,
-                label: 'Total',
-                value: '${_summary!.totalImporte.toStringAsFixed(0)}€',
-                color: Colors.green,
-                width: itemWidth,
-              ),
-              _buildSummaryItem(
-                icon: Icons.percent,
-                label: 'IVA',
-                value: '${_summary!.totalIva.toStringAsFixed(0)}€',
-                color: Colors.orange,
-                width: itemWidth,
-              ),
-            ],
-          );
-        },
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildSummaryItem(
+              icon: Icons.receipt_long,
+              label: 'Facturas',
+              value: '${_summary!.totalFacturas}',
+              color: Colors.blue,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildSummaryItem(
+              icon: Icons.euro,
+              label: 'Total',
+              value: '${_summary!.totalImporte.toStringAsFixed(0)}€',
+              color: Colors.green,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _buildSummaryItem(
+              icon: Icons.percent,
+              label: 'IVA',
+              value: '${_summary!.totalIva.toStringAsFixed(0)}€',
+              color: Colors.orange,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1121,14 +1125,11 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     required String label,
     required String value,
     required Color color,
-    double? width,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final small = Responsive.isSmall(context);
 
     return Container(
-      width: width,
-      padding: EdgeInsets.symmetric(vertical: small ? 8 : 12, horizontal: 8),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF1E2746) : Colors.white,
         borderRadius: BorderRadius.circular(12),
@@ -1137,41 +1138,47 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
         ),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: EdgeInsets.all(small ? 6 : 8),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: color, size: small ? 16 : 20),
-          ),
-          const SizedBox(height: 8),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              value,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: small ? 14 : 16,
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: color, size: 15),
               ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              label,
-              style: TextStyle(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.9)
-                    : Colors.grey.shade700,
-                fontSize: small ? 10 : 12,
-                fontWeight: FontWeight.w500,
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              textAlign: TextAlign.center,
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.7)
+                  : Colors.grey.shade600,
+              fontSize: 10,
+              fontWeight: FontWeight.w500,
             ),
+            textAlign: TextAlign.center,
+            maxLines: 1,
           ),
         ],
       ),
@@ -1179,36 +1186,66 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   }
 
   Widget _buildFilters(BuildContext context) {
-    // Replaced with improved date picker theme logic in _selectDate
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1A2332) : Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.grey.shade200,
+        ),
+      ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Search Row
+          // Section label
+          Row(
+            children: [
+              Icon(Icons.filter_list,
+                  size: 16,
+                  color: isDark ? Colors.white38 : Colors.grey.shade500),
+              const SizedBox(width: 6),
+              Text(
+                'Filtros',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white38 : Colors.grey.shade500,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Search Row - full width fields
           Row(
             children: [
               Expanded(
                 child: _buildSearchField(
                   controller: _clientSearchController,
                   hint: 'Buscar cliente...',
-                  icon: Icons.person_search,
+                  icon: Icons.person_search_outlined,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: _buildSearchField(
                   controller: _facturaSearchController,
                   hint: 'Nº Factura...',
-                  icon: Icons.receipt,
+                  icon: Icons.receipt_long_outlined,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 12),
 
-          // Month & Year Row
+          // Date Controls Grid - 2x2 layout
           Row(
             children: [
               Expanded(
@@ -1216,7 +1253,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                   value: _selectedMonth,
                   items: [
                     const DropdownMenuItem<int>(
-                      child: Text('Todos los meses'),
+                      child: Text('Todos'),
                     ),
                     ...List.generate(12, (index) {
                       final monthName = DateFormat('MMMM', 'es_ES')
@@ -1234,7 +1271,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                   icon: Icons.calendar_month,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: _buildDropdown<int>(
                   value: _selectedYear,
@@ -1248,7 +1285,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
 
           // Date Range Row
           Row(
@@ -1262,7 +1299,7 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                   isActive: _dateFrom != null,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 10),
               Expanded(
                 child: _buildDateButton(
                   label: _dateTo == null
@@ -1273,20 +1310,30 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
                 ),
               ),
               if (_dateFrom != null || _dateTo != null)
-                IconButton(
-                  icon: const Icon(Icons.clear, color: Colors.red),
-                  onPressed: () {
-                    setState(() {
-                      _dateFrom = null;
-                      _dateTo = null;
-                    });
-                    _refreshData();
-                  },
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: InkWell(
+                    onTap: () {
+                      setState(() {
+                        _dateFrom = null;
+                        _dateTo = null;
+                      });
+                      _refreshData();
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child:
+                          const Icon(Icons.close, size: 18, color: Colors.red),
+                    ),
+                  ),
                 ),
             ],
           ),
-
-          const SizedBox(height: 16),
         ],
       ),
     );
@@ -1298,39 +1345,49 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
     required bool isActive,
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accentColor = const Color(0xFF2D5A87);
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(10),
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+        height: 44,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(
           color: isActive
-              ? const Color(0xFF2D5A87).withValues(alpha: 0.1)
-              : (isDark ? const Color(0xFF1E2746) : Colors.grey.shade100),
-          borderRadius: BorderRadius.circular(12),
+              ? accentColor.withValues(alpha: 0.08)
+              : (isDark ? const Color(0xFF1E2746) : Colors.white),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: isActive
-                ? const Color(0xFF2D5A87)
-                : (isDark ? Colors.white10 : Colors.transparent),
+                ? accentColor.withValues(alpha: 0.4)
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.grey.shade200),
+            width: isActive ? 1.5 : 1,
           ),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.date_range,
-              size: 18,
-              color: isActive ? const Color(0xFF2D5A87) : Colors.grey,
+              Icons.date_range_rounded,
+              size: 16,
+              color: isActive
+                  ? accentColor
+                  : (isDark ? Colors.white38 : Colors.grey.shade400),
             ),
             const SizedBox(width: 8),
             Text(
               label,
               style: TextStyle(
                 color: isActive
-                    ? const Color(0xFF2D5A87)
-                    : (isDark ? Colors.white : Colors.black87),
-                fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                    ? accentColor
+                    : (isDark
+                        ? Colors.white.withValues(alpha: 0.7)
+                        : Colors.black87),
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w500,
+                fontSize: 13,
               ),
             ),
           ],
@@ -1346,25 +1403,38 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Responsive search field height
-    final fieldH = Responsive.value(context, phone: 40, desktop: 48);
     return Container(
-      height: fieldH,
+      height: 44,
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2746) : Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? Colors.white10 : Colors.transparent),
+        color: isDark ? const Color(0xFF1E2746) : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.grey.shade200,
+        ),
       ),
       child: TextField(
         controller: controller,
         onChanged: (_) => _onSearchChanged(),
-        style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+        style: TextStyle(
+          color: isDark ? Colors.white : Colors.black87,
+          fontSize: 14,
+        ),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(color: isDark ? Colors.white38 : Colors.grey),
-          prefixIcon: Icon(icon, color: Colors.grey, size: 20),
+          hintStyle: TextStyle(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.3)
+                : Colors.grey.shade400,
+            fontSize: 13,
+          ),
+          prefixIcon: Icon(icon,
+              color: isDark ? Colors.white38 : Colors.grey.shade400, size: 18),
+          prefixIconConstraints: const BoxConstraints(minWidth: 40),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         ),
       ),
     );
@@ -1379,14 +1449,17 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Responsive dropdown height
     return Container(
-      height: Responsive.value(context, phone: 40, desktop: 48),
-      padding: const EdgeInsets.symmetric(horizontal: 12),
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
       decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF1E2746) : Colors.grey.shade100,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: isDark ? Colors.white10 : Colors.transparent),
+        color: isDark ? const Color(0xFF1E2746) : Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : Colors.grey.shade200,
+        ),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<T>(
@@ -1394,18 +1467,30 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
           items: items,
           onChanged: onChanged,
           hint: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 18, color: Colors.grey),
+              Icon(icon,
+                  size: 16,
+                  color: isDark ? Colors.white38 : Colors.grey.shade400),
               const SizedBox(width: 8),
               Text(
                 hint,
-                style: TextStyle(color: isDark ? Colors.white38 : Colors.grey),
+                style: TextStyle(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.3)
+                      : Colors.grey.shade400,
+                  fontSize: 13,
+                ),
               ),
             ],
           ),
-          icon: const Icon(Icons.arrow_drop_down, color: Colors.grey),
+          icon: Icon(Icons.arrow_drop_down,
+              color: isDark ? Colors.white38 : Colors.grey.shade400),
           dropdownColor: isDark ? const Color(0xFF1E2746) : Colors.white,
-          style: TextStyle(color: isDark ? Colors.white : Colors.black87),
+          style: TextStyle(
+            color: isDark ? Colors.white : Colors.black87,
+            fontSize: 14,
+          ),
           isExpanded: true,
         ),
       ),
