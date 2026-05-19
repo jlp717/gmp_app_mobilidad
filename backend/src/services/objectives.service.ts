@@ -69,6 +69,67 @@ interface LevelData {
 // HELPER FUNCTIONS
 // ============================================
 
+type YearStats = Record<string, { sales: number; cost: number; units: number }>;
+
+function createYearStats(yearsArray: number[]): YearStats {
+  return Object.fromEntries(
+    yearsArray.map(year => [year.toString(), { sales: 0, cost: 0, units: 0 }]),
+  );
+}
+
+function addToYearStats(
+  stats: YearStats,
+  year: number,
+  sales: number,
+  cost: number,
+  units: number,
+): void {
+  const key = year.toString();
+  if (!stats[key]) stats[key] = { sales: 0, cost: 0, units: 0 };
+  stats[key].sales += sales;
+  stats[key].cost += cost;
+  stats[key].units += units;
+}
+
+function formatYearStats(
+  stats: YearStats,
+  yearsArray: number[],
+  productSets?: Record<string, Set<string>>,
+): Record<string, unknown> {
+  const output: Record<string, unknown> = {};
+  for (const year of yearsArray) {
+    const key = year.toString();
+    const data = stats[key] || { sales: 0, cost: 0, units: 0 };
+    const margin = data.sales - data.cost;
+    output[key] = {
+      sales: parseFloat(data.sales.toFixed(2)),
+      cost: parseFloat(data.cost.toFixed(2)),
+      units: parseFloat(data.units.toFixed(2)),
+      margin: parseFloat(margin.toFixed(2)),
+      marginPercent: data.sales > 0 ? parseFloat(((margin / data.sales) * 100).toFixed(1)) : 0,
+      avgUnitPrice: data.units > 0 ? parseFloat((data.sales / data.units).toFixed(2)) : 0,
+      avgUnitCost: data.units > 0 ? parseFloat((data.cost / data.units).toFixed(2)) : 0,
+      marginPerUnit: data.units > 0 ? parseFloat((margin / data.units).toFixed(2)) : 0,
+      ...(productSets?.[key] ? { productCount: productSets[key].size } : {}),
+    };
+  }
+  return output;
+}
+
+function formatByYearFromMonthly(
+  monthlyData: Record<string, Record<string, { sales: number; cost: number; units: number }>>,
+  yearsArray: number[],
+): Record<string, unknown> {
+  const stats = createYearStats(yearsArray);
+  for (const [yearStr, months] of Object.entries(monthlyData || {})) {
+    if (!yearsArray.includes(parseInt(yearStr))) continue;
+    for (const md of Object.values(months || {})) {
+      addToYearStats(stats, parseInt(yearStr), md.sales || 0, md.cost || 0, md.units || 0);
+    }
+  }
+  return formatYearStats(stats, yearsArray);
+}
+
 /**
  * Loads filter/family names from DSEDAC tables with caching.
  */
@@ -115,12 +176,16 @@ function formatLevelMonthly(
     const mStr = m.toString();
     let selectedSales = 0, selectedUnits = 0, selectedCost = 0;
     let prevSales = 0, prevUnits = 0, prevCost = 0;
+    const byYear = createYearStats(yearsArray);
 
     for (const [yearStr, mData] of Object.entries(monthlyData)) {
       const y = parseInt(yearStr);
       const md = mData[mStr];
       if (!md) continue;
-      if (isSelectedYear(y)) { selectedSales += md.sales; selectedUnits += md.units; selectedCost += md.cost; }
+      if (isSelectedYear(y)) {
+        selectedSales += md.sales; selectedUnits += md.units; selectedCost += md.cost;
+        addToYearStats(byYear, y, md.sales || 0, md.cost || 0, md.units || 0);
+      }
       else if (isPrevYear(y)) { prevSales += md.sales; prevUnits += md.units; prevCost += md.cost; }
     }
 
@@ -141,6 +206,7 @@ function formatLevelMonthly(
       prevCost: parseFloat(prevCost.toFixed(2)),
       yoyTrend: mTrend,
       yoyVariation: parseFloat(mVar.toFixed(1)),
+      byYear: formatYearStats(byYear, yearsArray),
     };
   }
   return output;
@@ -176,6 +242,7 @@ function formatLevelSummary(level: LevelData, yearsArray: number[]) {
     prevYearMargin: parseFloat(prevMargin.toFixed(2)),
     yoyTrend,
     yoyVariation: parseFloat(variation.toFixed(1)),
+    byYear: formatByYearFromMonthly(level.monthlyData, yearsArray),
     monthlyData: formatLevelMonthly(level.monthlyData, yearsArray),
   };
 }
@@ -728,8 +795,11 @@ class ObjectivesService {
     let grandTotalPrevSales = 0, grandTotalPrevCost = 0, grandTotalPrevUnits = 0;
     const productSet = new Set<string>();
     const prevProductSet = new Set<string>();
-    const monthlyStats = new Map<number, { currentSales: number; prevSales: number; currentUnits: number }>();
-    for (let m = 1; m <= 12; m++) monthlyStats.set(m, { currentSales: 0, prevSales: 0, currentUnits: 0 });
+    const grandTotalsByYear = createYearStats(yearsArray);
+    const productSetsByYear: Record<string, Set<string>> = {};
+    yearsArray.forEach(year => { productSetsByYear[year.toString()] = new Set<string>(); });
+    const monthlyStats = new Map<number, { currentSales: number; prevSales: number; currentUnits: number; byYear: YearStats }>();
+    for (let m = 1; m <= 12; m++) monthlyStats.set(m, { currentSales: 0, prevSales: 0, currentUnits: 0, byYear: createYearStats(yearsArray) });
 
     // Available filter maps
     const availableFamiliesMap = new Map<string, { code: string; name: string }>();
@@ -782,13 +852,18 @@ class ObjectivesService {
 
       // Update monthly stats
       const mStat = monthlyStats.get(month)!;
-      if (isSelected) { mStat.currentSales += sales; mStat.currentUnits += units; }
+      if (isSelected) {
+        mStat.currentSales += sales; mStat.currentUnits += units;
+        addToYearStats(mStat.byYear, year, sales, cost, units);
+      }
       else if (isPrev) { mStat.prevSales += sales; }
 
       // Grand totals
       if (isSelected) {
         grandTotalSales += sales; grandTotalCost += cost; grandTotalUnits += units;
         productSet.add(prodCode);
+        addToYearStats(grandTotalsByYear, year, sales, cost, units);
+        productSetsByYear[year.toString()]?.add(prodCode);
       } else if (isPrev) {
         grandTotalPrevSales += sales; grandTotalPrevCost += cost; grandTotalPrevUnits += units;
         prevProductSet.add(prodCode);
@@ -825,7 +900,7 @@ class ObjectivesService {
           prevYearSales: 0, prevYearCost: 0, prevYearUnits: 0,
           hasDiscount: false, hasSpecialPrice: false,
           avgDiscountPct: 0, avgClientTariff: 0, avgBaseTariff: 0,
-          monthlyData: {} as Record<string, Record<string, { sales: number; units: number }>>,
+          monthlyData: {} as Record<string, Record<string, { sales: number; cost: number; units: number }>>,
         });
       }
       const product = subfamily.products.get(prodCode)!;
@@ -846,8 +921,9 @@ class ObjectivesService {
       const ys = year.toString();
       const ms = month.toString();
       if (!product.monthlyData[ys]) product.monthlyData[ys] = {};
-      if (!product.monthlyData[ys][ms]) product.monthlyData[ys][ms] = { sales: 0, units: 0 };
+      if (!product.monthlyData[ys][ms]) product.monthlyData[ys][ms] = { sales: 0, cost: 0, units: 0 };
       product.monthlyData[ys][ms].sales += sales;
+      product.monthlyData[ys][ms].cost += cost;
       product.monthlyData[ys][ms].units += units;
 
       // --- FI Hierarchy (FI1 > FI2 > FI3 > FI4 > Product) ---
@@ -930,8 +1006,9 @@ class ObjectivesService {
         fiProduct.prevYearSales += sales; fiProduct.prevYearCost += cost; fiProduct.prevYearUnits += units;
       }
       if (!fiProduct.monthlyData[year.toString()]) fiProduct.monthlyData[year.toString()] = {};
-      if (!fiProduct.monthlyData[year.toString()][month.toString()]) fiProduct.monthlyData[year.toString()][month.toString()] = { sales: 0, units: 0 };
+      if (!fiProduct.monthlyData[year.toString()][month.toString()]) fiProduct.monthlyData[year.toString()][month.toString()] = { sales: 0, cost: 0, units: 0 };
       fiProduct.monthlyData[year.toString()][month.toString()].sales += sales;
+      fiProduct.monthlyData[year.toString()][month.toString()].cost += cost;
       fiProduct.monthlyData[year.toString()][month.toString()].units += units;
     }
 
@@ -952,18 +1029,22 @@ class ObjectivesService {
           const monthlyOutput: Record<string, unknown> = {};
           for (let m = 1; m <= 12; m++) {
             const mStr = m.toString();
-            let selSales = 0, selUnits = 0, pSales = 0;
-            for (const [ys, md] of Object.entries(p.monthlyData) as [string, Record<string, { sales: number; units: number }>][]) {
+            let selSales = 0, selUnits = 0, selCost = 0, pSales = 0, pCost = 0;
+            const byYear = createYearStats(yearsArray);
+            for (const [ys, md] of Object.entries(p.monthlyData) as [string, Record<string, { sales: number; cost: number; units: number }>][]) {
               const y = parseInt(ys);
               if (md[mStr]) {
-                if (isSelectedYear(y)) { selSales += md[mStr].sales; selUnits += md[mStr].units; }
-                else if (isPrevYear(y)) { pSales += md[mStr].sales; }
+                if (isSelectedYear(y)) {
+                  selSales += md[mStr].sales; selUnits += md[mStr].units; selCost += md[mStr].cost || 0;
+                  addToYearStats(byYear, y, md[mStr].sales || 0, md[mStr].cost || 0, md[mStr].units || 0);
+                }
+                else if (isPrevYear(y)) { pSales += md[mStr].sales; pCost += md[mStr].cost || 0; }
               }
             }
             let mTrend = 'neutral'; let mVar = 0;
             if (pSales > 0) { mVar = ((selSales - pSales) / pSales) * 100; if (mVar > 5) mTrend = 'up'; else if (mVar < -5) mTrend = 'down'; }
             else if (selSales > 0) mTrend = 'up';
-            monthlyOutput[mStr] = { sales: selSales, prevSales: pSales, yoyTrend: mTrend, yoyVariation: mVar };
+            monthlyOutput[mStr] = { sales: selSales, cost: selCost, prevSales: pSales, prevCost: pCost, yoyTrend: mTrend, yoyVariation: mVar, byYear: formatYearStats(byYear, yearsArray) };
           }
 
           return {
@@ -980,6 +1061,7 @@ class ObjectivesService {
             prevYearAvgPrice: parseFloat(prevAvgPrice.toFixed(2)),
             hasDiscount: p.hasDiscount, hasSpecialPrice: p.hasSpecialPrice,
             avgDiscountPct: p.avgDiscountPct,
+            byYear: formatByYearFromMonthly(p.monthlyData || {}, yearsArray),
             monthlyData: monthlyOutput,
             yoyTrend, yoyVariation: parseFloat(variation.toFixed(1)),
           };
@@ -1068,6 +1150,7 @@ class ObjectivesService {
         sales: val.currentSales, units: val.currentUnits, prevSales: val.prevSales,
         yoyVariation: variation !== null ? parseFloat(variation.toFixed(1)) : null,
         yoyTrend,
+        byYear: formatYearStats(val.byYear, yearsArray),
       };
     });
 
@@ -1081,6 +1164,7 @@ class ObjectivesService {
     const productGrowth = prevProductSet.size > 0
       ? ((productSet.size - prevProductSet.size) / prevProductSet.size) * 100
       : (productSet.size > 0 ? 100 : 0);
+    const byYearTotals = formatYearStats(grandTotalsByYear, yearsArray, productSetsByYear);
 
     return {
       clientCode,
@@ -1088,12 +1172,13 @@ class ObjectivesService {
       editableNotes,
       summary: {
         isNewClient,
+        byYear: byYearTotals,
         current: { label: yearsArray.join(', '), sales: grandTotalSales, margin: grandTotalMargin, units: grandTotalUnits, productCount: productSet.size },
         previous: { label: yearsArray.map(y => y - 1).join(', '), sales: grandTotalPrevSales, margin: grandTotalPrevMargin, units: grandTotalPrevUnits, productCount: prevProductSet.size },
         growth: { sales: salesGrowth, margin: marginGrowth, units: unitsGrowth, productCount: productGrowth },
         breakdown: [],
       },
-      grandTotal: { sales: grandTotalSales, cost: grandTotalCost, margin: grandTotalMargin, units: grandTotalUnits, products: productSet.size },
+      grandTotal: { sales: grandTotalSales, cost: grandTotalCost, margin: grandTotalMargin, units: grandTotalUnits, products: productSet.size, byYear: byYearTotals },
       monthlyTotals: flatMonthlyTotals,
       availableFilters: {
         families: Array.from(availableFamiliesMap.values()).sort((a, b) => a.name.localeCompare(b.name)),

@@ -1184,13 +1184,62 @@ router.get('/matrix', verifyToken, async (req, res) => {
         let grandTotalPrevSales = 0, grandTotalPrevCost = 0, grandTotalPrevUnits = 0;
         const productSet = new Set();
         const prevProductSet = new Set(); // Products from previous year
+        const createYearStats = () => {
+            const stats = {};
+            yearsArray.forEach(year => {
+                stats[year] = { sales: 0, cost: 0, units: 0 };
+            });
+            return stats;
+        };
+        const grandTotalsByYear = createYearStats();
+        const productSetsByYear = {};
+        yearsArray.forEach(year => { productSetsByYear[year] = new Set(); });
 
         // Monthly YoY Calculation
         const monthlyStats = new Map();
-        for (let m = 1; m <= 12; m++) monthlyStats.set(m, { currentSales: 0, prevSales: 0, currentUnits: 0 });
+        for (let m = 1; m <= 12; m++) monthlyStats.set(m, { currentSales: 0, prevSales: 0, currentUnits: 0, byYear: createYearStats() });
 
         const isSelectedYear = (y) => yearsArray.includes(y);
         const isPrevYear = (y) => yearsArray.some(selected => selected - 1 === y);
+        const round2 = (value) => parseFloat((value || 0).toFixed(2));
+        const round1 = (value) => parseFloat((value || 0).toFixed(1));
+        const addToYearStats = (stats, year, sales, cost, units) => {
+            if (!isSelectedYear(year)) return;
+            if (!stats[year]) stats[year] = { sales: 0, cost: 0, units: 0 };
+            stats[year].sales += sales;
+            stats[year].cost += cost;
+            stats[year].units += units;
+        };
+        const formatYearStats = (stats, productSets = null) => {
+            const output = {};
+            yearsArray.forEach(year => {
+                const data = stats?.[year] || { sales: 0, cost: 0, units: 0 };
+                const margin = (data.sales || 0) - (data.cost || 0);
+                output[year] = {
+                    sales: round2(data.sales),
+                    cost: round2(data.cost),
+                    units: round2(data.units),
+                    margin: round2(margin),
+                    marginPercent: data.sales > 0 ? round1((margin / data.sales) * 100) : 0,
+                    avgUnitPrice: data.units > 0 ? round2(data.sales / data.units) : 0,
+                    avgUnitCost: data.units > 0 ? round2(data.cost / data.units) : 0,
+                    marginPerUnit: data.units > 0 ? round2(margin / data.units) : 0
+                };
+                if (productSets?.[year]) output[year].productCount = productSets[year].size;
+            });
+            return output;
+        };
+        const formatByYearFromMonthly = (monthlyData) => {
+            const stats = createYearStats();
+            Object.keys(monthlyData || {}).forEach(yearStr => {
+                const year = parseInt(yearStr);
+                if (!isSelectedYear(year)) return;
+                Object.values(monthlyData[yearStr] || {}).forEach(mData => {
+                    addToYearStats(stats, year, mData.sales || 0, mData.cost || 0, mData.units || 0);
+                });
+            });
+            return formatYearStats(stats);
+        };
 
         rows.forEach(row => {
             const famCode = row.FAMILY_CODE?.trim() || 'SIN_FAM';
@@ -1270,6 +1319,7 @@ router.get('/matrix', verifyToken, async (req, res) => {
             if (isSelectedYear(year)) {
                 mStat.currentSales += sales;
                 mStat.currentUnits += units;
+                addToYearStats(mStat.byYear, year, sales, cost, units);
             } else if (isPrevYear(year)) {
                 mStat.prevSales += sales;
             }
@@ -1280,6 +1330,8 @@ router.get('/matrix', verifyToken, async (req, res) => {
                 grandTotalCost += cost;
                 grandTotalUnits += units;
                 productSet.add(prodCode);
+                addToYearStats(grandTotalsByYear, year, sales, cost, units);
+                productSetsByYear[year]?.add(prodCode);
             } else if (isPrevYear(year)) {
                 grandTotalPrevSales += sales;
                 grandTotalPrevCost += cost;
@@ -1361,9 +1413,10 @@ router.get('/matrix', verifyToken, async (req, res) => {
                 // Product Monthly Data
                 if (!product.monthlyData[year]) product.monthlyData[year] = {};
                 if (!product.monthlyData[year][month]) product.monthlyData[year][month] = {
-                    sales: 0, units: 0, avgDiscountPct: 0, avgDiscountEur: 0
+                    sales: 0, cost: 0, units: 0, avgDiscountPct: 0, avgDiscountEur: 0
                 };
                 product.monthlyData[year][month].sales += sales;
+                product.monthlyData[year][month].cost += cost;
                 product.monthlyData[year][month].units += units;
                 if (avgDiscountPct > 0) product.monthlyData[year][month].avgDiscountPct = avgDiscountPct;
                 if (avgDiscountEur > 0) product.monthlyData[year][month].avgDiscountEur = avgDiscountEur;
@@ -1523,8 +1576,9 @@ router.get('/matrix', verifyToken, async (req, res) => {
                 }
                 // Monthly data for FI product
                 if (!fiProduct.monthlyData[year]) fiProduct.monthlyData[year] = {};
-                if (!fiProduct.monthlyData[year][month]) fiProduct.monthlyData[year][month] = { sales: 0, units: 0 };
+                if (!fiProduct.monthlyData[year][month]) fiProduct.monthlyData[year][month] = { sales: 0, cost: 0, units: 0 };
                 fiProduct.monthlyData[year][month].sales += sales;
+                fiProduct.monthlyData[year][month].cost += cost;
                 fiProduct.monthlyData[year][month].units += units;
             }
         });
@@ -1557,7 +1611,8 @@ router.get('/matrix', verifyToken, async (req, res) => {
                 units: val.currentUnits,
                 prevSales: val.prevSales,
                 yoyVariation: variation !== null ? parseFloat(variation.toFixed(1)) : null,
-                yoyTrend: yoyTrend
+                yoyTrend: yoyTrend,
+                byYear: formatYearStats(val.byYear)
             };
         });
 
@@ -1582,7 +1637,7 @@ router.get('/matrix', verifyToken, async (req, res) => {
                     // Flatten Monthly Data
                     const flatMonthly = {};
                     for (let m = 1; m <= 12; m++) {
-                        flatMonthly[m.toString()] = { selectedSales: 0, selectedUnits: 0, prevSales: 0, prevUnits: 0 };
+                        flatMonthly[m.toString()] = { selectedSales: 0, selectedUnits: 0, selectedCost: 0, prevSales: 0, prevUnits: 0, prevCost: 0, byYear: createYearStats() };
                     }
                     Object.keys(p.monthlyData).forEach(yearStr => {
                         const y = parseInt(yearStr);
@@ -1591,9 +1646,12 @@ router.get('/matrix', verifyToken, async (req, res) => {
                             if (isSelectedYear(y)) {
                                 flatMonthly[mStr].selectedSales += mData[mStr].sales || 0;
                                 flatMonthly[mStr].selectedUnits += mData[mStr].units || 0;
+                                flatMonthly[mStr].selectedCost += mData[mStr].cost || 0;
+                                addToYearStats(flatMonthly[mStr].byYear, y, mData[mStr].sales || 0, mData[mStr].cost || 0, mData[mStr].units || 0);
                             } else if (isPrevYear(y)) {
                                 flatMonthly[mStr].prevSales += mData[mStr].sales || 0;
                                 flatMonthly[mStr].prevUnits += mData[mStr].units || 0;
+                                flatMonthly[mStr].prevCost += mData[mStr].cost || 0;
                             }
                         });
                     });
@@ -1610,9 +1668,12 @@ router.get('/matrix', verifyToken, async (req, res) => {
 
                         monthlyOutput[mStr] = {
                             sales: d.selectedSales,
+                            cost: d.selectedCost,
                             prevSales: d.prevSales, // Added for frontend context
+                            prevCost: d.prevCost,
                             yoyTrend: mTrend,
-                            yoyVariation: mVar
+                            yoyVariation: mVar,
+                            byYear: formatYearStats(d.byYear)
                         };
                     });
 
@@ -1634,6 +1695,7 @@ router.get('/matrix', verifyToken, async (req, res) => {
                         hasSpecialPrice: p.hasSpecialPrice,
                         avgDiscountPct: p.avgDiscountPct,
                         avgDiscountEur: p.avgDiscountEur,
+                        byYear: formatByYearFromMonthly(p.monthlyData || {}),
                         monthlyData: monthlyOutput,
                         yoyTrend,
                         yoyVariation: parseFloat(variation.toFixed(1))
@@ -1669,7 +1731,7 @@ router.get('/matrix', verifyToken, async (req, res) => {
         const formatLevelMonthly = (monthlyData) => {
             const flatMonthly = {};
             for (let m = 1; m <= 12; m++) {
-                flatMonthly[m.toString()] = { selectedSales: 0, selectedUnits: 0, selectedCost: 0, prevSales: 0, prevUnits: 0, prevCost: 0 };
+                flatMonthly[m.toString()] = { selectedSales: 0, selectedUnits: 0, selectedCost: 0, prevSales: 0, prevUnits: 0, prevCost: 0, byYear: createYearStats() };
             }
             Object.keys(monthlyData).forEach(yearStr => {
                 const y = parseInt(yearStr);
@@ -1679,6 +1741,7 @@ router.get('/matrix', verifyToken, async (req, res) => {
                         flatMonthly[mStr].selectedSales += mData[mStr].sales || 0;
                         flatMonthly[mStr].selectedUnits += mData[mStr].units || 0;
                         flatMonthly[mStr].selectedCost += mData[mStr].cost || 0;
+                        addToYearStats(flatMonthly[mStr].byYear, y, mData[mStr].sales || 0, mData[mStr].cost || 0, mData[mStr].units || 0);
                     } else if (isPrevYear(y)) {
                         flatMonthly[mStr].prevSales += mData[mStr].sales || 0;
                         flatMonthly[mStr].prevUnits += mData[mStr].units || 0;
@@ -1704,7 +1767,8 @@ router.get('/matrix', verifyToken, async (req, res) => {
                     prevSales: parseFloat(d.prevSales.toFixed(2)),
                     prevCost: parseFloat(d.prevCost.toFixed(2)),
                     yoyTrend: mTrend,
-                    yoyVariation: parseFloat(mVar.toFixed(1))
+                    yoyVariation: parseFloat(mVar.toFixed(1)),
+                    byYear: formatYearStats(d.byYear)
                 };
             });
             return output;
@@ -1753,6 +1817,7 @@ router.get('/matrix', verifyToken, async (req, res) => {
                 hasSpecialPrice: p.hasSpecialPrice,
                 avgDiscountPct: p.avgDiscountPct || 0,
                 avgDiscountEur: p.avgDiscountEur || 0,
+                byYear: formatByYearFromMonthly(p.monthlyData || {}),
                 monthlyData: productMonthly,
                 yoyTrend,
                 yoyVariation: parseFloat(variation.toFixed(1))
@@ -1813,6 +1878,7 @@ router.get('/matrix', verifyToken, async (req, res) => {
                             prevYearMargin: parseFloat(prevMargin4.toFixed(2)),
                             yoyTrend: yoy4,
                             yoyVariation: parseFloat(variation4.toFixed(1)),
+                            byYear: formatByYearFromMonthly(fi4.monthlyData || {}),
                             monthlyData: formatLevelMonthly(fi4.monthlyData || {}),
                             productCount: products.length,
                             products
@@ -1834,6 +1900,7 @@ router.get('/matrix', verifyToken, async (req, res) => {
                         prevYearMargin: parseFloat(prevMargin3.toFixed(2)),
                         yoyTrend: yoy3,
                         yoyVariation: parseFloat(variation3.toFixed(1)),
+                        byYear: formatByYearFromMonthly(fi3.monthlyData || {}),
                         monthlyData: formatLevelMonthly(fi3.monthlyData || {}),
                         childCount: children3.length,
                         children: children3
@@ -1855,6 +1922,7 @@ router.get('/matrix', verifyToken, async (req, res) => {
                     prevYearMargin: parseFloat(prevMargin2.toFixed(2)),
                     yoyTrend: yoy2,
                     yoyVariation: parseFloat(variation2.toFixed(1)),
+                    byYear: formatByYearFromMonthly(fi2.monthlyData || {}),
                     monthlyData: formatLevelMonthly(fi2.monthlyData || {}),
                     childCount: children2.length,
                     children: children2
@@ -1883,6 +1951,7 @@ router.get('/matrix', verifyToken, async (req, res) => {
                 prevYearMargin: parseFloat(prevMargin1.toFixed(2)),
                 yoyTrend: yoy1,
                 yoyVariation: parseFloat(variation1.toFixed(1)),
+                byYear: formatByYearFromMonthly(fi1.monthlyData || {}),
                 monthlyData: formatLevelMonthly(fi1.monthlyData || {}),
                 childCount: children1.length,
                 children: children1
@@ -1902,9 +1971,11 @@ router.get('/matrix', verifyToken, async (req, res) => {
         const productGrowth = prevProductSet.size > 0
             ? ((productSet.size - prevProductSet.size) / prevProductSet.size) * 100
             : (productSet.size > 0 ? 100 : 0);
+        const byYearTotals = formatYearStats(grandTotalsByYear, productSetsByYear);
 
         const summary = {
             isNewClient,
+            byYear: byYearTotals,
             current: {
                 label: yearsArray.join(', '),
                 sales: grandTotalSales,
@@ -1938,7 +2009,8 @@ router.get('/matrix', verifyToken, async (req, res) => {
                 cost: grandTotalCost,
                 margin: grandTotalMargin,
                 units: grandTotalUnits,
-                products: productSet.size
+                products: productSet.size,
+                byYear: byYearTotals
             },
             monthlyTotals: flatMonthlyTotals,
             availableFilters: {

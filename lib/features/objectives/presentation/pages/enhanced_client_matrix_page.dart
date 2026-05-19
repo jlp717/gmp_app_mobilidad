@@ -10,7 +10,6 @@ import 'package:gmp_app_mobilidad/core/widgets/fi_filters_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
-import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
 import 'package:gmp_app_mobilidad/features/sales_history/presentation/widgets/sales_summary_header.dart';
 import 'package:path_provider/path_provider.dart';
@@ -37,9 +36,6 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   String? _error;
   bool _showFilters = false;
 
-  List<Map<String, dynamic>> _productList = [];
-  bool _isLoadingProducts = false;
-
   // Legacy familia/subfamilia hierarchy
   List<Map<String, dynamic>> _families = [];
   // 5-level FI hierarchy (FI1 > FI2 > FI3 > FI4 > productos)
@@ -54,10 +50,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   Map<String, dynamic>? _editableNotes;
   Map<String, dynamic> _contactInfo = {};
 
-  Set<int> _selectedYears = {DateTime.now().year};
+  Set<int> _selectedYears = {...ApiConfig.availableYears};
   Set<int> _selectedMonths = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
   // Pending filter state (only apply when user clicks Apply)
-  final Set<int> _pendingYears = {DateTime.now().year};
+  final Set<int> _pendingYears = {...ApiConfig.availableYears};
   Set<int> _pendingMonths = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
   bool _filtersDirty = false; // Track if filters changed
   String _productCodeSearch = '';
@@ -107,8 +103,13 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   int get _endMonth => _selectedMonths.isEmpty
       ? 12
       : _selectedMonths.reduce((a, b) => a > b ? a : b);
+  List<int> get _selectedYearsDesc {
+    final years = _selectedYears.toList()..sort((a, b) => b.compareTo(a));
+    return years;
+  }
+
   String get _yearsParam => _selectedYears.isNotEmpty
-      ? _selectedYears.toList().join(',')
+      ? _selectedYearsDesc.join(',')
       : DateTime.now().year.toString();
 
   Future<void> _loadData() async {
@@ -189,86 +190,60 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     }
   }
 
-  /// Load products view (when family grouping is disabled)
-  Future<void> _loadProductsView() async {
-    setState(() {
-      _isLoadingProducts = true;
-    });
+  Widget _buildFlatProductsList() {
+    final products = _collectFlatProductsForCurrentFilters()
+      ..sort((a, b) {
+        final aSales = (a['totalSales'] as num?)?.toDouble() ?? 0;
+        final bSales = (b['totalSales'] as num?)?.toDouble() ?? 0;
+        return bSales.compareTo(aSales);
+      });
 
-    try {
-      final products = await ClientsService.getClientSalesHistory(
-        clientCode: widget.clientCode,
-        vendedorCodes: '',
-        groupByFamily: 0,
-        limit: 200,
+    if (products.isEmpty) {
+      return const Center(
+        child: Text('No hay productos', style: TextStyle(color: Colors.grey)),
       );
-      setState(() {
-        _productList = products;
-        _isLoadingProducts = false;
-      });
-    } catch (e) {
-      debugPrint('Error loading products: $e');
-      setState(() {
-        _isLoadingProducts = false;
-        _productList = [];
-      });
-    }
-  }
-
-  Widget _buildProductsList() {
-    if (_isLoadingProducts) {
-      return const Center(child: ModernLoading(message: 'Cargando productos...'));
-    }
-
-    if (_productList.isEmpty) {
-      return const Center(child: Text('No hay productos', style: TextStyle(color: Colors.grey)));
     }
 
     return ListView.builder(
       padding: const EdgeInsets.all(4),
-      itemCount: _productList.length,
-      itemBuilder: (context, index) {
-        final product = _productList[index];
-        final date = (product['date'] as String?) ?? '';
-        final productName = (product['productName'] as String?) ?? 'Producto';
-        final productCode = (product['productCode'] as String?) ?? '';
-        final boxes = product['boxes'] ?? 0;
-        final amount = (product['amount'] as num?)?.toDouble() ?? 0;
-
-        return Card(
-          color: AppTheme.surfaceColor,
-          margin: const EdgeInsets.only(bottom: 4),
-          child: ListTile(
-            dense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
-            leading: Text(
-              date.length >= 10 ? date.substring(5) : date,
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-            ),
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  productName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 12),
-                ),
-                if (productCode.isNotEmpty)
-                  Text(
-                    productCode,
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9),
-                  ),
-              ],
-            ),
-            trailing: Text(
-              CurrencyFormatter.formatWhole(amount),
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-            ),
-          ),
-        );
-      },
+      itemCount: products.length,
+      itemBuilder: (context, index) => _buildFiProduct(products[index]),
     );
+  }
+
+  List<Map<String, dynamic>> _collectFlatProductsForCurrentFilters() {
+    final fiProducts = _fiHierarchy
+        .expand(_collectAllProducts)
+        .map((p) => Map<String, dynamic>.from(p))
+        .toList();
+
+    if (fiProducts.isNotEmpty) {
+      return fiProducts;
+    }
+
+    return _families.expand(_collectLegacyFamilyProducts).toList();
+  }
+
+  List<Map<String, dynamic>> _collectLegacyFamilyProducts(
+    Map<String, dynamic> family,
+  ) {
+    final List<Map<String, dynamic>> results = [];
+    final subfamilies = family['subfamilies'] as List?;
+    if (subfamilies == null) return results;
+
+    for (final subfamily in subfamilies) {
+      if (subfamily is! Map) continue;
+
+      final products = subfamily['products'] as List?;
+      if (products == null) continue;
+
+      for (final product in products) {
+        if (product is! Map) continue;
+        results.add(Map<String, dynamic>.from(product));
+      }
+    }
+
+    return results;
   }
 
   /// Parse FI options from API response
@@ -468,7 +443,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       // Solo jerarquía FI de 5 niveles
                       Expanded(
                         child: _maxDepthLevel == 0
-                            ? _buildProductsList()
+                            ? _buildFlatProductsList()
                             : (_fiHierarchy.isEmpty
                                 ? const Center(
                                     child: Text(
@@ -492,7 +467,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
-        border: Border(bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.3))),
+        border: Border(
+            bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.3))),
       ),
       child: SingleChildScrollView(
         child: Column(
@@ -597,7 +573,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                             padding: EdgeInsets.zero,
                             labelPadding:
                                 const EdgeInsets.symmetric(horizontal: 3),
-                            selectedColor: AppTheme.neonPurple.withValues(alpha: 0.3),
+                            selectedColor:
+                                AppTheme.neonPurple.withValues(alpha: 0.3),
                           ),
                         ),
                       ),
@@ -782,22 +759,133 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     );
   }
 
+  Map<String, dynamic> _mapFrom(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) {
+      return value.map((key, value) => MapEntry(key.toString(), value));
+    }
+    return {};
+  }
+
+  Map<String, dynamic> _yearData(dynamic byYear, int year) {
+    final yearMap = _mapFrom(byYear);
+    return _mapFrom(yearMap[year.toString()]);
+  }
+
+  double _numValue(Map<String, dynamic> data, String key) =>
+      (data[key] as num?)?.toDouble() ?? 0;
+
+  String _formatUnits(double value) {
+    if (value.abs() >= 100 || value == value.roundToDouble()) {
+      return value.toStringAsFixed(0);
+    }
+    return value.toStringAsFixed(2);
+  }
+
   Widget _buildSummaryRow() {
-    if (_summary.isEmpty) {
-      // Fallback to old manually calculated headers if summary missing (compatibility)
-      // But backend should now send it.
+    final byYear = _mapFrom(_summary['byYear']);
+    if (byYear.isEmpty) {
+      return SalesSummaryHeader(
+        summary: _summary,
+        showMargin: widget.isJefeVentas,
+        isJefeVentas: widget.isJefeVentas,
+      );
     }
-    // Inject breakdown if multiple years selected
-    final years = _selectedYears.toList()..sort();
-    if (years.length > 1) {
-      // Map yearly totals from _monthlyTotals? No, backend doesn't send explicit yearly breakdown in summary yet?
-      // Actually I left breakdown: [] in backend.
-      // But SalesSummaryHeader handles empty breakdown gracefully (just doesn't show it).
-    }
-    return SalesSummaryHeader(
-      summary: _summary,
-      showMargin: widget.isJefeVentas,
-      isJefeVentas: widget.isJefeVentas,
+
+    final height = widget.isJefeVentas ? 96.0 : 82.0;
+    return Container(
+      height: height,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.darkBase,
+        border: Border(
+          bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.25)),
+        ),
+      ),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: _selectedYearsDesc.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final year = _selectedYearsDesc[index];
+          final data = _yearData(byYear, year);
+          final sales = _numValue(data, 'sales');
+          final units = _numValue(data, 'units');
+          final products = (data['productCount'] as num?)?.toInt() ?? 0;
+          final margin = _numValue(data, 'margin');
+          final marginPercent = _numValue(data, 'marginPercent');
+
+          return Container(
+            width: widget.isJefeVentas ? 178 : 150,
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceColor,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: AppTheme.neonBlue.withValues(alpha: 0.25),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      '$year',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.neonBlue,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '$products prod.',
+                      style: const TextStyle(
+                        fontSize: 8,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _formatCurrency(sales),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  '${_formatUnits(units)} uds',
+                  style: const TextStyle(
+                    fontSize: 9,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+                if (widget.isJefeVentas) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    '${_formatCurrency(margin)} (${marginPercent.toStringAsFixed(1)}%)',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 9,
+                      fontWeight: FontWeight.w600,
+                      color: marginPercent >= 0
+                          ? AppTheme.success
+                          : AppTheme.error,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
@@ -849,8 +937,11 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   }
 
   Widget _buildMonthlyRow() {
+    final years = _selectedYearsDesc;
+    final height = 38.0 + (years.length * 18.0);
+
     return Container(
-      height: 54, // Increased to accommodate content
+      height: height,
       padding: const EdgeInsets.only(bottom: 2),
       decoration: const BoxDecoration(
         color: AppTheme.darkBase,
@@ -872,9 +963,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           if (!_selectedMonths.contains(m)) return const SizedBox.shrink();
 
           final data = _monthlyTotals[m.toString()];
+          final byYear = _mapFrom(data?['byYear']);
           final sales = (data?['sales'] as num?)?.toDouble() ?? 0;
           final yoyTrend = data?['yoyTrend'] as String?;
-          final yoyVar = (data?['yoyVariation'] as num?)?.toDouble();
 
           // Check if client is NEW (no sales in entire previous year)
           final isClientNew = _summary['isNewClient'] == true;
@@ -907,55 +998,63 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           }
 
           return Container(
-            width: 60,
+            width: years.length == 1 ? 76 : 96,
             margin: const EdgeInsets.only(right: 3),
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
             decoration: BoxDecoration(
               color: bgColor,
               borderRadius: BorderRadius.circular(4),
               border: Border.all(color: borderColor, width: 1.5),
             ),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    _mNames[m - 1].toUpperCase(),
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    _formatCurrency(sales),
-                    style: const TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  if (showNewBadge)
-                    const Text(
-                      'NUEVO',
-                      style: TextStyle(
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF2979FF),
-                      ),
-                    )
-                  else if (yoyVar != null && yoyVar != 0)
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
                     Text(
-                      '${yoyVar >= 0 ? "+" : ""}${yoyVar.toStringAsFixed(0)}%',
-                      style: TextStyle(
-                        fontSize: 8,
+                      _mNames[m - 1].toUpperCase(),
+                      style: const TextStyle(
+                        fontSize: 10,
                         fontWeight: FontWeight.bold,
-                        color: yoyTrend == 'up'
-                            ? AppTheme.success
-                            : AppTheme.error,
                       ),
                     ),
-                ],
-              ),
+                    const Spacer(),
+                    if (showNewBadge)
+                      const Text(
+                        'NUEVO',
+                        style: TextStyle(
+                          fontSize: 7,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF2979FF),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                ...years.map((year) {
+                  final yData = _yearData(byYear, year);
+                  final ySales = _numValue(yData, 'sales');
+                  final yUnits = _numValue(yData, 'units');
+                  final rowColor = ySales.abs() < 0.01
+                      ? AppTheme.textSecondary
+                      : Colors.white;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '$year ${_formatCompact(ySales)} EUR / ${_formatUnits(yUnits)}u',
+                        style: TextStyle(
+                          fontSize: 8,
+                          fontWeight: FontWeight.w600,
+                          color: rowColor,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
             ),
           );
         },
@@ -983,13 +1082,16 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final List<Map<String, dynamic>> results = [];
     final products = node['products'] as List?;
     if (products != null) {
-      results.addAll(products.map((p) => Map<String, dynamic>.from(p as Map)));
-      return results;
+      for (final product in products) {
+        if (product is! Map) continue;
+        results.add(Map<String, dynamic>.from(product));
+      }
     }
     final children = node['children'] as List?;
     if (children != null) {
       for (final child in children) {
-        results.addAll(_collectAllProducts(Map<String, dynamic>.from(child as Map)));
+        if (child is! Map) continue;
+        results.addAll(_collectAllProducts(Map<String, dynamic>.from(child)));
       }
     }
     return results;
@@ -1001,7 +1103,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     if (allProducts.isEmpty) {
       return const Padding(
         padding: EdgeInsets.all(8),
-        child: Text('Sin productos', style: TextStyle(color: Colors.grey, fontSize: 11)),
+        child: Text('Sin productos',
+            style: TextStyle(color: Colors.grey, fontSize: 11)),
       );
     }
     return Column(children: allProducts.map(_buildFiProduct).toList());
@@ -1009,12 +1112,20 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
 
   /// Always-visible grouping level bar – chip per depth level.
   Widget _buildGroupingBar() {
-    const labels = ['Sin grupos', 'FI1', 'FI1+2', 'FI1+2+3', 'FI1+2+3+4', 'Todos'];
+    const labels = [
+      'Sin grupos',
+      'FI1',
+      'FI1+2',
+      'FI1+2+3',
+      'FI1+2+3+4',
+      'Todos'
+    ];
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
-        border: Border(bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.25))),
+        border: Border(
+            bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.25))),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -1029,11 +1140,11 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               return Padding(
                 padding: const EdgeInsets.only(right: 4),
                 child: ChoiceChip(
-                  label: Text(labels[depth], style: const TextStyle(fontSize: 9)),
+                  label:
+                      Text(labels[depth], style: const TextStyle(fontSize: 9)),
                   selected: _maxDepthLevel == depth,
                   onSelected: (_) {
                     setState(() => _maxDepthLevel = depth);
-                    if (depth == 0) _loadProductsView();
                   },
                   visualDensity: VisualDensity.compact,
                   padding: EdgeInsets.zero,
@@ -1068,15 +1179,6 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               .toList() ??
           [],
     );
-    final sales = (fi1['totalSales'] as num?)?.toDouble() ?? 0;
-    final units = (fi1['totalUnits'] as num?)?.toDouble() ?? 0;
-    final cost = (fi1['totalCost'] as num?)?.toDouble() ?? 0;
-    final margin = (fi1['totalMarginPercent'] as num?)?.toDouble() ?? 0;
-    final totalMargin =
-        (fi1['totalMargin'] as num?)?.toDouble() ?? (sales - cost);
-    final prevYearSales = (fi1['prevYearSales'] as num?)?.toDouble() ?? 0;
-    final yoyVariation = (fi1['yoyVariation'] as num?)?.toDouble() ?? 0;
-    final yoyTrend = fi1['yoyTrend'] as String? ?? 'neutral';
     final monthlyData = fi1['monthlyData'] as Map<String, dynamic>?;
     final childCount = (fi1['childCount'] as num?)?.toInt() ?? children.length;
 
@@ -1088,7 +1190,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       margin: const EdgeInsets.only(bottom: 4),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: AppTheme.neonPurple.withValues(alpha: 0.4), width: 2),
+        side: BorderSide(
+            color: AppTheme.neonPurple.withValues(alpha: 0.4), width: 2),
       ),
       child: Column(
         children: [
@@ -1165,16 +1268,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                         ),
                       ),
                       // Stats with YoY
-                      _buildLevelStatsWithYoY(
-                        sales,
-                        units,
-                        margin,
-                        totalMargin,
-                        prevYearSales,
-                        yoyVariation,
-                        yoyTrend,
-                        AppTheme.neonPurple,
-                      ),
+                      _buildLevelStatsByYear(fi1, AppTheme.neonPurple),
                     ],
                   ),
                   // Monthly breakdown if enabled
@@ -1190,7 +1284,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               child: _maxDepthLevel <= 1
                   ? _buildFlatProductsFromNode(fi1)
                   : Column(
-                      children: children.map((fi2) => _buildFi2Card(fi2, code)).toList(),
+                      children: children
+                          .map((fi2) => _buildFi2Card(fi2, code))
+                          .toList(),
                     ),
             ),
         ],
@@ -1209,15 +1305,6 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               .toList() ??
           [],
     );
-    final sales = (fi2['totalSales'] as num?)?.toDouble() ?? 0;
-    final units = (fi2['totalUnits'] as num?)?.toDouble() ?? 0;
-    final cost = (fi2['totalCost'] as num?)?.toDouble() ?? 0;
-    final margin = (fi2['totalMarginPercent'] as num?)?.toDouble() ?? 0;
-    final totalMargin =
-        (fi2['totalMargin'] as num?)?.toDouble() ?? (sales - cost);
-    final prevYearSales = (fi2['prevYearSales'] as num?)?.toDouble() ?? 0;
-    final yoyVariation = (fi2['yoyVariation'] as num?)?.toDouble() ?? 0;
-    final yoyTrend = fi2['yoyTrend'] as String? ?? 'neutral';
     final monthlyData = fi2['monthlyData'] as Map<String, dynamic>?;
     final childCount = (fi2['childCount'] as num?)?.toInt() ?? children.length;
 
@@ -1228,8 +1315,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       decoration: BoxDecoration(
         color: AppTheme.neonBlue.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(6),
-        border:
-            Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.4), width: 1.5),
+        border: Border.all(
+            color: AppTheme.neonBlue.withValues(alpha: 0.4), width: 1.5),
       ),
       child: Column(
         children: [
@@ -1302,14 +1389,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           ],
                         ),
                       ),
-                      _buildLevelStatsWithYoY(
-                        sales,
-                        units,
-                        margin,
-                        totalMargin,
-                        prevYearSales,
-                        yoyVariation,
-                        yoyTrend,
+                      _buildLevelStatsByYear(
+                        fi2,
                         AppTheme.neonBlue,
                         compact: true,
                       ),
@@ -1327,7 +1408,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               child: _maxDepthLevel <= 2
                   ? _buildFlatProductsFromNode(fi2)
                   : Column(
-                      children: children.map((fi3) => _buildFi3Card(fi3, nodeKey)).toList(),
+                      children: children
+                          .map((fi3) => _buildFi3Card(fi3, nodeKey))
+                          .toList(),
                     ),
             ),
         ],
@@ -1346,15 +1429,6 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               .toList() ??
           [],
     );
-    final sales = (fi3['totalSales'] as num?)?.toDouble() ?? 0;
-    final units = (fi3['totalUnits'] as num?)?.toDouble() ?? 0;
-    final cost = (fi3['totalCost'] as num?)?.toDouble() ?? 0;
-    final margin = (fi3['totalMarginPercent'] as num?)?.toDouble() ?? 0;
-    final totalMargin =
-        (fi3['totalMargin'] as num?)?.toDouble() ?? (sales - cost);
-    final prevYearSales = (fi3['prevYearSales'] as num?)?.toDouble() ?? 0;
-    final yoyVariation = (fi3['yoyVariation'] as num?)?.toDouble() ?? 0;
-    final yoyTrend = fi3['yoyTrend'] as String? ?? 'neutral';
     final monthlyData = fi3['monthlyData'] as Map<String, dynamic>?;
     final childCount = (fi3['childCount'] as num?)?.toInt() ?? children.length;
 
@@ -1438,14 +1512,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           ],
                         ),
                       ),
-                      _buildLevelStatsWithYoY(
-                        sales,
-                        units,
-                        margin,
-                        totalMargin,
-                        prevYearSales,
-                        yoyVariation,
-                        yoyTrend,
+                      _buildLevelStatsByYear(
+                        fi3,
                         AppTheme.neonGreen,
                         compact: true,
                       ),
@@ -1463,7 +1531,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               child: _maxDepthLevel <= 3
                   ? _buildFlatProductsFromNode(fi3)
                   : Column(
-                      children: children.map((fi4) => _buildFi4Card(fi4, nodeKey)).toList(),
+                      children: children
+                          .map((fi4) => _buildFi4Card(fi4, nodeKey))
+                          .toList(),
                     ),
             ),
         ],
@@ -1482,15 +1552,6 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               .toList() ??
           [],
     );
-    final sales = (fi4['totalSales'] as num?)?.toDouble() ?? 0;
-    final units = (fi4['totalUnits'] as num?)?.toDouble() ?? 0;
-    final cost = (fi4['totalCost'] as num?)?.toDouble() ?? 0;
-    final margin = (fi4['totalMarginPercent'] as num?)?.toDouble() ?? 0;
-    final totalMargin =
-        (fi4['totalMargin'] as num?)?.toDouble() ?? (sales - cost);
-    final prevYearSales = (fi4['prevYearSales'] as num?)?.toDouble() ?? 0;
-    final yoyVariation = (fi4['yoyVariation'] as num?)?.toDouble() ?? 0;
-    final yoyTrend = fi4['yoyTrend'] as String? ?? 'neutral';
     final monthlyData = fi4['monthlyData'] as Map<String, dynamic>?;
     final productCount =
         (fi4['productCount'] as num?)?.toInt() ?? products.length;
@@ -1575,14 +1636,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                           ],
                         ),
                       ),
-                      _buildLevelStatsWithYoY(
-                        sales,
-                        units,
-                        margin,
-                        totalMargin,
-                        prevYearSales,
-                        yoyVariation,
-                        yoyTrend,
+                      _buildLevelStatsByYear(
+                        fi4,
                         AppTheme.warning,
                         compact: true,
                       ),
@@ -1664,160 +1719,63 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     );
   }
 
-  /// Enhanced stats with YoY comparison and explicit labels
-  Widget _buildLevelStatsWithYoY(
-    double sales,
-    double units,
-    double marginPercent,
-    double totalMargin,
-    double prevSales,
-    double yoyVariation,
-    String yoyTrend,
+  Widget _buildLevelStatsByYear(
+    Map<String, dynamic> node,
     Color color, {
     bool compact = false,
   }) {
-    var trendColor = AppTheme.textSecondary;
-    var trendIcon = Icons.remove;
-    if (yoyTrend == 'up') {
-      trendColor = AppTheme.success;
-      trendIcon = Icons.trending_up;
-    } else if (yoyTrend == 'down') {
-      trendColor = AppTheme.error;
-      trendIcon = Icons.trending_down;
-    } else if (yoyTrend == 'new') {
-      trendColor = AppTheme.neonBlue;
-      trendIcon = Icons.fiber_new;
-    }
+    final byYear = _mapFrom(node['byYear']);
+    final width = widget.isJefeVentas
+        ? (compact ? 150.0 : 178.0)
+        : (compact ? 118.0 : 138.0);
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // SALES COLUMN
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              'Monto este año:',
-              style: TextStyle(
-                fontSize: compact ? 7 : 8,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            Text(
-              _formatCurrency(sales),
-              style: TextStyle(
-                fontSize: compact ? 10 : 12,
-                fontWeight: FontWeight.bold,
-                color: color,
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(width: 12),
+    return SizedBox(
+      width: width,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: _selectedYearsDesc.map((year) {
+          final data = _yearData(byYear, year);
+          final sales = _numValue(data, 'sales');
+          final units = _numValue(data, 'units');
+          final margin = _numValue(data, 'margin');
+          final marginPercent = _numValue(data, 'marginPercent');
+          final hasSales = sales.abs() >= 0.01;
 
-        // YOY VARIATION COLUMN
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              'Variación:',
-              style: TextStyle(
-                fontSize: compact ? 7 : 8,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            if (prevSales > 0)
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '${yoyVariation >= 0 ? "+" : ""}${yoyVariation.toStringAsFixed(0)}%',
+          return Padding(
+            padding: EdgeInsets.only(top: compact ? 1 : 2),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '$year ${_formatCurrency(sales)}',
                     style: TextStyle(
-                      fontSize: compact ? 9 : 10,
+                      fontSize: compact ? 9 : 11,
                       fontWeight: FontWeight.bold,
-                      color: trendColor,
+                      color: hasSales ? color : AppTheme.textSecondary,
                     ),
                   ),
-                  const SizedBox(width: 2),
-                  Text(
-                    'vs ${_formatCompact(prevSales)}',
-                    style: TextStyle(
-                      fontSize: compact ? 7 : 8,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                ],
-              )
-            else
-              Text(
-                'SIN HISTÓRICO',
-                style: TextStyle(fontSize: compact ? 7 : 8, color: Colors.grey),
-              ),
-          ],
-        ),
-        const SizedBox(width: 12),
-
-        // UNITS COLUMN
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              'Unidades:',
-              style: TextStyle(
-                fontSize: compact ? 7 : 8,
-                color: AppTheme.textSecondary,
-              ),
-            ),
-            Text(
-              '${units.toStringAsFixed(0)} uds',
-              style: TextStyle(
-                fontSize: compact ? 10 : 12,
-                color: Colors.white70,
-              ),
-            ),
-          ],
-        ),
-
-        // Margin (Jefe Ventas only)
-        if (widget.isJefeVentas) ...[
-          const SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                'Margen:',
-                style: TextStyle(
-                  fontSize: compact ? 7 : 8,
-                  color: AppTheme.textSecondary,
                 ),
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    '${marginPercent.toStringAsFixed(1)}%',
-                    style: TextStyle(
-                      fontSize: compact ? 9 : 10,
-                      fontWeight: FontWeight.bold,
-                      color: marginPercent >= 0
-                          ? AppTheme.success
-                          : AppTheme.error,
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '(${_formatCurrency(totalMargin)})',
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    widget.isJefeVentas
+                        ? '${_formatUnits(units)} uds | ${_formatCompact(margin)} EUR (${marginPercent.toStringAsFixed(1)}%)'
+                        : '${_formatUnits(units)} uds',
                     style: TextStyle(
                       fontSize: compact ? 7 : 8,
-                      color: AppTheme.textSecondary,
+                      color: widget.isJefeVentas && marginPercent < 0
+                          ? AppTheme.error
+                          : AppTheme.textSecondary,
                     ),
                   ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ],
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
     );
   }
 
@@ -1828,6 +1786,86 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   }) {
     if (monthlyData == null || monthlyData.isEmpty) {
       return const SizedBox.shrink();
+    }
+
+    final years = _selectedYearsDesc;
+    final hasYearData = monthlyData.values.any((value) {
+      final map = _mapFrom(value);
+      return _mapFrom(map['byYear']).isNotEmpty;
+    });
+
+    if (hasYearData) {
+      final height = (compact ? 34.0 : 40.0) + (years.length * 18.0);
+      return Container(
+        margin: EdgeInsets.only(top: compact ? 6 : 8),
+        height: height,
+        child: ListView.builder(
+          scrollDirection: Axis.horizontal,
+          itemCount: 12,
+          itemBuilder: (context, index) {
+            final monthNum = (index + 1).toString();
+            final mData = _mapFrom(monthlyData[monthNum]);
+            final byYear = _mapFrom(mData['byYear']);
+            final hasSales = years.any(
+              (year) =>
+                  _numValue(_yearData(byYear, year), 'sales').abs() > 0.01,
+            );
+
+            return Container(
+              width: compact ? 90 : 102,
+              margin: const EdgeInsets.only(right: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+              decoration: BoxDecoration(
+                color: hasSales
+                    ? AppTheme.darkCard
+                    : AppTheme.darkCard.withValues(alpha: 0.3),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: hasSales
+                      ? AppTheme.neonBlue.withValues(alpha: 0.35)
+                      : Colors.grey.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _mNames[index],
+                    style: TextStyle(
+                      fontSize: compact ? 9 : 10,
+                      fontWeight: FontWeight.bold,
+                      color: hasSales ? Colors.white : AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  ...years.map((year) {
+                    final data = _yearData(byYear, year);
+                    final sales = _numValue(data, 'sales');
+                    final units = _numValue(data, 'units');
+                    final color = sales.abs() < 0.01
+                        ? AppTheme.textSecondary
+                        : Colors.white;
+                    return Padding(
+                      padding: const EdgeInsets.only(top: 1),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          '$year ${_formatCompact(sales)} EUR / ${_formatUnits(units)}u',
+                          style: TextStyle(
+                            fontSize: compact ? 7 : 8,
+                            fontWeight: FontWeight.w600,
+                            color: color,
+                          ),
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            );
+          },
+        ),
+      );
     }
 
     // Check if client is NEW (no sales in entire previous year)
@@ -1986,40 +2024,284 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     );
   }
 
+  Map<String, dynamic> _productYearData(
+      Map<String, dynamic> product, int year) {
+    final data = _yearData(_mapFrom(product['byYear']), year);
+    if (data.isNotEmpty || _selectedYearsDesc.length != 1) return data;
+
+    final sales = (product['totalSales'] as num?)?.toDouble() ?? 0;
+    final cost = (product['totalCost'] as num?)?.toDouble() ?? 0;
+    final units = (product['totalUnits'] as num?)?.toDouble() ?? 0;
+    final avgPrice = units > 0 ? sales / units : 0.0;
+    final avgCost = units > 0 ? cost / units : 0.0;
+    final margin = sales - cost;
+    return {
+      'sales': sales,
+      'cost': cost,
+      'units': units,
+      'margin': margin,
+      'marginPercent': sales > 0 ? (margin / sales) * 100 : 0.0,
+      'avgUnitPrice': avgPrice,
+      'avgUnitCost': avgCost,
+      'marginPerUnit': avgPrice - avgCost,
+    };
+  }
+
+  Widget _buildProductCommercialByYear(
+    Map<String, dynamic> product,
+    String unitLabel,
+    Color accentColor,
+    bool hasDiscount,
+    double avgDiscountPct,
+    double avgDiscountEur,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppTheme.neonPurple.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        children: [
+          const Row(
+            children: [
+              SizedBox(
+                width: 38,
+                child: Text(
+                  'Año',
+                  style: TextStyle(fontSize: 7, color: AppTheme.textSecondary),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'PVP',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 7, color: AppTheme.textSecondary),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'Uds',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 7, color: AppTheme.textSecondary),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  'Ventas',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 7, color: AppTheme.textSecondary),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          ..._selectedYearsDesc.map((year) {
+            final data = _productYearData(product, year);
+            final avgPrice = _numValue(data, 'avgUnitPrice');
+            final units = _numValue(data, 'units');
+            final sales = _numValue(data, 'sales');
+            final rowColor =
+                sales.abs() < 0.01 ? AppTheme.textSecondary : Colors.white;
+
+            return Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 38,
+                    child: Text(
+                      '$year',
+                      style: TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                        color: accentColor,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '${_formatCurrency(avgPrice)}/$unitLabel',
+                        style: TextStyle(fontSize: 9, color: rowColor),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: Text(
+                      _formatUnits(units),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 9, color: rowColor),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: FittedBox(
+                      alignment: Alignment.centerRight,
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        _formatCurrency(sales),
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: rowColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+          if (hasDiscount) ...[
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                avgDiscountPct > 0
+                    ? 'Dto -${avgDiscountPct.toStringAsFixed(1)}%'
+                    : 'Dto${avgDiscountEur > 0 ? " -${_formatCurrency(avgDiscountEur)}" : ""}',
+                style: const TextStyle(
+                  fontSize: 8,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.orange,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProductMarginByYear(
+    Map<String, dynamic> product,
+    String unitLabel,
+  ) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppTheme.darkBase,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Column(
+        children: [
+          const Row(
+            children: [
+              SizedBox(
+                width: 38,
+                child: Text(
+                  'Año',
+                  style: TextStyle(fontSize: 7, color: AppTheme.textSecondary),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'Coste',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 7, color: AppTheme.textSecondary),
+                ),
+              ),
+              Expanded(
+                child: Text(
+                  'Margen',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 7, color: AppTheme.textSecondary),
+                ),
+              ),
+              Expanded(
+                flex: 2,
+                child: Text(
+                  'Margen Total',
+                  textAlign: TextAlign.right,
+                  style: TextStyle(fontSize: 7, color: AppTheme.textSecondary),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          ..._selectedYearsDesc.map((year) {
+            final data = _productYearData(product, year);
+            final avgCost = _numValue(data, 'avgUnitCost');
+            final marginPerUnit = _numValue(data, 'marginPerUnit');
+            final margin = _numValue(data, 'margin');
+            final marginPercent = _numValue(data, 'marginPercent');
+            final marginColor =
+                marginPercent >= 0 ? AppTheme.success : AppTheme.error;
+
+            return Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 38,
+                    child: Text(
+                      '$year',
+                      style: const TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.neonBlue,
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '${_formatCurrency(avgCost)}/$unitLabel',
+                        style: const TextStyle(
+                          fontSize: 9,
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        _formatCurrency(marginPerUnit),
+                        style: TextStyle(fontSize: 9, color: marginColor),
+                      ),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 2,
+                    child: FittedBox(
+                      alignment: Alignment.centerRight,
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        '${_formatCurrency(margin)} (${marginPercent.toStringAsFixed(1)}%)',
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.bold,
+                          color: marginColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
+  }
+
   Widget _buildFiProduct(Map<String, dynamic> p) {
     final code = p['code'] as String? ?? '';
     final name = p['name'] as String? ?? code;
     final unitType = (p['unitType'] as String?)?.toUpperCase() ?? 'UDS';
-    final sales = (p['totalSales'] as num?)?.toDouble() ?? 0;
-    final units = (p['totalUnits'] as num?)?.toDouble() ?? 0;
-    final cost = (p['totalCost'] as num?)?.toDouble() ?? 0;
-    final totalMargin =
-        (p['totalMargin'] as num?)?.toDouble() ?? (sales - cost);
-    final marginPercent = (p['totalMarginPercent'] as num?)?.toDouble() ?? 0;
-    final avgPrice = (p['avgUnitPrice'] as num?)?.toDouble() ?? 0;
-    final avgCost = (p['avgUnitCost'] as num?)?.toDouble() ?? 0;
-    final prevYearSales = (p['prevYearSales'] as num?)?.toDouble() ?? 0;
-    final prevYearUnits = (p['prevYearUnits'] as num?)?.toDouble() ?? 0;
-    final prevYearCost = (p['prevYearCost'] as num?)?.toDouble() ?? 0;
-    final prevYearMargin = (p['prevYearMargin'] as num?)?.toDouble() ?? 0;
-    final prevYearAvgPrice = (p['prevYearAvgPrice'] as num?)?.toDouble() ?? 0;
-    final prevYearAvgCost = (p['prevYearAvgCost'] as num?)?.toDouble() ?? 0;
     final yoyTrend = p['yoyTrend'] as String? ?? 'neutral';
-    final yoyVariation = (p['yoyVariation'] as num?)?.toDouble() ?? 0;
     final hasDiscount = p['hasDiscount'] as bool? ?? false;
     final avgDiscountPct = (p['avgDiscountPct'] as num?)?.toDouble() ?? 0;
     final avgDiscountEur = (p['avgDiscountEur'] as num?)?.toDouble() ?? 0;
     final monthlyData = p['monthlyData'] as Map<String, dynamic>?;
-
-    // Calculate per unit
-    final costPerUnit = units > 0 ? cost / units : 0.0;
-    final marginPerUnit = avgPrice - costPerUnit;
-    final prevMarginPerUnit = prevYearUnits > 0
-        ? (prevYearSales - prevYearCost) / prevYearUnits
-        : 0.0;
-    final prevMarginPct = prevYearSales > 0
-        ? ((prevYearSales - prevYearCost) / prevYearSales) * 100
-        : 0.0;
 
     // Unit label
     String unitLabel;
@@ -2176,7 +2458,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                               ),
                               decoration: BoxDecoration(
                                 border: Border.all(
-                                  color: AppTheme.neonBlue.withValues(alpha: 0.4),
+                                  color:
+                                      AppTheme.neonBlue.withValues(alpha: 0.4),
                                 ),
                                 borderRadius: BorderRadius.circular(6),
                               ),
@@ -2221,251 +2504,21 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           const SizedBox(height: 6),
 
           // === COMERCIAL: PVP, UDS, VENTAS con año pasado ===
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-            decoration: BoxDecoration(
-              color: AppTheme.neonPurple.withValues(alpha: 0.08),
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Row(
-              children: [
-                // PVP por unidad (actual + año pasado)
-                Expanded(
-                  child: Column(
-                    children: [
-                      Text(
-                        'PVP/$unitLabel',
-                        style: const TextStyle(
-                          fontSize: 7,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                      Text(
-                        _formatCurrency(avgPrice),
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.neonPurple,
-                        ),
-                      ),
-                      if (prevYearAvgPrice > 0)
-                        Text(
-                          '(${_formatCurrency(prevYearAvgPrice)})',
-                          style: const TextStyle(
-                            fontSize: 7,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                // Unidades (actual + año pasado)
-                Expanded(
-                  child: Column(
-                    children: [
-                      Text(
-                        unitLabel,
-                        style: const TextStyle(
-                          fontSize: 7,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                      Text(
-                        units >= 100
-                            ? units.toStringAsFixed(0)
-                            : units.toStringAsFixed(2),
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.neonBlue,
-                        ),
-                      ),
-                      if (prevYearUnits > 0)
-                        Text(
-                          '(${prevYearUnits >= 100 ? prevYearUnits.toStringAsFixed(0) : prevYearUnits.toStringAsFixed(2)})',
-                          style: const TextStyle(
-                            fontSize: 7,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                // Ventas totales (actual + año pasado entre paréntesis)
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    children: [
-                      const Text(
-                        'Ventas',
-                        style: TextStyle(
-                          fontSize: 7,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                      Text(
-                        _formatCurrency(sales),
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: borderColor == AppTheme.surfaceColor
-                              ? Colors.white
-                              : borderColor,
-                        ),
-                      ),
-                      if (prevYearSales > 0)
-                        Text(
-                          '(${_formatCurrency(prevYearSales)})',
-                          style: const TextStyle(
-                            fontSize: 8,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                // Descuento (si tiene)
-                if (hasDiscount)
-                  Expanded(
-                    child: Column(
-                      children: [
-                        const Text(
-                          'Dto',
-                          style: TextStyle(fontSize: 7, color: Colors.orange),
-                        ),
-                        Text(
-                          '-${avgDiscountPct.toStringAsFixed(1)}%',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.orange,
-                          ),
-                        ),
-                        if (avgDiscountEur > 0)
-                          Text(
-                            '-${_formatCurrency(avgDiscountEur)}',
-                            style: TextStyle(
-                              fontSize: 7,
-                              color: Colors.orange.withValues(alpha: 0.7),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
+          _buildProductCommercialByYear(
+            p,
+            unitLabel,
+            borderColor == AppTheme.surfaceColor
+                ? AppTheme.neonPurple
+                : borderColor,
+            hasDiscount,
+            avgDiscountPct,
+            avgDiscountEur,
           ),
-
           // === JEFE VENTAS: Coste, Margen (con año anterior) ===
           if (widget.isJefeVentas) ...[
             const SizedBox(height: 4),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-              decoration: BoxDecoration(
-                color: AppTheme.darkBase,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Row(
-                children: [
-                  // Coste por unidad + coste total
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Text(
-                          'Coste/$unitLabel',
-                          style: const TextStyle(
-                            fontSize: 7,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                        Text(
-                          _formatCurrency(
-                            avgCost > 0 ? avgCost : costPerUnit,
-                          ),
-                          style: const TextStyle(
-                            fontSize: 9,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                        Text(
-                          'Total: ${_formatCurrency(cost)}',
-                          style: const TextStyle(
-                            fontSize: 7,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Margen por unidad actual
-                  Expanded(
-                    child: Column(
-                      children: [
-                        Text(
-                          'Margen/$unitLabel',
-                          style: const TextStyle(
-                            fontSize: 7,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                        Text(
-                          _formatCurrency(marginPerUnit),
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            color: marginPerUnit >= 0
-                                ? AppTheme.success
-                                : AppTheme.error,
-                          ),
-                        ),
-                        if (prevMarginPerUnit != 0)
-                          Text(
-                            'Ant: ${_formatCurrency(prevMarginPerUnit)}',
-                            style: const TextStyle(
-                              fontSize: 7,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  // Margen total + % actual
-                  Expanded(
-                    child: Column(
-                      children: [
-                        const Text(
-                          'Margen Total',
-                          style: TextStyle(
-                            fontSize: 7,
-                            color: AppTheme.textSecondary,
-                          ),
-                        ),
-                        Text(
-                          '${_formatCurrency(totalMargin)} (${marginPercent.toStringAsFixed(1)}%)',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                            color: marginPercent >= 0
-                                ? AppTheme.success
-                                : AppTheme.error,
-                          ),
-                        ),
-                        if (prevYearMargin != 0 || prevMarginPct != 0)
-                          Text(
-                            'Ant: ${_formatCurrency(prevYearMargin)} (${prevMarginPct.toStringAsFixed(1)}%)',
-                            style: const TextStyle(
-                              fontSize: 7,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _buildProductMarginByYear(p, unitLabel),
           ],
-
           // Monthly breakdown
           if (monthlyData != null)
             _buildMonthlyBreakdownRow(monthlyData, compact: true),
@@ -2735,7 +2788,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(8),
         border: discount
-            ? Border.all(color: Colors.orange.withValues(alpha: 0.5), width: 1.5)
+            ? Border.all(
+                color: Colors.orange.withValues(alpha: 0.5), width: 1.5)
             : null,
       ),
       child: Column(
@@ -2815,7 +2869,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                               ),
                               decoration: BoxDecoration(
                                 border: Border.all(
-                                  color: AppTheme.neonBlue.withValues(alpha: 0.4),
+                                  color:
+                                      AppTheme.neonBlue.withValues(alpha: 0.4),
                                 ),
                                 borderRadius: BorderRadius.circular(6),
                               ),
