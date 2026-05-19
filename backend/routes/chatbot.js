@@ -32,7 +32,7 @@ router.post('/message', async (req, res) => {
             userCode: req.user.code,
             isJefeVentas: req.user.isJefeVentas,
             role: req.user.role,
-            vendedorCodes: [req.user.code] // Single vendor scope from auth
+            clientCode: req.body.clientCode // Optional: context from Flutter
         };
 
         // Get database connection
