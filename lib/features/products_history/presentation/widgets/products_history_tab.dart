@@ -136,13 +136,6 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
         )}€';
   }
 
-  String _fmtMoneyCompact(num? v) {
-    final value = (v ?? 0).toDouble();
-    if (value >= 1000000) return '${(value / 1000000).toStringAsFixed(1)}M€';
-    if (value >= 1000) return '${(value / 1000).toStringAsFixed(1)}K€';
-    return '${value.toStringAsFixed(2)}€';
-  }
-
   String _fmtPct(num? v) =>
       v == null ? '-' : '${v.toDouble().toStringAsFixed(1)}%';
 
@@ -799,9 +792,6 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
       }
     }
     if (maxVal == 0) return const SizedBox.shrink();
-
-    const barGroupWidth = 1.0;
-    final barWidth = 1.0 / numYears;
 
     return Card(
       color: AppTheme.darkCard,
