@@ -635,205 +635,312 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
     final small = Responsive.isSmall(context);
     final filterWidth = small ? 140.0 : 160.0;
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: Row(
-        children: [
-          // Vendor Dropdown
-          SizedBox(
-            width: filterWidth,
-            child: DropdownButtonFormField<String>(
-              key: ValueKey<String>(_selectedVendedor ?? 'ALL'),
-              initialValue: _vendedoresDisponibles
-                      .any((v) => v['code'].toString() == _selectedVendedor)
-                  ? _selectedVendedor
-                  : '',
-              isExpanded: true,
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: AppTheme.surfaceColor,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none),
-                enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide(
-                        color: _selectedVendedor != null
-                            ? AppTheme.neonBlue
-                            : Colors.transparent)),
-                focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppTheme.neonBlue)),
-                prefixIcon: const Icon(Icons.person,
-                    color: AppTheme.neonBlue, size: 20),
-              ),
-              dropdownColor: AppTheme.darkCard,
-              icon: const Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue),
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-              items: [
-                const DropdownMenuItem<String>(value: '', child: Text('Todos')),
-                ..._vendedoresDisponibles.map((v) {
-                  return DropdownMenuItem<String>(
-                    value: v['code'].toString(),
-                    child: Text((v['name'] as String?) ?? v['code'].toString(),
-                        overflow: TextOverflow.ellipsis),
-                  );
-                }),
-              ],
-              onChanged: (val) {
-                final normalizedValue = val?.isEmpty ?? false ? null : val;
-                if (normalizedValue == _selectedVendedor) return;
-                ref.read(filterProvider.notifier).setVendor(normalizedValue);
-              },
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Client Filter Button
-          SizedBox(
-            width: filterWidth,
-            child: GestureDetector(
-              onTap: _openClientFilter,
-              child: Container(
-                height: 44,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceColor,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: _selectedClientCodes.isNotEmpty
-                          ? AppTheme.neonPurple
-                          : Colors.transparent),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.people_alt,
-                        color: _selectedClientCodes.isNotEmpty
-                            ? AppTheme.neonPurple
-                            : AppTheme.textSecondary,
-                        size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _selectedClientCodes.isEmpty
-                            ? 'Clientes'
-                            : '${_selectedClientCodes.length} selec.',
-                        style: TextStyle(
-                            color: _selectedClientCodes.isNotEmpty
-                                ? Colors.white
-                                : Colors.white54,
-                            fontSize: 13),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const Icon(Icons.arrow_drop_down, color: Colors.white54),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // FI Filters Button
-          SizedBox(
-            width: filterWidth,
-            child: GestureDetector(
-              onTap: _openFiFiltersDialog,
-              child: Container(
-                height: 44,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceColor,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: _fiFilters.isNotEmpty
-                          ? AppTheme.neonBlue
-                          : Colors.transparent),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.filter_alt,
-                        color: _fiFilters.isNotEmpty
-                            ? AppTheme.neonBlue
-                            : AppTheme.textSecondary,
-                        size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _fiFilters.isEmpty
-                            ? 'Categorías'
-                            : _buildFiFilterSummary(),
-                        style: TextStyle(
-                            color: _fiFilters.isNotEmpty
-                                ? Colors.white
-                                : Colors.white54,
-                            fontSize: 13),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const Icon(Icons.arrow_drop_down, color: Colors.white54),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Product Filter Button
-          SizedBox(
-            width: filterWidth,
-            child: GestureDetector(
-              onTap: () async {
-                final result = await showDialog<Set<Map<String, dynamic>>>(
-                  context: context,
-                  builder: (context) => _ProductSearchDialog(
-                    initialSelection: _selectedProductCodes,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Row 1: Main filters
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              // Vendor Dropdown
+              SizedBox(
+                width: filterWidth,
+                child: DropdownButtonFormField<String>(
+                  key: ValueKey<String>(_selectedVendedor ?? 'ALL'),
+                  initialValue: _vendedoresDisponibles
+                          .any((v) => v['code'].toString() == _selectedVendedor)
+                      ? _selectedVendedor
+                      : '',
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    filled: true,
+                    fillColor: AppTheme.surfaceColor,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide.none),
+                    enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                            color: _selectedVendedor != null
+                                ? AppTheme.neonBlue
+                                : Colors.transparent)),
+                    focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: AppTheme.neonBlue)),
+                    prefixIcon: const Icon(Icons.person,
+                        color: AppTheme.neonBlue, size: 20),
                   ),
-                );
-
-                if (result != null) {
-                  setState(() {
-                    _selectedProductCodes =
-                        result.map((m) => m['code'].toString()).toSet();
-                  });
-                  _fetchAllData();
-                }
-              },
-              child: Container(
-                height: 44,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceColor,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: _selectedProductCodes.isNotEmpty
-                          ? AppTheme.neonPurple
-                          : Colors.transparent),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.inventory_2,
-                        color: _selectedProductCodes.isNotEmpty
-                            ? AppTheme.neonPurple
-                            : AppTheme.textSecondary,
-                        size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _selectedProductCodes.isEmpty
-                            ? 'Productos'
-                            : '${_selectedProductCodes.length} selec.',
-                        style: TextStyle(
-                            color: _selectedProductCodes.isNotEmpty
-                                ? Colors.white
-                                : Colors.white54,
-                            fontSize: 13),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const Icon(Icons.arrow_drop_down, color: Colors.white54),
+                  dropdownColor: AppTheme.darkCard,
+                  icon: const Icon(Icons.arrow_drop_down,
+                      color: AppTheme.neonBlue),
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  items: [
+                    const DropdownMenuItem<String>(
+                        value: '', child: Text('Todos')),
+                    ..._vendedoresDisponibles.map((v) {
+                      return DropdownMenuItem<String>(
+                        value: v['code'].toString(),
+                        child: Text(
+                            (v['name'] as String?) ?? v['code'].toString(),
+                            overflow: TextOverflow.ellipsis),
+                      );
+                    }),
                   ],
+                  onChanged: (val) {
+                    final normalizedValue = val?.isEmpty ?? false ? null : val;
+                    if (normalizedValue == _selectedVendedor) return;
+                    ref
+                        .read(filterProvider.notifier)
+                        .setVendor(normalizedValue);
+                  },
                 ),
               ),
-            ),
+              const SizedBox(width: 8),
+              // Client Filter Button
+              SizedBox(
+                width: filterWidth,
+                child: GestureDetector(
+                  onTap: _openClientFilter,
+                  child: Container(
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: _selectedClientCodes.isNotEmpty
+                              ? AppTheme.neonPurple
+                              : Colors.transparent),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.people_alt,
+                            color: _selectedClientCodes.isNotEmpty
+                                ? AppTheme.neonPurple
+                                : AppTheme.textSecondary,
+                            size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _selectedClientCodes.isEmpty
+                                ? 'Clientes'
+                                : '${_selectedClientCodes.length} selec.',
+                            style: TextStyle(
+                                color: _selectedClientCodes.isNotEmpty
+                                    ? Colors.white
+                                    : Colors.white54,
+                                fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const Icon(Icons.arrow_drop_down,
+                            color: Colors.white54),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // FI Filters Button
+              SizedBox(
+                width: filterWidth,
+                child: GestureDetector(
+                  onTap: _openFiFiltersDialog,
+                  child: Container(
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: _fiFilters.isNotEmpty
+                              ? AppTheme.neonBlue
+                              : Colors.transparent),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.filter_alt,
+                            color: _fiFilters.isNotEmpty
+                                ? AppTheme.neonBlue
+                                : AppTheme.textSecondary,
+                            size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _fiFilters.isEmpty
+                                ? 'Categorias'
+                                : _buildFiFilterSummary(),
+                            style: TextStyle(
+                                color: _fiFilters.isNotEmpty
+                                    ? Colors.white
+                                    : Colors.white54,
+                                fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const Icon(Icons.arrow_drop_down,
+                            color: Colors.white54),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Product Filter Button
+              SizedBox(
+                width: filterWidth,
+                child: GestureDetector(
+                  onTap: () async {
+                    final result = await showDialog<Set<Map<String, dynamic>>>(
+                      context: context,
+                      builder: (context) => _ProductSearchDialog(
+                        initialSelection: _selectedProductCodes,
+                      ),
+                    );
+
+                    if (result != null) {
+                      setState(() {
+                        _selectedProductCodes =
+                            result.map((m) => m['code'].toString()).toSet();
+                      });
+                      _fetchAllData();
+                    }
+                  },
+                  child: Container(
+                    height: 44,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceColor,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: _selectedProductCodes.isNotEmpty
+                              ? AppTheme.neonPurple
+                              : Colors.transparent),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.inventory_2,
+                            color: _selectedProductCodes.isNotEmpty
+                                ? AppTheme.neonPurple
+                                : AppTheme.textSecondary,
+                            size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _selectedProductCodes.isEmpty
+                                ? 'Productos'
+                                : '${_selectedProductCodes.length} selec.',
+                            style: TextStyle(
+                                color: _selectedProductCodes.isNotEmpty
+                                    ? Colors.white
+                                    : Colors.white54,
+                                fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const Icon(Icons.arrow_drop_down,
+                            color: Colors.white54),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // Row 2: Quick Family Chips (FI1-FI5)
+        if (_fiFilters.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              if (_fiFilters.fi1 != null)
+                _buildFamilyChip('FI1', _fiFilters.fi1!, Icons.category, () {
+                  setState(() => _fiFilters = FiFilterState(
+                        fi2: _fiFilters.fi2,
+                        fi3: _fiFilters.fi3,
+                        fi4: _fiFilters.fi4,
+                        fi5: _fiFilters.fi5,
+                      ));
+                  _fetchAllData();
+                }),
+              if (_fiFilters.fi2 != null)
+                _buildFamilyChip(
+                    'FI2', _fiFilters.fi2!, Icons.subdirectory_arrow_right, () {
+                  setState(() => _fiFilters = FiFilterState(
+                        fi1: _fiFilters.fi1,
+                        fi3: _fiFilters.fi3,
+                        fi4: _fiFilters.fi4,
+                        fi5: _fiFilters.fi5,
+                      ));
+                  _fetchAllData();
+                }),
+              if (_fiFilters.fi5 != null)
+                _buildFamilyChip('FI5', _fiFilters.fi5!, Icons.ac_unit, () {
+                  setState(() => _fiFilters = FiFilterState(
+                        fi1: _fiFilters.fi1,
+                        fi2: _fiFilters.fi2,
+                        fi3: _fiFilters.fi3,
+                        fi4: _fiFilters.fi4,
+                      ));
+                  _fetchAllData();
+                }),
+              if (_fiFilters.fi3 != null)
+                _buildFamilyChip('FI3', _fiFilters.fi3!, Icons.tune, () {
+                  setState(() => _fiFilters = FiFilterState(
+                        fi1: _fiFilters.fi1,
+                        fi2: _fiFilters.fi2,
+                        fi4: _fiFilters.fi4,
+                        fi5: _fiFilters.fi5,
+                      ));
+                  _fetchAllData();
+                }),
+              if (_fiFilters.fi4 != null)
+                _buildFamilyChip('FI4', _fiFilters.fi4!, Icons.eco, () {
+                  setState(() => _fiFilters = FiFilterState(
+                        fi1: _fiFilters.fi1,
+                        fi2: _fiFilters.fi2,
+                        fi3: _fiFilters.fi3,
+                        fi5: _fiFilters.fi5,
+                      ));
+                  _fetchAllData();
+                }),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildFamilyChip(
+      String label, String value, IconData icon, VoidCallback onRemove) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.neonBlue.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: AppTheme.neonBlue),
+          const SizedBox(width: 4),
+          Text('$label:',
+              style: const TextStyle(
+                  color: AppTheme.neonBlue,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold)),
+          const SizedBox(width: 4),
+          Text(value,
+              style: const TextStyle(color: Colors.white, fontSize: 11)),
+          const SizedBox(width: 6),
+          GestureDetector(
+            onTap: onRemove,
+            child: const Icon(Icons.close, size: 14, color: Colors.white54),
           ),
         ],
       ),
@@ -1363,7 +1470,7 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
   }
 }
 
-// Mutable Helper Class
+// Enhanced Product Search Dialog with code + description + family
 class _ProductSearchDialog extends StatefulWidget {
   const _ProductSearchDialog({required this.initialSelection, super.key});
   final Set<String> initialSelection;
@@ -1383,7 +1490,7 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
   void initState() {
     super.initState();
     _selectedCodes = Set.from(widget.initialSelection);
-    _searchProducts(); // Load initial top products
+    _searchProducts();
   }
 
   @override
@@ -1458,7 +1565,7 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
               onChanged: _onSearchChanged,
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
-                hintText: 'Buscar por código o nombre...',
+                hintText: 'Buscar por codigo, nombre o familia...',
                 hintStyle: const TextStyle(color: Colors.white30),
                 prefixIcon: const Icon(Icons.search, color: Colors.white54),
                 filled: true,
@@ -1484,6 +1591,7 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
                             final item = _searchResults[index];
                             final code = item['code']?.toString() ?? '';
                             final name = item['name']?.toString() ?? '';
+                            final family = item['family']?.toString() ?? '';
                             final isSelected = _selectedCodes.contains(code);
 
                             return ListTile(
@@ -1501,9 +1609,33 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
                                       color: isSelected
                                           ? Colors.white
                                           : Colors.white70)),
-                              subtitle: Text(code,
-                                  style: const TextStyle(
-                                      color: Colors.white30, fontSize: 12)),
+                              subtitle: Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(code,
+                                        style: const TextStyle(
+                                            color: Colors.white30,
+                                            fontSize: 12)),
+                                  ),
+                                  if (family.isNotEmpty) ...[
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.neonBlue
+                                            .withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(family,
+                                          style: const TextStyle(
+                                              color: AppTheme.neonBlue,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                ],
+                              ),
                             );
                           },
                         ),
@@ -1520,10 +1652,6 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
                 const SizedBox(width: 8),
                 ElevatedButton(
                   onPressed: () {
-                    final selectedItems = _searchResults
-                        .where((i) => _selectedCodes.contains(i['code']))
-                        .toSet();
-                    // Just pass back dummy objects with code, as caller only needs codes
                     final resultSet =
                         _selectedCodes.map((c) => {'code': c}).toSet();
                     Navigator.pop(context, resultSet);
