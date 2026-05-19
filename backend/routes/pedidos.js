@@ -47,11 +47,12 @@ const { TTL } = require('../services/redis-cache');
 
 router.use(verifyToken);
 
-// Req #2: Margin visibility  only JEFE_VENTAS / ADMIN see cost/margin data
+// Req #2: Margin visibility — only JEFE_VENTAS / ADMIN / Comercial 80 see cost/margin data
 const MARGIN_VISIBLE_ROLES = ['JEFE_VENTAS', 'ADMIN'];
 function canSeeMargin(user) {
     const role = (user?.role || '').toUpperCase();
-    return MARGIN_VISIBLE_ROLES.includes(role) || user?.isJefeVentas === true;
+    const code = (user?.code || '').replace(/^0+/, '');
+    return MARGIN_VISIBLE_ROLES.includes(role) || user?.isJefeVentas === true || code === '80';
 }
 function stripMarginFromOrder(order, user) {
     if (canSeeMargin(user)) return order;
@@ -589,6 +590,20 @@ router.get('/delivery-options', async (req, res) => {
         logger.error(`[PEDIDOS] Error in GET /delivery-options: ${error.message}`);
         const status = error.message.includes('Fecha reparto') ? 409 : 500;
         res.status(status).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * GET /api/pedidos/available-vehicles
+ * List all active vehicles for truck assignment in order confirmation.
+ */
+router.get('/available-vehicles', async (req, res) => {
+    try {
+        const vehicles = await pedidosService.getAvailableVehicles();
+        res.json({ success: true, vehicles });
+    } catch (error) {
+        logger.error(`[PEDIDOS] Error in GET /available-vehicles: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 
@@ -1422,11 +1437,28 @@ router.get('/purchase-history-global', async (req, res) => {
         const lastYearTo = (to.getFullYear() - 1) * 10000 + (to.getMonth() + 1) * 100 + to.getDate();
         const lastYearParams = [lastYearFrom, lastYearTo];
 
-        const [detail, summary, topProducts, lastYear] = await Promise.all([
+        // 5) Mensual por año: agrupa importe por ANO y MES para gráfico multi-año
+        const monthlyByYearSql = `
+            SELECT
+                L.LCAADC AS ANO,
+                L.LCMMDC AS MES,
+                COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_VENDIDO,
+                COALESCE(SUM(L.LCCTUD * L.LCPRVT), 0) AS TOTAL_SIN_DESCUENTO,
+                COALESCE(SUM(L.LCCTUD * L.LCPRVT - L.LCIMVT), 0) AS TOTAL_DESCUENTO,
+                COALESCE(SUM(L.LCCTUD), 0) AS TOTAL_UNIDADES,
+                COUNT(*) AS NUM_LINEAS
+            FROM DSED.LACLAE L
+            WHERE ${whereSql}
+            GROUP BY L.LCAADC, L.LCMMDC
+            ORDER BY L.LCAADC DESC, L.LCMMDC
+        `;
+
+        const [detail, summary, topProducts, lastYear, monthlyByYear] = await Promise.all([
             queryWithParams(detailSql, params, []),
             queryWithParams(summarySql, params, []),
             queryWithParams(topProductosSql, params, []),
             queryWithParams(lastYearSql, lastYearParams, []),
+            queryWithParams(monthlyByYearSql, params, []),
         ]);
 
         const s = summary?.[0] || {};
@@ -1483,6 +1515,15 @@ router.get('/purchase-history-global', async (req, res) => {
                 importeDescuento: parseFloat(r.IMPORTEDESCUENTO) || 0,
                 formaPago: (r.CODIGOFORMAPAGO || '').trim(),
                 albaran: `${(r.SERIEALBARAN || '').trim()}-${r.NUMEROALBARAN || ''}`,
+            })),
+            monthlyByYear: (monthlyByYear || []).map(r => ({
+                year: parseInt(r.ANO),
+                month: parseInt(r.MES),
+                totalVendido: parseFloat(r.TOTAL_VENDIDO) || 0,
+                totalSinDescuento: parseFloat(r.TOTAL_SIN_DESCUENTO) || 0,
+                totalDescuento: parseFloat(r.TOTAL_DESCUENTO) || 0,
+                totalUnidades: parseFloat(r.TOTAL_UNIDADES) || 0,
+                numLineas: parseInt(r.NUM_LINEAS) || 0,
             })),
             pagination: { limit, offset, hasMore: (detail || []).length === limit },
         });
