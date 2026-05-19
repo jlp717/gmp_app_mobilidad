@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 
+/// Full-screen, zoomable product image viewer.
 class FullscreenImageViewer extends StatelessWidget {
+  /// Creates a product image viewer.
   const FullscreenImageViewer({
     required this.imageUrl,
     required this.productName,
@@ -11,9 +14,16 @@ class FullscreenImageViewer extends StatelessWidget {
     this.productCode,
   });
 
+  /// Product image URL.
   final String imageUrl;
+
+  /// Product title shown in the app bar.
   final String productName;
+
+  /// Optional HTTP headers for protected image endpoints.
   final Map<String, String>? headers;
+
+  /// Optional product code used by image fallbacks.
   final String? productCode;
 
   Map<String, String> get _effectiveHeaders {
@@ -26,6 +36,7 @@ class FullscreenImageViewer extends StatelessWidget {
     };
   }
 
+  /// Opens the product image viewer.
   static void show(
     BuildContext context, {
     required String imageUrl,
@@ -55,15 +66,18 @@ class FullscreenImageViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    const viewerBackground = AppColors.darkBase;
+    const imageSurface = AppColors.darkCard;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: viewerBackground,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: viewerBackground,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Color(0xFF0F172A)),
+        iconTheme: const IconThemeData(color: Colors.white),
         title: Text(
           productName,
-          style: const TextStyle(color: Color(0xFF0F172A), fontSize: 14),
+          style: const TextStyle(color: Colors.white, fontSize: 14),
           overflow: TextOverflow.ellipsis,
         ),
         leading: IconButton(
@@ -77,7 +91,7 @@ class FullscreenImageViewer extends StatelessWidget {
           child: ClipRRect(
             borderRadius: BorderRadius.circular(12),
             child: Container(
-              color: Colors.white,
+              color: imageSurface,
               width: double.infinity,
               height: double.infinity,
               child: InteractiveViewer(
