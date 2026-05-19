@@ -12,6 +12,7 @@ import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/services/secure_storage.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/widgets/premium_route.dart';
 import 'package:gmp_app_mobilidad/features/auth/presentation/pages/login_page.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/main_shell.dart';
 import 'package:go_router/go_router.dart';
@@ -201,16 +202,18 @@ class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
         GoRoute(
           path: '/login',
           name: 'login',
-          pageBuilder: (context, state) => MaterialPage(
-            key: state.pageKey,
+          pageBuilder: (context, state) => buildPremiumTransitionPage(
+            context: context,
+            state: state,
             child: const LoginPage(),
           ),
         ),
         GoRoute(
           path: '/dashboard',
           name: 'dashboard',
-          pageBuilder: (context, state) => MaterialPage(
-            key: state.pageKey,
+          pageBuilder: (context, state) => buildPremiumTransitionPage(
+            context: context,
+            state: state,
             child: const MainShell(),
           ),
         ),

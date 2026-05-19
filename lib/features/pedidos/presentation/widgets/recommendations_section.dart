@@ -1,6 +1,7 @@
 /// Recommendations Section
 /// =======================
 /// Collapsible horizontal scrollable sections for "Productos habituales" and "Otros clientes compran"
+/// Ahora muestra datos enriquecidos: stock, referencia, unidad, estado comprado, margen (jefes ventas).
 library;
 
 import 'package:flutter/material.dart';
@@ -15,11 +16,9 @@ class RecommendationsSection extends ConsumerStatefulWidget {
   const RecommendationsSection({
     required this.onProductTap, super.key,
   });
-  /// Callback al tocar una recomendacion. Recibe codigo, nombre y la cantidad
-  /// sugerida (envases) basada en el historial de compras del cliente. Si la
-  /// cantidad sugerida es 0 significa que no hay datos historicos suficientes.
-  final void Function(String code, String name, double suggestedQty)
-      onProductTap;
+  /// Callback al tocar una recomendacion. Recibe el Recommendation completo
+  /// con todos los datos enriquecidos (stock, precios, unidades, etc.).
+  final void Function(Recommendation item) onProductTap;
 
   @override
   ConsumerState<RecommendationsSection> createState() => _RecommendationsSectionState();
@@ -33,6 +32,7 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
     final provider = ref.watch(pedidosProvider);
     final hasHistory = provider.clientHistory.isNotEmpty;
     final hasSimilar = provider.similarClients.isNotEmpty;
+    final canSeeMargin = ref.watch(pedidosProvider.select((p) => p.isMarginVisible));
 
     if (!hasHistory && !hasSimilar) return const SizedBox.shrink();
 
@@ -100,11 +100,7 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
               title: 'Productos habituales',
               icon: Icons.history,
               items: provider.clientHistory,
-              // Mostrar la cantidad media en cajas que suele pedir el cliente.
-              // Si suggestedUnits es 0, caer en frequency (n. veces comprado).
-              badgeBuilder: (r) => r.suggestedUnits > 0
-                  ? '${r.suggestedUnits.toStringAsFixed(0)} cj'
-                  : '${r.frequency}x',
+              canSeeMargin: canSeeMargin,
             ),
           if (hasSimilar)
             _buildSection(
@@ -112,7 +108,7 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
               title: 'Otros clientes compran',
               icon: Icons.people_outline,
               items: provider.similarClients,
-              badgeBuilder: (r) => '${r.clientCount} cl.',
+              canSeeMargin: canSeeMargin,
             ),
         ],
       ],
@@ -124,7 +120,7 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
     required String title,
     required IconData icon,
     required List<Recommendation> items,
-    required String Function(Recommendation) badgeBuilder,
+    required bool canSeeMargin,
   }) {
     final pad = Responsive.contentPadding(context);
 
@@ -151,7 +147,7 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
           ),
         ),
         SizedBox(
-          height: 68,
+          height: 110,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: EdgeInsets.symmetric(horizontal: pad.left),
@@ -159,7 +155,7 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
             separatorBuilder: (_, __) => const SizedBox(width: 8),
             itemBuilder: (ctx, i) {
               final item = items[i];
-              return _buildRecoCard(context, item, badgeBuilder(item));
+              return _buildRecoCard(context, item, canSeeMargin);
             },
           ),
         ),
@@ -168,54 +164,154 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
   }
 
   Widget _buildRecoCard(
-      BuildContext context, Recommendation item, String badge,) {
+      BuildContext context, Recommendation item, bool canSeeMargin,) {
+    final hasStock = item.hasStock;
+    final isDual = item.unitsPerBox > 1;
+    final unitLabel = item.unitMeasure.isNotEmpty
+        ? item.unitMeasure
+        : (isDual ? 'CAJAS' : 'UDS');
+
+    // Badge principal: cantidad sugerida o frecuencia
+    String mainBadge;
+    if (item.source == 'history') {
+      if (item.suggestedUnits > 0) {
+        mainBadge = '${item.suggestedUnits.toStringAsFixed(0)} cj';
+      } else if (item.totalEnvases > 0) {
+        mainBadge = '${item.totalEnvases.toStringAsFixed(0)} cj tot';
+      } else {
+        mainBadge = '${item.frequency}x';
+      }
+    } else {
+      mainBadge = '${item.clientCount} cl.';
+    }
+
     return InkWell(
-      onTap: () => widget.onProductTap(
-        item.code,
-        item.name,
-        item.suggestedUnits, // cantidad sugerida del historial
-      ),
+      onTap: () => widget.onProductTap(item),
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        width: 140,
+        width: 180,
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: AppTheme.darkCard,
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: AppTheme.borderColor.withValues(alpha: 0.3)),
+          border: Border.all(
+            color: hasStock
+                ? AppTheme.neonGreen.withValues(alpha: 0.3)
+                : AppTheme.borderColor.withValues(alpha: 0.3),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            // Code + name
+            Text(
+              item.code,
+              style: TextStyle(
+                color: AppTheme.neonBlue,
+                fontWeight: FontWeight.w600,
+                fontSize: Responsive.fontSize(context, small: 9, large: 10),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 2),
             Text(
               item.name,
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w500,
                 fontSize:
-                    Responsive.fontSize(context, small: 11, large: 12),
+                    Responsive.fontSize(context, small: 10, large: 11),
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            const SizedBox(height: 4),
-            Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Text(
-                badge,
-                style: TextStyle(
-                  color: AppTheme.neonBlue,
-                  fontSize:
-                      Responsive.fontSize(context, small: 10, large: 11),
-                  fontWeight: FontWeight.w600,
+            const Spacer(),
+            // Stock indicator
+            Row(
+              children: [
+                Icon(
+                  hasStock ? Icons.inventory_2 : Icons.inventory_2_outlined,
+                  color: hasStock ? AppTheme.neonGreen : AppTheme.error,
+                  size: 12,
                 ),
-              ),
+                const SizedBox(width: 3),
+                Expanded(
+                  child: Text(
+                    item.stockDisplay,
+                    style: TextStyle(
+                      color: hasStock ? AppTheme.neonGreen : AppTheme.error,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            // Badges row
+            Row(
+              children: [
+                // Main badge (suggested qty / frequency / client count)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: AppTheme.neonBlue.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    mainBadge,
+                    style: TextStyle(
+                      color: AppTheme.neonBlue,
+                      fontSize:
+                          Responsive.fontSize(context, small: 8, large: 9),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 4),
+                // Unit badge
+                if (isDual)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: AppTheme.neonPurple.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '${item.unitsPerBox.toStringAsFixed(0)}u/cj',
+                      style: TextStyle(
+                        color: AppTheme.neonPurple,
+                        fontSize:
+                            Responsive.fontSize(context, small: 8, large: 9),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                // Margin badge (jefes de ventas)
+                if (canSeeMargin && item.precioTarifa1 > 0 && item.precioCliente > 0)
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: AppTheme.warning.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '${((1 - item.precioCliente / item.precioTarifa1) * 100).toStringAsFixed(0)}%',
+                      style: TextStyle(
+                        color: AppTheme.warning,
+                        fontSize:
+                            Responsive.fontSize(context, small: 8, large: 9),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ],
         ),

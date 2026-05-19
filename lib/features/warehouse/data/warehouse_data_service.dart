@@ -4,7 +4,6 @@ library;
 
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
-import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -13,7 +12,6 @@ import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 
 /// Resumen de un camión en el dashboard
 class TruckSummary {
-
   TruckSummary({
     required this.vehicleCode,
     required this.description,
@@ -28,17 +26,17 @@ class TruckSummary {
   });
 
   factory TruckSummary.fromJson(Map<String, dynamic> json) => TruckSummary(
-    vehicleCode: (json['vehicleCode'] as String?) ?? '',
-    description: (json['description'] as String?) ?? '',
-    matricula: (json['matricula'] as String?) ?? '',
-    driverCode: (json['driverCode'] as String?) ?? '',
-    driverName: (json['driverName'] as String?) ?? '',
-    orderCount: (json['orderCount'] as int?) ?? 0,
-    lineCount: (json['lineCount'] as int?) ?? 0,
-    maxPayloadKg: ((json['maxPayloadKg'] ?? 0) as num).toDouble(),
-    containerVolume: ((json['containerVolume'] ?? 0) as num).toDouble(),
-    tolerancePct: ((json['tolerancePct'] ?? 5) as num).toDouble(),
-  );
+        vehicleCode: (json['vehicleCode'] as String?) ?? '',
+        description: (json['description'] as String?) ?? '',
+        matricula: (json['matricula'] as String?) ?? '',
+        driverCode: (json['driverCode'] as String?) ?? '',
+        driverName: (json['driverName'] as String?) ?? '',
+        orderCount: (json['orderCount'] as int?) ?? 0,
+        lineCount: (json['lineCount'] as int?) ?? 0,
+        maxPayloadKg: ((json['maxPayloadKg'] ?? 0) as num).toDouble(),
+        containerVolume: ((json['containerVolume'] ?? 0) as num).toDouble(),
+        tolerancePct: ((json['tolerancePct'] ?? 5) as num).toDouble(),
+      );
   final String vehicleCode;
   final String description;
   final String matricula;
@@ -53,7 +51,6 @@ class TruckSummary {
 
 /// Vehículo completo con configuración
 class VehicleConfig {
-
   VehicleConfig({
     required this.code,
     required this.description,
@@ -72,9 +69,8 @@ class VehicleConfig {
     var imgUrl = json['imageUrl'] as String?;
     if (imgUrl != null && imgUrl.startsWith('/api/')) {
       final base = ApiConfig.baseUrl; // e.g. http://192.168.1.230:3334/api
-      final serverRoot = base.endsWith('/api')
-          ? base.substring(0, base.length - 4)
-          : base;
+      final serverRoot =
+          base.endsWith('/api') ? base.substring(0, base.length - 4) : base;
       imgUrl = '$serverRoot$imgUrl';
     }
     return VehicleConfig(
@@ -86,7 +82,8 @@ class VehicleConfig {
       volumeM3: ((json['volumeM3'] ?? 0) as num).toDouble(),
       containerVolumeM3: ((json['containerVolumeM3'] ?? 0) as num).toDouble(),
       interior: TruckInterior.fromJson(
-          (json['interior'] as Map<String, dynamic>?) ?? {},),
+        (json['interior'] as Map<String, dynamic>?) ?? {},
+      ),
       tolerancePct: ((json['tolerancePct'] ?? 5) as num).toDouble(),
       imageUrl: imgUrl,
     );
@@ -104,7 +101,6 @@ class VehicleConfig {
 }
 
 class TruckInterior {
-
   TruckInterior({
     required this.lengthCm,
     required this.widthCm,
@@ -112,10 +108,10 @@ class TruckInterior {
   });
 
   factory TruckInterior.fromJson(Map<String, dynamic> json) => TruckInterior(
-    lengthCm: ((json['lengthCm'] ?? 0) as num).toDouble(),
-    widthCm: ((json['widthCm'] ?? 0) as num).toDouble(),
-    heightCm: ((json['heightCm'] ?? 0) as num).toDouble(),
-  );
+        lengthCm: ((json['lengthCm'] ?? 0) as num).toDouble(),
+        widthCm: ((json['widthCm'] ?? 0) as num).toDouble(),
+        heightCm: ((json['heightCm'] ?? 0) as num).toDouble(),
+      );
   final double lengthCm;
   final double widthCm;
   final double heightCm;
@@ -125,7 +121,6 @@ class TruckInterior {
 
 /// Caja colocada en el camión (resultado del bin packing)
 class PlacedBox {
-
   PlacedBox({
     required this.id,
     required this.label,
@@ -133,26 +128,32 @@ class PlacedBox {
     required this.clientCode,
     required this.articleCode,
     required this.weight,
-    required this.x, required this.y, required this.z, required this.w, required this.d, required this.h, this.importeEur = 0,
+    required this.x,
+    required this.y,
+    required this.z,
+    required this.w,
+    required this.d,
+    required this.h,
+    this.importeEur = 0,
     this.margenEur = 0,
   });
 
   factory PlacedBox.fromJson(Map<String, dynamic> json) => PlacedBox(
-    id: (json['id'] as int?) ?? 0,
-    label: (json['label'] as String?) ?? '',
-    orderNumber: (json['orderNumber'] as int?) ?? 0,
-    clientCode: (json['clientCode'] as String?) ?? '',
-    articleCode: (json['articleCode'] as String?) ?? '',
-    weight: ((json['weight'] ?? 0) as num).toDouble(),
-    importeEur: ((json['importeEur'] ?? 0) as num).toDouble(),
-    margenEur: ((json['margenEur'] ?? 0) as num).toDouble(),
-    x: ((json['x'] ?? 0) as num).toDouble(),
-    y: ((json['y'] ?? 0) as num).toDouble(),
-    z: ((json['z'] ?? 0) as num).toDouble(),
-    w: ((json['w'] ?? 0) as num).toDouble(),
-    d: ((json['d'] ?? 0) as num).toDouble(),
-    h: ((json['h'] ?? 0) as num).toDouble(),
-  );
+        id: (json['id'] as int?) ?? 0,
+        label: (json['label'] as String?) ?? '',
+        orderNumber: (json['orderNumber'] as int?) ?? 0,
+        clientCode: (json['clientCode'] as String?) ?? '',
+        articleCode: (json['articleCode'] as String?) ?? '',
+        weight: ((json['weight'] ?? 0) as num).toDouble(),
+        importeEur: ((json['importeEur'] ?? 0) as num).toDouble(),
+        margenEur: ((json['margenEur'] ?? 0) as num).toDouble(),
+        x: ((json['x'] ?? 0) as num).toDouble(),
+        y: ((json['y'] ?? 0) as num).toDouble(),
+        z: ((json['z'] ?? 0) as num).toDouble(),
+        w: ((json['w'] ?? 0) as num).toDouble(),
+        d: ((json['d'] ?? 0) as num).toDouble(),
+        h: ((json['h'] ?? 0) as num).toDouble(),
+      );
   final int id;
   final String label;
   final int orderNumber;
@@ -172,7 +173,6 @@ class PlacedBox {
 
 /// Métricas del resultado del load plan
 class LoadMetrics {
-
   LoadMetrics({
     required this.totalBoxes,
     required this.placedCount,
@@ -194,24 +194,31 @@ class LoadMetrics {
   });
 
   factory LoadMetrics.fromJson(Map<String, dynamic> json) => LoadMetrics(
-    totalBoxes: (json['totalBoxes'] as int?) ?? 0,
-    placedCount: (json['placedCount'] as int?) ?? 0,
-    overflowCount: (json['overflowCount'] as int?) ?? 0,
-    containerVolumeCm3: ((json['containerVolumeCm3'] ?? 0) as num).toDouble(),
-    usedVolumeCm3: ((json['usedVolumeCm3'] ?? 0) as num).toDouble(),
-    volumeOccupancyPct: ((json['volumeOccupancyPct'] ?? 0) as num).toDouble(),
-    totalWeightKg: ((json['totalWeightKg'] ?? 0) as num).toDouble(),
-    overflowWeightKg: ((json['overflowWeightKg'] ?? 0) as num).toDouble(),
-    maxPayloadKg: ((json['maxPayloadKg'] ?? 0) as num).toDouble(),
-    weightOccupancyPct: ((json['weightOccupancyPct'] ?? 0) as num).toDouble(),
-    totalDemandVolumeCm3: ((json['totalDemandVolumeCm3'] ?? 0) as num).toDouble(),
-    totalDemandWeightKg: ((json['totalDemandWeightKg'] ?? 0) as num).toDouble(),
-    demandVsCapacityPct: ((json['demandVsCapacityPct'] ?? 0) as num).toDouble(),
-    status: (json['status'] as String?) ?? 'SEGURO',
-    totalImporteEur: ((json['totalImporteEur'] ?? 0) as num).toDouble(),
-    totalMargenEur: ((json['totalMargenEur'] ?? 0) as num).toDouble(),
-    overflowImporteEur: ((json['overflowImporteEur'] ?? 0) as num).toDouble(),
-  );
+        totalBoxes: (json['totalBoxes'] as int?) ?? 0,
+        placedCount: (json['placedCount'] as int?) ?? 0,
+        overflowCount: (json['overflowCount'] as int?) ?? 0,
+        containerVolumeCm3:
+            ((json['containerVolumeCm3'] ?? 0) as num).toDouble(),
+        usedVolumeCm3: ((json['usedVolumeCm3'] ?? 0) as num).toDouble(),
+        volumeOccupancyPct:
+            ((json['volumeOccupancyPct'] ?? 0) as num).toDouble(),
+        totalWeightKg: ((json['totalWeightKg'] ?? 0) as num).toDouble(),
+        overflowWeightKg: ((json['overflowWeightKg'] ?? 0) as num).toDouble(),
+        maxPayloadKg: ((json['maxPayloadKg'] ?? 0) as num).toDouble(),
+        weightOccupancyPct:
+            ((json['weightOccupancyPct'] ?? 0) as num).toDouble(),
+        totalDemandVolumeCm3:
+            ((json['totalDemandVolumeCm3'] ?? 0) as num).toDouble(),
+        totalDemandWeightKg:
+            ((json['totalDemandWeightKg'] ?? 0) as num).toDouble(),
+        demandVsCapacityPct:
+            ((json['demandVsCapacityPct'] ?? 0) as num).toDouble(),
+        status: (json['status'] as String?) ?? 'SEGURO',
+        totalImporteEur: ((json['totalImporteEur'] ?? 0) as num).toDouble(),
+        totalMargenEur: ((json['totalMargenEur'] ?? 0) as num).toDouble(),
+        overflowImporteEur:
+            ((json['overflowImporteEur'] ?? 0) as num).toDouble(),
+      );
   final int totalBoxes;
   final int placedCount;
   final int overflowCount;
@@ -234,9 +241,12 @@ class LoadMetrics {
 
 /// Resultado completo del planificador de carga
 class LoadPlanResult {
-
   LoadPlanResult({
-    required this.placed, required this.overflow, required this.metrics, required this.tolerancePct, this.truck,
+    required this.placed,
+    required this.overflow,
+    required this.metrics,
+    required this.tolerancePct,
+    this.truck,
   });
 
   factory LoadPlanResult.fromJson(Map<String, dynamic> json) {
@@ -250,7 +260,8 @@ class LoadPlanResult {
           .map((b) => PlacedBox.fromJson(b as Map<String, dynamic>))
           .toList(),
       metrics: LoadMetrics.fromJson(
-          (json['metrics'] as Map<String, dynamic>?) ?? {},),
+        (json['metrics'] as Map<String, dynamic>?) ?? {},
+      ),
       tolerancePct: ((json['tolerancePct'] ?? 5) as num).toDouble(),
     );
   }
@@ -263,7 +274,6 @@ class LoadPlanResult {
 
 /// Resultado del cálculo de equilibrio de ejes
 class AxleBalanceResult {
-
   AxleBalanceResult({
     required this.cogX,
     required this.cogY,
@@ -307,7 +317,6 @@ class AxleBalanceResult {
 
 /// Orden de un camión
 class TruckOrder {
-
   TruckOrder({
     required this.articleCode,
     required this.articleName,
@@ -358,7 +367,8 @@ class TruckOrder {
 }
 
 /// Personal de almacén
-class WarehousePerson { // 'custom' or 'vdd'
+class WarehousePerson {
+  // 'custom' or 'vdd'
 
   WarehousePerson({
     required this.id,
@@ -394,7 +404,6 @@ class WarehousePerson { // 'custom' or 'vdd'
 
 /// Artículo con dimensiones (reales o estimadas)
 class ArticleDimension {
-
   ArticleDimension({
     required this.code,
     required this.name,
@@ -447,11 +456,20 @@ class ArticleDimension {
 
 /// Entrada del historial de cargas
 class LoadHistoryEntry {
-
   LoadHistoryEntry({
     required this.id,
     required this.vehicleCode,
-    required this.date, required this.weightKg, required this.volumeCm3, required this.volumePct, required this.weightPct, required this.orderCount, required this.boxCount, required this.status, required this.createdBy, required this.createdAt, this.vehicleDesc = '',
+    required this.date,
+    required this.weightKg,
+    required this.volumeCm3,
+    required this.volumePct,
+    required this.weightPct,
+    required this.orderCount,
+    required this.boxCount,
+    required this.status,
+    required this.createdBy,
+    required this.createdAt,
+    this.vehicleDesc = '',
     this.matricula = '',
     this.importeTotal = 0,
     this.margenTotal = 0,
@@ -513,28 +531,27 @@ class WarehouseDataService {
     if (month != null) qp['month'] = month.toString();
     if (day != null) qp['day'] = day.toString();
 
-    final response = await ApiClient.get(
+    final cacheKey =
+        'warehouse_dashboard_${year ?? 'now'}_${month ?? 'now'}_${day ?? 'now'}';
+    final result = await OfflineAwareApi.get(
       '/warehouse/dashboard',
       queryParameters: qp,
-      cacheKey:
-          'warehouse_dashboard_${year ?? 'now'}_${month ?? 'now'}_${day ?? 'now'}',
-      cacheTTL: CacheService.shortTTL,
+      cacheKey: cacheKey,
     );
 
-    return ((response['trucks'] as List?) ?? [])
+    return ((result.data['trucks'] as List?) ?? [])
         .map((t) => TruckSummary.fromJson(t as Map<String, dynamic>))
         .toList();
   }
 
   /// Lista todos los vehículos
   static Future<List<VehicleConfig>> getVehicles() async {
-    final response = await ApiClient.get(
+    final result = await OfflineAwareApi.get(
       '/warehouse/vehicles',
       cacheKey: 'warehouse_vehicles',
-      cacheTTL: CacheService.defaultTTL,
     );
 
-    return ((response['vehicles'] as List?) ?? [])
+    return ((result.data['vehicles'] as List?) ?? [])
         .map((v) => VehicleConfig.fromJson(v as Map<String, dynamic>))
         .toList();
   }
@@ -548,7 +565,7 @@ class WarehouseDataService {
     double? tolerance,
   }) async {
     final now = DateTime.now();
-    final response = await ApiClient.postWithTimeout(
+    final response = await OfflineAwareApi.post(
       '/warehouse/load-plan',
       {
         'vehicleCode': vehicleCode,
@@ -557,7 +574,7 @@ class WarehouseDataService {
         'day': day ?? now.day,
         if (tolerance != null) 'tolerance': tolerance,
       },
-      receiveTimeout: const Duration(seconds: 60),
+      syncType: 'warehouse_plan',
     );
 
     return LoadPlanResult.fromJson(response);
@@ -569,11 +586,15 @@ class WarehouseDataService {
     required List<Map<String, dynamic>> items,
     double? tolerance,
   }) async {
-    final response = await ApiClient.post('/warehouse/load-plan-manual', {
-      'vehicleCode': vehicleCode,
-      'items': items,
-      if (tolerance != null) 'tolerance': tolerance,
-    });
+    final response = await OfflineAwareApi.post(
+      '/warehouse/load-plan-manual',
+      {
+        'vehicleCode': vehicleCode,
+        'items': items,
+        if (tolerance != null) 'tolerance': tolerance,
+      },
+      syncType: 'warehouse_plan_manual',
+    );
     return LoadPlanResult.fromJson(response);
   }
 
@@ -589,28 +610,26 @@ class WarehouseDataService {
     if (month != null) qp['month'] = month.toString();
     if (day != null) qp['day'] = day.toString();
 
-    final response = await ApiClient.get(
+    final result = await OfflineAwareApi.get(
       '/warehouse/truck/$vehicleCode/orders',
       queryParameters: qp,
       cacheKey:
           'warehouse_orders_${vehicleCode}_${year ?? ''}_${month ?? ''}_${day ?? ''}',
-      cacheTTL: CacheService.shortTTL,
     );
 
-    return ((response['orders'] as List?) ?? [])
+    return ((result.data['orders'] as List?) ?? [])
         .map((o) => TruckOrder.fromJson(o as Map<String, dynamic>))
         .toList();
   }
 
   /// Personal de almacén
   static Future<List<WarehousePerson>> getPersonnel() async {
-    final response = await ApiClient.get(
+    final result = await OfflineAwareApi.get(
       '/warehouse/personnel',
       cacheKey: 'warehouse_personnel',
-      cacheTTL: CacheService.defaultTTL,
     );
 
-    return ((response['personnel'] as List?) ?? [])
+    return ((result.data['personnel'] as List?) ?? [])
         .map((p) => WarehousePerson.fromJson(p as Map<String, dynamic>))
         .toList();
   }
@@ -623,13 +642,16 @@ class WarehouseDataService {
     String? telefono,
     String? email,
   }) async {
-    await ApiClient.post('/warehouse/personnel', {
-      'nombre': nombre,
-      if (codigoVendedor != null) 'codigoVendedor': codigoVendedor,
-      if (rol != null) 'rol': rol,
-      if (telefono != null) 'telefono': telefono,
-      if (email != null) 'email': email,
-    });
+    await OfflineAwareApi.post(
+        '/warehouse/personnel',
+        {
+          'nombre': nombre,
+          if (codigoVendedor != null) 'codigoVendedor': codigoVendedor,
+          if (rol != null) 'rol': rol,
+          if (telefono != null) 'telefono': telefono,
+          if (email != null) 'email': email,
+        },
+        syncType: 'warehouse_add_person');
   }
 
   /// Actualizar operario
@@ -641,23 +663,35 @@ class WarehouseDataService {
     String? email,
     bool? activo,
   }) async {
-    await ApiClient.put('/warehouse/personnel/$id', data: {
-      if (nombre != null) 'nombre': nombre,
-      if (rol != null) 'rol': rol,
-      if (telefono != null) 'telefono': telefono,
-      if (email != null) 'email': email,
-      if (activo != null) 'activo': activo,
-    },);
+    await OfflineAwareApi.put(
+      '/warehouse/personnel/$id',
+      data: {
+        if (nombre != null) 'nombre': nombre,
+        if (rol != null) 'rol': rol,
+        if (telefono != null) 'telefono': telefono,
+        if (email != null) 'email': email,
+        if (activo != null) 'activo': activo,
+      },
+      syncType: 'warehouse_update_person',
+    );
   }
 
   /// Eliminar operario (soft delete)
   static Future<void> deletePerson(String id) async {
-    await ApiClient.post('/warehouse/personnel/$id/delete', {});
+    await OfflineAwareApi.post(
+      '/warehouse/personnel/$id/delete',
+      {},
+      syncType: 'warehouse_delete_person',
+    );
   }
 
   /// Auto-estimate dimensions for articles without real dimensions
   static Future<Map<String, dynamic>> bulkEstimateDimensions() async {
-    final response = await ApiClient.post('/warehouse/articles/bulk-estimate', {});
+    final response = await OfflineAwareApi.post(
+      '/warehouse/articles/bulk-estimate',
+      {},
+      syncType: 'warehouse_bulk_estimate',
+    );
     return response;
   }
 
@@ -671,12 +705,13 @@ class WarehouseDataService {
     if (search != null && search.isNotEmpty) qp['search'] = search;
     if (onlyWithDimensions ?? false) qp['onlyWithDimensions'] = 'true';
 
-    final response = await ApiClient.get(
+    final result = await OfflineAwareApi.get(
       '/warehouse/articles',
       queryParameters: qp,
+      cacheKey: 'warehouse_articles_${search ?? 'all'}',
     );
 
-    return ((response['articles'] as List?) ?? [])
+    return ((result.data['articles'] as List?) ?? [])
         .map((a) => ArticleDimension.fromJson(a as Map<String, dynamic>))
         .toList();
   }
@@ -690,29 +725,45 @@ class WarehouseDataService {
     double? pesoCajaKg,
     String? notas,
   }) async {
-    await ApiClient.put('/warehouse/article-dimensions/$code', data: {
-      'largoCm': largoCm,
-      'anchoCm': anchoCm,
-      'altoCm': altoCm,
-      if (pesoCajaKg != null) 'pesoCajaKg': pesoCajaKg,
-      if (notas != null) 'notas': notas,
-    },);
+    await OfflineAwareApi.put(
+      '/warehouse/article-dimensions/$code',
+      data: {
+        'largoCm': largoCm,
+        'anchoCm': anchoCm,
+        'altoCm': altoCm,
+        if (pesoCajaKg != null) 'pesoCajaKg': pesoCajaKg,
+        if (notas != null) 'notas': notas,
+      },
+      syncType: 'warehouse_update_article_dims',
+    );
   }
 
   /// Eliminar dimensiones reales (volver a estimado)
   static Future<void> deleteArticleDimensions(String code) async {
-    await ApiClient.post('/warehouse/article-dimensions/$code/delete', {});
+    await OfflineAwareApi.post(
+      '/warehouse/article-dimensions/$code/delete',
+      {},
+      syncType: 'warehouse_delete_article_dims',
+    );
   }
 
   /// Resetear TODAS las dimensiones reales (volver todo a estimado)
   static Future<Map<String, dynamic>> resetAllDimensions() async {
-    final response = await ApiClient.post('/warehouse/articles/reset-all-dimensions', {});
+    final response = await OfflineAwareApi.post(
+      '/warehouse/articles/reset-all-dimensions',
+      {},
+      syncType: 'warehouse_reset_dims',
+    );
     return response;
   }
 
   /// Limpiar personal de test
   static Future<void> cleanupTestPersonnel() async {
-    await ApiClient.post('/warehouse/personnel/cleanup-test', {});
+    await OfflineAwareApi.post(
+      '/warehouse/personnel/cleanup-test',
+      {},
+      syncType: 'warehouse_cleanup_test',
+    );
   }
 
   /// Historial de cargas con filtros de fecha
@@ -727,12 +778,13 @@ class WarehouseDataService {
     if (dateFrom != null) qp['dateFrom'] = dateFrom;
     if (dateTo != null) qp['dateTo'] = dateTo;
 
-    final response = await ApiClient.get(
+    final result = await OfflineAwareApi.get(
       '/warehouse/load-history',
       queryParameters: qp,
+      cacheKey: 'warehouse_history_${vehicleCode ?? 'all'}',
     );
 
-    return ((response['history'] as List?) ?? [])
+    return ((result.data['history'] as List?) ?? [])
         .map((h) => LoadHistoryEntry.fromJson(h as Map<String, dynamic>))
         .toList();
   }
@@ -746,11 +798,12 @@ class WarehouseDataService {
     required String vehicleCode,
     required String date,
   }) async {
-    final response = await ApiClient.get(
+    final result = await OfflineAwareApi.get(
       '/warehouse/manual-layout/$vehicleCode/$date',
+      cacheKey: 'warehouse_layout_${vehicleCode}_$date',
     );
-    if (response['found'] == true) {
-      return response['layout'] as Map<String, dynamic>;
+    if (result.data['found'] == true) {
+      return result.data['layout'] as Map<String, dynamic>;
     }
     return null;
   }
@@ -763,13 +816,16 @@ class WarehouseDataService {
     Map<String, dynamic>? metricsJson,
     String? vendor,
   }) async {
-    await ApiClient.post('/warehouse/manual-layout', {
-      'vehicleCode': vehicleCode,
-      'date': date,
-      if (vendor != null) 'vendor': vendor,
-      'layoutJson': layoutJson,
-      'metricsJson': metricsJson ?? {},
-    });
+    await OfflineAwareApi.post(
+        '/warehouse/manual-layout',
+        {
+          'vehicleCode': vehicleCode,
+          'date': date,
+          if (vendor != null) 'vendor': vendor,
+          'layoutJson': layoutJson,
+          'metricsJson': metricsJson ?? {},
+        },
+        syncType: 'warehouse_save_layout');
   }
 
   /// Optimize load for maximum profit
@@ -779,18 +835,25 @@ class WarehouseDataService {
     required int month,
     required int day,
   }) async {
-    final response = await ApiClient.post('/warehouse/load-plan/optimize', {
-      'vehicleCode': vehicleCode,
-      'year': year,
-      'month': month,
-      'day': day,
-    });
+    final response = await OfflineAwareApi.post(
+        '/warehouse/load-plan/optimize',
+        {
+          'vehicleCode': vehicleCode,
+          'year': year,
+          'month': month,
+          'day': day,
+        },
+        syncType: 'warehouse_optimize');
     return response;
   }
 
   /// Delete manual layout
   static Future<void> deleteManualLayout(int id) async {
-    await ApiClient.post('/warehouse/manual-layout/$id/delete', {});
+    await OfflineAwareApi.post(
+      '/warehouse/manual-layout/$id/delete',
+      {},
+      syncType: 'warehouse_delete_layout',
+    );
   }
 
   /// Smart optimize — must-deliver + greedy knapsack by value density
@@ -801,17 +864,16 @@ class WarehouseDataService {
     required int day,
     List<int>? mustDeliverOrders,
   }) async {
-    final response = await ApiClient.postWithTimeout(
+    final response = await OfflineAwareApi.post(
       '/warehouse/load-plan/smart-optimize',
       {
         'vehicleCode': vehicleCode,
         'year': year,
         'month': month,
         'day': day,
-        if (mustDeliverOrders != null)
-          'mustDeliverOrders': mustDeliverOrders,
+        if (mustDeliverOrders != null) 'mustDeliverOrders': mustDeliverOrders,
       },
-      receiveTimeout: const Duration(seconds: 60),
+      syncType: 'warehouse_smart_optimize',
     );
     return LoadPlanResult.fromJson(response);
   }
@@ -821,25 +883,28 @@ class WarehouseDataService {
     required String vehicleCode,
     required List<Map<String, dynamic>> placedBoxes,
   }) async {
-    final response = await ApiClient.post(
+    final response = await OfflineAwareApi.post(
       '/warehouse/load-plan/axle-balance',
       {
         'vehicleCode': vehicleCode,
         'placed': placedBoxes,
       },
+      syncType: 'warehouse_axle_balance',
     );
     return AxleBalanceResult.fromJson(response);
   }
 
   /// Get global warehouse config
   static Future<Map<String, String>> getConfig() async {
-    final response = await ApiClient.get('/warehouse/config');
-    final items = (response['config'] as List?) ?? [];
+    final result = await OfflineAwareApi.get(
+      '/warehouse/config',
+      cacheKey: 'warehouse_config',
+    );
+    final items = (result.data['config'] as List?) ?? [];
     final map = <String, String>{};
     for (final item in items) {
       final m = item as Map<String, dynamic>;
-      map[(m['CLAVE'] as String?) ?? ''] =
-          (m['VALOR'] as String?) ?? '';
+      map[(m['CLAVE'] as String?) ?? ''] = (m['VALOR'] as String?) ?? '';
     }
     return map;
   }
@@ -850,16 +915,24 @@ class WarehouseDataService {
     required String value,
     String? description,
   }) async {
-    await ApiClient.put('/warehouse/config', data: {
-      'key': key,
-      'value': value,
-      if (description != null) 'description': description,
-    },);
+    await OfflineAwareApi.put(
+      '/warehouse/config',
+      data: {
+        'key': key,
+        'value': value,
+        if (description != null) 'description': description,
+      },
+      syncType: 'warehouse_update_config',
+    );
   }
 
   /// Seed default config values
   static Future<void> seedConfig() async {
-    await ApiClient.post('/warehouse/config/seed', {});
+    await OfflineAwareApi.post(
+      '/warehouse/config/seed',
+      {},
+      syncType: 'warehouse_seed_config',
+    );
   }
 
   /// Guardar carga actual al histórico (botón explícito)
@@ -872,15 +945,18 @@ class WarehouseDataService {
     required List<Map<String, dynamic>> placed,
     List<Map<String, dynamic>> overflow = const [],
   }) async {
-    await ApiClient.post('/warehouse/save-load', {
-      'vehicleCode': vehicleCode,
-      'year': year,
-      'month': month,
-      'day': day,
-      'metrics': metrics,
-      'placed': placed,
-      'overflow': overflow,
-    });
+    await OfflineAwareApi.post(
+        '/warehouse/save-load',
+        {
+          'vehicleCode': vehicleCode,
+          'year': year,
+          'month': month,
+          'day': day,
+          'metrics': metrics,
+          'placed': placed,
+          'overflow': overflow,
+        },
+        syncType: 'warehouse_save_load');
   }
 
   /// Actualizar config camión
@@ -892,12 +968,16 @@ class WarehouseDataService {
     double? toleranciaExceso,
     String? notas,
   }) async {
-    await ApiClient.put('/warehouse/truck-config/$vehicleCode', data: {
-      if (largoInteriorCm != null) 'largoInteriorCm': largoInteriorCm,
-      if (anchoInteriorCm != null) 'anchoInteriorCm': anchoInteriorCm,
-      if (altoInteriorCm != null) 'altoInteriorCm': altoInteriorCm,
-      if (toleranciaExceso != null) 'toleranciaExceso': toleranciaExceso,
-      if (notas != null) 'notas': notas,
-    },);
+    await OfflineAwareApi.put(
+      '/warehouse/truck-config/$vehicleCode',
+      data: {
+        if (largoInteriorCm != null) 'largoInteriorCm': largoInteriorCm,
+        if (anchoInteriorCm != null) 'anchoInteriorCm': anchoInteriorCm,
+        if (altoInteriorCm != null) 'altoInteriorCm': altoInteriorCm,
+        if (toleranciaExceso != null) 'toleranciaExceso': toleranciaExceso,
+        if (notas != null) 'notas': notas,
+      },
+      syncType: 'warehouse_truck_config',
+    );
   }
 }

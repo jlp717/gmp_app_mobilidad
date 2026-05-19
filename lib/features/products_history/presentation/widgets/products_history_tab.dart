@@ -870,7 +870,9 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 0.5),
                                     child: Container(
-                                      height: h < 2 ? (value > 0 ? 2 : 0) : h,
+                                      height:
+                                          (h < 2 ? (value > 0 ? 2 : 0) : h)
+                                              .toDouble(),
                                       decoration: BoxDecoration(
                                         color: color.withValues(
                                             alpha: value > 0 ? 0.8 : 0),

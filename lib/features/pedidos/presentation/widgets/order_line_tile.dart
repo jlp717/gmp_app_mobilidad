@@ -71,6 +71,17 @@ class OrderLineTile extends StatelessWidget {
     return '${PedidosFormatters.number(line.cantidadUnidades)} $label';
   }
 
+  static String _formatQty(double v, String unit) {
+    final isWeight = unit.toUpperCase() == 'KILOGRAMOS' ||
+        unit.toUpperCase() == 'LITROS';
+    if (isWeight) {
+      return v.toStringAsFixed(2)
+          .replaceAll(RegExp(r'0+$'), '')
+          .replaceAll(RegExp(r'\.$'), '');
+    }
+    return v.toStringAsFixed(0);
+  }
+
   String _priceLabel() {
     if (line.precioVenta <= 0) return '';
     final abbr = _unitAbbr(line.unidadMedida);

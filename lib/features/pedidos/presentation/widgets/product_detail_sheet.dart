@@ -24,11 +24,13 @@ class ProductDetailSheet extends StatefulWidget {
     required this.productCode, required this.productName, super.key,
     this.clientCode,
     this.clientName,
+    this.isMarginVisible = true,
   });
   final String productCode;
   final String productName;
   final String? clientCode;
   final String? clientName;
+  final bool isMarginVisible;
 
   static Future<void> show(
     BuildContext context, {
@@ -36,6 +38,7 @@ class ProductDetailSheet extends StatefulWidget {
     required String productName,
     String? clientCode,
     String? clientName,
+    bool isMarginVisible = true,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -54,6 +57,7 @@ class ProductDetailSheet extends StatefulWidget {
           productName: productName,
           clientCode: clientCode,
           clientName: clientName,
+          isMarginVisible: isMarginVisible,
         ),
       ),
     );
@@ -681,6 +685,7 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
             productName: widget.productName,
             clientCode: widget.clientCode!,
             clientName: widget.clientName ?? '',
+            isMarginVisible: widget.isMarginVisible,
           );
         },
         icon: const Icon(Icons.bar_chart_rounded),

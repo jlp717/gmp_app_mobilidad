@@ -1673,6 +1673,222 @@ const summaryTools = {
     }
 };
 
+// ============================================================================
+// CROSS-QUERY TOOLS (Producto + Cliente + Periodo combinados)
+// ============================================================================
+
+const crossQueryTools = {
+    async getPriceSoldToClient(conn, productCode, clientCode, limit = 5) {
+        const rows = await safeQuery(conn, `
+            SELECT PRECIOVENTAUNITARIO, IMPORTEVENTA, CANTIDADENVASES,
+                   ANODOCUMENTO, MESDOCUMENTO, DIADOCUMENTO,
+                   TRIM(NUMEROORDENPREPARACION) as ORDEN
+            FROM DSEDAC.LAC
+            WHERE TRIM(CODIGOARTICULO) = ? AND TRIM(CODIGOCLIENTEALBARAN) = ?
+            ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
+            FETCH FIRST ? ROWS ONLY
+        `, [productCode, clientCode, limit]);
+
+        if (rows.length === 0) return { error: 'Sin ventas de este producto a este cliente' };
+
+        return {
+            productCode,
+            clientCode,
+            sales: rows.map(r => ({
+                price: parseFloat(r.PRECIOVENTAUNITARIO) || 0,
+                amount: parseFloat(r.IMPORTEVENTA) || 0,
+                quantity: parseFloat(r.CANTIDADENVASES) || 0,
+                date: `${r.ANODOCUMENTO}-${String(r.MESDOCUMENTO).padStart(2, '0')}-${String(r.DIADOCUMENTO).padStart(2, '0')}`,
+                orderNumber: r.ORDEN
+            }))
+        };
+    },
+
+    async getProductSalesByClient(conn, productCode, clientCode, month, year) {
+        const currentYear = year || new Date().getFullYear();
+        const currentMonth = month || new Date().getMonth() + 1;
+
+        const rows = await safeQuery(conn, `
+            SELECT SUM(IMPORTEVENTA) as TOTAL, SUM(CANTIDADENVASES) as UNIDADES,
+                   AVG(PRECIOVENTAUNITARIO) as PRECIO_MEDIO, COUNT(*) as LINEAS
+            FROM DSEDAC.LAC
+            WHERE TRIM(CODIGOARTICULO) = ? AND TRIM(CODIGOCLIENTEALBARAN) = ?
+              AND ANODOCUMENTO = ? AND MESDOCUMENTO = ?
+        `, [productCode, clientCode, currentYear, currentMonth]);
+
+        const r = rows[0] || {};
+        return {
+            productCode,
+            clientCode,
+            month: currentMonth,
+            year: currentYear,
+            totalSales: parseFloat(r.TOTAL) || 0,
+            totalUnits: parseFloat(r.UNIDADES) || 0,
+            avgPrice: Math.round((parseFloat(r.PRECIO_MEDIO) || 0) * 100) / 100,
+            numLines: parseInt(r.LINEAS) || 0
+        };
+    },
+
+    async getClientProductsBought(conn, clientCode, limit = 20) {
+        const rows = await safeQuery(conn, `
+            SELECT TRIM(L.CODIGOARTICULO) as CODIGO, TRIM(A.DESCRIPCIONARTICULO) as NOMBRE,
+                   TRIM(A.FAMILIA) as FAMILIA,
+                   SUM(L.IMPORTEVENTA) as TOTAL, SUM(L.CANTIDADENVASES) as UNIDADES,
+                   AVG(L.PRECIOVENTAUNITARIO) as PRECIO_MEDIO
+            FROM DSEDAC.LAC L
+            LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+            WHERE TRIM(L.CODIGOCLIENTEALBARAN) = ?
+            GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, A.FAMILIA
+            ORDER BY TOTAL DESC
+            FETCH FIRST ? ROWS ONLY
+        `, [clientCode, limit]);
+
+        return {
+            clientCode,
+            products: rows.map(r => ({
+                code: r.CODIGO,
+                name: r.NOMBRE || 'Sin nombre',
+                family: r.FAMILIA || 'Sin familia',
+                totalSales: parseFloat(r.TOTAL) || 0,
+                totalUnits: parseFloat(r.UNIDADES) || 0,
+                avgPrice: Math.round((parseFloat(r.PRECIO_MEDIO) || 0) * 100) / 100
+            }))
+        };
+    },
+
+    async getClientMonthlySales(conn, clientCode, months = 12) {
+        const now = new Date();
+        const startYear = now.getFullYear();
+        const startMonth = now.getMonth() + 1 - months;
+
+        let adjYear = startYear, adjMonth = startMonth;
+        if (adjMonth <= 0) { adjYear -= 1; adjMonth += 12; }
+
+        const rows = await safeQuery(conn, `
+            SELECT ANODOCUMENTO, MESDOCUMENTO,
+                   SUM(IMPORTEVENTA) as TOTAL, SUM(CANTIDADENVASES) as UNIDADES,
+                   COUNT(*) as LINEAS
+            FROM DSEDAC.LAC
+            WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
+              AND (ANODOCUMENTO > ? OR (ANODOCUMENTO = ? AND MESDOCUMENTO >= ?))
+            GROUP BY ANODOCUMENTO, MESDOCUMENTO
+            ORDER BY ANODOCUMENTO, MESDOCUMENTO
+        `, [clientCode, adjYear - 1, adjYear, adjMonth]);
+
+        return {
+            clientCode,
+            monthly: rows.map(r => ({
+                period: `${r.ANODOCUMENTO}-${String(r.MESDOCUMENTO).padStart(2, '0')}`,
+                totalSales: parseFloat(r.TOTAL) || 0,
+                totalUnits: parseFloat(r.UNIDADES) || 0,
+                numLines: parseInt(r.LINEAS) || 0
+            }))
+        };
+    },
+
+    async getVendorMonthlySummary(conn, userCode, isJefeVentas, months = 6, vendorScope) {
+        const now = new Date();
+        const vendorFilter = _buildVendorFilter(vendorScope, userCode);
+
+        const months_data = [];
+        for (let i = 0; i < months; i++) {
+            const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+            const y = d.getFullYear();
+            const m = d.getMonth() + 1;
+
+            const rows = await safeQuery(conn, `
+                SELECT SUM(IMPORTEVENTA) as VENTAS, COUNT(DISTINCT CODIGOCLIENTEALBARAN) as CLIENTES,
+                       COUNT(*) as OPERACIONES
+                FROM DSEDAC.LAC
+                WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
+                  ${vendorFilter.sql}
+            `, [y, m, ...vendorFilter.params]);
+
+            const r = rows[0] || {};
+            months_data.push({
+                period: `${y}-${String(m).padStart(2, '0')}`,
+                sales: parseFloat(r.VENTAS) || 0,
+                clients: parseInt(r.CLIENTES) || 0,
+                operations: parseInt(r.OPERACIONES) || 0
+            });
+        }
+
+        return { months: months_data };
+    },
+
+    async getTopProductsByClient(conn, clientCode, month, year, limit = 10) {
+        const currentYear = year || new Date().getFullYear();
+        const currentMonth = month || new Date().getMonth() + 1;
+
+        const rows = await safeQuery(conn, `
+            SELECT TRIM(L.CODIGOARTICULO) as CODIGO, TRIM(A.DESCRIPCIONARTICULO) as NOMBRE,
+                   TRIM(A.FAMILIA) as FAMILIA,
+                   SUM(L.IMPORTEVENTA) as TOTAL, SUM(L.CANTIDADENVASES) as UNIDADES,
+                   AVG(L.PRECIOVENTAUNITARIO) as PRECIO_MEDIO
+            FROM DSEDAC.LAC L
+            LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
+            WHERE TRIM(L.CODIGOCLIENTEALBARAN) = ?
+              AND L.ANODOCUMENTO = ? AND L.MESDOCUMENTO = ?
+            GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, A.FAMILIA
+            ORDER BY TOTAL DESC
+            FETCH FIRST ? ROWS ONLY
+        `, [clientCode, currentYear, currentMonth, limit]);
+
+        return {
+            clientCode,
+            month: currentMonth,
+            year: currentYear,
+            products: rows.map(r => ({
+                code: r.CODIGO,
+                name: r.NOMBRE || 'Sin nombre',
+                family: r.FAMILIA || 'Sin familia',
+                totalSales: parseFloat(r.TOTAL) || 0,
+                totalUnits: parseFloat(r.UNIDADES) || 0,
+                avgPrice: Math.round((parseFloat(r.PRECIO_MEDIO) || 0) * 100) / 100
+            }))
+        };
+    },
+
+    async searchProductByName(conn, query) {
+        const searchTerm = `%${query}%`;
+        const rows = await safeQuery(conn, `
+            SELECT TRIM(CODIGOARTICULO) as CODIGO, TRIM(DESCRIPCIONARTICULO) as NOMBRE,
+                   TRIM(FAMILIA) as FAMILIA, PRECIOVENTA as PRECIO
+            FROM DSEDAC.ART
+            WHERE TRIM(DESCRIPCIONARTICULO) LIKE ?
+            ORDER BY DESCRIPCIONARTICULO
+            FETCH FIRST 10 ROWS ONLY
+        `, [searchTerm]);
+
+        return rows.map(r => ({
+            code: r.CODIGO,
+            name: r.NOMBRE,
+            family: r.FAMILIA,
+            price: parseFloat(r.PRECIO) || 0
+        }));
+    },
+
+    async searchClientByName(conn, query) {
+        const searchTerm = `%${query}%`;
+        const rows = await safeQuery(conn, `
+            SELECT TRIM(CODIGOCLIENTE) as CODIGO, TRIM(NOMBRECLIENTE) as NOMBRE,
+                   TRIM(POBLACION) as POBLACION, TRIM(PROVINCIA) as PROVINCIA,
+                   TRIM(CODIGOVENDEDOR) as VENDEDOR
+            FROM DSEDAC.CLI
+            WHERE TRIM(NOMBRECLIENTE) LIKE ?
+            ORDER BY NOMBRECLIENTE
+            FETCH FIRST 10 ROWS ONLY
+        `, [searchTerm]);
+
+        return rows.map(r => ({
+            code: r.CODIGO,
+            name: r.NOMBRE,
+            location: `${r.POBLACION} (${r.PROVINCIA})`,
+            vendor: r.VENDEDOR
+        }));
+    }
+};
+
 // ── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -1691,5 +1907,6 @@ module.exports = {
     analyticsTools,
     repartidorTools,
     warehouseTools,
-    summaryTools
+    summaryTools,
+    crossQueryTools
 };

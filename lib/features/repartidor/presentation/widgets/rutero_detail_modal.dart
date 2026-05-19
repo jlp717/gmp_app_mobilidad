@@ -13,6 +13,7 @@ import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/email_form_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
 import 'package:gmp_app_mobilidad/core/widgets/whatsapp_form_modal.dart';
+import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.dart';
 import 'package:gmp_app_mobilidad/features/repartidor/data/zebra_print_service.dart';
@@ -909,69 +910,16 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
   }
 
   void _showFullscreenImage(String imageUrl, String name) {
-    Navigator.of(context).push<void>(
-      PageRouteBuilder<void>(
-        opaque: false,
-        barrierColor: Colors.black54,
-        barrierDismissible: true,
-        pageBuilder: (ctx, anim, secondAnim) {
-          const viewerBackground = Color(0xFFF8FAFC);
-          const viewerForeground = Color(0xFF0F172A);
-
-          return Scaffold(
-            backgroundColor: viewerBackground,
-            appBar: AppBar(
-              backgroundColor: viewerBackground,
-              elevation: 0,
-              iconTheme: const IconThemeData(color: viewerForeground),
-              title: Text(
-                name,
-                style: const TextStyle(
-                  color: viewerForeground,
-                  fontSize: 14,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-              leading: IconButton(
-                icon: const Icon(Icons.close),
-                onPressed: () => Navigator.of(ctx).pop(),
-              ),
-            ),
-            body: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: ColoredBox(
-                    color: Colors.white,
-                    child: InteractiveViewer(
-                      minScale: 0.5,
-                      maxScale: 5,
-                      child: SmartProductImage(
-                        imageUrl: imageUrl,
-                        productCode: '',
-                        productName: name,
-                        fit: BoxFit.contain,
-                        borderRadius: BorderRadius.zero,
-                        headers: {
-                          'Accept': 'image/*',
-                          if (ApiClient.dio.options.headers['Authorization'] !=
-                              null)
-                            'Authorization': ApiClient
-                                .dio.options.headers['Authorization'] as String,
-                        },
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-        transitionsBuilder: (ctx, anim, secondAnim, child) {
-          return FadeTransition(opacity: anim, child: child);
-        },
-      ),
+    FullscreenImageViewer.show(
+      context,
+      imageUrl: imageUrl,
+      productName: name,
+      headers: {
+        'Accept': 'image/*',
+        if (ApiClient.dio.options.headers['Authorization'] != null)
+          'Authorization':
+              ApiClient.dio.options.headers['Authorization'] as String,
+      },
     );
   }
 

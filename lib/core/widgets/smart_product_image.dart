@@ -1,12 +1,12 @@
-import 'package:flutter/material.dart';
-
-
 import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 
 /// Premium product image widget with elegant fallback.
-/// Memoizes failed URLs to prevent repeated 404 requests.
+/// Memoizes failed URLs with TTL to prevent repeated 404 requests
+/// while allowing retries after cache expiry (default: 1 hour).
 /// Uses product-code-based gradient for visually distinct placeholders.
 /// Now caches image bytes persistently using CacheService.
 class SmartProductImage extends StatelessWidget {
@@ -32,11 +32,42 @@ class SmartProductImage extends StatelessWidget {
   final bool showCodeOnFallback;
   final Map<String, String>? headers;
 
-  static final Set<String> _failedUrls = {};
+  /// TTL-based failed URL cache: URL → timestamp when it failed.
+  /// Entries expire after [_failedUrlTTL] to allow retries.
+  static final Map<String, DateTime> _failedUrls = {};
+  static const Duration _failedUrlTTL = Duration(hours: 1);
+
+  /// Check if a URL is currently in the failed cache (not expired).
+  static bool _isFailed(String url) {
+    final failedAt = _failedUrls[url];
+    if (failedAt == null) return false;
+    if (DateTime.now().difference(failedAt) > _failedUrlTTL) {
+      _failedUrls.remove(url); // Expired, clean up
+      return false;
+    }
+    return true;
+  }
+
+  /// Mark a URL as failed (with current timestamp).
+  static void _markFailed(String url) {
+    _failedUrls[url] = DateTime.now();
+  }
+
+  /// Clear all expired entries from the failed URL cache.
+  /// Call this on network state changes or app resume.
+  static void clearExpired() {
+    final now = DateTime.now();
+    _failedUrls.removeWhere((_, ts) => now.difference(ts) > _failedUrlTTL);
+  }
+
+  /// Clear all failed URLs (use sparingly, e.g., on logout or major state change).
+  static void clearAll() {
+    _failedUrls.clear();
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (imageUrl.isEmpty || _failedUrls.contains(imageUrl)) {
+    if (imageUrl.isEmpty || _isFailed(imageUrl)) {
       return _buildFallback();
     }
 
@@ -54,7 +85,7 @@ class SmartProductImage extends StatelessWidget {
         cacheWidth: cacheW,
         cacheHeight: cacheH,
         errorBuilder: (context, error, stackTrace) {
-          _failedUrls.add(imageUrl);
+          _markFailed(imageUrl);
           return _buildFallback();
         },
         loadingBuilder: (context, child, loadingProgress) {

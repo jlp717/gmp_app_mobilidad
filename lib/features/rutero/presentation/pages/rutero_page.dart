@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -13,7 +14,7 @@ import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Import Sync Header
 import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
-import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/enhanced_client_matrix_page.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/pedidos_page.dart';
 import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_dialogs.dart';
 import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_filter_bar.dart';
 import 'package:gmp_app_mobilidad/features/rutero/presentation/widgets/rutero_header.dart';
@@ -301,7 +302,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     });
 
     try {
-      final response = await ApiClient.get(
+      final result = await OfflineAwareApi.get(
         ApiConfig.ruteroWeek,
         queryParameters: {
           'vendedorCodes': _activeVendedorCode,
@@ -310,8 +311,10 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           'month': _selectedMonth,
           'ignoreOverrides': _sortMode == 'route',
         },
+        cacheKey: 'rutero_week_${_selectedRole}_${_selectedYear}_${_selectedMonth}',
       );
 
+      final response = result.data;
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _weekData = Map<String, int>.from(
@@ -349,6 +352,12 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
         useDirectEndpoint: useDirectEndpoint,
         generation: generation,
       );
+    } on OfflineException catch (e) {
+      if (!mounted || generation != _loadGeneration) return;
+      setState(() {
+        _error = e.message;
+        _isLoadingWeek = false;
+      });
     } catch (e) {
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
@@ -385,7 +394,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           ? '${ApiConfig.ruteroDay}-direct/$_selectedDay'
           : '${ApiConfig.ruteroDay}/$_selectedDay';
 
-      final response = await ApiClient.get(
+      final result = await OfflineAwareApi.get(
         endpoint,
         queryParameters: {
           'vendedorCodes': _activeVendedorCode,
@@ -395,8 +404,11 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           'week': _selectedWeek,
           'ignoreOverrides': _sortMode == 'route' ? 'true' : 'false',
         },
+        cacheKey: 'rutero_day_${_selectedRole}_$_selectedDay',
+        forceRefresh: useDirectEndpoint,
       );
 
+      final response = result.data;
       if (!mounted || currentGeneration != _loadGeneration) return;
       setState(() {
         final rawList = response['clients'] ?? <dynamic>[];
@@ -452,6 +464,13 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           await _enrichWithSalesData(generation: currentGeneration);
         }
       }
+    } on OfflineException catch (e) {
+      if (!mounted || currentGeneration != _loadGeneration) return;
+      setState(() {
+        _dayClients = [];
+        _isLoadingClients = false;
+        _error = e.message;
+      });
     } catch (e) {
       if (!mounted || currentGeneration != _loadGeneration) return;
       setState(() {
@@ -464,7 +483,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   /// Fetch sales data from normal endpoint and merge into existing clients
   Future<void> _enrichWithSalesData({required int generation}) async {
     try {
-      final normalResponse = await ApiClient.get(
+      final result = await OfflineAwareApi.get(
         '${ApiConfig.ruteroDay}/$_selectedDay',
         queryParameters: {
           'vendedorCodes': _activeVendedorCode,
@@ -474,8 +493,10 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           'week': _selectedWeek,
           'ignoreOverrides': _sortMode == 'route' ? 'true' : 'false',
         },
+        cacheKey: 'rutero_day_enrich_${_selectedRole}_$_selectedDay',
       );
 
+      final normalResponse = result.data;
       if (!mounted || generation != _loadGeneration) return;
 
       final enrichedClients =
@@ -862,10 +883,11 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     Navigator.push(
       context,
       MaterialPageRoute<void>(
-        builder: (context) => EnhancedClientMatrixPage(
-          clientCode: (client['code'] as String?) ?? '',
-          clientName: (client['name'] as String?) ?? 'Cliente',
+        builder: (context) => PedidosPage(
+          employeeCode: widget.employeeCode,
           isJefeVentas: widget.isJefeVentas,
+          initialClientCode: (client['code'] as String?) ?? '',
+          initialClientName: (client['name'] as String?) ?? 'Cliente',
         ),
       ),
     );
@@ -1100,12 +1122,13 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
     // Let's call API first
     try {
-      await ApiClient.put(
+      await OfflineAwareApi.put(
         '${ApiConfig.clientsList}/notes',
         data: {
           'clientCode': (client['code'] as String?) ?? '',
           'notes': notes,
         },
+        syncType: 'client_notes',
       );
 
       if (mounted) {
@@ -1261,14 +1284,16 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   Future<void> _refreshDataAndCounts() async {
     // Primero refrescar contadores desde el backend
     try {
-      final countsResponse = await ApiClient.get(
+      final result = await OfflineAwareApi.get(
         '/rutero/counts',
         queryParameters: {
           'vendedorCodes': _activeVendedorCode,
           'role': _selectedRole,
         },
+        cacheKey: 'rutero_counts_${_selectedRole}',
       );
 
+      final countsResponse = result.data;
       if (countsResponse['counts'] != null && mounted) {
         setState(() {
           _weekData = Map<String, int>.from(
@@ -1280,8 +1305,12 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
                   _weekData.values.fold(0, (a, b) => a + b);
         });
       }
-    } catch (e) {
+    } on OfflineException catch (_) {
       // Si falla, hacer refresh completo
+      await _loadWeekData();
+      return;
+    } catch (e) {
+      debugPrint('[Rutero] Error refreshing counts: $e');
       await _loadWeekData();
       return;
     }
@@ -1313,11 +1342,14 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           )
           .toList();
 
-      await ApiClient.post('/rutero/config', {
-        'vendedor': vendedor,
-        'dia': _selectedDay.toLowerCase(),
-        'orden': orderPayload,
-      });
+      await OfflineAwareApi.post(
+          '/rutero/config',
+          {
+            'vendedor': vendedor,
+            'dia': _selectedDay.toLowerCase(),
+            'orden': orderPayload,
+          },
+          syncType: 'rutero_config');
 
       // Refrescar contadores y datos
       await _refreshDataAndCounts();
@@ -1509,19 +1541,22 @@ class _ReorderDialogState extends State<ReorderDialog> {
         targetPosition = int.tryParse(position) ?? 'end';
       }
 
-      await ApiClient.post('/rutero/move_clients', {
-        'vendedor': widget.activeVendedor,
-        'moves': [
+      await OfflineAwareApi.post(
+          '/rutero/move_clients',
           {
-            'client': (client['code'] as String?) ?? '',
-            'toDay': toDay.toLowerCase(),
-            'fromDay': widget.currentDay.toLowerCase(),
-            'clientName': (client['name'] as String?) ?? '',
-            'position': targetPosition,
-          }
-        ],
-        'targetPosition': targetPosition,
-      });
+            'vendedor': widget.activeVendedor,
+            'moves': [
+              {
+                'client': (client['code'] as String?) ?? '',
+                'toDay': toDay.toLowerCase(),
+                'fromDay': widget.currentDay.toLowerCase(),
+                'clientName': (client['name'] as String?) ?? '',
+                'position': targetPosition,
+              }
+            ],
+            'targetPosition': targetPosition,
+          },
+          syncType: 'rutero_move');
 
       // Cerrar loading
       if (mounted) Navigator.pop(context);

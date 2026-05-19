@@ -28,77 +28,82 @@ const {
     summaryTools
 } = require('./chatbot_tools');
 
-// ── Intent Detection Patterns (expanded for misspellings) ────────────────────
+// ── Intent Detection Patterns (expanded for misspellings, synonyms, natural language) ──
 
 const intentPatterns = {
     // Greetings & Help
-    saludo: /^(hola|buenos\s*d[ií]as|buenas\s*tardes|buenas|hey|qu[eé]\s*tal|saludos)/i,
-    ayuda: /^(ayuda|help|comandos|qu[eé]\s*puedes|opciones|men[uú])/i,
+    saludo: /^(hola|buenos\s*d[ií]as|buenas\s*tardes|buenas\s*noches|buenas|hey|qu[eé]\s*tal|saludos|ola|wenas|buen dia|buenas tardes)/i,
+    ayuda: /^(ayuda|help|comandos|qu[eé]\s*puedes|opciones|men[uú]|que sabes hacer|como funciona|instrucciones)/i,
 
-    // Commissions
-    comision: /comisi[oó]n|comisiones|cuanto\s*gano|cu[aá]nto\s*gano|mi\s*comisi[oó]n|comisi[oó]n\s*del\s*mes/i,
-    comisionDetalle: /detalle.*comisi[oó]n|comisi[oó]n.*detalle|comisi[oó]n.*cliente/i,
-    comisionConfig: /configuraci[oó]n.*comisi[oó]n|tier.*comisi[oó]n|ipc.*comisi[oó]n/i,
+    // Commissions (with misspellings: comision, comision, comi, cuanto gano, mi sueldo)
+    comision: /comisi[oó]n|comisiones|cuanto\s*gano|cu[aá]nto\s*gano|mi\s*comisi[oó]n|comisi[oó]n\s*del\s*mes|comi|mi\s*sueldo|liquidaci[oó]n|devengo/i,
+    comisionDetalle: /detalle.*comisi[oó]n|comisi[oó]n.*detalle|comisi[oó]n.*cliente|desglose.*comisi[oó]n/i,
+    comisionConfig: /configuraci[oó]n.*comisi[oó]n|tier.*comisi[oó]n|ipc.*comisi[oó]n|como\s*se\s*calcula.*comisi[oó]n/i,
 
-    // Objectives
-    objetivo: /objetivo|objetivos|cumplimiento|meta|target|cu[aá]nto\s*me\s*falta|voy\s*bien/i,
-    objetivoFamilia: /objetivo.*familia|familia.*objetivo|objetivo.*producto/i,
+    // Objectives (objetivo, meta, target, cuanto me falta)
+    objetivo: /objetivo|objetivos|cumplimiento|meta|target|cu[aá]nto\s*me\s*falta|voy\s*bien|cuanto\s*me\s*falta|progreso|avance|percentaje/i,
+    objetivoFamilia: /objetivo.*familia|familia.*objetivo|objetivo.*producto|meta.*familia/i,
 
-    // Margins
-    margen: /margen|m[aá]rgenes|rentabilid|beneficio|ganancia|profit/i,
-    margenGlobal: /margen\s*(global|total|general|mi\s*margen)/i,
+    // Margins (margen, rentabilidad, beneficio, ganancia, cuanto gano por cliente)
+    margen: /margen|m[aá]rgenes|rentabilid|beneficio|ganancia|profit|cuanto\s*gano\s*con|rentable|porcentaje\s*de\s*margen/i,
+    margenGlobal: /margen\s*(global|total|general|mi\s*margen|del\s*mes)/i,
 
-    // Pricing
-    precio: /precio|cost[eo]|tarifa|cu[aá]nto|cuanto\s*cuesta|cuanto\s*vale|vender|vendo|cobro|cu[aá]nto\s*cobra/i,
-    minimo: /m[ií]nimo|minimo|suelo|floor|breakeven|break-even|precio\s*suelo|no\s*perder/i,
-    descuento: /descuento|rebaja|bajar|negociar|simul|si\s*le\s*hago|si\s*bajo/i,
+    // Pricing (precio, coste, tarifa, cuanto cuesta, cuanto vale, cuanto cobro)
+    precio: /precio|cost[eo]|tarifa|cu[aá]nto|cuanto\s*cuesta|cuanto\s*vale|vender|vendo|cobro|cu[aá]nto\s*cobra|a\s*cuanto|precio\s*venta|pvp/i,
+    minimo: /m[ií]nimo|minimo|suelo|floor|breakeven|break-even|precio\s*suelo|no\s*perder|precio\s*minimo|bajar\s*de/i,
+    descuento: /descuento|rebaja|bajar|negociar|simul|si\s*le\s*hago|si\s*bajo|le\s*hago\s*un|aplicar\s*descuento/i,
 
-    // Client Risk & Debt
-    deuda: /deuda|debe|adeuda|pendiente|vencid|pagar|cobr|deben|me\s*deben|deuda.*cliente/i,
-    bloqueo: /bloqueado|bloqueo|no\s*puedo\s*vender|impedido|restringid/i,
-    riesgo: /riesgo|score|evaluaci[oó]n|evaluar|peligro|fiabilidad|solvencia/i,
-    credito: /cr[eé]dito|l[ií]mite|limite.*cr[eé]dito|disponible.*cr[eé]dito|linea.*cr[eé]dito/i,
+    // Client Risk & Debt (deuda, debe, pendiente, vencido, me deben)
+    deuda: /deuda|debe|adeuda|pendiente|vencid|pagar|cobr|deben|me\s*deben|deuda.*cliente|impagad|moroso/i,
+    bloqueo: /bloqueado|bloqueo|no\s*puedo\s*vender|impedido|restringid|bloque|no\s*venta/i,
+    riesgo: /riesgo|score|evaluaci[oó]n|evaluar|peligro|fiabilidad|solvencia|riesgo\s*cliente|puntuaci[oó]n/i,
+    credito: /cr[eé]dito|l[ií]mite|limite.*cr[eé]dito|disponible.*cr[eé]dito|linea.*cr[eé]dito|credito\s*cliente/i,
 
-    // Commercial Intelligence
-    churn: /dej[oó]\s*de\s*comprar|compraba\s*y|perdid|abandon[oó]|ya\s*no\s*compra|churn/i,
-    comparar: /comparar|compar|a[oñ]o|a[oñ]os|vs|versus|hist[oó]rico|evoluci[oó]n|crecimiento/i,
-    historial: /historial|compr[oó]|pedidos.*cliente|ventas.*cliente|histor/i,
+    // Commercial Intelligence (churn, comparar, historial)
+    churn: /dej[oó]\s*de\s*comprar|compraba\s*y|perdid|abandon[oó]|ya\s*no\s*compra|churn|producto\s*que\s*no|ha\s*dejado/i,
+    comparar: /comparar|compar|a[oñ]o|a[oñ]os|vs|versus|hist[oó]rico|evoluci[oó]n|crecimiento|diferencia|anio/i,
+    historial: /historial|compr[oó]|pedidos.*cliente|ventas.*cliente|histor|que\s*compr[oó]|compras\s*recientes/i,
 
     // Stock & Logistics
-    stock: /stock|existencias|inventario|almac[eé]n|disponib|hay\s*en\s*almac[eé]n|queda/i,
+    stock: /stock|existencias|inventario|almac[eé]n|disponib|hay\s*en\s*almac[eé]n|queda|cuanto\s*queda|stock\s*producto/i,
 
     // Invoices & Albaranes
-    factura: /factura|facturas|invoice|f[aá]ctura.*cliente|factura.*pendiente/i,
-    albaran: /albar[aá]n|albaranes|delivery.*note/i,
+    factura: /factura|facturas|invoice|f[aá]ctura.*cliente|factura.*pendiente|recibo/i,
+    albaran: /albar[aá]n|albaranes|delivery.*note|albaran/i,
 
     // Pedidos (Orders)
-    pedido: /pedido|pedidos|orden.*preparaci[oó]n|opp|cu[aá]ntos\s*pedidos|pedidos.*hoy|pedidos.*dia/i,
+    pedido: /pedido|pedidos|orden.*preparaci[oó]n|opp|cu[aá]ntos\s*pedidos|pedidos.*hoy|pedidos.*dia|orden.*cliente/i,
 
     // Cobros (Collections)
-    cobro: /cobro|cobros|cobrar|pendiente.*cobro|cobrado|recaudaci[oó]n|cu[aá]nto\s*cobr[eé]|cobros.*mes/i,
+    cobro: /cobro|cobros|cobrar|pendiente.*cobro|cobrado|recaudaci[oó]n|cu[aá]nto\s*cobr[eé]|cobros.*mes|recaudado/i,
 
     // Bolsa
-    bolsa: /bolsa|saldo.*bolsa|bolsa.*comercial|consumido.*bolsa|acumulado/i,
+    bolsa: /bolsa|saldo.*bolsa|bolsa.*comercial|consumido.*bolsa|acumulado|bolsa\s*comercial/i,
 
     // Evolution
-    evolucion: /evoluci[oó]n|tendencia|trend|creciendo|decreciendo|subiendo|bajando/i,
+    evolucion: /evoluci[oó]n|tendencia|trend|creciendo|decreciendo|subiendo|bajando|como\s*va|evolucion/i,
 
     // Analytics
-    top: /top|mejor|mejores|ranking|principales|m[aá]s\s*vendido/i,
-    yoy: /a[oñ]o.*contra.*a[oñ]o|yoy|year.*over|comparativa.*anual/i,
+    top: /top|mejor|mejores|ranking|principales|m[aá]s\s*vendido|mas\s*vendido|top\s*cliente|top\s*producto/i,
+    yoy: /a[oñ]o.*contra.*a[oñ]o|yoy|year.*over|comparativa.*anual|anio.*contra/i,
 
     // Repartidor
-    repartidor: /repartidor|reparto|entrega|entregas|cobro.*repartidor|mi\s*ruta|ruta.*hoy/i,
+    repartidor: /repartidor|reparto|entrega|entregas|cobro.*repartidor|mi\s*ruta|ruta.*hoy|ruta.*dia/i,
 
     // Warehouse
-    almacen: /almac[eé]n|warehouse|camion|camiones|veh[ií]culo|carga|load.*plan|expedici[oó]n/i,
+    almacen: /almac[eé]n|warehouse|camion|camiones|veh[ií]culo|carga|load.*plan|expedici[oó]n|vehiculos/i,
 
     // Daily Summary
-    resumen: /resumen.*dia|resumen.*hoy|como.*fue.*hoy|que.*pas[oó].*hoy|resumen/i,
+    resumen: /resumen.*dia|resumen.*hoy|como.*fue.*hoy|que.*pas[oó].*hoy|resumen|balance.*dia/i,
 
     // Search
-    buscarCliente: /buscar.*cliente|buscar.*client|cliente.*llama|nombre.*cliente|cliente.*nombre/i,
-    buscarProducto: /buscar.*producto|buscar.*art[ií]culo|producto.*llama|nombre.*producto/i,
+    buscarCliente: /buscar.*cliente|buscar.*client|cliente.*llama|nombre.*cliente|cliente.*nombre|como\s*se\s*llama.*cliente|cliente.*cual/i,
+    buscarProducto: /buscar.*producto|buscar.*art[ií]culo|producto.*llama|nombre.*producto|articulo.*nombre|producto.*cual/i,
+
+    // Cross-queries (producto + cliente combinados)
+    precioCliente: /precio.*cliente|vend[ií].*cliente|a\s*cuanto.*vend[ií].*cliente|precio\s*le\s*vend[ií]|factur[aé].*cliente/i,
+    productosCliente: /productos.*compr[oó]|que.*compr[oó].*cliente|productos.*cliente|compras.*cliente|que\s*compra/i,
+    ventasCliente: /ventas.*cliente|cuanto.*compr[oó].*cliente|facturacion.*cliente|gasto.*cliente|cliente.*gasto/i,
 };
 
 // ── Entity Extraction ────────────────────────────────────────────────────────

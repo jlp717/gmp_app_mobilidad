@@ -361,9 +361,10 @@ class _MainShellState extends ConsumerState<MainShell> {
     // muestre/oculte márgenes según corresponda. Se hace de forma defensiva
     // post-frame para no notificar listeners durante el build.
     final currentRole = user.role;
+    final currentUserCode = user.code;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      ref.read(pedidosProvider).setUserRole(currentRole);
+      ref.read(pedidosProvider).setUserRole(currentRole, code: currentUserCode);
     });
 
     // PERFORMANCE: Use select() to only rebuild when vendedorCodes changes

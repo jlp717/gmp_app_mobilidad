@@ -27,26 +27,28 @@ class SyncOperation {
   String? lastError;
 
   Map<String, dynamic> toJson() => {
-    'id': id,
-    'type': type,
-    'endpoint': endpoint,
-    'method': method,
-    'payload': payload,
-    'attempts': attempts,
-    'createdAt': createdAt?.toIso8601String(),
-    'lastError': lastError,
-  };
+        'id': id,
+        'type': type,
+        'endpoint': endpoint,
+        'method': method,
+        'payload': payload,
+        'attempts': attempts,
+        'createdAt': createdAt?.toIso8601String(),
+        'lastError': lastError,
+      };
 
   factory SyncOperation.fromJson(Map<String, dynamic> json) => SyncOperation(
-    id: json['id'] as String,
-    type: json['type'] as String,
-    endpoint: json['endpoint'] as String,
-    method: json['method'] as String,
-    payload: Map<String, dynamic>.from(json['payload'] as Map),
-    attempts: json['attempts'] as int? ?? 0,
-    createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt'] as String) : null,
-    lastError: json['lastError'] as String?,
-  );
+        id: json['id'] as String,
+        type: json['type'] as String,
+        endpoint: json['endpoint'] as String,
+        method: json['method'] as String,
+        payload: Map<String, dynamic>.from(json['payload'] as Map),
+        attempts: json['attempts'] as int? ?? 0,
+        createdAt: json['createdAt'] != null
+            ? DateTime.parse(json['createdAt'] as String)
+            : null,
+        lastError: json['lastError'] as String?,
+      );
 }
 
 /// Queue of offline mutations that are processed when connectivity is restored.
@@ -55,6 +57,8 @@ class SyncQueueService {
   static const String _boxName = 'sync_queue';
   static const int _maxAttempts = 5;
   static const Duration _baseDelay = Duration(seconds: 2);
+  static const Duration _maxAge =
+      Duration(days: 7); // Stale operations auto-purge
 
   static SyncQueueService? _instance;
   Box<String>? _box;
@@ -68,7 +72,9 @@ class SyncQueueService {
 
   Future<void> initialize() async {
     _box = await Hive.openBox<String>(_boxName);
-    debugPrint('[SyncQueue] Initialized with ${_box?.length ?? 0} pending operations');
+    _purgeStale(); // Clean up expired operations on startup
+    debugPrint(
+        '[SyncQueue] Initialized with ${_box?.length ?? 0} pending operations');
   }
 
   int get pendingCount => _box?.length ?? 0;
@@ -89,12 +95,17 @@ class SyncQueueService {
   /// Get all pending operations.
   List<SyncOperation> get pending {
     if (_box == null) return [];
-    return _box!.keys.map((key) {
-      final raw = _box!.get(key);
-      if (raw == null) return null;
-      return SyncOperation.fromJson(jsonDecode(raw) as Map<String, dynamic>);
-    }).whereType<SyncOperation>().toList()
-      ..sort((a, b) => (a.createdAt ?? DateTime.now()).compareTo(b.createdAt ?? DateTime.now()));
+    return _box!.keys
+        .map((key) {
+          final raw = _box!.get(key);
+          if (raw == null) return null;
+          return SyncOperation.fromJson(
+              jsonDecode(raw) as Map<String, dynamic>);
+        })
+        .whereType<SyncOperation>()
+        .toList()
+      ..sort((a, b) => (a.createdAt ?? DateTime.now())
+          .compareTo(b.createdAt ?? DateTime.now()));
   }
 
   /// Process all pending operations.
@@ -105,10 +116,20 @@ class SyncQueueService {
 
     int successCount = 0;
     for (final op in ops) {
+      // Skip if backoff delay not yet elapsed
+      final backoff = _calculateBackoff(op.attempts);
+      final nextRetry = (op.createdAt ?? DateTime.now()).add(backoff);
+      if (DateTime.now().isBefore(nextRetry) && op.attempts > 0) {
+        debugPrint(
+            '[SyncQueue] ${op.id} in backoff, retry at ${nextRetry.toIso8601String()}');
+        continue;
+      }
+
       try {
         await _processOperation(op);
         await dequeue(op.id);
         successCount++;
+        debugPrint('[SyncQueue] Synced: ${op.type} (${op.id})');
       } catch (e) {
         op.attempts++;
         op.lastError = e.toString();
@@ -118,11 +139,46 @@ class SyncQueueService {
         } else {
           // Update with incremented attempts
           await _box?.put(op.id, jsonEncode(op.toJson()));
-          debugPrint('[SyncQueue] ${op.id} failed (${op.attempts}/$_maxAttempts): ${e.toString().substring(0, 100)}');
+          final delay = _calculateBackoff(op.attempts);
+          debugPrint(
+              '[SyncQueue] ${op.id} failed (${op.attempts}/$_maxAttempts), retry in ${delay.inSeconds}s: ${e.toString().substring(0, 100)}');
         }
       }
     }
     return successCount;
+  }
+
+  /// Calculate exponential backoff delay: baseDelay * 2^attempts
+  Duration _calculateBackoff(int attempts) {
+    final seconds = _baseDelay.inSeconds * (1 << attempts); // 2, 4, 8, 16, 32
+    return Duration(seconds: seconds.clamp(2, 300)); // Cap at 5 min
+  }
+
+  /// Remove operations older than _maxAge.
+  void _purgeStale() {
+    if (_box == null) return;
+    final cutoff = DateTime.now().subtract(_maxAge);
+    final stale = <String>[];
+    for (final key in _box!.keys) {
+      final raw = _box!.get(key);
+      if (raw == null) continue;
+      try {
+        final op =
+            SyncOperation.fromJson(jsonDecode(raw) as Map<String, dynamic>);
+        if ((op.createdAt ?? DateTime.now()).isBefore(cutoff)) {
+          stale.add(key);
+        }
+      } catch (_) {
+        stale.add(key); // Corrupted entry, remove it
+      }
+    }
+    for (final key in stale) {
+      _box!.delete(key);
+    }
+    if (stale.isNotEmpty) {
+      debugPrint(
+          '[SyncQueue] Purged ${stale.length} stale operations (>${_maxAge.inDays} days old)');
+    }
   }
 
   Future<void> _processOperation(SyncOperation op) async {
@@ -132,6 +188,10 @@ class SyncQueueService {
         break;
       case 'PUT':
         await ApiClient.put(op.endpoint, data: op.payload);
+        break;
+      case 'DELETE':
+        await ApiClient.delete(op.endpoint,
+            data: op.payload.isNotEmpty ? op.payload : null);
         break;
       default:
         throw UnsupportedError('Method ${op.method} not supported for sync');

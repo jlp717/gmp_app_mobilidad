@@ -9,6 +9,7 @@ import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
+import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/sales_history/domain/product_history_item.dart';
 import 'package:gmp_app_mobilidad/features/sales_history/presentation/widgets/sales_summary_header.dart';
@@ -599,84 +600,16 @@ class _ProductThumbnail extends StatelessWidget {
   }
 
   void _showFullscreenImage(BuildContext context) {
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        opaque: false,
-        barrierColor: Colors.black54,
-        barrierDismissible: true,
-        pageBuilder: (ctx, anim, secondAnim) {
-          return _FullscreenImageViewer(
-            imageUrl: imageUrl,
-            productName: productName,
-          );
-        },
-        transitionsBuilder: (ctx, anim, secondAnim, child) {
-          return FadeTransition(opacity: anim, child: child);
-        },
-      ),
-    );
-  }
-}
-
-// =============================================================================
-// FULLSCREEN IMAGE VIEWER – InteractiveViewer with pinch-to-zoom
-// =============================================================================
-class _FullscreenImageViewer extends StatelessWidget {
-
-  const _FullscreenImageViewer(
-      {required this.imageUrl, required this.productName,});
-  final String imageUrl;
-  final String productName;
-
-  @override
-  Widget build(BuildContext context) {
-    const viewerBackground = Color(0xFFF8FAFC);
-    const viewerForeground = Color(0xFF0F172A);
-
-    return Scaffold(
-      backgroundColor: viewerBackground,
-      appBar: AppBar(
-        backgroundColor: viewerBackground,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: viewerForeground),
-        title: Text(
-          productName,
-          style: const TextStyle(color: viewerForeground, fontSize: 14),
-          overflow: TextOverflow.ellipsis,
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: ColoredBox(
-              color: Colors.white,
-              child: InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 5,
-                child: SmartProductImage(
-                  imageUrl: imageUrl,
-                  productCode: '',
-                  productName: productName,
-                  fit: BoxFit.contain,
-                  borderRadius: BorderRadius.zero,
-                  headers: {
-                    'Accept': 'image/*',
-                    if (ApiClient.dio.options.headers['Authorization'] != null)
-                      'Authorization': ApiClient
-                          .dio.options.headers['Authorization'] as String,
-                  },
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
+    FullscreenImageViewer.show(
+      context,
+      imageUrl: imageUrl,
+      productName: productName,
+      headers: {
+        'Accept': 'image/*',
+        if (ApiClient.dio.options.headers['Authorization'] != null)
+          'Authorization':
+              ApiClient.dio.options.headers['Authorization'] as String,
+      },
     );
   }
 }

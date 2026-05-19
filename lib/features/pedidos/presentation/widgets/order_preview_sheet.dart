@@ -12,7 +12,7 @@ import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
-typedef OrderPreviewConfirm = Future<Map<String, dynamic>?> Function(
+typedef OrderPreviewConfirm = Future<dynamic> Function(
   String observaciones, {
   String? deliveryDate,
   String? vehicleCode,
@@ -20,14 +20,15 @@ typedef OrderPreviewConfirm = Future<Map<String, dynamic>?> Function(
   String? routeCode,
 });
 
-/// Shows the order preview as a centered dialog. Returns true if confirmed.
-Future<bool?> showOrderPreviewSheet({
+/// Shows the order preview as a centered dialog. Returns the confirmation
+/// result (Map) if confirmed, null if cancelled or failed.
+Future<dynamic> showOrderPreviewSheet({
   required BuildContext context,
   required PedidosProvider provider,
   required String vendedorCode,
   required OrderPreviewConfirm onConfirm,
 }) {
-  return showDialog<bool>(
+  return showDialog<dynamic>(
     context: context,
     barrierColor: Colors.black87,
     builder: (ctx) => _OrderPreviewSheet(
@@ -507,18 +508,35 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           const SizedBox(height: 12),
           _buildDayChips(options),
           const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(13),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.055),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            ),
-            child: _buildDeliveryInfo(
-              icon: Icons.local_shipping_rounded,
-              label: 'Camion asignado',
-              value: truckLabel,
-              subtitle: truckSub,
+          InkWell(
+            onTap: _isLoadingDeliveryOptions || _isConfirming
+                ? null
+                : _showVehicleSelector,
+            borderRadius: BorderRadius.circular(14),
+            child: Container(
+              padding: const EdgeInsets.all(13),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.055),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildDeliveryInfo(
+                      icon: Icons.local_shipping_rounded,
+                      label: 'Camion asignado',
+                      value: truckLabel,
+                      subtitle: truckSub,
+                    ),
+                  ),
+                  const Icon(
+                    Icons.arrow_forward_ios_rounded,
+                    color: AppTheme.textSecondary,
+                    size: 14,
+                  ),
+                ],
+              ),
             ),
           ),
           if (_deliveryError != null) ...[
@@ -840,39 +858,40 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           const SizedBox(height: 10),
 
           // Margin bar
-          Row(
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
-                    value: (margin / 50).clamp(0.0, 1.0),
-                    minHeight: 6,
-                    backgroundColor: AppTheme.darkCard,
-                    valueColor: AlwaysStoppedAnimation<Color>(marginColor),
+          if (provider.isMarginVisible)
+            Row(
+              children: [
+                Expanded(
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: (margin / 50).clamp(0.0, 1.0),
+                      minHeight: 6,
+                      backgroundColor: AppTheme.darkCard,
+                      valueColor: AlwaysStoppedAnimation<Color>(marginColor),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: marginColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: marginColor.withValues(alpha: 0.3)),
-                ),
-                child: Text(
-                  'Margen ${margin.toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    color: marginColor,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+                const SizedBox(width: 12),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: marginColor.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: marginColor.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    'Margen ${margin.toStringAsFixed(1)}%',
+                    style: TextStyle(
+                      color: marginColor,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
     );
@@ -1093,6 +1112,121 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     await _loadDeliveryOptions(deliveryDate: _formatIsoDate(picked));
   }
 
+  Future<void> _showVehicleSelector() async {
+    if (_deliveryOptions == null) return;
+
+    try {
+      final vehicles = await PedidosService.getAvailableVehicles();
+      if (!mounted) return;
+
+      if (vehicles.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No hay camiones disponibles'),
+            backgroundColor: AppTheme.warning,
+          ),
+        );
+        return;
+      }
+
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: AppTheme.darkSurface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Row(
+            children: [
+              Icon(Icons.local_shipping_rounded, color: AppTheme.neonGreen),
+              SizedBox(width: 8),
+              Text('Seleccionar camion', style: TextStyle(color: Colors.white)),
+            ],
+          ),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: ListView.builder(
+              shrinkWrap: true,
+              itemCount: vehicles.length,
+              itemBuilder: (_, i) {
+                final v = vehicles[i];
+                final code = (v['code'] ?? '').toString();
+                final desc = (v['matricula'] ?? v['description'] ?? '').toString();
+                final isCurrent = code == _deliveryOptions?.vehicleCode;
+                return ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: isCurrent
+                          ? AppTheme.neonGreen.withValues(alpha: 0.15)
+                          : AppTheme.neonBlue.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      Icons.local_shipping_rounded,
+                      color: isCurrent ? AppTheme.neonGreen : AppTheme.neonBlue,
+                    ),
+                  ),
+                  title: Text(
+                    desc.isNotEmpty ? '$code - $desc' : 'Camion $code',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: isCurrent ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                  ),
+                  trailing: isCurrent
+                      ? const Icon(Icons.check_circle, color: AppTheme.neonGreen)
+                      : null,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _deliveryOptions = OrderDeliveryOptions(
+                        clientCode: _deliveryOptions!.clientCode,
+                        vendedorCode: _deliveryOptions!.vendedorCode,
+                        allowedDeliveryDays: _deliveryOptions!.allowedDeliveryDays,
+                        allowedDeliveryDaysShort:
+                            _deliveryOptions!.allowedDeliveryDaysShort,
+                        suggestedDeliveryDate:
+                            _deliveryOptions!.suggestedDeliveryDate,
+                        suggestedDeliveryDateFormatted:
+                            _deliveryOptions!.suggestedDeliveryDateFormatted,
+                        selectedDeliveryDate:
+                            _deliveryOptions!.selectedDeliveryDate,
+                        selectedDeliveryDateFormatted:
+                            _deliveryOptions!.selectedDeliveryDateFormatted,
+                        vehicleCode: code,
+                        driverCode: _deliveryOptions!.driverCode,
+                        vehicleMatricula: desc,
+                        vehicleDescription: desc,
+                        truckConfidence: 'manual',
+                        truckSource: 'manual',
+                        routeCode: _deliveryOptions!.routeCode,
+                        validated: _deliveryOptions!.validated,
+                      );
+                    });
+                  },
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancelar',
+                  style: TextStyle(color: Colors.white54)),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error cargando camiones: $e'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    }
+  }
+
   DateTime? _parseIsoDate(String value) {
     final parts = value.split('-');
     if (parts.length != 3) return null;
@@ -1155,10 +1289,13 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         driverCode: _deliveryOptions?.driverCode,
         routeCode: _deliveryOptions?.routeCode,
       );
-      if (result != null && mounted) {
+      if (!mounted) return;
+      if (result != null) {
         HapticFeedback.mediumImpact();
-        Navigator.of(context).pop(true);
-      } else if (mounted) {
+        // Close the preview dialog and return the result so the caller
+        // can show the success snackbar and reset the cart.
+        Navigator.of(context).pop(result);
+      } else {
         // Confirmation failed — reset button and show error
         setState(() => _isConfirming = false);
         ScaffoldMessenger.of(context).showSnackBar(

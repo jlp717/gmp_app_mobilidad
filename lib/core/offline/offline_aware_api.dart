@@ -28,13 +28,17 @@ enum DataSource { network, cache, stale }
 /// Implements the following strategy for READS:
 /// 1. Try cache → if fresh (< 24h), yield immediately
 /// 2. If online → fetch API → update cache → return network data
-/// 3. If offline → return stale cache with warning
+/// 3. If limited/offline → return stale cache with warning
 ///
 /// For WRITES:
 /// 1. If online → send to API → update cache on success
-/// 2. If offline → save to sync queue → return optimistic result
+/// 2. If limited/offline → save to sync queue → return optimistic result
 class OfflineAwareApi {
   const OfflineAwareApi._();
+
+  /// Whether we have verified real connectivity (not just a network interface).
+  static bool get _isOnline =>
+      ConnectivityService.instance.currentStatus == ConnectivityStatus.online;
 
   /// GET with offline-first strategy.
   ///
@@ -48,21 +52,20 @@ class OfflineAwareApi {
     Duration? cacheTTL,
     bool forceRefresh = false,
   }) async {
-    final isOnline = ConnectivityService.instance.currentStatus == ConnectivityStatus.online;
-
     // 1. Try fresh cache first (unless force refreshing)
     if (!forceRefresh) {
       try {
         final cached = CacheService.get<Map<String, dynamic>>(cacheKey);
         if (cached != null) {
           debugPrint('[OfflineAware] Cache HIT: $endpoint');
-          return OfflineResult(data: _deepCastMap(cached), source: DataSource.cache);
+          return OfflineResult(
+              data: _deepCastMap(cached), source: DataSource.cache);
         }
       } catch (_) {}
     }
 
-    // 2. If online, fetch from API
-    if (isOnline) {
+    // 2. If online (verified), fetch from API
+    if (_isOnline) {
       try {
         final response = await ApiClient.get(
           endpoint,
@@ -78,21 +81,31 @@ class OfflineAwareApi {
       }
     }
 
-    // 3. Try stale cache (offline or network error)
+    // 3. Try stale cache (offline, limited, or network error)
     try {
       final stale = CacheService.getStale<Map<String, dynamic>>(cacheKey);
       if (stale != null) {
+        final status = ConnectivityService.instance.currentStatus;
+        final errorLabel = status == ConnectivityStatus.limited
+            ? 'Conexión limitada. Mostrando datos guardados.'
+            : status == ConnectivityStatus.offline
+                ? 'Sin conexión. Mostrando datos guardados.'
+                : 'Error de red. Mostrando datos guardados.';
         debugPrint('[OfflineAware] Stale cache HIT: $endpoint');
         return OfflineResult(
           data: _deepCastMap(stale),
           source: DataSource.stale,
-          error: isOnline ? 'Error de red. Mostrando datos guardados.' : 'Sin conexión. Mostrando datos guardados.',
+          error: errorLabel,
         );
       }
     } catch (_) {}
 
     // 4. Nothing — throw
-    throw OfflineException('No hay datos disponibles. Conéctate a internet y vuelve a intentarlo.');
+    final status = ConnectivityService.instance.currentStatus;
+    final msg = status == ConnectivityStatus.limited
+        ? 'No hay datos disponibles y la conexión es limitada.'
+        : 'No hay datos disponibles. Conéctate a internet y vuelve a intentarlo.';
+    throw OfflineException(msg);
   }
 
   /// GET with offline-first strategy for List responses.
@@ -103,8 +116,6 @@ class OfflineAwareApi {
     Duration? cacheTTL,
     bool forceRefresh = false,
   }) async {
-    final isOnline = ConnectivityService.instance.currentStatus == ConnectivityStatus.online;
-
     if (!forceRefresh) {
       try {
         final cached = CacheService.get<List<dynamic>>(cacheKey);
@@ -114,7 +125,7 @@ class OfflineAwareApi {
       } catch (_) {}
     }
 
-    if (isOnline) {
+    if (_isOnline) {
       try {
         final response = await ApiClient.getList(
           endpoint,
@@ -132,33 +143,42 @@ class OfflineAwareApi {
     try {
       final stale = CacheService.getStale<List<dynamic>>(cacheKey);
       if (stale != null) {
+        final status = ConnectivityService.instance.currentStatus;
+        final errorLabel = status == ConnectivityStatus.limited
+            ? 'Conexión limitada. Mostrando datos guardados.'
+            : status == ConnectivityStatus.offline
+                ? 'Sin conexión. Mostrando datos guardados.'
+                : 'Error de red. Mostrando datos guardados.';
         return OfflineResult(
           data: stale,
           source: DataSource.stale,
-          error: isOnline ? 'Error de red. Mostrando datos guardados.' : 'Sin conexión. Mostrando datos guardados.',
+          error: errorLabel,
         );
       }
     } catch (_) {}
 
-    throw OfflineException('No hay datos disponibles. Conéctate a internet y vuelve a intentarlo.');
+    final status = ConnectivityService.instance.currentStatus;
+    final msg = status == ConnectivityStatus.limited
+        ? 'No hay datos disponibles y la conexión es limitada.'
+        : 'No hay datos disponibles. Conéctate a internet y vuelve a intentarlo.';
+    throw OfflineException(msg);
   }
 
   /// POST with offline support: if online, send directly;
-  /// if offline, queue for later sync.
+  /// if limited/offline, queue for later sync.
   static Future<Map<String, dynamic>> post(
     String endpoint,
     Map<String, dynamic> data, {
     String? syncType,
     String? cacheKey,
   }) async {
-    final isOnline = ConnectivityService.instance.currentStatus == ConnectivityStatus.online;
-
-    if (isOnline) {
+    if (_isOnline) {
       try {
         final response = await ApiClient.post(endpoint, data);
         // Update cache if cacheKey provided
         if (cacheKey != null) {
-          await CacheService.set(cacheKey, response, ttl: CacheService.shortTTL);
+          await CacheService.set(cacheKey, response,
+              ttl: CacheService.shortTTL);
         }
         return response;
       } catch (e) {
@@ -170,7 +190,7 @@ class OfflineAwareApi {
       }
     }
 
-    // Offline: queue for later sync
+    // Offline/limited: queue for later sync
     final operation = SyncOperation(
       id: '${syncType ?? 'op'}_${DateTime.now().microsecondsSinceEpoch}',
       type: syncType ?? 'mutation',
@@ -191,13 +211,12 @@ class OfflineAwareApi {
     String? syncType,
     String? cacheKey,
   }) async {
-    final isOnline = ConnectivityService.instance.currentStatus == ConnectivityStatus.online;
-
-    if (isOnline) {
+    if (_isOnline) {
       try {
         final response = await ApiClient.put(endpoint, data: data);
         if (cacheKey != null) {
-          await CacheService.set(cacheKey, response, ttl: CacheService.shortTTL);
+          await CacheService.set(cacheKey, response,
+              ttl: CacheService.shortTTL);
         }
         return response;
       } catch (e) {
@@ -215,6 +234,39 @@ class OfflineAwareApi {
       payload: data ?? {},
     );
     await SyncQueueService.instance.enqueue(operation);
+    return {'success': true, 'queued': true, 'syncId': operation.id};
+  }
+
+  /// DELETE with offline support.
+  static Future<Map<String, dynamic>> delete(
+    String endpoint, {
+    String? syncType,
+    String? cacheKey,
+  }) async {
+    if (_isOnline) {
+      try {
+        final response = await ApiClient.delete(endpoint);
+        if (cacheKey != null) {
+          await CacheService.invalidate(cacheKey);
+        }
+        return response;
+      } catch (e) {
+        if (e is ApiException && e.statusCode != null && e.statusCode! >= 500) {
+          rethrow;
+        }
+      }
+    }
+
+    final operation = SyncOperation(
+      id: '${syncType ?? 'op'}_${DateTime.now().microsecondsSinceEpoch}',
+      type: syncType ?? 'mutation',
+      endpoint: endpoint,
+      method: 'DELETE',
+      payload: {},
+    );
+    await SyncQueueService.instance.enqueue(operation);
+    debugPrint('[OfflineAware] Queued DELETE for sync: $endpoint');
+
     return {'success': true, 'queued': true, 'syncId': operation.id};
   }
 

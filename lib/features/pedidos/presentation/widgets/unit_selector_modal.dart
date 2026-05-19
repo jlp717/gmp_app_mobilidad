@@ -67,8 +67,9 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     _units = widget.availableUnits;
     _selectedUnit =
         widget.initialUnit ?? (_units.isNotEmpty ? _units.first : 'CAJAS');
+    final isWeight = _selectedUnit == 'KILOGRAMOS' || _selectedUnit == 'LITROS';
     _qtyController.text = widget.initialQuantity?.toStringAsFixed(
-          _selectedUnit == 'KILOGRAMOS' || _selectedUnit == 'LITROS' ? 2 : 0,
+          isWeight ? 2 : 0,
         ) ??
         '1';
   }
@@ -152,7 +153,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
         return '${_fmtNum(envases)} cj';
       case 'KILOGRAMOS':
       case 'LITROS':
-        return '${_fmtNum(p.stockForUnit(unit), decimals: 2)} ${_unitAbbr(unit)}';
+        return '${_fmtNum(p.stockForUnit(unit), decimals: 1)} ${_unitAbbr(unit)}';
       default:
         return '${_fmtNum(p.stockForUnit(unit))} ${_unitAbbr(unit)}';
     }

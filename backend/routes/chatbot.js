@@ -13,6 +13,18 @@ const { getPool } = require('../config/db');
 const { processMessage } = require('../src/chatbot/llm-orchestrator');
 const { logChatEvent } = require('../src/chatbot/moderation');
 
+// ── Health Check (no auth needed — MUST be before verifyToken) ───────────────
+
+router.get('/health', (req, res) => {
+    const hasGroqKey = !!process.env.GROQ_API_KEY;
+    res.json({
+        status: 'ok',
+        llm: hasGroqKey ? 'enabled' : 'disabled (using regex fallback)',
+        model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+        timestamp: new Date().toISOString()
+    });
+});
+
 // All chatbot endpoints require authentication
 router.use(verifyToken);
 
@@ -76,18 +88,6 @@ router.post('/message', async (req, res) => {
             response: 'Lo siento, hubo un error interno. Intenta de nuevo.'
         });
     }
-});
-
-// ── Health Check (no auth needed) ────────────────────────────────────────────
-
-router.get('/health', (req, res) => {
-    const hasGroqKey = !!process.env.GROQ_API_KEY;
-    res.json({
-        status: 'ok',
-        llm: hasGroqKey ? 'enabled' : 'disabled (using regex fallback)',
-        model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
-        timestamp: new Date().toISOString()
-    });
 });
 
 module.exports = router;

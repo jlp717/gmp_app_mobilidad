@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -186,43 +187,120 @@ class AppTheme {
             ),
       ),
 
-      // Card Theme — V2: 24px radius, premium shadow
+      // Card Theme — V2.5: premium shadow, frosted border, dark surface
       cardTheme: CardThemeData(
         color: darkCard,
-        elevation: 2,
-        shadowColor: neonBlue.withValues(alpha: 0.08),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusLg)),
+        elevation: 3,
+        shadowColor: Colors.black.withValues(alpha: 0.25),
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusLg),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.04)),
+        ),
+        clipBehavior: Clip.antiAlias,
       ),
 
-      // App Bar Theme
-      appBarTheme: const AppBarTheme(
+      // App Bar Theme — V2.5: subtle bottom glow, premium icons
+      appBarTheme: AppBarTheme(
         backgroundColor: darkSurface,
         elevation: 0,
+        scrolledUnderElevation: 1,
+        shadowColor: neonBlue.withValues(alpha: 0.05),
         centerTitle: false,
-        iconTheme: IconThemeData(color: neonBlue),
+        iconTheme: const IconThemeData(color: neonBlue),
+        actionsIconTheme: const IconThemeData(color: neonBlue),
+        titleTextStyle: const TextStyle(
+          color: textPrimary,
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          letterSpacing: -0.3,
+        ),
+        toolbarTextStyle: const TextStyle(
+          color: textSecondary,
+          fontSize: 14,
+        ),
+        systemOverlayStyle: SystemUiOverlayStyle(
+          statusBarColor: darkBase,
+          statusBarIconBrightness: Brightness.light,
+          systemNavigationBarColor: darkBase,
+          systemNavigationBarIconBrightness: Brightness.light,
+        ),
       ),
 
-      // Button Themes — V2: 16px radius, premium
+      // Button Themes — V2.5: animated press state, neon border, premium
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: neonBlue,
           foregroundColor: darkBase,
+          disabledBackgroundColor: darkCard,
+          disabledForegroundColor: textTertiary,
+          elevation: 2,
+          shadowColor: neonBlue.withValues(alpha: 0.3),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusMd)),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          animationDuration: const Duration(milliseconds: 200),
+          enableFeedback: true,
         ),
       ),
 
-      // Input Theme — V2: 16px radius, clean borders
+      // Outlined button with neon border
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: neonBlue,
+          side: BorderSide(color: neonBlue.withValues(alpha: 0.5)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusMd)),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          animationDuration: const Duration(milliseconds: 200),
+        ),
+      ),
+
+      // Text button with subtle accent
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: neonBlue,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusSm)),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        ),
+      ),
+
+      // Input Theme — V2.5: glow focus, premium radius
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: darkSurface,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(radiusMd),
-            borderSide: BorderSide.none,),
+            borderSide: BorderSide(color: borderColor.withValues(alpha: 0.5)),),
+        enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(radiusMd),
+            borderSide: BorderSide(color: borderColor.withValues(alpha: 0.3)),),
         focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(radiusMd),
             borderSide: const BorderSide(color: neonBlue, width: 2),),
+        errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(radiusMd),
+            borderSide: const BorderSide(color: error, width: 1),),
+        focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(radiusMd),
+            borderSide: const BorderSide(color: error, width: 2),),
+        labelStyle: const TextStyle(color: textSecondary),
+        hintStyle: const TextStyle(color: textTertiary),
+      ),
+
+      // Floating action button theme
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: neonBlue,
+        foregroundColor: darkBase,
+        elevation: 4,
+        focusElevation: 8,
+        hoverElevation: 6,
+        highlightElevation: 8,
+        disabledElevation: 0,
+        shape: const CircleBorder(),
+        enableFeedback: true,
       ),
 
       // DatePicker Theme for dark mode visibility
@@ -255,29 +333,46 @@ class AppTheme {
         dividerColor: Colors.white24,
       ),
 
-      // Dialog Theme — V2: generous radius
+      // Dialog Theme — V2.5: generous radius, premium shadow, subtle glow
       dialogTheme: DialogThemeData(
         backgroundColor: darkCard,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusLg)),
-        elevation: 8,
-        shadowColor: Colors.black.withValues(alpha: 0.4),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusLg),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+        ),
+        elevation: 12,
+        shadowColor: Colors.black.withValues(alpha: 0.5),
+        surfaceTintColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
       ),
 
-      // Bottom Sheet Theme — V2
+      // Bottom Sheet Theme — V2.5: frosted top, elevated
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: darkCard,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(radiusLg)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(radiusXl)),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.04)),
         ),
-        elevation: 8,
+        elevation: 12,
+        shadowColor: Colors.black.withValues(alpha: 0.4),
+        surfaceTintColor: Colors.transparent,
+        modalElevation: 16,
+        modalBarrierColor: Colors.black.withValues(alpha: 0.5),
+        dragHandleColor: textTertiary,
+        dragHandleSize: const Size(32, 4),
       ),
 
-      // Snackbar Theme
+      // Snackbar Theme — V2.5: floating pill, premium
       snackBarTheme: SnackBarThemeData(
         backgroundColor: darkCard,
         contentTextStyle: const TextStyle(color: textPrimary, fontSize: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusMd)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusMd),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
+        ),
         behavior: SnackBarBehavior.floating,
+        elevation: 8,
+        width: 440,
       ),
     );
   }

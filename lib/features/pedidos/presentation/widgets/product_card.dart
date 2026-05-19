@@ -9,6 +9,7 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
@@ -85,6 +86,9 @@ class _ProductCardState extends State<ProductCard> {
             : widget.product.precioTarifa1)
         : widget.product.precioTarifa1;
     final minBoxPrice = widget.product.minimumPriceForUnit('CAJAS');
+    final primaryUnit = widget.product.displayUnit;
+    final minPrimaryPrice = widget.product.minimumPriceForUnit(primaryUnit);
+    final unitLabel = Product.unitLabel(primaryUnit);
 
     final hasClientePrice = widget.product.precioCliente > 0;
 
@@ -392,13 +396,13 @@ class _ProductCardState extends State<ProductCard> {
                       ),
                     ],
                   ),
-                  // Minimum price reference
+                  // Minimum price reference (per primary sale unit)
                   if (widget.product.precioMinimo > 0 &&
-                      minBoxPrice != displayPrice)
+                      minPrimaryPrice != displayPrice)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(
-                        'Min cj: ${_formatPrice(minBoxPrice, decimals: 2)}\u20AC',
+                        'Min $unitLabel: ${_formatPrice(minPrimaryPrice, decimals: 2)}\u20AC',
                         style: TextStyle(
                           color: Colors.white38,
                           fontSize:
@@ -407,7 +411,7 @@ class _ProductCardState extends State<ProductCard> {
                       ),
                     ),
                   const SizedBox(height: 4),
-                  // U/C badge
+                  // Box content badge (U/C, kg/cj, L/cj)
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -418,7 +422,7 @@ class _ProductCardState extends State<ProductCard> {
                           Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
                     ),
                     child: Text(
-                      'U/C: ${_formatUc(widget.product.unitsPerBox)}',
+                      _buildBoxContentBadge(),
                       style: TextStyle(
                         color: AppTheme.neonBlue,
                         fontSize:
@@ -562,86 +566,21 @@ class _ProductCardState extends State<ProductCard> {
   void _showFullscreenImage(BuildContext context, String code) {
     final imageUrl = '${ApiConfig.baseUrl}/products/'
         '${Uri.encodeComponent(code.trim())}/image';
-    Navigator.of(context).push<void>(
-      PageRouteBuilder<void>(
-        opaque: false,
-        // FIX: fondo translucido oscuro en lugar de negro solido para que se
-        // distinga el contenido detras del modal.
-        barrierColor: const Color(0xCC101218), // ~80% opacidad sobre fondo oscuro
-        barrierDismissible: true,
-        pageBuilder: (ctx, anim, secondAnim) {
-          return Scaffold(
-            backgroundColor: Colors.transparent,
-            appBar: AppBar(
-              backgroundColor: Colors.transparent,
-              elevation: 0,
-              title: Text(
-                widget.product.name,
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
-                overflow: TextOverflow.ellipsis,
-              ),
-              leading: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.of(ctx).pop(),
-              ),
-            ),
-            body: Center(
-              child: InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 5,
-                child: ColoredBox(
-                  color: Colors.white,
-                  child: Image.network(
-                  imageUrl,
-                  headers: ApiClient.authHeaders,
-                  fit: BoxFit.contain,
-                  loadingBuilder: (context, child, progress) {
-                    if (progress == null) return child;
-                    final total = progress.expectedTotalBytes;
-                    return SizedBox(
-                      width: 80,
-                      height: 80,
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          value: total != null
-                              ? progress.cumulativeBytesLoaded / total
-                              : null,
-                          strokeWidth: 2,
-                          color: Colors.white54,
-                        ),
-                      ),
-                    );
-                  },
-                  errorBuilder: (context, error, stack) => Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.broken_image_outlined,
-                        color: Colors.white38,
-                        size: 64,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        widget.product.name,
-                        style: const TextStyle(
-                          color: Colors.white38,
-                          fontSize: 12,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-        transitionsBuilder: (ctx, anim, secondAnim, child) {
-          return FadeTransition(opacity: anim, child: child);
-        },
-      ),
+    FullscreenImageViewer.show(
+      context,
+      imageUrl: imageUrl,
+      productName: widget.product.name,
+      productCode: code,
+      headers: ApiClient.authHeaders,
     );
+  }
+
+  String _buildBoxContentBadge() {
+    final p = widget.product;
+    final content = p.boxContentDesc;
+    if (content.isNotEmpty) return content;
+    if (p.unitsPerBox > 1) return '${_formatUc(p.unitsPerBox)} uds/cj';
+    return '';
   }
 
   String _formatUc(double value) {

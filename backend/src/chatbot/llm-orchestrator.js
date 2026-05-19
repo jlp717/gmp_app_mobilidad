@@ -30,7 +30,8 @@ const {
     analyticsTools,
     repartidorTools,
     warehouseTools,
-    summaryTools
+    summaryTools,
+    crossQueryTools
 } = require('./chatbot_tools');
 
 // ── Groq Client ──────────────────────────────────────────────────────────────
@@ -816,6 +817,117 @@ const TOOL_DEFINITIONS = [
                 }
             }
         }
+    },
+    // ═══════════════════════════════════════════════════════════════════════
+    // CONSULTAS CRUZADAS (Producto + Cliente combinados)
+    // ═══════════════════════════════════════════════════════════════════════
+    {
+        type: 'function',
+        function: {
+            name: 'get_price_sold_to_client',
+            description: 'Obtiene el precio al que se vendio un producto especifico a un cliente especifico, con historial',
+            parameters: {
+                type: 'object',
+                properties: {
+                    productCode: { type: 'string', description: 'Codigo del producto' },
+                    clientCode: { type: 'string', description: 'Codigo del cliente' },
+                    limit: { type: 'integer', description: 'Numero de ventas recientes (default 5)' }
+                },
+                required: ['productCode', 'clientCode']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_product_sales_by_client',
+            description: 'Obtiene ventas de un producto a un cliente en un mes especifico: total, unidades, precio medio',
+            parameters: {
+                type: 'object',
+                properties: {
+                    productCode: { type: 'string', description: 'Codigo del producto' },
+                    clientCode: { type: 'string', description: 'Codigo del cliente' },
+                    month: { type: 'integer', description: 'Mes (1-12)' },
+                    year: { type: 'integer', description: 'Año' }
+                },
+                required: ['productCode', 'clientCode']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_client_products',
+            description: 'Obtiene los productos que ha comprado un cliente, ordenados por importe total',
+            parameters: {
+                type: 'object',
+                properties: {
+                    clientCode: { type: 'string', description: 'Codigo del cliente' },
+                    limit: { type: 'integer', description: 'Numero de productos (default 20)' }
+                },
+                required: ['clientCode']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_client_monthly_sales',
+            description: 'Obtiene las ventas mensuales de un cliente en los ultimos N meses',
+            parameters: {
+                type: 'object',
+                properties: {
+                    clientCode: { type: 'string', description: 'Codigo del cliente' },
+                    months: { type: 'integer', description: 'Numero de meses (default 12)' }
+                },
+                required: ['clientCode']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'get_top_products_by_client',
+            description: 'Obtiene los productos mas comprados por un cliente en un mes',
+            parameters: {
+                type: 'object',
+                properties: {
+                    clientCode: { type: 'string', description: 'Codigo del cliente' },
+                    month: { type: 'integer', description: 'Mes (1-12)' },
+                    year: { type: 'integer', description: 'Año' },
+                    limit: { type: 'integer', description: 'Numero de productos (default 10)' }
+                },
+                required: ['clientCode']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'search_product_by_name',
+            description: 'Busca productos por nombre o descripcion (LIKE). Devuelve hasta 10 resultados',
+            parameters: {
+                type: 'object',
+                properties: {
+                    query: { type: 'string', description: 'Texto a buscar en nombre del producto' }
+                },
+                required: ['query']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
+            name: 'search_client_by_name',
+            description: 'Busca clientes por nombre (LIKE). Devuelve hasta 10 resultados',
+            parameters: {
+                type: 'object',
+                properties: {
+                    query: { type: 'string', description: 'Texto a buscar en nombre del cliente' }
+                },
+                required: ['query']
+            }
+        }
     }
 ];
 
@@ -955,6 +1067,22 @@ async function executeTool(toolName, args, context) {
         // Daily Summary
         case 'get_daily_summary':
             return await summaryTools.getDailySummary(conn, userCode, effectiveIsJefeVentas, args.year, args.month, args.day, effectiveVendorCodes);
+
+        // Cross-Query Tools
+        case 'get_price_sold_to_client':
+            return await crossQueryTools.getPriceSoldToClient(conn, args.productCode, args.clientCode, args.limit || 5);
+        case 'get_product_sales_by_client':
+            return await crossQueryTools.getProductSalesByClient(conn, args.productCode, args.clientCode, args.month, args.year);
+        case 'get_client_products':
+            return await crossQueryTools.getClientProductsBought(conn, args.clientCode, args.limit || 20);
+        case 'get_client_monthly_sales':
+            return await crossQueryTools.getClientMonthlySales(conn, args.clientCode, args.months || 12);
+        case 'get_top_products_by_client':
+            return await crossQueryTools.getTopProductsByClient(conn, args.clientCode, args.month, args.year, args.limit || 10);
+        case 'search_product_by_name':
+            return await crossQueryTools.searchProductByName(conn, args.query);
+        case 'search_client_by_name':
+            return await crossQueryTools.searchClientByName(conn, args.query);
 
         default:
             return { error: `Herramienta desconocida: ${toolName}` };
@@ -1296,6 +1424,45 @@ ${truckList}`;
 - Operaciones: ${result.totalOperations}
 ${result.topClients ? '\nTop clientes:\n' + result.topClients.slice(0, 5).map((c, i) => `- #${i + 1} ${c.name}: **${c.sales.toLocaleString('es-ES')}€**`).join('\n') : ''}
 ${result.topProducts ? '\nTop productos:\n' + result.topProducts.slice(0, 5).map((p, i) => `- #${i + 1} ${p.name}: ${p.quantity} uds`).join('\n') : ''}`;
+
+        // ── Cross-Query Tools ──
+        case 'get_price_sold_to_client':
+            if (result.error) return result.error;
+            const priceList = result.sales.slice(0, 5)
+                .map(s => `- ${s.date}: **${s.price.toLocaleString('es-ES')}€** | ${s.quantity} uds | ${s.amount.toLocaleString('es-ES')}€`).join('\n');
+            return `Precio vendido ${result.productCode} a cliente ${result.clientCode}:\n${priceList}`;
+
+        case 'get_product_sales_by_client':
+            return `Ventas ${result.productCode} a cliente ${result.clientCode} (${result.month}/${result.year}):
+Total: **${result.totalSales.toLocaleString('es-ES')}€** | Unidades: ${result.totalUnits} | Precio medio: **${result.avgPrice}€** | Lineas: ${result.numLines}`;
+
+        case 'get_client_products':
+            if (result.products.length === 0) return `Cliente ${result.clientCode}: Sin compras registradas.`;
+            const prodList = result.products.slice(0, 10)
+                .map(p => `- ${p.name} (${p.code}): **${p.totalSales.toLocaleString('es-ES')}€** | ${p.totalUnits} uds`).join('\n');
+            return `Productos comprados por cliente ${result.clientCode}:\n${prodList}`;
+
+        case 'get_client_monthly_sales':
+            if (result.monthly.length === 0) return `Cliente ${result.clientCode}: Sin ventas registradas.`;
+            const monthList = result.monthly.slice(-6)
+                .map(m => `- ${m.period}: **${m.totalSales.toLocaleString('es-ES')}€** | ${m.totalUnits} uds`).join('\n');
+            return `Ventas mensuales cliente ${result.clientCode}:\n${monthList}`;
+
+        case 'get_top_products_by_client':
+            if (result.products.length === 0) return `Sin datos para cliente ${result.clientCode} en ${result.month}/${result.year}.`;
+            const topList = result.products.slice(0, 10)
+                .map(p => `- ${p.name} (${p.code}): **${p.totalSales.toLocaleString('es-ES')}€** | ${p.totalUnits} uds`).join('\n');
+            return `Top productos cliente ${result.clientCode} (${result.month}/${result.year}):\n${topList}`;
+
+        case 'search_product_by_name':
+            if (result.length === 0) return 'No se encontraron productos con ese nombre.';
+            const prSearch = result.map(p => `- ${p.name} (${p.code}) | ${p.family} | ${p.price.toLocaleString('es-ES')}€`).join('\n');
+            return `Productos encontrados:\n${prSearch}`;
+
+        case 'search_client_by_name':
+            if (result.length === 0) return 'No se encontraron clientes con ese nombre.';
+            const clSearch = result.map(c => `- ${c.name} (${c.code}) | ${c.location}`).join('\n');
+            return `Clientes encontrados:\n${clSearch}`;
 
         default:
             return JSON.stringify(result, null, 2);

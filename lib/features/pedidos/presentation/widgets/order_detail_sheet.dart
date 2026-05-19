@@ -611,7 +611,8 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                 ? null
                 : () async {
                     HapticFeedback.lightImpact();
-                    await OrderPdfGenerator.generateAndShare(context, _detail!);
+                    final canSeeMargin = ref.watch(pedidosProvider.select((p) => p.isMarginVisible));
+                    await OrderPdfGenerator.generateAndShare(context, _detail!, isMarginVisible: canSeeMargin);
                   },
             icon: const Icon(Icons.picture_as_pdf),
             color: AppTheme.neonGreen,

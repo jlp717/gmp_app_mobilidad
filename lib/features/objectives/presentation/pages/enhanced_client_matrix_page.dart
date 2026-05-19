@@ -8,6 +8,7 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fi_filters_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
+import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
@@ -3239,82 +3240,16 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     String imageUrl,
     String productName,
   ) {
-    Navigator.of(ctx).push(
-      PageRouteBuilder<void>(
-        opaque: false,
-        barrierColor: Colors.black87,
-        barrierDismissible: true,
-        pageBuilder: (c, anim, secondAnim) {
-          return Scaffold(
-            backgroundColor: Colors.black,
-            appBar: AppBar(
-              backgroundColor: Colors.black,
-              elevation: 0,
-              title: Text(
-                productName,
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
-                overflow: TextOverflow.ellipsis,
-              ),
-              leading: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.of(c).pop(),
-              ),
-            ),
-            body: Center(
-              child: InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 5,
-                child: ColoredBox(
-                  color: Colors.white,
-                  child: Image.network(
-                  imageUrl,
-                  fit: BoxFit.contain,
-                  headers: {
-                    'Accept': 'image/*',
-                    if (ApiClient.dio.options.headers['Authorization'] != null)
-                      'Authorization': ApiClient
-                          .dio.options.headers['Authorization'] as String,
-                  },
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return SizedBox(
-                      width: MediaQuery.of(context).size.width * 0.8,
-                      height: MediaQuery.of(context).size.height * 0.6,
-                      child: Center(
-                        child: CircularProgressIndicator(
-                          value: loadingProgress.expectedTotalBytes != null
-                              ? loadingProgress.cumulativeBytesLoaded /
-                                  loadingProgress.expectedTotalBytes!
-                              : null,
-                        ),
-                      ),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) {
-                    return SizedBox(
-                      width: MediaQuery.of(context).size.width * 0.8,
-                      height: MediaQuery.of(context).size.height * 0.6,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.broken_image,
-                              size: 64, color: Colors.grey),
-                          const SizedBox(height: 16),
-                          Text('Error cargando imagen: $error',
-                              style: const TextStyle(color: Colors.white70)),
-                        ],
-                      ),
-                    );
-                  },
-                  ),
-                ), // ColoredBox
-              ),
-            ),
-          );
-        },
-        transitionsBuilder: (c, anim, secondAnim, child) =>
-            FadeTransition(opacity: anim, child: child),
-      ),
+    FullscreenImageViewer.show(
+      ctx,
+      imageUrl: imageUrl,
+      productName: productName,
+      headers: {
+        'Accept': 'image/*',
+        if (ApiClient.dio.options.headers['Authorization'] != null)
+          'Authorization':
+              ApiClient.dio.options.headers['Authorization'] as String,
+      },
     );
   }
 

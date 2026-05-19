@@ -19,11 +19,13 @@ class ProductHistorySheet extends StatefulWidget {
     required this.clientCode,
     required this.clientName,
     super.key,
+    this.isMarginVisible = true,
   });
   final String productCode;
   final String productName;
   final String clientCode;
   final String clientName;
+  final bool isMarginVisible;
 
   static Future<void> show(
     BuildContext context, {
@@ -31,6 +33,7 @@ class ProductHistorySheet extends StatefulWidget {
     required String productName,
     required String clientCode,
     required String clientName,
+    bool isMarginVisible = true,
   }) {
     if (productCode.trim().isEmpty || clientCode.trim().isEmpty) {
       return Future.value();
@@ -52,6 +55,7 @@ class ProductHistorySheet extends StatefulWidget {
           productName: productName,
           clientCode: clientCode,
           clientName: clientName,
+          isMarginVisible: isMarginVisible,
         ),
       ),
     );
@@ -460,11 +464,12 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     final items = [
       _KpiItem('Ventas', _fmtEur(t.sales), AppTheme.neonGreen),
       _KpiItem('Coste', _fmtEur(t.cost), Colors.orange),
-      _KpiItem(
-        'Margen',
-        _fmtPct(margin),
-        margin > 15 ? AppTheme.neonGreen : AppTheme.error,
-      ),
+      if (widget.isMarginVisible)
+        _KpiItem(
+          'Margen',
+          _fmtPct(margin),
+          margin > 15 ? AppTheme.neonGreen : AppTheme.error,
+        ),
       _KpiItem('Envases', _fmtNum(t.envases), AppTheme.neonBlue),
       _KpiItem('Unidades', _fmtNum(t.units), Colors.amber),
       _KpiItem(
@@ -987,9 +992,11 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                       DataCell(Text(_fmtEur(d.cost))),
                       DataCell(
                         Text(
-                          _fmtPct(margin),
+                          widget.isMarginVisible ? _fmtPct(margin) : '—',
                           style: TextStyle(
-                            color: marginColor,
+                            color: widget.isMarginVisible
+                                ? marginColor
+                                : Colors.white24,
                             fontSize: 10,
                           ),
                         ),
@@ -1154,10 +1161,11 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                     DataCell(Text(_fmtEur(t.cost))),
                     DataCell(
                       Text(
-                        _fmtPct(margin),
+                        widget.isMarginVisible ? _fmtPct(margin) : '—',
                         style: TextStyle(
-                          color:
-                              margin > 15 ? AppTheme.neonGreen : AppTheme.error,
+                          color: widget.isMarginVisible
+                              ? (margin > 15 ? AppTheme.neonGreen : AppTheme.error)
+                              : Colors.white24,
                           fontSize: 11,
                         ),
                       ),

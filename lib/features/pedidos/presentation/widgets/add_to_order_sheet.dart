@@ -11,6 +11,7 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
@@ -230,16 +231,11 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
   }
 
   String _formatQtyForInput(double value, String unit) {
-    final useDecimals = unit == 'KILOGRAMOS' || unit == 'LITROS';
-    String text;
-    if (!useDecimals) {
-      if (value == value.truncateToDouble()) {
-        text = value.toStringAsFixed(0);
-      } else {
-        text = value.toStringAsFixed(2);
-      }
-      return text.replaceAll('.', ',');
+    final isWeight = unit == 'KILOGRAMOS' || unit == 'LITROS';
+    if (!isWeight) {
+      return value.toStringAsFixed(0).replaceAll('.', ',');
     }
+    String text;
     if (value == value.truncateToDouble()) {
       text = value.toStringAsFixed(0);
     } else {
@@ -351,49 +347,12 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
   void _showFullscreenImage(BuildContext context) {
     final imageUrl = '${ApiConfig.baseUrl}/products/'
         '${Uri.encodeComponent(product.code.trim())}/image';
-    Navigator.of(context).push<void>(
-      PageRouteBuilder<void>(
-        opaque: false,
-        barrierColor: Colors.black87,
-        barrierDismissible: true,
-        pageBuilder: (ctx, anim, secondAnim) {
-          return Scaffold(
-            backgroundColor: Colors.black,
-            appBar: AppBar(
-              backgroundColor: Colors.black,
-              elevation: 0,
-              title: Text(
-                product.name,
-                style: const TextStyle(color: Colors.white70, fontSize: 14),
-                overflow: TextOverflow.ellipsis,
-              ),
-              leading: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.of(ctx).pop(),
-              ),
-            ),
-            body: Center(
-              child: InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 5,
-                child: ColoredBox(
-                  color: Colors.white,
-                  child: SmartProductImage(
-                  imageUrl: imageUrl,
-                  productCode: product.code,
-                  productName: product.name,
-                  fit: BoxFit.contain,
-                  headers: ApiClient.authHeaders,
-                  ),
-                ),
-              ),
-            ),
-          );
-        },
-        transitionsBuilder: (ctx, anim, secondAnim, child) {
-          return FadeTransition(opacity: anim, child: child);
-        },
-      ),
+    FullscreenImageViewer.show(
+      context,
+      imageUrl: imageUrl,
+      productName: product.name,
+      productCode: product.code,
+      headers: ApiClient.authHeaders,
     );
   }
 
@@ -614,12 +573,14 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                       color: AppTheme.neonBlue,
                       onTap: () {
                         final prov = ref.read(pedidosProvider);
+                        final canSeeMargin = ref.watch(pedidosProvider.select((p) => p.isMarginVisible));
                         ProductDetailSheet.show(
                           ctx,
                           productCode: product.code,
                           productName: product.name,
                           clientCode: prov.hasClient ? prov.clientCode : null,
                           clientName: prov.hasClient ? prov.clientName : null,
+                          isMarginVisible: canSeeMargin,
                         );
                       },
                     ),
@@ -631,12 +592,14 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                         color: AppTheme.neonPurple,
                         onTap: () {
                           final prov = ref.read(pedidosProvider);
+                          final canSeeMargin = ref.watch(pedidosProvider.select((p) => p.isMarginVisible));
                           ProductHistorySheet.show(
                             ctx,
                             productCode: product.code,
                             productName: product.name,
                             clientCode: prov.clientCode!,
                             clientName: prov.clientName ?? '',
+                            isMarginVisible: canSeeMargin,
                           );
                         },
                       ),
@@ -1037,6 +1000,9 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                       final qtyPerBox =
                           product.quantityPerBoxForUnit(_selectedUnit);
                       final boxPrice = _unitPriceForSelection('CAJAS');
+                      final boxContent = product.boxContentDesc;
+                      final minPriceForSelected =
+                          product.minimumPriceForUnit(_selectedUnit);
 
                       return Container(
                         width: double.infinity,
@@ -1054,35 +1020,57 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Primary: price per selected unit
                             Text(
-                              'Precio unitario: ${PedidosFormatters.money(selectedUnitPrice, decimals: 3)} / $selectedLabel',
+                              'Precio: ${PedidosFormatters.money(selectedUnitPrice, decimals: 3)} €/$selectedLabel',
                               style: const TextStyle(
                                 color: Colors.white70,
-                                fontSize: 11,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _selectedUnit == 'CAJAS'
-                                  ? 'Precio por caja: ${PedidosFormatters.money(boxPrice, decimals: 3)}'
-                                  : '1 caja = ${_formatUnitQty(qtyPerBox, _selectedUnit)} $selectedLabel · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)}',
-                              style: const TextStyle(
-                                color: Colors.white54,
-                                fontSize: 10,
+                            const SizedBox(height: 3),
+                            // Box content: what each caja contains
+                            if (boxContent.isNotEmpty)
+                              Text(
+                                '1 caja = $boxContent · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)} €',
+                                style: const TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 11,
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 2),
+                            if (boxContent.isEmpty && _selectedUnit != 'CAJAS')
+                              Text(
+                                '1 caja = ${_formatUnitQty(qtyPerBox, _selectedUnit)} $selectedLabel · Precio caja: ${PedidosFormatters.money(boxPrice, decimals: 3)} €',
+                                style: const TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            const SizedBox(height: 3),
+                            // Stock
                             Text(
-                              'Stock disponible: ${_formatUnitQty(selectedStock, _selectedUnit)} $selectedLabel',
+                              'Stock: ${_formatUnitQty(selectedStock, _selectedUnit)} $selectedLabel',
                               style: TextStyle(
                                 color: selectedStock > 0
                                     ? AppTheme.neonGreen
                                     : AppTheme.error,
-                                fontSize: 10,
+                                fontSize: 11,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
+                            // Minimum price for selected unit
+                            if (minPriceForSelected > 0)
+                              Text(
+                                'Precio minimo: ${PedidosFormatters.money(minPriceForSelected, decimals: 3)} €/$selectedLabel',
+                                style: TextStyle(
+                                  color: price < minPriceForSelected
+                                      ? AppTheme.error
+                                      : Colors.white38,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
                           ],
                         ),
                       );
@@ -1215,7 +1203,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                   children: [
                     if (product.precioMinimo > 0)
                       Text(
-                        'Min: ${PedidosFormatters.money(product.minimumPriceForUnit(_selectedUnit), decimals: 3)}',
+                        'Min: ${PedidosFormatters.money(product.minimumPriceForUnit(_selectedUnit), decimals: 3)} €/${Product.unitLabel(_selectedUnit)}',
                         style: TextStyle(
                           color: price > 0 &&
                                   price <
@@ -1236,8 +1224,11 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                     ),
                   ],
                 ),
-                Builder(
-                  builder: (_) {
+                Consumer(
+                  builder: (context, ref, _) {
+                    if (!ref.watch(pedidosProvider.select((p) => p.isMarginVisible))) {
+                      return const SizedBox.shrink();
+                    }
                     final costo = product.precioMinimo > 0
                         ? product.precioMinimo * 0.7
                         : product.precioTarifa1 * 0.7;

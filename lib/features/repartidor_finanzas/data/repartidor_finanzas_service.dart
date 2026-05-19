@@ -147,27 +147,29 @@ class RepartidorFinanzasService {
     required double efectivo2,
     required double entregado2,
   }) async {
-    final response = await ApiClient.post(
-      '/repartidor-finanzas/liquidaciones',
-      {
-        'repartidorId': repartidorId,
-        'date': _isoDate(date),
-        'idempotencyToken': idempotencyToken,
-        'sendEmails': true,
-        'totals': {
-          'totalEfectivo': totalEfectivo,
-          'totalCheques': totalCheques,
-          'totalTarjeta': totalTarjeta,
-          'totalPostdatados': totalPostdatados,
-          'saldoActual': saldoActual,
-          'totalCobrosDia': totalCobrosDia,
-          'totalAIngresar': totalAIngresar,
-          'ingresoBanco': ingresoBanco,
-          'gastos': gastos,
-          'efectivo2': efectivo2,
-          'entregado2': entregado2,
-        },
+    final payload = {
+      'repartidorId': repartidorId,
+      'date': _isoDate(date),
+      'idempotencyToken': idempotencyToken,
+      'sendEmails': true,
+      'totals': {
+        'totalEfectivo': totalEfectivo,
+        'totalCheques': totalCheques,
+        'totalTarjeta': totalTarjeta,
+        'totalPostdatados': totalPostdatados,
+        'saldoActual': saldoActual,
+        'totalCobrosDia': totalCobrosDia,
+        'totalAIngresar': totalAIngresar,
+        'ingresoBanco': ingresoBanco,
+        'gastos': gastos,
+        'efectivo2': efectivo2,
+        'entregado2': entregado2,
       },
+    };
+    final response = await OfflineAwareApi.post(
+      '/repartidor-finanzas/liquidaciones',
+      payload,
+      syncType: 'close_liquidacion',
     );
 
     await invalidateAllForRepartidor(repartidorId);
@@ -234,7 +236,7 @@ class RepartidorFinanzasService {
 
     final safeRep = repartidorId.replaceAll(RegExp('[^A-Za-z0-9_-]'), '_');
     final token = 'vto_${safeRep}_${DateTime.now().microsecondsSinceEpoch}';
-    await ApiClient.post(
+    await OfflineAwareApi.post(
       '/repartidor-finanzas/cobros',
       {
         'codigoCliente': codigoCliente,
@@ -256,6 +258,7 @@ class RepartidorFinanzasService {
         'idempotencyToken': token,
         'notas': 'Abono vencimiento $documento',
       },
+      syncType: 'register_cobro',
     );
 
     await invalidateAllForRepartidor(repartidorId);
@@ -269,13 +272,14 @@ class RepartidorFinanzasService {
     required String idempotencyToken,
     required String reason,
   }) async {
-    final response = await ApiClient.post(
+    final response = await OfflineAwareApi.post(
       '/repartidor-finanzas/cobros/reverse',
       {
         'repartidorId': repartidorId,
         'idempotencyToken': idempotencyToken,
         'reason': reason,
       },
+      syncType: 'reverse_cobro',
     );
     await invalidateAllForRepartidor(repartidorId);
     return Map<String, dynamic>.from(response);

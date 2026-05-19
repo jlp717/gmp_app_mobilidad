@@ -14,7 +14,7 @@ class OrderPdfGenerator {
   static const _ultraLight = '#f8f9fa';
 
   static Future<void> generateAndShare(
-      BuildContext context, OrderDetail order,) async {
+      BuildContext context, OrderDetail order, {bool isMarginVisible = true}) async {
     final pdf = pw.Document();
     final header = order.header;
     final lines = order.lines;
@@ -30,7 +30,7 @@ class OrderPdfGenerator {
           pw.SizedBox(height: 16),
           _buildLinesTable(lines),
           pw.SizedBox(height: 16),
-          _buildTotals(header, lines),
+          _buildTotals(header, lines, isMarginVisible: isMarginVisible),
           if (header.tipoVenta.isNotEmpty) ...[
             pw.SizedBox(height: 12),
             pw.Text('Tipo de venta: ${_saleTypeLabel(header.tipoVenta)}',
@@ -223,7 +223,7 @@ class OrderPdfGenerator {
     );
   }
 
-  static pw.Widget _buildTotals(OrderSummary header, List<OrderLine> lines) {
+  static pw.Widget _buildTotals(OrderSummary header, List<OrderLine> lines, {bool isMarginVisible = true}) {
     final totalVenta = lines.fold<double>(0, (s, l) => s + l.importeVenta);
     final totalMargen = lines.fold<double>(0, (s, l) => s + l.importeMargen);
     final pctMargen = totalVenta > 0 ? (totalMargen / totalVenta * 100) : 0;
@@ -246,8 +246,9 @@ class OrderPdfGenerator {
             pw.Divider(color: PdfColors.grey300),
             _totalRow('Total:', _money(totalVenta),
                 bold: true, color: PdfColor.fromHex('#003d7a'),),
-            _totalRow('Margen:',
-                '${_money(totalMargen)} (${pctMargen.toStringAsFixed(1)}%)',),
+            if (isMarginVisible)
+              _totalRow('Margen:',
+                  '${_money(totalMargen)} (${pctMargen.toStringAsFixed(1)}%)',),
           ],
         ),
       ),

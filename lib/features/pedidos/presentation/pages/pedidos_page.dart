@@ -8,6 +8,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -46,10 +48,14 @@ class PedidosPage extends ConsumerStatefulWidget {
     required this.isJefeVentas,
     super.key,
     this.forceShowVendorSelector = false,
+    this.initialClientCode,
+    this.initialClientName,
   });
   final String employeeCode;
   final bool isJefeVentas;
   final bool forceShowVendorSelector;
+  final String? initialClientCode;
+  final String? initialClientName;
 
   @override
   ConsumerState<PedidosPage> createState() => _PedidosPageState();
@@ -72,6 +78,21 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   String _orderSortBy = 'fecha';
   String _orderSortOrder = 'DESC';
 
+  // Cache guard: solo cargar datos de Mis Pedidos la primera vez
+  bool _misPedidosLoaded = false;
+  bool _evolucionLoaded = false;
+
+  // Rutero-style sort modes for order inspection
+  String _orderSortMode = 'custom'; // 'custom', 'route', 'sales_desc', 'sales_asc'
+  List<Map<String, dynamic>> _ruteroClientData = [];
+  bool _isLoadingRuteroData = false;
+  static const Map<String, String> _orderSortModeLabels = {
+    'sales_desc': 'Mayor Acumulado',
+    'sales_asc': 'Menor Acumulado',
+    'route': 'Ruta Original',
+    'custom': 'Orden Personalizado',
+  };
+
   @override
   void initState() {
     super.initState();
@@ -86,11 +107,27 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (widget.initialClientCode != null &&
+          widget.initialClientName != null) {
+        final prov = ref.read(pedidosProvider);
+        prov.setClient(widget.initialClientCode!, widget.initialClientName!);
+        prov.loadRecommendations(
+          clientCode: widget.initialClientCode!,
+          vendedorCode: widget.employeeCode,
+        );
+        prov.loadClientBalance(widget.initialClientCode!);
+      }
       _loadInitialData();
       _initOffline();
       _initFavorites();
       ref.read(pedidosProvider).addListener(_onProviderChange);
     });
+
+    if (widget.initialClientCode != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _tabController.animateTo(2);
+      });
+    }
 
     _catalogScrollController.addListener(_onCatalogScroll);
 
@@ -137,8 +174,14 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
   void _onTabChange() {
     if (_tabController.index == 1 && mounted) {
-      ref.read(pedidosProvider).loadOrderStats(vendedorCodes: _vendedorCodes);
-      _loadOrdersWithFilters(ref.read(pedidosProvider));
+      if (!_misPedidosLoaded) {
+        _misPedidosLoaded = true;
+        ref.read(pedidosProvider).loadOrderStats(vendedorCodes: _vendedorCodes);
+        _loadOrdersWithFilters(ref.read(pedidosProvider));
+        if (_ruteroClientData.isEmpty) {
+          _loadRuteroClientData();
+        }
+      }
     }
     if (_tabController.index == 0 && mounted) {
       ref.read(pedidosProvider).loadComplementaryProducts();
@@ -176,6 +219,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
   void _onVendorFilterChanged() {
     if (!mounted) return;
+    _misPedidosLoaded = false;
+    _evolucionLoaded = false;
+    _ruteroClientData = [];
     _loadInitialData();
   }
 
@@ -274,6 +320,14 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     String code, {
     String fallbackName = '',
     double suggestedEnvases = 0,
+    double? fallbackStockEnvases,
+    double? fallbackStockUnidades,
+    double? fallbackUnitsPerBox,
+    double? fallbackUnitsFraction,
+    double? fallbackPrecioTarifa1,
+    double? fallbackPrecioMinimo,
+    double? fallbackPrecioCliente,
+    String? fallbackUnitMeasure,
   }) async {
     final productCode = code.trim();
     if (productCode.isEmpty) return;
@@ -291,7 +345,6 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       return;
     }
 
-    // Always fetch fresh product detail to ensure correct price for current client
     Product? product;
     try {
       final detail = await PedidosService.getProductDetail(
@@ -299,13 +352,162 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         clientCode: provider.clientCode,
       );
       product = detail.product;
-    } catch (_) {
-      // Fallback: try to find in cached catalog
+      debugPrint(
+        '[pedidos] _openProductByCode: code=$productCode '
+        'stockEnvases=${product.stockEnvases} stockUnidades=${product.stockUnidades}',
+      );
+      // If API returned 0 stock but we have enriched data from recommendation, use it
+      if (product.stockEnvases == 0 &&
+          product.stockUnidades == 0 &&
+          fallbackStockEnvases != null &&
+          fallbackStockEnvases > 0) {
+        debugPrint(
+          '[pedidos] _openProductByCode: API returned 0 stock, '
+          'using fallback from recommendation: '
+          'envases=$fallbackStockEnvases uds=$fallbackStockUnidades',
+        );
+        product = Product(
+          code: product.code,
+          name: product.name,
+          brand: product.brand,
+          family: product.family,
+          ean: product.ean,
+          unitsPerBox: product.unitsPerBox > 1
+              ? product.unitsPerBox
+              : (fallbackUnitsPerBox ?? 1),
+          unitsFraction: product.unitsFraction > 0
+              ? product.unitsFraction
+              : (fallbackUnitsFraction ?? 0),
+          unitMeasure: product.unitMeasure.isNotEmpty
+              ? product.unitMeasure
+              : (fallbackUnitMeasure ?? ''),
+          stockEnvases: fallbackStockEnvases,
+          stockUnidades: fallbackStockUnidades ?? 0,
+          precioTarifa1: product.precioTarifa1 > 0
+              ? product.precioTarifa1
+              : (fallbackPrecioTarifa1 ?? 0),
+          precioMinimo: product.precioMinimo > 0
+              ? product.precioMinimo
+              : (fallbackPrecioMinimo ?? 0),
+          precioCliente: product.precioCliente > 0
+              ? product.precioCliente
+              : (fallbackPrecioCliente ?? 0),
+          precioTarifaCliente: product.precioTarifaCliente,
+          codigoTarifaCliente: product.codigoTarifaCliente,
+          nameExt: product.nameExt,
+          familyName: product.familyName,
+          prefamilia: product.prefamilia,
+          subFamily: product.subFamily,
+          grupoGeneral: product.grupoGeneral,
+          tipoProducto: product.tipoProducto,
+          claseArticulo: product.claseArticulo,
+          categoria: product.categoria,
+          gama: product.gama,
+          codigoIva: product.codigoIva,
+          pesoNeto: product.pesoNeto,
+          volumen: product.volumen,
+          grados: product.grados,
+          calibre: product.calibre,
+          observacion1: product.observacion1,
+          observacion2: product.observacion2,
+          presentacion: product.presentacion,
+          formato: product.formato,
+          productoPesado: product.productoPesado,
+          trazable: product.trazable,
+          unidadPale: product.unidadPale,
+          unidadFilaPale: product.unidadFilaPale,
+          fechaAlta: product.fechaAlta,
+          anoBaja: product.anoBaja,
+          mesBaja: product.mesBaja,
+          hasPurchased: product.hasPurchased,
+          salesThisYear: product.salesThisYear,
+          salesPrevYear: product.salesPrevYear,
+          yoyChange: product.yoyChange,
+          unitsRetractil: product.unitsRetractil,
+          weight: product.weight,
+        );
+      }
+    } catch (e) {
+      debugPrint(
+        '[pedidos] _openProductByCode: getProductDetail failed for '
+        '$productCode, falling back to catalog. Error: $e',
+      );
       for (final p in provider.products) {
         if (p.code == productCode) {
           product = p;
+          debugPrint(
+            '[pedidos] _openProductByCode: found in catalog, '
+            'stockEnvases=${p.stockEnvases} stockUnidades=${p.stockUnidades}',
+          );
           break;
         }
+      }
+      // If catalog also has 0 stock, use recommendation fallback
+      if (product != null &&
+          product.stockEnvases == 0 &&
+          product.stockUnidades == 0 &&
+          fallbackStockEnvases != null &&
+          fallbackStockEnvases > 0) {
+        product = Product(
+          code: product.code,
+          name: product.name,
+          brand: product.brand,
+          family: product.family,
+          ean: product.ean,
+          unitsPerBox: product.unitsPerBox > 1
+              ? product.unitsPerBox
+              : (fallbackUnitsPerBox ?? 1),
+          unitsFraction: product.unitsFraction > 0
+              ? product.unitsFraction
+              : (fallbackUnitsFraction ?? 0),
+          unitMeasure: product.unitMeasure.isNotEmpty
+              ? product.unitMeasure
+              : (fallbackUnitMeasure ?? ''),
+          stockEnvases: fallbackStockEnvases,
+          stockUnidades: fallbackStockUnidades ?? 0,
+          precioTarifa1: product.precioTarifa1 > 0
+              ? product.precioTarifa1
+              : (fallbackPrecioTarifa1 ?? 0),
+          precioMinimo: product.precioMinimo > 0
+              ? product.precioMinimo
+              : (fallbackPrecioMinimo ?? 0),
+          precioCliente: product.precioCliente > 0
+              ? product.precioCliente
+              : (fallbackPrecioCliente ?? 0),
+          precioTarifaCliente: product.precioTarifaCliente,
+          codigoTarifaCliente: product.codigoTarifaCliente,
+          nameExt: product.nameExt,
+          familyName: product.familyName,
+          prefamilia: product.prefamilia,
+          subFamily: product.subFamily,
+          grupoGeneral: product.grupoGeneral,
+          tipoProducto: product.tipoProducto,
+          claseArticulo: product.claseArticulo,
+          categoria: product.categoria,
+          gama: product.gama,
+          codigoIva: product.codigoIva,
+          pesoNeto: product.pesoNeto,
+          volumen: product.volumen,
+          grados: product.grados,
+          calibre: product.calibre,
+          observacion1: product.observacion1,
+          observacion2: product.observacion2,
+          presentacion: product.presentacion,
+          formato: product.formato,
+          productoPesado: product.productoPesado,
+          trazable: product.trazable,
+          unidadPale: product.unidadPale,
+          unidadFilaPale: product.unidadFilaPale,
+          fechaAlta: product.fechaAlta,
+          anoBaja: product.anoBaja,
+          mesBaja: product.mesBaja,
+          hasPurchased: product.hasPurchased,
+          salesThisYear: product.salesThisYear,
+          salesPrevYear: product.salesPrevYear,
+          yoyChange: product.yoyChange,
+          unitsRetractil: product.unitsRetractil,
+          weight: product.weight,
+        );
       }
     }
 
@@ -764,11 +966,19 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             (provider.clientHistory.isNotEmpty ||
                 provider.similarClients.isNotEmpty))
           RecommendationsSection(
-            onProductTap: (code, name, suggestedQty) {
+            onProductTap: (Recommendation reco) {
               _openProductByCode(
-                code,
-                fallbackName: name,
-                suggestedEnvases: suggestedQty,
+                reco.code,
+                fallbackName: reco.name,
+                suggestedEnvases: reco.suggestedUnits,
+                fallbackStockEnvases: reco.stockEnvases,
+                fallbackStockUnidades: reco.stockUnidades,
+                fallbackUnitsPerBox: reco.unitsPerBox,
+                fallbackUnitsFraction: reco.unitsFraction,
+                fallbackPrecioTarifa1: reco.precioTarifa1,
+                fallbackPrecioMinimo: reco.precioMinimo,
+                fallbackPrecioCliente: reco.precioCliente,
+                fallbackUnitMeasure: reco.unitMeasure,
               );
             },
           ),
@@ -981,27 +1191,64 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       );
     }
 
-    // Mejora 9 — Favoritos primero
-    final sortedProducts = [...provider.products]..sort((a, b) {
+    // Sort: purchased grouped first, new products at end
+    // Default mode: purchased ASC (least bought first) → new alphabetical
+    // Search mode: purchased DESC (most spent first) → new alphabetical
+    final isSearching =
+        provider.productSearch != null && provider.productSearch!.isNotEmpty;
+
+    final purchased = <Product>[];
+    final nuevos = <Product>[];
+    for (final p in provider.products) {
+      if (p.hasPurchased) {
+        purchased.add(p);
+      } else {
+        nuevos.add(p);
+      }
+    }
+
+    if (isSearching) {
+      purchased.sort((a, b) {
         final aSales = a.salesThisYear + a.salesPrevYear;
         final bSales = b.salesThisYear + b.salesPrevYear;
-        final salesCmp = aSales.compareTo(bSales);
+        final salesCmp = bSales.compareTo(aSales); // DESC: más gastado primero
         if (salesCmp != 0) return salesCmp;
-        final purchasedCmp =
-            (a.hasPurchased ? 1 : 0).compareTo(b.hasPurchased ? 1 : 0);
-        if (purchasedCmp != 0) return purchasedCmp;
-        final favoriteCmp = (provider.isFavorite(b.code) ? 1 : 0)
-            .compareTo(provider.isFavorite(a.code) ? 1 : 0);
-        if (favoriteCmp != 0) return favoriteCmp;
+        final aFav = provider.isFavorite(a.code) ? 1 : 0;
+        final bFav = provider.isFavorite(b.code) ? 1 : 0;
+        if (aFav != bFav) return bFav.compareTo(aFav);
         return a.name.compareTo(b.name);
       });
+    } else {
+      purchased.sort((a, b) {
+        final aSales = a.salesThisYear + a.salesPrevYear;
+        final bSales = b.salesThisYear + b.salesPrevYear;
+        final salesCmp = aSales.compareTo(bSales); // ASC: menos comprado primero
+        if (salesCmp != 0) return salesCmp;
+        final aFav = provider.isFavorite(a.code) ? 1 : 0;
+        final bFav = provider.isFavorite(b.code) ? 1 : 0;
+        if (aFav != bFav) return bFav.compareTo(aFav);
+        return a.name.compareTo(b.name);
+      });
+    }
+    nuevos.sort((a, b) {
+      final aFav = provider.isFavorite(a.code) ? 1 : 0;
+      final bFav = provider.isFavorite(b.code) ? 1 : 0;
+      if (aFav != bFav) return bFav.compareTo(aFav);
+      return a.name.compareTo(b.name);
+    });
+
+    final showSeparator = purchased.isNotEmpty && nuevos.isNotEmpty;
+    final displayList = <Object>[];
+    displayList.addAll(purchased);
+    if (showSeparator) displayList.add('__SEPARATOR__');
+    displayList.addAll(nuevos);
 
     return ListView.builder(
       controller: _catalogScrollController,
       padding: Responsive.contentPadding(context),
-      itemCount: sortedProducts.length + (provider.hasMoreProducts ? 1 : 0),
+      itemCount: displayList.length + (provider.hasMoreProducts ? 1 : 0),
       itemBuilder: (ctx, i) {
-        if (i >= sortedProducts.length) {
+        if (i >= displayList.length) {
           return const Padding(
             padding: EdgeInsets.all(16),
             child: Center(
@@ -1009,7 +1256,52 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             ),
           );
         }
-        final product = sortedProducts[i];
+        final item = displayList[i];
+        if (item is String) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppTheme.success,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'Ya comprados',
+                  style: TextStyle(
+                    color: Colors.white54,
+                    fontSize: Responsive.fontSize(context, small: 11, large: 12),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const Spacer(),
+                Text(
+                  'Nuevos',
+                  style: TextStyle(
+                    color: AppTheme.error,
+                    fontSize: Responsive.fontSize(context, small: 11, large: 12),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: AppTheme.error,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }
+        final product = item as Product;
         // Mejora 1 — cartQty
         OrderLine? lineInCart;
         for (final line in provider.lines) {
@@ -1060,8 +1352,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             double unidades = 0;
             if (unit == 'CAJAS') {
               envases = qty;
-              unidades =
-                  product.isDualFieldProduct ? qty * product.unitsPerBox : 0;
+              unidades = qty * (product.unitsPerBox > 0 ? product.unitsPerBox : 1);
             } else if (unit == 'KILOGRAMOS' || unit == 'LITROS') {
               unidades = qty;
             } else {
@@ -1095,9 +1386,14 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             } else {
               provider.loadComplementaryProducts();
               final unitLabel = Product.unitLabel(unit);
-              final fmtQty = qty == qty.truncateToDouble()
-                  ? qty.toStringAsFixed(0)
-                  : qty.toStringAsFixed(2);
+              final isWeight = unit == 'KILOGRAMOS' || unit == 'LITROS';
+              final fmtQty = isWeight
+                  ? (qty == qty.truncateToDouble()
+                      ? qty.toStringAsFixed(0)
+                      : qty.toStringAsFixed(2)
+                          .replaceAll(RegExp(r'0+$'), '')
+                          .replaceAll(RegExp(r'\.$'), ''))
+                  : qty.toStringAsFixed(0);
               messenger.showSnackBar(
                 SnackBar(
                   content: Text('+$fmtQty $unitLabel de ${product.name}'),
@@ -1133,12 +1429,85 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
   }
 
+  Widget _buildOrderSortModeSelector() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Row(
+        children: [
+          const Icon(Icons.sort, size: 16, color: AppTheme.textSecondary),
+          const SizedBox(width: 8),
+          const Text(
+            'Ordenar:',
+            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(
+              height: 32,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceColor,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: _orderSortMode,
+                  isExpanded: true,
+                  icon: const Icon(
+                    Icons.arrow_drop_down,
+                    size: 16,
+                    color: AppTheme.textSecondary,
+                  ),
+                  dropdownColor: AppTheme.surfaceColor,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textPrimary,
+                  ),
+                  items: _orderSortModeLabels.entries
+                      .map(
+                        (e) => DropdownMenuItem(
+                          value: e.key,
+                          child: Text(
+                            e.value,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      _onOrderSortModeChanged(value);
+                    }
+                  },
+                ),
+              ),
+            ),
+          ),
+          if (_isLoadingRuteroData) ...[
+            const SizedBox(width: 8),
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: AppTheme.neonBlue,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   // == TAB 3: Evolución (histórico global de compras) ==
 
   Widget _buildEvolucionTab() {
+    final provider = ref.read(pedidosProvider);
     return ProductsHistoryTab(
       isJefeVentas: widget.isJefeVentas,
       vendedorCodes: _vendedorCodes,
+      initialClientCode: provider.hasClient ? provider.clientCode : null,
     );
   }
 
@@ -1242,11 +1611,14 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               _orderMaxAmount = null;
               _orderSortBy = 'fecha';
               _orderSortOrder = 'DESC';
+              _orderSortMode = 'custom';
             });
             provider.setOrderStatusFilter(null);
             _loadOrdersWithFilters(provider);
           },
         ),
+        // Rutero-style sort mode selector
+        _buildOrderSortModeSelector(),
         const Divider(color: AppTheme.borderColor, height: 1),
         Expanded(
           child: RefreshIndicator(
@@ -1293,6 +1665,46 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
   }
 
+  Future<void> _loadRuteroClientData() async {
+    if (_isLoadingRuteroData) return;
+    setState(() => _isLoadingRuteroData = true);
+    try {
+      final now = DateTime.now();
+      final weekdays = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+      final dayName = weekdays[now.weekday - 1];
+      final response = await ApiClient.get(
+        '${ApiConfig.ruteroDay}/$dayName',
+        queryParameters: {
+          'vendedorCodes': _vendedorCodes,
+          'role': 'comercial',
+          'year': now.year,
+          'month': now.month,
+          'week': ((now.day + now.weekday - 2) ~/ 7) + 1,
+        },
+      );
+      if (mounted) {
+        final rawList = response['clients'] ?? <dynamic>[];
+        setState(() {
+          _ruteroClientData = (rawList as List)
+              .map((item) => Map<String, dynamic>.from(item as Map))
+              .toList();
+          _isLoadingRuteroData = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingRuteroData = false);
+      }
+    }
+  }
+
+  void _onOrderSortModeChanged(String value) {
+    setState(() => _orderSortMode = value);
+    if (_ruteroClientData.isEmpty && (value == 'custom' || value == 'sales_desc' || value == 'sales_asc')) {
+      _loadRuteroClientData();
+    }
+  }
+
   Widget _buildOrdersList(PedidosProvider provider) {
     if (provider.isLoadingOrders) {
       return const Center(
@@ -1316,21 +1728,54 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             _orderMaxAmount = null;
             _orderSortBy = 'fecha';
             _orderSortOrder = 'DESC';
+            _orderSortMode = 'custom';
           });
           provider.setOrderStatusFilter(null);
           _loadOrdersWithFilters(provider);
         },
       );
     }
+
+    // Apply rutero-style sorting to orders
+    var sortedOrders = provider.orders;
+    if (_orderSortMode != 'route') {
+      // Build a map of client code -> rutero data for fast lookup
+      final ruteroMap = <String, Map<String, dynamic>>{};
+      for (final client in _ruteroClientData) {
+        final code = client['code'] as String?;
+        if (code != null) ruteroMap[code] = client;
+      }
+
+      sortedOrders = [...provider.orders]..sort((a, b) {
+        switch (_orderSortMode) {
+          case 'custom':
+            final orderA = ruteroMap[a.clienteCode]?['order'] as int? ?? 9999;
+            final orderB = ruteroMap[b.clienteCode]?['order'] as int? ?? 9999;
+            if (orderA != orderB) return orderA.compareTo(orderB);
+            return a.clienteName.compareTo(b.clienteName);
+          case 'sales_desc':
+            final salesA = (ruteroMap[a.clienteCode]?['status'] as Map<String, dynamic>?)?['ytdSales'] as num? ?? 0;
+            final salesB = (ruteroMap[b.clienteCode]?['status'] as Map<String, dynamic>?)?['ytdSales'] as num? ?? 0;
+            return (salesB as num).compareTo(salesA as num);
+          case 'sales_asc':
+            final salesA = (ruteroMap[a.clienteCode]?['status'] as Map<String, dynamic>?)?['ytdSales'] as num? ?? 0;
+            final salesB = (ruteroMap[b.clienteCode]?['status'] as Map<String, dynamic>?)?['ytdSales'] as num? ?? 0;
+            return (salesA as num).compareTo(salesB as num);
+          case 'route':
+          default:
+            return 0; // Keep API order
+        }
+      });
+    }
+
     return ListView.builder(
       padding: const EdgeInsets.only(bottom: 16),
-      itemCount: provider.orders.length,
+      itemCount: sortedOrders.length,
       itemBuilder: (context, index) {
-        final order = provider.orders[index];
+        final order = sortedOrders[index];
         return OrderCard(
           order: order,
-          // Margen solo visible para JEFE_VENTAS (no para COMERCIAL)
-          isMarginVisible: widget.isJefeVentas,
+          isMarginVisible: ref.watch(pedidosProvider.select((p) => p.isMarginVisible)),
           onTap: () => _showOrderDetail(order),
           onDuplicate: () => _duplicateOrder(order),
           onCancel: order.estado != 'ANULADO' && order.estado != 'BORRADOR'

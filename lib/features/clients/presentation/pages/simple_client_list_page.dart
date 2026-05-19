@@ -13,7 +13,7 @@ import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Impor
 import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
-import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/enhanced_client_matrix_page.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/pedidos_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 /// Simple Clients List Page with debounced search
@@ -308,10 +308,11 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
     if (code.isNotEmpty) {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => EnhancedClientMatrixPage(
-            clientCode: code,
-            clientName: name,
+          builder: (context) => PedidosPage(
+            employeeCode: widget.employeeCode,
             isJefeVentas: widget.isJefeVentas,
+            initialClientCode: code,
+            initialClientName: name,
           ),
         ),
       );

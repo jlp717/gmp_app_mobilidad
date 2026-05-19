@@ -740,7 +740,9 @@ class OrderLine {
       claseLinea:
           (json['claseLinea'] ?? json['CLASELINEA'] ?? 'VT').toString().trim(),
     )..lineDiscountPct = _toDouble(
-        json['lineDiscountPct'] ?? json['DESCUENTO_LINEA'] ?? json['descuentoLinea'],
+        json['lineDiscountPct'] ??
+            json['DESCUENTO_LINEA'] ??
+            json['descuentoLinea'],
       );
   }
   int? id;
@@ -779,7 +781,7 @@ class OrderLine {
         'precioMinimo': precioMinimo,
         'ivaRate': ivaRate,
         'claseLinea': claseLinea,
-      'lineDiscountPct': lineDiscountPct,
+        'lineDiscountPct': lineDiscountPct,
       };
 
   /// Recalculate amounts based on current qty and price.
@@ -1111,7 +1113,8 @@ class OrderDetail {
   final List<OrderLine> lines;
 }
 
-/// Recommendation item
+/// Recommendation item — enriquecido con datos reales de producto
+/// (stock, precios, unidades, familia, marca) desde el backend.
 class Recommendation {
   Recommendation({
     required this.code,
@@ -1123,6 +1126,19 @@ class Recommendation {
     this.avgEnvases = 0,
     this.suggestedUnits = 0,
     this.clientCount = 0,
+    this.source = '',
+    this.lastPurchase,
+    // Campos enriquecidos desde DSEDAC.ART (backend los añade en getRecommendations)
+    this.family = '',
+    this.brand = '',
+    this.unitsPerBox = 1,
+    this.unitsFraction = 0,
+    this.unitMeasure = '',
+    this.stockEnvases = 0,
+    this.stockUnidades = 0,
+    this.precioTarifa1 = 0,
+    this.precioMinimo = 0,
+    this.precioCliente = 0,
   });
 
   factory Recommendation.fromJson(Map<String, dynamic> json) {
@@ -1140,8 +1156,22 @@ class Recommendation {
       clientCount: json['clientCount'] is int
           ? json['clientCount'] as int
           : int.tryParse(json['clientCount']?.toString() ?? '0') ?? 0,
+      source: (json['source'] ?? '').toString().trim(),
+      lastPurchase: json['lastPurchase']?.toString(),
+      // Campos enriquecidos (backend los añade via enrich query en pedidos.service.js)
+      family: (json['family'] ?? '').toString().trim(),
+      brand: (json['brand'] ?? '').toString().trim(),
+      unitsPerBox: _toDouble(json['unitsPerBox']),
+      unitsFraction: _toDouble(json['unitsFraction']),
+      unitMeasure: (json['unitMeasure'] ?? '').toString().trim(),
+      stockEnvases: _toDouble(json['stockEnvases']),
+      stockUnidades: _toDouble(json['stockUnidades']),
+      precioTarifa1: _toDouble(json['precioTarifa1']),
+      precioMinimo: _toDouble(json['precioMinimo']),
+      precioCliente: _toDouble(json['precioCliente']),
     );
   }
+
   final String code;
   final String name;
   final int frequency;
@@ -1149,11 +1179,62 @@ class Recommendation {
   final double totalEnvases;
   final double totalAmount;
   final double avgEnvases;
+
   /// Cantidad sugerida a comprar (preferentemente envases si hay datos).
   /// La UI debe priorizar este campo sobre `totalUnits` para evitar mostrar
   /// "0 cajas" cuando el dato real estaba en envases.
   final double suggestedUnits;
   final int clientCount;
+  final String source; // 'history' | 'similar'
+  final String? lastPurchase;
+
+  // Campos enriquecidos desde DSEDAC.ART
+  final String family;
+  final String brand;
+  final double unitsPerBox;
+  final double unitsFraction;
+  final String unitMeasure;
+  final double stockEnvases;
+  final double stockUnidades;
+  final double precioTarifa1;
+  final double precioMinimo;
+  final double precioCliente;
+
+  /// Stock total (envases + unidades convertidas a envases)
+  double get totalStock =>
+      stockEnvases + (unitsPerBox > 0 ? stockUnidades / unitsPerBox : 0);
+
+  /// Si hay stock disponible
+  bool get hasStock => stockEnvases > 0 || stockUnidades > 0;
+
+  /// Si el cliente ha comprado este producto antes.
+  /// Las recomendaciones de historial ('history') son productos que el cliente
+  /// ya compro. Las de clientes similares ('similar') son nuevos para el.
+  bool get hasPurchased => source == 'history';
+
+  /// Formatear stock para mostrar en UI
+  String get stockDisplay {
+    final parts = <String>[];
+    if (stockEnvases > 0) {
+      parts.add('${stockEnvases.toStringAsFixed(0)} cj');
+    }
+    if (stockUnidades > 0) {
+      parts.add('${stockUnidades.toStringAsFixed(0)} uds');
+    }
+    return parts.isEmpty ? 'Sin stock' : parts.join(' / ');
+  }
+
+  /// Unidades disponibles según la unidad de medida
+  double stockForUnit(String unit) {
+    switch (unit) {
+      case 'CAJAS':
+        return stockEnvases;
+      case 'UNIDADES':
+        return stockEnvases * unitsPerBox + stockUnidades;
+      default:
+        return stockEnvases;
+    }
+  }
 }
 
 // ─── SERVICE ──────────────────────────────────────────────────
@@ -1244,7 +1325,19 @@ class PedidosService {
         cacheKey: 'pedidos:detail:$trimmedCode:${clientCode ?? ''}',
         cacheTTL: const Duration(minutes: 10),
       );
-      return ProductDetail.fromJson(response);
+      final detail = ProductDetail.fromJson(response);
+      // Debug: trace if critical fields arrive as zeros
+      debugPrint(
+        '[PedidosService] getProductDetail($trimmedCode): '
+        'stockEnvases=${detail.product.stockEnvases} '
+        'stockUnidades=${detail.product.stockUnidades} '
+        'precioTarifa1=${detail.product.precioTarifa1} '
+        'precioCliente=${detail.product.precioCliente} '
+        'clientPrice=${detail.clientPrice} '
+        'tariffs=${detail.tariffs.length} '
+        'stockWH=${detail.stockByWarehouse.length}',
+      );
+      return detail;
     } catch (e) {
       debugPrint('[PedidosService] Error getProductDetail: $e');
       rethrow;
@@ -1316,16 +1409,20 @@ class PedidosService {
     String observaciones = '',
   }) async {
     try {
-      final response = await ApiClient.post('$_base/create', {
-        'clientCode': clientCode,
-        'clientName': clientName,
-        'vendedorCode': vendedorCode,
-        'tipoventa': tipoVenta,
-        'almacen': almacen,
-        'tarifa': tarifa,
-        'observaciones': observaciones,
-        'lines': lines.map((l) => l.toJson()).toList(),
-      });
+      final response = await OfflineAwareApi.post(
+        '$_base/create',
+        {
+          'clientCode': clientCode,
+          'clientName': clientName,
+          'vendedorCode': vendedorCode,
+          'tipoventa': tipoVenta,
+          'almacen': almacen,
+          'tarifa': tarifa,
+          'observaciones': observaciones,
+          'lines': lines.map((l) => l.toJson()).toList(),
+        },
+        syncType: 'create_order',
+      );
       // Invalidate orders cache
       CacheService.invalidateByPrefix('pedidos:orders:');
       return _normalizeOrderResponse(response);
@@ -1441,6 +1538,18 @@ class PedidosService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>> getAvailableVehicles() async {
+    try {
+      final response = await ApiClient.get('$_base/available-vehicles');
+      return (response['vehicles'] as List? ?? [])
+          .map((v) => Map<String, dynamic>.from(v as Map))
+          .toList();
+    } catch (e) {
+      debugPrint('[PedidosService] Error getAvailableVehicles: $e');
+      return [];
+    }
+  }
+
   static Future<List<Map<String, dynamic>>> getOrderAlbaran(int orderId) async {
     try {
       final response = await ApiClient.get('$_base/$orderId/albaran');
@@ -1469,7 +1578,11 @@ class PedidosService {
 
   static Future<void> addLine(int orderId, OrderLine line) async {
     try {
-      await ApiClient.put('$_base/$orderId/lines', data: line.toJson());
+      await OfflineAwareApi.put(
+        '$_base/$orderId/lines',
+        data: line.toJson(),
+        syncType: 'add_line',
+      );
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
     } catch (e) {
@@ -1484,7 +1597,11 @@ class PedidosService {
     Map<String, dynamic> data,
   ) async {
     try {
-      await ApiClient.put('$_base/$orderId/lines/$lineId', data: data);
+      await OfflineAwareApi.put(
+        '$_base/$orderId/lines/$lineId',
+        data: data,
+        syncType: 'update_line',
+      );
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
     } catch (e) {
@@ -1495,7 +1612,10 @@ class PedidosService {
 
   static Future<void> deleteLine(int orderId, int lineId) async {
     try {
-      await ApiClient.put('$_base/$orderId/lines/$lineId/delete');
+      await OfflineAwareApi.delete(
+        '$_base/$orderId/lines/$lineId',
+        syncType: 'delete_line',
+      );
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
     } catch (e) {
@@ -1526,14 +1646,23 @@ class PedidosService {
       if (routeCode != null && routeCode.trim().isNotEmpty) {
         data['routeCode'] = routeCode.trim();
       }
-      final response = await ApiClient.put(
+      final response = await OfflineAwareApi.put(
         '$_base/$orderId/confirm',
         data: data,
+        syncType: 'confirm_order',
       );
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
       CacheService.invalidateByPrefix('pedidos:delivery:');
       return _normalizeOrderResponse(response);
+    } on OfflineException {
+      // Offline: return optimistic result (queued)
+      debugPrint('[PedidosService] Order confirm queued for offline sync');
+      return {
+        'blocked': false,
+        'queued': true,
+        'message': 'Pedido en cola para sincronizar'
+      };
     } on ApiException catch (e) {
       // Capture only stock 409 as blocked. Delivery-date 409 must surface.
       if (e.statusCode == 409 && e.message.toLowerCase().contains('stock')) {
@@ -1554,7 +1683,10 @@ class PedidosService {
 
   static Future<void> cancelOrder(int orderId) async {
     try {
-      await ApiClient.put('$_base/$orderId/cancel');
+      await OfflineAwareApi.put(
+        '$_base/$orderId/cancel',
+        syncType: 'cancel_order',
+      );
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
     } catch (e) {
@@ -1568,9 +1700,10 @@ class PedidosService {
     String status,
   ) async {
     try {
-      final response = await ApiClient.put(
+      final response = await OfflineAwareApi.put(
         '$_base/$orderId/status',
         data: {'status': status},
+        syncType: 'update_order_status',
       );
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
