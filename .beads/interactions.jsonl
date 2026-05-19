@@ -5,3 +5,4 @@
 {"id":"int-e35f2bdd","kind":"field_change","created_at":"2026-05-18T15:24:46.1379156Z","actor":"jlp717","issue_id":"gmp_app_mobilidad-0q7","extra":{"field":"status","new_value":"in_progress","old_value":"open"}}
 {"id":"int-81c204b0","kind":"field_change","created_at":"2026-05-18T15:24:46.1397997Z","actor":"jlp717","issue_id":"gmp_app_mobilidad-0q7","extra":{"field":"assignee","new_value":"Javier","old_value":""}}
 {"id":"int-10f60e31","kind":"field_change","created_at":"2026-05-18T15:49:50.3054192Z","actor":"jlp717","issue_id":"gmp_app_mobilidad-bl3","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"Closed via update"}}
+{"id":"int-02bf55ac","kind":"field_change","created_at":"2026-05-19T12:15:59.7470269Z","actor":"jlp717","issue_id":"gmp_app_mobilidad-7ej","extra":{"field":"status","new_value":"closed","old_value":"in_progress","reason":"La pestaña Evolución de Pedidos usa de nuevo el historial/matriz de compras del cliente."}}

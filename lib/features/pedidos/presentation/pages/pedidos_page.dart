@@ -15,7 +15,7 @@ import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
-import 'package:gmp_app_mobilidad/features/products_history/presentation/widgets/products_history_tab.dart';
+import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/enhanced_client_matrix_page.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
@@ -80,10 +80,10 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
   // Cache guard: solo cargar datos de Mis Pedidos la primera vez
   bool _misPedidosLoaded = false;
-  bool _evolucionLoaded = false;
 
   // Rutero-style sort modes for order inspection
-  String _orderSortMode = 'custom'; // 'custom', 'route', 'sales_desc', 'sales_asc'
+  String _orderSortMode =
+      'custom'; // 'custom', 'route', 'sales_desc', 'sales_asc'
   List<Map<String, dynamic>> _ruteroClientData = [];
   bool _isLoadingRuteroData = false;
   static const Map<String, String> _orderSortModeLabels = {
@@ -220,7 +220,6 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   void _onVendorFilterChanged() {
     if (!mounted) return;
     _misPedidosLoaded = false;
-    _evolucionLoaded = false;
     _ruteroClientData = [];
     _loadInitialData();
   }
@@ -795,7 +794,10 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             ),
             Tab(height: 40, text: 'Mis Pedidos', icon: Icon(Icons.list_alt)),
             Tab(height: 40, text: 'Evolución', icon: Icon(Icons.show_chart)),
-            Tab(height: 40, text: 'Devoluciones', icon: Icon(Icons.assignment_return_outlined)),
+            Tab(
+                height: 40,
+                text: 'Devoluciones',
+                icon: Icon(Icons.assignment_return_outlined)),
           ],
         ),
       ),
@@ -1222,7 +1224,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       purchased.sort((a, b) {
         final aSales = a.salesThisYear + a.salesPrevYear;
         final bSales = b.salesThisYear + b.salesPrevYear;
-        final salesCmp = aSales.compareTo(bSales); // ASC: menos comprado primero
+        final salesCmp =
+            aSales.compareTo(bSales); // ASC: menos comprado primero
         if (salesCmp != 0) return salesCmp;
         final aFav = provider.isFavorite(a.code) ? 1 : 0;
         final bFav = provider.isFavorite(b.code) ? 1 : 0;
@@ -1275,7 +1278,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                   'Ya comprados',
                   style: TextStyle(
                     color: Colors.white54,
-                    fontSize: Responsive.fontSize(context, small: 11, large: 12),
+                    fontSize:
+                        Responsive.fontSize(context, small: 11, large: 12),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1284,7 +1288,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                   'Nuevos',
                   style: TextStyle(
                     color: AppTheme.error,
-                    fontSize: Responsive.fontSize(context, small: 11, large: 12),
+                    fontSize:
+                        Responsive.fontSize(context, small: 11, large: 12),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -1352,7 +1357,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             double unidades = 0;
             if (unit == 'CAJAS') {
               envases = qty;
-              unidades = qty * (product.unitsPerBox > 0 ? product.unitsPerBox : 1);
+              unidades =
+                  qty * (product.unitsPerBox > 0 ? product.unitsPerBox : 1);
             } else if (unit == 'KILOGRAMOS' || unit == 'LITROS') {
               unidades = qty;
             } else {
@@ -1390,7 +1396,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               final fmtQty = isWeight
                   ? (qty == qty.truncateToDouble()
                       ? qty.toStringAsFixed(0)
-                      : qty.toStringAsFixed(2)
+                      : qty
+                          .toStringAsFixed(2)
                           .replaceAll(RegExp(r'0+$'), '')
                           .replaceAll(RegExp(r'\.$'), ''))
                   : qty.toStringAsFixed(0);
@@ -1500,14 +1507,62 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
   }
 
-  // == TAB 3: Evolución (histórico global de compras) ==
+  // == TAB 3: Evolución (historial de compras del cliente) ==
 
   Widget _buildEvolucionTab() {
-    final provider = ref.read(pedidosProvider);
-    return ProductsHistoryTab(
+    final provider = ref.watch(pedidosProvider);
+    final clientCode =
+        (provider.hasClient ? provider.clientCode : widget.initialClientCode)
+            ?.trim();
+    final clientName = provider.hasClient
+        ? (provider.clientName ?? 'Cliente')
+        : (widget.initialClientName ?? 'Cliente');
+
+    if (clientCode == null || clientCode.isEmpty) {
+      return _buildEvolutionNoClientState();
+    }
+
+    return EnhancedClientMatrixPage(
+      key: ValueKey('client_purchase_history_$clientCode'),
+      clientCode: clientCode,
+      clientName: clientName,
       isJefeVentas: widget.isJefeVentas,
-      vendedorCodes: _vendedorCodes,
-      initialClientCode: provider.hasClient ? provider.clientCode : null,
+    );
+  }
+
+  Widget _buildEvolutionNoClientState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.person_search_outlined,
+              size: 64,
+              color: Colors.white.withValues(alpha: 0.28),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Selecciona un cliente',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.86),
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'La evolución muestra el historial de compras general del cliente.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.56),
+                fontSize: 13,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1670,7 +1725,15 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     setState(() => _isLoadingRuteroData = true);
     try {
       final now = DateTime.now();
-      final weekdays = ['lunes', 'martes', 'miercoles', 'jueves', 'viernes', 'sabado', 'domingo'];
+      final weekdays = [
+        'lunes',
+        'martes',
+        'miercoles',
+        'jueves',
+        'viernes',
+        'sabado',
+        'domingo'
+      ];
       final dayName = weekdays[now.weekday - 1];
       final response = await ApiClient.get(
         '${ApiConfig.ruteroDay}/$dayName',
@@ -1700,7 +1763,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
   void _onOrderSortModeChanged(String value) {
     setState(() => _orderSortMode = value);
-    if (_ruteroClientData.isEmpty && (value == 'custom' || value == 'sales_desc' || value == 'sales_asc')) {
+    if (_ruteroClientData.isEmpty &&
+        (value == 'custom' || value == 'sales_desc' || value == 'sales_asc')) {
       _loadRuteroClientData();
     }
   }
@@ -1747,25 +1811,33 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       }
 
       sortedOrders = [...provider.orders]..sort((a, b) {
-        switch (_orderSortMode) {
-          case 'custom':
-            final orderA = ruteroMap[a.clienteCode]?['order'] as int? ?? 9999;
-            final orderB = ruteroMap[b.clienteCode]?['order'] as int? ?? 9999;
-            if (orderA != orderB) return orderA.compareTo(orderB);
-            return a.clienteName.compareTo(b.clienteName);
-          case 'sales_desc':
-            final salesA = (ruteroMap[a.clienteCode]?['status'] as Map<String, dynamic>?)?['ytdSales'] as num? ?? 0;
-            final salesB = (ruteroMap[b.clienteCode]?['status'] as Map<String, dynamic>?)?['ytdSales'] as num? ?? 0;
-            return (salesB as num).compareTo(salesA as num);
-          case 'sales_asc':
-            final salesA = (ruteroMap[a.clienteCode]?['status'] as Map<String, dynamic>?)?['ytdSales'] as num? ?? 0;
-            final salesB = (ruteroMap[b.clienteCode]?['status'] as Map<String, dynamic>?)?['ytdSales'] as num? ?? 0;
-            return (salesA as num).compareTo(salesB as num);
-          case 'route':
-          default:
-            return 0; // Keep API order
-        }
-      });
+          switch (_orderSortMode) {
+            case 'custom':
+              final orderA = ruteroMap[a.clienteCode]?['order'] as int? ?? 9999;
+              final orderB = ruteroMap[b.clienteCode]?['order'] as int? ?? 9999;
+              if (orderA != orderB) return orderA.compareTo(orderB);
+              return a.clienteName.compareTo(b.clienteName);
+            case 'sales_desc':
+              final salesA = (ruteroMap[a.clienteCode]?['status']
+                      as Map<String, dynamic>?)?['ytdSales'] as num? ??
+                  0;
+              final salesB = (ruteroMap[b.clienteCode]?['status']
+                      as Map<String, dynamic>?)?['ytdSales'] as num? ??
+                  0;
+              return (salesB as num).compareTo(salesA as num);
+            case 'sales_asc':
+              final salesA = (ruteroMap[a.clienteCode]?['status']
+                      as Map<String, dynamic>?)?['ytdSales'] as num? ??
+                  0;
+              final salesB = (ruteroMap[b.clienteCode]?['status']
+                      as Map<String, dynamic>?)?['ytdSales'] as num? ??
+                  0;
+              return (salesA as num).compareTo(salesB as num);
+            case 'route':
+            default:
+              return 0; // Keep API order
+          }
+        });
     }
 
     return ListView.builder(
@@ -1775,7 +1847,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         final order = sortedOrders[index];
         return OrderCard(
           order: order,
-          isMarginVisible: ref.watch(pedidosProvider.select((p) => p.isMarginVisible)),
+          isMarginVisible:
+              ref.watch(pedidosProvider.select((p) => p.isMarginVisible)),
           onTap: () => _showOrderDetail(order),
           onDuplicate: () => _duplicateOrder(order),
           onCancel: order.estado != 'ANULADO' && order.estado != 'BORRADOR'
