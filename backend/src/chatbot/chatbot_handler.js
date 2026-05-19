@@ -167,36 +167,36 @@ async function handleChatMessage(conn, message, vendedorCodes, providedClientCod
 
     // ── GREETING ──
     if (intentPatterns.saludo.test(msg)) {
-        return `**Asistente NEXUS Activo**
+        return `**NEXUS — Sistema de consulta comercial GMP**
 
-Puedo ayudarte con:
-- **Comisiones**: "Mis comisiones", "Comision del mes"
-- **Objetivos**: "Cumplimiento de objetivo", "Objetivo por familia"
-- **Margenes**: "Mi margen global", "Margen cliente 12345"
+Consultas disponibles:
+- **Comisiones**: "Mis comisiones", "Comision de marzo"
+- **Objetivos**: "Cumplimiento objetivo", "Objetivo por familia"
+- **Margenes**: "Margen global", "Margen cliente 12345"
 - **Precios**: "Precio producto ABC", "Precio minimo"
-- **Deudas**: "Deuda del cliente 12345"
-- **Cobros**: "Cobros pendientes", "Resumen de cobros"
-- **Bolsa**: "Saldo de mi bolsa", "Movimientos de bolsa"
+- **Deudas**: "Deuda cliente 12345"
+- **Cobros**: "Cobros pendientes", "Resumen cobros mes"
+- **Bolsa**: "Saldo bolsa", "Movimientos bolsa"
 - **Stock**: "Stock producto XYZ"
-- **Facturas**: "Facturas pendientes", "Detalle factura"
-- **Pedidos**: "Pedidos de hoy", "Pedidos del cliente"
-- **Evolucion**: "Evolucion de ventas", "Productos en tendencia"
+- **Facturas**: "Facturas cliente 12345"
+- **Pedidos**: "Pedidos hoy", "Pedidos cliente"
+- **Evolucion**: "Evolucion ventas", "Productos en tendencia"
 - **Top**: "Top clientes", "Top productos"
 - **Comparativas**: "Ventas 2024 vs 2023"
-- **Repartidor**: "Mis cobros", "Entregas de hoy"
-- **Almacen**: "Camiones de hoy", "Vehiculos"
+- **Repartidor**: "Cobros repartidor", "Entregas hoy"
+- **Almacen**: "Camiones hoy", "Vehiculos"
 
-Escribe "ayuda" para ver comandos detallados.`;
+Escribe "ayuda" para detalle de comandos.`;
     }
 
     // ── HELP ──
     if (intentPatterns.ayuda.test(msg)) {
-        return `**Comandos Disponibles — NEXUS AI**
+        return `**Comandos NEXUS**
 
 **Finanzas**
-- "Mis comisiones" o "Comision de marzo"
-- "Objetivo del mes" o "Cumplimiento objetivo"
-- "Margen global" o "Margen cliente 12345"
+- "Mis comisiones" | "Comision marzo"
+- "Objetivo mes" | "Cumplimiento objetivo"
+- "Margen global" | "Margen cliente 12345"
 
 **Precios**
 - "Precio producto ABC"
@@ -204,45 +204,40 @@ Escribe "ayuda" para ver comandos detallados.`;
 - "Simula 15% descuento producto ABC"
 
 **Clientes**
-- "Deuda del cliente 12345"
+- "Deuda cliente 12345"
 - "Historial cliente 12345"
 - "Buscar cliente Garcia"
-- "Riesgo del cliente 12345"
-- "Credito del cliente 12345"
-- "Esta bloqueado el 12345?"
+- "Riesgo cliente 12345"
+- "Credito cliente 12345"
+- "Bloqueado 12345?"
 
 **Operaciones**
 - "Stock producto ABC"
-- "Facturas pendientes del cliente 12345"
-- "Pedidos de hoy"
+- "Facturas cliente 12345"
+- "Pedidos hoy"
 - "Cobros pendientes"
 
 **Analisis**
-- "Evolucion de ventas"
-- "Top clientes del mes"
+- "Evolucion ventas"
+- "Top clientes mes"
 - "Comparativa 2024 vs 2023"
 - "Productos en tendencia"
 
 **Bolsa**
-- "Saldo de mi bolsa"
-- "Movimientos de bolsa"
+- "Saldo bolsa" | "Movimientos bolsa"
 
-**Nota**: Incluye siempre el codigo de cliente o producto cuando sea posible.`;
+Incluye codigo de cliente o producto cuando sea posible.`;
     }
 
     // ── COMMISSIONS ──
     if (intentPatterns.comision.test(msg) && !intentPatterns.comisionDetalle.test(msg) && !intentPatterns.comisionConfig.test(msg)) {
         try {
             const userCode = vendedorCodes && vendedorCodes.length > 0 ? vendedorCodes[0] : '';
-            const isJefeVentas = false; // Fallback doesn't have role info
+            const isJefeVentas = false;
             const result = await commissionTools.getCommissions(conn, userCode, isJefeVentas, codes.month, undefined, vendedorCodes);
-            return `**Comisiones ${result.month}/${result.year}**
-
-- Ventas: **${result.sales.toLocaleString('es-ES')}€**
-- Comision: **${result.commission.toLocaleString('es-ES')}€**
-- Porcentaje: ${result.commissionPercent}%
-- Clientes activos: ${result.activeClients}
-- Operaciones: ${result.operations}`;
+            return `Comision ${result.month}/${result.year}:
+**${result.commission.toLocaleString('es-ES')}€** sobre ventas de **${result.sales.toLocaleString('es-ES')}€** (${result.commissionPercent}%)
+Clientes activos: ${result.activeClients} | Operaciones: ${result.operations}`;
         } catch (e) {
             return `Error obteniendo comisiones: ${e.message}`;
         }
@@ -269,13 +264,10 @@ Escribe "ayuda" para ver comandos detallados.`;
         try {
             const userCode = vendedorCodes && vendedorCodes.length > 0 ? vendedorCodes[0] : '';
             const result = await objectivesTools.getObjectives(conn, userCode, false, codes.month, undefined, vendedorCodes);
-            const status = result.achievementPercent >= 100 ? '**OBJETIVO CUMPLIDO**' : `Faltan ${(result.target - result.achieved).toLocaleString('es-ES')}€`;
-            return `**Objetivos ${result.month}/${result.year}**
-
-- Objetivo: **${result.target.toLocaleString('es-ES')}€**
-- Alcanzado: **${result.achieved.toLocaleString('es-ES')}€**
-- Cumplimiento: **${result.achievementPercent}%**
-- ${status}`;
+            const status = result.achievementPercent >= 100 ? 'OBJETIVO CUMPLIDO' : `Faltan ${(result.target - result.achieved).toLocaleString('es-ES')}€`;
+            return `Objetivo ${result.month}/${result.year}:
+Alcanzado: **${result.achieved.toLocaleString('es-ES')}€** de ${result.target.toLocaleString('es-ES')}€ (**${result.achievementPercent}%**)
+${status}`;
         } catch (e) {
             return `Error obteniendo objetivos: ${e.message}`;
         }
@@ -286,16 +278,11 @@ Escribe "ayuda" para ver comandos detallados.`;
         try {
             const userCode = vendedorCodes && vendedorCodes.length > 0 ? vendedorCodes[0] : '';
             const result = await commercialTools.getMarginGlobal(conn, userCode, false, codes.month, undefined, vendedorCodes);
-            return `**Margen Global - ${result.month}/${result.year}**
-
-- Ventas: **${result.sales.toLocaleString('es-ES')}€**
-- Coste: ${result.cost.toLocaleString('es-ES')}€
-- Beneficio: **${result.profit.toLocaleString('es-ES')}€**
-- Margen: **${result.marginPercent}%**
-- Clientes activos: ${result.clients}
-- Operaciones: ${result.operations}`;
+            return `Margen ${result.month}/${result.year}:
+Ventas: **${result.sales.toLocaleString('es-ES')}€** | Coste: ${result.cost.toLocaleString('es-ES')}€ | Beneficio: **${result.profit.toLocaleString('es-ES')}€**
+Margen: **${result.marginPercent}%** | Clientes: ${result.clients} | Operaciones: ${result.operations}`;
         } catch (e) {
-            return `Error calculando margen global: ${e.message}`;
+            return `Error calculando margen: ${e.message}`;
         }
     }
 
@@ -304,13 +291,9 @@ Escribe "ayuda" para ver comandos detallados.`;
         try {
             const userCode = vendedorCodes && vendedorCodes.length > 0 ? vendedorCodes[0] : '';
             const result = await commercialTools.getMarginByClient(conn, clientCode, userCode, false, vendedorCodes);
-            return `**Margen Cliente ${clientCode}**
-
-- Ventas totales: **${result.sales.toLocaleString('es-ES')}€**
-- Coste productos: ${result.cost.toLocaleString('es-ES')}€
-- Beneficio bruto: **${result.profit.toLocaleString('es-ES')}€**
-- Margen: **${result.marginPercent}%**
-- Operaciones: ${result.operations}`;
+            return `Margen cliente ${clientCode}:
+Ventas: **${result.sales.toLocaleString('es-ES')}€** | Coste: ${result.cost.toLocaleString('es-ES')}€ | Beneficio: **${result.profit.toLocaleString('es-ES')}€**
+Margen: **${result.marginPercent}%** | Operaciones: ${result.operations}`;
         } catch (e) {
             return `Error calculando margen: ${e.message}`;
         }
@@ -319,24 +302,16 @@ Escribe "ayuda" para ver comandos detallados.`;
     // ── DEBT ──
     if (intentPatterns.deuda.test(msg)) {
         if (!clientCode) {
-            return 'Necesito el codigo de cliente. Ejemplo: "Deuda del cliente 12345"';
+            return 'Necesito codigo de cliente. Ejemplo: "Deuda cliente 12345"';
         }
         try {
             const debt = await riskTools.getClientDebt(conn, clientCode);
-            const status = debt.riskLevel === 'ALTO' ? '**ALTO RIESGO**' : debt.riskLevel === 'MEDIO' ? '**RIESGO MEDIO**' : 'BAJO RIESGO';
-            return `**Deuda Cliente ${clientCode}** [${status}]
-
-- Total pendiente: **${debt.totalDebt.toLocaleString('es-ES')}€**
-- Vencido: **${debt.overdueDebt.toLocaleString('es-ES')}€**
-- Facturas abiertas: ${debt.numInvoices}
-
-**Antiguedad**:
-- 1-30 dias: ${debt.aging.days_1_30.toLocaleString('es-ES')}€
-- 31-60 dias: ${debt.aging.days_31_60.toLocaleString('es-ES')}€
-- 61-90 dias: ${debt.aging.days_61_90.toLocaleString('es-ES')}€
-- +90 dias: **${debt.aging.days_over_90.toLocaleString('es-ES')}€**
-
-${debt.overdueDebt > 1000 ? '**Recomendacion**: No ampliar credito sin cobrar primero.' : 'Estado de pago correcto.'}`;
+            const status = debt.riskLevel === 'ALTO' ? 'ALTO RIESGO' : debt.riskLevel === 'MEDIO' ? 'RIESGO MEDIO' : 'BAJO RIESGO';
+            const action = debt.overdueDebt > 1000 ? 'No ampliar credito sin cobrar primero' : 'Estado de pago correcto';
+            return `Deuda cliente ${clientCode} [${status}]
+Pendiente: **${debt.totalDebt.toLocaleString('es-ES')}€** | Vencido: **${debt.overdueDebt.toLocaleString('es-ES')}€**
+1-30d: ${debt.aging.days_1_30.toLocaleString('es-ES')}€ | 31-60d: ${debt.aging.days_31_60.toLocaleString('es-ES')}€ | 61-90d: ${debt.aging.days_61_90.toLocaleString('es-ES')}€ | +90d: **${debt.aging.days_over_90.toLocaleString('es-ES')}€**
+${action}`;
         } catch (e) {
             return `Error: ${e.message}`;
         }
@@ -404,19 +379,15 @@ ${risk.alerts.length > 0 ? risk.alerts.map(a => `- ${a}`).join('\n') : '- Sin al
     // ── PRICE ──
     if (intentPatterns.precio.test(msg) && !intentPatterns.descuento.test(msg) && !intentPatterns.minimo.test(msg)) {
         if (!productCode) {
-            return 'Necesito el codigo de producto. Ejemplo: "Precio del producto ABC123"';
+            return 'Necesito codigo de producto. Ejemplo: "Precio producto ABC123"';
         }
         try {
             const price = await pricingTools.getProductPrice(conn, productCode);
-            if (!price.product.CODIGOARTICULO) return `Producto ${productCode} no encontrado.`;
+            if (!price.product.CODIGOARTICULO) return `Producto ${productCode} no registrado.`;
             const margen = price.tariffPrice > 0 ? Math.round(((price.tariffPrice - price.cost) / price.tariffPrice) * 100) : 0;
-            return `**Producto ${productCode}**
-
-- Descripcion: ${price.product.DESCRIPCIONARTICULO?.trim() || 'Sin descripcion'}
-- Tarifa: **${price.tariffPrice.toLocaleString('es-ES')}€**
-- Coste: ${price.cost.toLocaleString('es-ES')}€
-- Ultimo vendido: ${price.lastSoldPrice.toLocaleString('es-ES')}€
-- Margen tarifa: ${margen}%`;
+            return `Producto ${productCode}: ${price.product.DESCRIPCIONARTICULO?.trim() || 'Sin descripcion'}
+Tarifa: **${price.tariffPrice.toLocaleString('es-ES')}€** | Coste: ${price.cost.toLocaleString('es-ES')}€ | Margen: ${margen}%
+Ultimo vendido: ${price.lastSoldPrice.toLocaleString('es-ES')}€`;
         } catch (e) {
             return `Error: ${e.message}`;
         }
@@ -425,21 +396,16 @@ ${risk.alerts.length > 0 ? risk.alerts.map(a => `- ${a}`).join('\n') : '- Sin al
     // ── MINIMUM PRICE ──
     if (intentPatterns.minimo.test(msg)) {
         if (!productCode) {
-            return 'Necesito el codigo de producto. Ejemplo: "Precio minimo del producto ABC123"';
+            return 'Necesito codigo de producto. Ejemplo: "Precio minimo producto ABC123"';
         }
         try {
             const breakeven = await pricingTools.calculateBreakeven(conn, productCode);
             if (breakeven.error) return breakeven.error;
-            return `**Precio Minimo - Producto ${productCode}**
-
-- Coste: ${breakeven.cost.toLocaleString('es-ES')}€
-- Tarifa oficial: ${breakeven.tariffPrice.toLocaleString('es-ES')}€
-- Precio suelo: **${breakeven.floorPrice.toLocaleString('es-ES')}€**
-
-**Margen minimo requerido**: ${breakeven.minMarginPercent}%
-**Margen actual**: ${Math.round(breakeven.currentMarginPercent)}%
-
-**Limite**: No vender por debajo de ${breakeven.floorPrice.toLocaleString('es-ES')}€`;
+            return `Precio minimo producto ${productCode}:
+Coste: ${breakeven.cost.toLocaleString('es-ES')}€ | Tarifa: ${breakeven.tariffPrice.toLocaleString('es-ES')}€
+Precio suelo: **${breakeven.floorPrice.toLocaleString('es-ES')}€** (margen minimo ${breakeven.minMarginPercent}%)
+Margen actual: ${Math.round(breakeven.currentMarginPercent)}%
+No vender por debajo de ${breakeven.floorPrice.toLocaleString('es-ES')}€`;
         } catch (e) {
             return `Error: ${e.message}`;
         }
@@ -448,21 +414,16 @@ ${risk.alerts.length > 0 ? risk.alerts.map(a => `- ${a}`).join('\n') : '- Sin al
     // ── DISCOUNT SIMULATION ──
     if (intentPatterns.descuento.test(msg)) {
         if (!productCode) {
-            return 'Necesito el codigo de producto. Ejemplo: "Simula 10% descuento en producto ABC123"';
+            return 'Necesito codigo de producto y descuento. Ejemplo: "Simula 10% descuento producto ABC123"';
         }
         try {
             const discountPercent = codes.percent || 10;
             const sim = await pricingTools.simulateDiscount(conn, productCode, discountPercent);
             if (sim.error) return sim.error;
-            return `**Simulacion Descuento ${discountPercent}% - Producto ${productCode}**
-
-- Precio original: ${sim.originalPrice.toLocaleString('es-ES')}€
-- Precio con descuento: **${sim.newPrice.toLocaleString('es-ES')}€**
-- Margen original: ${sim.originalMargin.toLocaleString('es-ES')}€
-- Nuevo margen: **${sim.newMargin.toLocaleString('es-ES')}€**
-- Impacto por unidad: ${sim.marginLoss.toLocaleString('es-ES')}€
-
-**Resultado**: ${sim.profitable ? '**RENTABLE**' : '**NO RENTABLE** - Genera perdidas'}`;
+            return `Descuento ${discountPercent}% — Producto ${productCode}:
+Precio: ${sim.originalPrice.toLocaleString('es-ES')}€ → **${sim.newPrice.toLocaleString('es-ES')}€**
+Margen: ${sim.originalMargin.toLocaleString('es-ES')}€ → **${sim.newMargin.toLocaleString('es-ES')}€**
+${sim.profitable ? 'RENTABLE' : 'NO RENTABLE — genera perdidas'}`;
         } catch (e) {
             return `Error: ${e.message}`;
         }
@@ -513,20 +474,16 @@ ${churn.count > 5 ? `\n...y ${churn.count - 5} mas` : ''}
     // ── STOCK ──
     if (intentPatterns.stock.test(msg)) {
         if (!productCode) {
-            return 'Necesito el codigo de producto. Ejemplo: "Stock del producto ABC123"';
+            return 'Necesito codigo de producto. Ejemplo: "Stock producto ABC123"';
         }
         try {
             const stock = await logisticsTools.getStockByWarehouse(conn, productCode);
-            if (stock.warehouses.length === 0) return `Sin informacion de stock para producto ${productCode}.`;
+            if (stock.warehouses.length === 0) return `Sin stock para producto ${productCode}.`;
             const list = stock.warehouses.map(w => `- Almacen ${w.warehouse}: ${w.stock} uds`).join('\n');
-            const status = stock.totalStock > 10 ? 'DISPONIBLE' : stock.totalStock > 0 ? '**STOCK BAJO**' : '**SIN STOCK**';
-            return `**Stock Producto ${productCode}** [${status}]
-
-**Total disponible**: ${stock.totalStock} unidades
-
-${list}
-
-${stock.totalStock === 0 ? '**Atencion**: Sin stock.' : ''}`;
+            const status = stock.totalStock > 10 ? 'DISPONIBLE' : stock.totalStock > 0 ? 'STOCK BAJO' : 'SIN STOCK';
+            return `Stock ${productCode} [${status}]
+Total: **${stock.totalStock}** unidades
+${list}`;
         } catch (e) {
             return `Error: ${e.message}`;
         }
@@ -605,19 +562,15 @@ ${stock.totalStock === 0 ? '**Atencion**: Sin stock.' : ''}`;
     }
 
     // ── DEFAULT ──
-    return `No he podido interpretar tu consulta con el sistema de respaldo.
+    return `Consulta no reconocida.
 
-**Ejemplos de consultas**:
-- "Mis comisiones" o "Comision de marzo"
-- "Deuda del cliente 12345"
-- "Precio del producto ABC"
-- "Stock del producto XYZ"
-- "Margen global"
-- "Objetivo del mes"
-- "Cobros pendientes"
-- "Facturas del cliente 12345"
+Ejemplos validos:
+- "Mis comisiones" | "Deuda cliente 12345"
+- "Precio producto ABC" | "Stock producto XYZ"
+- "Margen global" | "Objetivo mes"
+- "Cobros pendientes" | "Facturas cliente 12345"
 
-Escribe "ayuda" para ver todos los comandos.`;
+Escribe "ayuda" para lista completa.`;
 }
 
 module.exports = { handleChatMessage };
