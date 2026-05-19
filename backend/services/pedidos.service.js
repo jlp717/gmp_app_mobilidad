@@ -678,24 +678,24 @@ async function getDeliveryOptions({ clientCode, vendedorCode, deliveryDate }) {
 async function getAvailableVehicles() {
     try {
         const sql = `
-            SELECT 
-                ACC.ID as code,
-                ACC.MATRICULA as matricula,
-                ACC.CAPACIDAD_PESO as capacidadPeso,
-                ACC.CAPACIDAD_VOLUMEN as capacidadVolumen,
-                ACC.NOTAS as description,
-                '1' as activo
-            FROM JAVIER.ALMACEN_CAMIONES_CONFIG ACC
-            WHERE ACC.ACTIVO = 1
-            ORDER BY ACC.MATRICULA
+            SELECT
+                V.CODIGOVEHICULO AS code,
+                V.MATRICULA      AS matricula,
+                V.DESCRIPCIONVEHICULO AS description,
+                V.CODIGOCONDUCTOR AS driverCode,
+                V.TONELADAS      AS toneladas,
+                V.CARGAMAXIMA    AS cargaMaxima
+            FROM DSEDAC.VEH V
+            ORDER BY V.CODIGOVEHICULO
         `;
-        const result = await getPool().request().query(sql);
-        return (result.recordset || []).map(row => ({
-            code: trimString(row.code || '').substring(0, 10),
-            matricula: trimString(row.matricula || ''),
-            description: trimString(row.description || ''),
-            capacidadPeso: numberValue(row.capacidadPeso),
-            capacidadVolumen: numberValue(row.capacidadVolumen),
+        const rows = await queryWithParams(sql, []);
+        return (rows || []).map(row => ({
+            code:        trimString(row.CODE        || row.code        || '').substring(0, 10),
+            matricula:   trimString(row.MATRICULA   || row.matricula   || ''),
+            description: trimString(row.DESCRIPTION || row.description || ''),
+            driverCode:  trimString(row.DRIVERCODE  || row.driverCode  || ''),
+            toneladas:   numberValue(row.TONELADAS  || row.toneladas),
+            cargaMaxima: numberValue(row.CARGAMAXIMA|| row.cargaMaxima),
         }));
     } catch (error) {
         logger.error(`[PEDIDOS] getAvailableVehicles error: ${error.message}`);
