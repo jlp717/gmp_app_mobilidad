@@ -459,7 +459,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
               ),
               _buildStatItem(
                 context,
-                '${provider.totalUnidades.toStringAsFixed(0)} uds',
+                _formatTotalUnits(provider),
                 Icons.widgets_outlined,
                 Colors.white70,
               ),
@@ -469,12 +469,13 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                 Icons.euro,
                 AppTheme.neonGreen,
               ),
-              _buildStatItem(
-                context,
-                '${margin.toStringAsFixed(1)}%',
-                Icons.trending_up,
-                marginColor,
-              ),
+              if (provider.isMarginVisible)
+                _buildStatItem(
+                  context,
+                  '${margin.toStringAsFixed(1)}%',
+                  Icons.trending_up,
+                  marginColor,
+                ),
             ],
           ),
           // C3 – IVA breakdown
@@ -565,7 +566,8 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.neonGreen,
                 foregroundColor: AppTheme.darkBase,
-                disabledBackgroundColor: AppTheme.neonGreen.withValues(alpha: 0.5),
+                disabledBackgroundColor:
+                    AppTheme.neonGreen.withValues(alpha: 0.5),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -616,6 +618,22 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     return '$h:$m';
   }
 
+  String _formatTotalUnits(PedidosProvider provider) {
+    final total = provider.totalUnidades;
+    final hasWeightLines = provider.lines.any((l) {
+      final u = l.unidadMedida.toUpperCase().trim();
+      return u == 'KILOGRAMOS' || u == 'LITROS';
+    });
+    if (hasWeightLines) {
+      final formatted = total
+          .toStringAsFixed(2)
+          .replaceAll(RegExp(r'0+$'), '')
+          .replaceAll(RegExp(r'\.$'), '');
+      return '$formatted uds';
+    }
+    return '${total.toStringAsFixed(0)} uds';
+  }
+
   void _showEditLineDialog(
     BuildContext context,
     PedidosProvider provider,
@@ -625,29 +643,40 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     final isDual = line.unidadesCaja > 1 &&
         line.unidadesFraccion > 0 &&
         line.unidadesFraccion < line.unidadesCaja;
-    String formatQty(double v) => v
-        .toStringAsFixed(2)
-        .replaceAll(RegExp(r'\.00$'), '')
-        .replaceAll(RegExp(r'0$'), '')
-        .replaceAll(RegExp(r'\.$'), '');
+    String formatQty(double v, String unit) {
+      final isWeight =
+          unit.toUpperCase() == 'KILOGRAMOS' || unit.toUpperCase() == 'LITROS';
+      if (isWeight) {
+        return v
+            .toStringAsFixed(2)
+            .replaceAll(RegExp(r'0+$'), '')
+            .replaceAll(RegExp(r'\.$'), '');
+      }
+      return v.toStringAsFixed(0);
+    }
 
     final qtyController = TextEditingController(
       text: formatQty(
         line.cantidadEnvases > 0 ? line.cantidadEnvases : line.cantidadUnidades,
+        line.unidadMedida,
       ),
     );
     final cajasController = TextEditingController(
-      text: line.cantidadEnvases > 0 ? formatQty(line.cantidadEnvases) : '',
+      text: line.cantidadEnvases > 0
+          ? formatQty(line.cantidadEnvases, 'CAJAS')
+          : '',
     );
     final unidadesController = TextEditingController(
-      text: line.cantidadUnidades > 0 ? formatQty(line.cantidadUnidades) : '',
+      text: line.cantidadUnidades > 0
+          ? formatQty(line.cantidadUnidades, line.unidadMedida)
+          : '',
     );
     final priceController =
         TextEditingController(text: line.precioVenta.toStringAsFixed(3));
 
     final unitLabel = Product.unitLabel(line.unidadMedida);
     final equivText = line.unidadesCaja > 1
-        ? '1 cj = ${formatQty(line.unidadesCaja)} uds'
+        ? '1 cj = ${formatQty(line.unidadesCaja, line.unidadMedida)} uds'
         : null;
 
     showDialog<void>(
@@ -792,7 +821,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                             final cur =
                                 double.tryParse(val.replaceAll(',', '.')) ?? 0;
                             unidadesController.text =
-                                formatQty(cur * line.unidadesCaja);
+                                formatQty(cur * line.unidadesCaja, 'UNIDADES');
                           },
                         ),
                       ),
@@ -811,7 +840,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                           textAlign: TextAlign.center,
                           decoration: InputDecoration(
                             labelText:
-                                'Uds (${formatQty(line.unidadesCaja)} U/C)',
+                                'Uds (${formatQty(line.unidadesCaja, 'UNIDADES')} U/C)',
                             labelStyle: const TextStyle(color: Colors.white70),
                             filled: true,
                             fillColor: AppTheme.darkCard,
@@ -837,7 +866,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                             final cur =
                                 double.tryParse(val.replaceAll(',', '.')) ?? 0;
                             cajasController.text =
-                                formatQty(cur / line.unidadesCaja);
+                                formatQty(cur / line.unidadesCaja, 'CAJAS');
                           },
                         ),
                       ),
@@ -1239,7 +1268,10 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
 
           _obsCtrl.clear();
           _discountCtrl.clear();
-          await provider.loadPromotions();
+          // Fire-and-forget: do NOT await these — the modal should close
+          // immediately after a successful confirmation. Awaiting loadPromotions()
+          // was the root cause of the "modal stuck after confirm" bug.
+          provider.loadPromotions();
           provider.loadOrders(
             vendedorCodes: widget.vendedorCode,
             forceRefresh: true,
@@ -1248,18 +1280,24 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
             vendedorCodes: widget.vendedorCode,
             forceRefresh: true,
           );
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Pedido #${result['numeroPedido'] ?? ''} confirmado correctamente',
-              ),
-              backgroundColor: AppTheme.neonGreen,
-            ),
-          );
         }
         return result;
       },
-    );
+    ).then((result) {
+      // This runs AFTER the preview dialog is closed
+      if (result == null || result is! Map<String, dynamic>) return;
+      if (!context.mounted) return;
+      if (_handleBlockedOrUnconfirmedResult(context, result)) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Pedido #${result['numeroPedido'] ?? ''} confirmado correctamente',
+          ),
+          backgroundColor: AppTheme.neonGreen,
+        ),
+      );
+    });
   }
 }
 

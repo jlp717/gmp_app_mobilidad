@@ -101,9 +101,10 @@ class PedidosProvider with ChangeNotifier {
   String? _error;
 
   // Req #2: Visibilidad de márgenes / costes según rol.
-  // JEFE_VENTAS y ADMIN ven márgenes; COMERCIAL/REPARTIDOR no.
+  // JEFE_VENTAS, ADMIN y Comercial 80 ven márgenes; COMERCIAL/REPARTIDOR no.
   bool _isJefeVentas = false;
   String _userRole = 'COMERCIAL';
+  String _userCode = '';
 
   // Req #8: Estado del aviso de borradores acumulados.
   String? _draftWarningMessage;
@@ -192,18 +193,26 @@ class PedidosProvider with ChangeNotifier {
 
   // Req #2: getters de visibilidad por rol.
   bool get isJefeVentas => _isJefeVentas;
-  bool get isMarginVisible => _isJefeVentas; // Solo JEFE_VENTAS/ADMIN ven margen.
+  bool get isMarginVisible {
+    final normalizedCode = _userCode.replaceFirst(RegExp(r'^0+'), '');
+    return _isJefeVentas || normalizedCode == '80';
+  }
+
   String get userRole => _userRole;
 
   /// Actualiza el rol del usuario logueado (e.g. al iniciar sesión o
   /// cuando authProvider cambia). Notifica para que las vistas se
   /// repinten ocultando/mostrando márgenes según corresponda.
-  void setUserRole(String? role) {
+  void setUserRole(String? role, {String? code}) {
     final normalized = (role ?? '').trim().toUpperCase();
     final next = normalized == 'JEFE_VENTAS' || normalized == 'ADMIN';
-    if (next == _isJefeVentas && normalized == _userRole) return;
+    final normalizedCode = (code ?? '').replaceFirst(RegExp(r'^0+'), '');
+    if (next == _isJefeVentas &&
+        normalized == _userRole &&
+        normalizedCode == _userCode) return;
     _isJefeVentas = next;
     _userRole = normalized.isEmpty ? 'COMERCIAL' : normalized;
+    _userCode = normalizedCode;
     notifyListeners();
   }
 
@@ -834,6 +843,7 @@ class PedidosProvider with ChangeNotifier {
     notifyListeners();
 
     try {
+      debugPrint('[confirmOrder] Step 1/3: Building lines for submit');
       final linesForSubmit = _buildLinesForSubmit();
       final obs = observaciones.trim();
       final discountTag = _globalDiscountPct > 0
@@ -843,6 +853,8 @@ class PedidosProvider with ChangeNotifier {
           [discountTag, obs].where((s) => s.isNotEmpty).join(' ').trim();
 
       // Step 1: Create the order
+      debugPrint(
+          '[confirmOrder] Step 2/3: Calling createOrder API (client=$_clientCode, lines=${linesForSubmit.length})');
       final createResult = await _orderApi.createOrder(
         clientCode: _clientCode!,
         clientName: _clientName ?? '',
@@ -851,14 +863,18 @@ class PedidosProvider with ChangeNotifier {
         lines: linesForSubmit,
         observaciones: fullObservaciones,
       );
+      debugPrint('[confirmOrder] createOrder result id=${createResult['id']}');
 
       if (createResult['id'] == null) {
         _error = 'Error al crear el pedido';
+        debugPrint('[confirmOrder] FAILED: createOrder returned null id');
         return null;
       }
 
       // Step 2: Immediately confirm the order (set to CONFIRMADO)
       final orderId = createResult['id'] as int;
+      debugPrint(
+          '[confirmOrder] Step 3/3: Calling confirmOrder API (orderId=$orderId, saleType=$_saleType, deliveryDate=$deliveryDate)');
       final confirmedResult = await _orderApi.confirmOrder(
         orderId,
         _saleType,
@@ -867,6 +883,8 @@ class PedidosProvider with ChangeNotifier {
         driverCode: driverCode,
         routeCode: routeCode,
       );
+      debugPrint(
+          '[confirmOrder] confirmOrder result keys=${confirmedResult.keys.toList()}');
 
       final result = normalizeConfirmOrderResultForProvider(
         createResult: Map<String, dynamic>.from(createResult),
@@ -890,8 +908,12 @@ class PedidosProvider with ChangeNotifier {
       // so "Mis Pedidos" shows the new order immediately.
       refreshOrdersAndStats();
 
+      debugPrint(
+          '[confirmOrder] SUCCESS: order confirmed, result keys=${result.keys.toList()}');
       return result;
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('[confirmOrder] ERROR: $e');
+      debugPrint('[confirmOrder] STACK: $st');
       _error = e.toString();
       return null;
     } finally {
