@@ -29,6 +29,7 @@ class Product {
     this.precioTarifa1 = 0,
     this.precioMinimo = 0,
     this.precioCliente = 0,
+    this.precioCosto = 0,
     this.codigoTarifaCliente = 1,
     this.precioTarifaCliente = 0,
     this.nameExt = '',
@@ -80,6 +81,7 @@ class Product {
       precioTarifa1: _toDouble(json['precioTarifa1']),
       precioMinimo: _toDouble(json['precioMinimo']),
       precioCliente: _toDouble(json['precioCliente']),
+      precioCosto: _toDouble(json['precioCosto']),
       codigoTarifaCliente: json['codigoTarifaCliente'] is int
           ? json['codigoTarifaCliente'] as int
           : int.tryParse(json['codigoTarifaCliente']?.toString() ?? '1') ?? 1,
@@ -137,6 +139,7 @@ class Product {
   final double precioTarifa1;
   final double precioMinimo;
   final double precioCliente;
+  final double precioCosto;
   final int codigoTarifaCliente;
   final double precioTarifaCliente;
   // Extended fields from ART table

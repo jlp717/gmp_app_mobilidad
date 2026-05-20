@@ -141,6 +141,44 @@ class PedidosProvider with ChangeNotifier {
   Map<String, dynamic> _analytics = {};
   bool _isLoadingAnalytics = false;
 
+  // ── Cached Calculations (P1: avoid recalculation on every getter access) ──
+  double? _cachedTotalImporte;
+  double? _cachedTotalCosto;
+  double? _cachedTotalConDescuento;
+  double? _cachedTotalMargen;
+  double? _cachedPorcentajeMargen;
+  bool _cacheValid = false;
+
+  void _invalidateCache() {
+    _cacheValid = false;
+    _cachedTotalImporte = null;
+    _cachedTotalCosto = null;
+    _cachedTotalConDescuento = null;
+    _cachedTotalMargen = null;
+    _cachedPorcentajeMargen = null;
+  }
+
+  // ── Debounced notifyListeners (P1: batch rapid state changes) ──
+  bool _notifyScheduled = false;
+  bool _disposed = false;
+
+  /// Schedules a single notifyListeners call via microtask to batch
+  /// multiple rapid state changes into one rebuild cycle.
+  void _notify({bool immediate = false}) {
+    if (_disposed) return;
+    if (immediate) {
+      _notifyScheduled = false;
+      notifyListeners();
+      return;
+    }
+    if (_notifyScheduled) return;
+    _notifyScheduled = true;
+    Future.microtask(() {
+      _notifyScheduled = false;
+      if (!_disposed) notifyListeners();
+    });
+  }
+
   String _qtyKey(String productCode, [String? clientCode]) {
     final product = productCode.trim();
     final client = (clientCode ?? _clientCode ?? '').trim();
@@ -274,38 +312,60 @@ class PedidosProvider with ChangeNotifier {
   }
 
   double get globalDiscountPct => _globalDiscountPct;
-  double get totalDescuento => totalImporte * _globalDiscountPct / 100;
-  double get totalConDescuento => totalImporte - totalDescuento;
-  double get totalBase => _lines.fold(0, (s, l) {
-        final saleAfterDiscount = l.importeVenta * _discountFactor;
-        return s + saleAfterDiscount / (1 + l.ivaRate);
-      });
-  double get totalIva => totalConDescuento - totalBase;
-  Map<double, double> get ivaBreakdown {
-    final map = <double, double>{};
-    for (final l in _lines) {
-      if (l.ivaRate > 0) {
-        final saleAfterDiscount = l.importeVenta * _discountFactor;
-        final iva = saleAfterDiscount - (saleAfterDiscount / (1 + l.ivaRate));
-        map[l.ivaRate] = (map[l.ivaRate] ?? 0) + iva;
-      }
-    }
-    return map;
+
+  /// Total importe bruto del carrito (suma de importeVenta de todas las líneas).
+  double get totalImporte {
+    if (_cacheValid && _cachedTotalImporte != null) return _cachedTotalImporte!;
+    final value = _lines.fold(0.0, (sum, l) => sum + l.importeVenta);
+    _cachedTotalImporte = value;
+    return value;
   }
 
-  bool get hasClient => _clientCode != null && _clientCode!.isNotEmpty;
-  bool get hasLines => _lines.isNotEmpty;
-  int get lineCount => _lines.length;
+  double get totalDescuento => totalImporte * _globalDiscountPct / 100;
 
-  double get totalEnvases =>
-      _lines.fold(0, (sum, l) => sum + l.cantidadEnvases);
-  double get totalUnidades =>
-      _lines.fold(0, (sum, l) => sum + l.cantidadUnidades);
-  double get totalImporte => _lines.fold(0, (sum, l) => sum + l.importeVenta);
-  double get totalCosto => _lines.fold(0, (sum, l) => sum + l.importeCosto);
-  double get totalMargen => totalConDescuento - totalCosto;
-  double get porcentajeMargen =>
-      totalConDescuento > 0 ? (totalMargen / totalConDescuento) * 100 : 0;
+  double get totalConDescuento {
+    if (_cacheValid && _cachedTotalConDescuento != null) {
+      return _cachedTotalConDescuento!;
+    }
+    final value = totalImporte - totalDescuento;
+    _cachedTotalConDescuento = value;
+    return value;
+  }
+
+  double get totalBase {
+    var sum = 0.0;
+    for (final l in _lines) {
+      final saleAfterDiscount = l.importeVenta * _discountFactor;
+      sum += saleAfterDiscount / (1 + l.ivaRate);
+    }
+    return sum;
+  }
+
+  double get totalIva => totalConDescuento - totalBase;
+
+  double get totalCosto {
+    if (_cacheValid && _cachedTotalCosto != null) return _cachedTotalCosto!;
+    final value = _lines.fold(0.0, (sum, l) => sum + l.importeCosto);
+    _cachedTotalCosto = value;
+    return value;
+  }
+
+  double get totalMargen {
+    if (_cacheValid && _cachedTotalMargen != null) return _cachedTotalMargen!;
+    final value = totalConDescuento - totalCosto;
+    _cachedTotalMargen = value;
+    return value;
+  }
+
+  double get porcentajeMargen {
+    if (_cacheValid && _cachedPorcentajeMargen != null) {
+      return _cachedPorcentajeMargen!;
+    }
+    final value =
+        totalConDescuento > 0 ? (totalMargen / totalConDescuento) * 100 : 0;
+    _cachedPorcentajeMargen = value;
+    return value;
+  }
 
   String get saleTypeLabel {
     switch (_saleType) {
@@ -318,6 +378,25 @@ class PedidosProvider with ChangeNotifier {
       default:
         return 'Venta';
     }
+  }
+
+  // ── Derived cart getters (required by UI) ──
+  bool get hasClient => _clientCode != null && _clientCode!.isNotEmpty;
+  bool get hasLines => _lines.isNotEmpty;
+  int get lineCount => _lines.length;
+  double get totalEnvases =>
+      _lines.fold(0.0, (sum, l) => sum + l.cantidadEnvases);
+  double get totalUnidades =>
+      _lines.fold(0.0, (sum, l) => sum + l.cantidadUnidades);
+
+  Map<int, double> get ivaBreakdown {
+    final breakdown = <int, double>{};
+    for (final line in _lines) {
+      final ivaPct = (line.ivaRate * 100).round();
+      final saleAfterDiscount = line.importeVenta * _discountFactor;
+      breakdown[ivaPct] = (breakdown[ivaPct] ?? 0) + saleAfterDiscount;
+    }
+    return breakdown;
   }
 
   // ── Client ──
@@ -372,14 +451,16 @@ class PedidosProvider with ChangeNotifier {
 
   void setGlobalDiscount(double pct) {
     _globalDiscountPct = pct.clamp(0, 100);
-    notifyListeners();
+    _invalidateCache();
+    _notify();
   }
 
   void reorderLines(int oldIndex, int newIndex) {
     if (newIndex > oldIndex) newIndex--;
     final item = _lines.removeAt(oldIndex);
     _lines.insert(newIndex, item);
-    notifyListeners();
+    _invalidateCache();
+    _notify();
   }
 
   // ── Product Catalog ──
@@ -528,7 +609,7 @@ class PedidosProvider with ChangeNotifier {
     if (!hasClient) {
       const msg = 'Debes seleccionar un cliente antes de anadir productos.';
       _error = msg;
-      notifyListeners();
+      _notify(immediate: true);
       return msg;
     }
 
@@ -638,9 +719,11 @@ class PedidosProvider with ChangeNotifier {
         unidadesCaja: product.quantityPerBoxForUnit(unit),
         unidadesFraccion: product.unitsFraction,
         precioVenta: precioVenta,
-        precioCosto: product.precioMinimo > 0
-            ? product.precioMinimo * 0.7
-            : product.precioTarifa1 * 0.7,
+        precioCosto: product.precioCosto > 0
+            ? product.precioCosto
+            : (product.precioMinimo > 0
+                ? product.precioMinimo * 0.7
+                : product.precioTarifa1 * 0.7),
         precioTarifa: product.precioTarifa1,
         precioTarifaCliente: product.precioCliente,
         precioMinimo: product.precioMinimo,
@@ -654,7 +737,8 @@ class PedidosProvider with ChangeNotifier {
 
     _error = null;
     _isDirty = true;
-    notifyListeners();
+    _invalidateCache();
+    _notify();
     return isPartial ? 'PARCIAL:$missingQty|${product.name}' : null;
   }
 
@@ -731,7 +815,8 @@ class PedidosProvider with ChangeNotifier {
     _lastUnitByProduct[_qtyKey(line.codigoArticulo, _clientCode)] =
         line.unidadMedida;
     _isDirty = true;
-    notifyListeners();
+    _invalidateCache();
+    _notify();
     return null;
   }
 
@@ -743,7 +828,8 @@ class PedidosProvider with ChangeNotifier {
       _complementaryProducts = [];
     }
     _isDirty = true;
-    notifyListeners();
+    _invalidateCache();
+    _notify();
   }
 
   void updateLineClaseLinea(int index, String clase) {
@@ -766,7 +852,8 @@ class PedidosProvider with ChangeNotifier {
       line.recalculate();
     }
     _isDirty = true;
-    notifyListeners();
+    _invalidateCache();
+    _notify();
   }
 
   void clearOrder() {
@@ -783,7 +870,8 @@ class PedidosProvider with ChangeNotifier {
     _complementaryProducts = [];
     _clientBalance = {};
     _error = null;
-    notifyListeners();
+    _invalidateCache();
+    _notify();
   }
 
   List<OrderLine> _buildLinesForSubmit() {
@@ -1208,7 +1296,8 @@ class PedidosProvider with ChangeNotifier {
       _lastUnitByProduct[_qtyKey(line.codigoArticulo)] = line.unidadMedida;
     }
     _error = null;
-    notifyListeners();
+    _invalidateCache();
+    _notify();
   }
 
   Future<void> deleteDraft(String key) async {
@@ -1346,7 +1435,7 @@ class PedidosProvider with ChangeNotifier {
       notifyListeners();
     } catch (e) {
       _error = 'Error al clonar pedido: $e';
-      notifyListeners();
+      _notify(immediate: true);
     }
   }
 
@@ -1370,9 +1459,11 @@ class PedidosProvider with ChangeNotifier {
           cantidadEnvases: defaultQty,
           unidadesCaja: product.unitsPerBox,
           precioVenta: product.bestPrice,
-          precioCosto: product.precioMinimo > 0
-              ? product.precioMinimo * 0.7
-              : product.precioTarifa1 * 0.7,
+          precioCosto: product.precioCosto > 0
+              ? product.precioCosto
+              : (product.precioMinimo > 0
+                  ? product.precioMinimo * 0.7
+                  : product.precioTarifa1 * 0.7),
           precioTarifa: product.precioTarifa1,
           precioTarifaCliente: product.precioCliente,
           precioMinimo: product.precioMinimo,
@@ -1385,7 +1476,8 @@ class PedidosProvider with ChangeNotifier {
       }
     }
     _error = null;
-    notifyListeners();
+    _invalidateCache();
+    _notify();
   }
 
   // ── Stock Auto-Refresh for Cart Lines (Parallel) ──
@@ -1449,6 +1541,7 @@ class PedidosProvider with ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     super.dispose();
   }
 }

@@ -1241,6 +1241,55 @@ router.get('/matrix', verifyToken, async (req, res) => {
             return formatYearStats(stats);
         };
 
+        const sortedYearsDesc = [...yearsArray].sort((a, b) => b - a);
+        const referenceYear = sortedYearsDesc[0] || new Date().getFullYear();
+        const comparisonYears = sortedYearsDesc
+            .filter(year => year < referenceYear)
+            .slice(0, 2);
+        const COMPARISON_THRESHOLD_PCT = 0.5;
+        const yearMetricValue = (byYear, year, metric = 'sales') => {
+            const data = byYear?.[year] || byYear?.[String(year)] || {};
+            return round2(Number(data?.[metric]) || 0);
+        };
+        const comparisonEntry = (referenceValue, yearValue, year) => {
+            const delta = round2(referenceValue - yearValue);
+            if (Math.abs(yearValue) < 0.01) {
+                if (Math.abs(referenceValue) < 0.01) {
+                    return { year, value: 0, delta: 0, percent: 0, trend: 'flat', color: 'blue', label: '0%' };
+                }
+                return { year, value: 0, delta, percent: null, trend: 'new', color: 'blue', label: 'Nuevo' };
+            }
+            const percent = round1((delta / yearValue) * 100);
+            if (referenceValue < 0.01 && yearValue > 0) {
+                return { year, value: yearValue, delta, percent: -100, trend: 'lost', color: 'red', label: '-100%' };
+            }
+            if (percent > COMPARISON_THRESHOLD_PCT) {
+                return { year, value: yearValue, delta, percent, trend: 'up', color: 'green', label: `+${percent}%` };
+            }
+            if (percent < -COMPARISON_THRESHOLD_PCT) {
+                return { year, value: yearValue, delta, percent, trend: 'down', color: 'red', label: `${percent}%` };
+            }
+            return { year, value: yearValue, delta, percent, trend: 'flat', color: 'blue', label: '0%' };
+        };
+        const buildYearComparison = (byYear, metric = 'sales') => {
+            const referenceValue = yearMetricValue(byYear, referenceYear, metric);
+            const comparisons = comparisonYears.map(year =>
+                comparisonEntry(referenceValue, yearMetricValue(byYear, year, metric), year)
+            );
+            const primary = comparisons[0] || { trend: 'no-data', color: 'blue', label: '—' };
+            return {
+                metric,
+                referenceYear,
+                referenceValue,
+                comparisonYears,
+                thresholdPct: COMPARISON_THRESHOLD_PCT,
+                trend: primary.trend,
+                color: primary.color,
+                label: primary.label,
+                comparisons,
+            };
+        };
+
         rows.forEach(row => {
             const famCode = row.FAMILY_CODE?.trim() || 'SIN_FAM';
             const subfamCode = row.SUBFAMILY_CODE?.trim() || 'General';
@@ -1347,6 +1396,7 @@ router.get('/matrix', verifyToken, async (req, res) => {
                         familyCode: famCode,
                         familyName: familyNames[famCode] ? `${famCode} - ${familyNames[famCode]}` : famCode,
                         totalSales: 0, totalCost: 0, totalUnits: 0,
+                        yearStats: createYearStats(),
                         subfamilies: new Map()
                     });
                 }
@@ -1356,6 +1406,7 @@ router.get('/matrix', verifyToken, async (req, res) => {
                     family.totalSales += sales;
                     family.totalCost += cost;
                     family.totalUnits += units;
+                    addToYearStats(family.yearStats, year, sales, cost, units);
                 }
 
                 // Subfamily
@@ -1365,6 +1416,7 @@ router.get('/matrix', verifyToken, async (req, res) => {
                         subfamilyCode: subfamCode,
                         subfamilyName: subfamName,
                         totalSales: 0, totalCost: 0, totalUnits: 0,
+                        yearStats: createYearStats(),
                         products: new Map()
                     });
                 }
@@ -1374,6 +1426,7 @@ router.get('/matrix', verifyToken, async (req, res) => {
                     subfamily.totalSales += sales;
                     subfamily.totalCost += cost;
                     subfamily.totalUnits += units;
+                    addToYearStats(subfamily.yearStats, year, sales, cost, units);
                 }
 
                 // Product
@@ -1677,6 +1730,9 @@ router.get('/matrix', verifyToken, async (req, res) => {
                         };
                     });
 
+                    const productByYear = formatByYearFromMonthly(p.monthlyData || {});
+                    const productComparison = buildYearComparison(productByYear);
+
                     return {
                         code: p.productCode,
                         name: p.productName,
@@ -1695,7 +1751,8 @@ router.get('/matrix', verifyToken, async (req, res) => {
                         hasSpecialPrice: p.hasSpecialPrice,
                         avgDiscountPct: p.avgDiscountPct,
                         avgDiscountEur: p.avgDiscountEur,
-                        byYear: formatByYearFromMonthly(p.monthlyData || {}),
+                        byYear: productByYear,
+                        comparison: productComparison,
                         monthlyData: monthlyOutput,
                         yoyTrend,
                         yoyVariation: parseFloat(variation.toFixed(1))
@@ -1704,24 +1761,36 @@ router.get('/matrix', verifyToken, async (req, res) => {
 
                 const margin = s.totalSales - s.totalCost;
                 const marginPercent = s.totalSales > 0 ? (margin / s.totalSales) * 100 : 0;
+                const subfamilyByYear = formatYearStats(s.yearStats);
+                const subfamilyComparison = buildYearComparison(subfamilyByYear);
                 return {
                     subfamilyCode: s.subfamilyCode,
                     subfamilyName: s.subfamilyName,
                     totalSales: parseFloat(s.totalSales.toFixed(2)),
                     totalUnits: s.totalUnits,
                     totalMarginPercent: parseFloat(marginPercent.toFixed(1)),
+                    byYear: subfamilyByYear,
+                    comparison: subfamilyComparison,
+                    yoyTrend: subfamilyComparison.trend,
+                    yoyVariation: subfamilyComparison.comparisons?.[0]?.percent ?? null,
                     products
                 };
             }).sort((a, b) => b.totalSales - a.totalSales);
 
             const margin = f.totalSales - f.totalCost;
             const marginPercent = f.totalSales > 0 ? (margin / f.totalSales) * 100 : 0;
+            const familyByYear = formatYearStats(f.yearStats);
+            const familyComparison = buildYearComparison(familyByYear);
             return {
                 familyCode: f.familyCode,
                 familyName: f.familyName,
                 totalSales: parseFloat(f.totalSales.toFixed(2)),
                 totalUnits: f.totalUnits,
                 totalMarginPercent: parseFloat(marginPercent.toFixed(1)),
+                byYear: familyByYear,
+                comparison: familyComparison,
+                yoyTrend: familyComparison.trend,
+                yoyVariation: familyComparison.comparisons?.[0]?.percent ?? null,
                 subfamilies
             };
         }).sort((a, b) => b.totalSales - a.totalSales);
@@ -1792,6 +1861,8 @@ router.get('/matrix', verifyToken, async (req, res) => {
 
             // Format product monthly data
             const productMonthly = formatLevelMonthly(p.monthlyData || {});
+            const productByYear = formatByYearFromMonthly(p.monthlyData || {});
+            const productComparison = buildYearComparison(productByYear);
 
             return {
                 code: p.code,
@@ -1817,7 +1888,8 @@ router.get('/matrix', verifyToken, async (req, res) => {
                 hasSpecialPrice: p.hasSpecialPrice,
                 avgDiscountPct: p.avgDiscountPct || 0,
                 avgDiscountEur: p.avgDiscountEur || 0,
-                byYear: formatByYearFromMonthly(p.monthlyData || {}),
+                byYear: productByYear,
+                comparison: productComparison,
                 monthlyData: productMonthly,
                 yoyTrend,
                 yoyVariation: parseFloat(variation.toFixed(1))
@@ -1862,6 +1934,8 @@ router.get('/matrix', verifyToken, async (req, res) => {
                         const products = Array.from(fi4.products.values())
                             .map(formatFiProduct)
                             .sort((a, b) => b.totalSales - a.totalSales);
+                        const byYear4 = formatByYearFromMonthly(fi4.monthlyData || {});
+                        const comparison4 = buildYearComparison(byYear4);
 
                         return {
                             code: fi4.code,
@@ -1876,14 +1950,17 @@ router.get('/matrix', verifyToken, async (req, res) => {
                             prevYearUnits: parseFloat(fi4.prevYearUnits.toFixed(2)),
                             prevYearCost: parseFloat(fi4.prevYearCost.toFixed(2)),
                             prevYearMargin: parseFloat(prevMargin4.toFixed(2)),
-                            yoyTrend: yoy4,
-                            yoyVariation: parseFloat(variation4.toFixed(1)),
-                            byYear: formatByYearFromMonthly(fi4.monthlyData || {}),
+                            yoyTrend: comparison4.trend,
+                            yoyVariation: comparison4.comparisons?.[0]?.percent ?? parseFloat(variation4.toFixed(1)),
+                            byYear: byYear4,
+                            comparison: comparison4,
                             monthlyData: formatLevelMonthly(fi4.monthlyData || {}),
                             productCount: products.length,
                             products
                         };
                     }).filter(f => f.totalSales > 0 || f.productCount > 0).sort((a, b) => b.totalSales - a.totalSales);
+                    const byYear3 = formatByYearFromMonthly(fi3.monthlyData || {});
+                    const comparison3 = buildYearComparison(byYear3);
 
                     return {
                         code: fi3.code,
@@ -1898,14 +1975,17 @@ router.get('/matrix', verifyToken, async (req, res) => {
                         prevYearUnits: parseFloat(fi3.prevYearUnits.toFixed(2)),
                         prevYearCost: parseFloat(fi3.prevYearCost.toFixed(2)),
                         prevYearMargin: parseFloat(prevMargin3.toFixed(2)),
-                        yoyTrend: yoy3,
-                        yoyVariation: parseFloat(variation3.toFixed(1)),
-                        byYear: formatByYearFromMonthly(fi3.monthlyData || {}),
+                        yoyTrend: comparison3.trend,
+                        yoyVariation: comparison3.comparisons?.[0]?.percent ?? parseFloat(variation3.toFixed(1)),
+                        byYear: byYear3,
+                        comparison: comparison3,
                         monthlyData: formatLevelMonthly(fi3.monthlyData || {}),
                         childCount: children3.length,
                         children: children3
                     };
                 }).filter(f => f.totalSales > 0 || f.childCount > 0).sort((a, b) => b.totalSales - a.totalSales);
+                const byYear2 = formatByYearFromMonthly(fi2.monthlyData || {});
+                const comparison2 = buildYearComparison(byYear2);
 
                 return {
                     code: fi2.code,
@@ -1920,9 +2000,10 @@ router.get('/matrix', verifyToken, async (req, res) => {
                     prevYearUnits: parseFloat(fi2.prevYearUnits.toFixed(2)),
                     prevYearCost: parseFloat(fi2.prevYearCost.toFixed(2)),
                     prevYearMargin: parseFloat(prevMargin2.toFixed(2)),
-                    yoyTrend: yoy2,
-                    yoyVariation: parseFloat(variation2.toFixed(1)),
-                    byYear: formatByYearFromMonthly(fi2.monthlyData || {}),
+                    yoyTrend: comparison2.trend,
+                    yoyVariation: comparison2.comparisons?.[0]?.percent ?? parseFloat(variation2.toFixed(1)),
+                    byYear: byYear2,
+                    comparison: comparison2,
                     monthlyData: formatLevelMonthly(fi2.monthlyData || {}),
                     childCount: children2.length,
                     children: children2
@@ -1935,6 +2016,8 @@ router.get('/matrix', verifyToken, async (req, res) => {
             if (fi1.prevYearSales === 0 && fi1.totalSales > 0) yoy1 = 'new';
             else if (variation1 > 5) yoy1 = 'up';
             else if (variation1 < -5) yoy1 = 'down';
+            const byYear1 = formatByYearFromMonthly(fi1.monthlyData || {});
+            const comparison1 = buildYearComparison(byYear1);
 
             return {
                 code: fi1.code,
@@ -1949,9 +2032,10 @@ router.get('/matrix', verifyToken, async (req, res) => {
                 prevYearUnits: parseFloat(fi1.prevYearUnits.toFixed(2)),
                 prevYearCost: parseFloat(fi1.prevYearCost.toFixed(2)),
                 prevYearMargin: parseFloat(prevMargin1.toFixed(2)),
-                yoyTrend: yoy1,
-                yoyVariation: parseFloat(variation1.toFixed(1)),
-                byYear: formatByYearFromMonthly(fi1.monthlyData || {}),
+                yoyTrend: comparison1.trend,
+                yoyVariation: comparison1.comparisons?.[0]?.percent ?? parseFloat(variation1.toFixed(1)),
+                byYear: byYear1,
+                comparison: comparison1,
                 monthlyData: formatLevelMonthly(fi1.monthlyData || {}),
                 childCount: children1.length,
                 children: children1
@@ -1972,10 +2056,12 @@ router.get('/matrix', verifyToken, async (req, res) => {
             ? ((productSet.size - prevProductSet.size) / prevProductSet.size) * 100
             : (productSet.size > 0 ? 100 : 0);
         const byYearTotals = formatYearStats(grandTotalsByYear, productSetsByYear);
+        const totalComparison = buildYearComparison(byYearTotals);
 
         const summary = {
             isNewClient,
             byYear: byYearTotals,
+            comparison: totalComparison,
             current: {
                 label: yearsArray.join(', '),
                 sales: grandTotalSales,
@@ -2004,13 +2090,19 @@ router.get('/matrix', verifyToken, async (req, res) => {
             contactInfo,
             editableNotes,
             summary,
+            comparisonConfig: {
+                referenceYear,
+                comparisonYears,
+                thresholdPct: COMPARISON_THRESHOLD_PCT
+            },
             grandTotal: {
                 sales: grandTotalSales,
                 cost: grandTotalCost,
                 margin: grandTotalMargin,
                 units: grandTotalUnits,
                 products: productSet.size,
-                byYear: byYearTotals
+                byYear: byYearTotals,
+                comparison: totalComparison
             },
             monthlyTotals: flatMonthlyTotals,
             availableFilters: {

@@ -288,4 +288,40 @@ describe('pedidos reparto confirmation contract', () => {
     expect(mockConnQuery.mock.calls.some(([sql]) => /^BEGIN WORK$/i.test(sql))).toBe(true);
     expect(mockConnQuery.mock.calls.some(([sql]) => /^COMMIT$/i.test(sql))).toBe(true);
   });
+
+  test('DSEDAC target carries manual vehicle assignment into CPC export', async () => {
+    process.env.PEDIDOS_CONFIRMATION_SCHEMA = 'DSEDAC';
+    process.env.PEDIDOS_EXPORT_TO_SYSTEM = 'true';
+    process.env.PEDIDOS_SYSTEM_TERMINAL = '10';
+    mockGetClientDays.mockReturnValue({
+      deliveryDays: ['martes', 'jueves'],
+      deliveryDaysShort: 'MJ',
+    });
+    mockSuccessfulConfirmationQueries({ includeLine: true, vehicleCode: '11', driverCode: '57' });
+    mockConnQuery.mockImplementation(async (sql) => {
+      if (/MAX\(NUMEROPEDIDO\)/i.test(sql)) return [{ NEXT_NUMERO: 779 }];
+      return [];
+    });
+    mockPool = {
+      connect: jest.fn().mockResolvedValue({
+        query: (...args) => mockConnQuery(...args),
+        close: mockConnClose,
+      }),
+    };
+
+    await pedidosService.confirmOrder(42, 'CC', {
+      deliveryDate: '2026-05-05',
+      vehicleCode: '44',
+      driverCode: '88',
+      routeCode: 'R9',
+    });
+
+    const cpcInsert = mockConnQuery.mock.calls.find(([sql]) =>
+      /INSERT\s+INTO\s+DSEDAC\.CPC/i.test(sql),
+    );
+    expect(cpcInsert).toBeDefined();
+    expect(cpcInsert[0]).toContain('CODIGOVEHICULO');
+    expect(cpcInsert[0]).toContain('CODIGOREPARTIDOR');
+    expect(cpcInsert[1]).toEqual(expect.arrayContaining(['44', '88']));
+  });
 });

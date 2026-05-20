@@ -58,9 +58,11 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
   late final AnimationController _pulseController;
   bool _isConfirming = false;
   bool _isLoadingDeliveryOptions = false;
+  bool _confirmSucceeded = false;
   OrderDeliveryOptions? _deliveryOptions;
   DateTime? _selectedDeliveryDate;
   String? _deliveryError;
+  String? _confirmStatusMessage;
 
   @override
   void initState() {
@@ -215,7 +217,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             ),
           ),
           IconButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: _isConfirming ? null : () => Navigator.pop(context),
             icon: const Icon(Icons.close, color: Colors.white54),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -305,7 +307,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               decoration: BoxDecoration(
                 color: AppTheme.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.warning.withValues(alpha: 0.3)),
+                border:
+                    Border.all(color: AppTheme.warning.withValues(alpha: 0.3)),
               ),
               child: Column(
                 children: [
@@ -496,7 +499,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                   color: AppTheme.neonGreen,
                   style: IconButton.styleFrom(
                     backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.12),
-                    disabledBackgroundColor: Colors.white.withValues(alpha: 0.04),
+                    disabledBackgroundColor:
+                        Colors.white.withValues(alpha: 0.04),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -547,7 +551,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               decoration: BoxDecoration(
                 color: AppTheme.error.withValues(alpha: 0.10),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppTheme.error.withValues(alpha: 0.24)),
+                border:
+                    Border.all(color: AppTheme.error.withValues(alpha: 0.24)),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -879,7 +884,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                   decoration: BoxDecoration(
                     color: marginColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: marginColor.withValues(alpha: 0.3)),
+                    border:
+                        Border.all(color: marginColor.withValues(alpha: 0.3)),
                   ),
                   child: Text(
                     'Margen ${margin.toStringAsFixed(1)}%',
@@ -961,8 +967,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
-        border:
-            Border(top: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.2))),
+        border: Border(
+            top: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.2))),
         boxShadow: [
           BoxShadow(
             color: AppTheme.neonBlue.withValues(alpha: 0.1),
@@ -972,90 +978,161 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         ],
       ),
       child: SafeArea(
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Total summary
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Total a confirmar',
-                    style:
-                        TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                  ),
-                  Text(
-                    PedidosFormatters.money(total),
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 16),
-            // Confirm button with pulse animation
-            AnimatedBuilder(
-              animation: _pulseController,
-              builder: (context, child) {
-                final glow = _isConfirming ? 0.0 : _pulseController.value * 0.3;
-                return Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: AppTheme.neonGreen.withValues(alpha: 0.2 + glow),
-                        blurRadius: 16 + (glow * 20),
-                        spreadRadius: glow * 4,
+            if (_confirmStatusMessage != null) ...[
+              _buildConfirmStatusBanner(),
+              const SizedBox(height: 12),
+            ],
+            Row(
+              children: [
+                // Total summary
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Total a confirmar',
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        PedidosFormatters.money(total),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
                       ),
                     ],
                   ),
-                  child: child,
-                );
-              },
-              child: SizedBox(
-                height: 52,
-                child: ElevatedButton.icon(
-                  onPressed: _isConfirming || _isLoadingDeliveryOptions
-                      ? null
-                      : _handleConfirm,
-                  icon: _isConfirming
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: AppTheme.darkBase,
+                ),
+                const SizedBox(width: 16),
+                // Confirm button with pulse animation
+                AnimatedBuilder(
+                  animation: _pulseController,
+                  builder: (context, child) {
+                    final glow = _isConfirming || _confirmSucceeded
+                        ? 0.0
+                        : _pulseController.value * 0.3;
+                    return Container(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.neonGreen
+                                .withValues(alpha: 0.2 + glow),
+                            blurRadius: 16 + (glow * 20),
+                            spreadRadius: glow * 4,
                           ),
-                        )
-                      : const Icon(Icons.check_circle_outline, size: 20),
-                  label: Text(
-                    _isConfirming ? 'Confirmando...' : 'CONFIRMAR PEDIDO',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.5,
+                        ],
+                      ),
+                      child: child,
+                    );
+                  },
+                  child: SizedBox(
+                    height: 52,
+                    child: ElevatedButton.icon(
+                      onPressed: _isConfirming ||
+                              _isLoadingDeliveryOptions ||
+                              _confirmSucceeded
+                          ? null
+                          : _handleConfirm,
+                      icon: _isConfirming
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: AppTheme.darkBase,
+                              ),
+                            )
+                          : Icon(
+                              _confirmSucceeded
+                                  ? Icons.check_circle
+                                  : Icons.check_circle_outline,
+                              size: 20,
+                            ),
+                      label: Text(
+                        _confirmSucceeded
+                            ? 'Confirmado'
+                            : (_isConfirming
+                                ? 'Confirmando...'
+                                : 'CONFIRMAR PEDIDO'),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.neonGreen,
+                        foregroundColor: AppTheme.darkBase,
+                        disabledBackgroundColor:
+                            AppTheme.neonGreen.withValues(alpha: 0.4),
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        elevation: 0,
+                      ),
                     ),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.neonGreen,
-                    foregroundColor: AppTheme.darkBase,
-                    disabledBackgroundColor:
-                        AppTheme.neonGreen.withValues(alpha: 0.4),
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    elevation: 0,
                   ),
                 ),
-              ),
+              ],
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildConfirmStatusBanner() {
+    final isError = !_isConfirming && !_confirmSucceeded;
+    final color = _confirmSucceeded
+        ? AppTheme.neonGreen
+        : (isError ? AppTheme.error : AppTheme.neonBlue);
+    final icon = _confirmSucceeded
+        ? Icons.check_circle_rounded
+        : (isError ? Icons.error_outline_rounded : Icons.sync_rounded);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        children: [
+          if (_isConfirming)
+            SizedBox(
+              width: 18,
+              height: 18,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: color,
+              ),
+            )
+          else
+            Icon(icon, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              _confirmStatusMessage!,
+              style: TextStyle(
+                color: color,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1133,7 +1210,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: AppTheme.darkSurface,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Row(
             children: [
               Icon(Icons.local_shipping_rounded, color: AppTheme.neonGreen),
@@ -1149,7 +1227,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
               itemBuilder: (_, i) {
                 final v = vehicles[i];
                 final code = (v['code'] ?? '').toString();
-                final desc = (v['matricula'] ?? v['description'] ?? '').toString();
+                final desc =
+                    (v['matricula'] ?? v['description'] ?? '').toString();
                 final isCurrent = code == _deliveryOptions?.vehicleCode;
                 return ListTile(
                   leading: Container(
@@ -1173,7 +1252,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                     ),
                   ),
                   trailing: isCurrent
-                      ? const Icon(Icons.check_circle, color: AppTheme.neonGreen)
+                      ? const Icon(Icons.check_circle,
+                          color: AppTheme.neonGreen)
                       : null,
                   onTap: () {
                     Navigator.pop(ctx);
@@ -1181,7 +1261,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                       _deliveryOptions = OrderDeliveryOptions(
                         clientCode: _deliveryOptions!.clientCode,
                         vendedorCode: _deliveryOptions!.vendedorCode,
-                        allowedDeliveryDays: _deliveryOptions!.allowedDeliveryDays,
+                        allowedDeliveryDays:
+                            _deliveryOptions!.allowedDeliveryDays,
                         allowedDeliveryDaysShort:
                             _deliveryOptions!.allowedDeliveryDaysShort,
                         suggestedDeliveryDate:
@@ -1277,7 +1358,11 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
 
   Future<void> _handleConfirm() async {
     HapticFeedback.heavyImpact();
-    setState(() => _isConfirming = true);
+    setState(() {
+      _isConfirming = true;
+      _confirmSucceeded = false;
+      _confirmStatusMessage = 'Confirmando pedido...';
+    });
 
     try {
       final result = await widget.onConfirm(
@@ -1292,28 +1377,35 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
       if (!mounted) return;
       if (result != null) {
         HapticFeedback.mediumImpact();
-        // Close the preview dialog and return the result so the caller
-        // can show the success snackbar and reset the cart.
+        final number =
+            result is Map ? result['numeroPedido']?.toString() : null;
+        setState(() {
+          _isConfirming = false;
+          _confirmSucceeded = true;
+          _confirmStatusMessage = number == null || number.isEmpty
+              ? 'Pedido confirmado correctamente'
+              : 'Pedido #$number confirmado correctamente';
+        });
+        await Future<void>.delayed(const Duration(seconds: 2));
+        if (!mounted) return;
         Navigator.of(context).pop(result);
       } else {
-        // Confirmation failed — reset button and show error
-        setState(() => _isConfirming = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se pudo confirmar el pedido. Intentalo de nuevo.'),
-            backgroundColor: AppTheme.error,
-          ),
-        );
+        final providerError = widget.provider.error;
+        setState(() {
+          _isConfirming = false;
+          _confirmSucceeded = false;
+          _confirmStatusMessage = providerError == null || providerError.isEmpty
+              ? 'No se pudo confirmar el pedido. Intentalo de nuevo.'
+              : _cleanError(providerError);
+        });
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isConfirming = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: AppTheme.error,
-        ),
-      );
+      setState(() {
+        _isConfirming = false;
+        _confirmSucceeded = false;
+        _confirmStatusMessage = _cleanError(e);
+      });
     }
   }
 }

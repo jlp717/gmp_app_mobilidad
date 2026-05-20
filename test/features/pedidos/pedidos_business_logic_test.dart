@@ -1,6 +1,59 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_order_api.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+
+class _RecordingOrderApi implements PedidosOrderApi {
+  int? confirmedOrderId;
+  String? confirmedSaleType;
+  String? confirmedDeliveryDate;
+  String? confirmedVehicleCode;
+  String? confirmedDriverCode;
+  String? confirmedRouteCode;
+
+  @override
+  Future<Map<String, dynamic>> createOrder({
+    required String clientCode,
+    required String clientName,
+    required String vendedorCode,
+    required String tipoVenta,
+    required List<OrderLine> lines,
+    required String observaciones,
+  }) async {
+    return {
+      'id': 42,
+      'estado': 'BORRADOR',
+      'numeroPedido': 1001,
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> confirmOrder(
+    int orderId,
+    String saleType, {
+    String? deliveryDate,
+    String? vehicleCode,
+    String? driverCode,
+    String? routeCode,
+  }) async {
+    confirmedOrderId = orderId;
+    confirmedSaleType = saleType;
+    confirmedDeliveryDate = deliveryDate;
+    confirmedVehicleCode = vehicleCode;
+    confirmedDriverCode = driverCode;
+    confirmedRouteCode = routeCode;
+    return {
+      'header': {
+        'id': orderId,
+        'estado': 'CONFIRMADO',
+        'numeroPedido': 1001,
+        'vehicleCode': vehicleCode,
+        'driverCode': driverCode,
+        'routeCode': routeCode,
+      },
+    };
+  }
+}
 
 void main() {
   group('OrderLine recalculation', () {
@@ -150,6 +203,43 @@ void main() {
         isConfirmedOrderResultForProvider({'blocked': true}),
         isFalse,
       );
+    });
+  });
+
+  group('PedidosProvider confirmation API contract', () {
+    test('forwards selected delivery vehicle assignment to confirmation API',
+        () async {
+      final api = _RecordingOrderApi();
+      final provider = PedidosProvider(orderApi: api);
+      provider.setClient('4300010363', 'SUSHI LORCA, S.L.');
+      provider.addLine(
+        Product(
+          code: 'ART001',
+          name: 'Producto test',
+          stockEnvases: 10,
+          precioTarifa1: 10,
+        ),
+        1,
+        0,
+        'CAJAS',
+        10,
+      );
+
+      final result = await provider.confirmOrder(
+        '57',
+        deliveryDate: '2026-05-05',
+        vehicleCode: '44',
+        driverCode: '88',
+        routeCode: 'R9',
+      );
+
+      expect(result, isNotNull);
+      expect(api.confirmedOrderId, 42);
+      expect(api.confirmedSaleType, 'CC');
+      expect(api.confirmedDeliveryDate, '2026-05-05');
+      expect(api.confirmedVehicleCode, '44');
+      expect(api.confirmedDriverCode, '88');
+      expect(api.confirmedRouteCode, 'R9');
     });
   });
 }

@@ -48,6 +48,7 @@ class _AddToOrderBody extends ConsumerStatefulWidget {
   const _AddToOrderBody({required this.product, this.suggestedEnvases = 0});
 
   final Product product;
+
   /// Cantidad de cajas sugerida en base al historial de compras del cliente.
   /// Se usa como valor inicial cuando NO hay ya una linea existente del
   /// producto en el pedido y el provider no recuerda una cantidad reciente.
@@ -573,7 +574,8 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                       color: AppTheme.neonBlue,
                       onTap: () {
                         final prov = ref.read(pedidosProvider);
-                        final canSeeMargin = ref.watch(pedidosProvider.select((p) => p.isMarginVisible));
+                        final canSeeMargin = ref.watch(
+                            pedidosProvider.select((p) => p.isMarginVisible));
                         ProductDetailSheet.show(
                           ctx,
                           productCode: product.code,
@@ -592,7 +594,8 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                         color: AppTheme.neonPurple,
                         onTap: () {
                           final prov = ref.read(pedidosProvider);
-                          final canSeeMargin = ref.watch(pedidosProvider.select((p) => p.isMarginVisible));
+                          final canSeeMargin = ref.watch(
+                              pedidosProvider.select((p) => p.isMarginVisible));
                           ProductHistorySheet.show(
                             ctx,
                             productCode: product.code,
@@ -1226,12 +1229,15 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                 ),
                 Consumer(
                   builder: (context, ref, _) {
-                    if (!ref.watch(pedidosProvider.select((p) => p.isMarginVisible))) {
+                    if (!ref.watch(
+                        pedidosProvider.select((p) => p.isMarginVisible))) {
                       return const SizedBox.shrink();
                     }
-                    final costo = product.precioMinimo > 0
-                        ? product.precioMinimo * 0.7
-                        : product.precioTarifa1 * 0.7;
+                    final costo = product.precioCosto > 0
+                        ? product.precioCosto
+                        : (product.precioMinimo > 0
+                            ? product.precioMinimo * 0.7
+                            : product.precioTarifa1 * 0.7);
                     final margen =
                         price > 0 ? ((price - costo) / price * 100) : 0.0;
                     final margenColor = margen >= 15

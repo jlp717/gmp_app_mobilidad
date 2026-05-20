@@ -438,6 +438,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       ClientAlertsWidget(clientId: widget.clientCode),
                       if (_showFilters) _buildFilters(),
                       _buildSummaryRow(),
+                      _buildComparisonOverview(),
                       _buildMonthlyRow(),
                       _buildGroupingBar(),
                       // Solo jerarquía FI de 5 niveles
@@ -933,6 +934,205 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           style: const TextStyle(fontSize: 7, color: AppTheme.textSecondary),
         ),
       ],
+    );
+  }
+
+  Map<String, dynamic> _comparisonFrom(dynamic source) {
+    if (source is! Map) return const <String, dynamic>{};
+    final raw = source['comparison'];
+    if (raw is! Map) return const <String, dynamic>{};
+    return Map<String, dynamic>.from(raw);
+  }
+
+  List<Map<String, dynamic>> _comparisonEntries(
+    Map<String, dynamic> comparison,
+  ) {
+    final raw = comparison['comparisons'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return raw
+        .whereType<Map>()
+        .map((entry) => Map<String, dynamic>.from(entry))
+        .toList();
+  }
+
+  Color _comparisonColorFromName(String? color, {Color? fallback}) {
+    switch ((color ?? '').toLowerCase()) {
+      case 'green':
+        return AppTheme.success;
+      case 'red':
+        return AppTheme.error;
+      case 'blue':
+        return AppTheme.neonBlue;
+      default:
+        return fallback ?? AppTheme.neonBlue;
+    }
+  }
+
+  IconData _comparisonIcon(String? trend) {
+    switch ((trend ?? '').toLowerCase()) {
+      case 'up':
+        return Icons.trending_up;
+      case 'down':
+      case 'lost':
+        return Icons.trending_down;
+      case 'new':
+        return Icons.auto_awesome;
+      case 'flat':
+      case 'no-data':
+      default:
+        return Icons.horizontal_rule;
+    }
+  }
+
+  Widget _buildComparisonChip(
+    Map<String, dynamic> entry, {
+    bool compact = false,
+  }) {
+    final year = entry['year']?.toString() ?? '—';
+    final label = entry['label']?.toString() ?? '—';
+    final color = _comparisonColorFromName(entry['color']?.toString());
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 5 : 8,
+        vertical: compact ? 2 : 4,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: color.withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _comparisonIcon(entry['trend']?.toString()),
+            size: compact ? 9 : 12,
+            color: color,
+          ),
+          SizedBox(width: compact ? 2 : 4),
+          Text(
+            'vs $year $label',
+            style: TextStyle(
+              fontSize: compact ? 7 : 9,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComparisonStrip(
+    Map<String, dynamic> row, {
+    bool compact = false,
+  }) {
+    final comparison = _comparisonFrom(row);
+    final entries = _comparisonEntries(comparison).take(2).toList();
+    if (entries.isEmpty) return const SizedBox.shrink();
+    return Wrap(
+      alignment: WrapAlignment.end,
+      spacing: compact ? 3 : 5,
+      runSpacing: compact ? 2 : 4,
+      children: [
+        for (final entry in entries)
+          _buildComparisonChip(entry, compact: compact),
+      ],
+    );
+  }
+
+  Widget _buildComparisonBadge(
+    Map<String, dynamic> row, {
+    bool compact = false,
+  }) {
+    final comparison = _comparisonFrom(row);
+    if (comparison.isEmpty) return const SizedBox.shrink();
+    final label = comparison['label']?.toString() ?? '—';
+    final color = _comparisonColorFromName(comparison['color']?.toString());
+    return Container(
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 5 : 7,
+        vertical: compact ? 2 : 3,
+      ),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _comparisonIcon(comparison['trend']?.toString()),
+            size: compact ? 9 : 12,
+            color: color,
+          ),
+          SizedBox(width: compact ? 2 : 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: compact ? 7 : 9,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComparisonOverview() {
+    final source =
+        _comparisonFrom(_summary).isNotEmpty ? _summary : _grandTotal;
+    final comparison = _comparisonFrom(source);
+    if (comparison.isEmpty) return const SizedBox.shrink();
+
+    final referenceYear = comparison['referenceYear']?.toString() ?? '—';
+    final referenceValue = (comparison['referenceValue'] as num?)?.toDouble() ??
+        _numValue(
+            _yearData(_mapFrom(source['byYear']), _selectedYearsDesc.first),
+            'sales');
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(8, 4, 8, 6),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: AppTheme.darkCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: AppTheme.neonBlue.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Referencia $referenceYear',
+                  style: const TextStyle(
+                    fontSize: 9,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+                Text(
+                  _formatCurrency(referenceValue),
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.neonBlue,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: _buildComparisonStrip(source, compact: false)),
+        ],
+      ),
     );
   }
 
@@ -1725,6 +1925,23 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     bool compact = false,
   }) {
     final byYear = _mapFrom(node['byYear']);
+    final comparison = _comparisonFrom(node);
+    final fallbackYear = _selectedYearsDesc.isNotEmpty
+        ? _selectedYearsDesc.first
+        : DateTime.now().year;
+    final referenceYear = (comparison['referenceYear'] as num?)?.toInt() ??
+        int.tryParse(comparison['referenceYear']?.toString() ?? '') ??
+        fallbackYear;
+    final referenceData = _yearData(byYear, referenceYear);
+    final referenceValue = (comparison['referenceValue'] as num?)?.toDouble() ??
+        _numValue(referenceData, 'sales');
+    final units = _numValue(referenceData, 'units');
+    final margin = _numValue(referenceData, 'margin');
+    final marginPercent = _numValue(referenceData, 'marginPercent');
+    final comparisonColor = _comparisonColorFromName(
+      comparison['color']?.toString(),
+      fallback: color,
+    );
     final width = widget.isJefeVentas
         ? (compact ? 150.0 : 178.0)
         : (compact ? 118.0 : 138.0);
@@ -1733,48 +1950,35 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
       width: width,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.end,
-        children: _selectedYearsDesc.map((year) {
-          final data = _yearData(byYear, year);
-          final sales = _numValue(data, 'sales');
-          final units = _numValue(data, 'units');
-          final margin = _numValue(data, 'margin');
-          final marginPercent = _numValue(data, 'marginPercent');
-          final hasSales = sales.abs() >= 0.01;
-
-          return Padding(
-            padding: EdgeInsets.only(top: compact ? 1 : 2),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    '$year ${_formatCurrency(sales)}',
-                    style: TextStyle(
-                      fontSize: compact ? 9 : 11,
-                      fontWeight: FontWeight.bold,
-                      color: hasSales ? color : AppTheme.textSecondary,
-                    ),
-                  ),
-                ),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(
-                    widget.isJefeVentas
-                        ? '${_formatUnits(units)} uds | ${_formatCompact(margin)} EUR (${marginPercent.toStringAsFixed(1)}%)'
-                        : '${_formatUnits(units)} uds',
-                    style: TextStyle(
-                      fontSize: compact ? 7 : 8,
-                      color: widget.isJefeVentas && marginPercent < 0
-                          ? AppTheme.error
-                          : AppTheme.textSecondary,
-                    ),
-                  ),
-                ),
-              ],
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              '$referenceYear ${_formatCurrency(referenceValue)}',
+              style: TextStyle(
+                fontSize: compact ? 10 : 12,
+                fontWeight: FontWeight.w800,
+                color: comparisonColor,
+              ),
             ),
-          );
-        }).toList(),
+          ),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              widget.isJefeVentas
+                  ? '${_formatUnits(units)} uds | ${_formatCompact(margin)} EUR (${marginPercent.toStringAsFixed(1)}%)'
+                  : '${_formatUnits(units)} uds',
+              style: TextStyle(
+                fontSize: compact ? 7 : 8,
+                color: widget.isJefeVentas && marginPercent < 0
+                    ? AppTheme.error
+                    : AppTheme.textSecondary,
+              ),
+            ),
+          ),
+          const SizedBox(height: 3),
+          _buildComparisonStrip(node, compact: true),
+        ],
       ),
     );
   }
@@ -2298,6 +2502,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final name = p['name'] as String? ?? code;
     final unitType = (p['unitType'] as String?)?.toUpperCase() ?? 'UDS';
     final yoyTrend = p['yoyTrend'] as String? ?? 'neutral';
+    final comparison = _comparisonFrom(p);
     final hasDiscount = p['hasDiscount'] as bool? ?? false;
     final avgDiscountPct = (p['avgDiscountPct'] as num?)?.toDouble() ?? 0;
     final avgDiscountEur = (p['avgDiscountEur'] as num?)?.toDouble() ?? 0;
@@ -2320,11 +2525,15 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     }
 
     var borderColor = AppTheme.surfaceColor;
-    if (yoyTrend == 'up') {
+    if (comparison.isNotEmpty) {
+      borderColor = _comparisonColorFromName(comparison['color']?.toString());
+    } else if (yoyTrend == 'up') {
       borderColor = AppTheme.success;
-    } else if (yoyTrend == 'down')
+    } else if (yoyTrend == 'down') {
       borderColor = AppTheme.error;
-    else if (yoyTrend == 'new') borderColor = AppTheme.neonBlue;
+    } else if (yoyTrend == 'new') {
+      borderColor = AppTheme.neonBlue;
+    }
 
     final baseUrl = ApiConfig.baseUrl;
     final imageUrl =
@@ -2428,7 +2637,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                             ),
                           ),
                         ],
-                        if (yoyTrend != 'neutral') ...[
+                        if (comparison.isNotEmpty) ...[
+                          const SizedBox(width: 4),
+                          _buildComparisonBadge(p, compact: true),
+                        ] else if (yoyTrend != 'neutral') ...[
                           const SizedBox(width: 4),
                           Icon(
                             yoyTrend == 'up'
@@ -2565,6 +2777,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final sales = (f['totalSales'] as num?)?.toDouble() ?? 0;
     final units = (f['totalUnits'] as num?)?.toDouble() ?? 0;
     final margin = (f['totalMarginPercent'] as num?)?.toDouble() ?? 0;
+    final comparisonColor = _comparisonColorFromName(
+      _comparisonFrom(f)['color']?.toString(),
+      fallback: AppTheme.neonBlue,
+    );
 
     var pCount = 0;
     for (final s in subs) {
@@ -2607,10 +2823,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
               children: [
                 Text(
                   _formatCurrency(sales),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: AppTheme.neonBlue,
+                    color: comparisonColor,
                   ),
                 ),
                 Text(
@@ -2618,6 +2834,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   style: const TextStyle(
                       fontSize: 9, color: AppTheme.textSecondary),
                 ),
+                const SizedBox(height: 2),
+                _buildComparisonBadge(f, compact: true),
               ],
             ),
             onTap: () => setState(() {
@@ -2646,6 +2864,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     final units = (s['totalUnits'] as num?)?.toDouble() ?? 0;
     final key = '$famCode|$code';
     final expanded = _expandedSubfamilies.contains(key);
+    final comparisonColor = _comparisonColorFromName(
+      _comparisonFrom(s)['color']?.toString(),
+      fallback: AppTheme.neonPurple,
+    );
 
     return Container(
       margin: const EdgeInsets.only(left: 12, right: 4, bottom: 2),
@@ -2696,9 +2918,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     children: [
                       Text(
                         _formatCurrency(sales),
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
+                          color: comparisonColor,
                         ),
                       ),
                       if (widget.isJefeVentas)
@@ -2710,6 +2933,8 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                                 margin > 0 ? AppTheme.success : AppTheme.error,
                           ),
                         ),
+                      const SizedBox(height: 2),
+                      _buildComparisonBadge(s, compact: true),
                     ],
                   ),
                 ],
@@ -3262,21 +3487,21 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   }
 
   Widget _buildStrictPercentage(double variation, String trend) {
-    if (variation.abs() < 1.0) {
+    if (variation.abs() < 0.5) {
       // Strict check for negligible variation
       return const Text(
         '0%',
         style: TextStyle(
           fontSize: 7,
           fontWeight: FontWeight.bold,
-          color: Colors.grey,
+          color: AppTheme.neonBlue,
         ),
       );
     }
 
     final isPositive = variation > 0;
     final color = trend == 'neutral'
-        ? Colors.grey
+        ? AppTheme.neonBlue
         : (isPositive ? AppTheme.success : AppTheme.error);
     final prefix =
         isPositive ? '+' : ''; // No prefix if 0, but logic above handles < 1.0

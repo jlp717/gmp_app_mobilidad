@@ -790,7 +790,7 @@ async function nextSystemPedidoNumber(conn, target, ejercicio) {
     return integerValue(rows?.[0]?.NEXT_NUMERO) || 1;
 }
 
-function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCode, saleType, userId }) {
+function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCode, saleType, userId, vehicleCode, driverCode }) {
     const docDay = integerValue(header.DIADOCUMENTO) || new Date().getDate();
     const docMonth = integerValue(header.MESDOCUMENTO) || new Date().getMonth() + 1;
     const docYear = integerValue(header.ANODOCUMENTO) || integerValue(header.EJERCICIO) || new Date().getFullYear();
@@ -808,7 +808,8 @@ function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCo
         'DIADOCUMENTO', 'MESDOCUMENTO', 'ANODOCUMENTO', 'HORADOCUMENTO',
         'CODIGOCLIENTEALBARAN', 'CODIGOCLIENTEFACTURA', 'CODIGOCLIENTECADENA',
         'CODIGOVENDEDOR', 'CODIGOVENDEDORCOBRO', 'CODIGOPROMOTORPREVENTA', 'CODIGOCOMERCIAL',
-        'CODIGORUTA', 'CODIGOFORMAPAGO', 'CODIGOTARIFA', 'CODIGOALMACEN', 'RECARGOSN',
+        'CODIGORUTA', 'CODIGOVEHICULO', 'CODIGOREPARTIDOR',
+        'CODIGOFORMAPAGO', 'CODIGOTARIFA', 'CODIGOALMACEN', 'RECARGOSN',
         'IMPORTEBASEIMPONIBLEBRUTA1', 'IMPORTEBASEIMPONIBLE1', 'IMPORTEBRUTO',
         'IMPORTETOTAL', 'IMPORTECOSTO', 'IMPORTEMARGEN',
         'SITUACIONPEDIDO', 'CODIGOOPERACION', 'OBSERVACION1', 'OBSERVACION2',
@@ -821,7 +822,10 @@ function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCo
         docDay, docMonth, docYear, hora,
         cliente, cliente, '',
         vendedor, vendedor, vendedor, vendedor,
-        truncate(routeCode, 4), truncate(header.CODIGOFORMAPAGO || '02', 2),
+        truncate(routeCode, 4),
+        truncate(vehicleCode || header.CODIGOVEHICULO, 10),
+        truncate(driverCode || header.CODIGOREPARTIDOR, 2),
+        truncate(header.CODIGOFORMAPAGO || '02', 2),
         integerValue(header.CODIGOTARIFA) || 1, integerValue(header.CODIGOALMACEN) || 1, 'N',
         base, base, base,
         total, costo, margen,
@@ -914,7 +918,7 @@ function buildDsedacOcpcInsert({ target, header, systemRef, userId }) {
     };
 }
 
-async function exportCommercialOrderToSystem(conn, { header, lines, deliveryPlan, routeCode, saleType, userId }) {
+async function exportCommercialOrderToSystem(conn, { header, lines, deliveryPlan, routeCode, saleType, userId, vehicleCode, driverCode }) {
     const target = getPedidosConfirmationTarget();
     if (!target.shouldExportToSystem) {
         return {
@@ -941,7 +945,7 @@ async function exportCommercialOrderToSystem(conn, { header, lines, deliveryPlan
         numero,
     };
 
-    const cab = buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCode, saleType, userId });
+    const cab = buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCode, saleType, userId, vehicleCode, driverCode });
     await conn.query(cab.sql, cab.params);
 
     for (const line of lines || []) {
@@ -1204,6 +1208,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, limit
             COALESCE(T1.PRECIOTARIFA, 0) AS precioTarifa1,
             COALESCE(T2.PRECIOTARIFA, 0) AS precioMinimo,
             COALESCE(TC.PRECIOTARIFA, 0) AS precioCliente,
+            COALESCE(A.COSTEPROMEDIO, 0) AS precioCosto,
             TRIM(COALESCE(A.FORMATO, '')) AS formato,
             COALESCE(A.PRODUCTOPESADOSN, '') AS productoPesado,
             COALESCE(PH.SALES_THIS_YEAR, 0) AS salesThisYear,
@@ -1300,6 +1305,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, limit
                 precioTarifa1: parseFloat(r.PRECIOTARIFA1) || 0,
                 precioMinimo: parseFloat(r.PRECIOMINIMO) || 0,
                 precioCliente: parseFloat(r.PRECIOCLIENTE) || 0,
+                precioCosto: parseFloat(r.PRECIOCOSTO) || 0,
                 formato: (r.FORMATO || '').trim(),
                 productoPesado: (r.PRODUCTOPESADO || '').trim() === 'S',
                 unitType: unitType,
@@ -2544,6 +2550,8 @@ async function confirmOrder(orderId, saleType, options = {}) {
                     deliveryPlan,
                     routeCode,
                     saleType,
+                    vehicleCode,
+                    driverCode,
                     userId: options.userId,
                 });
                 const update = buildConfirmOrderUpdate({
