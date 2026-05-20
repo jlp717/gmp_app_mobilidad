@@ -1,5 +1,8 @@
 # Agent Instructions
 
+> **⚠️ ORCHESTRATOR PIPELINE — REGLA ABSOLUTA**
+> El orchestrator DEBE ejecutar los 5 pasos del pipeline (DOMAIN+TIER → PRE-FLIGHT → ROLE-PLAY → QUALITY GATES → RESULT) para CADA tarea antes de tocar código. Ver `.opencode/AGENTS.md` para el playbook completo.
+
 This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
 
 > **Architecture in one line:** Issues live in a local Dolt database
