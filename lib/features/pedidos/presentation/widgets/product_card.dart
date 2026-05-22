@@ -15,9 +15,10 @@ import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 
 class ProductCard extends StatefulWidget {
-
   const ProductCard({
-    required this.product, required this.onTap, super.key,
+    required this.product,
+    required this.onTap,
+    super.key,
     this.isFavorite = false,
     this.promo,
     this.onToggleFavorite,
@@ -91,9 +92,13 @@ class _ProductCardState extends State<ProductCard> {
     final unitLabel = Product.unitLabel(primaryUnit);
 
     final hasClientePrice = widget.product.precioCliente > 0;
+    final promoColor =
+        widget.promo?.isGift == true ? AppTheme.neonGreen : AppTheme.neonPurple;
 
     return Card(
-      color: inCart ? AppTheme.darkCard.withValues(alpha: 0.92) : AppTheme.darkCard,
+      color: inCart
+          ? AppTheme.darkCard.withValues(alpha: 0.92)
+          : AppTheme.darkCard,
       margin: const EdgeInsets.only(bottom: 6),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
@@ -101,7 +106,7 @@ class _ProductCardState extends State<ProductCard> {
           color: inCart
               ? AppTheme.neonGreen
               : widget.promo != null
-                  ? AppTheme.neonPurple
+                  ? promoColor
                   : AppTheme.borderColor.withValues(alpha: 0.3),
           width: inCart ? 1.5 : (widget.promo != null ? 1.5 : 1.0),
         ),
@@ -129,7 +134,9 @@ class _ProductCardState extends State<ProductCard> {
                       right: 0,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 4, vertical: 1,),
+                          horizontal: 4,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
                           color: AppTheme.neonGreen,
                           borderRadius: BorderRadius.circular(6),
@@ -182,8 +189,11 @@ class _ProductCardState extends State<ProductCard> {
                             color: widget.product.hasPurchased
                                 ? AppTheme.success
                                 : AppTheme.error,
-                            fontSize: Responsive.fontSize(context,
-                                small: 9, large: 10,),
+                            fontSize: Responsive.fontSize(
+                              context,
+                              small: 9,
+                              large: 10,
+                            ),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -191,12 +201,15 @@ class _ProductCardState extends State<ProductCard> {
                         // Unit type badge
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 5, vertical: 1,),
+                            horizontal: 5,
+                            vertical: 1,
+                          ),
                           decoration: BoxDecoration(
                             color: AppTheme.neonBlue.withValues(alpha: 0.12),
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
-                                color: AppTheme.neonBlue.withValues(alpha: 0.3),),
+                              color: AppTheme.neonBlue.withValues(alpha: 0.3),
+                            ),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -211,8 +224,11 @@ class _ProductCardState extends State<ProductCard> {
                                 _unitTypeLabel(),
                                 style: TextStyle(
                                   color: AppTheme.neonBlue,
-                                  fontSize: Responsive.fontSize(context,
-                                      small: 9, large: 10,),
+                                  fontSize: Responsive.fontSize(
+                                    context,
+                                    small: 9,
+                                    large: 10,
+                                  ),
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
@@ -224,19 +240,38 @@ class _ProductCardState extends State<ProductCard> {
                           const SizedBox(width: 6),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 1,),
+                              horizontal: 4,
+                              vertical: 1,
+                            ),
                             decoration: BoxDecoration(
-                              color: AppTheme.neonPurple.withValues(alpha: 0.2),
+                              color: promoColor.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(4),
                               border: Border.all(
-                                  color: AppTheme.neonPurple.withValues(alpha: 0.4),),
+                                color: promoColor.withValues(alpha: 0.4),
+                              ),
                             ),
-                            child: Text(
-                              widget.promo!.promoDesc,
-                              style: const TextStyle(
-                                  color: AppTheme.neonPurple,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (widget.promo!.isGift) ...[
+                                  Icon(
+                                    Icons.card_giftcard,
+                                    color: promoColor,
+                                    size: 10,
+                                  ),
+                                  const SizedBox(width: 2),
+                                ],
+                                Text(
+                                  widget.promo!.isGift
+                                      ? widget.promo!.giftLabel
+                                      : widget.promo!.promoDesc,
+                                  style: TextStyle(
+                                    color: promoColor,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -263,8 +298,11 @@ class _ProductCardState extends State<ProductCard> {
                           widget.product.code,
                           style: TextStyle(
                             color: Colors.white38,
-                            fontSize: Responsive.fontSize(context,
-                                small: 11, large: 12,),
+                            fontSize: Responsive.fontSize(
+                              context,
+                              small: 11,
+                              large: 12,
+                            ),
                           ),
                         ),
                         if (widget.product.hasPurchased &&
@@ -278,11 +316,13 @@ class _ProductCardState extends State<ProductCard> {
                     // Stock row
                     Row(
                       children: [
-                        Icon(Icons.inventory_outlined,
-                            color: widget.product.hasStock
-                                ? AppTheme.neonGreen
-                                : AppTheme.error,
-                            size: 13,),
+                        Icon(
+                          Icons.inventory_outlined,
+                          color: widget.product.hasStock
+                              ? AppTheme.neonGreen
+                              : AppTheme.error,
+                          size: 13,
+                        ),
                         const SizedBox(width: 4),
                         Expanded(
                           child: Text(
@@ -291,8 +331,11 @@ class _ProductCardState extends State<ProductCard> {
                               color: widget.product.hasStock
                                   ? AppTheme.neonGreen
                                   : AppTheme.error,
-                              fontSize: Responsive.fontSize(context,
-                                  small: 11, large: 12,),
+                              fontSize: Responsive.fontSize(
+                                context,
+                                small: 11,
+                                large: 12,
+                              ),
                               fontWeight: FontWeight.w500,
                             ),
                             maxLines: 1,
@@ -319,7 +362,9 @@ class _ProductCardState extends State<ProductCard> {
                       },
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 5, vertical: 1,),
+                          horizontal: 5,
+                          vertical: 1,
+                        ),
                         decoration: BoxDecoration(
                           color: _showClientePrice
                               ? AppTheme.neonGreen.withValues(alpha: 0.15)
@@ -337,8 +382,11 @@ class _ProductCardState extends State<ProductCard> {
                             color: _showClientePrice
                                 ? AppTheme.neonGreen
                                 : Colors.white54,
-                            fontSize: Responsive.fontSize(context,
-                                small: 8, large: 9,),
+                            fontSize: Responsive.fontSize(
+                              context,
+                              small: 8,
+                              large: 9,
+                            ),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -356,8 +404,11 @@ class _ProductCardState extends State<ProductCard> {
                               ? AppTheme.neonPurple
                               : AppTheme.neonGreen,
                           fontWeight: FontWeight.bold,
-                          fontSize: Responsive.fontSize(context,
-                              small: 14, large: 16,),
+                          fontSize: Responsive.fontSize(
+                            context,
+                            small: 14,
+                            large: 16,
+                          ),
                         ),
                       ),
                       // IVA toggle button
@@ -387,8 +438,11 @@ class _ProductCardState extends State<ProductCard> {
                               color: _showIva
                                   ? AppTheme.neonPurple
                                   : Colors.white54,
-                              fontSize: Responsive.fontSize(context,
-                                  small: 7, large: 8,),
+                              fontSize: Responsive.fontSize(
+                                context,
+                                small: 7,
+                                large: 8,
+                              ),
                               fontWeight: FontWeight.w700,
                             ),
                           ),
@@ -418,8 +472,8 @@ class _ProductCardState extends State<ProductCard> {
                     decoration: BoxDecoration(
                       color: AppTheme.neonBlue.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(6),
-                      border:
-                          Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+                      border: Border.all(
+                          color: AppTheme.neonBlue.withValues(alpha: 0.3)),
                     ),
                     child: Text(
                       _buildBoxContentBadge(),
@@ -457,11 +511,14 @@ class _ProductCardState extends State<ProductCard> {
                     decoration: BoxDecoration(
                       color: AppTheme.neonBlue.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(8),
-                      border:
-                          Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.4)),
+                      border: Border.all(
+                          color: AppTheme.neonBlue.withValues(alpha: 0.4)),
                     ),
-                    child: const Icon(Icons.add,
-                        color: AppTheme.neonBlue, size: 18,),
+                    child: const Icon(
+                      Icons.add,
+                      color: AppTheme.neonBlue,
+                      size: 18,
+                    ),
                   ),
                 ),
               ],

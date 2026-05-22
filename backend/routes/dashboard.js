@@ -67,7 +67,19 @@ function buildVendedorFilterLACLAEParameterized(vendedorCodes, tableAlias = 'L',
 
 router.get('/metrics', verifyToken, async (req, res) => {
     try {
-        const { vendedorCodes, year, month } = req.query;
+        // Debug logging for troubleshooting
+        logger.info(`[DASHBOARD] Metrics request from user: ${req.user?.code}, role: ${req.user?.role}, isJefeVentas: ${req.user?.isJefeVentas}`);
+        logger.info(`[DASHBOARD] Query params: vendedorCodes=${req.query.vendedorCodes}, user has vendedorCodes: ${req.user?.vendedorCodes || 'none'}`);
+        
+        let { vendedorCodes, year, month } = req.query;
+        
+        // For jefes de ventas, if no specific vendor codes are requested, use 'ALL'
+        // This ensures they see all vendors' data by default
+        if (req.user?.isJefeVentas && (!vendedorCodes || vendedorCodes === req.user?.code)) {
+            vendedorCodes = 'ALL';
+            logger.info(`[DASHBOARD] Jefe de ventas detected, setting vendedorCodes to 'ALL'`);
+        }
+        
         const now = getCurrentDate();
         const currentYear = parseInt(year) || now.getFullYear();
         const currentMonth = parseInt(month) || (now.getMonth() + 1);
@@ -206,7 +218,14 @@ router.get('/metrics', verifyToken, async (req, res) => {
 
 router.get('/matrix-data', verifyToken, async (req, res) => {
     try {
-        const { vendedorCodes, groupBy = 'vendor', year, years, clientCodes, productCodes, familyCodes } = req.query;
+        let { vendedorCodes, groupBy = 'vendor', year, years, clientCodes, productCodes, familyCodes } = req.query;
+        
+        // For jefes de ventas, if no specific vendor codes are requested, use 'ALL'
+        if (req.user?.isJefeVentas && (!vendedorCodes || vendedorCodes === req.user?.code)) {
+            vendedorCodes = 'ALL';
+            logger.info(`[DASHBOARD] Jefe de ventas detected in matrix-data, setting vendedorCodes to 'ALL'`);
+        }
+        
         const cacheKey = `dashboard:matrix:v2:${JSON.stringify(req.query)}`;
 
         const { redisCache } = require('../services/redis-cache');
@@ -515,13 +534,25 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
 
 router.get('/sales-evolution', verifyToken, async (req, res) => {
     try {
-        const { vendedorCodes, years, granularity = 'month', upToToday = 'false', months = 36 } = req.query;
+        let { vendedorCodes, years, granularity = 'month', upToToday = 'false', months = 36 } = req.query;
+        
+        // For jefes de ventas, if no specific vendor codes are requested, use 'ALL'
+        if (req.user?.isJefeVentas && (!vendedorCodes || vendedorCodes === req.user?.code)) {
+            vendedorCodes = 'ALL';
+            logger.info(`[DASHBOARD] Jefe de ventas detected in sales-evolution, setting vendedorCodes to 'ALL'`);
+        }
+
         const now = getCurrentDate();
         const selectedYears = years
             ? years.split(',').map(y => parseInt(y.trim()))
             : [now.getFullYear(), now.getFullYear() - 1, now.getFullYear() - 2];
 
         const yearsFilter = `AND L.LCAADC IN (${selectedYears.map(() => '?').join(',')})`;
+
+        // Apply vendor filter
+        const vendedorResult = buildVendedorFilterParameterized(vendedorCodes, 'L');
+        const vendorFilter = vendedorResult.filter;
+        const vendorParams = vendedorResult.params;
 
         let dateFilter = '';
         let dateParams = [];
@@ -545,11 +576,11 @@ router.get('/sales-evolution', verifyToken, async (req, res) => {
                COUNT(DISTINCT L.LCNRAB) as orders,
                COUNT(DISTINCT L.LCCDCL) as clients
         FROM DSED.LACLAE L
-        WHERE ${LACLAE_SALES_FILTER} ${yearsFilter} ${dateFilter}
+        WHERE ${LACLAE_SALES_FILTER} ${yearsFilter} ${vendorFilter} ${dateFilter}
         GROUP BY L.LCAADC, L.LCMMDC, L.LCDDDC
         ORDER BY L.LCAADC DESC, L.LCMMDC DESC, L.LCDDDC DESC
       `;
-            const dailyParams = [...selectedYears, ...dateParams];
+            const dailyParams = [...selectedYears, ...vendorParams, ...dateParams];
             const dailyData = await cachedQuery(queryWithParams, dailyQuery, `${cacheKey}:daily`, evolutionTTL, dailyParams);
 
             const weeklyMap = {};
@@ -576,11 +607,11 @@ router.get('/sales-evolution', verifyToken, async (req, res) => {
                COUNT(DISTINCT L.LCNRAB) as totalOrders,
                COUNT(DISTINCT L.LCCDCL) as uniqueClients
         FROM DSED.LACLAE L
-        WHERE ${LACLAE_SALES_FILTER} ${yearsFilter} ${dateFilter}
+        WHERE ${LACLAE_SALES_FILTER} ${yearsFilter} ${vendorFilter} ${dateFilter}
         GROUP BY L.LCAADC, L.LCMMDC
         ORDER BY L.LCAADC DESC, L.LCMMDC DESC
       `;
-            const monthlyParams = [...selectedYears, ...dateParams];
+            const monthlyParams = [...selectedYears, ...vendorParams, ...dateParams];
             const rows = await cachedQuery(queryWithParams, monthlyQuery, `${cacheKey}:monthly`, evolutionTTL, monthlyParams);
             resultData = rows.map(r => ({
                 year: r.YEAR, month: r.MONTH,
@@ -600,8 +631,15 @@ router.get('/sales-evolution', verifyToken, async (req, res) => {
 
 router.get('/recent-sales', verifyToken, async (req, res) => {
     try {
-        const { vendedorCodes, limit = 20 } = req.query;
-        const vendedorResult = buildVendedorFilter(vendedorCodes, 'L');
+        let { vendedorCodes, limit = 20 } = req.query;
+        
+        // For jefes de ventas, if no specific vendor codes are requested, use 'ALL'
+        if (req.user?.isJefeVentas && (!vendedorCodes || vendedorCodes === req.user?.code)) {
+            vendedorCodes = 'ALL';
+            logger.info(`[DASHBOARD] Jefe de ventas detected in recent-sales, setting vendedorCodes to 'ALL'`);
+        }
+
+        const vendedorResult = buildVendedorFilterParameterized(vendedorCodes, 'L');
         const cacheKey = `dashboard:recent_sales:${vendedorCodes || 'ALL'}:${limit}`;
 
         const recentTTL = (!vendedorCodes || vendedorCodes === 'ALL') ? TTL.MEDIUM : TTL.SHORT;
@@ -618,14 +656,14 @@ router.get('/recent-sales', verifyToken, async (req, res) => {
         COUNT(*) as numLines
       FROM DSEDAC.LINDTO L
       LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
-      WHERE L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorResult}
+      WHERE L.ANODOCUMENTO >= ${MIN_YEAR} ${vendedorResult.filter}
       GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO, L.DIADOCUMENTO,
         L.CODIGOCLIENTEALBARAN, C.NOMBRECLIENTE, L.CODIGOVENDEDOR, L.SERIEDOCUMENTO
       ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
       FETCH FIRST ${parseInt(limit)} ROWS ONLY
         `;
 
-        const sales = await cachedQuery(query, sql, cacheKey, recentTTL);
+        const sales = await cachedQuery(queryWithParams, sql, cacheKey, recentTTL, vendedorResult.params);
 
         res.json({
             sales: sales.map(s => ({

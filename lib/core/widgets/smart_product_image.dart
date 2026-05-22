@@ -21,6 +21,7 @@ class SmartProductImage extends StatelessWidget {
     this.borderRadius,
     this.showCodeOnFallback = true,
     this.headers,
+    this.forceRetry = false  // Nuevo parámetro para forzar reintento
   });
   final String imageUrl;
   final String productCode;
@@ -31,6 +32,7 @@ class SmartProductImage extends StatelessWidget {
   final BorderRadiusGeometry? borderRadius;
   final bool showCodeOnFallback;
   final Map<String, String>? headers;
+  final bool forceRetry;  // Nuevo parámetro para forzar reintento
 
   /// TTL-based failed URL cache: URL → timestamp when it failed.
   /// Entries expire after [_failedUrlTTL] to allow retries.
@@ -67,7 +69,8 @@ class SmartProductImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (imageUrl.isEmpty || _isFailed(imageUrl)) {
+    // Si forceRetry es true, ignoramos el caché de URLs fallidas
+    if (imageUrl.isEmpty || (!forceRetry && _isFailed(imageUrl))) {
       return _buildFallback();
     }
 

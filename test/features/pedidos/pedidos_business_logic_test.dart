@@ -57,6 +57,27 @@ class _RecordingOrderApi implements PedidosOrderApi {
 
 void main() {
   group('OrderLine recalculation', () {
+    test('keeps gift lines at zero sale and negative cost margin', () {
+      final line = OrderLine(
+        codigoArticulo: 'P004',
+        descripcion: '[REGALO] Producto regalo',
+        cantidadUnidades: 2,
+        unidadMedida: 'UNIDADES',
+        unidadesCaja: 1,
+        precioVenta: 0,
+        precioCosto: 3,
+        tipoLinea: 'G',
+      );
+
+      line.recalculate();
+
+      expect(line.tipoLinea, 'G');
+      expect(line.importeVenta, 0);
+      expect(line.importeCosto, 6);
+      expect(line.importeMargen, -6);
+      expect(line.toJson()['tipoLinea'], 'G');
+    });
+
     test('charges caja price once when units are only the box equivalence', () {
       final line = OrderLine(
         codigoArticulo: 'P001',
@@ -111,6 +132,70 @@ void main() {
 
       expect(product.minimumPriceForUnit('CAJAS'), 24);
       expect(product.minimumPriceForUnit('KILOGRAMOS'), 2);
+    });
+  });
+
+  group('Promotions', () {
+    test('parses gift promotion metadata from backend JSON', () {
+      final promo = PromotionItem.fromJson({
+        'code': 'NST_1582',
+        'productCode': '1582',
+        'name': 'Regalo producto',
+        'promoDesc': '3+1 gratis',
+        'promoType': 'GIFT',
+        'promoCode': 'NST_1582',
+        'minQty': 3,
+        'giftQty': 1,
+        'cumulative': true,
+        'isGlobal': true,
+        'noGiftBought': true,
+      });
+
+      expect(promo.productCode, '1582');
+      expect(promo.isGlobal, isTrue);
+      expect(promo.noGiftBought, isTrue);
+      expect(promo.isGift, isTrue);
+    });
+
+    test('auto-adds cumulative gift lines when sale quantity reaches threshold',
+        () {
+      final provider = PedidosProvider();
+      provider.setClient('4300010363', 'Cliente test');
+      provider.debugSetPromotions([
+        PromotionItem(
+          code: 'NST_1582',
+          productCode: '1582',
+          name: 'Regalo producto',
+          promoDesc: 'Compra 3 y regalo 1',
+          promoType: 'GIFT',
+          promoCode: 'NST_1582',
+          minQty: 3,
+          giftQty: 1,
+          cumulative: true,
+        ),
+      ]);
+
+      provider.addLine(
+        Product(
+          code: '1582',
+          name: 'Producto con regalo',
+          stockUnidades: 20,
+          precioTarifa1: 10,
+          precioCosto: 4,
+          unitMeasure: 'UNIDADES',
+        ),
+        0,
+        6,
+        'UNIDADES',
+        10,
+      );
+
+      expect(provider.lines.length, 3);
+      expect(provider.lines.where((line) => line.tipoLinea == 'G').length, 2);
+      expect(provider.lastGiftPromotionMessage, contains('2 regalo'));
+      expect(provider.totalImporte, 60);
+      expect(provider.totalCosto, 32);
+      expect(provider.totalMargen, 28);
     });
   });
 

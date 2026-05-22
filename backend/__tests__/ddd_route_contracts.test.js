@@ -97,11 +97,11 @@ jest.mock('../routes/entregas', () => {
 
 const { createPedidosRoutes, createCobrosRoutes, createEntregasRoutes } = require('../src/shared/routes/ddd-adapters');
 
-function makeApp(router) {
+function makeApp(router, user = { id: '01', code: '01', role: 'COMERCIAL' }) {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
-    req.user = { id: '01', code: '01', role: 'COMERCIAL' };
+    req.user = user;
     next();
   });
   app.use(router);
@@ -232,6 +232,21 @@ describe('DDD cobros route contracts', () => {
     expect(res.body.resumen.totalPendiente).toBe(42);
   });
 
+  test('GET /:codigoCliente/pendientes cache key includes authenticated commercial scope', async () => {
+    mockCobrosRepo.getPendientes.mockResolvedValue({
+      cobros: [],
+      resumen: { totalPendiente: 0 },
+    });
+
+    await request(makeApp(createCobrosRoutes(), { id: '01', code: '01', role: 'COMERCIAL' }))
+      .get('/C001/pendientes');
+    await request(makeApp(createCobrosRoutes(), { id: '02', code: '02', role: 'COMERCIAL' }))
+      .get('/C001/pendientes');
+
+    expect(mockCache.set.mock.calls[0][0]).toContain('COMERCIAL:01');
+    expect(mockCache.set.mock.calls[1][0]).toContain('COMERCIAL:02');
+  });
+
   test('POST /:codigoCliente/registrar is available for Flutter and registers payment', async () => {
     mockCobrosRepo.registerPayment.mockResolvedValue({ id: 'pay1', status: 'REGISTRADO' });
 
@@ -294,6 +309,24 @@ describe('DDD cobros route contracts', () => {
       expect.objectContaining({ userId: '01', userRole: 'COMERCIAL' }),
     );
     expect(res.body.grandTotal).toBe(42);
+  });
+
+  test('GET /pending-summary/:vendedorCode forwards manager visible vendorCodes', async () => {
+    mockCobrosRepo.getPendingSummary.mockResolvedValue({ summary: {}, grandTotal: 0, clientCount: 0 });
+
+    const res = await request(makeApp(createCobrosRoutes(), {
+      id: '98',
+      code: '98',
+      role: 'JEFE_VENTAS',
+      isJefeVentas: true,
+      vendorCodes: ['01', '02'],
+    })).get('/pending-summary/ALL');
+
+    expect(res.status).toBe(200);
+    expect(mockCobrosRepo.getPendingSummary).toHaveBeenCalledWith(
+      'ALL',
+      expect.objectContaining({ vendorCodes: ['01', '02'] }),
+    );
   });
 });
 

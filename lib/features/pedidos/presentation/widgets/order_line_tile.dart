@@ -15,9 +15,14 @@ import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_fo
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
 class OrderLineTile extends StatelessWidget {
-
   const OrderLineTile({
-    required this.line, required this.index, required this.onDismissed, required this.onTap, required this.onIncrement, required this.onDecrement, super.key,
+    required this.line,
+    required this.index,
+    required this.onDismissed,
+    required this.onTap,
+    required this.onIncrement,
+    required this.onDecrement,
+    super.key,
     this.onClaseLineaToggle,
     this.onDiscountChanged,
   });
@@ -72,10 +77,11 @@ class OrderLineTile extends StatelessWidget {
   }
 
   static String _formatQty(double v, String unit) {
-    final isWeight = unit.toUpperCase() == 'KILOGRAMOS' ||
-        unit.toUpperCase() == 'LITROS';
+    final isWeight =
+        unit.toUpperCase() == 'KILOGRAMOS' || unit.toUpperCase() == 'LITROS';
     if (isWeight) {
-      return v.toStringAsFixed(2)
+      return v
+          .toStringAsFixed(2)
           .replaceAll(RegExp(r'0+$'), '')
           .replaceAll(RegExp(r'\.$'), '');
     }
@@ -90,28 +96,47 @@ class OrderLineTile extends StatelessWidget {
 
   static String _unitAbbr(String unit) {
     switch (unit.toUpperCase().trim()) {
-      case 'CAJAS': return 'cj';
-      case 'CAJA': return 'cj';
-      case 'KILOGRAMOS': return 'kg';
-      case 'KILO': return 'kg';
-      case 'KG': return 'kg';
-      case 'LITROS': return 'L';
-      case 'LITRO': return 'L';
-      case 'BANDEJAS': return 'band';
-      case 'BANDEJA': return 'band';
-      case 'ESTUCHES': case 'ESTUCHE': return 'est';
-      case 'BOLSAS': case 'BOLSA': return 'bol';
-      case 'UNIDADES': return 'uds';
-      case 'UNIDAD': return 'uds';
-      case 'PIEZAS': return 'pzs';
-      case 'PIEZA': return 'pzs';
-      default: return unit.toLowerCase();
+      case 'CAJAS':
+        return 'cj';
+      case 'CAJA':
+        return 'cj';
+      case 'KILOGRAMOS':
+        return 'kg';
+      case 'KILO':
+        return 'kg';
+      case 'KG':
+        return 'kg';
+      case 'LITROS':
+        return 'L';
+      case 'LITRO':
+        return 'L';
+      case 'BANDEJAS':
+        return 'band';
+      case 'BANDEJA':
+        return 'band';
+      case 'ESTUCHES':
+      case 'ESTUCHE':
+        return 'est';
+      case 'BOLSAS':
+      case 'BOLSA':
+        return 'bol';
+      case 'UNIDADES':
+        return 'uds';
+      case 'UNIDAD':
+        return 'uds';
+      case 'PIEZAS':
+        return 'pzs';
+      case 'PIEZA':
+        return 'pzs';
+      default:
+        return unit.toLowerCase();
     }
   }
 
   @override
   // ignore: prefer_expression_function_bodies
   Widget build(BuildContext context) {
+    final isGiftLine = line.tipoLinea == 'G' || line.precioVenta <= 0;
     final marginColor = line.porcentajeMargen >= 15
         ? AppTheme.neonGreen
         : line.porcentajeMargen >= 5
@@ -136,7 +161,9 @@ class OrderLineTile extends StatelessWidget {
         return false; // The callback handles deletion after confirmation
       },
       child: Card(
-        color: AppTheme.darkCard,
+        color: isGiftLine
+            ? AppTheme.neonGreen.withValues(alpha: 0.08)
+            : AppTheme.darkCard,
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
@@ -156,7 +183,8 @@ class OrderLineTile extends StatelessWidget {
                     width: 40,
                     height: 40,
                     child: SmartProductImage(
-                      imageUrl: '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(line.codigoArticulo.trim())}/image',
+                      imageUrl:
+                          '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(line.codigoArticulo.trim())}/image',
                       productCode: line.codigoArticulo,
                       productName: line.descripcion,
                       headers: ApiClient.authHeaders,
@@ -177,8 +205,11 @@ class OrderLineTile extends StatelessWidget {
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w500,
-                          fontSize: Responsive.fontSize(context,
-                              small: 12, large: 14,),
+                          fontSize: Responsive.fontSize(
+                            context,
+                            small: 12,
+                            large: 14,
+                          ),
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -186,41 +217,79 @@ class OrderLineTile extends StatelessWidget {
                       const SizedBox(height: 3),
                       Row(
                         children: [
-                          // Tappable VT / SC badge
-                          GestureDetector(
-                            onTap: onClaseLineaToggle == null
-                                ? null
-                                : () => onClaseLineaToggle!(
-                                    line.claseLinea == 'SC' ? 'VT' : 'SC',),
-                            child: Container(
+                          if (isGiftLine) ...[
+                            Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 5, vertical: 1,),
-                              decoration: BoxDecoration(
-                                color: line.claseLinea == 'SC'
-                                    ? Colors.blueGrey.withValues(alpha: 0.25)
-                                    : AppTheme.neonPurple
-                                        .withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                  color: line.claseLinea == 'SC'
-                                      ? Colors.blueGrey
-                                      : Colors.transparent,
-                                  width: 0.5,
-                                ),
+                                horizontal: 5,
+                                vertical: 1,
                               ),
-                              child: Text(
-                                line.claseLinea == 'SC' ? 'SC' : 'VT',
-                                style: TextStyle(
+                              decoration: BoxDecoration(
+                                color:
+                                    AppTheme.neonGreen.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.card_giftcard,
+                                    color: AppTheme.neonGreen,
+                                    size: 10,
+                                  ),
+                                  SizedBox(width: 2),
+                                  Text(
+                                    'REGALO',
+                                    style: TextStyle(
+                                      color: AppTheme.neonGreen,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ] else
+                            // Tappable VT / SC badge
+                            GestureDetector(
+                              onTap: onClaseLineaToggle == null
+                                  ? null
+                                  : () => onClaseLineaToggle!(
+                                        line.claseLinea == 'SC' ? 'VT' : 'SC',
+                                      ),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 1,
+                                ),
+                                decoration: BoxDecoration(
                                   color: line.claseLinea == 'SC'
-                                      ? Colors.blueGrey.shade200
-                                      : AppTheme.neonPurple,
-                                  fontSize: Responsive.fontSize(context,
-                                      small: 9, large: 10,),
-                                  fontWeight: FontWeight.w600,
+                                      ? Colors.blueGrey.withValues(alpha: 0.25)
+                                      : AppTheme.neonPurple
+                                          .withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: line.claseLinea == 'SC'
+                                        ? Colors.blueGrey
+                                        : Colors.transparent,
+                                    width: 0.5,
+                                  ),
+                                ),
+                                child: Text(
+                                  line.claseLinea == 'SC' ? 'SC' : 'VT',
+                                  style: TextStyle(
+                                    color: line.claseLinea == 'SC'
+                                        ? Colors.blueGrey.shade200
+                                        : AppTheme.neonPurple,
+                                    fontSize: Responsive.fontSize(
+                                      context,
+                                      small: 9,
+                                      large: 10,
+                                    ),
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
                           const SizedBox(width: 6),
                           // Qty Stepper
                           Container(
@@ -238,27 +307,35 @@ class OrderLineTile extends StatelessWidget {
                                             line.cantidadUnidades > 0
                                         ? onDecrement
                                         : null,
-                                    borderRadius:
-                                        const BorderRadius.horizontal(
-                                            left: Radius.circular(6),),
+                                    borderRadius: const BorderRadius.horizontal(
+                                      left: Radius.circular(6),
+                                    ),
                                     child: const Padding(
                                       padding: EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 3,),
-                                      child: Icon(Icons.remove,
-                                          size: 14,
-                                          color: Colors.white70,),
+                                        horizontal: 6,
+                                        vertical: 3,
+                                      ),
+                                      child: Icon(
+                                        Icons.remove,
+                                        size: 14,
+                                        color: Colors.white70,
+                                      ),
                                     ),
                                   ),
                                 ),
                                 Padding(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 4,),
+                                    horizontal: 4,
+                                  ),
                                   child: Text(
                                     _getQtyLabel(),
                                     style: TextStyle(
                                       color: Colors.white,
-                                      fontSize: Responsive.fontSize(context,
-                                          small: 11, large: 12,),
+                                      fontSize: Responsive.fontSize(
+                                        context,
+                                        small: 11,
+                                        large: 12,
+                                      ),
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -267,15 +344,19 @@ class OrderLineTile extends StatelessWidget {
                                   color: Colors.transparent,
                                   child: InkWell(
                                     onTap: onIncrement,
-                                    borderRadius:
-                                        const BorderRadius.horizontal(
-                                            right: Radius.circular(6),),
+                                    borderRadius: const BorderRadius.horizontal(
+                                      right: Radius.circular(6),
+                                    ),
                                     child: const Padding(
                                       padding: EdgeInsets.symmetric(
-                                          horizontal: 6, vertical: 3,),
-                                      child: Icon(Icons.add,
-                                          size: 14,
-                                          color: AppTheme.neonBlue,),
+                                        horizontal: 6,
+                                        vertical: 3,
+                                      ),
+                                      child: Icon(
+                                        Icons.add,
+                                        size: 14,
+                                        color: AppTheme.neonBlue,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -290,7 +371,9 @@ class OrderLineTile extends StatelessWidget {
                         Text(
                           _priceLabel(),
                           style: const TextStyle(
-                              color: Colors.white38, fontSize: 10,),
+                            color: Colors.white38,
+                            fontSize: 10,
+                          ),
                         ),
                       ],
                       // Req #6: Descuento por línea editable.
@@ -308,20 +391,26 @@ class OrderLineTile extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    if (line.importeVenta == 0) ...[
+                    if (isGiftLine) ...[
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.warning_amber_rounded,
-                              color: AppTheme.warning, size: 13,),
+                          const Icon(
+                            Icons.card_giftcard,
+                            color: AppTheme.neonGreen,
+                            size: 13,
+                          ),
                           const SizedBox(width: 3),
                           Text(
                             '0,00 €',
                             style: TextStyle(
-                              color: AppTheme.error,
+                              color: AppTheme.neonGreen,
                               fontWeight: FontWeight.bold,
-                              fontSize: Responsive.fontSize(context,
-                                  small: 13, large: 15,),
+                              fontSize: Responsive.fontSize(
+                                context,
+                                small: 13,
+                                large: 15,
+                              ),
                             ),
                           ),
                         ],
@@ -330,23 +419,33 @@ class OrderLineTile extends StatelessWidget {
                       // Req #6: Precio original tachado si hay descuento.
                       if (line.lineDiscountPct > 0)
                         Text(
-                          PedidosFormatters.money(line.precioVenta,
-                              decimals: 3,),
+                          PedidosFormatters.money(
+                            line.precioVenta,
+                            decimals: 3,
+                          ),
                           style: TextStyle(
                             color: Colors.white38,
                             decoration: TextDecoration.lineThrough,
-                            fontSize: Responsive.fontSize(context,
-                                small: 10, large: 11,),
+                            fontSize: Responsive.fontSize(
+                              context,
+                              small: 10,
+                              large: 11,
+                            ),
                           ),
                         )
                       else
                         Text(
-                          PedidosFormatters.money(line.precioVenta,
-                              decimals: 3,),
+                          PedidosFormatters.money(
+                            line.precioVenta,
+                            decimals: 3,
+                          ),
                           style: TextStyle(
                             color: Colors.white70,
-                            fontSize: Responsive.fontSize(context,
-                                small: 11, large: 12,),
+                            fontSize: Responsive.fontSize(
+                              context,
+                              small: 11,
+                              large: 12,
+                            ),
                           ),
                         ),
                       const SizedBox(height: 2),
@@ -355,8 +454,11 @@ class OrderLineTile extends StatelessWidget {
                         style: TextStyle(
                           color: AppTheme.neonGreen,
                           fontWeight: FontWeight.bold,
-                          fontSize: Responsive.fontSize(context,
-                              small: 13, large: 15,),
+                          fontSize: Responsive.fontSize(
+                            context,
+                            small: 13,
+                            large: 15,
+                          ),
                         ),
                       ),
                     ],
@@ -369,8 +471,8 @@ class OrderLineTile extends StatelessWidget {
                     final visible = ref.watch(pedidosProvider).isMarginVisible;
                     if (!visible) return const SizedBox.shrink();
                     return Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 3),
                       decoration: BoxDecoration(
                         color: marginColor.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(6),
@@ -379,8 +481,11 @@ class OrderLineTile extends StatelessWidget {
                         '${line.porcentajeMargen.toStringAsFixed(1)}%',
                         style: TextStyle(
                           color: marginColor,
-                          fontSize: Responsive.fontSize(context,
-                              small: 10, large: 11,),
+                          fontSize: Responsive.fontSize(
+                            context,
+                            small: 10,
+                            large: 11,
+                          ),
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -415,8 +520,10 @@ class _LineDiscountChip extends StatelessWidget {
       builder: (ctx) {
         return AlertDialog(
           backgroundColor: AppTheme.darkSurface,
-          title: const Text('Descuento de línea',
-              style: TextStyle(color: Colors.white),),
+          title: const Text(
+            'Descuento de línea',
+            style: TextStyle(color: Colors.white),
+          ),
           content: TextField(
             controller: controller,
             autofocus: true,

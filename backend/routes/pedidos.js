@@ -394,7 +394,7 @@ router.get('/product-history/:productCode/:clientCode', async (req, res) => {
                 SUM(L.LCIMCT) AS COST,
                 SUM(L.LCCTUD) AS UNITS,
                 SUM(L.LCCTEV) AS ENVASES,
-                AVG(L.LCPRTC) AS AVG_PRICE,
+                AVG(L.LCPRMD) AS AVG_PRICE,
                 AVG(L.LCPRT1) AS AVG_TARIFF,
                 AVG(CASE WHEN L.LCPJDT <> 0 THEN L.LCPJDT ELSE NULL END) AS AVG_DISCOUNT_PCT,
                 COUNT(*) AS LINE_COUNT
@@ -753,9 +753,29 @@ router.get('/product-comparative/:productCode', async (req, res) => {
 router.get('/client-evolution/:clientCode', async (req, res) => {
     try {
         const clientCode = String(req.params.clientCode || '').trim();
+        const vendedorCodes = req.query.vendedorCodes || req.query.vendorCodes || 'ALL';
+        
         if (!clientCode) {
             return res.status(400).json({ success: false, error: 'clientCode requerido' });
         }
+        
+        // Verify client belongs to vendor scope
+        const clientCheckQuery = `
+            SELECT 1 FROM DSEDAC.CLI 
+            WHERE TRIM(CODIGOCLIENTE) = ?
+              ${buildVendedorFilter(vendedorCodes)}
+            FETCH FIRST 1 ROWS ONLY
+        `;
+        const clientCheck = await queryWithParams(clientCheckQuery, [clientCode]);
+
+        if (clientCheck.length === 0) {
+            return res.status(403).json({ 
+                success: false, 
+                error: 'No tienes acceso a este cliente',
+                message: 'Cliente no encontrado o no tienes permiso para verlo' 
+            });
+        }
+        
         const currentYear = new Date().getFullYear();
         const startYear = currentYear - 2;
 
@@ -765,6 +785,7 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
             FROM DSED.LACLAE L
             WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
               AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
+              ${buildVendedorFilter(vendedorCodes, 'L')}
             GROUP BY L.LCAADC, L.LCMMDC
             ORDER BY L.LCAADC ASC, L.LCMMDC ASC
         `;
@@ -777,6 +798,7 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
             LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
             WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
               AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
+              ${buildVendedorFilter(vendedorCodes, 'L')}
             GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
             ORDER BY TOTAL_SALES DESC
             FETCH FIRST 20 ROWS ONLY
@@ -791,6 +813,7 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
             LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
             WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
               AND (L.LCSRAB = 'D' OR L.LCTPVT = 'DV')
+              ${buildVendedorFilter(vendedorCodes, 'L')}
             GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
             ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC
             FETCH FIRST 50 ROWS ONLY

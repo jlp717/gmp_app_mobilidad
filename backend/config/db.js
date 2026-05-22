@@ -24,15 +24,16 @@ const DB_CONFIG = `DSN=${DB_DSN};UID=${DB_UID_FINAL};PWD=${DB_PWD_FINAL};NAM=1;C
     COMMTIMEOUT=${parseInt(process.env.ODBC_COMM_TIMEOUT) || 90};
     DBQ=${DB_DSN};`;
 
-// Pool sizing â€” configurable via env for production tuning.
+// Pool sizing — configurable via env for production tuning.
 // Defaults raised: /commissions/summary?vendor=ALL fans out to N parallel vendor
 // queries; with max=10 the pool exhausted and requests timed out at 10s.
-// Increased to 30 for high-concurrency commission scenarios (up to ~40 vendors in parallel).
+// Increased to 50 for high-concurrency scenarios (up to ~40 vendors in parallel).
+// For multi-user environments, increased max connections to handle concurrent users
 const POOL_CONFIG = {
-    min: parseInt(process.env.DB_POOL_MIN, 10) || 3,
-    max: parseInt(process.env.DB_POOL_MAX, 10) || 30,
-    idleTimeoutMs: parseInt(process.env.DB_POOL_IDLE_MS, 10) || 30000,
-    acquireTimeoutMs: parseInt(process.env.DB_POOL_ACQUIRE_MS, 10) || 30000
+    min: parseInt(process.env.DB_POOL_MIN, 10) || 5,  // Increased from 3 for better availability
+    max: parseInt(process.env.DB_POOL_MAX, 10) || 50, // Increased from 30 for better concurrency
+    idleTimeoutMs: parseInt(process.env.DB_POOL_IDLE_MS, 10) || 60000, // Increased from 30000
+    acquireTimeoutMs: parseInt(process.env.DB_POOL_ACQUIRE_MS, 10) || 60000 // Increased from 30000
 };
 
 const pool = {
@@ -47,6 +48,11 @@ const pool = {
     _closed: false,
 
     async _ensureMinConnections() {
+        // Add safety check to prevent excessive connections
+        if (this.connections.length >= this.max) {
+            return;
+        }
+        
         while (this.connections.length < this.min) {
             try {
                 const conn = await this._odbcPool.connect();
@@ -87,11 +93,25 @@ const pool = {
         if (this._closed) throw new Error('Pool is closed');
         const start = Date.now();
 
-        while (this.active >= this.max) {
-            if (Date.now() - start > this.acquireTimeoutMs) {
-                throw new Error('Pool: acquire timeout - max connections reached');
+        // Implement circuit breaker pattern to prevent cascade failures
+        if (this.active >= this.max) {
+            const waitTime = 20;
+            let attempts = 0;
+            const maxAttempts = Math.floor(this.acquireTimeoutMs / waitTime);
+            
+            while (this.active >= this.max && attempts < maxAttempts) {
+                if (Date.now() - start > this.acquireTimeoutMs) {
+                    logger.warn(`[POOL] Connection acquisition timeout after ${this.acquireTimeoutMs}ms`);
+                    throw new Error('Pool: acquire timeout - max connections reached');
+                }
+                
+                await new Promise(res => setTimeout(res, waitTime));
+                attempts++;
             }
-            await new Promise(res => setTimeout(res, 20));
+            
+            if (this.active >= this.max) {
+                throw new Error('Pool: unable to acquire connection after waiting');
+            }
         }
 
         let c = this.connections.find(c => !c.inUse);
@@ -105,12 +125,23 @@ const pool = {
                     throw new Error(`Pool: failed to create connection - ${error.message}`);
                 }
             } else {
-                while (!c) {
-                    if (Date.now() - start > this.acquireTimeoutMs) {
-                        throw new Error('Pool: acquire timeout - no available connections');
-                    }
-                    await new Promise(res => setTimeout(res, 20));
+                // Wait for connection with exponential backoff
+                let waitTime = 20;
+                let totalWait = 0;
+                
+                while (!c && totalWait < this.acquireTimeoutMs) {
+                    await new Promise(res => setTimeout(res, waitTime));
+                    totalWait += waitTime;
                     c = this.connections.find(c => !c.inUse);
+                    
+                    // Exponential backoff up to 200ms
+                    if (waitTime < 200) {
+                        waitTime += 20;
+                    }
+                }
+                
+                if (!c) {
+                    throw new Error('Pool: acquire timeout - no available connections');
                 }
             }
         } else {

@@ -15,6 +15,30 @@ class MatrixNode {
     this.children = const [],
     this.isExpanded = false,
   });
+
+  factory MatrixNode.fromJson(Map<String, dynamic> json) {
+    return MatrixNode(
+      id: json['id']?.toString() ?? '',
+      name: json['name']?.toString() ?? '',
+      type: json['type']?.toString() ?? '',
+      sales: (json['sales'] as num?)?.toDouble() ?? 0.0,
+      margin: (json['margin'] as num?)?.toDouble() ?? 0.0,
+      growth: (json['growth'] as num?)?.toDouble() ?? 0.0,
+      orders: (json['orders'] as num?)?.toInt() ?? 0,
+      children: (json['children'] as List<dynamic>?)
+              ?.map((e) => MatrixNode.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
+      isExpanded: json['isExpanded'] == true,
+    );
+  }
+
+  static List<MatrixNode> fromJsonList(dynamic data) {
+    if (data == null) return [];
+    if (data is List) return data.map((e) => MatrixNode.fromJson(e as Map<String, dynamic>)).toList();
+    return [];
+  }
+
   final String id;
   final String name;
   final String

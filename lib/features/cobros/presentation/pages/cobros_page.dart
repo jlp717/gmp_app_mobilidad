@@ -71,10 +71,11 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     try {
       final currentFilterVendor = ref.read(selectedVendorProvider);
       final queryCode = currentFilterVendor ?? widget.employeeCode;
-      final results = await ClientsService.getClientsList(
+      final response = await ClientsService.getClientsList(
         vendedorCodes: queryCode,
         search: query.isEmpty ? null : query,
       );
+      final results = (response['clients'] as List<dynamic>).cast<Map<String, dynamic>>();
       if (mounted && generation == _clientLoadGeneration) {
         setState(() => _foundClients = results);
       }
@@ -105,7 +106,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       if (selectedVendor != null && selectedVendor.isNotEmpty) {
         await _provider.cargarPendingSummary(selectedVendor);
       } else if (allVendorCodes.isNotEmpty) {
-        await _provider.cargarPendingSummary(null, vendedorCodes: allVendorCodes);
+        await _provider.cargarPendingSummary(null,
+            vendedorCodes: allVendorCodes);
       } else {
         await _provider.cargarPendingSummary(null);
       }
@@ -242,9 +244,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     final entries = cobros.pendingSummary.entries.where((entry) {
       final total = (entry.value['total'] as num?)?.toDouble() ?? 0;
       final vencido = (entry.value['vencido'] as num?)?.toDouble() ?? 0;
-      final estado = vencido > 0
-          ? 'vencido'
-          : (total > 0 ? 'pendiente' : 'aldia');
+      final estado =
+          vencido > 0 ? 'vencido' : (total > 0 ? 'pendiente' : 'aldia');
       switch (_estadoFilter) {
         case 'vencido':
           return estado == 'vencido';
@@ -332,7 +333,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                 ),
               ),
               Container(
-                width: 1, height: 36,
+                width: 1,
+                height: 36,
                 color: Colors.white.withValues(alpha: 0.08),
               ),
               Expanded(
@@ -344,7 +346,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                 ),
               ),
               Container(
-                width: 1, height: 36,
+                width: 1,
+                height: 36,
                 color: Colors.white.withValues(alpha: 0.08),
               ),
               Expanded(
@@ -429,7 +432,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     final filters = const [
       _FilterDef('pendiente', 'Pendientes', Icons.schedule, Colors.amber),
       _FilterDef('vencido', 'Vencidos', Icons.error_outline, Colors.redAccent),
-      _FilterDef('aldia', 'Al dia', Icons.check_circle_outline, AppTheme.neonGreen),
+      _FilterDef(
+          'aldia', 'Al dia', Icons.check_circle_outline, AppTheme.neonGreen),
       _FilterDef('todos', 'Todos', Icons.list, Colors.white70),
     ];
     return Container(
@@ -448,18 +452,19 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             return Padding(
               padding: const EdgeInsets.only(right: 8),
               child: FilterChip(
-                avatar: Icon(f.icon, size: 16,
-                    color: selected ? Colors.white : f.color,),
+                avatar: Icon(
+                  f.icon,
+                  size: 16,
+                  color: selected ? Colors.white : f.color,
+                ),
                 label: Text(f.label),
                 selected: selected,
-                onSelected: (_) =>
-                    setState(() => _estadoFilter = f.value),
+                onSelected: (_) => setState(() => _estadoFilter = f.value),
                 backgroundColor: AppTheme.darkCard,
                 selectedColor: f.color.withValues(alpha: 0.25),
                 labelStyle: TextStyle(
                   color: selected ? Colors.white : Colors.white70,
-                  fontWeight:
-                      selected ? FontWeight.w600 : FontWeight.normal,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
                 ),
                 side: BorderSide(
                   color: selected
@@ -520,10 +525,10 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
               hintText: 'Buscar por nombre, código, NIF...',
-              hintStyle:
-                  TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6)),
-              prefixIcon:
-                  Icon(Icons.search, color: AppTheme.neonBlue.withValues(alpha: 0.7)),
+              hintStyle: TextStyle(
+                  color: AppTheme.textSecondary.withValues(alpha: 0.6)),
+              prefixIcon: Icon(Icons.search,
+                  color: AppTheme.neonBlue.withValues(alpha: 0.7)),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide:
@@ -562,6 +567,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
 
   Widget _buildNoClientsState(CobrosProvider cobros, String searchQuery) {
     final hasDebt = cobros.grandTotal > 0;
+    final hasSummaryData = cobros.pendingSummary.isNotEmpty;
     final isFiltering = searchQuery.isNotEmpty || _estadoFilter != 'pendiente';
 
     return Center(
@@ -571,9 +577,13 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              isFiltering ? Icons.search_off : Icons.check_circle_outline,
+              isFiltering
+                  ? Icons.search_off
+                  : (hasSummaryData
+                      ? Icons.check_circle_outline
+                      : Icons.info_outline),
               size: 64,
-              color: (isFiltering
+              color: (isFiltering || !hasSummaryData
                       ? AppTheme.textSecondary
                       : AppTheme.success)
                   .withValues(alpha: 0.3),
@@ -584,7 +594,9 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                   ? 'No se encontraron resultados'
                   : (hasDebt
                       ? 'No hay clientes con deuda'
-                      : 'Todo al dia'),
+                      : (hasSummaryData
+                          ? 'Todo al dia'
+                          : 'Resumen de cobros no disponible')),
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 16,
@@ -598,7 +610,9 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                   ? 'Prueba con otro termino de busqueda o filtro'
                   : (hasDebt
                       ? 'Los clientes con deuda no coinciden con el filtro actual'
-                      : 'No hay cobros pendientes para este comercial'),
+                      : (hasSummaryData
+                          ? 'No hay cobros pendientes para este comercial'
+                          : 'Reintenta para cargar la deuda real del ERP')),
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13,
@@ -627,7 +641,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                 label: const Text('Limpiar filtros'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppTheme.neonBlue,
-                  side: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+                  side: BorderSide(
+                      color: AppTheme.neonBlue.withValues(alpha: 0.3)),
                 ),
               ),
             ],
@@ -644,6 +659,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     final pending = _provider.pendingForClient(code);
     final vencido = _provider.vencidoForClient(code);
     final estado = _provider.estadoForClient(code);
+    final hasSummary = _provider.hasPendingSummaryForClient(code);
     final fromErpDebt = client['fromErpDebt'] == true;
 
     // Nombre: usar el que viene del backend (NOMBREALTERNATIVO > DESCRIPCIONCLIENTE)
@@ -663,8 +679,11 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       case 'PENDIENTE':
         badgeColor = AppTheme.warning;
         break;
-      default:
+      case 'AL_DIA':
         badgeColor = AppTheme.success;
+        break;
+      default:
+        badgeColor = AppTheme.textSecondary;
     }
 
     return Card(
@@ -803,8 +822,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                     ],
                   ],
                 ),
-              // Tick verde: solo si NO tiene pendiente Y NO tiene vencido
-              if (pending == 0 && vencido == 0)
+              // Tick verde: solo si hay summary explicito y no hay deuda.
+              if (hasSummary && pending == 0 && vencido == 0)
                 Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -815,6 +834,20 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                   child: const Icon(
                     Icons.check_circle,
                     color: AppTheme.success,
+                    size: 20,
+                  ),
+                ),
+              if (!hasSummary)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.textSecondary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Icon(
+                    Icons.remove_circle_outline,
+                    color: AppTheme.textSecondary,
                     size: 20,
                   ),
                 ),

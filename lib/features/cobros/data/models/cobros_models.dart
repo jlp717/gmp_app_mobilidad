@@ -137,13 +137,12 @@ class CobroPendiente {
       estadoCalc = EstadoCobro.fromString(json['estado'] as String?);
     } else if (pendiente <= 0.0001) {
       estadoCalc = EstadoCobro.alDia;
-    } else if (parsedVenc != null &&
-        parsedVenc.isBefore(DateTime.now().subtract(const Duration(days: 0)))) {
-      // Vencido si fecha venc < hoy.
+    } else if (parsedVenc != null) {
+      // Vencido si fecha venc <= hoy.
       final today = DateTime.now();
       final dueOnly = DateTime(parsedVenc.year, parsedVenc.month, parsedVenc.day);
       final todayOnly = DateTime(today.year, today.month, today.day);
-      estadoCalc = dueOnly.isBefore(todayOnly)
+      estadoCalc = !dueOnly.isAfter(todayOnly)
           ? EstadoCobro.vencido
           : EstadoCobro.pendiente;
     } else {

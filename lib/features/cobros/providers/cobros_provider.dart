@@ -29,6 +29,17 @@ String buildCobroIdempotencyToken({
       '${clean(referencia)}:$timestamp';
 }
 
+String estadoFromPendingSummaryEntry(Map<String, dynamic>? data) {
+  if (data == null) return 'SIN_DATOS';
+  final estado = (data['estado'] as String?)?.toUpperCase();
+  if (estado != null && estado.isNotEmpty) return estado;
+  final vencido = (data['vencido'] as num?)?.toDouble() ?? 0;
+  final total = (data['total'] as num?)?.toDouble() ?? 0;
+  if (vencido > 0) return 'VENCIDO';
+  if (total > 0) return 'PENDIENTE';
+  return 'AL_DIA';
+}
+
 class CobrosProvider extends ChangeNotifier {
   CobrosProvider({
     required this.employeeCode,
@@ -46,6 +57,8 @@ class CobrosProvider extends ChangeNotifier {
   ResumenCobros? _resumenCobros;
   EstadoCliente? _estadoClienteActual;
   Map<String, Map<String, dynamic>> _pendingSummary = {};
+  String? _lastSummaryVendorCode;
+  List<String>? _lastSummaryVendorCodes;
   double _grandTotal = 0;
   double _grandTotalVencido = 0;
   String _filtroEstado = 'todos';
@@ -64,10 +77,12 @@ class CobrosProvider extends ChangeNotifier {
   Map<String, Map<String, dynamic>> get pendingSummary => _pendingSummary;
   double get grandTotal => _grandTotal;
   double get grandTotalVencido => _grandTotalVencido;
+
   /// Numero de clientes con cualquier importe pendiente (>0).
   int get clientsWithDebt => _pendingSummary.values
       .where((v) => ((v['total'] as num?)?.toDouble() ?? 0) > 0)
       .length;
+
   /// Numero de clientes con importe vencido (>0).
   int get clientsWithVencido => _pendingSummary.values
       .where((v) => ((v['vencido'] as num?)?.toDouble() ?? 0) > 0)
@@ -265,10 +280,16 @@ class CobrosProvider extends ChangeNotifier {
     try {
       String endpoint;
       if (vendedorCodes != null && vendedorCodes.isNotEmpty) {
+        _lastSummaryVendorCode = null;
+        _lastSummaryVendorCodes = List<String>.from(vendedorCodes);
         endpoint = '/cobros/pending-summary/${vendedorCodes.join(',')}';
       } else if (vendedorCode != null && vendedorCode.isNotEmpty) {
+        _lastSummaryVendorCode = vendedorCode;
+        _lastSummaryVendorCodes = null;
         endpoint = '/cobros/pending-summary/$vendedorCode';
       } else {
+        _lastSummaryVendorCode = null;
+        _lastSummaryVendorCodes = null;
         endpoint = '/cobros/pending-summary/ALL';
       }
       final response = await ApiClient.get(endpoint);
@@ -296,6 +317,10 @@ class CobrosProvider extends ChangeNotifier {
     return (entry?['total'] as num?)?.toDouble() ?? 0;
   }
 
+  bool hasPendingSummaryForClient(String code) {
+    return _pendingSummary.containsKey(code.trim());
+  }
+
   /// Req #15: importe vencido por cliente (subset de pending).
   double vencidoForClient(String code) {
     final entry = _pendingSummary[code.trim()];
@@ -305,14 +330,7 @@ class CobrosProvider extends ChangeNotifier {
   /// Req #15: estado consolidado por cliente — VENCIDO | PENDIENTE | AL_DIA.
   String estadoForClient(String code) {
     final entry = _pendingSummary[code.trim()];
-    if (entry == null) return 'AL_DIA';
-    final estado = (entry['estado'] as String?)?.toUpperCase();
-    if (estado != null && estado.isNotEmpty) return estado;
-    final vencido = (entry['vencido'] as num?)?.toDouble() ?? 0;
-    final total = (entry['total'] as num?)?.toDouble() ?? 0;
-    if (vencido > 0) return 'VENCIDO';
-    if (total > 0) return 'PENDIENTE';
-    return 'AL_DIA';
+    return estadoFromPendingSummaryEntry(entry);
   }
 
   Future<void> cargarCobrosPendientes(String codigoCliente) async {
@@ -391,7 +409,10 @@ class CobrosProvider extends ChangeNotifier {
         if (_pendingSummary.isNotEmpty) {
           // No bloqueamos el flujo de UI con await: fire-and-forget.
           // ignore: unawaited_futures
-          cargarPendingSummary(employeeCode);
+          cargarPendingSummary(
+            _lastSummaryVendorCode,
+            vendedorCodes: _lastSummaryVendorCodes,
+          );
         }
         return true;
       }

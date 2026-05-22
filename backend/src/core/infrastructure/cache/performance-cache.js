@@ -86,6 +86,36 @@ class PerformanceCache {
   }
 
   /**
+   * Compatibility wrapper for getOrFetch() — called by ddd-adapters.js
+   * Handles multiple calling patterns:
+   *   (key, fetchFn)           → default COMERCIAL TTL
+   *   (key, fetchFn, number)   → convert seconds to ttlConfig
+   *   (key, fetchFn, {l1,l2,l3}) → pass through to get()
+   *   (key, fetchFn, {role, isAllQuery}) → compute TTL from role/query type
+   */
+  async getOrFetch(key, fetchFn, ttlSecOrConfig) {
+    let ttlConfig;
+    if (ttlSecOrConfig == null) {
+      ttlConfig = TTL_CONFIG.COMERCIAL;
+    } else if (typeof ttlSecOrConfig === 'number') {
+      const s = Math.max(1, Math.floor(ttlSecOrConfig));
+      ttlConfig = { l1: Math.min(s, 30), l2: s, l3: s * 2 };
+    } else if (ttlSecOrConfig && typeof ttlSecOrConfig === 'object') {
+      if (ttlSecOrConfig.l1 != null && ttlSecOrConfig.l2 != null) {
+        ttlConfig = ttlSecOrConfig;
+      } else if (ttlSecOrConfig.role) {
+        const role = ttlSecOrConfig.role || 'COMERCIAL';
+        ttlConfig = this.getTTL(role, !!ttlSecOrConfig.isAllQuery);
+      } else {
+        ttlConfig = TTL_CONFIG.COMERCIAL;
+      }
+    } else {
+      ttlConfig = TTL_CONFIG.COMERCIAL;
+    }
+    return this.get(key, fetchFn, ttlConfig);
+  }
+
+  /**
    * Get with cascade: L1 → L2 → fetch
    */
   async get(key, fetchFn, ttlConfig) {

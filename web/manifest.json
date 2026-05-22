@@ -1,13 +1,20 @@
 {
-    "name": "gmp_app_mobilidad",
-    "short_name": "gmp_app_mobilidad",
+    "name": "GMP App Movilidad",
+    "short_name": "GMP Mobilidad",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "Sistema de Gestión Comercial con funcionalidad offline completa",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
+    "scope": "/",
+    "categories": ["business", "productivity"],
+    "serviceworker": {
+      "src": "/sw.js",
+      "scope": "/",
+      "update_via_cache": "all"
+    },
     "icons": [
         {
             "src": "icons/Icon-192.png",

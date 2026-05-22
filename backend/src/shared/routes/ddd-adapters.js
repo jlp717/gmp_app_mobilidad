@@ -1242,7 +1242,17 @@ function createCobrosRoutes() {
     userId: req.user?.code || req.user?.id,
     userRole: req.user?.role || 'COMERCIAL',
     isJefeVentas: req.user?.isJefeVentas === true || req.user?.role === 'JEFE_VENTAS' || req.user?.role === 'ADMIN',
+    vendedorCodes: req.user?.vendedorCodes || req.user?.vendorCodes,
+    vendorCodes: req.user?.vendorCodes || req.user?.vendedorCodes,
   });
+
+  const cobrosCacheScope = (req) => {
+    const role = req.user?.role || 'COMERCIAL';
+    const userId = req.user?.code || req.user?.id || 'anonymous';
+    const visible = req.user?.vendorCodes || req.user?.vendedorCodes || [];
+    const visibleScope = Array.isArray(visible) ? visible.join(',') : String(visible || '');
+    return `${role}:${userId}:${visibleScope}`;
+  };
 
   const sendCobrosError = (res, error) => {
     const status = Number(error.status) ||
@@ -1267,7 +1277,7 @@ function createCobrosRoutes() {
       const { codigoCliente } = req.params;
       if (!codigoCliente) return res.status(400).json({ success: false, error: 'codigoCliente required' });
 
-      const cacheKey = `ddd:cobros:pendientes:${codigoCliente}`;
+      const cacheKey = `ddd:cobros:pendientes:${codigoCliente}:${cobrosCacheScope(req)}`;
       await withCache(cache, cacheKey, TTL_MS.PENDIENTES, async () => {
         const pendientes = await repo.getPendientes(String(codigoCliente).trim(), cobrosContext(req));
         return {
@@ -1333,8 +1343,8 @@ function createCobrosRoutes() {
         overrideReason: overrideReason || '',
       });
 
-      cache.invalidatePattern(`ddd:cobros:pendientes:${codigoCliente}`);
-      cache.invalidatePattern(`ddd:cobros:historico:${codigoCliente}`);
+      cache.invalidatePattern(`ddd:cobros:pendientes:${codigoCliente}:`);
+      cache.invalidatePattern(`ddd:cobros:historico:${codigoCliente}:`);
 
       res.json({ success: true, mensaje: 'Cobro registrado correctamente', payment: result });
     } catch (error) {
@@ -1368,8 +1378,8 @@ function createCobrosRoutes() {
       });
 
       // Invalidate cobros caches
-      cache.invalidatePattern(`ddd:cobros:pendientes:${clientCode}`);
-      cache.invalidatePattern(`ddd:cobros:historico:${clientCode}`);
+      cache.invalidatePattern(`ddd:cobros:pendientes:${clientCode}:`);
+      cache.invalidatePattern(`ddd:cobros:historico:${clientCode}:`);
 
       res.json({ success: true, payment: result });
     } catch (error) {
@@ -1397,7 +1407,7 @@ function createCobrosRoutes() {
       const { codigoCliente } = req.params;
       const { limit, offset } = req.query;
 
-      const cacheKey = `ddd:cobros:historico:${codigoCliente}:${limit || 20}:${offset || 0}`;
+      const cacheKey = `ddd:cobros:historico:${codigoCliente}:${cobrosCacheScope(req)}:${limit || 20}:${offset || 0}`;
       await withCache(cache, cacheKey, TTL_MS.COBROS_HISTORICO, async () => {
         const historico = await repo.getHistorico({
           clientCode: String(codigoCliente).trim(),

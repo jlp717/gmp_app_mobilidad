@@ -250,13 +250,17 @@ app.use((req, res, next) => {
   next();
 });
 
-// Path normalization â€” handle requests arriving without /api prefix.
+// Path normalization — handle requests arriving without /api prefix.
 // Safety net for cases where Cloudflare Tunnel or a reverse proxy strips the
 // /api path segment before forwarding to this server.
-// Examples fixed: /auth/login â†’ /api/auth/login, /facturas â†’ /api/facturas
+// Examples fixed: /auth/login → /api/auth/login, /facturas → /api/facturas
 app.use((req, res, next) => {
   if (!req.path.startsWith('/api') && !req.path.startsWith('/health')) {
-    req.url = '/api' + req.url;
+    // Only add /api prefix if the original URL does not already start with /api/
+    // This prevents double prefixing when the Flutter client already adds /api
+    if (!req.originalUrl.startsWith('/api/')) {
+      req.url = '/api' + req.url;
+    }
   }
   next();
 });
@@ -416,6 +420,19 @@ app.get('/health/version-check', (req, res) => {
 
 // Also mount at /api/health/version-check since Flutter ApiClient adds /api prefix
 app.get('/api/health/version-check', (req, res) => {
+  res.json({
+    status: 'ok',
+    currentVersion: process.env.APP_VERSION || '3.3.1',
+    minVersion: process.env.MIN_APP_VERSION || '3.0.0',
+    latestVersion: process.env.LATEST_APP_VERSION || '3.3.1',
+    updateRequired: false,
+    updateUrl: process.env.UPDATE_URL || null,
+    timestamp: new Date().toISOString()
+  });
+});
+
+// API version endpoint for mobile app compatibility
+app.get('/api/app/version', (req, res) => {
   res.json({
     status: 'ok',
     currentVersion: process.env.APP_VERSION || '3.3.1',
