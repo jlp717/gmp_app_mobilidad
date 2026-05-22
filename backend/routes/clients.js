@@ -61,6 +61,11 @@ const getClientsHandler = async (req, res) => {
       }
     }
 
+    // Also prepare version for LACLAE tables (LV + S subqueries use LCCDCL, not C.CODIGOCLIENTE)
+    const laclaeClientCodesFilter = clientCodesFilter
+        ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL')
+        : '';
+
     // Generate Cache Key (v5 = optimized with pre-filtered client codes)
     const cacheKey = `clients:list:v5:${vendedorCodes || 'ALL'}:${safeSearch || 'none'}:${limit}:${offset}`;
     // OPTIMIZATION: Longer TTL for ALL vendors (JEFE_VENTAS default)
@@ -123,6 +128,7 @@ const getClientsHandler = async (req, res) => {
             AND LCTPVT IN ('CC', 'VC')
             AND LCCLLN IN ('AB', 'VT')
             AND LCSRAB NOT IN ('N', 'Z')
+            ${laclaeClientCodesFilter}
         ) X
         WHERE RN = 1
       ) LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE

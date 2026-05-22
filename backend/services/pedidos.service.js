@@ -1208,7 +1208,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, limit
             COALESCE(T1.PRECIOTARIFA, 0) AS precioTarifa1,
             COALESCE(T2.PRECIOTARIFA, 0) AS precioMinimo,
             COALESCE(TC.PRECIOTARIFA, 0) AS precioCliente,
-            COALESCE(A.COSTEPROMEDIO, 0) AS precioCosto,
+            COALESCE(LC.PRECIOCOSTO, 0) AS precioCosto,
             TRIM(COALESCE(A.FORMATO, '')) AS formato,
             COALESCE(A.PRODUCTOPESADOSN, '') AS productoPesado,
             COALESCE(PH.SALES_THIS_YEAR, 0) AS salesThisYear,
@@ -1255,6 +1255,12 @@ async function getProducts({ search, clientCode, family, marca, prefamily, limit
                 WHERE TRIM(CLC.CODIGOCLIENTE) = ?
                 FETCH FIRST 1 ROW ONLY
             )
+        LEFT JOIN (
+            SELECT TRIM(CODIGOARTICULO) AS CA, PRECIOCOSTO,
+                ROW_NUMBER() OVER (PARTITION BY TRIM(CODIGOARTICULO) ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC) AS RN
+            FROM DSEDAC.LAC
+            WHERE PRECIOCOSTO > 0
+        ) LC ON TRIM(A.CODIGOARTICULO) = LC.CA AND LC.RN = 1
         ${where}
         ORDER BY
             CASE WHEN COALESCE(PH.PURCHASE_COUNT, 0) > 0 THEN 0 ELSE 1 END ASC,
@@ -1923,10 +1929,18 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
     sql += `, C.NUMEROPEDIDO DESC`;
     sql += ` OFFSET ${parseInt(offset)} ROWS FETCH FIRST ${parseInt(limit)} ROWS ONLY`;
 
+    // CACHE: Keyed on all filter params to avoid repeated costly scans of PEDIDOS_LIN
+    const cacheKey = `pedidos:orders:${vendedorCodes || 'ALL'}:${status || ''}:${year || ''}:${month || ''}:${dateFrom || ''}:${dateTo || ''}:${search || ''}:${minAmount || ''}:${maxAmount || ''}:${sortBy || 'fecha'}:${sortOrder || 'DESC'}:${limit}:${offset}`;
+
     try {
-        const rows = await queryWithParams(sql, params);
+        const rows = await cachedQuery(
+            (q) => queryWithParams(q, params),
+            sql,
+            cacheKey,
+            TTL.SHORT
+        );
         if (!rows || rows.length === 0) {
-            return [];
+            return { orders: [], count: 0 };
         }
         const orders = rows.map(r => {
             const dia = String(r.DIADOCUMENTO).padStart(2, '0');

@@ -18,6 +18,7 @@ import 'package:gmp_app_mobilidad/features/dashboard/presentation/pages/dashboar
 import 'package:gmp_app_mobilidad/features/facturas/presentation/pages/facturas_page.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/pages/kpi_dashboard_page.dart';
 import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/objectives_page.dart';
+import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/client_evolution_page.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/presentation/pages/bolsa_page.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/pedidos_page.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
@@ -1487,6 +1488,16 @@ class _MainShellState extends ConsumerState<MainShell> {
           );
         case 'Bolsa':
           return const BolsaPage();
+        case 'Evolución':
+          return ClientEvolutionPage(
+            employeeCode: empCode,
+            isJefeVentas: isCommercial80AllMode || hasScopedVendorAccess,
+            vendorSelectorCodes: (isCommercial80AllMode || hasScopedVendorAccess)
+                ? effectiveVendorCodes
+                : null,
+            includeAllVendorOption: !hasScopedVendorAccess,
+            forceShowVendorSelector: isCommercial80,
+          );
         case 'Chat IA':
           return const ComingSoonPlaceholder(
             title: 'Nexus AI — Asistente Comercial',

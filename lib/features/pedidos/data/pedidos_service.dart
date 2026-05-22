@@ -572,6 +572,9 @@ class PromotionItem {
     this.minQty = 0,
     this.giftQty = 0,
     this.cumulative = false,
+    this.productCode = '',
+    this.isGlobal = false,
+    this.noGiftBought = false,
   });
 
   factory PromotionItem.fromJson(Map<String, dynamic> json) {
@@ -611,6 +614,9 @@ class PromotionItem {
       minQty: _toDouble(json['minQty']),
       giftQty: _toDouble(json['giftQty']),
       cumulative: json['cumulative'] == true,
+      productCode: (json['productCode'] ?? '').toString().trim(),
+      isGlobal: _toBool(json['isGlobal']),
+      noGiftBought: _toBool(json['noGiftBought']),
     );
   }
   final String code;
@@ -627,6 +633,9 @@ class PromotionItem {
   final double minQty;
   final double giftQty;
   final bool cumulative;
+  final String productCode;
+  final bool isGlobal;
+  final bool noGiftBought;
 
   bool get hasSaving => regularPrice > 0 && promoPrice < regularPrice;
   double get savingPct =>
@@ -705,6 +714,7 @@ class OrderLine {
     this.ivaRate = 0.21,
     this.unidadesFraccion = 0,
     this.claseLinea = 'VT',
+    this.tipoLinea = 'R',
   });
 
   factory OrderLine.fromJson(Map<String, dynamic> json) {
@@ -742,6 +752,8 @@ class OrderLine {
           _toDouble(json['unidadesFraccion'] ?? json['UNIDADESFRACCION']),
       claseLinea:
           (json['claseLinea'] ?? json['CLASELINEA'] ?? 'VT').toString().trim(),
+      tipoLinea:
+          (json['tipoLinea'] ?? 'R').toString().trim(),
     )..lineDiscountPct = _toDouble(
         json['lineDiscountPct'] ??
             json['DESCUENTO_LINEA'] ??
@@ -767,6 +779,7 @@ class OrderLine {
   double ivaRate; // e.g. 0.21, 0.10, 0.04, 0.0
   double unidadesFraccion; // Support for dual-field unit logic
   String claseLinea;
+  String tipoLinea;
   double lineDiscountPct;
 
   Map<String, dynamic> toJson() => {
@@ -784,6 +797,7 @@ class OrderLine {
         'precioMinimo': precioMinimo,
         'ivaRate': ivaRate,
         'claseLinea': claseLinea,
+        'tipoLinea': tipoLinea,
         'lineDiscountPct': lineDiscountPct,
       };
 
@@ -1830,4 +1844,12 @@ int _toInt(dynamic value, {int fallback = 0}) {
   if (value is String) return int.tryParse(value) ?? fallback;
   // Map / List / any other unexpected type → fallback (prevents crashes)
   return fallback;
+}
+
+/// Safe bool parser — handles null, bool, String, num, Map (crash-proof).
+bool _toBool(dynamic value, {bool fallback = false}) {
+  if (value == null) return fallback;
+  if (value is bool) return value;
+  final s = value.toString().trim().toUpperCase();
+  return s == 'TRUE' || s == 'S' || s == '1';
 }

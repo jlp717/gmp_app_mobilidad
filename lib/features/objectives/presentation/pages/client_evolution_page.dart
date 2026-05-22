@@ -80,7 +80,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
         vendedorCodes: queryCode,
         limit: 100, // Reasonable limit for dropdown
       );
-      final clients = (response['clients'] as List<dynamic>).cast<Map<String, dynamic>>();
+      final clients = (response as List<dynamic>).cast<Map<String, dynamic>>();
 
       if (mounted && generation == _loadGeneration) {
         setState(() {

@@ -362,7 +362,7 @@ class PedidosProvider with ChangeNotifier {
       return _cachedPorcentajeMargen!;
     }
     final value =
-        totalConDescuento > 0 ? (totalMargen / totalConDescuento) * 100 : 0;
+        totalConDescuento > 0 ? (totalMargen / totalConDescuento) * 100 : 0.0;
     _cachedPorcentajeMargen = value;
     return value;
   }
@@ -842,7 +842,7 @@ class PedidosProvider with ChangeNotifier {
       line.precioVenta = 0;
       line.importeVenta = 0;
       line.importeMargen = -line.importeCosto;
-      line.porcentajeMargen = 0;
+      line.porcentajeMargen = 0.0;
     } else {
       // Restore price from tariff cache if available
       final cached = lastPriceForProduct(line.codigoArticulo);
@@ -1536,6 +1536,22 @@ class PedidosProvider with ChangeNotifier {
     } catch (e) {
       debugPrint('[PedidosProvider] syncPendingOrders error: $e');
       return 0;
+    }
+  }
+
+  @visibleForTesting
+  void debugSetPromotions(List<PromotionItem> promotions) {
+    _activePromotionsList
+      ..clear()
+      ..addAll(promotions);
+    _activePromotions.clear();
+    final seen = <String>{};
+    for (final promo in promotions) {
+      final productCode =
+          promo.productCode.isNotEmpty ? promo.productCode : promo.code;
+      if (productCode.isNotEmpty && seen.add(productCode)) {
+        _activePromotions[productCode] = promo;
+      }
     }
   }
 

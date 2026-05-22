@@ -32,6 +32,20 @@ class AppColors {
   static const Color neonElectric = Color(0xFF60A5FA);
   static const Color holoBlue = Color(0xFF2563EB);
 
+  // Advanced accents
+  static const Color quantumRed = Color(0xFFFF4466);
+  static const Color quantumOrange = Color(0xFFFFAA00);
+  static const Color quantumLime = Color(0xFF8AFF00);
+  static const Color quantumViolet = Color(0xFF9D4EDD);
+
+  // Holographic effect colors
+  static const Color holoPrimary = Color(0xFF00D4FF);
+  static const Color holoSecondary = Color(0xFFB967FF);
+  static const Color holoAccent = Color(0xFFFF55AA);
+  static const Color holoSuccess = Color(0xFF00FFAA);
+  static const Color holoWarning = Color(0xFFFFAA00);
+  static const Color holoError = Color(0xFFFF4466);
+
   // Aliases
   static const Color primary = neonBlue;
   static const Color secondary = neonGreen;
@@ -48,6 +62,10 @@ class AppColors {
   static const Color premiumGreenEnd = Color(0xFF06B6D4);
   static const Color premiumSunriseStart = Color(0xFFF59E0B);
   static const Color premiumSunriseEnd = Color(0xFFEF4444);
+  static const Color premiumQuantumStart = Color(0xFF00D4FF);
+  static const Color premiumQuantumEnd = Color(0xFFB967FF);
+  static const Color premiumNeonStart = Color(0xFF00FFAA);
+  static const Color premiumNeonEnd = Color(0xFFFF55AA);
 
   // ============================================================================
   // GLOW INTENSITIES
@@ -94,6 +112,10 @@ class AppColors {
   static const Color chartViolet = Color(0xFF8B5CF6);
   static const Color chartEmerald = Color(0xFF10B981);
   static const Color chartAmber = Color(0xFFF59E0B);
+  static const Color chartCoral = Color(0xFFFF6B6B);
+  static const Color chartOcean = Color(0xFF00D4FF);
+  static const Color chartLime = Color(0xFF8AFF00);
+  static const Color chartMagenta = Color(0xFFFF55AA);
 
   static const List<Color> chartColors = [
     neonBlue,
@@ -182,6 +204,37 @@ class AppColors {
       Color(0xFFEC4899),
     ],
   );
+
+  // ============================================================================
+  // DYNAMIC GRADIENTS — For interactive elements
+  // ============================================================================
+
+  static const List<Color> dynamicGradient1 = [
+    neonBlue,
+    neonGreen,
+  ];
+
+  static const List<Color> dynamicGradient2 = [
+    neonPurple,
+    neonPink,
+  ];
+
+  static const List<Color> dynamicGradient3 = [
+    neonBlue,
+    neonPurple,
+  ];
+
+  static const List<Color> dynamicGradient4 = [
+    neonGreen,
+    neonCyan,
+  ];
+
+  static const List<Color> holographicGradient = [
+    neonCyan,
+    neonPurple,
+    neonPink,
+    neonGreen,
+  ];
 
   // ============================================================================
   // SPACING CONSTANTS

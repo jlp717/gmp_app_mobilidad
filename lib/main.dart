@@ -28,6 +28,12 @@ void main() async {
     debugPrint('[FLUTTER_ERROR] ${details.exceptionAsString()}');
   };
 
+  PlatformDispatcher.instance.onError = (error, stack) {
+    Sentry.captureException(error, stackTrace: stack);
+    debugPrint('[PLATFORM_ERROR] $error\n$stack');
+    return true;
+  };
+
   if (kReleaseMode) {
     ErrorWidget.builder = (FlutterErrorDetails details) {
       return Material(
@@ -82,6 +88,7 @@ void main() async {
   } catch (e, stack) {
     debugPrint('[MAIN] ❌ Initialization error: $e');
     debugPrint('[MAIN] Stack: $stack');
+    await Sentry.captureException(e, stackTrace: stack);
   }
 
   await initializeDateFormatting('es');
@@ -130,6 +137,7 @@ class GMPSalesAnalyticsApp extends ConsumerStatefulWidget {
 
 class _GMPSalesAnalyticsAppState extends ConsumerState<GMPSalesAnalyticsApp>
     with WidgetsBindingObserver {
+  static const premiumRoutes = <String>[];
   late final GoRouter _router;
   final ValueNotifier<int> _authChangeSignal = ValueNotifier<int>(0);
 

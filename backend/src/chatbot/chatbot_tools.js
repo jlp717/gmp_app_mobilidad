@@ -164,9 +164,16 @@ const dbDiscoveryTools = {
 const pricingTools = {
     async getProductPrice(conn, productCode) {
         const tariff = await safeQuery(conn, `
-            SELECT CODIGOARTICULO, DESCRIPCIONARTICULO, PRECIOVENTA, COSTEPROMEDIO
-            FROM DSEDAC.ART
-            WHERE TRIM(CODIGOARTICULO) = ?
+            SELECT A.CODIGOARTICULO, A.DESCRIPCIONARTICULO, A.PRECIOVENTA,
+                   COALESCE((
+                       SELECT L.PRECIOCOSTO FROM DSEDAC.LAC L
+                       WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
+                         AND L.PRECIOCOSTO > 0
+                       ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
+                       FETCH FIRST 1 ROW ONLY
+                   ), 0) AS PRECIOCOSTO
+            FROM DSEDAC.ART A
+            WHERE TRIM(A.CODIGOARTICULO) = ?
             FETCH FIRST 1 ROWS ONLY
         `, [productCode]);
 
@@ -182,7 +189,7 @@ const pricingTools = {
         return {
             product: tariff[0] || {},
             tariffPrice: parseFloat(tariff[0]?.PRECIOVENTA) || 0,
-            cost: parseFloat(tariff[0]?.COSTEPROMEDIO) || 0,
+            cost: parseFloat(tariff[0]?.PRECIOCOSTO) || 0,
             lastSoldPrice: parseFloat(lastSale[0]?.PRECIOVENTAUNITARIO) || 0,
             lastSoldTo: lastSale[0]?.CLIENTE
         };
@@ -190,14 +197,22 @@ const pricingTools = {
 
     async calculateBreakeven(conn, productCode) {
         const art = await safeQuery(conn, `
-            SELECT COSTEPROMEDIO, PRECIOVENTA
-            FROM DSEDAC.ART WHERE TRIM(CODIGOARTICULO) = ?
+            SELECT A.PRECIOVENTA,
+                   COALESCE((
+                       SELECT L.PRECIOCOSTO FROM DSEDAC.LAC L
+                       WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
+                         AND L.PRECIOCOSTO > 0
+                       ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
+                       FETCH FIRST 1 ROW ONLY
+                   ), 0) AS PRECIOCOSTO
+            FROM DSEDAC.ART A
+            WHERE TRIM(A.CODIGOARTICULO) = ?
             FETCH FIRST 1 ROWS ONLY
         `, [productCode]);
 
         if (!art[0]) return { error: 'Producto no encontrado' };
 
-        const cost = parseFloat(art[0].COSTEPROMEDIO) || 0;
+        const cost = parseFloat(art[0].PRECIOCOSTO) || 0;
         const tariff = parseFloat(art[0].PRECIOVENTA) || 0;
         const minMargin = 0.05;
         const floorPrice = cost * (1 + minMargin);
@@ -214,13 +229,22 @@ const pricingTools = {
 
     async simulateDiscount(conn, productCode, discountPercent) {
         const art = await safeQuery(conn, `
-            SELECT COSTEPROMEDIO, PRECIOVENTA FROM DSEDAC.ART 
-            WHERE TRIM(CODIGOARTICULO) = ? FETCH FIRST 1 ROWS ONLY
+            SELECT A.PRECIOVENTA,
+                   COALESCE((
+                       SELECT L.PRECIOCOSTO FROM DSEDAC.LAC L
+                       WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
+                         AND L.PRECIOCOSTO > 0
+                       ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
+                       FETCH FIRST 1 ROW ONLY
+                   ), 0) AS PRECIOCOSTO
+            FROM DSEDAC.ART A
+            WHERE TRIM(A.CODIGOARTICULO) = ?
+            FETCH FIRST 1 ROWS ONLY
         `, [productCode]);
 
         if (!art[0]) return { error: 'Producto no encontrado' };
 
-        const cost = parseFloat(art[0].COSTEPROMEDIO) || 0;
+        const cost = parseFloat(art[0].PRECIOCOSTO) || 0;
         const tariff = parseFloat(art[0].PRECIOVENTA) || 0;
         const discount = parseFloat(discountPercent) / 100;
         const newPrice = tariff * (1 - discount);

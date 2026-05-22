@@ -66,6 +66,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
 
   late String _selectedUnit;
   double? _selectedTariffUnitPrice;
+  bool _userOverrodePrice = false; // true cuando el usuario elige tarifa manualmente
   bool _showWarehouseStock = false;
   List<TariffEntry> _tariffs = [];
   List<StockEntry> _stockByWarehouse = [];
@@ -81,7 +82,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
     final prov = ref.read(pedidosProvider);
     OrderLine? existingLine;
     for (final line in prov.lines) {
-      if (line.codigoArticulo == product.code) {
+      if (line.codigoArticulo == product.code && line.tipoLinea != 'G') {
         existingLine = line;
         break;
       }
@@ -155,6 +156,24 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
   }
 
   double _unitPriceForSelection(String unit) {
+    // Prioridad 1: Promo de precio activa (PRICE) → aplica promoPrice automáticamente
+    // SOLO si el usuario NO ha sobrescrito manualmente el precio.
+    if (!_userOverrodePrice) {
+      final prov = ref.read(pedidosProvider);
+      final promo = prov.getPromo(product.code);
+      if (promo != null &&
+          promo.promoType == 'PRICE' &&
+          promo.promoPrice > 0) {
+        final promoUnitPrice = promo.promoPrice;
+        if (unit == 'CAJAS') {
+          return promoUnitPrice *
+              (product.unitsPerBox > 0 ? product.unitsPerBox : 1);
+        }
+        return promoUnitPrice;
+      }
+    }
+
+    // Prioridad 2: Último precio usado o selección manual de tarifa
     if (_selectedTariffUnitPrice != null && _selectedTariffUnitPrice! > 0) {
       if (unit == 'CAJAS') {
         return _selectedTariffUnitPrice! *
@@ -162,6 +181,8 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
       }
       return _selectedTariffUnitPrice!;
     }
+
+    // Prioridad 3: Precio de tarifa normal del producto
     return product.priceForUnit(unit);
   }
 
@@ -626,6 +647,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                         if (selected != null) {
                           setModalState(() {
                             _selectedTariffUnitPrice = selected;
+                            _userOverrodePrice = true;
                             _priceController.text = _formatPriceForInput(
                               _unitPriceForSelection(_selectedUnit),
                             );
@@ -1116,7 +1138,10 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
-                          onChanged: (_) => setModalState(() {}),
+                  onChanged: (_) {
+                    _userOverrodePrice = true;
+                    setModalState(() {});
+                  },
                           decoration: _qtyFieldDeco(AppTheme.neonGreen),
                         ),
                       ),

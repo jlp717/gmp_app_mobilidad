@@ -75,7 +75,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         vendedorCodes: queryCode,
         search: query.isEmpty ? null : query,
       );
-      final results = (response['clients'] as List<dynamic>).cast<Map<String, dynamic>>();
+      final results = (response as List<dynamic>).cast<Map<String, dynamic>>();
       if (mounted && generation == _clientLoadGeneration) {
         setState(() => _foundClients = results);
       }
