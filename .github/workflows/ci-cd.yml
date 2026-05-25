@@ -50,7 +50,7 @@ jobs:
       node_version: ${{ steps.version.outputs.node }}
     steps:
       - name: Checkout with full history
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 2
 
@@ -104,7 +104,7 @@ jobs:
       warning_count: ${{ steps.analyze.outputs.warning_count }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -174,7 +174,7 @@ jobs:
       error_count: ${{ steps.lint.outputs.error_count }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -234,7 +234,7 @@ jobs:
       coverage: ${{ steps.coverage.outputs.coverage }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -297,7 +297,7 @@ jobs:
       test_result: ${{ steps.test.outputs.result }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -360,7 +360,7 @@ jobs:
       vulnerabilities: ${{ steps.scan.outputs.vulns }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -447,7 +447,7 @@ jobs:
       apk_size: ${{ steps.size.outputs.size }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -547,7 +547,7 @@ jobs:
       aab_path: ${{ steps.build.outputs.aab_path }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -629,7 +629,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}

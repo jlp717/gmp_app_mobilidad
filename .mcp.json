@@ -2,7 +2,10 @@
   "mcpServers": {
     "claude-flow": {
       "command": "claude-flow",
-      "args": ["mcp", "start"],
+      "args": [
+        "mcp",
+        "start"
+      ],
       "env": {
         "npm_config_update_notifier": "false",
         "CLAUDE_FLOW_MODE": "v3",
@@ -29,6 +32,13 @@
         "npm_config_update_notifier": "false"
       },
       "autoStart": false
+    },
+    "guardvibe": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "guardvibe@3.1.21"
+      ]
     }
   }
 }

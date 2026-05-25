@@ -65,7 +65,7 @@ jobs:
       should_auto_fix: ${{ steps.decide.outputs.should_auto_fix }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 1
 
@@ -265,7 +265,7 @@ print(f\"Summary: {d['summary']}\")
       github.event.workflow_run.head_repository.fork == false
     steps:
       - name: Checkout (at failing branch)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ needs.analyze.outputs.branch }}
           fetch-depth: 2
@@ -419,7 +419,7 @@ print(json.dumps(ctx))
       fromJson(needs.analyze.outputs.classification).transient == false
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v4

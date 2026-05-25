@@ -125,10 +125,10 @@ nc localhost 3197
 - ShimmerLoading, SkeletonCard, SkeletonList, SkeletonSummary
 - OrderStatusBadge, SmartProductImage, ComingSoonPlaceholder
 
-### Tests Totales (esta sesión):
+### Tests Totales (actualizado May 25, 2026):
 - 11/11 Flutter navigation tests ✅
-- 76/76 Backend tests ✅
-- ~60+ Widget tests passing
+- 217/224 Backend tests (7 pre-existing failures)
+- ~60+ Widget tests ✅
 
 ## Color Centralization
 
@@ -225,3 +225,34 @@ bd close <id>         # Complete work
 - NEVER say "ready to push when you are" - YOU must push
 - If push fails, resolve and retry until it succeeds
 <!-- END BEADS INTEGRATION -->
+
+## Security Rules (enforced by GuardVibe MCP)
+
+### Mandatory checks
+- AFTER writing any API route, Server Action, or database query: use the guardvibe scan_file MCP tool on the file
+- BEFORE committing: use the guardvibe scan_staged MCP tool
+- When GuardVibe reports HIGH or CRITICAL: fix immediately before moving on
+- BEFORE creating a PR: use scan_changed_files to review all changes
+
+### Scan visibility — ALWAYS report GuardVibe results to the user
+- AFTER every scan: ALWAYS tell the user the GuardVibe result, even when clean
+- When issues found: "GuardVibe: [count] issues found ([severity]). Fixing..."
+- When clean: "GuardVibe: scanned [filename] — no issues found."
+- Include the summary stats line from scan output when present
+- NEVER silently consume scan results — the user must see that GuardVibe is protecting their code
+- Periodically (every ~10 scans or at session start): run security_stats tool and share the dashboard with the user
+
+### Writing secure code
+- Every API route handler MUST have auth check before DB access
+- Every POST endpoint MUST have input validation (zod/joi schema)
+- Never pass user input to innerHTML, eval, exec, or raw SQL
+- Never pass user-controlled URLs to fetch() without allowlist validation
+- Always use select: in Prisma/Drizzle queries from Server Actions (never return full objects to client)
+- Always validate redirect URLs against trusted domain allowlist
+- Set security headers (CSP, HSTS, X-Frame-Options, X-Content-Type-Options)
+- Verify webhook signatures before processing events
+- Use parameterized queries, never string concatenation/template literals for SQL
+
+### When in doubt
+- Use the guardvibe explain_remediation MCP tool with the rule ID for detailed fix guidance
+- Use the guardvibe check_code MCP tool to verify a code snippet is secure before applying

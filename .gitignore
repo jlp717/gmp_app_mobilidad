@@ -238,3 +238,7 @@ backend/scripts/testing/
 # AcouZ — voice dictation tool (standalone, not tracked)
 acouz/
 .acouz/
+# GuardVibe (auto-added by guardvibe init)
+.mcp.json
+CLAUDE.md
+.guardvibe/
