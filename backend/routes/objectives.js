@@ -36,7 +36,7 @@ const {
     isCacheReady: isMetadataCacheReady
 } = require('../services/metadataCache');
 
-const OBJECTIVES_CACHE_VERSION = 'v20260529-hybrid-evolution-fix';
+const OBJECTIVES_CACHE_VERSION = 'v20260529-hybrid-jefe-all';
 
 // =============================================================================
 // INHERITED OBJECTIVES LOGIC
@@ -279,6 +279,63 @@ async function getExactMonthlyTargets(vendorCode, year) {
         return targets;
     } catch (err) {
         logger.debug(`[OBJECTIVES] getExactMonthlyTargets error: ${err.message}`);
+        return {};
+    }
+}
+
+/**
+ * Global pinned months (JEFE / ALL): sum objectives only for months where
+ * multiple comerciales have COMMERCIAL_TARGETS (e.g. May global 1.41M).
+ */
+async function getGlobalPinnedMonthlyTargets(year) {
+    try {
+        const aggregated = await queryWithParams(`
+            SELECT MES, SUM(IMPORTE_OBJETIVO) as TOTAL
+            FROM JAVIER.COMMERCIAL_TARGETS
+            WHERE ANIO = ? AND ACTIVO = 1 AND MES IS NOT NULL
+            GROUP BY MES
+            HAVING COUNT(DISTINCT TRIM(CODIGOVENDEDOR)) > 1
+        `, [year], false);
+
+        const targets = {};
+        (aggregated || []).forEach(r => {
+            const mes = parseInt(r.MES, 10);
+            const val = parseFloat(r.TOTAL) || 0;
+            if (mes > 0 && val > 0) targets[mes] = val;
+        });
+        return targets;
+    } catch (err) {
+        logger.debug(`[OBJECTIVES] getGlobalPinnedMonthlyTargets error: ${err.message}`);
+        return {};
+    }
+}
+
+async function getScopedPinnedMonthlyTargets(year, vendorCodes) {
+    const allVariants = [...new Set(
+        vendorCodes.flatMap(code => getVendorCodeVariants(code)),
+    )];
+    if (allVariants.length === 0) return {};
+
+    try {
+        const ph = allVariants.map(() => '?').join(',');
+        const aggregated = await queryWithParams(`
+            SELECT MES, SUM(IMPORTE_OBJETIVO) as TOTAL
+            FROM JAVIER.COMMERCIAL_TARGETS
+            WHERE ANIO = ? AND ACTIVO = 1
+              AND MES IS NOT NULL
+              AND TRIM(CODIGOVENDEDOR) IN (${ph})
+            GROUP BY MES
+        `, [year, ...allVariants], false);
+
+        const targets = {};
+        (aggregated || []).forEach(r => {
+            const mes = parseInt(r.MES, 10);
+            const val = parseFloat(r.TOTAL) || 0;
+            if (mes > 0 && val > 0) targets[mes] = val;
+        });
+        return targets;
+    } catch (err) {
+        logger.debug(`[OBJECTIVES] getScopedPinnedMonthlyTargets error: ${err.message}`);
         return {};
     }
 }
@@ -753,53 +810,36 @@ router.get('/evolution', verifyToken, async (req, res) => {
         }
 
         // ==========================================================================
-        // FIXED TARGETS: Check if vendor has fixed monthly targets from COMMERCIAL_TARGETS.
-        // Single-vendor: uses exact matches with fallback to dynamic for missing months.
-        // Multi-vendor: aggregates only months that have override entries (vendor != 15).
+        // FIXED TARGETS from COMMERCIAL_TARGETS
+        // - Single vendor: exact month rows → hybrid per commercial
+        // - JEFE ALL: months with 2+ vendors (global May 1.41M) → hybrid on aggregate
+        // - Multi-vendor scope (e.g. 80 team): sum pinned months in scope
         // ==========================================================================
         const fixedTargetsByYear = {};
         if (vendorCodesArray.length === 1) {
             const firstCode = vendorCodesArray[0];
             for (const year of yearsArray) {
-                // Use ONLY exact month matches (no pastRecent fallback) to avoid
-                // propagating override values to months that should be dynamic.
                 fixedTargetsByYear[year] = await getExactMonthlyTargets(firstCode, year);
             }
             if (Object.values(fixedTargetsByYear).some(targets => Object.keys(targets).length > 0)) {
                 logger.info(`[OBJECTIVES] Vendor ${firstCode} has fixed monthly targets in COMMERCIAL_TARGETS`);
             }
-        } else if (isAll || vendorCodesArray.length > 1) {
-            // Sum fixed monthly targets for each vendor in scope (team 72+73+81+83 for commercial 80).
-            try {
-                const allVariants = [...new Set(
-                    vendorCodesArray.flatMap(code => getVendorCodeVariants(code)),
-                )];
-                if (allVariants.length > 0) {
-                    const ph = allVariants.map(() => '?').join(',');
-                    for (const year of yearsArray) {
-                        const aggregated = await queryWithParams(`
-                            SELECT MES, SUM(IMPORTE_OBJETIVO) as TOTAL
-                            FROM JAVIER.COMMERCIAL_TARGETS
-                            WHERE ANIO = ? AND ACTIVO = 1
-                              AND MES IS NOT NULL
-                              AND TRIM(CODIGOVENDEDOR) IN (${ph})
-                            GROUP BY MES
-                        `, [year, ...allVariants], false);
-                        if (aggregated && aggregated.length > 0) {
-                            const targets = {};
-                            aggregated.forEach(r => {
-                                const mes = parseInt(r.MES, 10);
-                                const val = parseFloat(r.TOTAL) || 0;
-                                if (mes > 0 && val > 0) targets[mes] = val;
-                            });
-                            if (Object.keys(targets).length > 0) {
-                                fixedTargetsByYear[year] = targets;
-                            }
-                        }
-                    }
+        } else if (isAll) {
+            for (const year of yearsArray) {
+                const targets = await getGlobalPinnedMonthlyTargets(year);
+                if (Object.keys(targets).length > 0) {
+                    fixedTargetsByYear[year] = targets;
                 }
-            } catch (e) {
-                logger.debug(`[OBJECTIVES] multi-vendor fixed targets aggregation error: ${e.message}`);
+            }
+            if (Object.keys(fixedTargetsByYear).length > 0) {
+                logger.info('[OBJECTIVES] JEFE ALL: loaded global pinned months from COMMERCIAL_TARGETS');
+            }
+        } else if (vendorCodesArray.length > 1) {
+            for (const year of yearsArray) {
+                const targets = await getScopedPinnedMonthlyTargets(year, vendorCodesArray);
+                if (Object.keys(targets).length > 0) {
+                    fixedTargetsByYear[year] = targets;
+                }
             }
         }
 
