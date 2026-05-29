@@ -16,6 +16,7 @@ const {
     isScopedTeamAllRequest,
     resolveAllModeVendorCodes,
     allModeCacheScope,
+    isCommercial80User,
 } = require('../services/team-commission.service');
 
 const router = express.Router();
@@ -38,18 +39,19 @@ async function loadExcludedVendors() {
         `, false, false);
 
         if (rows && rows.length > 0) {
-            // Keep original code from DB ('03') AND normalized version ('3') to be safe
-            const dbCodes = rows.map(r => r.CODE);
-            const normalizedCodes = rows.map(r => (r.CODE || '').replace(/^0+/, ''));
+            // Keep original code from DB ('03') AND normalized version ('3') to be safe.
+            // 80 is commissionable; only the commercial-80 login is hidden from commission views.
+            const dbCodes = rows
+                .map(r => r.CODE)
+                .filter(code => code && ((code || '').replace(/^0+/, '') || code) !== '80');
+            const normalizedCodes = dbCodes.map(code => (code || '').replace(/^0+/, ''));
 
             // Merge unique with hardcoded safety list
             EXCLUDED_VENDORS = [...new Set([...DEFAULT_EXCLUDED, ...dbCodes, ...normalizedCodes])];
-            // Juan Luis (80): no comisión personal; ve equipo en panel (boss order 2026-05)
-            if (!EXCLUDED_VENDORS.includes('80')) EXCLUDED_VENDORS.push('80');
 
             logger.info(`[COMMISSIONS] Loaded ${rows.length} excluded rules. Effective list: [${EXCLUDED_VENDORS.join(', ')}]`);
         } else {
-            EXCLUDED_VENDORS = [...DEFAULT_EXCLUDED, '80'];
+            EXCLUDED_VENDORS = [...DEFAULT_EXCLUDED];
             logger.info(`[COMMISSIONS] No excluded vendors found in DB. Using fallback: [${EXCLUDED_VENDORS.join(', ')}]`);
         }
         _excludedVendorsLastLoad = Date.now();
@@ -72,7 +74,7 @@ const DEFAULT_CONFIG_2026 = {
         { min: 110.01, max: 999.99, pct: 2.0 }
     ]
 };
-const COMMISSIONS_CACHE_VERSION = 'v20260529-team80-payments';
+const COMMISSIONS_CACHE_VERSION = 'v20260529-team80-personal-visible';
 
 /**
  * Merge monthly commission rows for scoped team ALL (72+73+81+83).
@@ -1401,6 +1403,20 @@ router.get('/summary', verifyToken, async (req, res) => {
             )];
         const isGroupedRequest = safeVendorCode === 'ALL' || requestedVendorCodes.length > 1;
         const userCode = req.user?.code || '';
+        if (isCommercial80User(userCode)) {
+            logger.info('[COMMISSIONS] Hidden summary for authenticated commercial 80');
+            return res.json({
+                success: true,
+                status: 'hidden',
+                hiddenForCommercial80: true,
+                grandTotalCommission: 0,
+                totals: { commission: 0 },
+                breakdown: [],
+                months: [],
+                quarters: [],
+                payments: { monthly: {}, quarterly: {}, details: {}, total: 0 },
+            });
+        }
         const scopedTeamAll = isScopedTeamAllRequest(userCode, safeVendorCode);
         const groupHash = requestedVendorCodes.length > 0
             ? crypto.createHash('md5').update(requestedVendorCodes.slice().sort().join(',')).digest('hex').substring(0, 12)
@@ -2175,6 +2191,22 @@ router.get('/team/:leaderCode', verifyToken, async (req, res) => {
         const year = parseInt(req.query.year, 10) || new Date().getFullYear();
         if (!leaderCode || !isTeamLeader(leaderCode)) {
             return res.status(400).json({ success: false, error: 'Lider de equipo no valido' });
+        }
+        if (isCommercial80User(req.user?.code || '')) {
+            logger.info('[COMMISSIONS] Hidden team commission for authenticated commercial 80');
+            return res.json({
+                success: true,
+                hiddenForCommercial80: true,
+                leaderCode,
+                year,
+                months: [],
+                teamMembers: [],
+                annualTotal: 0,
+                annualExcess: 0,
+                annualTeamMembersExcess: 0,
+                annualTeamMembersCommission: 0,
+                leaderPersonalCommission: 0,
+            });
         }
         await ensureExcludedVendorsLoaded();
         let config = DEFAULT_CONFIG_2026;

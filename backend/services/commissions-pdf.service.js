@@ -967,21 +967,12 @@ function drawSummaryTeamLeadSection(doc, teamData, year, startMonth, endMonth, m
         yPos = margin;
     };
 
-    ensureSpace(98 + ROW_H * Math.max(rows.length, 1));
+    ensureSpace(80 + ROW_H * Math.max(rows.length, 1));
     doc.rect(margin, yPos, contentWidth, 22).fill(COLORS.almeriaBg);
     doc.rect(margin, yPos, contentWidth, 22).stroke(COLORS.almeriaBorder);
     doc.font('Helvetica-Bold').fontSize(11).fillColor(COLORS.almeriaText)
         .text(`Acumulado especial a entregar al 80 - Equipo Almeria (${year})`, margin + 6, yPos + 6, { width: contentWidth - 12 });
     yPos += 28;
-
-    doc.font('Helvetica').fontSize(8).fillColor(COLORS.muted)
-        .text(
-            'Este bloque se coloca bajo Juan Luis (80): suma su comision propia y la comision especial generada por cada comercial de Almeria.',
-            margin,
-            yPos,
-            { width: contentWidth },
-        );
-    yPos += 18;
 
     const summary = [
         { label: 'Comision propia 80', value: ownCommission, color: COLORS.header },

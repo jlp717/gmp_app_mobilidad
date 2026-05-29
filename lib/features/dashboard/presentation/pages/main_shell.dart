@@ -314,7 +314,11 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   List<_NavItem> _getNavItems(bool isJefeVentas, List<String> vendorCodes) {
     final authState = ref.read(authProvider).value;
-    final showCommissions = authState?.user?.showCommissions ?? false;
+    final user = authState?.user;
+    final normalizedUserCode =
+        (user?.code ?? '').replaceFirst(RegExp(r'^0+'), '');
+    final showCommissions =
+        (user?.showCommissions ?? false) && normalizedUserCode != '80';
 
     final navItems = NavigationConfigService.getNavItems(
       isAlmacen: _isAlmacenEffective,

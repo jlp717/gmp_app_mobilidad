@@ -5,6 +5,7 @@ import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
@@ -39,6 +40,27 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
   int _loadGeneration = 0;
 
   // Jefe View
+  bool _isLoggedCommercial80() {
+    final user = ref.read(authProvider).value?.user;
+    return isCommercial80Code(user?.code);
+  }
+
+  Map<String, dynamic> _hiddenCommissionsData() => const {
+        'success': true,
+        'status': 'hidden',
+        'hiddenForCommercial80': true,
+        'grandTotalCommission': 0,
+        'totals': {'commission': 0},
+        'breakdown': [],
+        'months': [],
+        'quarters': [],
+        'payments': {
+          'monthly': {},
+          'quarterly': {},
+          'details': {},
+          'total': 0,
+        },
+      };
 
   @override
   void initState() {
@@ -73,6 +95,16 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
   Future<void> _loadData({bool forceRefresh = false}) async {
     final generation = ++_loadGeneration;
+    if (_isLoggedCommercial80()) {
+      if (!mounted) return;
+      setState(() {
+        _data = _hiddenCommissionsData();
+        _isLoading = false;
+        _error = null;
+        _lastFetchTime = DateTime.now();
+      });
+      return;
+    }
     setState(() {
       _isLoading = true;
       _error = null;
@@ -818,6 +850,27 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final loggedUserCode = ref.watch(
+      authProvider.select((state) => state.value?.user?.code),
+    );
+    if (isCommercial80Code(loggedUserCode)) {
+      return Scaffold(
+        backgroundColor: AppTheme.darkBase,
+        body: Column(
+          children: [
+            SmartSyncHeader(
+              title: 'Comisiones',
+              subtitle: 'Seguimiento y Objetivos',
+              lastSync: _lastFetchTime,
+              isLoading: false,
+              onSync: () => _loadData(forceRefresh: true),
+            ),
+            const Expanded(child: SizedBox.shrink()),
+          ],
+        ),
+      );
+    }
+
     // Check if we're in jefe global ALL mode (per-vendor breakdown cards)
     final breakdown =
         (_data?['breakdown'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -1468,9 +1521,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             ),
           ),
 
-          if (((_data?['isExcluded'] as bool?) ?? false) ||
-              hidePersonalCommissionBadge ||
-              isInformative)
+          if (!isTeamLead &&
+              (((_data?['isExcluded'] as bool?) ?? false) ||
+                  hidePersonalCommissionBadge ||
+                  isInformative))
             Container(
               width: double.infinity,
               margin: const EdgeInsets.all(12),
@@ -1487,11 +1541,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      isTeamLead
-                          ? 'Juan Luis no genera comisión personal. Consulta el acumulado de su equipo o el detalle por comercial.'
-                          : hidePersonalCommissionBadge
-                              ? 'Este comercial no genera comisión según configuración actual'
-                              : 'Este comercial no participa en el plan de comisiones',
+                      hidePersonalCommissionBadge
+                          ? 'Este comercial no genera comisión según configuración actual'
+                          : 'Este comercial no participa en el plan de comisiones',
                       style: const TextStyle(
                           color: Colors.orange,
                           fontSize: 13,
@@ -2071,7 +2123,6 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
   }
 
   Widget _buildTeamLeadTablePanel(Map<String, dynamic> team) {
-    final members = (team['teamMembers'] as List?)?.cast<String>() ?? [];
     final monthRows =
         (team['months'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final nowMonth = DateTime.now().month;
@@ -2167,7 +2218,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Total a entregar al 80: comision propia ${CurrencyFormatter.format(leaderOwnCommission)} + especial equipo ${CurrencyFormatter.format(ytdTeamComm)}. La tabla desglosa ${members.join(', ')} por mes y umbral LY + IPC.',
+            'Propia 80: ${CurrencyFormatter.format(leaderOwnCommission)} | Especial equipo: ${CurrencyFormatter.format(ytdTeamComm)}',
             style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 12),
