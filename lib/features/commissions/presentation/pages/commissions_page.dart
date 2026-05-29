@@ -362,8 +362,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       decoration: BoxDecoration(
                         color: Colors.orange.withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(8),
-                        border:
-                            Border.all(color: Colors.orange.withValues(alpha: 0.4)),
+                        border: Border.all(
+                            color: Colors.orange.withValues(alpha: 0.4)),
                       ),
                       child: Row(
                         children: [
@@ -390,7 +390,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                       decoration: BoxDecoration(
                         color: Colors.blue.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                        border: Border.all(
+                            color: Colors.blue.withValues(alpha: 0.3)),
                       ),
                       child: const Row(
                         children: [
@@ -632,7 +633,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   decoration: BoxDecoration(
                     color: Colors.red.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.red.withValues(alpha: 0.4)),
+                    border:
+                        Border.all(color: Colors.red.withValues(alpha: 0.4)),
                   ),
                   child: const Row(
                     children: [
@@ -1008,10 +1010,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               ),
             ),
             // OBJ. MES
-            DataCell(Text(
-                isFuture ? '-' : CurrencyFormatter.format(target),
-                style:
-                    TextStyle(color: Colors.white.withValues(alpha: textOpacity)))),
+            DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(target),
+                style: TextStyle(
+                    color: Colors.white.withValues(alpha: textOpacity)))),
             // VENTA REAL o INCREMENTO EQUIPO (líder)
             DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(actual),
                 style: TextStyle(color: color, fontWeight: FontWeight.bold))),
@@ -1386,7 +1387,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (widget.isJefeVentas || widget.forceShowVendorSelector) ...[
+                      if (widget.isJefeVentas ||
+                          widget.forceShowVendorSelector) ...[
                         GlobalVendorSelector(
                           isJefeVentas: widget.isJefeVentas,
                           allowedVendorCodes: widget.vendorSelectorCodes,
@@ -1476,8 +1478,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   Expanded(
                     child: Text(
                       isTeamLead
-                          ? 'Tu vista personal no genera comisión; consulta el equipo abajo'
-                          : 'Este comercial no participa en el plan de comisiones',
+                          ? 'Juan Luis no genera comisión personal. Consulta el acumulado de su equipo o el detalle por comercial.'
+                          : hidePersonalCommissionBadge
+                              ? 'Este comercial no genera comisión según configuración actual'
+                              : 'Este comercial no participa en el plan de comisiones',
                       style: const TextStyle(
                           color: Colors.orange,
                           fontSize: 13,
@@ -1506,8 +1510,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      '$aggregateLabel — vista agregada (suma mensual de 72, 73, 81 y 83). '
-                      'Sin ventas personales de 80.',
+                      'Acumulado de su equipo — $aggregateLabel (suma mensual de 72, 73, 81 y 83).',
                       style: const TextStyle(
                           color: Colors.white,
                           fontSize: 13,
@@ -1851,7 +1854,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                   child: DataTable(
                                     columnSpacing: 20,
                                     headingRowColor: WidgetStateProperty.all(
-                                        AppTheme.surfaceColor.withValues(alpha: 0.8)),
+                                        AppTheme.surfaceColor
+                                            .withValues(alpha: 0.8)),
                                     columns: [
                                       const DataColumn(
                                           label: Text('MES',
@@ -1990,8 +1994,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           ),
           const SizedBox(width: 4),
           Text('$range → $rate',
-              style:
-                  TextStyle(fontSize: 9, color: Colors.white.withValues(alpha: 0.7))),
+              style: TextStyle(
+                  fontSize: 9, color: Colors.white.withValues(alpha: 0.7))),
         ],
       ),
     );
@@ -2058,7 +2062,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
   Widget _buildTeamLeadPanel(Map<String, dynamic> team) {
     final members = (team['teamMembers'] as List?)?.cast<String>() ?? [];
-    final monthRows = (team['months'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final monthRows =
+        (team['months'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final nowMonth = DateTime.now().month;
     final ytdTeamComm =
         (team['annualTeamMembersCommission'] as num?)?.toDouble() ?? 0;
@@ -2111,7 +2116,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             ),
           ),
           const SizedBox(height: 12),
-          ...monthRows.where((m) => ((m['month'] as num?)?.toInt() ?? 0) <= nowMonth).map((m) {
+          ...monthRows
+              .where((m) => ((m['month'] as num?)?.toInt() ?? 0) <= nowMonth)
+              .map((m) {
             final month = (m['month'] as num?)?.toInt() ?? 0;
             final teamComm =
                 (m['teamMembersCommission'] as num?)?.toDouble() ?? 0;
@@ -2146,10 +2153,8 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     final qualifies = (mem['qualifies'] as bool?) ?? false;
                     final ventas =
                         (mem['currentSales'] as num?)?.toDouble() ?? 0;
-                    final umbral =
-                        (mem['threshold'] as num?)?.toDouble() ?? 0;
-                    final comm =
-                        (mem['commission'] as num?)?.toDouble() ?? 0;
+                    final umbral = (mem['threshold'] as num?)?.toDouble() ?? 0;
+                    final comm = (mem['commission'] as num?)?.toDouble() ?? 0;
                     final tier = (mem['tier'] as num?)?.toInt() ?? 0;
                     return Text(
                       '  · $code — ${qualifies ? 'COMISIONA' : 'no'} · '
@@ -2593,7 +2598,8 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
         ),
         DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(target),
             style: TextStyle(
-                color: Colors.white.withValues(alpha: textOpacity), fontSize: 10))),
+                color: Colors.white.withValues(alpha: textOpacity),
+                fontSize: 10))),
         DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(actual),
             style: TextStyle(
                 color: color, fontWeight: FontWeight.bold, fontSize: 10))),
@@ -2625,7 +2631,8 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                 fontSize: 9))),
         DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(proRatedTarget),
             style: TextStyle(
-                fontSize: 9, color: Colors.white.withValues(alpha: textOpacity)))),
+                fontSize: 9,
+                color: Colors.white.withValues(alpha: textOpacity)))),
         DataCell(
           isFuture
               ? const Text('-',
@@ -2803,7 +2810,8 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
     }
 
     return DataRow(
-      color: WidgetStateProperty.all(AppTheme.neonPurple.withValues(alpha: 0.1)),
+      color:
+          WidgetStateProperty.all(AppTheme.neonPurple.withValues(alpha: 0.1)),
       cells: [
         DataCell(
           Row(

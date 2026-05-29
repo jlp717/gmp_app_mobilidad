@@ -205,7 +205,12 @@ router.post('/login',
             const vendedorCode = vendor.CODIGOVENDEDOR?.toString().trim();
             let rawName = vendor.NOMBREVENDEDOR || `Comercial ${vendedorCode}`;
             const vendedorName = rawName.replace(/^\d+\s+/, '').trim();
-            const isJefeVentas = vendor.JEFEVENTASSN === 'S';
+            const normalizedLoginCode = (vendedorCode || '').replace(/^0+/, '') || vendedorCode;
+            // Juan Luis (80): always COMERCIAL — JEFEVENTASSN in DB must not change nav/API scope
+            let isJefeVentas = vendor.JEFEVENTASSN === 'S';
+            if (normalizedLoginCode === '80') {
+                isJefeVentas = false;
+            }
             const tipoVendedor = vendor.TIPOVENDEDOR?.trim();
 
             // Verify PIN with migration support

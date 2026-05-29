@@ -262,7 +262,11 @@ router.post('/login',
             // Clean vendor name
             let rawName = vendor.NOMBREVENDEDOR || `Comercial ${vendedorCode}`;
             const vendedorName = rawName.replace(/^\d+\s+/, '').trim();
-            const isJefeVentas = vendor.JEFEVENTASSN === 'S';
+            const normalizedLoginCode = (vendedorCode || '').replace(/^0+/, '') || vendedorCode;
+            let isJefeVentas = vendor.JEFEVENTASSN === 'S';
+            if (normalizedLoginCode === '80') {
+                isJefeVentas = false;
+            }
             const tipoVendedor = vendor.TIPOVENDEDOR?.trim();
 
             // ===================================================================

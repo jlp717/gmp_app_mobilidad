@@ -14,7 +14,7 @@ class CommissionsService {
   }) async {
     try {
       // v5 busts cache after making assignment-based R1 the backend default.
-      final cacheKey = 'commissions_v5_r1_${vendedorCode}_$year';
+      final cacheKey = 'commissions_v6_team80_${vendedorCode}_$year';
 
       final result = await OfflineAwareApi.get(
         '/commissions/summary',

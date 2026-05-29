@@ -373,14 +373,18 @@ class _MainShellState extends ConsumerState<MainShell> {
       authProvider.select((state) => state.value?.vendedorCodes ?? []),
     );
     _ensureScopedVendorSelection(user, vendedorCodes);
-    final navItems = _getNavItems(isJefeVentas, vendedorCodes);
+    final normalizedUserCode = (user.code).replaceFirst(RegExp(r'^0+'), '');
+    final isCommercial80 = normalizedUserCode == '80';
+    // 80 stays COMERCIAL in nav even if DB has JEFEVENTASSN (avoids Panel index mismatch)
+    final navIsJefeVentas = isJefeVentas && !isCommercial80;
+    final navItems = _getNavItems(navIsJefeVentas, vendedorCodes);
     final safeIndex = _currentIndex.clamp(0, navItems.length - 1);
     final useBottomNav = Responsive.useBottomNav(context);
 
     if (useBottomNav) {
-      return _buildPhoneLayout(navItems, safeIndex, user, isJefeVentas);
+      return _buildPhoneLayout(navItems, safeIndex, user, navIsJefeVentas);
     }
-    return _buildTabletLayout(navItems, safeIndex, user, isJefeVentas);
+    return _buildTabletLayout(navItems, safeIndex, user, navIsJefeVentas);
   }
 
   // ---------------------------------------------------------------------------
@@ -406,8 +410,8 @@ class _MainShellState extends ConsumerState<MainShell> {
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: AppTheme.surfaceColor,
-          border:
-              Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+          border: Border(
+              top: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
         ),
         child: SafeArea(
           top: false,
@@ -541,7 +545,8 @@ class _MainShellState extends ConsumerState<MainShell> {
       context: context,
       backgroundColor: AppTheme.surfaceColor,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg)),
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppTheme.radiusLg)),
       ),
       builder: (ctx) => SafeArea(
         child: Column(
@@ -985,7 +990,9 @@ class _MainShellState extends ConsumerState<MainShell> {
             EdgeInsets.symmetric(vertical: isSmall ? 8 : 12, horizontal: 4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          color: isSelected ? item.color.withValues(alpha: 0.12) : Colors.transparent,
+          color: isSelected
+              ? item.color.withValues(alpha: 0.12)
+              : Colors.transparent,
           border: isSelected
               ? Border.all(color: item.color.withValues(alpha: 0.25))
               : null,
@@ -1073,7 +1080,8 @@ class _MainShellState extends ConsumerState<MainShell> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           color: AppTheme.neonPurple.withValues(alpha: 0.08),
-          border: Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.15)),
+          border:
+              Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.15)),
         ),
         child: const Column(
           children: [
@@ -1134,8 +1142,8 @@ class _MainShellState extends ConsumerState<MainShell> {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
-        border:
-            Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+        border: Border(
+            bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
       ),
       child: Row(
         children: [
@@ -1160,7 +1168,8 @@ class _MainShellState extends ConsumerState<MainShell> {
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.3)),
+                border: Border.all(
+                    color: AppTheme.neonPurple.withValues(alpha: 0.3)),
               ),
               child: _isLoadingRepartidores
                   ? const Center(
@@ -1395,9 +1404,13 @@ class _MainShellState extends ConsumerState<MainShell> {
     // ===============================================
 
     // Commercial 80: scoped team from login (auth vendedorCodes), not JEFE_VENTAS
-    final normalizedUserCode = (user?.code ?? '').replaceFirst(RegExp(r'^0+'), '');
+    final normalizedUserCode =
+        (user?.code ?? '').replaceFirst(RegExp(r'^0+'), '');
     final isCommercial80 = normalizedUserCode == '80';
     final effectiveVendorCodes = vendedorCodes;
+    final teamMemberCodes = effectiveVendorCodes
+        .where((c) => c.replaceFirst(RegExp(r'^0+'), '') != '80')
+        .toList();
 
     final hasScopedVendorAccess =
         user != null && _hasScopedVendorAccess(user, effectiveVendorCodes);
@@ -1406,20 +1419,23 @@ class _MainShellState extends ConsumerState<MainShell> {
         : '';
     final selectedScopedVendor =
         hasScopedVendorAccess ? ref.watch(selectedVendorProvider) : null;
+    final isTeamAggregateView = isCommercial80 &&
+        (selectedScopedVendor == null ||
+            selectedScopedVendor.isEmpty ||
+            selectedScopedVendor == 'ALL');
     final scopedEmployeeCode = hasScopedVendorAccess
         ? (selectedScopedVendor != null &&
                 effectiveVendorCodes.contains(selectedScopedVendor)
             ? selectedScopedVendor
             : scopedDefaultCode)
         : null;
-    final empCode = scopedEmployeeCode ?? effectiveVendorCodes.join(',');
+    final empCode = isTeamAggregateView
+        ? teamMemberCodes.join(',')
+        : (scopedEmployeeCode ?? effectiveVendorCodes.join(','));
+    final apiAggregateCode = isTeamAggregateView ? 'ALL' : empCode;
 
-    // For commercial 80: when "ALL" is selected, treat as jefe-like view
-    final isCommercial80AllMode = isCommercial80 &&
-        (selectedScopedVendor == null ||
-            selectedScopedVendor.isEmpty ||
-            selectedScopedVendor == 'ALL');
-    final comercialNav = _getNavItems(isCommercial80AllMode, effectiveVendorCodes);
+    // Nav always COMERCIAL for 80; team aggregate only affects Objetivos/Comisiones API
+    final comercialNav = _getNavItems(false, effectiveVendorCodes);
 
     Widget comercialPageForIndex(int idx) {
       final label = idx < comercialNav.length ? comercialNav[idx].label : '';
@@ -1427,36 +1443,33 @@ class _MainShellState extends ConsumerState<MainShell> {
         case 'Clientes':
           return SimpleClientListPage(
             employeeCode: empCode,
-            isJefeVentas: isCommercial80AllMode || hasScopedVendorAccess,
-            vendorSelectorCodes: (isCommercial80AllMode || hasScopedVendorAccess)
-                ? effectiveVendorCodes
-                : null,
+            isJefeVentas: false,
+            vendorSelectorCodes:
+                hasScopedVendorAccess ? effectiveVendorCodes : null,
             includeAllVendorOption: isCommercial80 || !hasScopedVendorAccess,
             forceShowVendorSelector: isCommercial80,
           );
         case 'Ruta':
           return RuteroPage(
             employeeCode: empCode,
-            isJefeVentas: isCommercial80AllMode,
+            isJefeVentas: false,
             forceShowVendorSelector: isCommercial80,
           );
         case 'Objetivos':
           return ObjectivesPage(
-            employeeCode: empCode,
-            isJefeVentas: isCommercial80AllMode || hasScopedVendorAccess,
-            vendorSelectorCodes: (isCommercial80AllMode || hasScopedVendorAccess)
-                ? effectiveVendorCodes
-                : null,
+            employeeCode: apiAggregateCode,
+            isJefeVentas: isTeamAggregateView,
+            vendorSelectorCodes:
+                hasScopedVendorAccess ? effectiveVendorCodes : null,
             includeAllVendorOption: isCommercial80 || !hasScopedVendorAccess,
             forceShowVendorSelector: isCommercial80,
           );
         case 'Comisiones':
           return CommissionsPage(
-            employeeCode: empCode,
-            isJefeVentas: isCommercial80AllMode || hasScopedVendorAccess,
-            vendorSelectorCodes: (isCommercial80AllMode || hasScopedVendorAccess)
-                ? effectiveVendorCodes
-                : null,
+            employeeCode: apiAggregateCode,
+            isJefeVentas: isTeamAggregateView,
+            vendorSelectorCodes:
+                hasScopedVendorAccess ? effectiveVendorCodes : null,
             includeAllVendorOption: isCommercial80 || !hasScopedVendorAccess,
             forceShowVendorSelector: isCommercial80,
           );
@@ -1467,13 +1480,13 @@ class _MainShellState extends ConsumerState<MainShell> {
         case 'Pedidos':
           return PedidosPage(
             employeeCode: empCode,
-            isJefeVentas: isCommercial80AllMode,
+            isJefeVentas: false,
             forceShowVendorSelector: isCommercial80,
           );
         case 'Glacius':
           return KpiDashboardPage(
             employeeCode: empCode,
-            isJefeVentas: isCommercial80AllMode,
+            isJefeVentas: false,
             forceShowVendorSelector: isCommercial80,
           );
         case 'Cobros':
@@ -1485,11 +1498,10 @@ class _MainShellState extends ConsumerState<MainShell> {
           return const BolsaPage();
         case 'Evolución':
           return ClientEvolutionPage(
-            employeeCode: empCode,
-            isJefeVentas: isCommercial80AllMode || hasScopedVendorAccess,
-            vendorSelectorCodes: (isCommercial80AllMode || hasScopedVendorAccess)
-                ? effectiveVendorCodes
-                : null,
+            employeeCode: apiAggregateCode,
+            isJefeVentas: isTeamAggregateView,
+            vendorSelectorCodes:
+                hasScopedVendorAccess ? effectiveVendorCodes : null,
             includeAllVendorOption: isCommercial80 || !hasScopedVendorAccess,
             forceShowVendorSelector: isCommercial80,
           );
@@ -1638,7 +1650,8 @@ class _LogoutConfirmationDialog extends StatelessWidget {
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
-                        side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                        side: BorderSide(
+                            color: Colors.white.withValues(alpha: 0.1)),
                       ),
                     ),
                     child: const Text(

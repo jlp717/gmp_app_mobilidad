@@ -4,14 +4,16 @@ import 'package:equatable/equatable.dart';
 enum UserRole { jefe, comercial, repartidor }
 
 /// User model aligned with backend response
-class UserModel extends Equatable { // NEW: DB-driven visibility
+class UserModel extends Equatable {
+  // NEW: DB-driven visibility
 
   const UserModel({
     required this.id,
     required this.code,
     required this.name,
     required this.company,
-    required this.role, this.delegation,
+    required this.role,
+    this.delegation,
     this.vendedorCode,
     this.isJefeVentas = false,
     this.tipoVendedor,
@@ -27,7 +29,8 @@ class UserModel extends Equatable { // NEW: DB-driven visibility
       company: (json['company'] as String?) ?? 'GMP',
       delegation: json['delegation'] as String?,
       vendedorCode: json['vendedorCode'] as String?,
-      isJefeVentas: _parseBool(json['isJefeVentas']),
+      isJefeVentas: _parseBool(json['isJefeVentas']) &&
+          (json['code']?.toString().replaceFirst(RegExp(r'^0+'), '') != '80'),
       tipoVendedor: json['tipoVendedor'] as String?,
       role: (json['role'] as String?) ?? 'COMERCIAL',
       codigoConductor: json['codigoConductor'] as String?,
@@ -133,4 +136,3 @@ class UserModel extends Equatable { // NEW: DB-driven visibility
     return false;
   }
 }
-

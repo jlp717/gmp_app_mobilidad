@@ -72,7 +72,77 @@ const DEFAULT_CONFIG_2026 = {
         { min: 110.01, max: 999.99, pct: 2.0 }
     ]
 };
-const COMMISSIONS_CACHE_VERSION = 'v20260508-r2-r1default';
+const COMMISSIONS_CACHE_VERSION = 'v20260528-team80-aggregate';
+
+/**
+ * Merge monthly commission rows for scoped team ALL (72+73+81+83).
+ * Keeps proRatedTarget / workingDays so OBJ. ACUM. and rhythm columns work in Flutter.
+ */
+function aggregateScopedTeamMonths(vendorResults, selectedYear, config) {
+    const now = getCurrentDate();
+    const months = [];
+    for (let m = 1; m <= 12; m++) {
+        let target = 0;
+        let actual = 0;
+        let commission = 0;
+        let provisionalCommission = 0;
+        let workingDays = 0;
+        let daysPassed = 0;
+
+        vendorResults.forEach(r => {
+            const md = (r.months || []).find(x => x.month === m);
+            if (!md) return;
+            target += md.target || 0;
+            actual += md.actual || 0;
+            commission += md.complianceCtx?.commission || 0;
+            provisionalCommission += md.dailyComplianceCtx?.provisionalCommission
+                ?? md.complianceCtx?.commission
+                ?? 0;
+            workingDays = Math.max(workingDays, md.workingDays || 0);
+            daysPassed = Math.max(daysPassed, md.daysPassed || 0);
+        });
+
+        const isFuture = (selectedYear > now.getFullYear())
+            || (selectedYear === now.getFullYear() && m > now.getMonth() + 1);
+        const isCurrentMonth = (selectedYear === now.getFullYear() && m === (now.getMonth() + 1));
+
+        if (isCurrentMonth && workingDays === 0) {
+            workingDays = calculateWorkingDays(selectedYear, m, []);
+            daysPassed = calculateDaysPassed(selectedYear, m, []);
+        } else if (!isFuture && !isCurrentMonth && workingDays > 0) {
+            daysPassed = workingDays;
+        }
+
+        const proRatedTarget = workingDays > 0 ? (target / workingDays) * daysPassed : 0;
+        const dailyTarget = workingDays > 0 ? target / workingDays : 0;
+        const dailyActual = daysPassed > 0 ? actual / daysPassed : 0;
+        const isOnTrack = actual >= proRatedTarget;
+        const pct = target > 0 ? (actual / target) * 100 : 0;
+        const rhythmPct = proRatedTarget > 0 ? (actual / proRatedTarget) * 100 : 0;
+
+        months.push({
+            month: m,
+            target,
+            actual,
+            workingDays,
+            daysPassed,
+            proRatedTarget,
+            dailyTarget,
+            dailyActual,
+            isFuture,
+            complianceCtx: {
+                pct,
+                commission,
+            },
+            dailyComplianceCtx: {
+                pct: rhythmPct,
+                isGreen: isOnTrack,
+                provisionalCommission,
+            },
+        });
+    }
+    return months;
+}
 
 // =============================================================================
 // DATABASE INITIALIZATION (JAVIER Schema)
@@ -1562,19 +1632,28 @@ router.get('/summary', verifyToken, async (req, res) => {
                 const globalTotal = results.reduce((s, r) => s + (r.grandTotalCommission || 0), 0);
                 const totalPaid = results.reduce((s, r) => s + (r.payments?.total || 0), 0);
 
-                // Aggregate Months/Quarters for this year (Team View)
-                const aggMonths = [];
-                for (let m = 1; m <= 12; m++) {
-                    let tT = 0, tA = 0, tC = 0;
-                    results.forEach(r => {
-                        const md = r.months.find(x => x.month === m);
-                        if (md) { tT += md.target; tA += md.actual; tC += (md.complianceCtx?.commission || 0); }
-                    });
-                    aggMonths.push({
-                        month: m, target: tT, actual: tA,
-                        complianceCtx: { commission: tC }
-                    });
-                }
+                // Aggregate Months/Quarters for this year (scoped team — full month shape for UI table)
+                const aggMonths = scopedTeamAll
+                    ? aggregateScopedTeamMonths(results, yr, config)
+                    : (() => {
+                        const simple = [];
+                        for (let m = 1; m <= 12; m++) {
+                            let tT = 0; let tA = 0; let tC = 0;
+                            results.forEach(r => {
+                                const md = r.months.find(x => x.month === m);
+                                if (md) {
+                                    tT += md.target;
+                                    tA += md.actual;
+                                    tC += (md.complianceCtx?.commission || 0);
+                                }
+                            });
+                            simple.push({
+                                month: m, target: tT, actual: tA,
+                                complianceCtx: { commission: tC },
+                            });
+                        }
+                        return simple;
+                    })();
 
                 // Aggregate Quarters
                 const aggQuarters = [1, 2, 3].map(q => {

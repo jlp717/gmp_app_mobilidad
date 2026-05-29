@@ -32,7 +32,7 @@ const {
     isCacheReady: isMetadataCacheReady
 } = require('../services/metadataCache');
 
-const OBJECTIVES_CACHE_VERSION = 'v20260512-r3-hybrid';
+const OBJECTIVES_CACHE_VERSION = 'v20260528-team80-objectives';
 
 // =============================================================================
 // INHERITED OBJECTIVES LOGIC
@@ -385,8 +385,29 @@ async function buildVendorObjectiveTargets(vendorCode, yearsArray, now) {
 
         if (hasFixedTargets) {
             annualObjective = 0;
+            let dynamicSeasonal = {};
+            if (combinedPrevTotal > 0) {
+                const avgMonthly = combinedPrevTotal / 12;
+                const growthFactor = 1 + (targetPct / 100);
+                const dynAnnual = combinedPrevTotal * growthFactor;
+                let rawSum = 0;
+                const tempTargets = {};
+                for (let m = 1; m <= 12; m++) {
+                    const sale = prevYearMonthlySales[m] || 0;
+                    const deviationRatio = avgMonthly > 0 ? (sale - avgMonthly) / avgMonthly : 0;
+                    const variableGrowthPct = (targetPct / 100) * (1 + (SEASONAL_AGGRESSIVENESS * deviationRatio));
+                    tempTargets[m] = sale * (1 + variableGrowthPct);
+                    rawSum += tempTargets[m];
+                }
+                const correctionFactor = rawSum > 0 ? dynAnnual / rawSum : 1;
+                for (let m = 1; m <= 12; m++) {
+                    dynamicSeasonal[m] = tempTargets[m] * correctionFactor;
+                }
+            }
             for (let m = 1; m <= 12; m++) {
-                seasonalTargets[m] = fixedTargetsByMonth[m] || 0;
+                seasonalTargets[m] = fixedTargetsByMonth[m]
+                    || dynamicSeasonal[m]
+                    || 0;
                 annualObjective += seasonalTargets[m];
             }
         } else {
@@ -776,33 +797,37 @@ router.get('/evolution', verifyToken, async (req, res) => {
                 logger.info(`[OBJECTIVES] Vendor ${firstCode} has fixed monthly targets in COMMERCIAL_TARGETS`);
             }
         } else if (isAll || vendorCodesArray.length > 1) {
-            // Aggregate fixed targets for months where MULTIPLE vendors have entries.
-            // This automatically detects override months (May + Sep-Dec) without
-            // hardcoding vendor IDs or months. Months with only vendor 15 (or any
-            // single vendor) are excluded, so they fall back to dynamic calculation.
+            // Sum fixed monthly targets for each vendor in scope (team 72+73+81+83 for commercial 80).
             try {
-                for (const year of yearsArray) {
-                    const aggregated = await queryWithParams(`
-                        SELECT MES, SUM(IMPORTE_OBJETIVO) as TOTAL
-                        FROM JAVIER.COMMERCIAL_TARGETS
-                        WHERE ANIO = ? AND ACTIVO = 1
-                        GROUP BY MES
-                        HAVING COUNT(DISTINCT CODIGOVENDEDOR) > 1
-                    `, [year], false);
-                    if (aggregated && aggregated.length > 0) {
-                        const targets = {};
-                        aggregated.forEach(r => {
-                            const mes = parseInt(r.MES);
-                            const val = parseFloat(r.TOTAL) || 0;
-                            if (mes && val > 0) targets[mes] = val;
-                        });
-                        if (Object.keys(targets).length > 0) {
-                            fixedTargetsByYear[year] = targets;
+                const allVariants = [...new Set(
+                    vendorCodesArray.flatMap(code => getVendorCodeVariants(code)),
+                )];
+                if (allVariants.length > 0) {
+                    const ph = allVariants.map(() => '?').join(',');
+                    for (const year of yearsArray) {
+                        const aggregated = await queryWithParams(`
+                            SELECT MES, SUM(IMPORTE_OBJETIVO) as TOTAL
+                            FROM JAVIER.COMMERCIAL_TARGETS
+                            WHERE ANIO = ? AND ACTIVO = 1
+                              AND MES IS NOT NULL
+                              AND TRIM(CODIGOVENDEDOR) IN (${ph})
+                            GROUP BY MES
+                        `, [year, ...allVariants], false);
+                        if (aggregated && aggregated.length > 0) {
+                            const targets = {};
+                            aggregated.forEach(r => {
+                                const mes = parseInt(r.MES, 10);
+                                const val = parseFloat(r.TOTAL) || 0;
+                                if (mes > 0 && val > 0) targets[mes] = val;
+                            });
+                            if (Object.keys(targets).length > 0) {
+                                fixedTargetsByYear[year] = targets;
+                            }
                         }
                     }
                 }
             } catch (e) {
-                logger.debug(`[OBJECTIVES] ALL vendors fixed targets aggregation error: ${e.message}`);
+                logger.debug(`[OBJECTIVES] multi-vendor fixed targets aggregation error: ${e.message}`);
             }
         }
 
