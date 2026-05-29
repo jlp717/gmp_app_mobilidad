@@ -13,6 +13,7 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/features/objectives/presentation/pages/enhanced_client_matrix_page.dart';
@@ -201,12 +202,21 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   }
 
   String get _vendedorCodes {
-    final vendedorCodes = ProviderScope.containerOf(context)
-            .read(authProvider)
-            .value
-            ?.vendedorCodes ??
-        [];
+    final authState =
+        ProviderScope.containerOf(context).read(authProvider).value;
+    final vendedorCodes = authState?.vendedorCodes ?? [];
     var codes = vendedorCodes.join(',');
+    if (hasCommercial80VendorScope(
+      userCode: authState?.user?.code,
+      vendorCodes: vendedorCodes,
+    )) {
+      return resolveScopedVendorCodes(
+        userCode: authState?.user?.code,
+        authVendorCodes: vendedorCodes,
+        selectedVendor: ref.read(selectedVendorProvider),
+        fallbackVendorCodes: widget.employeeCode,
+      );
+    }
     // JEFE_VENTAS: respect global "Ver como" filter
     if (widget.isJefeVentas) {
       final selected = ref.read(selectedVendorProvider);

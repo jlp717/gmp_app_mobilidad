@@ -6,6 +6,7 @@ import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
 import 'package:gmp_app_mobilidad/features/cobros/presentation/pages/cobro_detail_screen.dart';
@@ -46,6 +47,26 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   CobrosProvider get _provider =>
       ref.read(cobrosProvider(CobrosParams(employeeCode: widget.employeeCode)));
 
+  String _resolvedVendorCodes() {
+    final selectedVendor = ref.read(selectedVendorProvider);
+    final authState = ref.read(authProvider).value;
+    final authVendorCodes = authState?.vendedorCodes ?? const <String>[];
+
+    if (hasCommercial80VendorScope(
+      userCode: authState?.user?.code,
+      vendorCodes: authVendorCodes,
+    )) {
+      return resolveScopedVendorCodes(
+        userCode: authState?.user?.code,
+        authVendorCodes: authVendorCodes,
+        selectedVendor: selectedVendor,
+        fallbackVendorCodes: widget.employeeCode,
+      );
+    }
+
+    return selectedVendor ?? widget.employeeCode;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -69,8 +90,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     final generation = ++_clientLoadGeneration;
     setState(() => _isSearchingClients = true);
     try {
-      final currentFilterVendor = ref.read(selectedVendorProvider);
-      final queryCode = currentFilterVendor ?? widget.employeeCode;
+      final queryCode = _resolvedVendorCodes();
       final response = await ClientsService.getClientsList(
         vendedorCodes: queryCode,
         search: query.isEmpty ? null : query,
@@ -101,9 +121,24 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     final selectedVendor = ref.read(selectedVendorProvider);
     final authState = ref.read(authProvider).value;
     final allVendorCodes = authState?.vendedorCodes ?? [];
+    final scopedVendorCodes = _resolvedVendorCodes();
 
     try {
-      if (selectedVendor != null && selectedVendor.isNotEmpty) {
+      if (hasCommercial80VendorScope(
+        userCode: authState?.user?.code,
+        vendorCodes: allVendorCodes,
+      )) {
+        final codes = scopedVendorCodes
+            .split(',')
+            .map((c) => c.trim())
+            .where((c) => c.isNotEmpty)
+            .toList();
+        if (codes.length == 1) {
+          await _provider.cargarPendingSummary(codes.first);
+        } else {
+          await _provider.cargarPendingSummary(null, vendedorCodes: codes);
+        }
+      } else if (selectedVendor != null && selectedVendor.isNotEmpty) {
         await _provider.cargarPendingSummary(selectedVendor);
       } else if (allVendorCodes.isNotEmpty) {
         await _provider.cargarPendingSummary(null,

@@ -509,15 +509,23 @@ router.get('/dashboard', async (req, res) => {
 
     // 2. Vendor filter: restrict to this vendor's clients
     if (vendorCode && vendorCode !== 'ALL') {
+      const vendorCodes = String(vendorCode)
+        .split(',')
+        .map(c => c.trim())
+        .filter(c => c && /^[A-Z0-9]+$/i.test(c));
+      if (vendorCodes.length === 0) {
+        return res.status(400).json({ success: false, error: 'vendorCode invalido' });
+      }
+      const placeholders = vendorCodes.map(() => '?').join(',');
       const vendorClientsQuery = `
         SELECT DISTINCT TRIM(LCCDCL) AS CLIENT_CODE
         FROM DSED.LACLAE
-        WHERE TRIM(LCCDVD) = ? AND LCAADC = YEAR(CURRENT_DATE)
+        WHERE TRIM(LCCDVD) IN (${placeholders}) AND LCAADC = YEAR(CURRENT_DATE)
           AND LCTPVT IN ('CC','VC') AND LCCLLN IN ('AB','VT')`;
-      const vendorClientsResult = await kpiQuery(vendorClientsQuery, [vendorCode.trim()]);
+      const vendorClientsResult = await kpiQuery(vendorClientsQuery, vendorCodes);
       const validCodes = new Set(vendorClientsResult.rows.map(r => r.CLIENT_CODE.trim()));
 
-      logger.info(`[kpi:dashboard] LACLAE clients for vendor ${vendorCode}: ${validCodes.size}, sample: ${[...validCodes].slice(0, 5).join(', ')}`);
+      logger.info(`[kpi:dashboard] LACLAE clients for vendor ${vendorCodes.join(',')}: ${validCodes.size}, sample: ${[...validCodes].slice(0, 5).join(', ')}`);
 
       filteredAlerts = filteredAlerts.filter(a => validCodes.has((a.CLIENT_CODE || '').trim()));
       logger.info(`[kpi:dashboard] After vendor filter: ${filteredAlerts.length} alerts`);

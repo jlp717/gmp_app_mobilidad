@@ -13,6 +13,7 @@ import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/email_form_modal.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
@@ -29,8 +30,10 @@ import 'package:url_launcher/url_launcher.dart';
 class FacturasPage extends ConsumerStatefulWidget {
   const FacturasPage({
     super.key,
+    this.employeeCode,
     this.forceShowVendorSelector = false,
   });
+  final String? employeeCode;
   final bool forceShowVendorSelector;
 
   @override
@@ -132,7 +135,17 @@ class _FacturasPageState extends ConsumerState<FacturasPage>
 
       // SENIOR FIX: Reactive Vendor Selection
       // Always re-read the filter provider to ensure we have the latest selection
-      if (user.role == 'director' || user.isJefeVentas) {
+      if (hasCommercial80VendorScope(
+        userCode: user.code,
+        vendorCodes: authState.vendedorCodes,
+      )) {
+        codes = resolveScopedVendorCodes(
+          userCode: user.code,
+          authVendorCodes: authState.vendedorCodes,
+          selectedVendor: selectedVendor,
+          fallbackVendorCodes: widget.employeeCode ?? codes,
+        );
+      } else if (user.role == 'director' || user.isJefeVentas) {
         if (selectedVendor != null && selectedVendor.isNotEmpty) {
           codes = selectedVendor;
         }

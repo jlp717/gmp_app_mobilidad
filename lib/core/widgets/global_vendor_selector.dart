@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 
 /// Global Vendor Selector — V2 Premium.
 /// Modern dropdown with refined styling and subtle interactions.
@@ -33,6 +35,23 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
   List<Map<String, dynamic>> _vendedores = [];
   bool _isLoading = false;
 
+  List<String>? _effectiveAllowedCodes() {
+    final authState = ref.read(authProvider).value;
+    return effectiveAllowedVendorCodes(
+      userCode: authState?.user?.code,
+      authVendorCodes: authState?.vendedorCodes ?? const <String>[],
+      explicitAllowedCodes: widget.allowedVendorCodes,
+    );
+  }
+
+  bool get _isScopedCommercial80 {
+    final authState = ref.read(authProvider).value;
+    return isCommercial80Code(authState?.user?.code);
+  }
+
+  String get _allOptionLabel =>
+      _isScopedCommercial80 ? 'Equipo Almeria' : 'Todos los comerciales';
+
   @override
   void initState() {
     super.initState();
@@ -45,9 +64,15 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
+      final authState = ref.read(authProvider).value;
+      final allowedCodes = _effectiveAllowedCodes();
+      final scopeKey = allowedCodes == null || allowedCodes.isEmpty
+          ? 'all'
+          : allowedCodes.map(normalizeVendorCode).join('_');
       final response = await ApiClient.get(
         '/rutero/vendedores',
-        cacheKey: 'vendedores_list',
+        cacheKey:
+            'vendedores_list_${authState?.user?.code ?? 'anon'}_$scopeKey',
         cacheTTL: const Duration(minutes: 30),
       );
 
@@ -61,10 +86,9 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
             final name = v['name']?.toString() ?? '';
             if (code.isEmpty) return false;
             if (name.toUpperCase().startsWith('ZZ')) return false;
-            final allowedCodes = widget.allowedVendorCodes;
             if (allowedCodes != null &&
                 allowedCodes.isNotEmpty &&
-                !allowedCodes.contains(code)) {
+                !vendorCodeListContains(allowedCodes, code)) {
               return false;
             }
             return true;
@@ -85,29 +109,49 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
   }
 
   void _ensureValidSelection() {
-    if (widget.includeAllOption) return;
     if (_vendedores.isEmpty) return;
 
     final selectedVendor = ref.read(filterProvider).selectedVendor;
+    if (widget.includeAllOption &&
+        (selectedVendor == null || selectedVendor == 'ALL')) {
+      return;
+    }
+
     final hasValidSelection = selectedVendor != null &&
-        _vendedores.any((v) => v['code']?.toString() == selectedVendor);
+        _vendedores.any(
+          (v) => vendorCodeListContains(
+            <String>[v['code']?.toString() ?? ''],
+            selectedVendor,
+          ),
+        );
     if (hasValidSelection) return;
 
     final defaultCode = widget.defaultVendorCode;
-    final fallback = defaultCode != null &&
-            _vendedores.any((v) => v['code']?.toString() == defaultCode)
-        ? defaultCode
-        : _vendedores.first['code']?.toString();
+    final fallback = widget.includeAllOption
+        ? 'ALL'
+        : defaultCode != null &&
+                _vendedores.any(
+                  (v) => vendorCodeListContains(
+                    <String>[v['code']?.toString() ?? ''],
+                    defaultCode,
+                  ),
+                )
+            ? defaultCode
+            : _vendedores.first['code']?.toString();
 
     if (fallback != null && fallback.isNotEmpty) {
       ref.read(filterProvider.notifier).setVendor(fallback);
-      if (widget.onChanged != null) widget.onChanged!();
+      widget.onChanged?.call();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (!widget.isJefeVentas && !widget.forceShow) return const SizedBox.shrink();
+    if (!widget.isJefeVentas && !widget.forceShow) {
+      return const SizedBox.shrink();
+    }
+
+    ref.watch(authProvider);
 
     final shouldLoadVendors = widget.isJefeVentas || widget.forceShow;
     if (shouldLoadVendors && _vendedores.isEmpty && !_isLoading) {
@@ -119,7 +163,12 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
 
     final isValidSelection = selectedVendor == null ||
         (widget.includeAllOption && selectedVendor == 'ALL') ||
-        _vendedores.any((v) => v['code'].toString() == selectedVendor);
+        _vendedores.any(
+          (v) => vendorCodeListContains(
+            <String>[v['code'].toString()],
+            selectedVendor,
+          ),
+        );
 
     final currentValue = isValidSelection ? selectedVendor : null;
     final isCompact = Responsive.isLandscapeCompact(context);
@@ -150,12 +199,20 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
               color: AppTheme.neonBlue.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(AppTheme.radiusSm),
             ),
-            child: const Icon(Icons.visibility_rounded, color: AppTheme.neonBlue, size: 16),
+            child: const Icon(
+              Icons.visibility_rounded,
+              color: AppTheme.neonBlue,
+              size: 16,
+            ),
           ),
           const SizedBox(width: 8),
           const Text(
             'Ver como:',
-            style: TextStyle(fontSize: 12, color: Colors.white60, fontWeight: FontWeight.w500),
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.white60,
+              fontWeight: FontWeight.w500,
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -199,7 +256,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                         ),
                         hint: Text(
                           widget.includeAllOption
-                              ? 'Todos los comerciales'
+                              ? _allOptionLabel
                               : 'Selecciona comercial',
                           style: const TextStyle(
                             color: Colors.white60,
@@ -209,11 +266,11 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                         ),
                         items: [
                           if (widget.includeAllOption)
-                            const DropdownMenuItem<String>(
+                            DropdownMenuItem<String>(
                               value: 'ALL',
                               child: Text(
-                                'Todos los comerciales',
-                                style: TextStyle(
+                                _allOptionLabel,
+                                style: const TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -239,7 +296,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                         ],
                         onChanged: (value) {
                           ref.read(filterProvider.notifier).setVendor(value);
-                          if (widget.onChanged != null) widget.onChanged!();
+                          widget.onChanged?.call();
                         },
                       ),
                     ),

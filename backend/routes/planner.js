@@ -11,6 +11,7 @@ const {
     formatCurrency,
     LACLAE_SALES_FILTER,
     sanitizeForSQL,
+    getVendorVisibilityScope,
     handleRouteError
 } = require('../utils/common');
 
@@ -321,9 +322,16 @@ router.get('/rutero/vendedores', async (req, res) => {
         // Sort by code ascending as requested
         mapped.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
 
-        logger.info(`[VENDEDORES] Returning ${mapped.length} active ${role || 'comercial'} vendors`);
+        const userCode = req.user?.code;
+        const isJefeVentas = req.user?.isJefeVentas === true;
+        const allowedCodes = !isJefeVentas ? getVendorVisibilityScope(userCode) : null;
+        const scoped = allowedCodes && allowedCodes.length > 0
+            ? mapped.filter(v => allowedCodes.includes(String(v.code).trim().replace(/^0+/, '') || String(v.code).trim()))
+            : mapped;
 
-        res.json({ vendedores: mapped });
+        logger.info(`[VENDEDORES] Returning ${scoped.length} active ${role || 'comercial'} vendors`);
+
+        res.json({ vendedores: scoped });
     } catch (error) {
         logger.error(`Error fetching vendedores: ${error.message}`);
         res.status(500).json({ error: error.message });

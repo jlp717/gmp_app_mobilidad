@@ -9,6 +9,7 @@ import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Import Sync Header
@@ -273,6 +274,18 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   String get _activeVendedorCode {
     if (!mounted) return widget.employeeCode;
     final filterCode = ref.read(filterProvider).selectedVendor;
+    final authState = ref.read(authProvider).value;
+    if (hasCommercial80VendorScope(
+      userCode: authState?.user?.code,
+      vendorCodes: authState?.vendedorCodes ?? const <String>[],
+    )) {
+      return resolveScopedVendorCodes(
+        userCode: authState?.user?.code,
+        authVendorCodes: authState?.vendedorCodes ?? const <String>[],
+        selectedVendor: filterCode,
+        fallbackVendorCodes: widget.employeeCode,
+      );
+    }
     return filterCode ?? widget.employeeCode;
   }
 
@@ -281,6 +294,22 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   String? get _singleVendedorCode {
     if (!mounted) return null;
     final filterCode = ref.read(filterProvider).selectedVendor;
+    final authState = ref.read(authProvider).value;
+    if (hasCommercial80VendorScope(
+      userCode: authState?.user?.code,
+      vendorCodes: authState?.vendedorCodes ?? const <String>[],
+    )) {
+      final allowedCodes = commercial80AllowedVendorCodes(
+        authState?.vendedorCodes ?? const <String>[],
+      );
+      if (filterCode != null &&
+          filterCode != 'ALL' &&
+          vendorCodeListContains(allowedCodes, filterCode)) {
+        return filterCode;
+      }
+      if (!widget.employeeCode.contains(',')) return widget.employeeCode;
+      return null;
+    }
     if (filterCode != null) return filterCode;
     // Si employeeCode no contiene comas, es un solo vendedor
     if (!widget.employeeCode.contains(',')) return widget.employeeCode;
@@ -311,7 +340,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
           'month': _selectedMonth,
           'ignoreOverrides': _sortMode == 'route',
         },
-        cacheKey: 'rutero_week_${_selectedRole}_${_selectedYear}_${_selectedMonth}',
+        cacheKey:
+            'rutero_week_${_selectedRole}_${_selectedYear}_${_selectedMonth}',
       );
 
       final response = result.data;

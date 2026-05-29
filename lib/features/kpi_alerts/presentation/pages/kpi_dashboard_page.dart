@@ -8,6 +8,7 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/shimmer_skeleton.dart';
@@ -38,7 +39,7 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
   void initState() {
     super.initState();
     _loadDashboard();
-    if (widget.isJefeVentas) {
+    if (widget.isJefeVentas || widget.forceShowVendorSelector) {
       _vendorSubscription =
           ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
         if (previous != next) {
@@ -64,9 +65,20 @@ class _KpiDashboardPageState extends ConsumerState<KpiDashboardPage> {
       final filterCode = ref.read(filterProvider).selectedVendor;
       return filterCode; // null = all, or specific vendor
     }
-    // Comercial: always their own code
     final authState =
         ProviderScope.containerOf(context).read(authProvider).value;
+    if (hasCommercial80VendorScope(
+      userCode: authState?.user?.code,
+      vendorCodes: authState?.vendedorCodes ?? const <String>[],
+    )) {
+      return resolveScopedVendorCodes(
+        userCode: authState?.user?.code,
+        authVendorCodes: authState?.vendedorCodes ?? const <String>[],
+        selectedVendor: ref.read(selectedVendorProvider),
+        fallbackVendorCodes: widget.employeeCode,
+      );
+    }
+    // Comercial: always their own code
     return authState?.user?.vendedorCode;
   }
 

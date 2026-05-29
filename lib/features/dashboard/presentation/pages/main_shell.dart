@@ -1475,6 +1475,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           );
         case 'Facturas':
           return FacturasPage(
+            employeeCode: empCode,
             forceShowVendorSelector: isCommercial80,
           );
         case 'Pedidos':
