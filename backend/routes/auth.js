@@ -352,6 +352,8 @@ router.post('/login',
                 getClientIP(req) || req.ip || 'unknown'
             );
 
+            const showCommissions = vendor.HIDE_COMMISSIONS !== 'Y';
+
             res.json({
                 user: {
                     id: `V${vendedorCode}`,
@@ -365,11 +367,11 @@ router.post('/login',
                     isRepartidor,
                     codigoConductor,
                     matricula: matriculaVehiculo,
-                    showCommissions: vendor.HIDE_COMMISSIONS !== 'Y'
+                    showCommissions,
                 },
                 role: finalRole,
                 isRepartidor,
-                showCommissions: vendor.HIDE_COMMISSIONS !== 'Y',
+                showCommissions,
                 vendedorCodes,
                 token: accessToken,
                 refreshToken,

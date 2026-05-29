@@ -55,6 +55,31 @@ class CommissionsService {
     }
   }
 
+  /// Team commission breakdown for commercial lead (e.g. 80 — Almería)
+  static Future<Map<String, dynamic>> getTeamCommission({
+    required String leaderCode,
+    int? year,
+    bool forceRefresh = false,
+  }) async {
+    try {
+      final y = year ?? DateTime.now().year;
+      final cacheKey = 'commissions_team_${leaderCode}_$y';
+      final result = await OfflineAwareApi.get(
+        '/commissions/team/$leaderCode',
+        queryParameters: {
+          'year': y.toString(),
+          if (forceRefresh) 'forceRefresh': 'true',
+        },
+        cacheKey: cacheKey,
+        cacheTTL: const Duration(minutes: 15),
+        forceRefresh: forceRefresh,
+      );
+      return Map<String, dynamic>.from(result.data as Map);
+    } catch (e) {
+      throw Exception('Error cargando comision de equipo: $e');
+    }
+  }
+
   /// Register a commission payment (Restricted to ADMIN users via TIPOVENDEDOR)
   /// NEW: Now includes observaciones parameter (required if amount < generatedAmount)
   static Future<Map<String, dynamic>> payCommission({

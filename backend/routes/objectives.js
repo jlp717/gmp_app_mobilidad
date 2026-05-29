@@ -19,6 +19,10 @@ const {
 const { getClientCodesFromCache } = require('../services/laclae');
 const { redisCache, TTL } = require('../services/redis-cache');
 const {
+    isCommercial80User,
+    resolveAllModeVendorCodesString,
+} = require('../services/team-commission.service');
+const {
     getCachedFamilyNames,
     getCachedFi1Names,
     getCachedFi2Names,
@@ -182,6 +186,14 @@ function parseVendorCodes(vendedorCodes) {
         .split(',')
         .map(v => v.replace(/[^a-zA-Z0-9]/g, '').trim())
         .filter(Boolean);
+}
+
+/** Commercial 80 "Todos" → aggregate 72,73,81,83 only (not global ALL). */
+function scopeVendorCodesForUser(userCode, vendedorCodes) {
+    if ((!vendedorCodes || vendedorCodes === 'ALL') && isCommercial80User(userCode)) {
+        return resolveAllModeVendorCodesString(userCode);
+    }
+    return vendedorCodes;
 }
 
 async function addBSalesToRows(rows, vendorCodesArray, uniqueYears) {
@@ -636,12 +648,13 @@ if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
 router.get('/evolution', verifyToken, async (req, res) => {
     try {
         const { vendedorCodes, years } = req.query;
+        const effectiveVendorCodes = scopeVendorCodesForUser(req.user?.code, vendedorCodes);
         const now = getCurrentDate();
         const { calculateWorkingDays, calculateDaysPassed } = require('../utils/common');
         const { getVendorActiveDaysFromCache } = require('../services/laclae');
 
         // PERF: Route-level cache for evolution data
-        const cacheKey = `obj:evolution:${OBJECTIVES_CACHE_VERSION}:${vendedorCodes || 'ALL'}:${years || 'default'}`;
+        const cacheKey = `obj:evolution:${OBJECTIVES_CACHE_VERSION}:${effectiveVendorCodes || 'ALL'}:${years || 'default'}`;
         const cachedResult = await redisCache.get('route', cacheKey);
         if (cachedResult) {
             logger.info(`[OBJECTIVES] ⚡ Cache HIT for evolution (${cacheKey})`);
@@ -657,10 +670,10 @@ router.get('/evolution', verifyToken, async (req, res) => {
         const allYears = [...yearsArray, ...yearsArray.map(y => y - 1)];
         const uniqueYears = [...new Set(allYears)];
         const yearsFilter = uniqueYears.join(',');
-        const vendorCodesArray = parseVendorCodes(vendedorCodes);
+        const vendorCodesArray = parseVendorCodes(effectiveVendorCodes);
 
         // Use Date-Aware filter (handles LCCDVD for <March 2026 and R1_T8CDVD for >=March 2026)
-        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, uniqueYears, 'L');
+        const vendedorFilter = buildColumnaVendedorFilter(effectiveVendorCodes, uniqueYears, 'L');
 
         // Get Active Days for calculating pace 
         // Logic: if multiple vendors selected, we might average or select first? 
@@ -715,7 +728,7 @@ router.get('/evolution', verifyToken, async (req, res) => {
         // For vendors with incomplete history (some months with 0 sales in prevYear),
         // we calculate the target based on sales of their current clients by ANY vendor.
         let inheritedMonthlySales = {};
-        const isAll = !vendedorCodes || vendedorCodes === 'ALL';
+        const isAll = !effectiveVendorCodes || effectiveVendorCodes === 'ALL';
 
         let multiVendorTargets = null;
         if (vendorCodesArray.length > 1) {
@@ -794,7 +807,7 @@ router.get('/evolution', verifyToken, async (req, res) => {
         }
 
         // 1. Get Target Config
-        const targetPct = await getVendorTargetConfig(vendedorCodes);
+        const targetPct = await getVendorTargetConfig(effectiveVendorCodes);
 
         yearsArray.forEach(year => {
             // Calculate Annual Objective first
@@ -938,7 +951,7 @@ router.get('/evolution', verifyToken, async (req, res) => {
         };
 
         // PERF: Cache the result (5 min for specific vendor, 10 min for ALL)
-        const cacheTTL = (!vendedorCodes || vendedorCodes === 'ALL') ? TTL.SHORT * 2 : TTL.SHORT;
+        const cacheTTL = (!effectiveVendorCodes || effectiveVendorCodes === 'ALL') ? TTL.SHORT * 2 : TTL.SHORT;
         await redisCache.set('route', cacheKey, responseData, cacheTTL);
         logger.info(`[OBJECTIVES] 💾 Cached evolution (${cacheKey})`);
 
@@ -2151,11 +2164,12 @@ router.get('/populations', async (req, res) => {
 router.get('/by-client', async (req, res) => {
     try {
         const { vendedorCodes, years, months, city, code, nif, name, limit } = req.query;
+        const effectiveVendorCodes = scopeVendorCodesForUser(req.user?.code, vendedorCodes);
         const now = getCurrentDate();
 
         // PERF: Route-level cache for by-client (only when no search filters)
         const hasFilters = city || code || nif || name;
-        const cacheKey = `obj:byclient:${OBJECTIVES_CACHE_VERSION}:${vendedorCodes || 'ALL'}:${years || 'default'}:${months || 'all'}:${limit || '1000'}`;
+        const cacheKey = `obj:byclient:${OBJECTIVES_CACHE_VERSION}:${effectiveVendorCodes || 'ALL'}:${years || 'default'}:${months || 'all'}:${limit || '1000'}`;
         if (!hasFilters) {
             const cachedResult = await redisCache.get('route', cacheKey);
             if (cachedResult) {
@@ -2173,7 +2187,7 @@ router.get('/by-client', async (req, res) => {
         const monthsFilter = monthsArray.join(',');
 
         // Use LACLAE with R1_T8CDVD (route vendor) for consistency with client list and rutero
-        const vendedorFilter = buildColumnaVendedorFilter(vendedorCodes, yearsArray, 'L');
+        const vendedorFilter = buildColumnaVendedorFilter(effectiveVendorCodes, yearsArray, 'L');
 
         let extraFilters = '';
         const extraFilterParams = [];
@@ -2200,7 +2214,7 @@ router.get('/by-client', async (req, res) => {
         const prevYear = mainYear - 1;
 
         // OPTIMIZATION: Get client codes from cache instead of heavy subquery
-        const cachedClientCodes = getClientCodesFromCache(vendedorCodes);
+        const cachedClientCodes = getClientCodesFromCache(effectiveVendorCodes);
 
         let totalClientsCount = 0;
         let currentRows = [];
@@ -2328,7 +2342,7 @@ router.get('/by-client', async (req, res) => {
             }
         } else {
             // Fallback: Use original query with vendedor filter if cache not available
-            const vendedorFilterSales = buildColumnaVendedorFilter(vendedorCodes, yearsArray, 'L');
+            const vendedorFilterSales = buildColumnaVendedorFilter(effectiveVendorCodes, yearsArray, 'L');
 
             currentRows = await queryWithParams(`
                 SELECT 
@@ -2363,8 +2377,8 @@ router.get('/by-client', async (req, res) => {
         let objectiveConfigMap = new Map();
         let defaultObjectiveData = { percentage: 10 };
         let fixedTargetsMap = new Map();
-        const vendorCodesArray = vendedorCodes
-            ? vendedorCodes.split(',').map(v => v.replace(/[^a-zA-Z0-9]/g, '').trim()).filter(Boolean)
+        const vendorCodesArray = effectiveVendorCodes
+            ? effectiveVendorCodes.split(',').map(v => v.replace(/[^a-zA-Z0-9]/g, '').trim()).filter(Boolean)
             : [];
         const shouldLoadFixedTargets = vendorCodesArray.length === 1;
 

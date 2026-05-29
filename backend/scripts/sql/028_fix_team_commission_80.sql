@@ -1,0 +1,47 @@
+-- 028_fix_team_commission_80.sql
+-- Corrige datos de equipo Juan Luis (80). La logica de calculo ya va en codigo (no requiere 027).
+--
+-- SECCION A (opcional): solo si existen tablas de 027_team_commission_config.sql
+-- Si TEAM_COMMISSION_RULES no existe, omitir lineas 8-31 y ejecutar solo SECCION B.
+--
+-- SECCION A — reglas/miembros en BD (requiere migracion 027)
+
+UPDATE JAVIER.TEAM_COMMISSION_RULES
+SET COMMISSION_RATE = 10.00,
+    GROWTH_THRESHOLD_PCT = 10.00,
+    ALL_MUST_QUALIFY = 'Y'
+WHERE LEADER_CODE = '80' AND YEAR = 2026;
+
+DELETE FROM JAVIER.TEAM_COMMISSION_MEMBERS
+WHERE RULE_ID IN (
+  SELECT ID FROM JAVIER.TEAM_COMMISSION_RULES
+  WHERE LEADER_CODE = '80' AND YEAR = 2026
+)
+AND MEMBER_CODE IN ('80', '86');
+
+INSERT INTO JAVIER.TEAM_COMMISSION_MEMBERS (RULE_ID, MEMBER_CODE)
+SELECT r.ID, m.CODE
+FROM JAVIER.TEAM_COMMISSION_RULES r
+CROSS JOIN (
+  VALUES ('72'), ('73'), ('81'), ('83')
+) AS m(CODE)
+WHERE r.LEADER_CODE = '80' AND r.YEAR = 2026
+  AND NOT EXISTS (
+    SELECT 1 FROM JAVIER.TEAM_COMMISSION_MEMBERS x
+    WHERE x.RULE_ID = r.ID AND x.MEMBER_CODE = m.CODE
+  );
+
+-- SECCION B — comercial 80: ve pestaña Comisiones pero NO comisiona (badge/cálculo propio)
+-- HIDE_COMMISSIONS='Y' oculta la pestaña entera; usar 'N' + EXCLUIDO='Y' para solo ocultar badge.
+-- Ejecutar en producción cuando el jefe confirme:
+/*
+MERGE INTO JAVIER.COMMISSION_EXCEPTIONS AS t
+USING (VALUES ('80')) AS s(COD) ON TRIM(t.CODIGOVENDEDOR) = s.COD
+WHEN MATCHED THEN UPDATE SET EXCLUIDO_COMISIONES = 'Y', HIDE_COMMISSIONS = 'N'
+WHEN NOT MATCHED THEN INSERT (CODIGOVENDEDOR, HIDE_COMMISSIONS, EXCLUIDO_COMISIONES)
+VALUES ('80', 'N', 'Y');
+*/
+UPDATE JAVIER.COMMISSION_EXCEPTIONS
+SET EXCLUIDO_COMISIONES = 'Y',
+    HIDE_COMMISSIONS = 'N'
+WHERE TRIM(CODIGOVENDEDOR) IN ('80', '080');

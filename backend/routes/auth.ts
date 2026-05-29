@@ -390,6 +390,8 @@ router.post('/login',
                 isJefeVentas
             });
 
+            const showCommissions = vendor.HIDE_COMMISSIONS !== 'Y';
+
             const response = {
                 user: {
                     id: `V${vendedorCode}`,
@@ -404,11 +406,11 @@ router.post('/login',
                     isRepartidor,
                     codigoConductor,
                     matricula: matriculaVehiculo,
-                    showCommissions: vendor.HIDE_COMMISSIONS !== 'Y'
+                    showCommissions,
                 },
                 role: finalRole,
                 isRepartidor,
-                showCommissions: vendor.HIDE_COMMISSIONS !== 'Y',
+                showCommissions,
                 vendedorCodes,
                 token: accessToken,
                 refreshToken,

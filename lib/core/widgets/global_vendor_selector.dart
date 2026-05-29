@@ -118,6 +118,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
     final selectedVendor = filterState.selectedVendor;
 
     final isValidSelection = selectedVendor == null ||
+        (widget.includeAllOption && selectedVendor == 'ALL') ||
         _vendedores.any((v) => v['code'].toString() == selectedVendor);
 
     final currentValue = isValidSelection ? selectedVendor : null;
@@ -209,6 +210,7 @@ class _GlobalVendorSelectorState extends ConsumerState<GlobalVendorSelector> {
                         items: [
                           if (widget.includeAllOption)
                             const DropdownMenuItem<String>(
+                              value: 'ALL',
                               child: Text(
                                 'Todos los comerciales',
                                 style: TextStyle(

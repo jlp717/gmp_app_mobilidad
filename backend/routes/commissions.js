@@ -9,6 +9,14 @@ const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, SNAPSHOT_UNTIL_MONTH
 const { resolveHistoricalCommissionMonth } = require('../utils/commission-snapshot');
 const { verifyToken } = require('../middleware/auth');
 const { redisCache, TTL, invalidateCachePattern } = require('../services/redis-cache');
+const {
+    isTeamLeader,
+    getTeamCommission,
+    buildTeamLeadSummaryPayload,
+    isScopedTeamAllRequest,
+    resolveAllModeVendorCodes,
+    allModeCacheScope,
+} = require('../services/team-commission.service');
 
 const router = express.Router();
 
@@ -36,10 +44,12 @@ async function loadExcludedVendors() {
 
             // Merge unique with hardcoded safety list
             EXCLUDED_VENDORS = [...new Set([...DEFAULT_EXCLUDED, ...dbCodes, ...normalizedCodes])];
+            // Juan Luis (80): no comisión personal; ve equipo en panel (boss order 2026-05)
+            if (!EXCLUDED_VENDORS.includes('80')) EXCLUDED_VENDORS.push('80');
 
             logger.info(`[COMMISSIONS] Loaded ${rows.length} excluded rules. Effective list: [${EXCLUDED_VENDORS.join(', ')}]`);
         } else {
-            EXCLUDED_VENDORS = [...DEFAULT_EXCLUDED];
+            EXCLUDED_VENDORS = [...DEFAULT_EXCLUDED, '80'];
             logger.info(`[COMMISSIONS] No excluded vendors found in DB. Using fallback: [${EXCLUDED_VENDORS.join(', ')}]`);
         }
         _excludedVendorsLastLoad = Date.now();
@@ -1320,12 +1330,15 @@ router.get('/summary', verifyToken, async (req, res) => {
                     .filter(code => /^[a-zA-Z0-9]+$/.test(code))
             )];
         const isGroupedRequest = safeVendorCode === 'ALL' || requestedVendorCodes.length > 1;
+        const userCode = req.user?.code || '';
+        const scopedTeamAll = isScopedTeamAllRequest(userCode, safeVendorCode);
         const groupHash = requestedVendorCodes.length > 0
             ? crypto.createHash('md5').update(requestedVendorCodes.slice().sort().join(',')).digest('hex').substring(0, 12)
             : 'all';
+        const allScope = allModeCacheScope(userCode, safeVendorCode) || 'ALL';
         const aggregatedCacheKey = isGroupedRequest
             ? (safeVendorCode === 'ALL'
-                ? `comm:summary:${COMMISSIONS_CACHE_VERSION}:ALL:${years.join(',')}`
+                ? `comm:summary:${COMMISSIONS_CACHE_VERSION}:${allScope}:${years.join(',')}`
                 : `comm:summary:${COMMISSIONS_CACHE_VERSION}:GROUP:${groupHash}:${years.join(',')}`)
             : null;
 
@@ -1498,8 +1511,12 @@ router.get('/summary', verifyToken, async (req, res) => {
                 }
 
                 const vendorCodes = safeVendorCode === 'ALL'
-                    ? await discoverVendorCodesForYear(yr)
+                    ? await resolveAllModeVendorCodes(userCode, yr, discoverVendorCodesForYear)
                     : requestedVendorCodes;
+
+                if (scopedTeamAll) {
+                    logger.info(`[COMMISSIONS] Scoped team ALL for commercial 80 → [${vendorCodes.join(',')}]`);
+                }
 
                 // PERF: Batch fetch ALL vendor data in 5 queries instead of N×7
                 const batchStart = Date.now();
@@ -1573,29 +1590,49 @@ router.get('/summary', verifyToken, async (req, res) => {
                     config: config,
                     grandTotalCommission: globalTotal,
                     totals: { commission: globalTotal },
-                    breakdown: results,
+                    breakdown: scopedTeamAll ? [] : results,
                     months: aggMonths,
                     quarters: aggQuarters,
-                    payments: { total: totalPaid, monthly: {}, quarterly: {} }
+                    payments: { total: totalPaid, monthly: {}, quarterly: {} },
+                    ...(scopedTeamAll ? {
+                        isScopedTeamAggregate: true,
+                        aggregateLabel: 'Equipo Almería (72+73+81+83)',
+                    } : {}),
                 };
 
                 // PERF: Cache the ALL result for 15 minutes (expensive computation)
                 logger.debug(`[COMMISSIONS] Year result prepared for grouped cache (${allSummaryCacheKey})`);
 
             } else {
-                // Single Vendor
-                const data = await calculateVendorData(safeVendorCode, yr, config);
-                yearResult = {
-                    config: config,
-                    grandTotalCommission: data.grandTotalCommission,
-                    totals: { commission: data.grandTotalCommission },
-                    months: data.months,
-                    quarters: data.quarters,
-                    vendor: data.vendedorCode,
-                    breakdown: [], // No breakdown for single
-                    isExcluded: data.isExcluded, // FIX: Pass exclusion flag
-                    payments: data.payments      // FIX: Pass payments data
-                };
+                const singleCode = requestedVendorCodes[0] || safeVendorCode;
+                if (isTeamLeader(singleCode)) {
+                    const leaderPersonal = await calculateVendorData(singleCode, yr, config);
+                    const teamData = await getTeamCommission(
+                        singleCode,
+                        yr,
+                        (code, year, cfg) => calculateVendorData(code, year, cfg),
+                        config,
+                    );
+                    yearResult = buildTeamLeadSummaryPayload(
+                        leaderPersonal,
+                        teamData,
+                        config,
+                        leaderPersonal.payments,
+                    );
+                } else {
+                    const data = await calculateVendorData(safeVendorCode, yr, config);
+                    yearResult = {
+                        config: config,
+                        grandTotalCommission: data.grandTotalCommission,
+                        totals: { commission: data.grandTotalCommission },
+                        months: data.months,
+                        quarters: data.quarters,
+                        vendor: data.vendedorCode,
+                        breakdown: [],
+                        isExcluded: data.isExcluded,
+                        payments: data.payments,
+                    };
+                }
             }
 
             return yearResult;
@@ -1819,7 +1856,7 @@ async function loadCommissionConfigForPdf(year) {
     };
 }
 
-async function buildPdfSummaryVendors(vendorCode, year, config) {
+async function buildPdfSummaryVendors(vendorCode, year, config, userCode = '') {
     const safeVendorCode = (vendorCode || 'ALL').toString().replace(/[^a-zA-Z0-9,]/g, '').substring(0, 50) || 'ALL';
     const requestedVendorCodes = safeVendorCode === 'ALL'
         ? []
@@ -1836,7 +1873,7 @@ async function buildPdfSummaryVendors(vendorCode, year, config) {
     }
 
     const vendorCodes = safeVendorCode === 'ALL'
-        ? await discoverVendorCodesForYear(year)
+        ? await resolveAllModeVendorCodes(userCode, year, discoverVendorCodesForYear)
         : requestedVendorCodes;
 
     const [allVendorData, allSnapshotResult] = await Promise.all([
@@ -1865,6 +1902,11 @@ async function buildPdfSummaryVendors(vendorCode, year, config) {
     return settled
         .filter(result => result.status === 'fulfilled')
         .map(result => result.value);
+}
+
+function normalizeVendorCodeForPdf(code) {
+    const raw = String(code || '').trim();
+    return raw.replace(/^0+/, '') || raw;
 }
 
 router.get('/pdf', verifyToken, async (req, res) => {
@@ -1933,7 +1975,7 @@ router.get('/pdf', verifyToken, async (req, res) => {
         try {
             const config = await loadCommissionConfigForPdf(targetYear);
             [vendorData, condorData] = await Promise.all([
-                buildPdfSummaryVendors(vendorCode || 'ALL', targetYear, config),
+                buildPdfSummaryVendors(vendorCode || 'ALL', targetYear, config, userCode),
                 pdfService.getCondorSalesData(targetYear, startMonth, endMonth)
             ]);
             
@@ -1947,10 +1989,34 @@ router.get('/pdf', verifyToken, async (req, res) => {
             });
         }
 
+        let teamCommissionPdf = null;
+        const pdfVendorNorm = normalizeVendorCodeForPdf(vendorCode);
+        if (isTeamLeader(pdfVendorNorm) || (vendorData || []).some((v) => isTeamLeader(normalizeVendorCodeForPdf(v.vendedorCode)))) {
+            try {
+                await ensureExcludedVendorsLoaded();
+                const pdfConfig = await loadCommissionConfigForPdf(targetYear);
+                teamCommissionPdf = await getTeamCommission(
+                    '80',
+                    targetYear,
+                    (code, y, cfg) => calculateVendorData(code, y, cfg),
+                    pdfConfig,
+                );
+            } catch (teamErr) {
+                logger.warn(`[PDF] Team commission section skipped: ${teamErr.message}`);
+            }
+        }
+
         // Generate PDF with error handling
         let pdfBuffer;
         try {
-            pdfBuffer = await pdfService.generateCommissionsPdfFromSummary(vendorData, condorData, targetYear, startMonth, endMonth);
+            pdfBuffer = await pdfService.generateCommissionsPdfFromSummary(
+                vendorData,
+                condorData,
+                targetYear,
+                startMonth,
+                endMonth,
+                teamCommissionPdf,
+            );
             logger.info(`[PDF] PDF generated successfully (${(pdfBuffer.length / 1024).toFixed(2)} KB)`);
         } catch (pdfError) {
             logger.error(`[PDF] Error generating PDF: ${pdfError.message}`);
@@ -1989,6 +2055,48 @@ router.get('/pdf', verifyToken, async (req, res) => {
 });
 
 // FIX #1: Route to get excluded vendor codes (for frontend dynamic loading)
+router.get('/team/:leaderCode', verifyToken, async (req, res) => {
+    try {
+        const leaderCode = (req.params.leaderCode || '').replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
+        const year = parseInt(req.query.year, 10) || new Date().getFullYear();
+        if (!leaderCode || !isTeamLeader(leaderCode)) {
+            return res.status(400).json({ success: false, error: 'Lider de equipo no valido' });
+        }
+        await ensureExcludedVendorsLoaded();
+        let config = DEFAULT_CONFIG_2026;
+        try {
+            const dbConfig = await queryWithParams(
+                `SELECT * FROM JAVIER.COMM_CONFIG WHERE YEAR = ? FETCH FIRST 1 ROWS ONLY`,
+                [year],
+                false,
+                false,
+            );
+            if (dbConfig?.length) {
+                const row = dbConfig[0];
+                config = {
+                    ipc: parseFloat(row.IPC_PCT),
+                    TIER1_MAX: parseFloat(row.TIER1_MAX),
+                    TIER1_PCT: parseFloat(row.TIER1_PCT),
+                    TIER2_MAX: parseFloat(row.TIER2_MAX),
+                    TIER2_PCT: parseFloat(row.TIER2_PCT),
+                    TIER3_MAX: parseFloat(row.TIER3_MAX),
+                    TIER3_PCT: parseFloat(row.TIER3_PCT),
+                    TIER4_PCT: parseFloat(row.TIER4_PCT),
+                };
+            }
+        } catch (_) { /* default config */ }
+        const teamData = await getTeamCommission(
+            leaderCode,
+            year,
+            (code, y, cfg) => calculateVendorData(code, y, cfg),
+            config,
+        );
+        return res.json(teamData);
+    } catch (error) {
+        return handleRouteError(error, res, 'Error calculando comision de equipo', 500, { success: false });
+    }
+});
+
 router.get('/excluded-vendors', verifyToken, async (req, res) => {
     try {
         await loadExcludedVendors(); // Force fresh load

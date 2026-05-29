@@ -471,18 +471,59 @@ class CommissionsService {
       if (isAll) {
         yearResult = await this._calculateAllVendors(yr, config);
       } else {
-        const data = await calculateVendorData(sanitizeCode(vendorCode), yr, config, _excludedVendors);
-        yearResult = {
-          config,
-          grandTotalCommission: data.grandTotalCommission,
-          totals: { commission: data.grandTotalCommission },
-          months: data.months,
-          quarters: data.quarters,
-          vendor: data.vendedorCode,
-          breakdown: [],
-          isExcluded: data.isExcluded,
-          payments: data.payments,
-        };
+        const code = sanitizeCode(vendorCode);
+        if (isTeamLeaderCode(code)) {
+          const teamData = await getTeamCommission(code, yr);
+          yearResult = {
+            config,
+            grandTotalCommission: teamData.arrearsTotal ?? teamData.annualTotal,
+            totals: { commission: teamData.arrearsTotal ?? teamData.annualTotal },
+            months: teamData.months.map(tm => ({
+              month: tm.month,
+              prevSales: tm.totalExcess,
+              target: 0,
+              actual: tm.totalExcess,
+              workingDays: 0,
+              daysPassed: 0,
+              proRatedTarget: 0,
+              dailyTarget: 0,
+              dailyActual: 0,
+              isFuture: tm.month > (teamData.currentMonth ?? 12),
+              complianceCtx: {
+                pct: tm.allMembersQualified ? 100 : 0,
+                increment: tm.totalExcess,
+                tier: 0,
+                rate: teamData.config.commissionRate,
+                commission: tm.totalCommission,
+                isExcluded: false,
+              },
+              dailyComplianceCtx: {
+                pct: 0, tier: 0, rate: 0, isGreen: tm.allMembersQualified,
+                provisionalCommission: tm.totalCommission, increment: tm.totalExcess,
+              },
+            })),
+            quarters: [],
+            vendor: code,
+            breakdown: [],
+            isExcluded: false,
+            isTeamLead: true,
+            teamCommission: teamData,
+            payments: (await calculateVendorData(code, yr, config, _excludedVendors)).payments,
+          };
+        } else {
+          const data = await calculateVendorData(code, yr, config, _excludedVendors);
+          yearResult = {
+            config,
+            grandTotalCommission: data.grandTotalCommission,
+            totals: { commission: data.grandTotalCommission },
+            months: data.months,
+            quarters: data.quarters,
+            vendor: data.vendedorCode,
+            breakdown: [],
+            isExcluded: data.isExcluded,
+            payments: data.payments,
+          };
+        }
       }
 
       aggregatedResult = aggregatedResult
@@ -718,8 +759,6 @@ class CommissionsService {
   }
 }
 
-export const commissionsService = new CommissionsService();
-
 // ============================================
 // COMMERCIAL TEAM COMMISSION — DB-configurable
 // ============================================
@@ -746,18 +785,25 @@ interface TeamCommissionConfig {
 }
 
 // Fallback defaults (used only if DB tables are empty/missing)
+const ALMERIA_TEAM_MEMBERS_80 = ['72', '73', '81', '83'];
+
 const FALLBACK_TEAM_CONFIGS: Record<string, TeamCommissionConfig> = {
   '80': {
     rule: {
       leaderCode: '80',
       year: 2026,
-      commissionRate: 0.70,
+      commissionRate: 10.00,
       growthThresholdPct: 10.00,
       allMustQualify: true,
     },
-    members: ['72', '73', '80', '81', '83', '86'].map(c => ({ memberCode: c })),
+    members: ALMERIA_TEAM_MEMBERS_80.map(c => ({ memberCode: c })),
   },
 };
+
+export function isTeamLeaderCode(vendorCode: string): boolean {
+  const n = vendorCode.trim().replace(/^0+/, '') || vendorCode.trim();
+  return n === '80';
+}
 
 /**
  * Load team commission config from DB for a given leader code and year.
@@ -804,11 +850,20 @@ async function loadTeamCommissionConfig(
       ORDER BY MEMBER_CODE
     `, [leaderCode, year]);
 
+    const allowed = new Set(ALMERIA_TEAM_MEMBERS_80);
+    const leaderNorm = leaderCode.trim().replace(/^0+/, '');
     const members: TeamCommissionMember[] = (memberRows || [])
       .map(r => ({ memberCode: String(r.MEMBER_CODE).trim() }))
-      .filter(m => m.memberCode);
+      .filter(m => {
+        const c = m.memberCode.replace(/^0+/, '') || m.memberCode;
+        return allowed.has(c) && c !== leaderNorm;
+      });
 
-    logger.info(`[TEAM_COMM] Loaded DB config: leader=${leaderCode} rate=${rule.commissionRate}% threshold=${rule.growthThresholdPct}% members=${members.length} allQualify=${rule.allMustQualify}`);
+    if (members.length < 4) {
+      return FALLBACK_TEAM_CONFIGS[leaderCode] || { rule, members: ALMERIA_TEAM_MEMBERS_80.map(c => ({ memberCode: c })) };
+    }
+
+    logger.info(`[TEAM_COMM] Loaded DB config: leader=${leaderCode} rate=${rule.commissionRate}% members=${members.length} allQualify=${rule.allMustQualify}`);
 
     return { rule, members };
   } catch (e: unknown) {
@@ -854,83 +909,56 @@ async function calculateTeamCommission(
   leaderCode: string,
   year: number,
   month: number,
+  commissionConfig?: CommissionConfig,
 ): Promise<TeamCommissionResult> {
   const config = await loadTeamCommissionConfig(leaderCode, year);
   const { rule, members } = config;
-  const prevYear = year - 1;
-  const thresholdMultiplier = 1 + (rule.growthThresholdPct / 100);
+  const rate = rule.commissionRate / 100;
+  const cfg = commissionConfig || await loadCommissionConfig(year);
+  const excluded = await ensureExcludedVendorsLoaded();
 
   const memberResults: TeamMemberCommission[] = [];
-  let totalExcess = 0;
-  let totalCommission = 0;
+  let teamSalesIncrement = 0;
   let qualifyingMembers = 0;
 
   for (const member of members) {
     const code = member.memberCode;
-    const { clause, params } = buildVendedorFilterLACLAE(code);
+    const vendorData = await calculateVendorData(sanitizeCode(code), year, cfg, excluded);
+    const md = vendorData.months.find(m => m.month === month);
+    const prevSales = md?.prevSales ?? 0;
+    const currentSales = md?.actual ?? 0;
+    const salesIncrement = Math.max(0, currentSales - prevSales);
+    const ownCommission = md?.complianceCtx?.commission ?? 0;
+    const qualifies = ownCommission > 0;
 
-    // Current year sales for this month
-    const currRows = await odbcPool.query<Record<string, unknown>[]>(`
-      SELECT SUM(L.LCIMVT) AS SALES
-      FROM DSED.LACLAE L
-      WHERE L.LCAADC = ? AND L.LCMMDC = ?
-        AND ${LACLAE_SALES_FILTER}
-        ${clause}
-    `, [year, month, ...params]);
+    if (qualifies) qualifyingMembers++;
+    teamSalesIncrement += salesIncrement;
 
-    let currentSales = toFloat(currRows[0]?.SALES) || 0;
-    const bSales = await getBSales(code, year);
-    currentSales += (bSales[month] || 0);
-
-    // Previous year sales for same month
-    const prevRows = await odbcPool.query<Record<string, unknown>[]>(`
-      SELECT SUM(L.LCIMVT) AS SALES
-      FROM DSED.LACLAE L
-      WHERE L.LCAADC = ? AND L.LCMMDC = ?
-        AND ${LACLAE_SALES_FILTER}
-        ${clause}
-    `, [prevYear, month, ...params]);
-
-    let prevSales = toFloat(prevRows[0]?.SALES) || 0;
-    const bSalesPrev = await getBSales(code, prevYear);
-    prevSales += (bSalesPrev[month] || 0);
-
-    const threshold = prevSales * thresholdMultiplier;
-    const excess = Math.max(0, currentSales - threshold);
-    const qualifies = currentSales > threshold;
-    const commission = qualifies ? excess * (rule.commissionRate / 100) : 0;
-
-    if (qualifies) {
-      totalExcess += excess;
-      totalCommission += commission;
-      qualifyingMembers++;
-    }
-
-    const vendorName = await getVendorName(code);
     memberResults.push({
       vendorCode: code,
-      vendorName,
+      vendorName: vendorData.vendorName,
       prevYearSales: prevSales,
       currentSales,
-      threshold,
-      excess,
+      threshold: md?.target ?? 0,
+      excess: salesIncrement,
       qualifies,
-      commission,
+      commission: ownCommission,
     });
   }
 
-  // If allMustQualify is true and NOT all members qualified, commission = 0
-  const allMembersQualified = qualifyingMembers === members.length;
-  if (rule.allMustQualify && !allMembersQualified) {
-    totalCommission = 0;
-    totalExcess = 0;
-  }
+  const allMembersQualified =
+    qualifyingMembers === members.length &&
+    members.length === ALMERIA_TEAM_MEMBERS_80.length;
+  const totalCommission =
+    rule.allMustQualify && allMembersQualified
+      ? teamSalesIncrement * rate
+      : 0;
 
   return {
     year,
     month,
     members: memberResults,
-    totalExcess,
+    totalExcess: teamSalesIncrement,
     totalCommission,
     qualifyingMembers,
     allMembersQualified,
@@ -964,15 +992,19 @@ async function getTeamCommission(
   };
 }> {
   const config = await loadTeamCommissionConfig(leaderCode, year);
+  const commConfig = await loadCommissionConfig(year);
   const months: TeamCommissionResult[] = [];
+  const currentMonth = new Date().getMonth() + 1;
   let annualTotal = 0;
   let annualExcess = 0;
+  let arrearsTotal = 0;
 
   for (let m = 1; m <= 12; m++) {
-    const result = await calculateTeamCommission(leaderCode, year, m);
+    const result = await calculateTeamCommission(leaderCode, year, m, commConfig);
     months.push(result);
     annualTotal += result.totalCommission;
     annualExcess += result.totalExcess;
+    if (m <= currentMonth) arrearsTotal += result.totalCommission;
   }
 
   return {
@@ -982,6 +1014,8 @@ async function getTeamCommission(
     months,
     annualTotal,
     annualExcess,
+    arrearsTotal,
+    currentMonth,
     teamMembers: config.members.map(m => m.memberCode),
     config: {
       commissionRate: config.rule.commissionRate,
@@ -992,5 +1026,5 @@ async function getTeamCommission(
 }
 
 export const commissionsService = new CommissionsService();
-export { getTeamCommission, loadTeamCommissionConfig };
+export { getTeamCommission, loadTeamCommissionConfig, isTeamLeaderCode };
 export type { TeamCommissionResult, TeamMemberCommission, TeamCommissionConfig };

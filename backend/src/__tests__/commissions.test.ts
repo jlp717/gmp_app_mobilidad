@@ -48,7 +48,8 @@ describe('CommissionsService', () => {
 
       const result = await commissionsService.getExcludedVendors();
 
-      expect(result).toEqual(expect.arrayContaining(['3', '13', '93', '80']));
+      expect(result).toEqual(expect.arrayContaining(['3', '13', '93']));
+      expect(result).not.toContain('80');
     });
 
     it('returns merged list when DB has exclusions', async () => {

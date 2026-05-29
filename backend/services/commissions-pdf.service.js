@@ -777,7 +777,94 @@ function drawSummaryPdfTable({
     };
 }
 
-async function generateCommissionsPdfFromSummary(summaryVendors, condorDataMap, year, startMonth, endMonth) {
+function drawTeamLeadSection(doc, teamData, year, startMonth, endMonth, margin, contentWidth, pageHeight) {
+    if (!teamData || !teamData.months) return margin + 40;
+
+    const cols = [
+        { key: 'code', label: 'Comercial', width: 70 },
+        { key: 'prev', label: 'Ventas LY', width: 90 },
+        { key: 'curr', label: 'Ventas CY', width: 90 },
+        { key: 'inc', label: 'Incremento', width: 90 },
+        { key: 'qual', label: 'Umbral', width: 50 },
+        { key: 'own', label: 'Com. propia', width: 80 },
+    ];
+    const HDR_H = 16;
+    const ROW_H = 14;
+    let yPos = margin;
+
+    if (yPos > pageHeight - 120) {
+        doc.addPage({ layout: 'landscape' });
+        yPos = margin;
+    }
+
+    doc.font('Helvetica-Bold').fontSize(11).fillColor(COLORS.header)
+        .text(`Equipo Almeria (${teamData.leaderCode}) — umbral LY+IPC y franjas por comercial (sin gate 4/4)`, margin, yPos, { width: contentWidth });
+    yPos += 18;
+
+    for (let month = startMonth; month <= endMonth; month++) {
+        const tm = teamData.months.find((m) => m.month === month);
+        if (!tm) continue;
+
+        if (yPos > pageHeight - 100) {
+            doc.addPage({ layout: 'landscape' });
+            yPos = margin;
+        }
+
+        const teamExcess = tm.teamMembersExcess ?? 0;
+        const teamComm = tm.teamMembersCommission ?? 0;
+        doc.font('Helvetica-Bold').fontSize(9).fillColor(COLORS.text)
+            .text(
+                `${getMonthName(month)} ${year} — equipo exceso ${formatCurrency(teamExcess)} · comision ${formatCurrency(teamComm)} · califican ${tm.qualifyingMembers ?? 0}/4`,
+                margin,
+                yPos,
+            );
+        yPos += 14;
+
+        doc.rect(margin, yPos, contentWidth, HDR_H).fill(COLORS.columnHeader);
+        let xPos = margin;
+        cols.forEach((col) => {
+            doc.font('Helvetica-Bold').fontSize(7).fillColor(COLORS.header)
+                .text(col.label, xPos + 2, yPos + 4, { width: col.width - 4, align: 'left' });
+            doc.rect(xPos, yPos, col.width, HDR_H).stroke(COLORS.grid);
+            xPos += col.width;
+        });
+        yPos += HDR_H;
+
+        (tm.members || []).forEach((member, idx) => {
+            const rowBg = idx % 2 === 0 ? COLORS.rowAlt : '#FFFFFF';
+            doc.rect(margin, yPos, contentWidth, ROW_H).fill(rowBg);
+            xPos = margin;
+            const values = {
+                code: displayVendorCode(member.vendorCode),
+                prev: formatCurrency(member.prevYearSales),
+                curr: formatCurrency(member.currentSales),
+                inc: formatCurrency(member.excess),
+                qual: member.qualifies ? 'SI' : 'NO',
+                own: formatCurrency(member.commission),
+            };
+            cols.forEach((col) => {
+                const color = col.key === 'qual' ? (member.qualifies ? COLORS.good : COLORS.bad) : COLORS.text;
+                doc.font('Helvetica').fontSize(7).fillColor(color)
+                    .text(values[col.key], xPos + 2, yPos + 3, { width: col.width - 4, align: col.key === 'code' ? 'left' : 'right' });
+                doc.rect(xPos, yPos, col.width, ROW_H).stroke(COLORS.grid);
+                xPos += col.width;
+            });
+            yPos += ROW_H;
+        });
+
+        yPos += 6;
+    }
+
+    doc.font('Helvetica-Bold').fontSize(9).fillColor(COLORS.good)
+        .text(
+            `Atrasos ene-${getMonthName(endMonth).toLowerCase()}: ${formatCurrency(teamData.arrearsTotal || 0)} | Anual JL (exceso propio): ${formatCurrency(teamData.annualExcess || teamData.annualTotal || 0)}`,
+            margin,
+            yPos,
+        );
+    return yPos + 20;
+}
+
+async function generateCommissionsPdfFromSummary(summaryVendors, condorDataMap, year, startMonth, endMonth, teamCommissionData = null) {
     const vendors = [...(summaryVendors || [])].sort((a, b) => {
         const aCode = displayVendorCode(a.vendedorCode || a.code || '');
         const bCode = displayVendorCode(b.vendedorCode || b.code || '');
@@ -1129,6 +1216,19 @@ async function generateCommissionsPdf(vendorData, condorDataMap, year, startMont
 
                 yPos += HDR_H + 8;
             });
+
+            if (teamCommissionData) {
+                drawTeamLeadSection(
+                    doc,
+                    teamCommissionData,
+                    year,
+                    startMonth,
+                    endMonth,
+                    margin,
+                    contentWidth,
+                    pageHeight,
+                );
+            }
 
             doc.font('Helvetica').fontSize(7).fillColor(COLORS.muted)
                 .text('GMP App Movilidad | Uso interno', margin, pageHeight - 28, {

@@ -1394,15 +1394,10 @@ class _MainShellState extends ConsumerState<MainShell> {
     // COMERCIAL MODE
     // ===============================================
 
-    // Commercial 80 (Almeria lead) gets team view access
-    const commercial80TeamCodes = ['72', '73', '80', '81', '83', '86'];
+    // Commercial 80: scoped team from login (auth vendedorCodes), not JEFE_VENTAS
     final normalizedUserCode = (user?.code ?? '').replaceFirst(RegExp(r'^0+'), '');
     final isCommercial80 = normalizedUserCode == '80';
-
-    // For commercial 80: extend vendedorCodes to include team members
-    final effectiveVendorCodes = isCommercial80
-        ? {...vendedorCodes, ...commercial80TeamCodes}.toList()
-        : vendedorCodes;
+    final effectiveVendorCodes = vendedorCodes;
 
     final hasScopedVendorAccess =
         user != null && _hasScopedVendorAccess(user, effectiveVendorCodes);
@@ -1436,7 +1431,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             vendorSelectorCodes: (isCommercial80AllMode || hasScopedVendorAccess)
                 ? effectiveVendorCodes
                 : null,
-            includeAllVendorOption: !hasScopedVendorAccess,
+            includeAllVendorOption: isCommercial80 || !hasScopedVendorAccess,
             forceShowVendorSelector: isCommercial80,
           );
         case 'Ruta':
@@ -1452,7 +1447,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             vendorSelectorCodes: (isCommercial80AllMode || hasScopedVendorAccess)
                 ? effectiveVendorCodes
                 : null,
-            includeAllVendorOption: !hasScopedVendorAccess,
+            includeAllVendorOption: isCommercial80 || !hasScopedVendorAccess,
             forceShowVendorSelector: isCommercial80,
           );
         case 'Comisiones':
@@ -1462,7 +1457,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             vendorSelectorCodes: (isCommercial80AllMode || hasScopedVendorAccess)
                 ? effectiveVendorCodes
                 : null,
-            includeAllVendorOption: !hasScopedVendorAccess,
+            includeAllVendorOption: isCommercial80 || !hasScopedVendorAccess,
             forceShowVendorSelector: isCommercial80,
           );
         case 'Facturas':
@@ -1495,7 +1490,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             vendorSelectorCodes: (isCommercial80AllMode || hasScopedVendorAccess)
                 ? effectiveVendorCodes
                 : null,
-            includeAllVendorOption: !hasScopedVendorAccess,
+            includeAllVendorOption: isCommercial80 || !hasScopedVendorAccess,
             forceShowVendorSelector: isCommercial80,
           );
         case 'Chat IA':

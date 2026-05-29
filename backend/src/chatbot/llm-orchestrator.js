@@ -943,7 +943,7 @@ async function executeTool(toolName, args, context) {
     // - REPARTIDOR: [own code]
     // - JEFE_VENTAS: ALL (no filter needed, tools handle via isJefeVentas flag)
     const effectiveVendorCodes = vendorScope || [userCode];
-    const effectiveIsJefeVentas = isJefeVentas || role === 'JEFE_VENTAS' || userCode === '80';
+    const effectiveIsJefeVentas = isJefeVentas || role === 'JEFE_VENTAS';
 
     switch (toolName) {
         // Commissions
@@ -1618,7 +1618,8 @@ function resolveVendorScope(userCode, role, isJefeVentas) {
 
     // Comercial 80 — special case: can see Almeria vendors
     if (userCode === '80' || userCode === '080') {
-        return ['80', '03', '13', '23', '33']; // Almeria codes
+        const { getVendorVisibilityScope } = require('../../utils/common');
+        return getVendorVisibilityScope('80');
     }
 
     // Normal commercial or repartidor — only their own code

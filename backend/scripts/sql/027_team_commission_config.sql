@@ -1,6 +1,8 @@
 -- 027_team_commission_config.sql
--- Parametriza comisiones de equipo (lider comercial 80 - Almeria)
--- Elimina hardcodeo de miembros, ratio y umbral de crecimiento.
+-- OPCIONAL: tablas JAVIER.TEAM_COMMISSION_* para override en BD.
+-- La app NO las necesita: team-commission.service.js usa constantes (80 -> 72,73,81,83 @ 10%).
+-- Ejecutar solo si quieres cambiar reglas sin desplegar codigo (y TEAM_COMMISSION_USE_DB=true).
+-- Parametriza comisiones de equipo (lider comercial 80 - Almeria).
 
 -- Tabla de configuracion de reglas de equipo
 CREATE TABLE JAVIER.TEAM_COMMISSION_RULES (
@@ -27,10 +29,10 @@ CREATE TABLE JAVIER.TEAM_COMMISSION_MEMBERS (
 );
 
 -- Datos iniciales: equipo de comercial 80 (Almeria)
--- Regla: 0.70% sobre exceso del 10% YoY, todos deben calificar
+-- Regla: 10% del incremento YoY del equipo (4 comerciales), todos deben comisionar
 INSERT INTO JAVIER.TEAM_COMMISSION_RULES
     (LEADER_CODE, YEAR, COMMISSION_RATE, GROWTH_THRESHOLD_PCT, ALL_MUST_QUALIFY, ACTIVE)
-VALUES ('80', 2026, 0.70, 10.00, 'Y', 'Y');
+VALUES ('80', 2026, 10.00, 10.00, 'Y', 'Y');
 
 -- Miembros del equipo (se vinculan a la regla recien creada)
 -- Nota: RULE_ID se resolve con la subquery para evitar hardcodeo del ID
@@ -41,13 +43,7 @@ INSERT INTO JAVIER.TEAM_COMMISSION_MEMBERS (RULE_ID, MEMBER_CODE)
 SELECT ID, '73' FROM JAVIER.TEAM_COMMISSION_RULES WHERE LEADER_CODE = '80' AND YEAR = 2026;
 
 INSERT INTO JAVIER.TEAM_COMMISSION_MEMBERS (RULE_ID, MEMBER_CODE)
-SELECT ID, '80' FROM JAVIER.TEAM_COMMISSION_RULES WHERE LEADER_CODE = '80' AND YEAR = 2026;
-
-INSERT INTO JAVIER.TEAM_COMMISSION_MEMBERS (RULE_ID, MEMBER_CODE)
 SELECT ID, '81' FROM JAVIER.TEAM_COMMISSION_RULES WHERE LEADER_CODE = '80' AND YEAR = 2026;
 
 INSERT INTO JAVIER.TEAM_COMMISSION_MEMBERS (RULE_ID, MEMBER_CODE)
 SELECT ID, '83' FROM JAVIER.TEAM_COMMISSION_RULES WHERE LEADER_CODE = '80' AND YEAR = 2026;
-
-INSERT INTO JAVIER.TEAM_COMMISSION_MEMBERS (RULE_ID, MEMBER_CODE)
-SELECT ID, '86' FROM JAVIER.TEAM_COMMISSION_RULES WHERE LEADER_CODE = '80' AND YEAR = 2026;

@@ -806,16 +806,25 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Check if we're in ALL mode (breakdown available)
+    // Check if we're in jefe global ALL mode (per-vendor breakdown cards)
     final breakdown =
         (_data?['breakdown'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final isAllMode = breakdown.isNotEmpty;
+    final isScopedTeamAggregate =
+        (_data?['isScopedTeamAggregate'] as bool?) ?? false;
+    final aggregateLabel =
+        (_data?['aggregateLabel'] as String?) ?? 'Equipo Almería (72+73+81+83)';
+    final isAllMode = breakdown.isNotEmpty && !isScopedTeamAggregate;
 
     // ... vars ...
     final months = _data?['months'] as List? ?? [];
     final quarters = _data?['quarters'] as List? ?? [];
     final status = _data?['status'] as String? ?? 'active';
     final isInformative = status == 'informative';
+    final isTeamLead = (_data?['isTeamLead'] as bool?) ?? false;
+    final hidePersonalCommissionBadge =
+        (_data?['hidePersonalCommissionBadge'] as bool?) ?? false;
+    final teamCommission =
+        (_data?['teamCommission'] as Map?)?.cast<String, dynamic>();
     final grandTotal = (_data?['grandTotalCommission'] as num?)?.toDouble() ??
         (_data?['totals']?['commission'] as num?)?.toDouble() ??
         0.0;
@@ -921,10 +930,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       final monthNum = (m['month'] as num?)?.toInt() ?? 0;
       final monthName = _getMonthName(monthNum);
       final target = (m['target'] as num?)?.toDouble() ?? 0;
+      final ctx = (m['complianceCtx'] as Map?) ?? {};
       final actual = (m['actual'] as num?)?.toDouble() ?? 0;
       final isFuture = (m['isFuture'] as bool?) ?? false;
 
-      final ctx = (m['complianceCtx'] as Map?) ?? {};
       final pct = (ctx['pct'] as num?)?.toDouble() ?? 0;
       final tier = (ctx['tier'] as num?)?.toInt() ?? 0;
       final commission = (ctx['commission'] as num?)?.toDouble() ?? 0;
@@ -936,7 +945,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       final dailyGreen = (dailyCtx['isGreen'] as bool?) ?? false;
 
       // Color logic: future months get special styling
-      final isPositive = actual >= target && target > 0;
+      final isPositive = hidePersonalCommissionBadge
+          ? false
+          : (actual >= target && target > 0);
       final color = isFuture
           ? Colors.grey
           : (isPositive ? AppTheme.success : AppTheme.error);
@@ -997,10 +1008,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               ),
             ),
             // OBJ. MES
-            DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(target),
+            DataCell(Text(
+                isFuture ? '-' : CurrencyFormatter.format(target),
                 style:
                     TextStyle(color: Colors.white.withValues(alpha: textOpacity)))),
-            // VENTA REAL (acumulada del mes)
+            // VENTA REAL o INCREMENTO EQUIPO (líder)
             DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(actual),
                 style: TextStyle(color: color, fontWeight: FontWeight.bold))),
             // ESTADO MES
@@ -1444,8 +1456,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
             ),
           ),
 
-          // FASE 2: Inline exclusion banner instead of full screen block
-          if (((_data?['isExcluded'] as bool?) ?? false) || isInformative)
+          if (((_data?['isExcluded'] as bool?) ?? false) ||
+              hidePersonalCommissionBadge ||
+              isInformative)
             Container(
               width: double.infinity,
               margin: const EdgeInsets.all(12),
@@ -1455,14 +1468,17 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.money_off_rounded, color: Colors.orange, size: 20),
-                  SizedBox(width: 8),
+                  const Icon(Icons.money_off_rounded,
+                      color: Colors.orange, size: 20),
+                  const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Este comercial no participa en el plan de comisiones',
-                      style: TextStyle(
+                      isTeamLead
+                          ? 'Tu vista personal no genera comisión; consulta el equipo abajo'
+                          : 'Este comercial no participa en el plan de comisiones',
+                      style: const TextStyle(
                           color: Colors.orange,
                           fontSize: 13,
                           fontWeight: FontWeight.bold),
@@ -1471,6 +1487,39 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                 ],
               ),
             ),
+
+          if (isScopedTeamAggregate)
+            Container(
+              width: double.infinity,
+              margin: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.neonBlue.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: AppTheme.neonBlue.withValues(alpha: 0.35)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.groups_rounded,
+                      color: AppTheme.neonBlue, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '$aggregateLabel — vista agregada (suma mensual de 72, 73, 81 y 83). '
+                      'Sin ventas personales de 80.',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          if (isTeamLead && teamCommission != null && !isScopedTeamAggregate)
+            _buildTeamLeadPanel(teamCommission),
 
           // === SUMMARY CARDS ===
           if (!Responsive.isLandscapeCompact(context) &&
@@ -1519,9 +1568,10 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                           if (currentMonthData != null) ...[
                             Text(
                               CurrencyFormatter.format(
-                                  (currentMonthData!['actual'] as num?)
-                                          ?.toDouble() ??
-                                      0),
+                                (currentMonthData!['actual'] as num?)
+                                        ?.toDouble() ??
+                                    0,
+                              ),
                               style: TextStyle(
                                   fontSize:
                                       Responsive.isSmall(context) ? 14 : 16,
@@ -1529,37 +1579,42 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                   color: Colors.white),
                             ),
                             Text(
-                              'de ${CurrencyFormatter.format((currentMonthData!['target'] as num?)?.toDouble() ?? 0)}',
+                              hidePersonalCommissionBadge
+                                  ? 'Ventas mes (sin comisión personal)'
+                                  : 'de ${CurrencyFormatter.format((currentMonthData!['target'] as num?)?.toDouble() ?? 0)}',
                               style: TextStyle(
                                   fontSize: Responsive.isSmall(context) ? 8 : 9,
                                   color: Colors.white.withValues(alpha: 0.6)),
                             ),
-                            const SizedBox(height: 6),
-                            // Mini progress bar
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(4),
-                              child: LinearProgressIndicator(
-                                value: ((currentMonthData!['actual'] as num?)
-                                            ?.toDouble() ??
-                                        0) /
-                                    ((currentMonthData!['target'] as num?)
-                                                ?.toDouble() ??
-                                            1)
-                                        .clamp(0.01, double.infinity),
-                                backgroundColor: Colors.white.withValues(alpha: 0.1),
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  ((currentMonthData!['actual'] as num?)
+                            if (!hidePersonalCommissionBadge) ...[
+                              const SizedBox(height: 6),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: ((currentMonthData!['actual'] as num?)
+                                              ?.toDouble() ??
+                                          0) /
+                                      ((currentMonthData!['target'] as num?)
                                                   ?.toDouble() ??
-                                              0) >=
-                                          ((currentMonthData!['target'] as num?)
-                                                  ?.toDouble() ??
-                                              0)
-                                      ? AppTheme.success
-                                      : AppTheme.neonBlue,
+                                              1)
+                                          .clamp(0.01, double.infinity),
+                                  backgroundColor:
+                                      Colors.white.withValues(alpha: 0.1),
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    ((currentMonthData!['actual'] as num?)
+                                                    ?.toDouble() ??
+                                                0) >=
+                                            ((currentMonthData!['target']
+                                                        as num?)
+                                                    ?.toDouble() ??
+                                                0)
+                                        ? AppTheme.success
+                                        : AppTheme.neonBlue,
+                                  ),
+                                  minHeight: 6,
                                 ),
-                                minHeight: 6,
                               ),
-                            ),
+                            ],
                           ] else
                             const Text('Sin datos',
                                 style: TextStyle(color: Colors.grey)),
@@ -1797,45 +1852,43 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                     columnSpacing: 20,
                                     headingRowColor: WidgetStateProperty.all(
                                         AppTheme.surfaceColor.withValues(alpha: 0.8)),
-                                    columns: const [
-                                      // === DATOS DEL MES ===
-                                      DataColumn(
+                                    columns: [
+                                      const DataColumn(
                                           label: Text('MES',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   color:
                                                       AppTheme.textSecondary))),
-                                      DataColumn(
+                                      const DataColumn(
                                           label: Text('OBJ. MES',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   color:
                                                       AppTheme.textSecondary))),
-                                      DataColumn(
+                                      const DataColumn(
                                           label: Text('VENTA',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   color:
                                                       AppTheme.textSecondary))),
-                                      DataColumn(
+                                      const DataColumn(
                                           label: Text('ESTADO',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   color:
                                                       AppTheme.textSecondary))),
-                                      DataColumn(
+                                      const DataColumn(
                                           label: Text('%',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   color:
                                                       AppTheme.textSecondary))),
-                                      DataColumn(
+                                      const DataColumn(
                                           label: Text('COMISIÓN',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   color: AppTheme.neonGreen))),
-                                      // === RITMO DIARIO (acumulado) ===
-                                      DataColumn(
+                                      const DataColumn(
                                           label: Text('DÍAS',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
@@ -2001,6 +2054,123 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           child: Text('Error mostrando lista: $e',
               style: const TextStyle(color: Colors.red)));
     }
+  }
+
+  Widget _buildTeamLeadPanel(Map<String, dynamic> team) {
+    final members = (team['teamMembers'] as List?)?.cast<String>() ?? [];
+    final monthRows = (team['months'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final nowMonth = DateTime.now().month;
+    final ytdTeamComm =
+        (team['annualTeamMembersCommission'] as num?)?.toDouble() ?? 0;
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.neonGreen.withValues(alpha: 0.15),
+            AppTheme.neonBlue.withValues(alpha: 0.08),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.neonGreen.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.groups_rounded, color: AppTheme.neonGreen, size: 22),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Equipo Almería — comisión por comercial',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Cada comercial (${members.join(', ')}) comisiona solo si supera su umbral '
+            '(ventas LY + IPC pactado). Sin gate 4/4.',
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Comisiones equipo YTD (72+73+81+83): ${CurrencyFormatter.format(ytdTeamComm)}',
+            style: const TextStyle(
+              color: AppTheme.neonGreen,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...monthRows.where((m) => ((m['month'] as num?)?.toInt() ?? 0) <= nowMonth).map((m) {
+            final month = (m['month'] as num?)?.toInt() ?? 0;
+            final teamComm =
+                (m['teamMembersCommission'] as num?)?.toDouble() ?? 0;
+            final teamExcess =
+                (m['teamMembersExcess'] as num?)?.toDouble() ?? 0;
+            final qualifying = (m['qualifyingMembers'] as num?)?.toInt() ?? 0;
+            final memberList =
+                (m['members'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _getMonthName(month),
+                    style: const TextStyle(
+                      color: AppTheme.neonBlue,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  Text(
+                    'Equipo: $qualifying/4 superan umbral · '
+                    'exceso ${CurrencyFormatter.format(teamExcess)} · '
+                    'comisión ${CurrencyFormatter.format(teamComm)}',
+                    style: const TextStyle(
+                      color: AppTheme.neonGreen,
+                      fontSize: 12,
+                    ),
+                  ),
+                  ...memberList.map((mem) {
+                    final code = mem['vendorCode']?.toString() ?? '';
+                    final qualifies = (mem['qualifies'] as bool?) ?? false;
+                    final ventas =
+                        (mem['currentSales'] as num?)?.toDouble() ?? 0;
+                    final umbral =
+                        (mem['threshold'] as num?)?.toDouble() ?? 0;
+                    final comm =
+                        (mem['commission'] as num?)?.toDouble() ?? 0;
+                    final tier = (mem['tier'] as num?)?.toInt() ?? 0;
+                    return Text(
+                      '  · $code — ${qualifies ? 'COMISIONA' : 'no'} · '
+                      'ventas ${CurrencyFormatter.format(ventas)} / obj. ${CurrencyFormatter.format(umbral)}'
+                      '${tier > 0 ? ' · F$tier' : ''} · '
+                      'com. ${CurrencyFormatter.format(comm)}',
+                      style: TextStyle(
+                        color: qualifies
+                            ? AppTheme.neonGreen.withValues(alpha: 0.85)
+                            : Colors.orange.shade200,
+                        fontSize: 11,
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            );
+          }),
+        ],
+      ),
+    );
   }
 }
 
