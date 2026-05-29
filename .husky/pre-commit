@@ -24,10 +24,9 @@ JS_FILES=$(echo "$STAGED_FILES" | grep -E "backend/.*\.js$" || true)
 # ==========================================================================
 if [ -n "$DART_FILES" ]; then
   echo "  📝 Checking Dart formatting..."
-  UNFORMATTED=$(dart format --output=none $DART_FILES 2>/dev/null || true)
-  if [ -n "$UNFORMATTED" ]; then
+  if ! dart format --output=none --set-exit-if-changed $DART_FILES >/dev/null 2>&1; then
     echo -e "${RED}❌ Unformatted Dart files:${NC}"
-    echo "$UNFORMATTED"
+    dart format --output=none $DART_FILES 2>/dev/null | grep "^Changed " || true
     echo -e "${YELLOW}   Fix: dart format lib/ test/${NC}"
     FOUND=1
   else
@@ -41,7 +40,8 @@ fi
 if [ -n "$DART_FILES" ]; then
   echo "  🔍 Running flutter analyze..."
   ANALYZE_OUTPUT=$(flutter analyze --no-pub 2>&1 || true)
-  ERROR_COUNT=$(echo "$ANALYZE_OUTPUT" | grep -c "error -" || echo "0")
+  ERROR_COUNT=$(echo "$ANALYZE_OUTPUT" | grep -c "^  error -" || true)
+  ERROR_COUNT=${ERROR_COUNT:-0}
   if [ "$ERROR_COUNT" -gt 0 ]; then
     echo -e "${RED}❌ Flutter analyze found $ERROR_COUNT error(s):${NC}"
     echo "$ANALYZE_OUTPUT" | grep "error -"
@@ -88,7 +88,7 @@ SECRET_PATTERNS=(
 )
 
 for pattern in "${SECRET_PATTERNS[@]}"; do
-  MATCHES=$(echo "$STAGED_FILES" | xargs grep -l "$pattern" 2>/dev/null | grep -v ".git" || true)
+  MATCHES=$(echo "$STAGED_FILES" | grep -Ev '(^|/)pre-commit$' | xargs grep -l "$pattern" 2>/dev/null | grep -v ".git" || true)
   if [ -n "$MATCHES" ]; then
     echo -e "${RED}❌ Found secret pattern in staged files: $pattern${NC}"
     echo "$MATCHES"
