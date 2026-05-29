@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart';
@@ -30,7 +32,8 @@ class ClientEvolutionPage extends ConsumerStatefulWidget {
   final bool forceShowVendorSelector;
 
   @override
-  ConsumerState<ClientEvolutionPage> createState() => _ClientEvolutionPageState();
+  ConsumerState<ClientEvolutionPage> createState() =>
+      _ClientEvolutionPageState();
 }
 
 class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
@@ -50,7 +53,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
   void initState() {
     super.initState();
     _loadClients();
-    
+
     _vendorSubscription =
         ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
       if (previous != next) {
@@ -65,6 +68,42 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant ClientEvolutionPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.employeeCode != widget.employeeCode ||
+        oldWidget.isJefeVentas != widget.isJefeVentas ||
+        oldWidget.forceShowVendorSelector != widget.forceShowVendorSelector) {
+      _loadClients();
+      if (_selectedClientCode != null) {
+        _loadEvolutionData(_selectedClientCode!);
+      }
+    }
+  }
+
+  String _resolvedVendorCodes() {
+    final selectedVendor = ref.read(selectedVendorProvider);
+    final authState = ref.read(authProvider).value;
+    final authVendorCodes = authState?.vendedorCodes ?? const <String>[];
+
+    if (hasCommercial80VendorScope(
+      userCode: authState?.user?.code,
+      vendorCodes: authVendorCodes,
+    )) {
+      return resolveScopedVendorCodes(
+        userCode: authState?.user?.code,
+        authVendorCodes: authVendorCodes,
+        selectedVendor: selectedVendor,
+        fallbackVendorCodes: widget.employeeCode,
+      );
+    }
+
+    if (selectedVendor != null && selectedVendor.isNotEmpty) {
+      return selectedVendor;
+    }
+    return widget.employeeCode;
+  }
+
   Future<void> _loadClients() async {
     try {
       final generation = ++_loadGeneration;
@@ -73,8 +112,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
         _error = null;
       });
 
-      final currentFilterVendor = ref.read(selectedVendorProvider);
-      final queryCode = currentFilterVendor ?? widget.employeeCode;
+      final queryCode = _resolvedVendorCodes();
 
       final response = await ClientsService.getClientsList(
         vendedorCodes: queryCode,
@@ -107,7 +145,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
       });
 
       // Get vendor codes from provider
-      final vendorCodes = ref.read(selectedVendorProvider) ?? widget.employeeCode;
+      final vendorCodes = _resolvedVendorCodes();
 
       final response = await ApiClient.dio.get(
         '${ApiConfig.baseUrl}/api/pedidos/client-evolution/$clientCode?vendedorCodes=$vendorCodes',
@@ -117,7 +155,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
         final data = response.data;
         if (data['success'] == true) {
           final evolutionData = data['data'] ?? data;
-          
+
           final monthlyData = (evolutionData['monthlySales'] ?? []) is List
               ? (evolutionData['monthlySales'] as List)
                   .map((e) => Map<String, dynamic>.from(e as Map))
@@ -154,7 +192,8 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
           _monthlySales = [];
           _topProducts = [];
           _returns = [];
-          _error = 'Error ${response.statusCode}: ${response.data['message'] ?? 'Falló la carga de datos'}';
+          _error =
+              'Error ${response.statusCode}: ${response.data['message'] ?? 'Falló la carga de datos'}';
           _isLoading = false;
         });
       }
@@ -181,7 +220,9 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Recargar',
-            onPressed: _selectedClientCode != null ? () => _loadEvolutionData(_selectedClientCode!) : null,
+            onPressed: _selectedClientCode != null
+                ? () => _loadEvolutionData(_selectedClientCode!)
+                : null,
           ),
         ],
       ),
@@ -193,7 +234,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
               isJefeVentas: widget.isJefeVentas,
               forceShow: widget.forceShowVendorSelector,
             ),
-          
+
           // Client selection dropdown
           Padding(
             padding: const EdgeInsets.all(16.0),
@@ -206,7 +247,8 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                   children: [
                     const Text(
                       'Seleccionar Cliente',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
@@ -228,10 +270,13 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                                 '${client['NOMBRE']} (${client['CODIGO']})',
                                 style: const TextStyle(fontSize: 14),
                               ),
-                              if (client['POBLACION'] != null && client['POBLACION'].toString().isNotEmpty)
+                              if (client['POBLACION'] != null &&
+                                  client['POBLACION'].toString().isNotEmpty)
                                 Text(
                                   client['POBLACION'],
-                                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                                  style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppTheme.textSecondary),
                                 ),
                             ],
                           ),
@@ -239,7 +284,8 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                       }).toList(),
                       onChanged: (value) {
                         if (value != null) {
-                          final selected = _allClients.firstWhere((c) => c['CODIGO'] == value);
+                          final selected = _allClients
+                              .firstWhere((c) => c['CODIGO'] == value);
                           setState(() {
                             _selectedClientCode = value;
                             _selectedClientName = selected['NOMBRE'];
@@ -253,7 +299,7 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
               ),
             ),
           ),
-          
+
           // Evolution data display
           Expanded(
             child: RefreshIndicator(
@@ -265,7 +311,8 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                 }
               },
               child: _isLoading
-                  ? const Center(child: ModernLoading(message: 'Cargando evolución...'))
+                  ? const Center(
+                      child: ModernLoading(message: 'Cargando evolución...'))
                   : _error != null
                       ? Center(
                           child: Padding(
@@ -273,14 +320,18 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
+                                const Icon(Icons.error_outline,
+                                    color: AppTheme.error, size: 48),
                                 const SizedBox(height: 16),
-                                Text('Error: $_error', style: const TextStyle(color: AppTheme.textSecondary)),
+                                Text('Error: $_error',
+                                    style: const TextStyle(
+                                        color: AppTheme.textSecondary)),
                                 const SizedBox(height: 16),
                                 ElevatedButton(
-                                  onPressed: _selectedClientCode != null 
-                                    ? () => _loadEvolutionData(_selectedClientCode!) 
-                                    : _loadClients,
+                                  onPressed: _selectedClientCode != null
+                                      ? () => _loadEvolutionData(
+                                          _selectedClientCode!)
+                                      : _loadClients,
                                   child: const Text('Reintentar'),
                                 ),
                               ],
@@ -301,7 +352,8 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.people_alt_outlined, size: 48, color: AppTheme.textSecondary),
+            Icon(Icons.people_alt_outlined,
+                size: 48, color: AppTheme.textSecondary),
             SizedBox(height: 16),
             Text(
               'Seleccione un cliente para ver su evolución',
@@ -317,11 +369,13 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.show_chart_outlined, size: 48, color: AppTheme.textSecondary),
+            const Icon(Icons.show_chart_outlined,
+                size: 48, color: AppTheme.textSecondary),
             const SizedBox(height: 16),
             Text(
               'No hay datos de evolución para $_selectedClientName ($_selectedClientCode)',
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 16),
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 16),
               textAlign: TextAlign.center,
             ),
           ],
@@ -330,7 +384,8 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
     }
 
     return SingleChildScrollView(
-      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
+      padding:
+          EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -349,7 +404,8 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                       Expanded(
                         child: Text(
                           '$_selectedClientName ($_selectedClientCode)',
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          style: const TextStyle(
+                              fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                       ),
                     ],
@@ -365,9 +421,9 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
             Text(
               'Evolución Mensual',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
             ),
             const SizedBox(height: 12),
             Card(
@@ -392,7 +448,8 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                                   axisSide: meta.axisSide,
                                   space: 4,
                                   child: Text(
-                                    '${monthData['month']}/${monthData['year']}'.substring(2),
+                                    '${monthData['month']}/${monthData['year']}'
+                                        .substring(2),
                                     style: const TextStyle(fontSize: 8),
                                   ),
                                 );
@@ -418,20 +475,29 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
                             },
                           ),
                         ),
-                        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                        rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                        topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false)),
+                        rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false)),
                       ),
                       borderData: FlBorderData(show: true),
                       minX: 0,
                       maxX: _monthlySales.length.toDouble() - 1,
                       minY: 0,
                       maxY: _monthlySales.isNotEmpty
-                          ? (_monthlySales.map((e) => (e['sales'] as num?)?.toDouble() ?? 0.0).reduce((a, b) => a > b ? a : b) * 1.2)
+                          ? (_monthlySales
+                                  .map((e) =>
+                                      (e['sales'] as num?)?.toDouble() ?? 0.0)
+                                  .reduce((a, b) => a > b ? a : b) *
+                              1.2)
                           : 1000,
                       lineBarsData: [
                         LineChartBarData(
                           spots: _monthlySales.asMap().entries.map((entry) {
-                            return FlSpot(entry.key.toDouble(), (entry.value['sales'] as num?)?.toDouble() ?? 0.0);
+                            return FlSpot(
+                                entry.key.toDouble(),
+                                (entry.value['sales'] as num?)?.toDouble() ??
+                                    0.0);
                           }).toList(),
                           isCurved: true,
                           color: AppTheme.neonPurple,
@@ -457,9 +523,9 @@ class _ClientEvolutionPageState extends ConsumerState<ClientEvolutionPage> {
             Text(
               'Productos Top',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
             ),
             const SizedBox(height: 12),
             Card(

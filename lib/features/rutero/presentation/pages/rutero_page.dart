@@ -163,6 +163,18 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     });
   }
 
+  @override
+  void didUpdateWidget(covariant RuteroPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.employeeCode != widget.employeeCode ||
+        oldWidget.isJefeVentas != widget.isJefeVentas ||
+        oldWidget.forceShowVendorSelector != widget.forceShowVendorSelector) {
+      _retryTimer?.cancel();
+      _cacheRetryCount = 0;
+      _loadWeekData();
+    }
+  }
+
   Future<void> _refreshData() async {
     if (_isLoadingInProgress) return;
     _isLoadingInProgress = true;
@@ -289,6 +301,9 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     return filterCode ?? widget.employeeCode;
   }
 
+  String _ruteroCacheScopeFor(String vendedorCodes) =>
+      vendedorCodes.replaceAll(RegExp('[^A-Za-z0-9,]'), '_');
+
   /// Para operaciones de escritura (POST): devuelve un ÚNICO código de vendedor.
   /// Retorna null si hay múltiples vendedores y no se ha seleccionado uno específico.
   String? get _singleVendedorCode {
@@ -325,6 +340,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
 
   Future<void> _loadWeekData({bool useDirectEndpoint = false}) async {
     final generation = ++_loadGeneration;
+    final activeVendedorCode = _activeVendedorCode;
+    final cacheScope = _ruteroCacheScopeFor(activeVendedorCode);
     setState(() {
       _isLoadingWeek = true;
       _error = null;
@@ -334,14 +351,20 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       final result = await OfflineAwareApi.get(
         ApiConfig.ruteroWeek,
         queryParameters: {
-          'vendedorCodes': _activeVendedorCode,
+          'vendedorCodes': activeVendedorCode,
           'role': _selectedRole,
           'year': _selectedYear,
           'month': _selectedMonth,
           'ignoreOverrides': _sortMode == 'route',
         },
-        cacheKey:
-            'rutero_week_${_selectedRole}_${_selectedYear}_${_selectedMonth}',
+        cacheKey: [
+          'rutero_week',
+          cacheScope,
+          _selectedRole,
+          _selectedYear,
+          _selectedMonth,
+          _sortMode,
+        ].join('_'),
       );
 
       final response = result.data;
@@ -403,6 +426,8 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   }) async {
     if (!mounted) return;
     final currentGeneration = generation ?? ++_loadGeneration;
+    final activeVendedorCode = _activeVendedorCode;
+    final cacheScope = _ruteroCacheScopeFor(activeVendedorCode);
     setState(() {
       _isLoadingClients = true;
     });
@@ -411,7 +436,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       // If KPI filters are active, fetch the codes first
       if (_onlyWithAlerts || _selectedAlertType != 'ALL') {
         final alertCodes = await KpiAlertsService.instance.getClientsWithAlerts(
-          vendedorCodes: _activeVendedorCode,
+          vendedorCodes: activeVendedorCode,
           type: _selectedAlertType,
         );
         _kpiFilteredCodes = alertCodes.toSet();
@@ -427,14 +452,23 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
       final result = await OfflineAwareApi.get(
         endpoint,
         queryParameters: {
-          'vendedorCodes': _activeVendedorCode,
+          'vendedorCodes': activeVendedorCode,
           'role': _selectedRole,
           'year': _selectedYear,
           'month': _selectedMonth,
           'week': _selectedWeek,
           'ignoreOverrides': _sortMode == 'route' ? 'true' : 'false',
         },
-        cacheKey: 'rutero_day_${_selectedRole}_$_selectedDay',
+        cacheKey: [
+          'rutero_day',
+          cacheScope,
+          _selectedRole,
+          _selectedDay,
+          _selectedYear,
+          _selectedMonth,
+          _selectedWeek,
+          _sortMode,
+        ].join('_'),
         forceRefresh: useDirectEndpoint,
       );
 
@@ -513,17 +547,28 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   /// Fetch sales data from normal endpoint and merge into existing clients
   Future<void> _enrichWithSalesData({required int generation}) async {
     try {
+      final activeVendedorCode = _activeVendedorCode;
+      final cacheScope = _ruteroCacheScopeFor(activeVendedorCode);
       final result = await OfflineAwareApi.get(
         '${ApiConfig.ruteroDay}/$_selectedDay',
         queryParameters: {
-          'vendedorCodes': _activeVendedorCode,
+          'vendedorCodes': activeVendedorCode,
           'role': _selectedRole,
           'year': _selectedYear,
           'month': _selectedMonth,
           'week': _selectedWeek,
           'ignoreOverrides': _sortMode == 'route' ? 'true' : 'false',
         },
-        cacheKey: 'rutero_day_enrich_${_selectedRole}_$_selectedDay',
+        cacheKey: [
+          'rutero_day_enrich',
+          cacheScope,
+          _selectedRole,
+          _selectedDay,
+          _selectedYear,
+          _selectedMonth,
+          _selectedWeek,
+          _sortMode,
+        ].join('_'),
       );
 
       final normalResponse = result.data;
@@ -1314,13 +1359,15 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
   Future<void> _refreshDataAndCounts() async {
     // Primero refrescar contadores desde el backend
     try {
+      final activeVendedorCode = _activeVendedorCode;
+      final cacheScope = _ruteroCacheScopeFor(activeVendedorCode);
       final result = await OfflineAwareApi.get(
         '/rutero/counts',
         queryParameters: {
-          'vendedorCodes': _activeVendedorCode,
+          'vendedorCodes': activeVendedorCode,
           'role': _selectedRole,
         },
-        cacheKey: 'rutero_counts_${_selectedRole}',
+        cacheKey: ['rutero_counts', cacheScope, _selectedRole].join('_'),
       );
 
       final countsResponse = result.data;

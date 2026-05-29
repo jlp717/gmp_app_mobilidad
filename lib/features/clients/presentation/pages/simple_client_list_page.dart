@@ -7,6 +7,7 @@ import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/utils/vendor_scope.dart';
 import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Import Sync Header
@@ -60,7 +61,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
   void initState() {
     super.initState();
     _loadClients();
-    if (widget.isJefeVentas) {
+    if (widget.isJefeVentas || widget.forceShowVendorSelector) {
       _vendorSubscription =
           ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
         if (previous != next) {
@@ -75,6 +76,20 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
   }
 
   // ... (dispose and _onSearchChanged remain same)
+
+  @override
+  void didUpdateWidget(covariant SimpleClientListPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.employeeCode != widget.employeeCode ||
+        oldWidget.isJefeVentas != widget.isJefeVentas ||
+        oldWidget.forceShowVendorSelector != widget.forceShowVendorSelector) {
+      _loadClients(
+        query: _searchController.text.trim().isEmpty
+            ? null
+            : _searchController.text.trim(),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -107,8 +122,19 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
       // If Rep -> Show only theirs (pass employeeCode).
 
       String? codesToPass;
-      if (widget.isJefeVentas) {
-        // Use FilterProvider
+      final authState = ref.read(authProvider).value;
+      final authVendorCodes = authState?.vendedorCodes ?? const <String>[];
+      if (hasCommercial80VendorScope(
+        userCode: authState?.user?.code,
+        vendorCodes: authVendorCodes,
+      )) {
+        codesToPass = resolveScopedVendorCodes(
+          userCode: authState?.user?.code,
+          authVendorCodes: authVendorCodes,
+          selectedVendor: ref.read(selectedVendorProvider),
+          fallbackVendorCodes: widget.employeeCode,
+        );
+      } else if (widget.isJefeVentas || widget.forceShowVendorSelector) {
         codesToPass = ref.read(selectedVendorProvider);
         if (!widget.includeAllVendorOption &&
             (codesToPass == null ||

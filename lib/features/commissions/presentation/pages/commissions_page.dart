@@ -2060,7 +2060,162 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     }
   }
 
+  Widget _buildTeamLeadTablePanel(Map<String, dynamic> team) {
+    final members = (team['teamMembers'] as List?)?.cast<String>() ?? [];
+    final monthRows =
+        (team['months'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final nowMonth = DateTime.now().month;
+    final ytdTeamComm =
+        (team['annualTeamMembersCommission'] as num?)?.toDouble() ?? 0;
+
+    final rows = <DataRow>[];
+    for (final monthData in monthRows) {
+      final month = (monthData['month'] as num?)?.toInt() ?? 0;
+      if (month <= 0 || month > nowMonth) continue;
+
+      final memberList =
+          (monthData['members'] as List?)?.cast<Map<String, dynamic>>() ??
+              const <Map<String, dynamic>>[];
+      for (final member in memberList) {
+        final qualifies = (member['qualifies'] as bool?) ?? false;
+        final tier = (member['tier'] as num?)?.toInt() ?? 0;
+        rows.add(
+          DataRow(
+            color: WidgetStateProperty.all(
+              qualifies
+                  ? AppTheme.neonGreen.withValues(alpha: 0.07)
+                  : Colors.orange.withValues(alpha: 0.07),
+            ),
+            cells: [
+              DataCell(_teamTableText(_getMonthName(month))),
+              DataCell(_teamTableText(member['vendorCode']?.toString() ?? '')),
+              DataCell(_teamTableMoney(member['prevYearSales'])),
+              DataCell(_teamTableMoney(member['threshold'])),
+              DataCell(_teamTableMoney(member['currentSales'])),
+              DataCell(_teamTableMoney(member['excess'])),
+              DataCell(_teamTableText(tier > 0 ? 'F$tier' : '-')),
+              DataCell(
+                _teamTableText(
+                  CurrencyFormatter.format(
+                    (member['commission'] as num?)?.toDouble() ?? 0,
+                  ),
+                  color: qualifies ? AppTheme.neonGreen : Colors.orangeAccent,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    }
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.neonGreen.withValues(alpha: 0.15),
+            AppTheme.neonBlue.withValues(alpha: 0.08),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.neonGreen.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.groups_rounded,
+                  color: AppTheme.neonGreen, size: 22),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Equipo Almeria - comisiones especiales',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+              Text(
+                CurrencyFormatter.format(ytdTeamComm),
+                style: const TextStyle(
+                  color: AppTheme.neonGreen,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Juan Luis mantiene sus comisiones propias como comercial 80. Esta tabla anade las comisiones especiales de ${members.join(', ')} cuando cada comercial supera su umbral LY + IPC.',
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: DataTable(
+              headingRowHeight: 34,
+              dataRowMinHeight: 34,
+              dataRowMaxHeight: 42,
+              columnSpacing: 18,
+              horizontalMargin: 10,
+              headingRowColor: WidgetStateProperty.all(
+                AppTheme.neonGreen.withValues(alpha: 0.16),
+              ),
+              border: TableBorder.all(color: Colors.white12),
+              headingTextStyle: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 11,
+              ),
+              dataTextStyle: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 11,
+              ),
+              columns: const [
+                DataColumn(label: Text('Mes')),
+                DataColumn(label: Text('Comercial')),
+                DataColumn(label: Text('Venta LY'), numeric: true),
+                DataColumn(label: Text('Umbral'), numeric: true),
+                DataColumn(label: Text('Venta actual'), numeric: true),
+                DataColumn(label: Text('Exceso'), numeric: true),
+                DataColumn(label: Text('Franja')),
+                DataColumn(label: Text('Comision'), numeric: true),
+              ],
+              rows: rows,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _teamTableMoney(dynamic value) => _teamTableText(
+        CurrencyFormatter.format((value as num?)?.toDouble() ?? 0),
+        color: AppTheme.textPrimary,
+      );
+
+  Widget _teamTableText(
+    String value, {
+    Color color = AppTheme.textSecondary,
+    FontWeight fontWeight = FontWeight.w500,
+  }) {
+    return Text(
+      value,
+      style: TextStyle(color: color, fontSize: 11, fontWeight: fontWeight),
+    );
+  }
+
   Widget _buildTeamLeadPanel(Map<String, dynamic> team) {
+    if (team.isNotEmpty) {
+      return _buildTeamLeadTablePanel(team);
+    }
+
     final members = (team['teamMembers'] as List?)?.cast<String>() ?? [];
     final monthRows =
         (team['months'] as List?)?.cast<Map<String, dynamic>>() ?? [];

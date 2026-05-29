@@ -100,7 +100,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_onTabChange);
 
-    if (widget.isJefeVentas) {
+    if (widget.isJefeVentas || widget.forceShowVendorSelector) {
       _vendorSubscription =
           ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
         if (previous != next) _onVendorFilterChanged();
@@ -144,6 +144,16 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         }
       },
     );
+  }
+
+  @override
+  void didUpdateWidget(covariant PedidosPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.employeeCode != widget.employeeCode ||
+        oldWidget.isJefeVentas != widget.isJefeVentas ||
+        oldWidget.forceShowVendorSelector != widget.forceShowVendorSelector) {
+      _onVendorFilterChanged();
+    }
   }
 
   void _onProviderChange() {
