@@ -23,6 +23,10 @@ const {
     resolveAllModeVendorCodesString,
 } = require('../services/team-commission.service');
 const {
+    applyHybridMonthlyObjectives,
+    computeSeasonalWeightTargets,
+} = require('./objectives-hybrid-helpers');
+const {
     getCachedFamilyNames,
     getCachedFi1Names,
     getCachedFi2Names,
@@ -32,7 +36,7 @@ const {
     isCacheReady: isMetadataCacheReady
 } = require('../services/metadataCache');
 
-const OBJECTIVES_CACHE_VERSION = 'v20260528-team80-objectives';
+const OBJECTIVES_CACHE_VERSION = 'v20260529-hybrid-evolution-fix';
 
 // =============================================================================
 // INHERITED OBJECTIVES LOGIC
@@ -377,66 +381,34 @@ async function buildVendorObjectiveTargets(vendorCode, yearsArray, now) {
         }
 
         const combinedPrevTotal = prevYearTotal + inheritedTotal;
-        const fixedTargetsByMonth = await getFixedMonthlyObjectiveTargets(vendorCode, year);
-        const hasFixedTargets = Object.keys(fixedTargetsByMonth).length > 0;
+        const exactFixedByMonth = await getExactMonthlyTargets(vendorCode, year);
+        const hasPinnedMonths = Object.keys(exactFixedByMonth).length > 0;
 
         let annualObjective;
-        const seasonalTargets = {};
+        let seasonalTargets = {};
 
-        if (hasFixedTargets) {
-            annualObjective = 0;
-            let dynamicSeasonal = {};
-            if (combinedPrevTotal > 0) {
-                const avgMonthly = combinedPrevTotal / 12;
-                const growthFactor = 1 + (targetPct / 100);
-                const dynAnnual = combinedPrevTotal * growthFactor;
-                let rawSum = 0;
-                const tempTargets = {};
-                for (let m = 1; m <= 12; m++) {
-                    const sale = prevYearMonthlySales[m] || 0;
-                    const deviationRatio = avgMonthly > 0 ? (sale - avgMonthly) / avgMonthly : 0;
-                    const variableGrowthPct = (targetPct / 100) * (1 + (SEASONAL_AGGRESSIVENESS * deviationRatio));
-                    tempTargets[m] = sale * (1 + variableGrowthPct);
-                    rawSum += tempTargets[m];
-                }
-                const correctionFactor = rawSum > 0 ? dynAnnual / rawSum : 1;
-                for (let m = 1; m <= 12; m++) {
-                    dynamicSeasonal[m] = tempTargets[m] * correctionFactor;
-                }
-            }
-            for (let m = 1; m <= 12; m++) {
-                seasonalTargets[m] = fixedTargetsByMonth[m]
-                    || dynamicSeasonal[m]
-                    || 0;
-                annualObjective += seasonalTargets[m];
-            }
+        if (hasPinnedMonths && combinedPrevTotal > 0) {
+            const hybrid = applyHybridMonthlyObjectives(
+                prevYearMonthlySales,
+                combinedPrevTotal,
+                targetPct,
+                exactFixedByMonth,
+            );
+            seasonalTargets = hybrid.monthly;
+            annualObjective = hybrid.annual;
+        } else if (combinedPrevTotal > 0) {
+            seasonalTargets = computeSeasonalWeightTargets(
+                prevYearMonthlySales,
+                combinedPrevTotal,
+                targetPct,
+            );
+            annualObjective = Object.values(seasonalTargets).reduce((s, v) => s + v, 0);
         } else {
             const growthFactor = 1 + (targetPct / 100);
-            annualObjective = combinedPrevTotal > 0
-                ? combinedPrevTotal * growthFactor
-                : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * growthFactor : 0);
-
-            if (combinedPrevTotal > 0) {
-                const avgMonthly = combinedPrevTotal / 12;
-                let rawSum = 0;
-                const tempTargets = {};
-
-                for (let m = 1; m <= 12; m++) {
-                    const sale = prevYearMonthlySales[m] || 0;
-                    const deviationRatio = avgMonthly > 0 ? (sale - avgMonthly) / avgMonthly : 0;
-                    const variableGrowthPct = (targetPct / 100) * (1 + (SEASONAL_AGGRESSIVENESS * deviationRatio));
-                    const rawTarget = sale * (1 + variableGrowthPct);
-                    tempTargets[m] = rawTarget;
-                    rawSum += rawTarget;
-                }
-
-                const correctionFactor = rawSum > 0 ? annualObjective / rawSum : 1;
-                for (let m = 1; m <= 12; m++) {
-                    seasonalTargets[m] = tempTargets[m] * correctionFactor;
-                }
-            } else {
-                for (let m = 1; m <= 12; m++) seasonalTargets[m] = annualObjective / 12;
-            }
+            annualObjective = currentYearTotalSoFar > 0
+                ? currentYearTotalSoFar * growthFactor
+                : 0;
+            for (let m = 1; m <= 12; m++) seasonalTargets[m] = annualObjective / 12;
         }
 
         monthlyObjectiveByYear[year] = seasonalTargets;
@@ -870,41 +842,39 @@ router.get('/evolution', verifyToken, async (req, res) => {
             const fixedTargetsForYear = fixedTargetsByYear[year] || {};
             const hasFixedTargetsForYear = Object.keys(fixedTargetsForYear).length > 0;
 
+            let seasonalTargets = {};
+
             if (multiVendorTargets) {
                 annualObjective = multiVendorTargets.annualObjectiveByYear[year] || 0;
                 monthlyObjective = annualObjective / 12;
+            } else if (hasFixedTargetsForYear && combinedPrevTotal > 0) {
+                // Hybrid: pinned months (e.g. May 1.41M) + remainder on other months
+                const hybrid = applyHybridMonthlyObjectives(
+                    prevYearMonthlySales,
+                    combinedPrevTotal,
+                    targetPct,
+                    fixedTargetsForYear,
+                );
+                seasonalTargets = hybrid.monthly;
+                annualObjective = hybrid.annual;
+                monthlyObjective = annualObjective / 12;
             } else {
-                // Standard calculation: previous year * (1 + targetPct)
-                // Fallback to 10% if 0 (though normally handled by getVendorTargetConfig)
                 const growthFactor = 1 + (targetPct / 100);
-                annualObjective = combinedPrevTotal > 0 ? combinedPrevTotal * growthFactor : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * growthFactor : 0);
+                annualObjective = combinedPrevTotal > 0
+                    ? combinedPrevTotal * growthFactor
+                    : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * growthFactor : 0);
                 monthlyObjective = annualObjective / 12;
             }
 
-            // ===================================
-            // CALCULATE SEASONAL FACTORS
-            // ===================================
-            const seasonalTargets = {};
-            if (!multiVendorTargets && combinedPrevTotal > 0) {
-                const avgMonthly = combinedPrevTotal / 12;
-                let rawSum = 0;
-
-                // Pass 1: Calculate Raw Weighted Targets
-                const tempTargets = {};
-                for (let m = 1; m <= 12; m++) {
-                    const sale = prevYearMonthlySales[m] || 0;
-                    const deviationRatio = avgMonthly > 0 ? (sale - avgMonthly) / avgMonthly : 0;
-                    // Formula from simulation
-                    const variableGrowthPct = (targetPct / 100) * (1 + (SEASONAL_AGGRESSIVENESS * deviationRatio));
-                    const rawTarget = sale * (1 + variableGrowthPct);
-                    tempTargets[m] = rawTarget;
-                    rawSum += rawTarget;
-                }
-
-                // Pass 2: Normalize
-                const correctionFactor = rawSum > 0 ? annualObjective / rawSum : 1;
-                for (let m = 1; m <= 12; m++) {
-                    seasonalTargets[m] = tempTargets[m] * correctionFactor;
+            // Seasonal weights (skipped when hybrid/multi already set seasonalTargets)
+            if (combinedPrevTotal > 0 && Object.keys(seasonalTargets).length === 0) {
+                seasonalTargets = computeSeasonalWeightTargets(
+                    prevYearMonthlySales,
+                    combinedPrevTotal,
+                    targetPct,
+                );
+                if (!multiVendorTargets && !hasFixedTargetsForYear) {
+                    annualObjective = Object.values(seasonalTargets).reduce((s, v) => s + v, 0);
                 }
             }
 
@@ -922,19 +892,15 @@ router.get('/evolution', verifyToken, async (req, res) => {
                 // SEASONAL OBJECTIVE with INHERITED support:
                 let seasonalObjective = 0;
 
-                // FIXED TARGET OVERRIDE: Use fixed target when available, fallback to dynamic.
                 if (multiVendorTargets) {
                     seasonalObjective = multiVendorTargets.monthlyObjectiveByYear[year]?.[m] || 0;
-                } else if (hasFixedTargetsForYear) {
-                    seasonalObjective = fixedTargetsForYear[m];
-                    if (!seasonalObjective) {
-                        // Fallback: month without COMMERCIAL_TARGETS → use dynamic calculation
-                        if (combinedPrevTotal > 0) {
-                            seasonalObjective = seasonalTargets[m] || (prevYearMonthlySales[m] * 1.10);
-                        } else if (annualObjective > 0) {
-                            seasonalObjective = annualObjective / 12;
-                        }
+                    if (!seasonalObjective && combinedPrevTotal > 0) {
+                        seasonalObjective = seasonalTargets[m]
+                            || (prevYearMonthlySales[m] * (1 + targetPct / 100))
+                            || 0;
                     }
+                } else if (seasonalTargets[m] > 0) {
+                    seasonalObjective = seasonalTargets[m];
                 } else if (combinedPrevTotal > 0) {
                     // Use calculated seasonal target (Dynamic)
                     seasonalObjective = seasonalTargets[m] || (prevYearMonthlySales[m] * 1.10);
