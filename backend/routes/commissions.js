@@ -72,7 +72,7 @@ const DEFAULT_CONFIG_2026 = {
         { min: 110.01, max: 999.99, pct: 2.0 }
     ]
 };
-const COMMISSIONS_CACHE_VERSION = 'v20260528-team80-aggregate';
+const COMMISSIONS_CACHE_VERSION = 'v20260529-team80-payments';
 
 /**
  * Merge monthly commission rows for scoped team ALL (72+73+81+83).
@@ -1539,12 +1539,13 @@ router.get('/summary', verifyToken, async (req, res) => {
         };
 
         const mergePayments = (pA, pB) => {
-            if (!pA) return pB || { monthly: {}, quarterly: {}, total: 0 };
-            if (!pB) return pA || { monthly: {}, quarterly: {}, total: 0 };
+            if (!pA) return pB || { monthly: {}, quarterly: {}, details: {}, total: 0 };
+            if (!pB) return pA || { monthly: {}, quarterly: {}, details: {}, total: 0 };
 
             const merged = {
                 monthly: { ...pA.monthly },
                 quarterly: { ...pA.quarterly },
+                details: {},
                 total: (pA.total || 0) + (pB.total || 0)
             };
 
@@ -1557,6 +1558,37 @@ router.get('/summary', verifyToken, async (req, res) => {
             Object.keys(pB.quarterly || {}).forEach(q => {
                 merged.quarterly[q] = (merged.quarterly[q] || 0) + (pB.quarterly[q] || 0);
             });
+
+            const mergeDetails = (details = {}) => {
+                Object.entries(details).forEach(([month, detail]) => {
+                    if (!merged.details[month]) {
+                        merged.details[month] = {
+                            totalPaid: 0,
+                            comisionGenerada: 0,
+                            observaciones: [],
+                            ventaComision: 0,
+                            objetivoReal: 0,
+                            ultimaFecha: null,
+                        };
+                    }
+                    const target = merged.details[month];
+                    target.totalPaid += parseFloat(detail?.totalPaid) || 0;
+                    target.comisionGenerada += parseFloat(detail?.comisionGenerada) || 0;
+                    target.ventaComision += parseFloat(detail?.ventaComision) || 0;
+                    target.objetivoReal += parseFloat(detail?.objetivoReal) || 0;
+                    if (Array.isArray(detail?.observaciones)) {
+                        target.observaciones.push(...detail.observaciones.filter(Boolean));
+                    }
+                    const detailDate = detail?.ultimaFecha ? new Date(detail.ultimaFecha) : null;
+                    const targetDate = target.ultimaFecha ? new Date(target.ultimaFecha) : null;
+                    if (detailDate && (!targetDate || detailDate >= targetDate)) {
+                        target.ultimaFecha = detail.ultimaFecha;
+                    }
+                });
+            };
+
+            mergeDetails(pA.details);
+            mergeDetails(pB.details);
 
             return merged;
         };
@@ -1630,7 +1662,10 @@ router.get('/summary', verifyToken, async (req, res) => {
                     return valB - valA;
                 });
                 const globalTotal = results.reduce((s, r) => s + (r.grandTotalCommission || 0), 0);
-                const totalPaid = results.reduce((s, r) => s + (r.payments?.total || 0), 0);
+                const mergedPayments = results.reduce(
+                    (acc, r) => mergePayments(acc, r.payments),
+                    { monthly: {}, quarterly: {}, details: {}, total: 0 }
+                );
 
                 // Aggregate Months/Quarters for this year (scoped team — full month shape for UI table)
                 const aggMonths = scopedTeamAll
@@ -1672,7 +1707,7 @@ router.get('/summary', verifyToken, async (req, res) => {
                     breakdown: scopedTeamAll ? [] : results,
                     months: aggMonths,
                     quarters: aggQuarters,
-                    payments: { total: totalPaid, monthly: {}, quarterly: {} },
+                    payments: mergedPayments,
                     ...(scopedTeamAll ? {
                         isScopedTeamAggregate: true,
                         aggregateLabel: 'Equipo Almería (72+73+81+83)',

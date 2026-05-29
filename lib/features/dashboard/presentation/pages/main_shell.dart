@@ -98,16 +98,16 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   bool _hasScopedVendorAccess(UserModel user, List<String> vendorCodes) {
     // Commercial 80 (Almeria lead) gets team view access
-    final normalizedCode = (user?.code ?? '').replaceFirst(RegExp(r'^0+'), '');
+    final normalizedCode = user.code.replaceFirst(RegExp(r'^0+'), '');
     if (normalizedCode == '80' && vendorCodes.length > 1) return true;
     return !user.isJefeVentas && vendorCodes.length > 1;
   }
 
   String _defaultScopedVendor(UserModel user, List<String> vendorCodes) {
     // Commercial 80 (Almeria lead) defaults to ALL team members
-    final normalizedCode = (user.code ?? '').replaceFirst(RegExp(r'^0+'), '');
+    final normalizedCode = user.code.replaceFirst(RegExp(r'^0+'), '');
     if (normalizedCode == '80') return 'ALL';
-    final ownCode = user.vendedorCode ?? user.code ?? '';
+    final ownCode = user.vendedorCode ?? user.code;
     if (vendorCodes.contains(ownCode)) return ownCode;
     return vendorCodes.isNotEmpty ? vendorCodes.first : ownCode;
   }
@@ -1408,9 +1408,6 @@ class _MainShellState extends ConsumerState<MainShell> {
         (user?.code ?? '').replaceFirst(RegExp(r'^0+'), '');
     final isCommercial80 = normalizedUserCode == '80';
     final effectiveVendorCodes = vendedorCodes;
-    final teamMemberCodes = effectiveVendorCodes
-        .where((c) => c.replaceFirst(RegExp(r'^0+'), '') != '80')
-        .toList();
 
     final hasScopedVendorAccess =
         user != null && _hasScopedVendorAccess(user, effectiveVendorCodes);
@@ -1430,7 +1427,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             : scopedDefaultCode)
         : null;
     final empCode = isTeamAggregateView
-        ? teamMemberCodes.join(',')
+        ? effectiveVendorCodes.join(',')
         : (scopedEmployeeCode ?? effectiveVendorCodes.join(','));
     final apiAggregateCode = isTeamAggregateView ? 'ALL' : empCode;
 

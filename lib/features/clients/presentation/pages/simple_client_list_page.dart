@@ -69,6 +69,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
             query: _searchController.text.trim().isEmpty
                 ? null
                 : _searchController.text.trim(),
+            clearExisting: true,
           );
         }
       });
@@ -87,6 +88,7 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
         query: _searchController.text.trim().isEmpty
             ? null
             : _searchController.text.trim(),
+        clearExisting: true,
       );
     }
   }
@@ -109,11 +111,14 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
     });
   }
 
-  Future<void> _loadClients({String? query}) async {
+  Future<void> _loadClients({String? query, bool clearExisting = false}) async {
     final generation = ++_loadGeneration;
     setState(() {
       _isLoading = true;
       _error = null;
+      if (clearExisting) {
+        _clients = [];
+      }
     });
 
     try {

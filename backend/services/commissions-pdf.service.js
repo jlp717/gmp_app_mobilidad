@@ -881,21 +881,85 @@ function drawTeamLeadSection(doc, teamData, year, startMonth, endMonth, margin, 
     return yPos + 20;
 }
 
-function drawSummaryTeamLeadSection(doc, teamData, year, startMonth, endMonth, margin, contentWidth, pageHeight, startY) {
+function buildTeamLeadAccumulatedRows(teamData, startMonth, endMonth) {
+    const rows = new Map();
+    const leaderCode = displayVendorCode(teamData.leaderCode || '80');
+
+    rows.set(`leader:${leaderCode}`, {
+        code: leaderCode,
+        label: `${leaderCode} - comision propia`,
+        prev: 0,
+        threshold: 0,
+        curr: 0,
+        excess: 0,
+        commission: 0,
+        qualifyingMonths: 0,
+        isLeader: true,
+    });
+
+    for (let month = startMonth; month <= endMonth; month++) {
+        const tm = teamData.months.find((m) => Number(m.month) === month);
+        if (!tm) continue;
+
+        const leaderRow = rows.get(`leader:${leaderCode}`);
+        leaderRow.prev += toNumber(tm.leaderPrevSales);
+        leaderRow.threshold += toNumber(tm.leaderThreshold);
+        leaderRow.curr += toNumber(tm.leaderCurrentSales);
+        leaderRow.excess += toNumber(tm.leaderExcess);
+        leaderRow.commission += toNumber(tm.leaderPersonalCommission);
+        if (toNumber(tm.leaderPersonalCommission) > 0) leaderRow.qualifyingMonths += 1;
+
+        (Array.isArray(tm.members) ? tm.members : []).forEach((member) => {
+            const code = displayVendorCode(member.vendorCode);
+            const key = `member:${code}`;
+            if (!rows.has(key)) {
+                rows.set(key, {
+                    code,
+                    label: `${code} - especial equipo`,
+                    prev: 0,
+                    threshold: 0,
+                    curr: 0,
+                    excess: 0,
+                    commission: 0,
+                    qualifyingMonths: 0,
+                    isLeader: false,
+                });
+            }
+            const row = rows.get(key);
+            row.prev += toNumber(member.prevYearSales);
+            row.threshold += toNumber(member.threshold);
+            row.curr += toNumber(member.currentSales);
+            row.excess += toNumber(member.excess);
+            row.commission += toNumber(member.commission);
+            if (member.qualifies === true) row.qualifyingMonths += 1;
+        });
+    }
+
+    return Array.from(rows.values());
+}
+
+function drawSummaryTeamLeadSection(doc, teamData, year, startMonth, endMonth, margin, contentWidth, pageHeight, startY, leaderTotals = null) {
     if (!teamData || !Array.isArray(teamData.months)) return startY;
 
     const cols = [
-        { key: 'code', label: 'Comercial', width: 70 },
+        { key: 'label', label: 'Origen', width: 145 },
         { key: 'prev', label: 'Ventas LY', width: 90 },
         { key: 'threshold', label: 'Umbral LY+IPC', width: 95 },
         { key: 'curr', label: 'Ventas CY', width: 90 },
         { key: 'excess', label: 'Exceso', width: 80 },
-        { key: 'tier', label: 'Franja', width: 50 },
-        { key: 'comm', label: 'Comision', width: 80 },
+        { key: 'months', label: 'Meses OK', width: 60 },
+        { key: 'comm', label: 'Comision a 80', width: 95 },
     ];
     const HDR_H = 16;
     const ROW_H = 14;
     let yPos = startY;
+    const rows = buildTeamLeadAccumulatedRows(teamData, startMonth, endMonth);
+    const leaderRow = rows.find((row) => row.isLeader);
+    const memberRows = rows.filter((row) => !row.isLeader);
+    const ownCommission = leaderTotals?.generated ?? leaderRow?.commission ?? 0;
+    const ownPaid = leaderTotals?.paid ?? 0;
+    const specialCommission = memberRows.reduce((sum, row) => sum + row.commission, 0);
+    const totalToLeader = ownCommission + specialCommission;
 
     const ensureSpace = (height) => {
         if (yPos + height <= pageHeight - margin - 28) return;
@@ -903,86 +967,84 @@ function drawSummaryTeamLeadSection(doc, teamData, year, startMonth, endMonth, m
         yPos = margin;
     };
 
-    ensureSpace(90);
-    doc.font('Helvetica-Bold').fontSize(11).fillColor(COLORS.header)
-        .text(`Comisiones especiales Equipo Almeria (${displayVendorCode(teamData.leaderCode || '80')})`, margin, yPos, { width: contentWidth });
-    yPos += 18;
+    ensureSpace(98 + ROW_H * Math.max(rows.length, 1));
+    doc.rect(margin, yPos, contentWidth, 22).fill(COLORS.almeriaBg);
+    doc.rect(margin, yPos, contentWidth, 22).stroke(COLORS.almeriaBorder);
+    doc.font('Helvetica-Bold').fontSize(11).fillColor(COLORS.almeriaText)
+        .text(`Acumulado especial a entregar al 80 - Equipo Almeria (${year})`, margin + 6, yPos + 6, { width: contentWidth - 12 });
+    yPos += 28;
+
     doc.font('Helvetica').fontSize(8).fillColor(COLORS.muted)
         .text(
-            'Incluye los comerciales 72, 73, 81 y 83 con la nueva logica por exceso sobre LY+IPC. Juan Luis (80) mantiene sus comisiones propias y aparece resaltado junto al equipo.',
+            'Este bloque se coloca bajo Juan Luis (80): suma su comision propia y la comision especial generada por cada comercial de Almeria.',
             margin,
             yPos,
             { width: contentWidth },
         );
-    yPos += 24;
+    yPos += 18;
 
-    for (let month = startMonth; month <= endMonth; month++) {
-        const tm = teamData.months.find((m) => Number(m.month) === month);
-        if (!tm) continue;
-        const members = Array.isArray(tm.members) ? tm.members : [];
-        ensureSpace(16 + HDR_H + ROW_H * Math.max(members.length, 1) + 8);
+    const summary = [
+        { label: 'Comision propia 80', value: ownCommission, color: COLORS.header },
+        { label: 'Especial equipo', value: specialCommission, color: COLORS.good },
+        { label: 'Total a entregar al 80', value: totalToLeader, color: COLORS.almeriaBorder },
+        { label: 'Pagado propio 80', value: ownPaid, color: COLORS.condor },
+    ];
+    const cardWidth = Math.floor(contentWidth / summary.length);
+    summary.forEach((item, index) => {
+        const x = margin + index * cardWidth;
+        doc.rect(x, yPos, cardWidth - 4, 30).fill(index % 2 === 0 ? COLORS.rowAlt : '#FFFFFF').stroke(COLORS.grid);
+        doc.font('Helvetica').fontSize(7).fillColor(COLORS.muted)
+            .text(item.label, x + 4, yPos + 5, { width: cardWidth - 12 });
+        doc.font('Helvetica-Bold').fontSize(9).fillColor(item.color)
+            .text(formatCurrency(item.value), x + 4, yPos + 16, { width: cardWidth - 12, align: 'right' });
+    });
+    yPos += 38;
 
-        doc.font('Helvetica-Bold').fontSize(9).fillColor(COLORS.text)
-            .text(
-                `${getMonthName(month)} ${year} | exceso equipo ${formatCurrency(tm.teamMembersExcess || 0)} | comision ${formatCurrency(tm.teamMembersCommission || 0)} | califican ${tm.qualifyingMembers ?? 0}/4`,
-                margin,
-                yPos,
-                { width: contentWidth },
-            );
-        yPos += 14;
+    doc.rect(margin, yPos, contentWidth, HDR_H).fill(COLORS.columnHeader);
+    let xPos = margin;
+    cols.forEach((col) => {
+        doc.font('Helvetica-Bold').fontSize(7).fillColor(COLORS.header)
+            .text(col.label, xPos + 2, yPos + 4, { width: col.width - 4, align: 'left' });
+        doc.rect(xPos, yPos, col.width, HDR_H).stroke(COLORS.grid);
+        xPos += col.width;
+    });
+    yPos += HDR_H;
 
-        doc.rect(margin, yPos, contentWidth, HDR_H).fill(COLORS.columnHeader);
-        let xPos = margin;
+    rows.forEach((row, idx) => {
+        const rowBg = row.isLeader ? COLORS.almeriaBg : (idx % 2 === 0 ? COLORS.rowAlt : '#FFFFFF');
+        doc.rect(margin, yPos, contentWidth, ROW_H).fill(rowBg);
+        xPos = margin;
+        const values = {
+            label: row.label,
+            prev: formatCurrency(row.prev),
+            threshold: formatCurrency(row.threshold),
+            curr: formatCurrency(row.curr),
+            excess: formatCurrency(row.excess),
+            months: String(row.qualifyingMonths),
+            comm: formatCurrency(row.isLeader ? ownCommission : row.commission),
+        };
         cols.forEach((col) => {
-            doc.font('Helvetica-Bold').fontSize(7).fillColor(COLORS.header)
-                .text(col.label, xPos + 2, yPos + 4, { width: col.width - 4, align: 'left' });
-            doc.rect(xPos, yPos, col.width, HDR_H).stroke(COLORS.grid);
+            const isMoney = col.key !== 'label' && col.key !== 'months';
+            const color = col.key === 'comm'
+                ? (row.isLeader ? COLORS.header : COLORS.good)
+                : COLORS.text;
+            doc.font(row.isLeader ? 'Helvetica-Bold' : 'Helvetica').fontSize(7).fillColor(color)
+                .text(values[col.key], xPos + 2, yPos + 3, {
+                    width: col.width - 4,
+                    align: isMoney || col.key === 'months' ? 'right' : 'left',
+                });
+            doc.rect(xPos, yPos, col.width, ROW_H).stroke(COLORS.grid);
             xPos += col.width;
         });
-        yPos += HDR_H;
+        yPos += ROW_H;
+    });
 
-        members.forEach((member, idx) => {
-            const rowBg = idx % 2 === 0 ? COLORS.rowAlt : '#FFFFFF';
-            doc.rect(margin, yPos, contentWidth, ROW_H).fill(rowBg);
-            xPos = margin;
-            const tier = Number(member.tier || 0);
-            const values = {
-                code: displayVendorCode(member.vendorCode),
-                prev: formatCurrency(member.prevYearSales || 0),
-                threshold: formatCurrency(member.threshold || 0),
-                curr: formatCurrency(member.currentSales || 0),
-                excess: formatCurrency(member.excess || 0),
-                tier: tier > 0 ? `F${tier}` : '-',
-                comm: formatCurrency(member.commission || 0),
-            };
-            cols.forEach((col) => {
-                const qualifies = member.qualifies === true;
-                let color = COLORS.text;
-                if (col.key === 'excess' || col.key === 'comm' || col.key === 'tier') {
-                    color = qualifies ? COLORS.good : COLORS.bad;
-                }
-                doc.font('Helvetica').fontSize(7).fillColor(color)
-                    .text(values[col.key], xPos + 2, yPos + 3, {
-                        width: col.width - 4,
-                        align: col.key === 'code' ? 'left' : 'right',
-                    });
-                doc.rect(xPos, yPos, col.width, ROW_H).stroke(COLORS.grid);
-                xPos += col.width;
-            });
-            yPos += ROW_H;
-        });
-
-        yPos += 8;
-    }
-
-    ensureSpace(18);
-    doc.font('Helvetica-Bold').fontSize(9).fillColor(COLORS.good)
-        .text(
-            `Comision equipo YTD: ${formatCurrency(teamData.annualTeamMembersCommission || 0)} | Atrasos: ${formatCurrency(teamData.arrearsTotal || 0)}`,
-            margin,
-            yPos,
-            { width: contentWidth },
-        );
+    doc.rect(margin, yPos, contentWidth, ROW_H + 2).fill(COLORS.totalBg);
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(COLORS.totalText)
+        .text('TOTAL A ENTREGAR AL 80', margin + 4, yPos + 4, { width: contentWidth / 2 });
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(COLORS.totalText)
+        .text(formatCurrency(totalToLeader), margin + contentWidth / 2, yPos + 4, { width: contentWidth / 2 - 6, align: 'right' });
+    yPos += ROW_H + 10;
     return yPos + 22;
 }
 
@@ -1053,6 +1115,7 @@ async function generateCommissionsPdfFromSummary(summaryVendors, condorDataMap, 
                 generated: 0,
                 paid: 0,
             };
+            let teamSectionDrawn = false;
 
             vendors.forEach(vendor => {
                 const monthsInRange = endMonth - startMonth + 1;
@@ -1078,6 +1141,24 @@ async function generateCommissionsPdfFromSummary(summaryVendors, condorDataMap, 
                 Object.keys(globalTotals).forEach(key => {
                     globalTotals[key] += drawn.totals[key] || 0;
                 });
+
+                const normalized = normalizeVendorCode(vendor.vendedorCode || vendor.code);
+                const teamLeader = normalizeVendorCode(teamCommissionData?.leaderCode || '80');
+                if (teamCommissionData && normalized === teamLeader) {
+                    yPos = drawSummaryTeamLeadSection(
+                        doc,
+                        teamCommissionData,
+                        year,
+                        startMonth,
+                        endMonth,
+                        margin,
+                        contentWidth,
+                        pageHeight,
+                        yPos,
+                        drawn.totals,
+                    );
+                    teamSectionDrawn = true;
+                }
             });
 
             const globalNeededHeight = 36;
@@ -1115,7 +1196,7 @@ async function generateCommissionsPdfFromSummary(summaryVendors, condorDataMap, 
             });
             yPos += 30;
 
-            if (teamCommissionData) {
+            if (teamCommissionData && !teamSectionDrawn) {
                 yPos = drawSummaryTeamLeadSection(
                     doc,
                     teamCommissionData,
@@ -1126,6 +1207,7 @@ async function generateCommissionsPdfFromSummary(summaryVendors, condorDataMap, 
                     contentWidth,
                     pageHeight,
                     yPos,
+                    null,
                 );
             }
 

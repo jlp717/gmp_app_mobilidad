@@ -88,19 +88,20 @@ String resolveScopedVendorCodes({
   }
 
   final allowedCodes = commercial80AllowedVendorCodes(authVendorCodes);
-  final fallback = fallbackVendorCodes.trim().isNotEmpty
-      ? fallbackVendorCodes
+  final fallback = fallbackVendorCodes.trim();
+  final scopedFallback = fallback.isNotEmpty && fallback.toUpperCase() != 'ALL'
+      ? fallback
       : allowedCodes.join(',');
 
   if (selectedVendor == null ||
       selectedVendor.isEmpty ||
       selectedVendor == 'ALL') {
-    return fallback;
+    return scopedFallback;
   }
 
   if (vendorCodeListContains(allowedCodes, selectedVendor)) {
     return selectedVendor;
   }
 
-  return fallback;
+  return scopedFallback;
 }

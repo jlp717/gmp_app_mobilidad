@@ -12,6 +12,7 @@ class ClientsService {
     String? vendedorCodes,
     String? search,
     int limit = 1000,
+    bool forceRefresh = false,
   }) async {
     final params = <String, dynamic>{
       'limit': limit.toString(),
@@ -23,11 +24,21 @@ class ClientsService {
       params['search'] = search;
     }
 
+    final scopeKey = (vendedorCodes == null || vendedorCodes.isEmpty)
+        ? 'ALL'
+        : vendedorCodes
+            .split(',')
+            .map((code) => code.trim())
+            .where((code) => code.isNotEmpty)
+            .join('_');
+    final searchKey = (search == null || search.isEmpty) ? 'none' : search;
+
     final result = await OfflineAwareApi.get(
       ApiConfig.clientsList,
       queryParameters: params,
-      cacheKey: 'clients_list_${vendedorCodes ?? "ALL"}_${search ?? ''}',
+      cacheKey: 'clients_list_v2_${scopeKey}_${limit}_$searchKey',
       cacheTTL: const Duration(minutes: 5),
+      forceRefresh: forceRefresh,
     );
 
     final rawList = result.data['clients'] ?? [];
@@ -85,11 +96,13 @@ class ClientsService {
         .map((item) => Map<String, dynamic>.from(item as Map))
         .toList();
     if (isGrouped) {
-      return result.map((item) => {
-        ...item,
-        'productName': item['family1'] ?? 'Sin familia',
-        'productCode': '',
-      }).toList();
+      return result
+          .map((item) => {
+                ...item,
+                'productName': item['family1'] ?? 'Sin familia',
+                'productCode': '',
+              })
+          .toList();
     }
     return result;
   }

@@ -156,9 +156,7 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     _vendorSubscription =
         ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
       if (_isInitialized && previous != next) {
-        _retryTimer?.cancel();
-        _cacheRetryCount = 0;
-        _loadWeekData();
+        _onVendorScopeChanged();
       }
     });
   }
@@ -169,10 +167,21 @@ class _RuteroPageState extends ConsumerState<RuteroPage>
     if (oldWidget.employeeCode != widget.employeeCode ||
         oldWidget.isJefeVentas != widget.isJefeVentas ||
         oldWidget.forceShowVendorSelector != widget.forceShowVendorSelector) {
-      _retryTimer?.cancel();
-      _cacheRetryCount = 0;
-      _loadWeekData();
+      _onVendorScopeChanged();
     }
+  }
+
+  void _onVendorScopeChanged() {
+    if (!mounted) return;
+    _retryTimer?.cancel();
+    _cacheRetryCount = 0;
+    setState(() {
+      _weekData = {};
+      _dayClients = [];
+      _totalUniqueClients = 0;
+      _isCacheLoading = false;
+    });
+    _loadWeekData();
   }
 
   Future<void> _refreshData() async {

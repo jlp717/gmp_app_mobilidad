@@ -61,6 +61,16 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     super.dispose();
   }
 
+  @override
+  void didUpdateWidget(covariant CommissionsPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.employeeCode != widget.employeeCode ||
+        oldWidget.isJefeVentas != widget.isJefeVentas ||
+        oldWidget.forceShowVendorSelector != widget.forceShowVendorSelector) {
+      _loadData();
+    }
+  }
+
   Future<void> _loadData({bool forceRefresh = false}) async {
     final generation = ++_loadGeneration;
     setState(() {
@@ -2067,6 +2077,11 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
     final nowMonth = DateTime.now().month;
     final ytdTeamComm =
         (team['annualTeamMembersCommission'] as num?)?.toDouble() ?? 0;
+    final leaderOwnCommission =
+        (_data?['grandTotalCommission'] as num?)?.toDouble() ??
+            (team['leaderPersonalCommission'] as num?)?.toDouble() ??
+            0;
+    final totalToLeader = leaderOwnCommission + ytdTeamComm;
 
     final rows = <DataRow>[];
     for (final monthData in monthRows) {
@@ -2141,7 +2156,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                 ),
               ),
               Text(
-                CurrencyFormatter.format(ytdTeamComm),
+                CurrencyFormatter.format(totalToLeader),
                 style: const TextStyle(
                   color: AppTheme.neonGreen,
                   fontSize: 16,
@@ -2152,42 +2167,51 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Juan Luis mantiene sus comisiones propias como comercial 80. Esta tabla anade las comisiones especiales de ${members.join(', ')} cuando cada comercial supera su umbral LY + IPC.',
+            'Total a entregar al 80: comision propia ${CurrencyFormatter.format(leaderOwnCommission)} + especial equipo ${CurrencyFormatter.format(ytdTeamComm)}. La tabla desglosa ${members.join(', ')} por mes y umbral LY + IPC.',
             style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 12),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: DataTable(
-              headingRowHeight: 34,
-              dataRowMinHeight: 34,
-              dataRowMaxHeight: 42,
-              columnSpacing: 18,
-              horizontalMargin: 10,
-              headingRowColor: WidgetStateProperty.all(
-                AppTheme.neonGreen.withValues(alpha: 0.16),
+          ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: Responsive.isSmall(context) ? 220 : 320,
+            ),
+            child: Scrollbar(
+              child: SingleChildScrollView(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    headingRowHeight: 34,
+                    dataRowMinHeight: 34,
+                    dataRowMaxHeight: 42,
+                    columnSpacing: 18,
+                    horizontalMargin: 10,
+                    headingRowColor: WidgetStateProperty.all(
+                      AppTheme.neonGreen.withValues(alpha: 0.16),
+                    ),
+                    border: TableBorder.all(color: Colors.white12),
+                    headingTextStyle: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                    ),
+                    dataTextStyle: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 11,
+                    ),
+                    columns: const [
+                      DataColumn(label: Text('Mes')),
+                      DataColumn(label: Text('Comercial')),
+                      DataColumn(label: Text('Venta LY'), numeric: true),
+                      DataColumn(label: Text('Umbral'), numeric: true),
+                      DataColumn(label: Text('Venta actual'), numeric: true),
+                      DataColumn(label: Text('Exceso'), numeric: true),
+                      DataColumn(label: Text('Franja')),
+                      DataColumn(label: Text('Comision'), numeric: true),
+                    ],
+                    rows: rows,
+                  ),
+                ),
               ),
-              border: TableBorder.all(color: Colors.white12),
-              headingTextStyle: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 11,
-              ),
-              dataTextStyle: const TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 11,
-              ),
-              columns: const [
-                DataColumn(label: Text('Mes')),
-                DataColumn(label: Text('Comercial')),
-                DataColumn(label: Text('Venta LY'), numeric: true),
-                DataColumn(label: Text('Umbral'), numeric: true),
-                DataColumn(label: Text('Venta actual'), numeric: true),
-                DataColumn(label: Text('Exceso'), numeric: true),
-                DataColumn(label: Text('Franja')),
-                DataColumn(label: Text('Comision'), numeric: true),
-              ],
-              rows: rows,
             ),
           ),
         ],
