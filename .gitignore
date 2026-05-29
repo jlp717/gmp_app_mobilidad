@@ -9,8 +9,24 @@
 .buildlog/
 .history
 .svn/
-.swiftpm/
-migrate_working_dir/
+
+# Secrets and configuration
+.opencode/
+.env
+.config/
+.secrets/
+.credentials/
+*.key
+*.pem
+*.crt
+*.cert
+*.token
+tokens.json
+*.credentials.json
+*.env.local
+*.env.development.local
+*.env.test.local
+*.env.production.local
 
 # IntelliJ related
 *.iml
