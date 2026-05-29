@@ -323,8 +323,14 @@ router.get('/rutero/vendedores', async (req, res) => {
         mapped.sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
 
         const userCode = req.user?.code;
-        const isJefeVentas = req.user?.isJefeVentas === true;
-        const allowedCodes = !isJefeVentas ? getVendorVisibilityScope(userCode) : null;
+        const normalizedUserCode = String(userCode || '').trim().replace(/^0+/, '') || String(userCode || '').trim();
+        const userRole = String(req.user?.role || '').toUpperCase();
+        const isPrivileged =
+            req.user?.isJefeVentas === true ||
+            ['JEFE', 'JEFE_VENTAS', 'ADMIN', 'DIRECTOR'].includes(userRole);
+        const allowedCodes = !isPrivileged && normalizedUserCode === '80'
+            ? getVendorVisibilityScope(userCode)
+            : null;
         const scoped = allowedCodes && allowedCodes.length > 0
             ? mapped.filter(v => allowedCodes.includes(String(v.code).trim().replace(/^0+/, '') || String(v.code).trim()))
             : mapped;
