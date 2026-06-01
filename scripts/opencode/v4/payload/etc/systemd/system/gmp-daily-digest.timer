@@ -1,0 +1,10 @@
+[Unit]
+Description=Timer para GMP Daily Digest
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+TimeZone=Europe/Madrid
+Persistent=true
+
+[Install]
+WantedBy=timers.target

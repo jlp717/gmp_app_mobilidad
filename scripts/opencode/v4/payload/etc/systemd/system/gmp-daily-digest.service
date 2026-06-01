@@ -1,0 +1,11 @@
+[Unit]
+Description=GMP Daily Digest - Resumen diario enviado a Telegram
+After=network.target
+
+[Service]
+User=gmp
+WorkingDirectory=/opt/gmp-tools
+ExecStart=/bin/bash /opt/gmp-tools/daily-digest-runner.sh
+EnvironmentFile=/opt/gmp-tools/.env
+StandardOutput=journal
+StandardError=journal

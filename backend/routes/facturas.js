@@ -13,6 +13,8 @@ const logger = require('../middleware/logger');
 const { sendEmailWithPdf, generateInvoiceEmailHtml, cachePdf, getCachedPdf } = require('../services/emailPdfService');
 const { verifyToken } = require('../middleware/auth');
 
+const FACTURA_PDF_CACHE_VERSION = 'v2';
+
 /**
  * GET /api/facturas
  */
@@ -137,7 +139,7 @@ router.get('/:serie/:numero/:ejercicio/pdf', verifyToken, async (req, res, next)
     try {
         const { serie, numero, ejercicio } = req.params;
         const preview = req.query.preview === 'true';
-        const cacheKey = `factura_${serie}_${numero}_${ejercicio}`;
+        const cacheKey = `factura_${serie}_${numero}_${ejercicio}:${FACTURA_PDF_CACHE_VERSION}`;
 
         // Check PDF cache first
         let pdfBuffer = getCachedPdf(cacheKey);
@@ -195,7 +197,7 @@ router.post('/share/whatsapp', verifyToken, async (req, res, next) => {
         }
 
         // Get or generate PDF (with cache)
-        const cacheKey = `factura_${serie}_${numero}_${ejercicio}`;
+        const cacheKey = `factura_${serie}_${numero}_${ejercicio}:${FACTURA_PDF_CACHE_VERSION}`;
         let pdfBuffer = getCachedPdf(cacheKey);
 
         if (!pdfBuffer) {
@@ -258,7 +260,7 @@ router.post('/send-email', verifyToken, async (req, res, next) => {
         }
 
         // Get or generate PDF (with cache)
-        const cacheKey = `factura_${serie}_${numero}_${ejercicio}`;
+        const cacheKey = `factura_${serie}_${numero}_${ejercicio}:${FACTURA_PDF_CACHE_VERSION}`;
         let pdfBuffer = getCachedPdf(cacheKey);
 
         if (!pdfBuffer) {
@@ -326,7 +328,7 @@ router.post('/share/email', verifyToken, async (req, res, next) => {
         }
 
         // Use the new server-side sending
-        const cacheKey = `factura_${serie}_${numero}_${ejercicio}`;
+        const cacheKey = `factura_${serie}_${numero}_${ejercicio}:${FACTURA_PDF_CACHE_VERSION}`;
         let pdfBuffer = getCachedPdf(cacheKey);
 
         if (!pdfBuffer) {

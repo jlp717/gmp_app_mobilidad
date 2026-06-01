@@ -50,7 +50,7 @@ jobs:
       node_version: ${{ steps.version.outputs.node }}
     steps:
       - name: Checkout with full history
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 2
 
@@ -104,10 +104,10 @@ jobs:
       warning_count: ${{ steps.analyze.outputs.warning_count }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: 'stable'
@@ -118,7 +118,7 @@ jobs:
         run: flutter pub get
 
       - name: Get Flutter packages cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ~/.pub-cache
           key: ${{ runner.os }}-flutter-pub-${{ hashFiles('**/pubspec.lock') }}
@@ -174,10 +174,10 @@ jobs:
       error_count: ${{ steps.lint.outputs.error_count }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -234,10 +234,10 @@ jobs:
       coverage: ${{ steps.coverage.outputs.coverage }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -262,7 +262,7 @@ jobs:
           else
             echo "result=failed" >> $GITHUB_OUTPUT
             # Extract failed test names for rapid diagnosis
-            echo "$RESULT" | grep -B1 "●" | grep -v "^--$" | head -10 | while read line; do
+            echo "$RESULT" | grep -B1 "â—" | grep -v "^--$" | head -10 | while read line; do
               echo "::error::Test failed: $line"
             done
             exit 1
@@ -277,7 +277,7 @@ jobs:
           fi
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238
         if: always()
         with:
           files: backend/coverage/lcov.info
@@ -297,10 +297,10 @@ jobs:
       test_result: ${{ steps.test.outputs.result }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: 'stable'
@@ -311,7 +311,7 @@ jobs:
         run: flutter pub get
 
       - name: Get Flutter packages cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ~/.pub-cache
           key: ${{ runner.os }}-flutter-pub-${{ hashFiles('**/pubspec.lock') }}
@@ -340,7 +340,7 @@ jobs:
           fi
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@b9fd7d16f6d7d1b5d2bec1a2887e65ceed900238
         if: always()
         with:
           files: coverage/lcov.info
@@ -360,10 +360,10 @@ jobs:
       vulnerabilities: ${{ steps.scan.outputs.vulns }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
@@ -394,7 +394,7 @@ jobs:
           # Check for default secrets (exclude test files)
           SECRET_MATCHES=$(grep -rn "default-secret\|dev-access-secret\|dev-refresh-secret" backend --include="*.js" --include="*.ts" 2>/dev/null | grep -v "===" | grep -v "!==" | grep -v ".test." | grep -v "__tests__" | grep -v "instrument." || true)
           if [ -n "$SECRET_MATCHES" ]; then
-            echo "❌ Found hardcoded default secrets!"
+            echo "âŒ Found hardcoded default secrets!"
             echo "$SECRET_MATCHES"
             FOUND=1
           fi
@@ -402,7 +402,7 @@ jobs:
           # Check for .env files in repo
           ENV_FILES=$(git ls-files | grep -E "\.env$|\.env\.(local|production|staging|produccion)$" 2>/dev/null || true)
           if [ -n "$ENV_FILES" ]; then
-            echo "❌ Found .env files committed!"
+            echo "âŒ Found .env files committed!"
             echo "$ENV_FILES"
             FOUND=1
           fi
@@ -411,7 +411,7 @@ jobs:
             echo "Security scan failed - remove hardcoded secrets before deploying"
             exit 1
           fi
-          echo "✅ No hardcoded secrets found"
+          echo "âœ… No hardcoded secrets found"
 
       - name: Generate SBOM
         run: |
@@ -425,7 +425,7 @@ jobs:
           fi
 
       - name: Upload SBOM
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: sbom-${{ github.sha }}
           path: |
@@ -447,10 +447,10 @@ jobs:
       apk_size: ${{ steps.size.outputs.size }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: 'stable'
@@ -458,7 +458,7 @@ jobs:
           cache-path: ~/.pub-cache
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
         with:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
@@ -468,7 +468,7 @@ jobs:
         run: flutter pub get
 
       - name: Get Flutter packages cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ~/.pub-cache
           key: ${{ runner.os }}-flutter-pub-${{ hashFiles('**/pubspec.lock') }}
@@ -476,7 +476,7 @@ jobs:
             ${{ runner.os }}-flutter-pub-
 
       - name: Get Gradle cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
             ~/.gradle/caches
@@ -505,14 +505,14 @@ jobs:
           echo "APK Size: $SIZE"
 
       - name: Upload APKs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: android-debug-${{ github.sha }}
           path: build/app/outputs/flutter-apk/*.apk
           retention-days: 7
 
       - name: Upload CI artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: ci-artifacts-${{ github.sha }}
@@ -522,16 +522,16 @@ jobs:
 
       - name: Build summary
         run: |
-          echo "## ✅ Build Successful" >> $GITHUB_STEP_SUMMARY
+          echo "## âœ… Build Successful" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Android Debug APK" >> $GITHUB_STEP_SUMMARY
           echo "- Size: ${{ steps.size.outputs.size }}" >> $GITHUB_STEP_SUMMARY
           echo "- Path: \`${{ steps.build.outputs.apk_path }}\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Quality Gates" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Lint: Passed" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Tests: Passed" >> $GITHUB_STEP_SUMMARY
-          echo "- ✅ Security: Passed" >> $GITHUB_STEP_SUMMARY
+          echo "- âœ… Lint: Passed" >> $GITHUB_STEP_SUMMARY
+          echo "- âœ… Tests: Passed" >> $GITHUB_STEP_SUMMARY
+          echo "- âœ… Security: Passed" >> $GITHUB_STEP_SUMMARY
 
   # ==========================================================================
   # PHASE 5b: BUILD ANDROID (Main Branch - Release)
@@ -547,10 +547,10 @@ jobs:
       aab_path: ${{ steps.build.outputs.aab_path }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
 
       - name: Setup Flutter
-        uses: subosito/flutter-action@v2
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: 'stable'
@@ -558,7 +558,7 @@ jobs:
           cache-path: ~/.pub-cache
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
         with:
           distribution: 'zulu'
           java-version: ${{ env.JAVA_VERSION }}
@@ -568,7 +568,7 @@ jobs:
         run: flutter pub get
 
       - name: Get Flutter packages cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: ~/.pub-cache
           key: ${{ runner.os }}-flutter-pub-${{ hashFiles('**/pubspec.lock') }}
@@ -576,7 +576,7 @@ jobs:
             ${{ runner.os }}-flutter-pub-
 
       - name: Get Gradle cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
         with:
           path: |
             ~/.gradle/caches
@@ -600,7 +600,7 @@ jobs:
           echo "aab_path=$AAB_PATH" >> $GITHUB_OUTPUT
 
       - name: Upload APKs & AABs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: android-release-${{ github.sha }}
           path: |
@@ -610,7 +610,7 @@ jobs:
 
       - name: APK size report
         run: |
-          echo "## ✅ Release Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "## âœ… Release Build Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### APK Sizes" >> $GITHUB_STEP_SUMMARY
           ls -lh build/app/outputs/flutter-apk/*.apk 2>/dev/null | awk '{print "- " $9 ": " $5}' >> $GITHUB_STEP_SUMMARY
@@ -629,7 +629,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -656,7 +656,7 @@ jobs:
           git log --oneline -20 >> release-notes.md
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@de2c0eb89ae2a093876385947365aca7b0e5f844
         with:
           tag_name: v${{ steps.version.outputs.current }}
           body_path: release-notes.md
@@ -678,7 +678,7 @@ jobs:
     if: failure()
     steps:
       - name: Upload error logs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: ci-diagnostics-${{ github.sha }}
           path: /tmp/ci-artifacts/
@@ -698,7 +698,7 @@ jobs:
       - name: Collect failure details
         id: details
         run: |
-          echo "## ❌ CI/CD Pipeline Failed" >> $GITHUB_STEP_SUMMARY
+          echo "## âŒ CI/CD Pipeline Failed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Job | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-----|--------|" >> $GITHUB_STEP_SUMMARY
@@ -708,7 +708,7 @@ jobs:
           STATUS="${{ needs.flutter-lint.result }}"
           echo "| Flutter Lint | $STATUS |" >> $GITHUB_STEP_SUMMARY
           if [ "$STATUS" != "success" ]; then
-            echo "| → Errors | ${{ needs.flutter-lint.outputs.error_count || '?' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| â†’ Errors | ${{ needs.flutter-lint.outputs.error_count || '?' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Check Backend lint
@@ -716,7 +716,7 @@ jobs:
           STATUS="${{ needs.backend-lint.result }}"
           echo "| Backend Lint | $STATUS |" >> $GITHUB_STEP_SUMMARY
           if [ "$STATUS" != "success" ]; then
-            echo "| → Errors | ${{ needs.backend-lint.outputs.error_count || '?' }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| â†’ Errors | ${{ needs.backend-lint.outputs.error_count || '?' }} |" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Check Backend tests
@@ -737,12 +737,12 @@ jobs:
       - name: Failure links
         run: |
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🔗 Links" >> $GITHUB_STEP_SUMMARY
+          echo "### ðŸ”— Links" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "- [View Full Logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})" >> $GITHUB_STEP_SUMMARY
           echo "- [View Commit](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🛠️ Quick Fix Commands" >> $GITHUB_STEP_SUMMARY
+          echo "### ðŸ› ï¸ Quick Fix Commands" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
           echo "# Reproduce locally:" >> $GITHUB_STEP_SUMMARY

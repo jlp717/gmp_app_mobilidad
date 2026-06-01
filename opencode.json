@@ -1,0 +1,168 @@
+{
+    "$schema":  "https://opencode.ai/config.json",
+    "model":  "openai/gpt-5.5",
+    "small_model":  "openai/gpt-5.4-mini",
+    "default_agent":  "chief-engineer-assistant",
+    "username":  "Javier",
+    "share":  "disabled",
+    "autoupdate":  "notify",
+    "snapshot":  true,
+    "instructions":  [
+                         ".opencode/AGENTS.md",
+                         "AGENTS.md",
+                         "CLAUDE.md"
+                     ],
+    "skills":  {
+                   "paths":  [
+                                 ".opencode/skills"
+                             ]
+               },
+    "server":  {
+                   "port":  3090,
+                   "hostname":  "0.0.0.0",
+                   "mdns":  false,
+                   "cors":  [
+                                "http://localhost:3090",
+                                "http://100.107.11.80:3090",
+                                "app://opencode.ai"
+                            ]
+               },
+    "watcher":  {
+                    "ignore":  [
+                                   "node_modules/**",
+                                   ".dart_tool/**",
+                                   "build/**",
+                                   ".next/**",
+                                   ".swarm/**",
+                                   "**/*.log",
+                                   ".git-rewrite/**"
+                               ]
+                },
+    "tool_output":  {
+                        "max_lines":  300,
+                        "max_bytes":  20000
+                    },
+    "compaction":  {
+                       "auto":  true,
+                       "tail_turns":  20
+                   },
+    "enabled_providers":  [
+                              "openai",
+                              "cursor-acp",
+                              "opencode-go"
+                          ],
+    "disabled_providers":  [
+                               "nvidia",
+                               "google",
+                               "amazon-bedrock"
+                           ],
+    "experimental":  {
+                         "mcp_timeout":  30000,
+                         "policies":  [
+                                          {
+                                              "effect":  "deny",
+                                              "action":  "provider.use",
+                                              "resource":  "*"
+                                          },
+                                          {
+                                              "effect":  "allow",
+                                              "action":  "provider.use",
+                                              "resource":  "openai"
+                                          },
+                                          {
+                                              "effect":  "allow",
+                                              "action":  "provider.use",
+                                              "resource":  "cursor-acp"
+                                          },
+                                          {
+                                              "effect":  "allow",
+                                              "action":  "provider.use",
+                                              "resource":  "opencode-go"
+                                          }
+                                      ]
+                     },
+    "permission":  {
+                       "read":  {
+                                    "*":  "allow",
+                                    "*.env":  "deny",
+                                    "*.env.*":  "deny",
+                                    "*.pem":  "deny",
+                                    "*.key":  "deny"
+                                },
+                       "edit":  {
+                                    "*":  "ask"
+                                },
+                       "bash":  {
+                                    "*":  "ask",
+                                    "git status*":  "allow",
+                                    "git diff*":  "allow",
+                                    "git log*":  "allow",
+                                    "bd ready*":  "allow"
+                                },
+                       "external_directory":  "ask",
+                       "doom_loop":  "ask",
+                       "skill":  {
+                                     "*":  "allow"
+                                 },
+                       "lsp":  "allow"
+                   },
+    "plugin":  [
+                   "./.opencode/plugins/env-protection.ts",
+                   "./.opencode/plugins/context-compaction.ts",
+                   "./.opencode/plugins/task-tracer.ts",
+                   "./.opencode/plugins/anti-hallucination-guard.ts",
+                   "./.opencode/plugins/rate-limit-handler.ts",
+                   "./.opencode/plugins/anti-doom-loop.ts",
+                   "./.opencode/plugins/mobile-mode-detector.ts",
+                   "./.opencode/plugins/same-error-detector.ts",
+                   "./.opencode/plugins/production-safety-guard.ts"
+               ],
+    "tools":  {
+                  "voice-synthesis":  true,
+                  "rag-query":  true,
+                  "staging-deploy":  true,
+                  "tech-radar-fetch":  true,
+                  "retrospective-trigger":  true,
+                  "github-advanced":  true,
+                  "parallel-dispatch":  true,
+                  "file-gate-check":  true,
+                  "metrics-push":  true,
+                  "production-approval-gate":  true,
+                  "elite-quality-gate":  true
+              },
+    "command":  {
+                    "quality":  {
+                                    "description":  "Ejecuta el gate de calidad senior sobre cambios actuales.",
+                                    "agent":  "chief-engineer-assistant",
+                                    "template":  "Ejecuta elite-quality-gate y corrige o delega cualquier bloqueo. Argumentos: $ARGUMENTS"
+                                },
+                    "voice":  {
+                                  "description":  "Activa o desactiva modo voz Chief Engineer.",
+                                  "agent":  "chief-engineer-assistant",
+                                  "template":  "Gestiona modo voz con los argumentos: $ARGUMENTS"
+                              },
+                    "simulate":  {
+                                     "description":  "Simula carga, picos, failover o latencia contra staging.",
+                                     "agent":  "sre-engineer",
+                                     "template":  "Ejecuta simulacion segura con argumentos: $ARGUMENTS"
+                                 },
+                    "digest":  {
+                                   "description":  "Genera Daily Digest manual.",
+                                   "agent":  "tech-radar-agent",
+                                   "template":  "Genera digest manual con argumentos: $ARGUMENTS"
+                               },
+                    "retro":  {
+                                  "description":  "Lanza o consulta retrospectivas.",
+                                  "agent":  "sre-engineer",
+                                  "template":  "Gestiona retrospectiva con argumentos: $ARGUMENTS"
+                              },
+                    "adelante":  {
+                                  "description":  "Confirma promocion a produccion durante una ventana auditada.",
+                                  "agent":  "chief-engineer-assistant",
+                                  "template":  "Gestiona confirmacion de produccion con argumentos: $ARGUMENTS"
+                              }
+                },
+    "mcp":  {
+
+            }
+}

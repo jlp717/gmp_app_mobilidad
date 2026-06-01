@@ -134,6 +134,7 @@ pixel-agents/
 backend/deprecated/
 
 # Ruflo swarm runtime files
+.swarm/
 .swarm/*.db
 .swarm/*.db-wal
 .swarm/*.db-shm

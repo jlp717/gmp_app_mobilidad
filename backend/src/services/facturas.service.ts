@@ -14,6 +14,16 @@ import { parseVendorCodes, sanitizeCode, sanitizeSearch, buildInClause, buildSea
 import { toFloat, toStr, formatDateDMY, clampLimit, clampOffset, currentPage, totalPages } from '../utils/db-helpers';
 import { queryCache, TTL } from '../utils/query-cache';
 
+const TAX_SLOTS = [1, 2, 3, 4, 5] as const;
+
+function buildTaxBases(header: Record<string, unknown>): Array<{ base: number; pct: number; iva: number }> {
+    return TAX_SLOTS.map(slot => ({
+        base: toFloat(header[`IMPORTEBASEIMPONIBLE${slot}`]),
+        pct: toFloat(header[`PORCENTAJEIVA${slot}`]),
+        iva: toFloat(header[`IMPORTEIVA${slot}`])
+    })).filter(base => base.base !== 0 || base.iva !== 0);
+}
+
 interface FacturaListItem {
     id: string;
     serie: string;
@@ -103,29 +113,30 @@ class FacturasService {
 
         // Build parameterized query
         const conditions: string[] = [
-            'CAC.EJERCICIOFACTURA = ?',
-            'CAC.NUMEROFACTURA > 0',
+            'CFC.EJERCICIOFACTURA = ?',
+            'CFC.NUMEROFACTURA > 0',
+            'CFC.NUMEROFACTURA < 900000',
         ];
         const queryParams: unknown[] = [currentYear];
 
         // Vendor IN clause (parameterized)
-        const vendorIn = buildInClause('TRIM(CAC.CODIGOVENDEDOR)', vendorCodes);
+        const vendorIn = buildInClause('TRIM(CFC.CODIGOVENDEDOR)', vendorCodes);
         conditions.push(vendorIn.clause);
         queryParams.push(...vendorIn.params);
 
         if (month) {
-            conditions.push('CAC.MESFACTURA = ?');
+            conditions.push('CFC.MESDOCUMENTO = ?');
             queryParams.push(month);
         }
 
         if (clientId) {
-            conditions.push('TRIM(CAC.CODIGOCLIENTE) = ?');
+            conditions.push('TRIM(CFC.CODIGOCLIENTE) = ?');
             queryParams.push(sanitizeCode(clientId));
         }
 
         if (search) {
             const searchClause = buildSearchClause(
-                ['UPPER(CLI.NOMBRECLIENTE)', 'UPPER(CLI.NOMBREALTERNATIVO)', 'CAST(CAC.NUMEROFACTURA AS CHAR(20))', 'TRIM(CAC.CODIGOCLIENTE)'],
+                ['UPPER(CLI.NOMBRECLIENTE)', 'UPPER(CLI.NOMBREALTERNATIVO)', 'CAST(CFC.NUMEROFACTURA AS CHAR(20))', 'TRIM(CFC.CODIGOCLIENTE)'],
                 search
             );
             if (searchClause.clause) {
@@ -138,28 +149,28 @@ class FacturasService {
 
         const dataSql = `
       SELECT
-        TRIM(CAC.SERIEFACTURA) as SERIE,
-        CAC.NUMEROFACTURA as NUMERO,
-        CAC.EJERCICIOFACTURA as EJERCICIO,
-        CAC.ANOFACTURA as ANO,
-        CAC.MESFACTURA as MES,
-        CAC.DIAFACTURA as DIA,
-        TRIM(CAC.CODIGOCLIENTE) as CODIGO_CLIENTE,
+        TRIM(CFC.SERIEFACTURA) as SERIE,
+        CFC.NUMEROFACTURA as NUMERO,
+        CFC.EJERCICIOFACTURA as EJERCICIO,
+        CFC.ANODOCUMENTO as ANO,
+        CFC.MESDOCUMENTO as MES,
+        CFC.DIADOCUMENTO as DIA,
+        TRIM(CFC.CODIGOCLIENTE) as CODIGO_CLIENTE,
         TRIM(COALESCE(CLI.NOMBRECLIENTE, CLI.NOMBREALTERNATIVO, '')) as NOMBRE_CLIENTE,
-        CAC.IMPORTETOTAL as TOTAL,
-        CAC.IMPORTEBASEIMPONIBLE1 + CAC.IMPORTEBASEIMPONIBLE2 + CAC.IMPORTEBASEIMPONIBLE3 as BASE,
-        CAC.IMPORTEIVA1 + CAC.IMPORTEIVA2 + CAC.IMPORTEIVA3 as IVA
-      FROM DSEDAC.CAC CAC
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTE)
+        CFC.IMPORTETOTAL as TOTAL,
+        CFC.IMPORTEBASEIMPONIBLE as BASE,
+        CFC.IMPORTEIVA as IVA
+      FROM DSEDAC.CFC CFC
+      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CFC.CODIGOCLIENTE)
       WHERE ${whereClause}
-      ORDER BY CAC.ANOFACTURA DESC, CAC.MESFACTURA DESC, CAC.DIAFACTURA DESC, CAC.NUMEROFACTURA DESC
+      ORDER BY CFC.ANODOCUMENTO DESC, CFC.MESDOCUMENTO DESC, CFC.DIADOCUMENTO DESC, CFC.NUMEROFACTURA DESC
       OFFSET ? ROWS FETCH NEXT ? ROWS ONLY
     `;
 
         const countSql = `
-      SELECT COUNT(DISTINCT TRIM(CAC.SERIEFACTURA) || '-' || CAC.NUMEROFACTURA) as TOTAL
-      FROM DSEDAC.CAC CAC
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTE)
+      SELECT COUNT(DISTINCT TRIM(CFC.SERIEFACTURA) || '-' || CFC.NUMEROFACTURA) as TOTAL
+      FROM DSEDAC.CFC CFC
+      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CFC.CODIGOCLIENTE)
       WHERE ${whereClause}
     `;
 
@@ -220,8 +231,9 @@ class FacturasService {
 
         const sql = `
       SELECT DISTINCT EJERCICIOFACTURA as YEAR
-      FROM DSEDAC.CAC
+      FROM DSEDAC.CFC
       WHERE NUMEROFACTURA > 0
+        AND NUMEROFACTURA < 900000
         AND ${vendorIn.clause}
       ORDER BY YEAR DESC
     `;
@@ -249,6 +261,7 @@ class FacturasService {
         const conditions: string[] = [
             'EJERCICIOFACTURA = ?',
             'NUMEROFACTURA > 0',
+            'NUMEROFACTURA < 900000',
         ];
         const queryParams: unknown[] = [currentYear];
 
@@ -257,7 +270,7 @@ class FacturasService {
         queryParams.push(...vendorIn.params);
 
         if (month) {
-            conditions.push('MESFACTURA = ?');
+            conditions.push('MESDOCUMENTO = ?');
             queryParams.push(month);
         }
 
@@ -265,9 +278,9 @@ class FacturasService {
       SELECT
         COUNT(DISTINCT TRIM(SERIEFACTURA) || '-' || NUMEROFACTURA) as NUM_FACTURAS,
         SUM(IMPORTETOTAL) as TOTAL,
-        SUM(IMPORTEBASEIMPONIBLE1 + IMPORTEBASEIMPONIBLE2 + IMPORTEBASEIMPONIBLE3) as BASE,
-        SUM(IMPORTEIVA1 + IMPORTEIVA2 + IMPORTEIVA3) as IVA
-      FROM DSEDAC.CAC
+        SUM(IMPORTEBASEIMPONIBLE) as BASE,
+        SUM(IMPORTEIVA) as IVA
+      FROM DSEDAC.CFC
       WHERE ${conditions.join(' AND ')}
     `;
 
@@ -298,22 +311,24 @@ class FacturasService {
     private async _fetchFacturaDetail(serie: string, numero: number, ejercicio: number): Promise<FacturaDetail> {
         const headerSql = `
       SELECT
-        CAC.NUMEROFACTURA, CAC.SERIEFACTURA, CAC.EJERCICIOFACTURA,
-        CAC.DIAFACTURA, CAC.MESFACTURA, CAC.ANOFACTURA,
-        TRIM(CAC.CODIGOCLIENTE) as CODIGOCLIENTE,
+        CFC.NUMEROFACTURA, CFC.SERIEFACTURA, CFC.EJERCICIOFACTURA,
+        CFC.DIADOCUMENTO as DIAFACTURA, CFC.MESDOCUMENTO as MESFACTURA, CFC.ANODOCUMENTO as ANOFACTURA,
+        TRIM(CFC.CODIGOCLIENTE) as CODIGOCLIENTE,
         TRIM(COALESCE(CLI.NOMBRECLIENTE, '')) as NOMBRECLIENTEFACTURA,
         TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCIONCLIENTEFACTURA,
         TRIM(COALESCE(CLI.POBLACION, '')) as POBLACIONCLIENTEFACTURA,
         TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA,
-        CAC.IMPORTETOTAL as TOTALFACTURA,
-        CAC.IMPORTEBASEIMPONIBLE1, CAC.PORCENTAJEIVA1, CAC.IMPORTEIVA1,
-        CAC.IMPORTEBASEIMPONIBLE2, CAC.PORCENTAJEIVA2, CAC.IMPORTEIVA2,
-        CAC.IMPORTEBASEIMPONIBLE3, CAC.PORCENTAJEIVA3, CAC.IMPORTEIVA3
-      FROM DSEDAC.CAC CAC
-      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CAC.CODIGOCLIENTE)
-      WHERE TRIM(CAC.SERIEFACTURA) = ?
-        AND CAC.NUMEROFACTURA = ?
-        AND CAC.EJERCICIOFACTURA = ?
+        CFC.IMPORTETOTAL as TOTALFACTURA,
+        CFC.IMPORTEBASEIMPONIBLE1, CFC.PORCENTAJEIVA1, CFC.IMPORTEIVA1,
+        CFC.IMPORTEBASEIMPONIBLE2, CFC.PORCENTAJEIVA2, CFC.IMPORTEIVA2,
+        CFC.IMPORTEBASEIMPONIBLE3, CFC.PORCENTAJEIVA3, CFC.IMPORTEIVA3,
+        CFC.IMPORTEBASEIMPONIBLE4, CFC.PORCENTAJEIVA4, CFC.IMPORTEIVA4,
+        CFC.IMPORTEBASEIMPONIBLE5, CFC.PORCENTAJEIVA5, CFC.IMPORTEIVA5
+      FROM DSEDAC.CFC CFC
+      LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CFC.CODIGOCLIENTE)
+      WHERE TRIM(CFC.SERIEFACTURA) = ?
+        AND CFC.NUMEROFACTURA = ?
+        AND CFC.EJERCICIOFACTURA = ?
       FETCH FIRST 1 ROWS ONLY
     `;
 
@@ -351,11 +366,7 @@ class FacturasService {
 
             const header: any = headers[0];
 
-            const bases = [
-                { base: toFloat(header.IMPORTEBASEIMPONIBLE1), pct: toFloat(header.PORCENTAJEIVA1), iva: toFloat(header.IMPORTEIVA1) },
-                { base: toFloat(header.IMPORTEBASEIMPONIBLE2), pct: toFloat(header.PORCENTAJEIVA2), iva: toFloat(header.IMPORTEIVA2) },
-                { base: toFloat(header.IMPORTEBASEIMPONIBLE3), pct: toFloat(header.PORCENTAJEIVA3), iva: toFloat(header.IMPORTEIVA3) }
-            ].filter(b => b.base > 0);
+            const bases = buildTaxBases(header);
 
             return {
                 header: {

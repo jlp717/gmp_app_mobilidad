@@ -20,6 +20,16 @@ const facturasBreaker = new CircuitBreaker({
 });
 
 const BATCH_SIZE = 15;
+const FACTURA_CACHE_VERSION = 'v2';
+const TAX_SLOTS = [1, 2, 3, 4, 5];
+
+function buildTaxBases(header) {
+    return TAX_SLOTS.map(slot => ({
+        base: parseFloat(header[`IMPORTEBASEIMPONIBLE${slot}`]) || 0,
+        pct: parseFloat(header[`PORCENTAJEIVA${slot}`]) || 0,
+        iva: parseFloat(header[`IMPORTEIVA${slot}`]) || 0
+    })).filter(b => b.base !== 0 || b.iva !== 0);
+}
 
 async function batchedVendorQuery(baseSql, vendorColumn, vendors, queryFn) {
     if (!vendors || vendors.length === 0) {
@@ -44,7 +54,7 @@ async function batchedVendorQuery(baseSql, vendorColumn, vendors, queryFn) {
 class FacturasService {
 
     async getFacturas(params) {
-        const cacheKey = `facturas:list:${JSON.stringify(params)}`;
+        const cacheKey = `facturas:list:${FACTURA_CACHE_VERSION}:${JSON.stringify(params)}`;
         
         // Try Redis cache first (30s TTL for list — data changes slightly during day)
         const cached = await redisCache.get('route', cacheKey);
@@ -82,45 +92,45 @@ class FacturasService {
         function buildSqlForVendors(vendorBatch) {
             let sql = `
       SELECT
-        TRIM(CAC.SERIEFACTURA) as SERIE,
-        CAC.NUMEROFACTURA as NUMERO,
-        CAC.EJERCICIOFACTURA as EJERCICIO,
-        CAC.ANOFACTURA as ANO,
-        CAC.MESFACTURA as MES,
-        CAC.DIAFACTURA as DIA,
-        TRIM(CAC.CODIGOCLIENTEFACTURA) as CODIGO_CLIENTE,
+        TRIM(CFC.SERIEFACTURA) as SERIE,
+        CFC.NUMEROFACTURA as NUMERO,
+        CFC.EJERCICIOFACTURA as EJERCICIO,
+        CFC.ANODOCUMENTO as ANO,
+        CFC.MESDOCUMENTO as MES,
+        CFC.DIADOCUMENTO as DIA,
+        TRIM(CFC.CODIGOCLIENTE) as CODIGO_CLIENTE,
         TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRE_CLIENTE,
         TRIM(CLI.NOMBREALTERNATIVO) as NOMBRE_COMERCIAL,
         TRIM(CLI.NOMBRECLIENTE) as NOMBRE_FISCAL,
-        CAC.IMPORTETOTAL as TOTAL,
-        CAC.IMPORTEBASEIMPONIBLE1 + CAC.IMPORTEBASEIMPONIBLE2 + CAC.IMPORTEBASEIMPONIBLE3 as BASE,
-        CAC.IMPORTEIVA1 + CAC.IMPORTEIVA2 + CAC.IMPORTEIVA3 as IVA
-      FROM DSEDAC.CAC CAC
-      LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CAC.CODIGOCLIENTEFACTURA
-      WHERE CAC.NUMEROFACTURA > 0 AND CAC.NUMEROFACTURA < 900000
+        CFC.IMPORTETOTAL as TOTAL,
+        CFC.IMPORTEBASEIMPONIBLE as BASE,
+        CFC.IMPORTEIVA as IVA
+      FROM DSEDAC.CFC CFC
+      LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CFC.CODIGOCLIENTE
+      WHERE CFC.NUMEROFACTURA > 0 AND CFC.NUMEROFACTURA < 900000
     `;
             const queryParams = [];
 
             if (vendorBatch.length > 0) {
                 const placeholders = vendorBatch.map(() => '?').join(',');
-                sql += ` AND TRIM(CAC.CODIGOVENDEDOR) IN (${placeholders})`;
+                sql += ` AND TRIM(CFC.CODIGOVENDEDOR) IN (${placeholders})`;
                 queryParams.push(...vendorBatch);
             }
 
             if (dateFilterApplied && dateFromInt && dateToInt) {
-                sql += ` AND (CAC.ANOFACTURA * 10000 + CAC.MESFACTURA * 100 + CAC.DIAFACTURA) BETWEEN ? AND ?`;
+                sql += ` AND (CFC.ANODOCUMENTO * 10000 + CFC.MESDOCUMENTO * 100 + CFC.DIADOCUMENTO) BETWEEN ? AND ?`;
                 queryParams.push(dateFromInt, dateToInt);
             } else {
-                sql += ` AND CAC.EJERCICIOFACTURA = ?`;
+                sql += ` AND CFC.EJERCICIOFACTURA = ?`;
                 queryParams.push(currentYear);
                 if (month) {
-                    sql += ` AND CAC.MESFACTURA = ?`;
+                    sql += ` AND CFC.MESDOCUMENTO = ?`;
                     queryParams.push(month);
                 }
             }
 
             if (clientId) {
-                sql += ` AND TRIM(CAC.CODIGOCLIENTEFACTURA) = ?`;
+                sql += ` AND TRIM(CFC.CODIGOCLIENTE) = ?`;
                 queryParams.push(clientId.trim());
             }
 
@@ -135,10 +145,10 @@ class FacturasService {
                 const searchNum = parseFloat(docSearch);
                 const isNum = !isNaN(searchNum);
                 if (isNum) {
-                    sql += ` AND (TRIM(CAC.SERIEFACTURA) LIKE ? OR TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE ? OR CAC.NUMEROFACTURA = ?)`;
+                    sql += ` AND (TRIM(CFC.SERIEFACTURA) LIKE ? OR TRIM(CFC.CODIGOCLIENTE) LIKE ? OR CFC.NUMEROFACTURA = ?)`;
                     queryParams.push(safeDocSearch, safeDocSearch, searchNum);
                 } else {
-                    sql += ` AND (TRIM(CAC.SERIEFACTURA) LIKE ? OR TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE ?)`;
+                    sql += ` AND (TRIM(CFC.SERIEFACTURA) LIKE ? OR TRIM(CFC.CODIGOCLIENTE) LIKE ?)`;
                     queryParams.push(safeDocSearch, safeDocSearch);
                 }
             }
@@ -148,15 +158,15 @@ class FacturasService {
                 const searchNum = parseFloat(search);
                 const isNum = !isNaN(searchNum);
                 if (isNum) {
-                    sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR CAC.NUMEROFACTURA = ? OR TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE ?)`;
+                    sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR CFC.NUMEROFACTURA = ? OR TRIM(CFC.CODIGOCLIENTE) LIKE ?)`;
                     queryParams.push(safeSearch, safeSearch, searchNum, safeSearch);
                 } else {
-                    sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR TRIM(CAC.CODIGOCLIENTEFACTURA) LIKE ?)`;
+                    sql += ` AND (UPPER(CLI.NOMBRECLIENTE) LIKE ? OR UPPER(CLI.NOMBREALTERNATIVO) LIKE ? OR TRIM(CFC.CODIGOCLIENTE) LIKE ?)`;
                     queryParams.push(safeSearch, safeSearch, safeSearch);
                 }
             }
 
-            sql += ` ORDER BY CAC.ANOFACTURA DESC, CAC.MESFACTURA DESC, CAC.DIAFACTURA DESC, CAC.NUMEROFACTURA DESC`;
+            sql += ` ORDER BY CFC.ANODOCUMENTO DESC, CFC.MESDOCUMENTO DESC, CFC.DIADOCUMENTO DESC, CFC.NUMEROFACTURA DESC`;
             return { sql, queryParams };
         }
 
@@ -237,7 +247,7 @@ class FacturasService {
         if (isAll) {
             const sql = `
       SELECT DISTINCT EJERCICIOFACTURA as YEAR
-      FROM DSEDAC.CAC
+      FROM DSEDAC.CFC
       WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
       ORDER BY YEAR DESC
     `;
@@ -254,7 +264,7 @@ class FacturasService {
 
         const baseSql = `
       SELECT DISTINCT EJERCICIOFACTURA as YEAR
-      FROM DSEDAC.CAC
+      FROM DSEDAC.CFC
       WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
         AND @VENDOR_IN@
       ORDER BY YEAR DESC
@@ -281,7 +291,7 @@ class FacturasService {
             throw new Error('vendedorCodes is required');
         }
 
-        const cacheKey = `facturas:summary:${vendedorCodes || 'ALL'}:${year || ''}:${month || ''}:${dateFrom || ''}:${dateTo || ''}`;
+        const cacheKey = `facturas:summary:${FACTURA_CACHE_VERSION}:${vendedorCodes || 'ALL'}:${year || ''}:${month || ''}:${dateFrom || ''}:${dateTo || ''}`;
         const cached = await redisCache.get('route', cacheKey);
         if (cached !== null) return cached;
 
@@ -309,29 +319,29 @@ class FacturasService {
         async function runSummaryBatch(batchVendors) {
             let sql = `
       SELECT
-        COUNT(DISTINCT TRIM(SERIEFACTURA) || '-' || NUMEROFACTURA) as NUM_FACTURAS,
-        SUM(IMPORTETOTAL) as TOTAL,
-        SUM(IMPORTEBASEIMPONIBLE1 + IMPORTEBASEIMPONIBLE2 + IMPORTEBASEIMPONIBLE3) as BASE,
-        SUM(IMPORTEIVA1 + IMPORTEIVA2 + IMPORTEIVA3) as IVA
-      FROM DSEDAC.CAC
-      WHERE NUMEROFACTURA > 0 AND NUMEROFACTURA < 900000
+        COUNT(DISTINCT TRIM(CFC.SERIEFACTURA) || '-' || CFC.NUMEROFACTURA) as NUM_FACTURAS,
+        SUM(CFC.IMPORTETOTAL) as TOTAL,
+        SUM(CFC.IMPORTEBASEIMPONIBLE) as BASE,
+        SUM(CFC.IMPORTEIVA) as IVA
+      FROM DSEDAC.CFC CFC
+      WHERE CFC.NUMEROFACTURA > 0 AND CFC.NUMEROFACTURA < 900000
     `;
             const queryParams = [];
 
             if (batchVendors.length > 0) {
                 const placeholders = batchVendors.map(() => '?').join(',');
-                sql += ` AND TRIM(CODIGOVENDEDOR) IN (${placeholders})`;
+                sql += ` AND TRIM(CFC.CODIGOVENDEDOR) IN (${placeholders})`;
                 queryParams.push(...batchVendors);
             }
 
             if (dateFilterApplied && dateFromInt && dateToInt) {
-                sql += ` AND (ANOFACTURA * 10000 + MESFACTURA * 100 + DIAFACTURA) BETWEEN ? AND ?`;
+                sql += ` AND (CFC.ANODOCUMENTO * 10000 + CFC.MESDOCUMENTO * 100 + CFC.DIADOCUMENTO) BETWEEN ? AND ?`;
                 queryParams.push(dateFromInt, dateToInt);
             } else {
-                sql += ` AND EJERCICIOFACTURA = ?`;
+                sql += ` AND CFC.EJERCICIOFACTURA = ?`;
                 queryParams.push(currentYear);
                 if (month) {
-                    sql += ` AND MESFACTURA = ?`;
+                    sql += ` AND CFC.MESDOCUMENTO = ?`;
                     queryParams.push(month);
                 }
             }
@@ -381,40 +391,45 @@ class FacturasService {
             throw new Error('Factura no encontrada');
         }
 
-        // FIX: Aggregate across all albaranes for same invoice.
-        // A single invoice can span multiple albaranes (e.g., F-750 has 5 albaranes = 581.34€).
-        // Previously used FETCH FIRST 1 ROWS ONLY which only got the first albarán (218.65€).
+        // Use CFC as the fiscal invoice header. CAC is per-albaran and its
+        // rounded totals can drift from the printed invoice header.
         const headerSql = `
       SELECT
-        MIN(CAC.NUMEROFACTURA) as NUMEROFACTURA,
-        MIN(CAC.SERIEFACTURA) as SERIEFACTURA,
-        MIN(CAC.EJERCICIOFACTURA) as EJERCICIOFACTURA,
-        MIN(CAC.DIAFACTURA) as DIAFACTURA,
-        MIN(CAC.MESFACTURA) as MESFACTURA,
-        MIN(CAC.ANOFACTURA) as ANOFACTURA,
-        MIN(TRIM(CAC.CODIGOCLIENTEFACTURA)) as CODIGOCLIENTE,
-        MIN(TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, ''))) as NOMBRECLIENTEFACTURA,
-        MIN(TRIM(CLI.NOMBREALTERNATIVO)) as NOMBRECOMERCIALFACTURA,
-        MIN(TRIM(CLI.NOMBRECLIENTE)) as NOMBREFISCALFACTURA,
-        MIN(TRIM(COALESCE(CLI.DIRECCION, ''))) as DIRECCIONCLIENTEFACTURA,
-        MIN(TRIM(COALESCE(CLI.POBLACION, ''))) as POBLACIONCLIENTEFACTURA,
-        MIN(TRIM(COALESCE(CLI.NIF, ''))) as CIFCLIENTEFACTURA,
-        SUM(CAC.IMPORTETOTAL) as TOTALFACTURA,
-        SUM(CAC.IMPORTEBASEIMPONIBLE1) as IMPORTEBASEIMPONIBLE1,
-        MIN(CAC.PORCENTAJEIVA1) as PORCENTAJEIVA1,
-        SUM(CAC.IMPORTEIVA1) as IMPORTEIVA1,
-        SUM(CAC.IMPORTEBASEIMPONIBLE2) as IMPORTEBASEIMPONIBLE2,
-        MIN(CAC.PORCENTAJEIVA2) as PORCENTAJEIVA2,
-        SUM(CAC.IMPORTEIVA2) as IMPORTEIVA2,
-        SUM(CAC.IMPORTEBASEIMPONIBLE3) as IMPORTEBASEIMPONIBLE3,
-        MIN(CAC.PORCENTAJEIVA3) as PORCENTAJEIVA3,
-        SUM(CAC.IMPORTEIVA3) as IMPORTEIVA3
-      FROM DSEDAC.CAC CAC
-      LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CAC.CODIGOCLIENTEFACTURA
-      WHERE TRIM(CAC.SERIEFACTURA) = ?
-        AND CAC.NUMEROFACTURA = ?
-        AND CAC.EJERCICIOFACTURA = ?
-      GROUP BY CAC.NUMEROFACTURA, CAC.EJERCICIOFACTURA
+        CFC.NUMEROFACTURA,
+        CFC.SERIEFACTURA,
+        CFC.EJERCICIOFACTURA,
+        CFC.DIADOCUMENTO as DIAFACTURA,
+        CFC.MESDOCUMENTO as MESFACTURA,
+        CFC.ANODOCUMENTO as ANOFACTURA,
+        TRIM(CFC.CODIGOCLIENTE) as CODIGOCLIENTE,
+        TRIM(COALESCE(CLI.NOMBREALTERNATIVO, CLI.NOMBRECLIENTE, '')) as NOMBRECLIENTEFACTURA,
+        TRIM(CLI.NOMBREALTERNATIVO) as NOMBRECOMERCIALFACTURA,
+        TRIM(CLI.NOMBRECLIENTE) as NOMBREFISCALFACTURA,
+        TRIM(COALESCE(CLI.DIRECCION, '')) as DIRECCIONCLIENTEFACTURA,
+        TRIM(COALESCE(CLI.POBLACION, '')) as POBLACIONCLIENTEFACTURA,
+        TRIM(COALESCE(CLI.NIF, '')) as CIFCLIENTEFACTURA,
+        CFC.IMPORTETOTAL as TOTALFACTURA,
+        CFC.IMPORTEBASEIMPONIBLE1,
+        CFC.PORCENTAJEIVA1,
+        CFC.IMPORTEIVA1,
+        CFC.IMPORTEBASEIMPONIBLE2,
+        CFC.PORCENTAJEIVA2,
+        CFC.IMPORTEIVA2,
+        CFC.IMPORTEBASEIMPONIBLE3,
+        CFC.PORCENTAJEIVA3,
+        CFC.IMPORTEIVA3,
+        CFC.IMPORTEBASEIMPONIBLE4,
+        CFC.PORCENTAJEIVA4,
+        CFC.IMPORTEIVA4,
+        CFC.IMPORTEBASEIMPONIBLE5,
+        CFC.PORCENTAJEIVA5,
+        CFC.IMPORTEIVA5
+      FROM DSEDAC.CFC CFC
+      LEFT JOIN DSEDAC.CLI CLI ON CLI.CODIGOCLIENTE = CFC.CODIGOCLIENTE
+      WHERE TRIM(CFC.SERIEFACTURA) = ?
+        AND CFC.NUMEROFACTURA = ?
+        AND CFC.EJERCICIOFACTURA = ?
+      FETCH FIRST 1 ROWS ONLY
     `;
 
         try {
@@ -458,11 +473,7 @@ class FacturasService {
 
             const lines = await queryWithParams(linesSql, [serie, numero, ejercicio]);
 
-            const bases = [
-                { base: parseFloat(header.IMPORTEBASEIMPONIBLE1) || 0, pct: header.PORCENTAJEIVA1 || 0, iva: parseFloat(header.IMPORTEIVA1) || 0 },
-                { base: parseFloat(header.IMPORTEBASEIMPONIBLE2) || 0, pct: header.PORCENTAJEIVA2 || 0, iva: parseFloat(header.IMPORTEIVA2) || 0 },
-                { base: parseFloat(header.IMPORTEBASEIMPONIBLE3) || 0, pct: header.PORCENTAJEIVA3 || 0, iva: parseFloat(header.IMPORTEIVA3) || 0 }
-            ].filter(b => b.base > 0);
+            const bases = buildTaxBases(header);
 
             return {
                 header: {

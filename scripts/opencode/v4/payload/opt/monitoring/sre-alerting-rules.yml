@@ -1,0 +1,56 @@
+groups:
+  - name: gmp_sre_alerts
+    rules:
+      - alert: GmpApiDown
+        expr: up{job="gmp-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          project: gmp
+        annotations:
+          summary: "GMP API caida"
+          description: "El endpoint http://192.168.1.230:3335/api/health no responde."
+          runbook: "sre-runbooks/SKILL.md#api-backend-caida"
+      - alert: GmpHighErrorRate
+        expr: rate(http_requests_total{job="gmp-api",status=~"5.."}[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: warning
+          project: gmp
+        annotations:
+          summary: "Tasa de errores 5xx alta en GMP API"
+          description: "Error rate: {{ $value | humanizePercentage }}"
+      - alert: GmpHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{job="gmp-api"}[5m])) > 0.5
+        for: 3m
+        labels:
+          severity: warning
+          project: gmp
+        annotations:
+          summary: "Latencia P95 alta en GMP API"
+          description: "P95 latency: {{ $value }}s"
+      - alert: DB2ConnectionFailed
+        expr: gmp_db2_connection_errors_total > 5
+        for: 1m
+        labels:
+          severity: critical
+          project: gmp
+        annotations:
+          summary: "Fallos de conexion a DB2"
+          description: "{{ $value }} fallos de conexion DB2 en el ultimo minuto."
+          runbook: "sre-runbooks/SKILL.md#db2-connection-refused"
+      - alert: ChromaDBDown
+        expr: up{job="chromadb"} == 0
+        for: 2m
+        labels:
+          severity: warning
+          project: infra
+        annotations:
+          summary: "ChromaDB no responde, RAG degradado"
+      - alert: SloErrorBudgetLow
+        expr: (1 - avg_over_time(up{job="gmp-api"}[30d])) > 0.004
+        labels:
+          severity: warning
+        annotations:
+          summary: "Error budget SLO GMP por agotarse"
+          description: "Uptime 30d: {{ $value | humanizePercentage }}"
