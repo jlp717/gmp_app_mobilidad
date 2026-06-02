@@ -16,10 +16,13 @@ const {
     MIN_YEAR,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
-    getBSales,
+    getBSalesByVendor,
+    aggregateBSalesByMonth,
     sanitizeForSQL,
     handleRouteError
 } = require('../utils/common');
+
+const DASHBOARD_CACHE_VERSION = 'v20260602-b-sales-all';
 
 function buildVendedorFilterParameterized(vendedorCodes, tableAlias = 'L') {
     if (!vendedorCodes || vendedorCodes === 'ALL') return { filter: '', params: [] };
@@ -83,7 +86,7 @@ router.get('/metrics', verifyToken, async (req, res) => {
         const now = getCurrentDate();
         const currentYear = parseInt(year) || now.getFullYear();
         const currentMonth = parseInt(month) || (now.getMonth() + 1);
-        const cacheKey = `dashboard:metrics:${currentYear}:${currentMonth || 'all'}:${vendedorCodes || 'ALL'}`;
+        const cacheKey = `dashboard:metrics:${DASHBOARD_CACHE_VERSION}:${currentYear}:${currentMonth || 'all'}:${vendedorCodes || 'ALL'}`;
 
         const isAllVendors = !vendedorCodes || vendedorCodes === 'ALL';
         const currentTTL = isAllVendors ? TTL.MEDIUM : TTL.SHORT;
@@ -160,17 +163,15 @@ router.get('/metrics', verifyToken, async (req, res) => {
         let currentSales = parseFloat(curr.SALES) || 0;
         let lastSales = parseFloat(last.SALES) || 0;
 
-        if (vendedorCodes && vendedorCodes !== 'ALL') {
-            const firstCode = vendedorCodes.split(',')[0]?.trim();
-            if (firstCode) {
-                const [bSalesCurr, bSalesLast] = await Promise.all([
-                    getBSales(firstCode, currentYear),
-                    getBSales(firstCode, currentYear - 1),
-                ]);
-                currentSales += (bSalesCurr[currentMonth] || 0);
-                lastSales += (bSalesLast[currentMonth] || 0);
-            }
-        }
+        const bSalesScope = vendedorCodes && vendedorCodes !== 'ALL' ? vendedorCodes : [];
+        const [bSalesCurrByVendor, bSalesLastByVendor] = await Promise.all([
+            getBSalesByVendor(currentYear, bSalesScope),
+            getBSalesByVendor(currentYear - 1, bSalesScope),
+        ]);
+        const bSalesCurrByMonth = aggregateBSalesByMonth(bSalesCurrByVendor);
+        const bSalesLastByMonth = aggregateBSalesByMonth(bSalesLastByVendor);
+        currentSales += (bSalesCurrByMonth[currentMonth] || 0);
+        lastSales += (bSalesLastByMonth[currentMonth] || 0);
 
         const calcVar = (curr, prev) => prev && prev !== 0 ? ((curr - prev) / prev) * 100 : 0;
         const growthPercent = calcVar(currentSales, lastSales);
@@ -563,7 +564,7 @@ router.get('/sales-evolution', verifyToken, async (req, res) => {
             dateParams = [now.getFullYear(), now.getFullYear(), currentMonth, now.getFullYear(), currentMonth, currentDay];
         }
 
-        const cacheKey = `dashboard:evolution:${years || 'default'}:${granularity}:${upToToday}:${vendedorCodes || 'ALL'}`;
+        const cacheKey = `dashboard:evolution:${DASHBOARD_CACHE_VERSION}:${years || 'default'}:${granularity}:${upToToday}:${vendedorCodes || 'ALL'}`;
 
         const evolutionTTL = (!vendedorCodes || vendedorCodes === 'ALL') ? TTL.LONG : TTL.MEDIUM;
 
@@ -619,6 +620,18 @@ router.get('/sales-evolution', verifyToken, async (req, res) => {
                 totalOrders: parseInt(r.TOTALORDERS) || 0,
                 uniqueClients: parseInt(r.UNIQUECLIENTS) || 0
             }));
+
+            const bSalesScope = vendedorCodes && vendedorCodes !== 'ALL' ? vendedorCodes : [];
+            const bSalesByYear = await Promise.all(
+                selectedYears.map(async y => ({
+                    year: y,
+                    byMonth: aggregateBSalesByMonth(await getBSalesByVendor(y, bSalesScope))
+                }))
+            );
+            const bSalesMap = new Map(bSalesByYear.map(item => [item.year, item.byMonth]));
+            resultData.forEach(row => {
+                row.totalSales += (bSalesMap.get(row.year)?.[row.month] || 0);
+            });
         }
 
         const limitedData = resultData.slice(0, parseInt(months) || 36);

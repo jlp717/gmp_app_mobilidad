@@ -413,6 +413,90 @@ async function getVendorName(vendorCode) {
 const _bSalesCache = new Map();
 const _bSalesCacheTTL = 10 * 60 * 1000; // 10 minutes
 
+function normalizeSalesVendorCode(vendorCode) {
+    const raw = String(vendorCode || '').trim();
+    if (!raw) return '';
+    const unpadded = raw.replace(/^0+/, '') || raw;
+    return /^\d+$/.test(unpadded) && unpadded.length <= 2
+        ? unpadded.padStart(2, '0')
+        : unpadded;
+}
+
+function getSalesVendorCodeVariants(vendorCode) {
+    const raw = String(vendorCode || '').trim().replace(/[^a-zA-Z0-9]/g, '');
+    if (!raw) return [];
+    const unpadded = raw.replace(/^0+/, '') || raw;
+    const padded = /^\d+$/.test(unpadded) && unpadded.length <= 2
+        ? unpadded.padStart(2, '0')
+        : raw;
+    return [...new Set([raw, unpadded, padded].filter(Boolean))];
+}
+
+function parseSalesVendorCodes(vendorCodes) {
+    if (!vendorCodes || vendorCodes === 'ALL') return [];
+    if (Array.isArray(vendorCodes)) {
+        return vendorCodes
+            .map(code => String(code || '').trim().replace(/[^a-zA-Z0-9]/g, ''))
+            .filter(Boolean);
+    }
+    return String(vendorCodes)
+        .split(',')
+        .map(code => code.trim().replace(/[^a-zA-Z0-9]/g, ''))
+        .filter(Boolean);
+}
+
+async function getBSalesByVendor(year, vendorCodes = []) {
+    const safeYear = parseInt(year, 10);
+    if (!safeYear) return {};
+
+    const parsedCodes = parseSalesVendorCodes(vendorCodes);
+    const codeVariants = [...new Set(parsedCodes.flatMap(getSalesVendorCodeVariants))];
+    const params = [safeYear];
+    let vendorFilter = '';
+
+    if (codeVariants.length > 0) {
+        vendorFilter = `AND TRIM(CODIGOVENDEDOR) IN (${codeVariants.map(() => '?').join(',')})`;
+        params.push(...codeVariants);
+    }
+
+    try {
+        const rows = await queryWithParams(`
+            SELECT TRIM(CODIGOVENDEDOR) as CODIGOVENDEDOR, MES, SUM(IMPORTE) as IMPORTE
+            FROM JAVIER.VENTAS_B
+            WHERE EJERCICIO = ?
+              ${vendorFilter}
+            GROUP BY TRIM(CODIGOVENDEDOR), MES
+        `, params, false, false);
+
+        const byVendor = {};
+        rows.forEach(row => {
+            const code = normalizeSalesVendorCode(row.CODIGOVENDEDOR);
+            const month = parseInt(row.MES, 10);
+            const amount = parseFloat(row.IMPORTE) || 0;
+            if (!code || !month) return;
+            if (!byVendor[code]) byVendor[code] = {};
+            byVendor[code][month] = (byVendor[code][month] || 0) + amount;
+        });
+        return byVendor;
+    } catch (e) {
+        logger.debug(`getBSalesByVendor: table may not exist for ${year}: ${e.message}`);
+        return {};
+    }
+}
+
+function aggregateBSalesByMonth(bSalesByVendor) {
+    const monthly = {};
+    Object.values(bSalesByVendor || {}).forEach(vendorMonths => {
+        Object.entries(vendorMonths || {}).forEach(([month, amount]) => {
+            const m = parseInt(month, 10);
+            const value = parseFloat(amount) || 0;
+            if (!m) return;
+            monthly[m] = (monthly[m] || 0) + value;
+        });
+    });
+    return monthly;
+}
+
 async function getBSales(vendorCode, year) {
     if (!vendorCode || vendorCode === 'ALL') return {};
 
@@ -421,22 +505,9 @@ async function getBSales(vendorCode, year) {
     const cached = _bSalesCache.get(cacheKey);
     if (cached && Date.now() - cached.ts < _bSalesCacheTTL) return cached.data;
 
-    const unpaddedCode = rawCode.replace(/^0+/, '');
-
     try {
-        const safeRaw = rawCode.replace(/[^a-zA-Z0-9]/g, '');
-        const safeUnpadded = unpaddedCode.replace(/[^a-zA-Z0-9]/g, '');
-        const rows = await queryWithParams(`
-            SELECT MES, IMPORTE
-            FROM JAVIER.VENTAS_B
-            WHERE (CODIGOVENDEDOR = ? OR CODIGOVENDEDOR = ?)
-              AND EJERCICIO = ?
-        `, [safeRaw, safeUnpadded, parseInt(year)], false, false);
-
-        const monthlyMap = {};
-        rows.forEach(r => {
-            monthlyMap[r.MES] = (monthlyMap[r.MES] || 0) + (parseFloat(r.IMPORTE) || 0);
-        });
+        const byVendor = await getBSalesByVendor(year, [rawCode]);
+        const monthlyMap = byVendor[normalizeSalesVendorCode(rawCode)] || {};
         _bSalesCache.set(cacheKey, { data: monthlyMap, ts: Date.now() });
         // Limit cache size
         if (_bSalesCache.size > 500) {
@@ -471,6 +542,9 @@ module.exports = {
     getVendorName,
     getVendorVisibilityScope,
     getBSales,
+    getBSalesByVendor,
+    aggregateBSalesByMonth,
+    normalizeSalesVendorCode,
     sanitizeForSQL,
     sanitizeCodeList,
     sanitizeCodeListForParams,

@@ -11,7 +11,8 @@ const {
     MIN_YEAR,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
-    getBSales,
+    getBSalesByVendor,
+    aggregateBSalesByMonth,
     sanitizeForSQL,
     sanitizeCodeList,
     handleRouteError
@@ -36,7 +37,7 @@ const {
     isCacheReady: isMetadataCacheReady
 } = require('../services/metadataCache');
 
-const OBJECTIVES_CACHE_VERSION = 'v20260529-hybrid-jefe-all';
+const OBJECTIVES_CACHE_VERSION = 'v20260602-b-sales-all';
 
 // =============================================================================
 // INHERITED OBJECTIVES LOGIC
@@ -201,22 +202,23 @@ function scopeVendorCodesForUser(userCode, vendedorCodes) {
 }
 
 async function addBSalesToRows(rows, vendorCodesArray, uniqueYears) {
-    if (!vendorCodesArray || vendorCodesArray.length === 0) return;
+    const scopedVendorCodes = vendorCodesArray || [];
 
-    for (const code of vendorCodesArray) {
-        for (const yr of uniqueYears) {
-            const bSalesMap = await getBSales(code, yr);
-            for (const [month, amount] of Object.entries(bSalesMap)) {
-                const value = parseFloat(amount) || 0;
-                if (value <= 0) continue;
+    for (const yr of uniqueYears) {
+        const bSalesByMonth = aggregateBSalesByMonth(
+            await getBSalesByVendor(yr, scopedVendorCodes)
+        );
 
-                const m = parseInt(month);
-                const existingRow = rows.find(r => r.YEAR == yr && r.MONTH == m);
-                if (existingRow) {
-                    existingRow.SALES = (parseFloat(existingRow.SALES) || 0) + value;
-                } else {
-                    rows.push({ YEAR: yr, MONTH: m, SALES: value, COST: 0, CLIENTS: 0 });
-                }
+        for (const [month, amount] of Object.entries(bSalesByMonth)) {
+            const value = parseFloat(amount) || 0;
+            if (value === 0) continue;
+
+            const m = parseInt(month);
+            const existingRow = rows.find(r => r.YEAR == yr && r.MONTH == m);
+            if (existingRow) {
+                existingRow.SALES = (parseFloat(existingRow.SALES) || 0) + value;
+            } else {
+                rows.push({ YEAR: yr, MONTH: m, SALES: value, COST: 0, CLIENTS: 0 });
             }
         }
     }
@@ -764,9 +766,7 @@ router.get('/evolution', verifyToken, async (req, res) => {
         // B-SALES: Add secondary channel sales from JAVIER.VENTAS_B
         // Ensures consistency with commissions endpoint
         // =====================================================================
-        if (vendorCodesArray.length > 0) {
-            await addBSalesToRows(rows, vendorCodesArray, uniqueYears);
-        }
+        await addBSalesToRows(rows, vendorCodesArray, uniqueYears);
 
         // Organize by year
         const yearlyData = {};
