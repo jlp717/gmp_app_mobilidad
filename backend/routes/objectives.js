@@ -25,7 +25,6 @@ const {
 } = require('../services/team-commission.service');
 const {
     applyHybridMonthlyObjectives,
-    combineGrowthPercentages,
     computeSeasonalWeightTargets,
 } = require('./objectives-hybrid-helpers');
 const {
@@ -38,7 +37,7 @@ const {
     isCacheReady: isMetadataCacheReady
 } = require('../services/metadataCache');
 
-const OBJECTIVES_CACHE_VERSION = 'v20260602-b-sales-ipc-growth';
+const OBJECTIVES_CACHE_VERSION = 'v20260602-b-sales-all';
 
 // =============================================================================
 // INHERITED OBJECTIVES LOGIC
@@ -112,9 +111,9 @@ async function getClientsMonthlySales(clientCodes, year) {
     return monthlyMap;
 }
 
+
 const SEASONAL_AGGRESSIVENESS = 0.5; // Tuning parameter for seasonality (0.0=flat, 1.0=high)
-const DEFAULT_IPC_PCT = 3.0;
-const _objectiveIpcPctCache = new Map();
+const IPC = 1.03; // 3% inflation factor
 
 // Month number -> COFC quota column mapping
 const MONTH_QUOTA_MAP = {
@@ -128,39 +127,36 @@ const MONTH_QUOTA_MAP = {
  * Defaults to 10% if not configured
  */
 async function getVendorTargetConfig(vendorCode) {
+    if (!vendorCode || vendorCode === 'ALL') return 10.0;
     try {
-        const isAll = !vendorCode || vendorCode === 'ALL';
-        if (!isAll) {
-            const code = vendorCode.split(',')[0].trim();
-            const codeVariants = getVendorCodeVariants(code);
-            if (codeVariants.length > 0) {
-                const placeholders = codeVariants.map(() => '?').join(',');
+        const code = vendorCode.split(',')[0].trim();
+        const codeVariants = getVendorCodeVariants(code);
+        if (codeVariants.length === 0) return 10.0;
+        const placeholders = codeVariants.map(() => '?').join(',');
 
-                const explicitRows = await queryWithParams(`
-                    SELECT TARGET_PERCENTAGE
-                    FROM JAVIER.OBJ_CONFIG
-                    WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})
-                      AND CODIGOCLIENTE = '*'
-                    FETCH FIRST 1 ROWS ONLY
-                `, codeVariants, false);
+        const explicitRows = await queryWithParams(`
+            SELECT TARGET_PERCENTAGE
+            FROM JAVIER.OBJ_CONFIG
+            WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})
+              AND CODIGOCLIENTE = '*'
+            FETCH FIRST 1 ROWS ONLY
+        `, codeVariants, false);
 
-                if (explicitRows.length > 0) {
-                    return parseFloat(explicitRows[0].TARGET_PERCENTAGE) || 10.0;
-                }
+        if (explicitRows.length > 0) {
+            return parseFloat(explicitRows[0].TARGET_PERCENTAGE) || 10.0;
+        }
 
-                const vendorRows = await queryWithParams(`
-                    SELECT TARGET_PERCENTAGE, COUNT(*) as CNT
-                    FROM JAVIER.OBJ_CONFIG
-                    WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})
-                    GROUP BY TARGET_PERCENTAGE
-                    ORDER BY CNT DESC, TARGET_PERCENTAGE DESC
-                    FETCH FIRST 1 ROWS ONLY
-                `, codeVariants, false);
+        const vendorRows = await queryWithParams(`
+            SELECT TARGET_PERCENTAGE, COUNT(*) as CNT
+            FROM JAVIER.OBJ_CONFIG
+            WHERE TRIM(CODIGOVENDEDOR) IN (${placeholders})
+            GROUP BY TARGET_PERCENTAGE
+            ORDER BY CNT DESC, TARGET_PERCENTAGE DESC
+            FETCH FIRST 1 ROWS ONLY
+        `, codeVariants, false);
 
-                if (vendorRows.length > 0) {
-                    return parseFloat(vendorRows[0].TARGET_PERCENTAGE) || 10.0;
-                }
-            }
+        if (vendorRows.length > 0) {
+            return parseFloat(vendorRows[0].TARGET_PERCENTAGE) || 10.0;
         }
 
         const globalRows = await queryWithParams(`
@@ -179,35 +175,6 @@ async function getVendorTargetConfig(vendorCode) {
         logger.warn(`Could not fetch OBJ_CONFIG: ${e.message}`);
         return 10.0;
     }
-}
-
-async function getObjectiveIpcPct(year) {
-    const safeYear = parseInt(year, 10);
-    if (!safeYear) return DEFAULT_IPC_PCT;
-    if (_objectiveIpcPctCache.has(safeYear)) return _objectiveIpcPctCache.get(safeYear);
-
-    try {
-        const rows = await queryWithParams(`
-            SELECT IPC_PCT
-            FROM JAVIER.COMM_CONFIG
-            WHERE YEAR = ?
-            FETCH FIRST 1 ROWS ONLY
-        `, [safeYear], false, false);
-        const ipcPct = rows.length > 0
-            ? (parseFloat(rows[0].IPC_PCT) || DEFAULT_IPC_PCT)
-            : DEFAULT_IPC_PCT;
-        _objectiveIpcPctCache.set(safeYear, ipcPct);
-        return ipcPct;
-    } catch (e) {
-        logger.warn(`[OBJECTIVES] COMM_CONFIG IPC lookup failed for ${safeYear}: ${e.message}`);
-        _objectiveIpcPctCache.set(safeYear, DEFAULT_IPC_PCT);
-        return DEFAULT_IPC_PCT;
-    }
-}
-
-async function getObjectiveGrowthPct(year, improvementPct) {
-    const ipcPct = await getObjectiveIpcPct(year);
-    return combineGrowthPercentages(ipcPct, improvementPct);
 }
 
 function getVendorCodeVariants(vendorCode) {
@@ -451,7 +418,6 @@ async function buildVendorObjectiveTargets(vendorCode, yearsArray, now) {
     const annualObjectiveByYear = {};
 
     for (const year of yearsArray) {
-        const objectiveGrowthPct = await getObjectiveGrowthPct(year, targetPct);
         let prevYearTotal = 0;
         let inheritedTotal = 0;
         let currentYearTotalSoFar = 0;
@@ -484,7 +450,7 @@ async function buildVendorObjectiveTargets(vendorCode, yearsArray, now) {
             const hybrid = applyHybridMonthlyObjectives(
                 prevYearMonthlySales,
                 combinedPrevTotal,
-                objectiveGrowthPct,
+                targetPct,
                 exactFixedByMonth,
             );
             seasonalTargets = hybrid.monthly;
@@ -493,11 +459,11 @@ async function buildVendorObjectiveTargets(vendorCode, yearsArray, now) {
             seasonalTargets = computeSeasonalWeightTargets(
                 prevYearMonthlySales,
                 combinedPrevTotal,
-                objectiveGrowthPct,
+                targetPct,
             );
             annualObjective = Object.values(seasonalTargets).reduce((s, v) => s + v, 0);
         } else {
-            const growthFactor = 1 + (objectiveGrowthPct / 100);
+            const growthFactor = 1 + (targetPct / 100);
             annualObjective = currentYearTotalSoFar > 0
                 ? currentYearTotalSoFar * growthFactor
                 : 0;
@@ -544,10 +510,8 @@ router.get('/', verifyToken, async (req, res) => {
         const targetMonth = parseInt(month) || (now.getMonth() + 1);
         const vendedorFilter = buildVendedorFilter(vendedorCodes);
 
-        // 1. Get target configuration: IPC plus configured improvement.
+        // 1. Get Target Configuration (Global % increase)
         const targetPct = await getVendorTargetConfig(vendedorCodes);
-        const ipcPct = await getObjectiveIpcPct(targetYear);
-        const objectiveGrowthPct = combineGrowthPercentages(ipcPct, targetPct);
 
         // Intentar obtener objetivos desde DSEDAC.COFC (cuotas mensuales)
         let salesObjective = 0;
@@ -638,7 +602,7 @@ if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
         // Si no encontramos objetivo en BD, calcular con Lógica Estacional
         if (salesObjective === 0) {
             // Default flat if no history
-            let calculatedTarget = salesLast * (1 + objectiveGrowthPct / 100);
+            let calculatedTarget = salesLast * (1 + targetPct / 100);
 
             // Apply Seasonality if we have annual history
             if (totalPrevYear > 0) {
@@ -651,9 +615,8 @@ if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
                 const deviationRatio = avgMonthlySales > 0 ? (salesLast - avgMonthlySales) / avgMonthlySales : 0;
 
                 // Variable Growth Percentage for this month
-                // e.g. if growth is 13.3%, and month is high (+50% vs avg),
-                // variable growth becomes 13.3% * (1 + 0.5*0.5).
-                const variableGrowthPct = (objectiveGrowthPct / 100) * (1 + (SEASONAL_AGGRESSIVENESS * deviationRatio));
+                // e.g. if Target is 10%, and month is high (+50% vs avg), Growth might be 10% * (1 + 0.5*0.5) = 12.5%
+                const variableGrowthPct = (targetPct / 100) * (1 + (SEASONAL_AGGRESSIVENESS * deviationRatio));
 
                 // Initial Raw Target
                 const rawTarget = salesLast * (1 + variableGrowthPct);
@@ -672,7 +635,7 @@ if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
                 // Fallback to simple % if no previous annual data
                 // If no last year data at all, maybe based on current?
                 if (salesLast === 0 && salesCurrent > 0) {
-                    salesObjective = salesCurrent * (1 + objectiveGrowthPct / 100);
+                    salesObjective = salesCurrent * (1 + targetPct / 100);
                 } else {
                     salesObjective = calculatedTarget;
                 }
@@ -684,7 +647,7 @@ if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
         const marginCurrent = parseFloat(curr.MARGIN) || 0;
         const marginLast = parseFloat(last.MARGIN) || 0;
         // Si no hay marginObjective global, usar histórico + target%
-        marginObjective = marginObjective || (marginLast * (1 + objectiveGrowthPct / 100));
+        marginObjective = marginObjective || (marginLast * (1 + targetPct / 100));
         const marginProgress = marginObjective > 0 ? (marginCurrent / marginObjective) * 100 : 0;
 
         const clientsCurrent = parseInt(curr.CLIENTS) || 0;
@@ -701,9 +664,7 @@ if (salesObjective === 0 && vendedorCodes && vendedorCodes !== 'ALL') {
         res.json({
             period: { year: targetYear, month: targetMonth },
             objectiveSource,
-            targetPercentage: objectiveGrowthPct,
-            ipcPercentage: ipcPct,
-            improvementPercentage: targetPct,
+            targetPercentage: targetPct, // Return for debug/ui
             objectives: {
                 sales: {
                     target: salesObjective,
@@ -884,13 +845,8 @@ router.get('/evolution', verifyToken, async (req, res) => {
 
         // 1. Get Target Config
         const targetPct = await getVendorTargetConfig(effectiveVendorCodes);
-        const objectiveGrowthPctByYear = {};
-        for (const year of yearsArray) {
-            objectiveGrowthPctByYear[year] = await getObjectiveGrowthPct(year, targetPct);
-        }
 
         yearsArray.forEach(year => {
-            const objectiveGrowthPct = objectiveGrowthPctByYear[year] || targetPct;
             // Calculate Annual Objective first
             let prevYearTotal = 0;
             let inheritedTotal = 0;
@@ -936,14 +892,14 @@ router.get('/evolution', verifyToken, async (req, res) => {
                 const hybrid = applyHybridMonthlyObjectives(
                     prevYearMonthlySales,
                     combinedPrevTotal,
-                    objectiveGrowthPct,
+                    targetPct,
                     fixedTargetsForYear,
                 );
                 seasonalTargets = hybrid.monthly;
                 annualObjective = hybrid.annual;
                 monthlyObjective = annualObjective / 12;
             } else {
-                const growthFactor = 1 + (objectiveGrowthPct / 100);
+                const growthFactor = 1 + (targetPct / 100);
                 annualObjective = combinedPrevTotal > 0
                     ? combinedPrevTotal * growthFactor
                     : (currentYearTotalSoFar > 0 ? currentYearTotalSoFar * growthFactor : 0);
@@ -955,7 +911,7 @@ router.get('/evolution', verifyToken, async (req, res) => {
                 seasonalTargets = computeSeasonalWeightTargets(
                     prevYearMonthlySales,
                     combinedPrevTotal,
-                    objectiveGrowthPct,
+                    targetPct,
                 );
                 if (!multiVendorTargets && !hasFixedTargetsForYear) {
                     annualObjective = Object.values(seasonalTargets).reduce((s, v) => s + v, 0);
@@ -980,7 +936,7 @@ router.get('/evolution', verifyToken, async (req, res) => {
                     seasonalObjective = multiVendorTargets.monthlyObjectiveByYear[year]?.[m] || 0;
                     if (!seasonalObjective && combinedPrevTotal > 0) {
                         seasonalObjective = seasonalTargets[m]
-                            || (prevYearMonthlySales[m] * (1 + objectiveGrowthPct / 100))
+                            || (prevYearMonthlySales[m] * (1 + targetPct / 100))
                             || 0;
                     }
                 } else if (seasonalTargets[m] > 0) {
@@ -2525,7 +2481,6 @@ router.get('/by-client', async (req, res) => {
             }
         }
 
-        const byClientIpcPct = await getObjectiveIpcPct(mainYear);
         const clients = currentRows.map(r => {
             const code = r.CODE?.trim() || '';
             const sales = parseFloat(r.SALES) || 0;
@@ -2555,8 +2510,8 @@ router.get('/by-client', async (req, res) => {
                 ? objectiveConfigMap.get(code)
                 : defaultObjectiveData.percentage;
 
-            const effectiveTargetPct = combineGrowthPercentages(byClientIpcPct, targetPct);
-            const multiplier = 1 + (effectiveTargetPct / 100.0);
+            // Percentage stored as 10 for 10%. Multiplier = 1 + (10/100) = 1.10
+            const multiplier = 1 + (targetPct / 100.0);
 
             // Objective: Previous year sales * multiplier
             let objective = prevSales > 0 ? prevSales * multiplier : sales;
@@ -2580,9 +2535,6 @@ router.get('/by-client', async (req, res) => {
                 prevYear: prevSales,
                 margin: margin,
                 progress: Math.round(progress * 10) / 10,
-                targetPercentage: effectiveTargetPct,
-                ipcPercentage: byClientIpcPct,
-                improvementPercentage: targetPct,
                 status: status
             };
         });

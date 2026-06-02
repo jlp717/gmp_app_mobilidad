@@ -3,12 +3,6 @@
  */
 const SEASONAL_AGGRESSIVENESS = 0.5;
 
-function combineGrowthPercentages(ipcPct = 0, targetPct = 0) {
-    const ipc = parseFloat(ipcPct) || 0;
-    const target = parseFloat(targetPct) || 0;
-    return (((1 + (ipc / 100)) * (1 + (target / 100))) - 1) * 100;
-}
-
 function computeSeasonalWeightTargets(prevYearMonthlySales, combinedPrevTotal, targetPct) {
     const seasonalWeights = {};
     if (combinedPrevTotal <= 0) return seasonalWeights;
@@ -83,7 +77,6 @@ function applyHybridMonthlyObjectives(prevYearMonthlySales, combinedPrevTotal, t
 }
 
 module.exports = {
-    combineGrowthPercentages,
     computeSeasonalWeightTargets,
     applyHybridMonthlyObjectives,
 };
