@@ -815,7 +815,7 @@ function drawTeamLeadSection(doc, teamData, year, startMonth, endMonth, margin, 
     }
 
     doc.font('Helvetica-Bold').fontSize(11).fillColor(COLORS.header)
-        .text(`Equipo Almeria (${teamData.leaderCode}) — umbral LY+IPC y franjas por comercial (sin gate 4/4)`, margin, yPos, { width: contentWidth });
+        .text(`Equipo Almeria (${teamData.leaderCode}) - acumulado 80+equipo con umbral LY+10, sin IPC`, margin, yPos, { width: contentWidth });
     yPos += 18;
 
     for (let month = startMonth; month <= endMonth; month++) {
@@ -827,8 +827,8 @@ function drawTeamLeadSection(doc, teamData, year, startMonth, endMonth, margin, 
             yPos = margin;
         }
 
-        const teamExcess = tm.teamMembersExcess ?? 0;
-        const teamComm = tm.teamMembersCommission ?? 0;
+        const teamExcess = tm.teamAggregateExcess ?? tm.teamMembersExcess ?? 0;
+        const teamComm = tm.teamAggregateCommission ?? tm.teamMembersCommission ?? 0;
         doc.font('Helvetica-Bold').fontSize(9).fillColor(COLORS.text)
             .text(
                 `${getMonthName(month)} ${year} — equipo exceso ${formatCurrency(teamExcess)} · comision ${formatCurrency(teamComm)} · califican ${tm.qualifyingMembers ?? 0}/4`,
@@ -909,30 +909,28 @@ function buildTeamLeadAccumulatedRows(teamData, startMonth, endMonth) {
         leaderRow.commission += toNumber(tm.leaderPersonalCommission);
         if (toNumber(tm.leaderPersonalCommission) > 0) leaderRow.qualifyingMonths += 1;
 
-        (Array.isArray(tm.members) ? tm.members : []).forEach((member) => {
-            const code = displayVendorCode(member.vendorCode);
-            const key = `member:${code}`;
-            if (!rows.has(key)) {
-                rows.set(key, {
-                    code,
-                    label: `${code} - especial equipo`,
-                    prev: 0,
-                    threshold: 0,
-                    curr: 0,
-                    excess: 0,
-                    commission: 0,
-                    qualifyingMonths: 0,
-                    isLeader: false,
-                });
-            }
-            const row = rows.get(key);
-            row.prev += toNumber(member.prevYearSales);
-            row.threshold += toNumber(member.threshold);
-            row.curr += toNumber(member.currentSales);
-            row.excess += toNumber(member.excess);
-            row.commission += toNumber(member.commission);
-            if (member.qualifies === true) row.qualifyingMonths += 1;
-        });
+        if (!rows.has('aggregate:80-team')) {
+            rows.set('aggregate:80-team', {
+                code: '80+',
+                label: '80+72+73+81+83 - especial acumulado',
+                prev: 0,
+                threshold: 0,
+                curr: 0,
+                excess: 0,
+                commission: 0,
+                qualifyingMonths: 0,
+                isLeader: false,
+                isTeamAggregate: true,
+            });
+        }
+        const aggregateRow = rows.get('aggregate:80-team');
+        aggregateRow.prev += toNumber(tm.teamAggregatePrevSales);
+        aggregateRow.threshold += toNumber(tm.teamAggregateThreshold);
+        aggregateRow.curr += toNumber(tm.teamAggregateCurrentSales);
+        aggregateRow.excess += toNumber(tm.teamAggregateExcess);
+        aggregateRow.commission += toNumber(tm.teamAggregateCommission);
+        if (tm.teamAggregateQualifies === true) aggregateRow.qualifyingMonths += 1;
+
     }
 
     return Array.from(rows.values());
@@ -944,7 +942,7 @@ function drawSummaryTeamLeadSection(doc, teamData, year, startMonth, endMonth, m
     const cols = [
         { key: 'label', label: 'Origen', width: 145 },
         { key: 'prev', label: 'Ventas LY', width: 90 },
-        { key: 'threshold', label: 'Umbral LY+IPC', width: 95 },
+        { key: 'threshold', label: 'Umbral LY+10', width: 95 },
         { key: 'curr', label: 'Ventas CY', width: 90 },
         { key: 'excess', label: 'Exceso', width: 80 },
         { key: 'months', label: 'Meses OK', width: 60 },
@@ -955,10 +953,10 @@ function drawSummaryTeamLeadSection(doc, teamData, year, startMonth, endMonth, m
     let yPos = startY;
     const rows = buildTeamLeadAccumulatedRows(teamData, startMonth, endMonth);
     const leaderRow = rows.find((row) => row.isLeader);
-    const memberRows = rows.filter((row) => !row.isLeader);
+    const aggregateRow = rows.find((row) => row.isTeamAggregate);
     const ownCommission = leaderTotals?.generated ?? leaderRow?.commission ?? 0;
     const ownPaid = leaderTotals?.paid ?? 0;
-    const specialCommission = memberRows.reduce((sum, row) => sum + row.commission, 0);
+    const specialCommission = aggregateRow?.commission ?? 0;
     const totalToLeader = ownCommission + specialCommission;
 
     const ensureSpace = (height) => {
@@ -976,7 +974,7 @@ function drawSummaryTeamLeadSection(doc, teamData, year, startMonth, endMonth, m
 
     const summary = [
         { label: 'Comision propia 80', value: ownCommission, color: COLORS.header },
-        { label: 'Especial equipo', value: specialCommission, color: COLORS.good },
+        { label: 'Especial acumulado', value: specialCommission, color: COLORS.good },
         { label: 'Total a entregar al 80', value: totalToLeader, color: COLORS.almeriaBorder },
         { label: 'Pagado propio 80', value: ownPaid, color: COLORS.condor },
     ];

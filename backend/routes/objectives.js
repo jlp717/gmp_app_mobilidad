@@ -26,6 +26,9 @@ const {
 const {
     applyHybridMonthlyObjectives,
     computeSeasonalWeightTargets,
+    applyMonthlyObjectiveRebalances,
+    hasObjectiveMonthlyRebalances,
+    sumMonthlyObjectives,
 } = require('./objectives-hybrid-helpers');
 const {
     getCachedFamilyNames,
@@ -37,7 +40,7 @@ const {
     isCacheReady: isMetadataCacheReady
 } = require('../services/metadataCache');
 
-const OBJECTIVES_CACHE_VERSION = 'v20260602-b-sales-all';
+const OBJECTIVES_CACHE_VERSION = 'v20260603-june-rebalance';
 
 // =============================================================================
 // INHERITED OBJECTIVES LOGIC
@@ -380,6 +383,82 @@ async function getFixedMonthlyObjectiveTargets(vendorCode, year) {
     }
 }
 
+const _globalObjectiveBaselineCache = new Map();
+
+async function getGlobalObjectiveBaselineMonthly(year) {
+    const safeYear = parseInt(year, 10);
+    if (!safeYear) return {};
+
+    const cacheKey = String(safeYear);
+    if (_globalObjectiveBaselineCache.has(cacheKey)) {
+        return _globalObjectiveBaselineCache.get(cacheKey);
+    }
+
+    const prevYear = safeYear - 1;
+    const rows = await queryWithParams(`
+        SELECT
+            L.LCAADC as YEAR,
+            L.LCMMDC as MONTH,
+            SUM(L.LCIMVT) as SALES,
+            0 as COST,
+            0 as CLIENTS
+        FROM DSED.LACLAE L
+        WHERE L.LCAADC = ?
+          AND ${LACLAE_SALES_FILTER}
+        GROUP BY L.LCAADC, L.LCMMDC
+    `, [prevYear], false);
+
+    await addBSalesToRows(rows, [], [prevYear]);
+
+    const prevYearMonthlySales = {};
+    let combinedPrevTotal = 0;
+    for (let m = 1; m <= 12; m++) {
+        const row = rows.find(r => r.YEAR == prevYear && r.MONTH == m);
+        const sales = row ? parseFloat(row.SALES) || 0 : 0;
+        prevYearMonthlySales[m] = sales;
+        combinedPrevTotal += sales;
+    }
+
+    const targetPct = await getVendorTargetConfig('ALL');
+    const fixedTargetsForYear = await getGlobalPinnedMonthlyTargets(safeYear);
+    const monthly = Object.keys(fixedTargetsForYear).length > 0 && combinedPrevTotal > 0
+        ? applyHybridMonthlyObjectives(
+            prevYearMonthlySales,
+            combinedPrevTotal,
+            targetPct,
+            fixedTargetsForYear,
+        ).monthly
+        : computeSeasonalWeightTargets(prevYearMonthlySales, combinedPrevTotal, targetPct);
+
+    _globalObjectiveBaselineCache.set(cacheKey, monthly);
+    return monthly;
+}
+
+function buildObjectiveRebalanceAllocationFactors(monthlyTargets, globalMonthlyTargets) {
+    const factors = {};
+    for (let m = 1; m <= 12; m++) {
+        const globalValue = parseFloat(globalMonthlyTargets?.[m]) || 0;
+        const localValue = parseFloat(monthlyTargets?.[m]) || 0;
+        factors[m] = globalValue > 0 ? localValue / globalValue : 0;
+    }
+    return factors;
+}
+
+async function applyConfiguredObjectiveRebalances(year, monthlyTargets, vendorCode = null) {
+    if (!hasObjectiveMonthlyRebalances(year)) return monthlyTargets;
+
+    let allocationFactorsByMonth = null;
+    if (vendorCode) {
+        const globalBaseline = await getGlobalObjectiveBaselineMonthly(year);
+        allocationFactorsByMonth = buildObjectiveRebalanceAllocationFactors(
+            monthlyTargets,
+            globalBaseline,
+        );
+    }
+
+    return applyMonthlyObjectiveRebalances(monthlyTargets, year, { allocationFactorsByMonth });
+}
+
 async function buildVendorObjectiveTargets(vendorCode, yearsArray, now) {
     const currentYear = Math.max(...yearsArray);
     const uniqueYears = [...new Set([...yearsArray, ...yearsArray.map(y => y - 1)])];
@@ -470,6 +549,8 @@ async function buildVendorObjectiveTargets(vendorCode, yearsArray, now) {
             for (let m = 1; m <= 12; m++) seasonalTargets[m] = annualObjective / 12;
         }
 
+        seasonalTargets = await applyConfiguredObjectiveRebalances(year, seasonalTargets, vendorCode);
+        annualObjective = sumMonthlyObjectives(seasonalTargets);
         monthlyObjectiveByYear[year] = seasonalTargets;
         annualObjectiveByYear[year] = annualObjective;
     }
@@ -846,7 +927,7 @@ router.get('/evolution', verifyToken, async (req, res) => {
         // 1. Get Target Config
         const targetPct = await getVendorTargetConfig(effectiveVendorCodes);
 
-        yearsArray.forEach(year => {
+        for (const year of yearsArray) {
             // Calculate Annual Objective first
             let prevYearTotal = 0;
             let inheritedTotal = 0;
@@ -918,6 +999,16 @@ router.get('/evolution', verifyToken, async (req, res) => {
                 }
             }
 
+            if (!multiVendorTargets && Object.keys(seasonalTargets).length > 0) {
+                const allocationVendorCode = vendorCodesArray.length === 1 ? vendorCodesArray[0] : null;
+                seasonalTargets = await applyConfiguredObjectiveRebalances(
+                    year,
+                    seasonalTargets,
+                    allocationVendorCode,
+                );
+                annualObjective = sumMonthlyObjectives(seasonalTargets);
+                monthlyObjective = annualObjective / 12;
+            }
 
             yearlyData[year] = [];
 
@@ -972,7 +1063,7 @@ router.get('/evolution', verifyToken, async (req, res) => {
                 totalMargin: data.reduce((sum, m) => sum + m.margin, 0),
                 annualObjective: annualObjective
             };
-        });
+        }
 
         const responseData = {
             years: yearsArray,

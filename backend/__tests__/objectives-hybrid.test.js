@@ -4,6 +4,8 @@
 const {
     applyHybridMonthlyObjectives,
     computeSeasonalWeightTargets,
+    applyMonthlyObjectiveRebalances,
+    getObjectiveMonthlyRebalances,
 } = require('../routes/objectives-hybrid-helpers');
 
 describe('objectives hybrid redistribution', () => {
@@ -42,5 +44,36 @@ describe('objectives hybrid redistribution', () => {
         const weights = computeSeasonalWeightTargets(prev, 1200, 3);
         const sum = Object.values(weights).reduce((a, b) => a + b, 0);
         expect(sum).toBeCloseTo(1200 * 1.03, 0);
+    });
+
+    test('2026 rebalance moves 120k from June into November and December', () => {
+        const monthly = {};
+        for (let m = 1; m <= 12; m++) monthly[m] = 1000000;
+
+        const adjusted = applyMonthlyObjectiveRebalances(monthly, 2026);
+
+        expect(getObjectiveMonthlyRebalances(2026)).toHaveLength(1);
+        expect(adjusted[6]).toBe(880000);
+        expect(adjusted[11]).toBe(1070000);
+        expect(adjusted[12]).toBe(1050000);
+        expect(Object.values(adjusted).reduce((s, v) => s + v, 0))
+            .toBe(Object.values(monthly).reduce((s, v) => s + v, 0));
+    });
+
+    test('2026 rebalance can be allocated by monthly vendor weight', () => {
+        const monthly = {};
+        for (let m = 1; m <= 12; m++) monthly[m] = 100000;
+
+        const adjusted = applyMonthlyObjectiveRebalances(monthly, 2026, {
+            allocationFactorsByMonth: {
+                6: 0.25,
+                11: 0.40,
+                12: 0.10,
+            },
+        });
+
+        expect(adjusted[6]).toBe(70000);
+        expect(adjusted[11]).toBe(128000);
+        expect(adjusted[12]).toBe(105000);
     });
 });

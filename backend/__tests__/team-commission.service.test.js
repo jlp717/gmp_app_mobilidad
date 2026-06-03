@@ -11,6 +11,8 @@ const {
     loadTeamCommissionConfig,
     monthMetricsFromVendorData,
     ALMERIA_TEAM_MEMBERS_80,
+    ALMERIA_TEAM_ACCUMULATED_80,
+    TEAM_LEAD_GROWTH_THRESHOLD_PCT,
     isCommercial80User,
     isScopedTeamAllRequest,
     resolveAllModeVendorCodes,
@@ -65,8 +67,10 @@ describe('team-commission.service', () => {
         expect(resolveAllModeVendorCodesString('80')).toBe('72,73,81,83');
     });
 
-    test('TEAM_LEAD_YOY_BONUS_PCT is separate from IPC threshold (3%)', () => {
+    test('TEAM_LEAD_YOY_BONUS_PCT is fixed 10 for the 80 accumulated special', () => {
         expect(TEAM_LEAD_YOY_BONUS_PCT).toBe(10);
+        expect(TEAM_LEAD_GROWTH_THRESHOLD_PCT).toBe(10);
+        expect(ALMERIA_TEAM_ACCUMULATED_80).toEqual(['80', '72', '73', '81', '83']);
     });
 
     test('loadTeamCommissionConfig uses in-code members without DB', async () => {
@@ -84,10 +88,10 @@ describe('team-commission.service', () => {
         expect(m.commission).toBe(2);
     });
 
-    test('getTeamCommission: each member independent, no 4/4 gate, no leader 10%', async () => {
+    test('getTeamCommission: members stay individual, 80 special uses accumulated LY+10 without IPC', async () => {
         const mockCalculate = jest.fn(async (code) => {
             if (code === '80') {
-                return mockVendorData('80', { 1: 5000 }, { 1: 6000 }, { 1: 0 });
+                return mockVendorData('80', { 1: 5000 }, { 1: 7000 }, { 1: 50 });
             }
             if (code === '73') {
                 return mockVendorData('73', { 1: 1000, 2: 1000 }, { 1: 1200, 2: 900 }, { 1: 5, 2: 0 });
@@ -95,17 +99,34 @@ describe('team-commission.service', () => {
             return mockVendorData(code, { 1: 1000, 2: 1000 }, { 1: 1200, 2: 1200 }, { 1: 5, 2: 5 });
         });
 
-        const result = await getTeamCommission('80', 2026, mockCalculate, { ipc: 3 });
+        const result = await getTeamCommission('80', 2026, mockCalculate, {
+            ipc: 3,
+            TIER1_MAX: 103,
+            TIER1_PCT: 1,
+            TIER2_MAX: 106,
+            TIER2_PCT: 1.3,
+            TIER3_MAX: 110,
+            TIER3_PCT: 1.6,
+            TIER4_PCT: 2,
+        });
 
         expect(result.teamMembers).toEqual(ALMERIA_TEAM_MEMBERS_80);
         expect(result.annualTotal).toBe(0);
+        expect(result.annualTeamAggregateCommission).toBeGreaterThan(0);
 
         const jan = result.months.find((m) => m.month === 1);
         expect(jan.totalCommission).toBe(0);
-        expect(jan.leaderExcess).toBe(500);
+        expect(jan.leaderExcess).toBe(1500);
+        expect(jan.teamAggregateCodes).toEqual(['80', '72', '73', '81', '83']);
+        expect(jan.teamAggregatePrevSales).toBe(9000);
+        expect(jan.teamAggregateThreshold).toBe(9900);
+        expect(jan.teamAggregateCurrentSales).toBe(11800);
+        expect(jan.teamAggregateExcess).toBe(1900);
+        expect(jan.teamAggregateCommission).toBe(38);
+        expect(jan.teamMembersCommission).toBe(jan.teamAggregateCommission);
+        expect(jan.membersIndividualCommission).toBe(20);
         expect(jan.allMembersQualified).toBe(false);
         expect(jan.qualifyingMembers).toBe(4);
-        expect(jan.teamMembersCommission).toBeGreaterThan(0);
 
         const feb = result.months.find((m) => m.month === 2);
         expect(feb.qualifyingMembers).toBe(3);

@@ -2127,7 +2127,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
         (team['months'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final nowMonth = DateTime.now().month;
     final ytdTeamComm =
-        (team['annualTeamMembersCommission'] as num?)?.toDouble() ?? 0;
+        (team['annualTeamAggregateCommission'] as num?)?.toDouble() ??
+            (team['annualTeamMembersCommission'] as num?)?.toDouble() ??
+            0;
     final leaderOwnCommission =
         (_data?['grandTotalCommission'] as num?)?.toDouble() ??
             (team['leaderPersonalCommission'] as num?)?.toDouble() ??
@@ -2139,40 +2141,36 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       final month = (monthData['month'] as num?)?.toInt() ?? 0;
       if (month <= 0 || month > nowMonth) continue;
 
-      final memberList =
-          (monthData['members'] as List?)?.cast<Map<String, dynamic>>() ??
-              const <Map<String, dynamic>>[];
-      for (final member in memberList) {
-        final qualifies = (member['qualifies'] as bool?) ?? false;
-        final tier = (member['tier'] as num?)?.toInt() ?? 0;
-        rows.add(
-          DataRow(
-            color: WidgetStateProperty.all(
-              qualifies
-                  ? AppTheme.neonGreen.withValues(alpha: 0.07)
-                  : Colors.orange.withValues(alpha: 0.07),
-            ),
-            cells: [
-              DataCell(_teamTableText(_getMonthName(month))),
-              DataCell(_teamTableText(member['vendorCode']?.toString() ?? '')),
-              DataCell(_teamTableMoney(member['prevYearSales'])),
-              DataCell(_teamTableMoney(member['threshold'])),
-              DataCell(_teamTableMoney(member['currentSales'])),
-              DataCell(_teamTableMoney(member['excess'])),
-              DataCell(_teamTableText(tier > 0 ? 'F$tier' : '-')),
-              DataCell(
-                _teamTableText(
-                  CurrencyFormatter.format(
-                    (member['commission'] as num?)?.toDouble() ?? 0,
-                  ),
-                  color: qualifies ? AppTheme.neonGreen : Colors.orangeAccent,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
+      final qualifies = (monthData['teamAggregateQualifies'] as bool?) ?? false;
+      final tier = (monthData['teamAggregateTier'] as num?)?.toInt() ?? 0;
+      rows.add(
+        DataRow(
+          color: WidgetStateProperty.all(
+            qualifies
+                ? AppTheme.neonGreen.withValues(alpha: 0.07)
+                : Colors.orange.withValues(alpha: 0.07),
           ),
-        );
-      }
+          cells: [
+            DataCell(_teamTableText(_getMonthName(month))),
+            DataCell(_teamTableText('80+72+73+81+83')),
+            DataCell(_teamTableMoney(monthData['teamAggregatePrevSales'])),
+            DataCell(_teamTableMoney(monthData['teamAggregateThreshold'])),
+            DataCell(_teamTableMoney(monthData['teamAggregateCurrentSales'])),
+            DataCell(_teamTableMoney(monthData['teamAggregateExcess'])),
+            DataCell(_teamTableText(tier > 0 ? 'F$tier' : '-')),
+            DataCell(
+              _teamTableText(
+                CurrencyFormatter.format(
+                  (monthData['teamAggregateCommission'] as num?)?.toDouble() ??
+                      0,
+                ),
+                color: qualifies ? AppTheme.neonGreen : Colors.orangeAccent,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      );
     }
 
     return Container(
@@ -2198,7 +2196,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               const SizedBox(width: 8),
               const Expanded(
                 child: Text(
-                  'Equipo Almeria - comisiones especiales',
+                  'Equipo Almeria - acumulado especial 80',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
@@ -2218,7 +2216,7 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Propia 80: ${CurrencyFormatter.format(leaderOwnCommission)} | Especial equipo: ${CurrencyFormatter.format(ytdTeamComm)}',
+            'Propia 80: ${CurrencyFormatter.format(leaderOwnCommission)} | Especial acumulado: ${CurrencyFormatter.format(ytdTeamComm)}',
             style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 12),
@@ -2251,9 +2249,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                     ),
                     columns: const [
                       DataColumn(label: Text('Mes')),
-                      DataColumn(label: Text('Comercial')),
+                      DataColumn(label: Text('Origen')),
                       DataColumn(label: Text('Venta LY'), numeric: true),
-                      DataColumn(label: Text('Umbral'), numeric: true),
+                      DataColumn(label: Text('Umbral LY+10'), numeric: true),
                       DataColumn(label: Text('Venta actual'), numeric: true),
                       DataColumn(label: Text('Exceso'), numeric: true),
                       DataColumn(label: Text('Franja')),
@@ -2296,7 +2294,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
         (team['months'] as List?)?.cast<Map<String, dynamic>>() ?? [];
     final nowMonth = DateTime.now().month;
     final ytdTeamComm =
-        (team['annualTeamMembersCommission'] as num?)?.toDouble() ?? 0;
+        (team['annualTeamAggregateCommission'] as num?)?.toDouble() ??
+            (team['annualTeamMembersCommission'] as num?)?.toDouble() ??
+            0;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -2332,13 +2332,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Cada comercial (${members.join(', ')}) comisiona solo si supera su umbral '
-            '(ventas LY + IPC pactado). Sin gate 4/4.',
+            'Especial 80 sobre acumulado 80+${members.join(', ')} con umbral LY+10, sin IPC.',
             style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
           ),
           const SizedBox(height: 10),
           Text(
-            'Comisiones equipo YTD (72+73+81+83): ${CurrencyFormatter.format(ytdTeamComm)}',
+            'Especial acumulado YTD: ${CurrencyFormatter.format(ytdTeamComm)}',
             style: const TextStyle(
               color: AppTheme.neonGreen,
               fontSize: 16,
@@ -2351,9 +2350,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
               .map((m) {
             final month = (m['month'] as num?)?.toInt() ?? 0;
             final teamComm =
-                (m['teamMembersCommission'] as num?)?.toDouble() ?? 0;
-            final teamExcess =
-                (m['teamMembersExcess'] as num?)?.toDouble() ?? 0;
+                (m['teamAggregateCommission'] as num?)?.toDouble() ??
+                    (m['teamMembersCommission'] as num?)?.toDouble() ??
+                    0;
+            final teamExcess = (m['teamAggregateExcess'] as num?)?.toDouble() ??
+                (m['teamMembersExcess'] as num?)?.toDouble() ??
+                0;
             final qualifying = (m['qualifyingMembers'] as num?)?.toInt() ?? 0;
             final memberList =
                 (m['members'] as List?)?.cast<Map<String, dynamic>>() ?? [];

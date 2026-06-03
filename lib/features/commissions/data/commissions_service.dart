@@ -13,8 +13,8 @@ class CommissionsService {
     bool forceRefresh = false,
   }) async {
     try {
-      // Bust cache when commercial 80 becomes commissionable for manager/PDF views.
-      final cacheKey = 'commissions_v8_team80_${vendedorCode}_$year';
+      // Bust cache when commercial 80 accumulated-team commission logic changes.
+      final cacheKey = 'commissions_v9_team80_${vendedorCode}_$year';
 
       final result = await OfflineAwareApi.get(
         '/commissions/summary',
@@ -117,6 +117,9 @@ class CommissionsService {
       );
 
       // Force cache clear for this vendor AND the ALL view after payment
+      CacheService.invalidate('commissions_v9_team80_${vendedorCode}_$year');
+      CacheService.invalidate('commissions_v9_team80_ALL_$year');
+      CacheService.invalidateByPrefix('commissions_v9_team80_');
       CacheService.invalidate('commissions_v8_team80_${vendedorCode}_$year');
       CacheService.invalidate('commissions_v8_team80_ALL_$year');
       CacheService.invalidateByPrefix('commissions_v8_team80_');

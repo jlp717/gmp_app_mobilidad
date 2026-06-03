@@ -1,10 +1,10 @@
 'use strict';
 
 /**
- * Team visibility for commercial 80 (Almería).
- * Commission math uses standard calculateVendorData per vendor:
- * threshold = prevSales × (1 + IPC%), excess = max(0, actual − threshold), tiers on excess.
- * No 4/4 gate; no flat 10% on leader increment.
+ * Team visibility for commercial 80 (Almeria).
+ * Members keep their normal individual commission calculation.
+ * The leader special payout uses accumulated 80+72+73+81+83 sales,
+ * with a fixed LY + 10% threshold and no IPC.
  */
 
 const { queryWithParams } = require('../config/db');
@@ -23,6 +23,8 @@ const TEAM_LEADER_CODES = new Set(['80']);
 const ALMERIA_TEAM_MEMBERS_80 = ['72', '73', '81', '83'];
 /** Scoped "Todos los comerciales" for login 80 */
 const ALMERIA_TEAM_WITH_LEADER = ['80', ...ALMERIA_TEAM_MEMBERS_80];
+const ALMERIA_TEAM_ACCUMULATED_80 = ['80', ...ALMERIA_TEAM_MEMBERS_80];
+const TEAM_LEAD_GROWTH_THRESHOLD_PCT = 10;
 
 const TEAM_CONFIG_BY_LEADER = {
     '80': {
@@ -45,11 +47,10 @@ function isCommercial80User(userCode) {
 }
 
 /**
- * IPC (COMM_CONFIG.IPC_PCT, e.g. 3%) = per-vendor threshold inflation (LY + IPC).
- * TEAM_LEAD_YOY_BONUS_PCT (e.g. 10 in TEAM_COMMISSION_RULES) = optional leader
- * bonus on own YoY excess — NOT IPC, NOT used in current calculateVendorData path.
+ * Historical name kept for external callers/tests. This is the fixed growth
+ * threshold for the 80 accumulated special, not IPC and not OBJ_CONFIG.
  */
-const TEAM_LEAD_YOY_BONUS_PCT = 10;
+const TEAM_LEAD_YOY_BONUS_PCT = TEAM_LEAD_GROWTH_THRESHOLD_PCT;
 
 function isScopedTeamAllRequest(userCode, vendorCode) {
     const code = String(vendorCode || '').trim().toUpperCase();
@@ -171,6 +172,61 @@ function monthMetricsFromVendorData(vendorData, month) {
     };
 }
 
+function calculateTierCommission(actual, target, config) {
+    if (target <= 0) {
+        return { commission: 0, tier: 0, rate: 0, increment: 0, compliancePct: 0 };
+    }
+
+    const compliancePct = (actual / target) * 100;
+    const increment = actual - target;
+    let rate = 0;
+    let tier = 0;
+
+    if (compliancePct > config.TIER3_MAX) {
+        rate = config.TIER4_PCT;
+        tier = 4;
+    } else if (compliancePct > config.TIER2_MAX) {
+        rate = config.TIER3_PCT;
+        tier = 3;
+    } else if (compliancePct > config.TIER1_MAX) {
+        rate = config.TIER2_PCT;
+        tier = 2;
+    } else if (compliancePct > 100.00) {
+        rate = config.TIER1_PCT;
+        tier = 1;
+    }
+
+    return {
+        commission: increment > 0 && rate > 0 ? increment * (rate / 100) : 0,
+        tier,
+        rate,
+        increment,
+        compliancePct,
+    };
+}
+
+function buildAccumulatedTeamMetrics(leaderMetric, memberMetrics, config) {
+    const allMetrics = [leaderMetric, ...memberMetrics];
+    const prevSales = allMetrics.reduce((sum, metric) => sum + (metric.prevSales || 0), 0);
+    const currentSales = allMetrics.reduce((sum, metric) => sum + (metric.currentSales || 0), 0);
+    const threshold = prevSales * (1 + (TEAM_LEAD_GROWTH_THRESHOLD_PCT / 100));
+    const result = calculateTierCommission(currentSales, threshold, config);
+
+    return {
+        prevSales,
+        currentSales,
+        threshold,
+        excess: Math.max(0, currentSales - threshold),
+        commission: result.commission,
+        tier: result.tier,
+        rate: result.rate,
+        compliancePct: result.compliancePct,
+        qualifies: threshold > 0 && currentSales > threshold,
+        growthThresholdPct: TEAM_LEAD_GROWTH_THRESHOLD_PCT,
+        memberCodes: [...ALMERIA_TEAM_ACCUMULATED_80],
+    };
+}
+
 /**
  * @param {Function} calculateVendorData - (code, year, config) => vendor data
  */
@@ -186,8 +242,8 @@ async function calculateTeamMonth(leaderCode, year, month, config, calculateVend
     const leaderM = monthMetricsFromVendorData(leaderData, month);
 
     let qualifyingCount = 0;
-    let teamMembersExcess = 0;
-    let teamMembersCommission = 0;
+    let membersIndividualExcess = 0;
+    let membersIndividualCommission = 0;
 
     for (const memberCode of teamConfig.memberCodes) {
         if (!vendorDataCache.has(memberCode)) {
@@ -197,8 +253,8 @@ async function calculateTeamMonth(leaderCode, year, month, config, calculateVend
         const m = monthMetricsFromVendorData(vendorData, month);
 
         if (m.qualifies) qualifyingCount += 1;
-        teamMembersExcess += m.excess;
-        teamMembersCommission += m.commission;
+        membersIndividualExcess += m.excess;
+        membersIndividualCommission += m.commission;
 
         members.push({
             vendorCode: memberCode,
@@ -213,6 +269,15 @@ async function calculateTeamMonth(leaderCode, year, month, config, calculateVend
         });
     }
 
+    const accumulated = buildAccumulatedTeamMetrics(
+        leaderM,
+        members.map(member => ({
+            prevSales: member.prevYearSales,
+            currentSales: member.currentSales,
+        })),
+        config,
+    );
+
     return {
         year,
         month,
@@ -222,8 +287,21 @@ async function calculateTeamMonth(leaderCode, year, month, config, calculateVend
         leaderThreshold: leaderM.threshold,
         leaderExcess: leaderM.excess,
         leaderPersonalCommission: leaderM.commission,
-        teamMembersExcess,
-        teamMembersCommission,
+        membersIndividualExcess,
+        membersIndividualCommission,
+        teamAggregatePrevSales: accumulated.prevSales,
+        teamAggregateThreshold: accumulated.threshold,
+        teamAggregateCurrentSales: accumulated.currentSales,
+        teamAggregateExcess: accumulated.excess,
+        teamAggregateCommission: accumulated.commission,
+        teamAggregateTier: accumulated.tier,
+        teamAggregateRate: accumulated.rate,
+        teamAggregateCompliancePct: accumulated.compliancePct,
+        teamAggregateQualifies: accumulated.qualifies,
+        teamAggregateGrowthPct: accumulated.growthThresholdPct,
+        teamAggregateCodes: accumulated.memberCodes,
+        teamMembersExcess: accumulated.excess,
+        teamMembersCommission: accumulated.commission,
         /** @deprecated use leaderExcess — kept for PDF/clients */
         totalExcess: leaderM.excess,
         totalCommission: 0,
@@ -231,7 +309,8 @@ async function calculateTeamMonth(leaderCode, year, month, config, calculateVend
         allMembersQualified: false,
         config: {
             teamMemberCodes: teamConfig.memberCodes,
-            formula: 'LY_threshold_tiers_per_vendor',
+            accumulatedCodes: accumulated.memberCodes,
+            formula: 'leader_accumulated_LY_plus_10_no_ipc',
         },
     };
 }
@@ -242,8 +321,10 @@ async function getTeamCommission(leaderCode, year, calculateVendorData, config) 
     const vendorDataCache = new Map();
     const months = [];
     const currentMonth = new Date().getMonth() + 1;
-    let annualTeamMembersCommission = 0;
-    let annualTeamMembersExcess = 0;
+    let annualTeamAggregateCommission = 0;
+    let annualTeamAggregateExcess = 0;
+    let annualMembersIndividualCommission = 0;
+    let annualMembersIndividualExcess = 0;
     let annualLeaderExcess = 0;
 
     for (let m = 1; m <= 12; m++) {
@@ -256,8 +337,10 @@ async function getTeamCommission(leaderCode, year, calculateVendorData, config) 
             vendorDataCache,
         );
         months.push(result);
-        annualTeamMembersCommission += result.teamMembersCommission;
-        annualTeamMembersExcess += result.teamMembersExcess;
+        annualTeamAggregateCommission += result.teamAggregateCommission;
+        annualTeamAggregateExcess += result.teamAggregateExcess;
+        annualMembersIndividualCommission += result.membersIndividualCommission;
+        annualMembersIndividualExcess += result.membersIndividualExcess;
         annualLeaderExcess += result.leaderExcess;
     }
 
@@ -270,13 +353,19 @@ async function getTeamCommission(leaderCode, year, calculateVendorData, config) 
         months,
         annualTotal: 0,
         annualExcess: annualLeaderExcess,
-        annualTeamMembersExcess: annualTeamMembersExcess,
-        annualTeamMembersCommission: annualTeamMembersCommission,
+        annualTeamAggregateExcess,
+        annualTeamAggregateCommission,
+        annualMembersIndividualExcess,
+        annualMembersIndividualCommission,
+        annualTeamMembersExcess: annualTeamAggregateExcess,
+        annualTeamMembersCommission: annualTeamAggregateCommission,
         arrearsTotal: 0,
         leaderPersonalCommission: leaderData.grandTotalCommission ?? 0,
         teamMembers: teamConfig.memberCodes,
+        accumulatedCodes: [...ALMERIA_TEAM_ACCUMULATED_80],
+        growthThresholdPct: TEAM_LEAD_GROWTH_THRESHOLD_PCT,
         config: {
-            formula: 'LY_threshold_tiers_per_vendor',
+            formula: 'leader_accumulated_LY_plus_10_no_ipc',
         },
         currentMonth,
     };
@@ -307,6 +396,8 @@ module.exports = {
     TEAM_LEADER_CODES,
     ALMERIA_TEAM_MEMBERS_80,
     ALMERIA_TEAM_WITH_LEADER,
+    ALMERIA_TEAM_ACCUMULATED_80,
+    TEAM_LEAD_GROWTH_THRESHOLD_PCT,
     TEAM_LEAD_YOY_BONUS_PCT,
     isTeamLeader,
     isCommercial80User,
@@ -318,4 +409,5 @@ module.exports = {
     getTeamCommission,
     buildTeamLeadSummaryPayload,
     monthMetricsFromVendorData,
+    calculateTierCommission,
 };
