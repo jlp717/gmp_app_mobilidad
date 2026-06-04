@@ -8,6 +8,8 @@
  * - If a vendor has a row there, sales/target/generated/paid come from it.
  * - If a vendor is absent in a covered month, sales and target stay calculated
  *   with the historical vendor criterion, but generated and paid commission are 0.
+ * - If JAVIER.COMMISSION_PAYMENTS has a closed month, that stored payment
+ *   snapshot wins over historical/live calculations.
  */
 
 const PDFDocument = require('pdfkit');
@@ -16,6 +18,7 @@ const { queryWithParams } = require('../config/db');
 const { CircuitBreaker } = require('./circuit-breaker');
 const {
     getCommissionVendorColumnExpr,
+    getCommissionActualVendorColumnExprForYear,
     LACLAE_SALES_FILTER,
     SNAPSHOT_UNTIL_MONTH,
 } = require('../utils/common');
@@ -274,7 +277,7 @@ async function getSnapshotCommissionData(year, startMonth, endMonth) {
 }
 
 async function getLacSalesData(year, startMonth, endMonth) {
-    const vendorColExpr = getCommissionVendorColumnExpr('L', 'sales');
+    const vendorColExpr = getCommissionActualVendorColumnExprForYear(year, 'L');
     const vendorMap = new Map();
 
     try {
@@ -617,24 +620,24 @@ async function buildMonthlyTargetsAndCommissions(vendorData, condorDataMap, year
                 commission = 0;
                 paidOverride = 0;
                 status = 'not_commissioned';
-            } else {
-                const paymentSnapshot = resolvePaymentSnapshotMonth({
-                    paymentDetail: paymentMonths[month] || null,
-                    liveMetrics: {
-                        actual: totalSales,
-                        target,
-                        commission,
-                    },
-                    isExcluded: false,
-                });
+            }
 
-                if (paymentSnapshot.isPaymentSnapshot) {
-                    target = paymentSnapshot.target;
-                    totalSales = paymentSnapshot.actual;
-                    commission = paymentSnapshot.commission;
-                    paidOverride = toNumber(paymentMonths[month]?.importePagado);
-                    status = 'payment_recorded';
-                }
+            const paymentSnapshot = resolvePaymentSnapshotMonth({
+                paymentDetail: paymentMonths[month] || null,
+                liveMetrics: {
+                    actual: totalSales,
+                    target,
+                    commission,
+                },
+                isExcluded: false,
+            });
+
+            if (paymentSnapshot.isPaymentSnapshot) {
+                target = paymentSnapshot.target;
+                totalSales = paymentSnapshot.actual;
+                commission = paymentSnapshot.commission;
+                paidOverride = toNumber(paymentMonths[month]?.importePagado);
+                status = 'payment_recorded';
             }
 
             setNestedMonthValue(targetMap, normalized, month, {

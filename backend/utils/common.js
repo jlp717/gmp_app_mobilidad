@@ -105,6 +105,24 @@ function getCommissionVendorColumnExpr(tableAlias = 'L', purpose = 'sales', { fo
     return `${prefix}${column}`;
 }
 
+function getCommissionActualVendorColumnExprForYear(selectedYear, tableAlias = 'L') {
+    const safeYear = parseInt(selectedYear, 10);
+    const salesExpr = getCommissionVendorColumnExpr(tableAlias, 'sales');
+    const objectiveExpr = getCommissionVendorColumnExpr(tableAlias, 'objective');
+    if (!safeYear || salesExpr === objectiveExpr) return salesExpr;
+
+    const prefix = tableAlias ? `${tableAlias}.` : '';
+    return `CASE WHEN ${prefix}LCAADC = ${safeYear} AND ${prefix}LCMMDC >= ${TRANSITION_MONTH} THEN ${salesExpr} ELSE ${objectiveExpr} END`;
+}
+
+function getCommissionActualVendorColumnExprForMonth(year, month, tableAlias = 'L') {
+    const safeMonth = parseInt(month, 10);
+    const salesExpr = getCommissionVendorColumnExpr(tableAlias, 'sales');
+    const objectiveExpr = getCommissionVendorColumnExpr(tableAlias, 'objective');
+    if (!safeMonth || salesExpr === objectiveExpr) return salesExpr;
+    return safeMonth >= TRANSITION_MONTH ? salesExpr : objectiveExpr;
+}
+
 // =============================================================================
 // SNAPSHOT UNTIL MONTH — controls which months use the immutable sales snapshot
 // =============================================================================
@@ -559,6 +577,8 @@ module.exports = {
     getVendorColumn,
     getVendorColumnExpr,
     getCommissionVendorColumnExpr,
+    getCommissionActualVendorColumnExprForYear,
+    getCommissionActualVendorColumnExprForMonth,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
     LAC_TIPOVENTA_FILTER,

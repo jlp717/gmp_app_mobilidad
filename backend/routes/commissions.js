@@ -5,7 +5,7 @@ const { cachedQuery } = require('../services/query-optimizer');
 const logger = require('../middleware/logger');
 const { auditDataAccess } = require('../middleware/audit');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
-const { getCurrentDate, LACLAE_SALES_FILTER, SNAPSHOT_UNTIL_MONTH, getCommissionVendorColumnExpr, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL, handleRouteError } = require('../utils/common');
+const { getCurrentDate, LACLAE_SALES_FILTER, SNAPSHOT_UNTIL_MONTH, getCommissionVendorColumnExpr, getCommissionActualVendorColumnExprForYear, getCommissionActualVendorColumnExprForMonth, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL, handleRouteError } = require('../utils/common');
 const {
     resolveCommissionTarget,
     resolveHistoricalCommissionMonth,
@@ -78,7 +78,7 @@ const DEFAULT_CONFIG_2026 = {
         { min: 110.01, max: 999.99, pct: 2.0 }
     ]
 };
-const COMMISSIONS_CACHE_VERSION = 'v20260604-paid-month-target-fix';
+const COMMISSIONS_CACHE_VERSION = 'v20260604-monthly-paid-lock';
 
 /**
  * Merge monthly commission rows for scoped team ALL (72+73+81+83).
@@ -299,13 +299,7 @@ async function initCommissionTables() {
 // =============================================================================
 
 function getCommissionVendorColumnExprForYear(selectedYear, tableAlias = 'L') {
-    const safeYear = parseInt(selectedYear, 10);
-    const salesExpr = getCommissionVendorColumnExpr(tableAlias, 'sales');
-    const objectiveExpr = getCommissionVendorColumnExpr(tableAlias, 'objective');
-    if (!safeYear || salesExpr === objectiveExpr) return salesExpr;
-
-    const prefix = tableAlias ? `${tableAlias}.` : '';
-    return `CASE WHEN ${prefix}LCAADC = ${safeYear} THEN ${salesExpr} ELSE ${objectiveExpr} END`;
+    return getCommissionActualVendorColumnExprForYear(selectedYear, tableAlias);
 }
 
 function getCodeVariants(code) {
@@ -575,7 +569,9 @@ async function getVendorSalesSnapshot(vendorCodes, year) {
  * Reduces 145+ queries → 5 queries for ALL mode.
  */
 async function batchFetchAllVendorData(vendorCodes, year) {
-    // Use CASE expression to handle LCCDVD→R1_T8CDVD transition per-row (Jan/Feb 2026 use LCCDVD)
+    // Use CASE expression to handle the commission sales transition per row:
+    // current-year Jan/Feb follow the R1 assignment snapshot logic, current-year
+    // Mar+ follows the LCC seller logic, and previous-year baselines use R1.
     const vendorColExpr = getCommissionVendorColumnExprForYear(year, 'L');
     const safeCodes = vendorCodes.map(c => c.replace(/[^a-zA-Z0-9]/g, '')).filter(Boolean);
     const placeholders = safeCodes.map(() => '?').join(',');
@@ -593,8 +589,8 @@ async function batchFetchAllVendorData(vendorCodes, year) {
     const [allSalesRows, allBSalesRows, allPaymentsRows, allFixedTargets, allVendorNames] = await Promise.all([
         // 1. LACLAE sales for ALL vendors (current + prev year)
         // NOTE: GROUP BY must use the same month-based CASE expression as SELECT.
-        // Jan/Feb use LCCDVD and Mar+ use R1_T8CDVD for both current sales and
-        // prior-year commission baselines.
+        // Current-year Jan/Feb use R1_T8CDVD, current-year Mar+ use LCCDVD,
+        // and prior-year commission baselines use R1_T8CDVD.
         queryWithParams(`
             SELECT TRIM(${vendorColExpr}) as VENDOR_CODE, L.LCAADC as YEAR, LCMMDC as MONTH, SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L
@@ -1122,29 +1118,27 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             logger.warn(`[COMMISSIONS] No snapshot data found for month ${m}/2026 — using live calc (table may be empty for this month).`);
         }
 
-        if (!snapshotApplied) {
-            const paymentDetail = payments?.details?.[m] || payments?.details?.[String(m)] || null;
-            const paymentSnapshot = resolvePaymentSnapshotMonth({
-                paymentDetail,
-                liveMetrics: {
-                    actual: currentSales,
-                    target,
-                    commission: commValue,
-                },
-                isExcluded,
-            });
+        const paymentDetail = payments?.details?.[m] || payments?.details?.[String(m)] || null;
+        const paymentSnapshot = resolvePaymentSnapshotMonth({
+            paymentDetail,
+            liveMetrics: {
+                actual: currentSales,
+                target,
+                commission: commValue,
+            },
+            isExcluded,
+        });
 
-            if (paymentSnapshot.isPaymentSnapshot) {
-                currentSales = paymentSnapshot.actual;
-                target = paymentSnapshot.target;
-                commValue = paymentSnapshot.commission;
-                snapshotApplied = true;
-                snapshotSource = paymentSnapshot.snapshotSource;
-                targetSource = 'payment_snapshot';
-                currentLacSales = Math.max(currentSales - currentBSales, 0);
-                result = calculateCommission(currentSales, target, config);
-                logger.debug(`[COMMISSIONS] PAYMENT SNAPSHOT month ${m}/${selectedYear} for ${vendedorCode}: venta=${currentSales.toFixed(2)} obj=${target.toFixed(2)} comm=${commValue.toFixed(2)}`);
-            }
+        if (paymentSnapshot.isPaymentSnapshot) {
+            currentSales = paymentSnapshot.actual;
+            target = paymentSnapshot.target;
+            commValue = paymentSnapshot.commission;
+            snapshotApplied = true;
+            snapshotSource = paymentSnapshot.snapshotSource;
+            targetSource = 'payment_snapshot';
+            currentLacSales = Math.max(currentSales - currentBSales, 0);
+            result = calculateCommission(currentSales, target, config);
+            logger.debug(`[COMMISSIONS] PAYMENT SNAPSHOT month ${m}/${selectedYear} for ${vendedorCode}: venta=${currentSales.toFixed(2)} obj=${target.toFixed(2)} comm=${commValue.toFixed(2)}`);
         }
 
         // Add to totals
@@ -1964,7 +1958,7 @@ router.post('/pay', verifyToken, async (req, res) => {
         // Fallback only if the full summary path could not provide sales.
         if (safeMonthNum > 0 && ventaComision === 0) {
             try {
-                const salesVendorExpr = getCommissionVendorColumnExpr('L', 'sales');
+                const salesVendorExpr = getCommissionActualVendorColumnExprForMonth(safeYearNum, safeMonthNum, 'L');
                 const codeVariants = getCodeVariants(vendedorCode);
                 const vendorPlaceholders = codeVariants.map(() => '?').join(',');
                 const vendedorFilter = codeVariants.length > 0
