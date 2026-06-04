@@ -78,7 +78,7 @@ const DEFAULT_CONFIG_2026 = {
         { min: 110.01, max: 999.99, pct: 2.0 }
     ]
 };
-const COMMISSIONS_CACHE_VERSION = 'v20260604-monthly-paid-lock';
+const COMMISSIONS_CACHE_VERSION = 'v20260604-stable-commission-sources';
 
 /**
  * Merge monthly commission rows for scoped team ALL (72+73+81+83).
@@ -569,9 +569,9 @@ async function getVendorSalesSnapshot(vendorCodes, year) {
  * Reduces 145+ queries → 5 queries for ALL mode.
  */
 async function batchFetchAllVendorData(vendorCodes, year) {
-    // Use CASE expression to handle the commission sales transition per row:
-    // current-year Jan/Feb follow the R1 assignment snapshot logic, current-year
-    // Mar+ follows the LCC seller logic, and previous-year baselines use R1.
+    // Use CASE expression to handle commission sources per row:
+    // current-year sales use LCC seller logic; previous-year baselines use the
+    // historical transition (Jan/Feb LCC, Mar+ R1 assignment).
     const vendorColExpr = getCommissionVendorColumnExprForYear(year, 'L');
     const safeCodes = vendorCodes.map(c => c.replace(/[^a-zA-Z0-9]/g, '')).filter(Boolean);
     const placeholders = safeCodes.map(() => '?').join(',');
@@ -589,8 +589,8 @@ async function batchFetchAllVendorData(vendorCodes, year) {
     const [allSalesRows, allBSalesRows, allPaymentsRows, allFixedTargets, allVendorNames] = await Promise.all([
         // 1. LACLAE sales for ALL vendors (current + prev year)
         // NOTE: GROUP BY must use the same month-based CASE expression as SELECT.
-        // Current-year Jan/Feb use R1_T8CDVD, current-year Mar+ use LCCDVD,
-        // and prior-year commission baselines use R1_T8CDVD.
+        // Current-year sales use LCCDVD. Prior-year commission baselines use
+        // LCCDVD for Jan/Feb and R1_T8CDVD from March onward.
         queryWithParams(`
             SELECT TRIM(${vendorColExpr}) as VENDOR_CODE, L.LCAADC as YEAR, LCMMDC as MONTH, SUM(L.LCIMVT) as SALES
             FROM DSED.LACLAE L

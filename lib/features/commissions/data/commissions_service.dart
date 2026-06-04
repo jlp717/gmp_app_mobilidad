@@ -15,7 +15,7 @@ class CommissionsService {
     try {
       // Bust cache when the commission sales payload changes.
       final cacheKey = [
-        'commissions_v12_monthly_paid_lock',
+        'commissions_v13_stable_sources',
         vendedorCode,
         year,
       ].join('_');
@@ -123,6 +123,11 @@ class CommissionsService {
 
       // Force cache clear for this vendor AND the ALL view after payment
       await Future.wait([
+        CacheService.invalidate(
+          'commissions_v13_stable_sources_${vendedorCode}_$year',
+        ),
+        CacheService.invalidate('commissions_v13_stable_sources_ALL_$year'),
+        CacheService.invalidateByPrefix('commissions_v13_stable_sources_'),
         CacheService.invalidate(
           'commissions_v12_monthly_paid_lock_${vendedorCode}_$year',
         ),

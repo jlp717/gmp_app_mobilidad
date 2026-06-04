@@ -46,7 +46,7 @@ describe('vendor column transition filter', () => {
         expect(getCommissionVendorColumnExpr('L', 'objective')).toBe('L.R1_T8CDVD');
     });
 
-    test('commission actual sales use R1 for Jan/Feb and LCC from March', () => {
+    test('commission sales use LCC current year and transitioned prior-year baseline', () => {
         delete process.env.COMMISSION_SALES_VENDOR_COLUMN;
         delete process.env.COMMISSION_OBJECTIVE_VENDOR_COLUMN;
         jest.resetModules();
@@ -57,8 +57,8 @@ describe('vendor column transition filter', () => {
         } = require('../utils/common');
 
         expect(getCommissionActualVendorColumnExprForYear(2026, 'L'))
-            .toBe('CASE WHEN L.LCAADC = 2026 AND L.LCMMDC >= 3 THEN L.LCCDVD ELSE L.R1_T8CDVD END');
-        expect(getCommissionActualVendorColumnExprForMonth(2026, 2, 'L')).toBe('L.R1_T8CDVD');
+            .toBe('CASE WHEN L.LCAADC = 2026 THEN L.LCCDVD WHEN L.LCMMDC < 3 THEN L.LCCDVD ELSE L.R1_T8CDVD END');
+        expect(getCommissionActualVendorColumnExprForMonth(2026, 2, 'L')).toBe('L.LCCDVD');
         expect(getCommissionActualVendorColumnExprForMonth(2026, 3, 'L')).toBe('L.LCCDVD');
     });
 

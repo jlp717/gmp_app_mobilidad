@@ -112,15 +112,11 @@ function getCommissionActualVendorColumnExprForYear(selectedYear, tableAlias = '
     if (!safeYear || salesExpr === objectiveExpr) return salesExpr;
 
     const prefix = tableAlias ? `${tableAlias}.` : '';
-    return `CASE WHEN ${prefix}LCAADC = ${safeYear} AND ${prefix}LCMMDC >= ${TRANSITION_MONTH} THEN ${salesExpr} ELSE ${objectiveExpr} END`;
+    return `CASE WHEN ${prefix}LCAADC = ${safeYear} THEN ${salesExpr} WHEN ${prefix}LCMMDC < ${TRANSITION_MONTH} THEN ${salesExpr} ELSE ${objectiveExpr} END`;
 }
 
 function getCommissionActualVendorColumnExprForMonth(year, month, tableAlias = 'L') {
-    const safeMonth = parseInt(month, 10);
-    const salesExpr = getCommissionVendorColumnExpr(tableAlias, 'sales');
-    const objectiveExpr = getCommissionVendorColumnExpr(tableAlias, 'objective');
-    if (!safeMonth || salesExpr === objectiveExpr) return salesExpr;
-    return safeMonth >= TRANSITION_MONTH ? salesExpr : objectiveExpr;
+    return getCommissionVendorColumnExpr(tableAlias, 'sales');
 }
 
 // =============================================================================
