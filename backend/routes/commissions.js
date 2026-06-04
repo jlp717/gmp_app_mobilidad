@@ -78,7 +78,7 @@ const DEFAULT_CONFIG_2026 = {
         { min: 110.01, max: 999.99, pct: 2.0 }
     ]
 };
-const COMMISSIONS_CACHE_VERSION = 'v20260604-stable-commission-sources';
+const COMMISSIONS_CACHE_VERSION = 'v20260604-final-commission-sources';
 
 /**
  * Merge monthly commission rows for scoped team ALL (72+73+81+83).

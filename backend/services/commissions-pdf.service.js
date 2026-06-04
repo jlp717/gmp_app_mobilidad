@@ -454,7 +454,7 @@ async function getPreviousYearLacSales(year, startMonth, endMonth, vendorCodes) 
     if (codeParams.length === 0) return map;
 
     try {
-        const vendorColExpr = getCommissionVendorColumnExpr('L', 'objective');
+        const vendorColExpr = getCommissionActualVendorColumnExprForYear(year, 'L');
         const codePlaceholders = codeParams.map(() => '?').join(',');
         const rows = await queryWithParams(`
             SELECT

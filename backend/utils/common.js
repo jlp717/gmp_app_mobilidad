@@ -14,21 +14,15 @@ const MIN_YEAR = getCurrentYear() - 2; // Dynamic: always 3 years of data
 //   R1_T8CDVD = "Quién tiene el cliente asignado" (nueva lógica 2026)
 //
 // Set via environment variable. Default: R1_T8CDVD for route/objective views.
-// Commissions have separate purpose-specific columns below.
+// Commissions have fixed source columns below so figures do not drift by env.
 //
 // TRANSITION: From March 2026, use R1_T8CDVD. Jan/Feb 2026 and prior
 // always use LCCDVD so historical data remains unchanged.
 const VENDOR_COLUMN = process.env.VENDOR_COLUMN || 'R1_T8CDVD';
 const TRANSITION_YEAR = 2026;
 const TRANSITION_MONTH = 3; // March 2026: new logic starts here
-const COMMISSION_SALES_VENDOR_COLUMN = normalizeVendorColumn(
-    process.env.COMMISSION_SALES_VENDOR_COLUMN,
-    'LCCDVD',
-);
-const COMMISSION_OBJECTIVE_VENDOR_COLUMN = normalizeVendorColumn(
-    process.env.COMMISSION_OBJECTIVE_VENDOR_COLUMN,
-    'R1_T8CDVD',
-);
+const COMMISSION_SALES_VENDOR_COLUMN = 'LCCDVD';
+const COMMISSION_OBJECTIVE_VENDOR_COLUMN = 'R1_T8CDVD';
 
 // Scoped commercial visibility. These users keep their normal commercial role,
 // but the app receives the complete vendor list they are allowed to inspect.
@@ -77,21 +71,14 @@ function getVendorColumnExpr(tableAlias = 'L', { forLACTable = false } = {}) {
     const prefix = tableAlias ? `${tableAlias}.` : '';
     if (VENDOR_COLUMN === 'LCCDVD' || forLACTable) return `${prefix}LCCDVD`;
     // Month-based transition: Jan/Feb (any year) use LCCDVD, Mar+ (any year) use R1_T8CDVD.
-    // This correctly handles both current-year actual sales AND prior-year objective baseline:
-    //   - 2026 Jan/Feb actual sales: LCCDVD (snapshot transition period)
-    //   - 2026 Mar+ actual sales: R1_T8CDVD (new criterion)
-    //   - 2025 Jan/Feb prevSales baseline: LCCDVD (matches the Jan/Feb 2026 objective criterion)
-    //   - 2025 Mar+ prevSales baseline: R1_T8CDVD (matches the Mar+ 2026 objective criterion)
+    // General views use the transition column. Commission views use their own
+    // fixed helpers below because current-year sales and prior-year objectives
+    // have different source rules.
     return `CASE WHEN ${prefix}LCMMDC < ${TRANSITION_MONTH} THEN ${prefix}LCCDVD ELSE ${prefix}${VENDOR_COLUMN} END`;
 }
 
 logger.info(`[CONFIG] VENDOR_COLUMN = ${VENDOR_COLUMN} (transition: ${TRANSITION_MONTH}/${TRANSITION_YEAR})`);
 logger.info(`[CONFIG] COMMISSION_COLUMNS sales=${COMMISSION_SALES_VENDOR_COLUMN} objective=${COMMISSION_OBJECTIVE_VENDOR_COLUMN}`);
-
-function normalizeVendorColumn(value, fallback) {
-    const raw = String(value || fallback || '').trim().toUpperCase();
-    return raw === 'LCCDVD' ? 'LCCDVD' : 'R1_T8CDVD';
-}
 
 function getCommissionVendorColumnExpr(tableAlias = 'L', purpose = 'sales', { forLACTable = false } = {}) {
     const prefix = tableAlias ? `${tableAlias}.` : '';
@@ -107,12 +94,10 @@ function getCommissionVendorColumnExpr(tableAlias = 'L', purpose = 'sales', { fo
 
 function getCommissionActualVendorColumnExprForYear(selectedYear, tableAlias = 'L') {
     const safeYear = parseInt(selectedYear, 10);
-    const salesExpr = getCommissionVendorColumnExpr(tableAlias, 'sales');
-    const objectiveExpr = getCommissionVendorColumnExpr(tableAlias, 'objective');
-    if (!safeYear || salesExpr === objectiveExpr) return salesExpr;
+    if (!safeYear) return getCommissionVendorColumnExpr(tableAlias, 'sales');
 
     const prefix = tableAlias ? `${tableAlias}.` : '';
-    return `CASE WHEN ${prefix}LCAADC = ${safeYear} THEN ${salesExpr} WHEN ${prefix}LCMMDC < ${TRANSITION_MONTH} THEN ${salesExpr} ELSE ${objectiveExpr} END`;
+    return `CASE WHEN ${prefix}LCAADC = ${safeYear} THEN ${prefix}${COMMISSION_SALES_VENDOR_COLUMN} WHEN ${prefix}LCMMDC < ${TRANSITION_MONTH} THEN ${prefix}${COMMISSION_SALES_VENDOR_COLUMN} ELSE ${prefix}${COMMISSION_OBJECTIVE_VENDOR_COLUMN} END`;
 }
 
 function getCommissionActualVendorColumnExprForMonth(year, month, tableAlias = 'L') {

@@ -62,14 +62,14 @@ describe('vendor column transition filter', () => {
         expect(getCommissionActualVendorColumnExprForMonth(2026, 3, 'L')).toBe('L.LCCDVD');
     });
 
-    test('commission columns are configurable', () => {
+    test('commission columns are fixed for stability even when env vars are set', () => {
         process.env.COMMISSION_SALES_VENDOR_COLUMN = 'R1_T8CDVD';
         process.env.COMMISSION_OBJECTIVE_VENDOR_COLUMN = 'LCCDVD';
         jest.resetModules();
 
         const { getCommissionVendorColumnExpr } = require('../utils/common');
 
-        expect(getCommissionVendorColumnExpr('L', 'sales')).toBe('L.R1_T8CDVD');
-        expect(getCommissionVendorColumnExpr('L', 'objective')).toBe('L.LCCDVD');
+        expect(getCommissionVendorColumnExpr('L', 'sales')).toBe('L.LCCDVD');
+        expect(getCommissionVendorColumnExpr('L', 'objective')).toBe('L.R1_T8CDVD');
     });
 });
