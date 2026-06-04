@@ -13,8 +13,12 @@ class CommissionsService {
     bool forceRefresh = false,
   }) async {
     try {
-      // Bust cache when commercial 80 accumulated-team commission logic changes.
-      final cacheKey = 'commissions_v9_team80_${vendedorCode}_$year';
+      // Bust cache when the commission sales payload changes.
+      final cacheKey = [
+        'commissions_v10_sales_breakdown',
+        vendedorCode,
+        year,
+      ].join('_');
 
       final result = await OfflineAwareApi.get(
         '/commissions/summary',
@@ -117,21 +121,28 @@ class CommissionsService {
       );
 
       // Force cache clear for this vendor AND the ALL view after payment
-      CacheService.invalidate('commissions_v9_team80_${vendedorCode}_$year');
-      CacheService.invalidate('commissions_v9_team80_ALL_$year');
-      CacheService.invalidateByPrefix('commissions_v9_team80_');
-      CacheService.invalidate('commissions_v8_team80_${vendedorCode}_$year');
-      CacheService.invalidate('commissions_v8_team80_ALL_$year');
-      CacheService.invalidateByPrefix('commissions_v8_team80_');
-      CacheService.invalidate('commissions_v7_team80_${vendedorCode}_$year');
-      CacheService.invalidate('commissions_v7_team80_ALL_$year');
-      CacheService.invalidateByPrefix('commissions_v7_team80_');
-      CacheService.invalidateByPrefix('commissions_team_');
-      CacheService.invalidate('commissions_v5_r1_${vendedorCode}_$year');
-      CacheService.invalidate('commissions_v4_r1_${vendedorCode}_$year');
-      CacheService.invalidate('commissions_v3_${vendedorCode}_$year');
-      CacheService.invalidate('commissions_v2_${vendedorCode}_$year');
-      CacheService.invalidateByPrefix('comm:summary:ALL');
+      await Future.wait([
+        CacheService.invalidate(
+          'commissions_v10_sales_breakdown_${vendedorCode}_$year',
+        ),
+        CacheService.invalidate('commissions_v10_sales_breakdown_ALL_$year'),
+        CacheService.invalidateByPrefix('commissions_v10_sales_breakdown_'),
+        CacheService.invalidate('commissions_v9_team80_${vendedorCode}_$year'),
+        CacheService.invalidate('commissions_v9_team80_ALL_$year'),
+        CacheService.invalidateByPrefix('commissions_v9_team80_'),
+        CacheService.invalidate('commissions_v8_team80_${vendedorCode}_$year'),
+        CacheService.invalidate('commissions_v8_team80_ALL_$year'),
+        CacheService.invalidateByPrefix('commissions_v8_team80_'),
+        CacheService.invalidate('commissions_v7_team80_${vendedorCode}_$year'),
+        CacheService.invalidate('commissions_v7_team80_ALL_$year'),
+        CacheService.invalidateByPrefix('commissions_v7_team80_'),
+        CacheService.invalidateByPrefix('commissions_team_'),
+        CacheService.invalidate('commissions_v5_r1_${vendedorCode}_$year'),
+        CacheService.invalidate('commissions_v4_r1_${vendedorCode}_$year'),
+        CacheService.invalidate('commissions_v3_${vendedorCode}_$year'),
+        CacheService.invalidate('commissions_v2_${vendedorCode}_$year'),
+        CacheService.invalidateByPrefix('comm:summary:ALL'),
+      ]);
 
       return response;
     } catch (e) {

@@ -997,6 +997,12 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
       final target = (m['target'] as num?)?.toDouble() ?? 0;
       final ctx = (m['complianceCtx'] as Map?) ?? {};
       final actual = (m['actual'] as num?)?.toDouble() ?? 0;
+      final bSales = (m['bSales'] as num?)?.toDouble() ?? 0;
+      final lacSalesRaw = (m['lacSales'] as num?)?.toDouble();
+      final lacSalesFallback = actual - bSales;
+      final lacSales =
+          lacSalesRaw ?? (lacSalesFallback > 0 ? lacSalesFallback : 0);
+      final totalSales = (m['totalSales'] as num?)?.toDouble() ?? actual;
       final isFuture = (m['isFuture'] as bool?) ?? false;
 
       final pct = (ctx['pct'] as num?)?.toDouble() ?? 0;
@@ -1077,7 +1083,14 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                 style: TextStyle(
                     color: Colors.white.withValues(alpha: textOpacity)))),
             // VENTA REAL o INCREMENTO EQUIPO (líder)
-            DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(actual),
+            DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(lacSales),
+                style: TextStyle(color: color, fontWeight: FontWeight.bold))),
+            DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(bSales),
+                style: TextStyle(
+                    color: bSales > 0 ? AppTheme.neonBlue : Colors.grey,
+                    fontWeight:
+                        bSales > 0 ? FontWeight.bold : FontWeight.normal))),
+            DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(totalSales),
                 style: TextStyle(color: color, fontWeight: FontWeight.bold))),
             // ESTADO MES
             DataCell(
@@ -1363,7 +1376,9 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                 style:
                     TextStyle(color: textColor, fontWeight: FontWeight.bold))),
             const DataCell(SizedBox()), // OBJ. MES
-            const DataCell(SizedBox()), // VENTA
+            const DataCell(SizedBox()), // VENTA LAC
+            const DataCell(SizedBox()), // VENTA B
+            const DataCell(SizedBox()), // VENTA TOTAL
             const DataCell(SizedBox()), // ESTADO
             const DataCell(SizedBox()), // %
             DataCell(
@@ -1932,7 +1947,19 @@ class _CommissionsPageState extends ConsumerState<CommissionsPage> {
                                                   color:
                                                       AppTheme.textSecondary))),
                                       const DataColumn(
-                                          label: Text('VENTA',
+                                          label: Text('VENTA LAC',
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  color:
+                                                      AppTheme.textSecondary))),
+                                      const DataColumn(
+                                          label: Text('VENTA B',
+                                              style: TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  color:
+                                                      AppTheme.textSecondary))),
+                                      const DataColumn(
+                                          label: Text('VENTA TOTAL',
                                               style: TextStyle(
                                                   fontWeight: FontWeight.bold,
                                                   color:
@@ -2678,7 +2705,19 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
                     color: AppTheme.textSecondary,
                     fontSize: 10))),
         DataColumn(
-            label: Text('VENTA',
+            label: Text('VENTA LAC',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textSecondary,
+                    fontSize: 10))),
+        DataColumn(
+            label: Text('VENTA B',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.textSecondary,
+                    fontSize: 10))),
+        DataColumn(
+            label: Text('VENTA TOTAL',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: AppTheme.textSecondary,
@@ -2764,6 +2803,12 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
     final monthNum = (m['month'] as num?)?.toInt() ?? 0;
     final target = (m['target'] as num?)?.toDouble() ?? 0;
     final actual = (m['actual'] as num?)?.toDouble() ?? 0;
+    final bSales = (m['bSales'] as num?)?.toDouble() ?? 0;
+    final lacSalesRaw = (m['lacSales'] as num?)?.toDouble();
+    final lacSalesFallback = actual - bSales;
+    final lacSales =
+        lacSalesRaw ?? (lacSalesFallback > 0 ? lacSalesFallback : 0);
+    final totalSales = (m['totalSales'] as num?)?.toDouble() ?? actual;
     final isFuture = (m['isFuture'] as bool?) ?? false;
 
     final ctx = m['complianceCtx'] ?? {};
@@ -2832,7 +2877,15 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
             style: TextStyle(
                 color: Colors.white.withValues(alpha: textOpacity),
                 fontSize: 10))),
-        DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(actual),
+        DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(lacSales),
+            style: TextStyle(
+                color: color, fontWeight: FontWeight.bold, fontSize: 10))),
+        DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(bSales),
+            style: TextStyle(
+                color: bSales > 0 ? AppTheme.neonBlue : Colors.grey,
+                fontWeight: bSales > 0 ? FontWeight.bold : FontWeight.normal,
+                fontSize: 10))),
+        DataCell(Text(isFuture ? '-' : CurrencyFormatter.format(totalSales),
             style: TextStyle(
                 color: color, fontWeight: FontWeight.bold, fontSize: 10))),
         DataCell(
@@ -3064,6 +3117,8 @@ class _VendorExpandableCardState extends State<_VendorExpandableCard> {
             ],
           ),
         ),
+        const DataCell(SizedBox()),
+        const DataCell(SizedBox()),
         const DataCell(SizedBox()),
         const DataCell(SizedBox()),
         const DataCell(SizedBox()),

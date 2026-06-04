@@ -74,7 +74,7 @@ const DEFAULT_CONFIG_2026 = {
         { min: 110.01, max: 999.99, pct: 2.0 }
     ]
 };
-const COMMISSIONS_CACHE_VERSION = 'v20260603-team80-aggregate-ly10';
+const COMMISSIONS_CACHE_VERSION = 'v20260604-commission-sales-breakdown';
 
 /**
  * Merge monthly commission rows for scoped team ALL (72+73+81+83).
@@ -86,6 +86,8 @@ function aggregateScopedTeamMonths(vendorResults, selectedYear, config) {
     for (let m = 1; m <= 12; m++) {
         let target = 0;
         let actual = 0;
+        let lacSales = 0;
+        let bSales = 0;
         let commission = 0;
         let provisionalCommission = 0;
         let workingDays = 0;
@@ -96,6 +98,8 @@ function aggregateScopedTeamMonths(vendorResults, selectedYear, config) {
             if (!md) return;
             target += md.target || 0;
             actual += md.actual || 0;
+            bSales += md.bSales || 0;
+            lacSales += md.lacSales ?? Math.max((md.actual || 0) - (md.bSales || 0), 0);
             commission += md.complianceCtx?.commission || 0;
             provisionalCommission += md.dailyComplianceCtx?.provisionalCommission
                 ?? md.complianceCtx?.commission
@@ -126,6 +130,9 @@ function aggregateScopedTeamMonths(vendorResults, selectedYear, config) {
             month: m,
             target,
             actual,
+            lacSales,
+            bSales,
+            totalSales: actual,
             workingDays,
             daysPassed,
             proRatedTarget,
@@ -1027,10 +1034,12 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         // Base sales from LACLAE
         let prevSales = prevRow ? parseFloat(prevRow.SALES) : 0;
         prevSales += (bSalesPrevYear[m] || 0); // Include prev-year B-channel sales in objective baseline
-        let currentSales = currRow ? parseFloat(currRow.SALES) : 0;
+        let currentLacSales = currRow ? parseFloat(currRow.SALES) : 0;
+        let currentSales = currentLacSales;
 
         // ADD B-SALES to current sales.
-        currentSales += (bSalesCurrYear[m] || 0);
+        const currentBSales = bSalesCurrYear[m] || 0;
+        currentSales += currentBSales;
 
         // INHERITED OBJECTIVES: Use inherited sales when vendor has no own sales for this month
         if (prevSales === 0 && inheritedMonthlySales[m]) {
@@ -1097,6 +1106,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
                 target = historicalMonth.target;
                 commValue = historicalMonth.commission;
                 snapshotSource = historicalMonth.snapshotSource;
+                currentLacSales = Math.max(currentSales - currentBSales, 0);
                 logger.debug(`[COMMISSIONS] SNAPSHOT month ${m}/2026 for ${vendedorCode}: total=${snap.ventasTotales.toFixed(2)} obj=${snap.objetivo.toFixed(2)} comm=${snap.comisionGenerada.toFixed(2)} (live was ${result.commission.toFixed(2)})`);
             } else {
                 // Month has snapshot data globally but this vendor has NO row →
@@ -1106,6 +1116,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
                 target = historicalMonth.target;
                 commValue = historicalMonth.commission;
                 snapshotSource = historicalMonth.snapshotSource;
+                currentLacSales = Math.max(currentSales - currentBSales, 0);
                 logger.debug(`[COMMISSIONS] SNAPSHOT month ${m}/2026: vendor ${vendedorCode} not in snapshot → commission forced to 0`);
             }
             result = calculateCommission(currentSales, target, config);
@@ -1164,6 +1175,9 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             prevSales: prevSales,
             target: target,
             actual: currentSales,
+            lacSales: currentLacSales,
+            bSales: currentBSales,
+            totalSales: currentSales,
             workingDays: workingDays,
             daysPassed: daysPassed,
             proRatedTarget: proRatedTarget,
@@ -1272,6 +1286,8 @@ function buildAggregatedYearResult(results, config) {
     for (let month = 1; month <= 12; month++) {
         let target = 0;
         let actual = 0;
+        let lacSales = 0;
+        let bSales = 0;
         let commission = 0;
 
         sortedResults.forEach(result => {
@@ -1279,6 +1295,8 @@ function buildAggregatedYearResult(results, config) {
             if (monthData) {
                 target += monthData.target;
                 actual += monthData.actual;
+                bSales += monthData.bSales || 0;
+                lacSales += monthData.lacSales ?? Math.max((monthData.actual || 0) - (monthData.bSales || 0), 0);
                 commission += (monthData.complianceCtx?.commission || 0);
             }
         });
@@ -1287,6 +1305,9 @@ function buildAggregatedYearResult(results, config) {
             month,
             target,
             actual,
+            lacSales,
+            bSales,
+            totalSales: actual,
             complianceCtx: { commission }
         });
     }
