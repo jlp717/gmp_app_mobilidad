@@ -6,7 +6,11 @@ const logger = require('../middleware/logger');
 const { auditDataAccess } = require('../middleware/audit');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
 const { getCurrentDate, LACLAE_SALES_FILTER, SNAPSHOT_UNTIL_MONTH, getCommissionVendorColumnExpr, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL, handleRouteError } = require('../utils/common');
-const { resolveHistoricalCommissionMonth } = require('../utils/commission-snapshot');
+const {
+    resolveCommissionTarget,
+    resolveHistoricalCommissionMonth,
+    resolvePaymentSnapshotMonth,
+} = require('../utils/commission-snapshot');
 const { verifyToken } = require('../middleware/auth');
 const { redisCache, TTL, invalidateCachePattern } = require('../services/redis-cache');
 const {
@@ -74,7 +78,7 @@ const DEFAULT_CONFIG_2026 = {
         { min: 110.01, max: 999.99, pct: 2.0 }
     ]
 };
-const COMMISSIONS_CACHE_VERSION = 'v20260604-commission-sales-breakdown';
+const COMMISSIONS_CACHE_VERSION = 'v20260604-paid-month-target-fix';
 
 /**
  * Merge monthly commission rows for scoped team ALL (72+73+81+83).
@@ -440,6 +444,7 @@ async function getVendorPayments(vendorCode, year) {
                     payments.details[mes] = {
                         totalPaid: 0,
                         comisionGenerada: 0,
+                        comisionGeneradaSnapshot: 0,
                         ventaComision: 0,
                         objetivoReal: 0,
                         observaciones: [],
@@ -454,6 +459,7 @@ async function getVendorPayments(vendorCode, year) {
                 if (!payments.details[mes].ultimaFecha || (rowDate && rowDate >= new Date(payments.details[mes].ultimaFecha || 0))) {
                     payments.details[mes].ventaComision = parseFloat(r.VENTAS_REAL) || 0;
                     payments.details[mes].objetivoReal = parseFloat(r.OBJETIVO_MES) || 0;
+                    payments.details[mes].comisionGeneradaSnapshot = parseFloat(r.COMISION_GENERADA) || 0;
                     payments.details[mes].ultimaFecha = r.FECHA_PAGO;
                 }
             }
@@ -685,6 +691,7 @@ async function batchFetchAllVendorData(vendorCodes, year) {
                 payments.details[m] = {
                     totalPaid: 0,
                     comisionGenerada: 0,
+                    comisionGeneradaSnapshot: 0,
                     observaciones: [],
                     ventaComision: 0,
                     objetivoReal: 0,
@@ -698,6 +705,7 @@ async function batchFetchAllVendorData(vendorCodes, year) {
             if (!payments.details[m].ultimaFecha || (rowDate && rowDate >= new Date(payments.details[m].ultimaFecha || 0))) {
                 payments.details[m].ventaComision = parseFloat(r.VENTAS_REAL) || 0;
                 payments.details[m].objetivoReal = parseFloat(r.OBJETIVO_MES) || 0;
+                payments.details[m].comisionGeneradaSnapshot = parseFloat(r.COMISION_GENERADA) || 0;
                 payments.details[m].ultimaFecha = r.FECHA_PAGO;
             }
             payments.monthly[m] = (payments.monthly[m] || 0) + (parseFloat(r.IMPORTE_PAGADO) || 0);
@@ -1046,30 +1054,19 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             prevSales = inheritedMonthlySales[m];
         }
 
-        // Resolve fixed target for THIS specific month.
-        // fixedTargets[] contains all COMMERCIAL_TARGETS rows for this vendor.
-        // Pick the best entry for month m:
-        //   1. Exact month match (MES = m)
-        //   2. Annual entry (MES IS NULL)
-        //   3. Most recent past entry (MES < m, already sorted desc)
-        let resolvedFixedBase = fixedCommissionBase;
-        if (fixedTargets && fixedTargets.length > 0) {
-            const ft = fixedTargets;
-            const exact = ft.find(r => r.mes === m);
-            const annual = ft.find(r => r.mes === null);
-            const pastRecent = ft.find(r => r.mes !== null && r.mes < m);
-            resolvedFixedBase = exact?.importe || annual?.importe || pastRecent?.importe || null;
-        }
-
-        // Target 2026:
-        // - If vendor has FIXED commission base from COMMERCIAL_TARGETS, use that
-        // - Otherwise: prevSales * (1 + IPC)
-        let target;
-        if (resolvedFixedBase && resolvedFixedBase > 0) {
-            target = resolvedFixedBase;
-        } else {
-            target = prevSales * (1 + (config.ipc / 100));
-        }
+        // Resolve commission base for THIS exact month.
+        // COMMERCIAL_TARGETS rows are month pins, not rolling rules: May must
+        // not become the target for Jun/Jul/Aug just because those months lack
+        // explicit rows.
+        const targetResolution = resolveCommissionTarget({
+            month: m,
+            fixedTargets,
+            fallbackFixedBase: fixedCommissionBase,
+            prevSales,
+            ipc: config.ipc,
+        });
+        let target = targetResolution.target;
+        let targetSource = targetResolution.source;
 
         // Commission for this month (live calculation as baseline)
         let result = calculateCommission(currentSales, target, config);
@@ -1123,6 +1120,31 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         } else if (isSnapshotMonth) {
             // Snapshot month but table has NO rows for this month at all → fall back to live.
             logger.warn(`[COMMISSIONS] No snapshot data found for month ${m}/2026 — using live calc (table may be empty for this month).`);
+        }
+
+        if (!snapshotApplied) {
+            const paymentDetail = payments?.details?.[m] || payments?.details?.[String(m)] || null;
+            const paymentSnapshot = resolvePaymentSnapshotMonth({
+                paymentDetail,
+                liveMetrics: {
+                    actual: currentSales,
+                    target,
+                    commission: commValue,
+                },
+                isExcluded,
+            });
+
+            if (paymentSnapshot.isPaymentSnapshot) {
+                currentSales = paymentSnapshot.actual;
+                target = paymentSnapshot.target;
+                commValue = paymentSnapshot.commission;
+                snapshotApplied = true;
+                snapshotSource = paymentSnapshot.snapshotSource;
+                targetSource = 'payment_snapshot';
+                currentLacSales = Math.max(currentSales - currentBSales, 0);
+                result = calculateCommission(currentSales, target, config);
+                logger.debug(`[COMMISSIONS] PAYMENT SNAPSHOT month ${m}/${selectedYear} for ${vendedorCode}: venta=${currentSales.toFixed(2)} obj=${target.toFixed(2)} comm=${commValue.toFixed(2)}`);
+            }
         }
 
         // Add to totals
@@ -1186,6 +1208,8 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
             isFuture: isFuture,
             snapshotApplied: snapshotApplied,
             snapshotSource: snapshotSource,
+            targetSource: targetSource,
+            paymentSnapshotApplied: snapshotSource === 'JAVIER.COMMISSION_PAYMENTS',
             complianceCtx: {
                 pct: (target > 0) ? (currentSales / target) * 100 : 0,
                 increment: result.increment,
@@ -1194,7 +1218,8 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
                 commission: commValue,
                 isExcluded: isExcluded,
                 snapshotApplied: snapshotApplied,
-                snapshotSource: snapshotSource
+                snapshotSource: snapshotSource,
+                targetSource: targetSource
             },
             dailyComplianceCtx: {
                 pct: (proRatedTarget > 0) ? (currentSales / proRatedTarget) * 100 : 0,

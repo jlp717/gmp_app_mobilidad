@@ -1,6 +1,7 @@
 'use strict';
 
 const SNAPSHOT_SOURCE = 'JAVIER.COMMISSION_SNAPSHOT_2026_0102';
+const PAYMENT_SNAPSHOT_SOURCE = 'JAVIER.COMMISSION_PAYMENTS';
 
 function toNumber(value) {
     const parsed = parseFloat(value);
@@ -12,6 +13,98 @@ function hasSnapshotDataForMonth(monthsWithSnapshotData, month) {
     if (monthsWithSnapshotData instanceof Set) return monthsWithSnapshotData.has(month);
     if (Array.isArray(monthsWithSnapshotData)) return monthsWithSnapshotData.includes(month);
     return Boolean(monthsWithSnapshotData[month]);
+}
+
+function resolveCommissionTarget({
+    month,
+    fixedTargets,
+    fallbackFixedBase,
+    prevSales,
+    ipc,
+}) {
+    const safeMonth = parseInt(month, 10);
+    const fixedRows = Array.isArray(fixedTargets) ? fixedTargets : [];
+
+    const exact = fixedRows.find(row => row.mes === safeMonth);
+    const annual = fixedRows.find(row => row.mes === null);
+
+    const exactBase = toNumber(exact?.importe);
+    if (exactBase > 0) {
+        return {
+            target: exactBase,
+            source: 'commercial_targets_exact',
+        };
+    }
+
+    const annualBase = toNumber(annual?.importe);
+    if (annualBase > 0) {
+        return {
+            target: annualBase,
+            source: 'commercial_targets_annual',
+        };
+    }
+
+    const fallbackBase = toNumber(fallbackFixedBase);
+    if (fallbackBase > 0) {
+        return {
+            target: fallbackBase,
+            source: 'commercial_targets_fallback',
+        };
+    }
+
+    return {
+        target: toNumber(prevSales) * (1 + (toNumber(ipc) / 100)),
+        source: 'previous_year_plus_ipc',
+    };
+}
+
+function hasPaymentSnapshotData(paymentDetail) {
+    if (!paymentDetail) return false;
+    return Boolean(paymentDetail.ultimaFecha)
+        || toNumber(paymentDetail.totalPaid) > 0
+        || toNumber(paymentDetail.ventaComision) > 0
+        || toNumber(paymentDetail.objetivoReal) > 0
+        || toNumber(paymentDetail.comisionGenerada) > 0
+        || toNumber(paymentDetail.comisionGeneradaSnapshot) > 0;
+}
+
+function resolvePaymentSnapshotMonth({
+    paymentDetail,
+    liveMetrics,
+    isExcluded,
+}) {
+    const live = liveMetrics || {};
+    const liveCommission = isExcluded ? 0 : toNumber(live.commission);
+
+    if (!hasPaymentSnapshotData(paymentDetail)) {
+        return {
+            actual: toNumber(live.actual),
+            target: toNumber(live.target),
+            commission: liveCommission,
+            isPaymentSnapshot: false,
+            snapshotSource: null,
+            status: 'live',
+            hasStoredValues: false,
+        };
+    }
+
+    const generated = paymentDetail.comisionGeneradaSnapshot !== undefined
+        ? toNumber(paymentDetail.comisionGeneradaSnapshot)
+        : toNumber(paymentDetail.comisionGenerada);
+
+    return {
+        actual: toNumber(paymentDetail.ventaComision) > 0
+            ? toNumber(paymentDetail.ventaComision)
+            : toNumber(live.actual),
+        target: toNumber(paymentDetail.objetivoReal) > 0
+            ? toNumber(paymentDetail.objetivoReal)
+            : toNumber(live.target),
+        commission: isExcluded ? 0 : generated,
+        isPaymentSnapshot: true,
+        snapshotSource: PAYMENT_SNAPSHOT_SOURCE,
+        status: 'payment_recorded',
+        hasStoredValues: true,
+    };
 }
 
 /**
@@ -80,5 +173,8 @@ function resolveHistoricalCommissionMonth({
 
 module.exports = {
     SNAPSHOT_SOURCE,
+    PAYMENT_SNAPSHOT_SOURCE,
+    resolveCommissionTarget,
     resolveHistoricalCommissionMonth,
+    resolvePaymentSnapshotMonth,
 };

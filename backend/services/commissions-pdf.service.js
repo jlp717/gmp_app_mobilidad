@@ -19,6 +19,10 @@ const {
     LACLAE_SALES_FILTER,
     SNAPSHOT_UNTIL_MONTH,
 } = require('../utils/common');
+const {
+    resolveCommissionTarget,
+    resolvePaymentSnapshotMonth,
+} = require('../utils/commission-snapshot');
 
 const commissionsPdfBreaker = new CircuitBreaker({
     name: 'commissions-pdf',
@@ -378,10 +382,14 @@ async function getVendorPaymentsForPdf(year) {
                 VENDEDOR_CODIGO,
                 MES,
                 IMPORTE_PAGADO,
+                VENTAS_REAL,
+                OBJETIVO_MES,
+                COMISION_GENERADA,
+                FECHA_PAGO,
                 OBSERVACIONES
             FROM JAVIER.COMMISSION_PAYMENTS
             WHERE ANIO = ?
-            ORDER BY VENDEDOR_CODIGO, MES
+            ORDER BY VENDEDOR_CODIGO, MES, FECHA_PAGO
         `, [parseInt(year, 10)], false, false);
 
         rows.forEach(row => {
@@ -392,12 +400,27 @@ async function getVendorPaymentsForPdf(year) {
 
             if (!map.has(normalized)) map.set(normalized, {});
             if (!map.get(normalized)[month]) {
-                map.get(normalized)[month] = { importePagado: 0, observaciones: [] };
+                map.get(normalized)[month] = {
+                    importePagado: 0,
+                    observaciones: [],
+                    ventaComision: 0,
+                    objetivoReal: 0,
+                    comisionGeneradaSnapshot: 0,
+                    ultimaFecha: null,
+                };
             }
 
-            map.get(normalized)[month].importePagado += toNumber(row.IMPORTE_PAGADO);
+            const entry = map.get(normalized)[month];
+            const rowDate = row.FECHA_PAGO ? new Date(row.FECHA_PAGO) : null;
+            entry.importePagado += toNumber(row.IMPORTE_PAGADO);
             if (row.OBSERVACIONES && row.OBSERVACIONES.trim()) {
-                map.get(normalized)[month].observaciones.push(row.OBSERVACIONES.trim());
+                entry.observaciones.push(row.OBSERVACIONES.trim());
+            }
+            if (!entry.ultimaFecha || (rowDate && rowDate >= new Date(entry.ultimaFecha || 0))) {
+                entry.ventaComision = toNumber(row.VENTAS_REAL);
+                entry.objetivoReal = toNumber(row.OBJETIVO_MES);
+                entry.comisionGeneradaSnapshot = toNumber(row.COMISION_GENERADA);
+                entry.ultimaFecha = row.FECHA_PAGO;
             }
         });
     } catch (e) {
@@ -488,7 +511,6 @@ async function getFixedCommissionTargets(year, vendorCodes) {
     if (codeParams.length === 0) return map;
 
     try {
-        const currentMonth = new Date().getMonth() + 1;
         const placeholders = codeParams.map(() => '?').join(',');
         const rows = await queryWithParams(`
             SELECT
@@ -511,13 +533,14 @@ async function getFixedCommissionTargets(year, vendorCodes) {
         });
 
         rowsByVendor.forEach((vendorRows, normalizedCode) => {
-            const best = vendorRows
-                .sort((a, b) => (toNumber(b.MES) || 0) - (toNumber(a.MES) || 0))
-                .find(row => !row.MES || parseInt(row.MES, 10) <= currentMonth);
-            if (best) {
-                const amount = toNumber(best.IMPORTE_BASE_COMISION);
-                if (amount > 0) map.set(normalizedCode, amount);
-            }
+            const fixedRows = vendorRows
+                .map(row => ({
+                    mes: row.MES != null ? parseInt(row.MES, 10) : null,
+                    importe: toNumber(row.IMPORTE_BASE_COMISION),
+                }))
+                .filter(row => row.importe > 0)
+                .sort((a, b) => (b.mes ?? 0) - (a.mes ?? 0));
+            if (fixedRows.length > 0) map.set(normalizedCode, fixedRows);
         });
     } catch (e) {
         logger.warn(`[PDF] COMMERCIAL_TARGETS lookup failed: ${e.message}`);
@@ -540,11 +563,13 @@ function getSnapshotEntry(snapshotData, code, month) {
 
 async function buildMonthlyTargetsAndCommissions(vendorData, condorDataMap, year, startMonth, endMonth) {
     const vendorCodes = getVendorCodesFromData(vendorData, condorDataMap);
-    const [config, fixedTargets, prevLac, snapshotData] = await Promise.all([
+    const [config, fixedTargets, prevLac, prevCondor, snapshotData, paymentsData] = await Promise.all([
         getCommissionConfig(year),
         getFixedCommissionTargets(year, vendorCodes),
         getPreviousYearLacSales(year, startMonth, endMonth, vendorCodes),
+        getPreviousYearCondorSales(year, startMonth, endMonth, vendorCodes),
         getSnapshotCommissionData(year, startMonth, endMonth),
+        getVendorPaymentsForPdf(year),
     ]);
 
     const targetMap = new Map();
@@ -553,18 +578,24 @@ async function buildMonthlyTargetsAndCommissions(vendorData, condorDataMap, year
         const normalized = normalizeVendorCode(code);
         const vendor = (vendorData || []).find(v => normalizeVendorCode(v.code) === normalized);
         const condorEntry = getVendorEntry(condorDataMap, normalized);
-        const fixedTarget = fixedTargets.get(normalized);
+        const fixedTargetRows = fixedTargets.get(normalized) || [];
+        const paymentMonths = getVendorEntry(paymentsData, normalized) || {};
 
         for (let month = startMonth; month <= endMonth; month++) {
             const lacData = vendor?.months?.[month] || {};
             const condorData = condorEntry?.months?.[month] || {};
             const lacSales = toNumber(lacData.lac);
             const condorSales = toNumber(condorData.condor);
-            const previousSales = toNumber(getMonthValue(prevLac, normalized, month));
+            const previousSales = toNumber(getMonthValue(prevLac, normalized, month))
+                + toNumber(getMonthValue(prevCondor, normalized, month));
 
-            let target = fixedTarget && fixedTarget > 0
-                ? fixedTarget
-                : previousSales * (1 + (config.ipc / 100));
+            const targetResolution = resolveCommissionTarget({
+                month,
+                fixedTargets: fixedTargetRows,
+                prevSales: previousSales,
+                ipc: config.ipc,
+            });
+            let target = targetResolution.target;
             let totalSales = lacSales + condorSales;
             let commission = calculateCommission(totalSales, target, config).commission;
             let paidOverride = null;
@@ -586,6 +617,24 @@ async function buildMonthlyTargetsAndCommissions(vendorData, condorDataMap, year
                 commission = 0;
                 paidOverride = 0;
                 status = 'not_commissioned';
+            } else {
+                const paymentSnapshot = resolvePaymentSnapshotMonth({
+                    paymentDetail: paymentMonths[month] || null,
+                    liveMetrics: {
+                        actual: totalSales,
+                        target,
+                        commission,
+                    },
+                    isExcluded: false,
+                });
+
+                if (paymentSnapshot.isPaymentSnapshot) {
+                    target = paymentSnapshot.target;
+                    totalSales = paymentSnapshot.actual;
+                    commission = paymentSnapshot.commission;
+                    paidOverride = toNumber(paymentMonths[month]?.importePagado);
+                    status = 'payment_recorded';
+                }
             }
 
             setNestedMonthValue(targetMap, normalized, month, {

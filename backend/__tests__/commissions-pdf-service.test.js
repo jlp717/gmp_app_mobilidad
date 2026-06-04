@@ -94,4 +94,35 @@ describe('Commissions PDF historical months', () => {
             snapshotStatus: 'recorded',
         }));
     });
+
+    test('fixed monthly target does not roll forward in PDF metrics', async () => {
+        const queryWithParams = jest.fn(async (sql) => {
+            if (sql.includes('JAVIER.COMM_CONFIG')) return [];
+            if (sql.includes('JAVIER.COMMERCIAL_TARGETS')) {
+                return [{ VENDEDOR_CODIGO: '16', MES: 5, IMPORTE_BASE_COMISION: 78157.46 }];
+            }
+            if (sql.includes('DSED.LACLAE')) {
+                return [{ VENDEDOR_CODIGO: '16', MES: 6, VENTAS_LAC: 131017.70 }];
+            }
+            if (sql.includes('JAVIER.VENTAS_B')) return [];
+            if (sql.includes('JAVIER.COMMISSION_SNAPSHOT_2026_0102')) return [];
+            if (sql.includes('JAVIER.COMMISSION_PAYMENTS')) return [];
+            return [];
+        });
+
+        const service = loadService(queryWithParams);
+        const targetMap = await service._private.buildMonthlyTargetsAndCommissions(
+            [{ code: '16', name: 'Vendor 16', months: { 6: { lac: 14153.93 } } }],
+            new Map(),
+            2026,
+            6,
+            6
+        );
+
+        expect(targetMap.get('16')[6]).toEqual(expect.objectContaining({
+            totalVentas: 14153.93,
+            snapshotStatus: 'live',
+        }));
+        expect(targetMap.get('16')[6].objetivo).toBeCloseTo(134948.231, 3);
+    });
 });

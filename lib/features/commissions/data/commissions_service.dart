@@ -15,7 +15,7 @@ class CommissionsService {
     try {
       // Bust cache when the commission sales payload changes.
       final cacheKey = [
-        'commissions_v10_sales_breakdown',
+        'commissions_v11_paid_target_fix',
         vendedorCode,
         year,
       ].join('_');
@@ -85,7 +85,8 @@ class CommissionsService {
   }
 
   /// Register a commission payment (Restricted to ADMIN users via TIPOVENDEDOR)
-  /// NEW: Now includes observaciones parameter (required if amount < generatedAmount)
+  /// NEW: Now includes observaciones parameter.
+  /// Required if amount < generatedAmount.
   static Future<Map<String, dynamic>> payCommission({
     required String vendedorCode,
     required int year,
@@ -122,6 +123,11 @@ class CommissionsService {
 
       // Force cache clear for this vendor AND the ALL view after payment
       await Future.wait([
+        CacheService.invalidate(
+          'commissions_v11_paid_target_fix_${vendedorCode}_$year',
+        ),
+        CacheService.invalidate('commissions_v11_paid_target_fix_ALL_$year'),
+        CacheService.invalidateByPrefix('commissions_v11_paid_target_fix_'),
         CacheService.invalidate(
           'commissions_v10_sales_breakdown_${vendedorCode}_$year',
         ),
