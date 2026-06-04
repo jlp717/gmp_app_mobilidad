@@ -15,7 +15,7 @@ const logger = require('../middleware/logger');
 const { queryWithParams } = require('../config/db');
 const { CircuitBreaker } = require('./circuit-breaker');
 const {
-    getVendorColumnExpr,
+    getCommissionVendorColumnExpr,
     LACLAE_SALES_FILTER,
     SNAPSHOT_UNTIL_MONTH,
 } = require('../utils/common');
@@ -270,7 +270,7 @@ async function getSnapshotCommissionData(year, startMonth, endMonth) {
 }
 
 async function getLacSalesData(year, startMonth, endMonth) {
-    const vendorColExpr = getVendorColumnExpr('L');
+    const vendorColExpr = getCommissionVendorColumnExpr('L', 'sales');
     const vendorMap = new Map();
 
     try {
@@ -428,7 +428,7 @@ async function getPreviousYearLacSales(year, startMonth, endMonth, vendorCodes) 
     if (codeParams.length === 0) return map;
 
     try {
-        const vendorColExpr = getVendorColumnExpr('L');
+        const vendorColExpr = getCommissionVendorColumnExpr('L', 'objective');
         const codePlaceholders = codeParams.map(() => '?').join(',');
         const rows = await queryWithParams(`
             SELECT

@@ -5,7 +5,7 @@ const { cachedQuery } = require('../services/query-optimizer');
 const logger = require('../middleware/logger');
 const { auditDataAccess } = require('../middleware/audit');
 const { getVendorActiveDaysFromCache } = require('../services/laclae');
-const { getCurrentDate, LACLAE_SALES_FILTER, VENDOR_COLUMN, SNAPSHOT_UNTIL_MONTH, getVendorColumn, getVendorColumnExpr, buildVendedorFilterLACLAE, buildColumnaVendedorFilter, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL, handleRouteError } = require('../utils/common');
+const { getCurrentDate, LACLAE_SALES_FILTER, SNAPSHOT_UNTIL_MONTH, getCommissionVendorColumnExpr, getVendorName, calculateDaysPassed, getBSales, sanitizeForSQL, handleRouteError } = require('../utils/common');
 const { resolveHistoricalCommissionMonth } = require('../utils/commission-snapshot');
 const { verifyToken } = require('../middleware/auth');
 const { redisCache, TTL, invalidateCachePattern } = require('../services/redis-cache');
@@ -287,30 +287,66 @@ async function initCommissionTables() {
 // HELPER FUNCTIONS
 // =============================================================================
 
+function getCommissionVendorColumnExprForYear(selectedYear, tableAlias = 'L') {
+    const safeYear = parseInt(selectedYear, 10);
+    const salesExpr = getCommissionVendorColumnExpr(tableAlias, 'sales');
+    const objectiveExpr = getCommissionVendorColumnExpr(tableAlias, 'objective');
+    if (!safeYear || salesExpr === objectiveExpr) return salesExpr;
+
+    const prefix = tableAlias ? `${tableAlias}.` : '';
+    return `CASE WHEN ${prefix}LCAADC = ${safeYear} THEN ${salesExpr} ELSE ${objectiveExpr} END`;
+}
+
+function getCodeVariants(code) {
+    const safe = String(code || '').trim().replace(/[^a-zA-Z0-9]/g, '');
+    if (!safe) return [];
+    const unpadded = safe.replace(/^0+/, '') || safe;
+    const padded = /^\d{1,2}$/.test(unpadded) ? unpadded.padStart(2, '0') : unpadded;
+    return [...new Set([safe, unpadded, padded].filter(Boolean))];
+}
+
+function buildCommissionVendorFilter(vendedorCodes, selectedYear, tableAlias = 'L') {
+    if (!vendedorCodes || vendedorCodes === 'ALL') return '';
+
+    const vendorColumnExpr = getCommissionVendorColumnExprForYear(selectedYear, tableAlias);
+    const validCodes = [...new Set(
+        String(vendedorCodes)
+            .split(',')
+            .flatMap(getCodeVariants)
+            .filter(Boolean)
+    )]
+        .map(code => `'${code}'`)
+        .join(',');
+
+    if (!validCodes) return 'AND 1=0';
+    return `AND TRIM(${vendorColumnExpr}) IN (${validCodes})`;
+}
+
 /**
  * Get all clients currently managed by a vendor (from current year or most recent data)
  */
 async function getVendorCurrentClients(vendorCode, currentYear) {
     const safeCode = vendorCode.replace(/[^a-zA-Z0-9]/g, '');
     const safeYear = parseInt(currentYear);
-    const col = getVendorColumn(safeYear);
+    const col = getCommissionVendorColumnExpr('L', 'objective');
+    const codeVariants = getCodeVariants(safeCode);
+    const placeholders = codeVariants.map(() => '?').join(',');
     const rows = await queryWithParams(`
         SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
         FROM DSED.LACLAE L
-        WHERE L.${col} = ?
+        WHERE TRIM(${col}) IN (${placeholders})
           AND L.LCAADC = ?
           AND ${LACLAE_SALES_FILTER}
-    `, [safeCode, safeYear], false);
+    `, [...codeVariants, safeYear], false);
 
     if (rows.length === 0) {
-        const prevCol = getVendorColumn(safeYear - 1);
         const prevRows = await queryWithParams(`
             SELECT DISTINCT TRIM(L.LCCDCL) as CLIENT_CODE
             FROM DSED.LACLAE L
-            WHERE L.${prevCol} = ?
+            WHERE TRIM(${col}) IN (${placeholders})
               AND L.LCAADC = ?
               AND ${LACLAE_SALES_FILTER}
-        `, [safeCode, safeYear - 1], false);
+        `, [...codeVariants, safeYear - 1], false);
         return prevRows.map(r => r.CLIENT_CODE);
     }
 
@@ -527,7 +563,7 @@ async function getVendorSalesSnapshot(vendorCodes, year) {
  */
 async function batchFetchAllVendorData(vendorCodes, year) {
     // Use CASE expression to handle LCCDVD→R1_T8CDVD transition per-row (Jan/Feb 2026 use LCCDVD)
-    const vendorColExpr = getVendorColumnExpr('L');
+    const vendorColExpr = getCommissionVendorColumnExprForYear(year, 'L');
     const safeCodes = vendorCodes.map(c => c.replace(/[^a-zA-Z0-9]/g, '')).filter(Boolean);
     const placeholders = safeCodes.map(() => '?').join(',');
 
@@ -858,7 +894,7 @@ async function calculateVendorData(vendedorCode, selectedYear, config, preloaded
         // Original per-vendor queries (single vendor mode)
         const safeYear = parseInt(selectedYear);
         const safePrevYear = parseInt(prevYear);
-        const vendedorFilter = buildColumnaVendedorFilter(vendedorCode, [safeYear, safePrevYear], 'L');
+        const vendedorFilter = buildCommissionVendorFilter(vendedorCode, safeYear, 'L');
         const salesQuery = `
             SELECT 
                 L.LCAADC as YEAR,
@@ -1292,7 +1328,7 @@ async function discoverVendorCodesForYear(year) {
         return cachedCodes;
     }
 
-    const colExpr = getVendorColumnExpr('L');
+    const colExpr = getCommissionVendorColumnExprForYear(safeYr, 'L');
     const vendorRows = await queryWithParams(`
         SELECT DISTINCT RTRIM(${colExpr}) as VENDOR_CODE
         FROM DSED.LACLAE L
@@ -1302,9 +1338,8 @@ async function discoverVendorCodesForYear(year) {
     `, [safeYr, safeYr - 1], false);
 
     // Deduplicate by normalizing leading zeros: '05' and '5' are the same vendor.
-    // When VENDOR_COLUMN=R1_T8CDVD, the CASE expression returns LCCDVD for Jan/Feb
-    // and R1_T8CDVD for March+, so the same vendor can appear under two different
-    // codes (e.g. '05' from LCCDVD and '5' from R1_T8CDVD). Keep the first seen.
+    // Sales and objective columns may return the same vendor with padded/unpadded
+    // formats; keep one row per normalized code.
     const seenNormalized = new Set();
     const codes = vendorRows
         .map(r => (r.VENDOR_CODE || '').trim())
@@ -1883,7 +1918,12 @@ router.post('/pay', verifyToken, async (req, res) => {
         // Fallback only if the full summary path could not provide sales.
         if (safeMonthNum > 0 && ventaComision === 0) {
             try {
-                const vendedorFilter = buildVendedorFilterLACLAE(vendedorCode, 'L', safeYearNum, safeMonthNum);
+                const salesVendorExpr = getCommissionVendorColumnExpr('L', 'sales');
+                const codeVariants = getCodeVariants(vendedorCode);
+                const vendorPlaceholders = codeVariants.map(() => '?').join(',');
+                const vendedorFilter = codeVariants.length > 0
+                    ? `AND TRIM(${salesVendorExpr}) IN (${vendorPlaceholders})`
+                    : 'AND 1=0';
                 const salesQuery = `
                     SELECT SUM(L.LCIMVT) as SALES
                     FROM DSED.LACLAE L
@@ -1892,7 +1932,7 @@ router.post('/pay', verifyToken, async (req, res) => {
                       AND ${LACLAE_SALES_FILTER}
                       ${vendedorFilter}
                 `;
-                const salesRows = await queryWithParams(salesQuery, [safeYearNum, safeMonthNum], false);
+                const salesRows = await queryWithParams(salesQuery, [safeYearNum, safeMonthNum, ...codeVariants], false);
                 if (salesRows && salesRows.length > 0) {
                     ventaComision = parseFloat(salesRows[0].SALES) || 0;
                 }

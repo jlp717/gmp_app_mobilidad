@@ -13,14 +13,22 @@ const MIN_YEAR = getCurrentYear() - 2; // Dynamic: always 3 years of data
 //   LCCDVD    = "Quién vendió" (lógica actual de producción)
 //   R1_T8CDVD = "Quién tiene el cliente asignado" (nueva lógica 2026)
 //
-// Set via environment variable. Default: R1_T8CDVD because the current sales
-// objective and commission rules are assignment-based from March onward.
+// Set via environment variable. Default: R1_T8CDVD for route/objective views.
+// Commissions have separate purpose-specific columns below.
 //
 // TRANSITION: From March 2026, use R1_T8CDVD. Jan/Feb 2026 and prior
 // always use LCCDVD so historical data remains unchanged.
 const VENDOR_COLUMN = process.env.VENDOR_COLUMN || 'R1_T8CDVD';
 const TRANSITION_YEAR = 2026;
 const TRANSITION_MONTH = 3; // March 2026: new logic starts here
+const COMMISSION_SALES_VENDOR_COLUMN = normalizeVendorColumn(
+    process.env.COMMISSION_SALES_VENDOR_COLUMN,
+    'LCCDVD',
+);
+const COMMISSION_OBJECTIVE_VENDOR_COLUMN = normalizeVendorColumn(
+    process.env.COMMISSION_OBJECTIVE_VENDOR_COLUMN,
+    'R1_T8CDVD',
+);
 
 // Scoped commercial visibility. These users keep their normal commercial role,
 // but the app receives the complete vendor list they are allowed to inspect.
@@ -30,8 +38,8 @@ const VENDOR_VISIBILITY_SCOPES = {
 
 /**
  * Get the vendor column to use based on the target date.
- * - Production (LCCDVD env or default): always returns LCCDVD
- * - New logic (R1_T8CDVD env): returns LCCDVD for dates before March 2026,
+ * - LCCDVD env: always returns LCCDVD
+ * - R1_T8CDVD default/env: returns LCCDVD for dates before March 2026,
  *   R1_T8CDVD from March 2026 onwards.
  * @param {number} [year] - Target year (defaults to current)
  * @param {number} [month] - Target month 1-12 (defaults to current)
@@ -78,6 +86,24 @@ function getVendorColumnExpr(tableAlias = 'L', { forLACTable = false } = {}) {
 }
 
 logger.info(`[CONFIG] VENDOR_COLUMN = ${VENDOR_COLUMN} (transition: ${TRANSITION_MONTH}/${TRANSITION_YEAR})`);
+logger.info(`[CONFIG] COMMISSION_COLUMNS sales=${COMMISSION_SALES_VENDOR_COLUMN} objective=${COMMISSION_OBJECTIVE_VENDOR_COLUMN}`);
+
+function normalizeVendorColumn(value, fallback) {
+    const raw = String(value || fallback || '').trim().toUpperCase();
+    return raw === 'LCCDVD' ? 'LCCDVD' : 'R1_T8CDVD';
+}
+
+function getCommissionVendorColumnExpr(tableAlias = 'L', purpose = 'sales', { forLACTable = false } = {}) {
+    const prefix = tableAlias ? `${tableAlias}.` : '';
+    if (forLACTable) return `${prefix}LCCDVD`;
+
+    const normalizedPurpose = String(purpose || 'sales').trim().toLowerCase();
+    const column = normalizedPurpose === 'objective'
+        ? COMMISSION_OBJECTIVE_VENDOR_COLUMN
+        : COMMISSION_SALES_VENDOR_COLUMN;
+
+    return `${prefix}${column}`;
+}
 
 // =============================================================================
 // SNAPSHOT UNTIL MONTH — controls which months use the immutable sales snapshot
@@ -527,9 +553,12 @@ module.exports = {
     getCurrentYear,
     MIN_YEAR,
     VENDOR_COLUMN,
+    COMMISSION_SALES_VENDOR_COLUMN,
+    COMMISSION_OBJECTIVE_VENDOR_COLUMN,
     SNAPSHOT_UNTIL_MONTH,
     getVendorColumn,
     getVendorColumnExpr,
+    getCommissionVendorColumnExpr,
     LAC_SALES_FILTER,
     LACLAE_SALES_FILTER,
     LAC_TIPOVENTA_FILTER,
