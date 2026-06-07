@@ -26,6 +26,9 @@ const {
     resolveCommissionTarget,
     resolvePaymentSnapshotMonth,
 } = require('../utils/commission-snapshot');
+const {
+    TEAM_LEAD_GROWTH_THRESHOLD_PCT,
+} = require('./team-commission.service');
 
 const commissionsPdfBreaker = new CircuitBreaker({
     name: 'commissions-pdf',
@@ -933,68 +936,115 @@ function drawTeamLeadSection(doc, teamData, year, startMonth, endMonth, margin, 
     return yPos + 20;
 }
 
-function buildTeamLeadAccumulatedRows(teamData, startMonth, endMonth) {
+function buildTeamLeadAccumulatedRows(teamData, startMonth, endMonth, commissionConfig = DEFAULT_CONFIG) {
     const rows = new Map();
     const leaderCode = displayVendorCode(teamData.leaderCode || '80');
+    const thresholdMultiplier = 1 + (TEAM_LEAD_GROWTH_THRESHOLD_PCT / 100);
 
     rows.set(`leader:${leaderCode}`, {
         code: leaderCode,
-        label: `${leaderCode} - comision propia`,
+        label: `${leaderCode} - aporte al acumulado`,
+        prev: 0,
+        threshold: 0,
+        curr: 0,
+        excess: 0,
+        commission: null,
+        ownCommission: 0,
+        qualifyingMonths: 0,
+        isLeader: true,
+        isContribution: true,
+    });
+
+    const ensureMemberRow = (code) => {
+        const displayCode = displayVendorCode(code);
+        const key = `member:${displayCode}`;
+        if (!rows.has(key)) {
+            rows.set(key, {
+                code: displayCode,
+                label: `${displayCode} - aporte al acumulado`,
+                prev: 0,
+                threshold: 0,
+                curr: 0,
+                excess: 0,
+                commission: null,
+                ownCommission: 0,
+                qualifyingMonths: 0,
+                isLeader: false,
+                isContribution: true,
+            });
+        }
+        return rows.get(key);
+    };
+
+    const addContribution = (row, prevSales, currentSales) => {
+        const prev = toNumber(prevSales);
+        const curr = toNumber(currentSales);
+        const threshold = prev * thresholdMultiplier;
+        row.prev += prev;
+        row.threshold += threshold;
+        row.curr += curr;
+        row.excess += Math.max(0, curr - threshold);
+        if (threshold > 0 && curr > threshold) row.qualifyingMonths += 1;
+        return { prev, curr, threshold };
+    };
+
+    rows.set('aggregate:80-team', {
+        code: '80+',
+        label: 'TOTAL 80+72+73+81+83 - especial acumulado',
         prev: 0,
         threshold: 0,
         curr: 0,
         excess: 0,
         commission: 0,
         qualifyingMonths: 0,
-        isLeader: true,
+        isLeader: false,
+        isTeamAggregate: true,
     });
 
     for (let month = startMonth; month <= endMonth; month++) {
         const tm = teamData.months.find((m) => Number(m.month) === month);
         if (!tm) continue;
 
-        const leaderRow = rows.get(`leader:${leaderCode}`);
-        leaderRow.prev += toNumber(tm.leaderPrevSales);
-        leaderRow.threshold += toNumber(tm.leaderThreshold);
-        leaderRow.curr += toNumber(tm.leaderCurrentSales);
-        leaderRow.excess += toNumber(tm.leaderExcess);
-        leaderRow.commission += toNumber(tm.leaderPersonalCommission);
-        if (toNumber(tm.leaderPersonalCommission) > 0) leaderRow.qualifyingMonths += 1;
+        let monthPrev = 0;
+        let monthCurr = 0;
 
-        if (!rows.has('aggregate:80-team')) {
-            rows.set('aggregate:80-team', {
-                code: '80+',
-                label: '80+72+73+81+83 - especial acumulado',
-                prev: 0,
-                threshold: 0,
-                curr: 0,
-                excess: 0,
-                commission: 0,
-                qualifyingMonths: 0,
-                isLeader: false,
-                isTeamAggregate: true,
-            });
-        }
+        const leaderRow = rows.get(`leader:${leaderCode}`);
+        const leaderContribution = addContribution(leaderRow, tm.leaderPrevSales, tm.leaderCurrentSales);
+        leaderRow.ownCommission += toNumber(tm.leaderPersonalCommission);
+        monthPrev += leaderContribution.prev;
+        monthCurr += leaderContribution.curr;
+
+        (tm.members || []).forEach((member) => {
+            const memberRow = ensureMemberRow(member.vendorCode);
+            const contribution = addContribution(memberRow, member.prevYearSales, member.currentSales);
+            monthPrev += contribution.prev;
+            monthCurr += contribution.curr;
+        });
+
+        const monthThreshold = monthPrev * thresholdMultiplier;
+        const monthResult = calculateCommission(monthCurr, monthThreshold, commissionConfig || DEFAULT_CONFIG);
         const aggregateRow = rows.get('aggregate:80-team');
-        aggregateRow.prev += toNumber(tm.teamAggregatePrevSales);
-        aggregateRow.threshold += toNumber(tm.teamAggregateThreshold);
-        aggregateRow.curr += toNumber(tm.teamAggregateCurrentSales);
-        aggregateRow.excess += toNumber(tm.teamAggregateExcess);
-        aggregateRow.commission += toNumber(tm.teamAggregateCommission);
-        if (tm.teamAggregateQualifies === true) aggregateRow.qualifyingMonths += 1;
+        aggregateRow.prev += monthPrev;
+        aggregateRow.threshold += monthThreshold;
+        aggregateRow.curr += monthCurr;
+        aggregateRow.excess += Math.max(0, monthCurr - monthThreshold);
+        aggregateRow.commission += toNumber(monthResult.commission);
+        if (monthThreshold > 0 && monthCurr > monthThreshold) {
+            aggregateRow.qualifyingMonths += 1;
+        }
 
     }
 
     return Array.from(rows.values());
 }
 
-function drawSummaryTeamLeadSection(doc, teamData, year, startMonth, endMonth, margin, contentWidth, pageHeight, startY, leaderTotals = null) {
+function drawSummaryTeamLeadSection(doc, teamData, year, startMonth, endMonth, margin, contentWidth, pageHeight, startY, leaderTotals = null, commissionConfig = DEFAULT_CONFIG) {
     if (!teamData || !Array.isArray(teamData.months)) return startY;
 
     const cols = [
         { key: 'label', label: 'Origen', width: 145 },
         { key: 'prev', label: 'Ventas LY', width: 90 },
-        { key: 'threshold', label: 'Umbral LY+10', width: 95 },
+        { key: 'threshold', label: `Umbral LY+${TEAM_LEAD_GROWTH_THRESHOLD_PCT}`, width: 95 },
         { key: 'curr', label: 'Ventas CY', width: 90 },
         { key: 'excess', label: 'Exceso', width: 80 },
         { key: 'months', label: 'Meses OK', width: 60 },
@@ -1003,10 +1053,10 @@ function drawSummaryTeamLeadSection(doc, teamData, year, startMonth, endMonth, m
     const HDR_H = 16;
     const ROW_H = 14;
     let yPos = startY;
-    const rows = buildTeamLeadAccumulatedRows(teamData, startMonth, endMonth);
+    const rows = buildTeamLeadAccumulatedRows(teamData, startMonth, endMonth, commissionConfig);
     const leaderRow = rows.find((row) => row.isLeader);
     const aggregateRow = rows.find((row) => row.isTeamAggregate);
-    const ownCommission = leaderTotals?.generated ?? leaderRow?.commission ?? 0;
+    const ownCommission = leaderTotals?.generated ?? leaderRow?.ownCommission ?? 0;
     const ownPaid = leaderTotals?.paid ?? 0;
     const specialCommission = aggregateRow?.commission ?? 0;
     const totalToLeader = ownCommission + specialCommission;
@@ -1062,14 +1112,14 @@ function drawSummaryTeamLeadSection(doc, teamData, year, startMonth, endMonth, m
             curr: formatCurrency(row.curr),
             excess: formatCurrency(row.excess),
             months: String(row.qualifyingMonths),
-            comm: formatCurrency(row.isLeader ? ownCommission : row.commission),
+            comm: row.isTeamAggregate ? formatCurrency(row.commission) : '-',
         };
         cols.forEach((col) => {
             const isMoney = col.key !== 'label' && col.key !== 'months';
             const color = col.key === 'comm'
-                ? (row.isLeader ? COLORS.header : COLORS.good)
+                ? (row.isTeamAggregate ? COLORS.good : COLORS.muted)
                 : COLORS.text;
-            doc.font(row.isLeader ? 'Helvetica-Bold' : 'Helvetica').fontSize(7).fillColor(color)
+            doc.font(row.isTeamAggregate ? 'Helvetica-Bold' : 'Helvetica').fontSize(7).fillColor(color)
                 .text(values[col.key], xPos + 2, yPos + 3, {
                     width: col.width - 4,
                     align: isMoney || col.key === 'months' ? 'right' : 'left',
@@ -1089,7 +1139,7 @@ function drawSummaryTeamLeadSection(doc, teamData, year, startMonth, endMonth, m
     return yPos + 22;
 }
 
-async function generateCommissionsPdfFromSummary(summaryVendors, condorDataMap, year, startMonth, endMonth, teamCommissionData = null) {
+async function generateCommissionsPdfFromSummary(summaryVendors, condorDataMap, year, startMonth, endMonth, teamCommissionData = null, commissionConfig = DEFAULT_CONFIG) {
     const vendors = [...(summaryVendors || [])].sort((a, b) => {
         const aCode = displayVendorCode(a.vendedorCode || a.code || '');
         const bCode = displayVendorCode(b.vendedorCode || b.code || '');
@@ -1249,6 +1299,7 @@ async function generateCommissionsPdfFromSummary(summaryVendors, condorDataMap, 
                     pageHeight,
                     yPos,
                     null,
+                    commissionConfig,
                 );
             }
 
@@ -1514,6 +1565,7 @@ module.exports = {
         buildMonthlyTargetsAndCommissions,
         generateCommissionsPdfFromSummary,
         getSnapshotCommissionData,
+        buildTeamLeadAccumulatedRows,
         normalizeVendorCode,
     },
 };

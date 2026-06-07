@@ -2181,11 +2181,11 @@ router.get('/pdf', verifyToken, async (req, res) => {
         logger.info(`[PDF] Generating for DIEGO: year=${targetYear}, months ${startMonth}-${endMonth}`);
 
         // Fetch data with same calculation path as /summary.
-        let vendorData, condorData;
+        let vendorData, condorData, pdfConfig;
         try {
-            const config = await loadCommissionConfigForPdf(targetYear);
+            pdfConfig = await loadCommissionConfigForPdf(targetYear);
             [vendorData, condorData] = await Promise.all([
-                buildPdfSummaryVendors(vendorCode || 'ALL', targetYear, config, userCode),
+                buildPdfSummaryVendors(vendorCode || 'ALL', targetYear, pdfConfig, userCode),
                 pdfService.getCondorSalesData(targetYear, startMonth, endMonth)
             ]);
             
@@ -2204,7 +2204,6 @@ router.get('/pdf', verifyToken, async (req, res) => {
         if (isTeamLeader(pdfVendorNorm) || (vendorData || []).some((v) => isTeamLeader(normalizeVendorCodeForPdf(v.vendedorCode)))) {
             try {
                 await ensureExcludedVendorsLoaded();
-                const pdfConfig = await loadCommissionConfigForPdf(targetYear);
                 teamCommissionPdf = await getTeamCommission(
                     '80',
                     targetYear,
@@ -2226,6 +2225,7 @@ router.get('/pdf', verifyToken, async (req, res) => {
                 startMonth,
                 endMonth,
                 teamCommissionPdf,
+                pdfConfig,
             );
             logger.info(`[PDF] PDF generated successfully (${(pdfBuffer.length / 1024).toFixed(2)} KB)`);
         } catch (pdfError) {

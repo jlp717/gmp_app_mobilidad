@@ -176,4 +176,51 @@ describe('Commissions PDF historical months', () => {
             snapshotStatus: 'payment_recorded',
         }));
     });
+
+    test('80 accumulated summary is rebuilt from visible seller contributions', () => {
+        const service = loadService(jest.fn(async () => []));
+        const rows = service._private.buildTeamLeadAccumulatedRows(
+            {
+                leaderCode: '80',
+                months: [{
+                    month: 5,
+                    leaderPrevSales: 130127.45,
+                    leaderCurrentSales: 143541.70,
+                    leaderPersonalCommission: 12.34,
+                    // Stale/opaque aggregate fields must not drive the PDF summary.
+                    teamAggregatePrevSales: 487182.67,
+                    teamAggregateThreshold: 535900.94,
+                    teamAggregateCurrentSales: 999999.99,
+                    teamAggregateCommission: 999.99,
+                    members: [
+                        { vendorCode: '72', prevYearSales: 97986.79, currentSales: 93701.88 },
+                        { vendorCode: '73', prevYearSales: 88386.81, currentSales: 92606.86 },
+                        { vendorCode: '81', prevYearSales: 85268.57, currentSales: 83570.22 },
+                        { vendorCode: '83', prevYearSales: 58721.07, currentSales: 56263.84 },
+                    ],
+                }],
+            },
+            5,
+            5,
+            {
+                ipc: 3,
+                TIER1_MAX: 103,
+                TIER1_PCT: 1,
+                TIER2_MAX: 106,
+                TIER2_PCT: 1.3,
+                TIER3_MAX: 110,
+                TIER3_PCT: 1.6,
+                TIER4_PCT: 2,
+            },
+        );
+
+        const aggregate = rows.find(row => row.isTeamAggregate);
+        const leader = rows.find(row => row.isLeader);
+
+        expect(aggregate.prev).toBeCloseTo(460490.69, 2);
+        expect(aggregate.curr).toBeCloseTo(469684.50, 2);
+        expect(aggregate.threshold).toBeCloseTo(506539.76, 2);
+        expect(aggregate.commission).toBeCloseTo(0, 2);
+        expect(leader.ownCommission).toBeCloseTo(12.34, 2);
+    });
 });
