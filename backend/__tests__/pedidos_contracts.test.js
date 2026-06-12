@@ -596,6 +596,12 @@ describe('pedidos mutation route ownership contract', function() {
     expect(res.status).toBe(403);
     expect(res.body).toMatchObject({ success: false, code: 'FORBIDDEN_CLIENT_VENDOR' });
     expect(mockService.createOrder).not.toHaveBeenCalled();
+    const scopeSql = mockQueryWithParams.mock.calls[0][0];
+    expect(scopeSql).toMatch(/DSEDAC\.CLP/);
+    expect(scopeSql).toMatch(/VENDEDORCOMERCIAL/);
+    expect(scopeSql).not.toMatch(/CLI\.CODIGOVENDEDOR/);
+    expect(scopeSql).not.toMatch(/CODIGOVENDEDOR/);
+    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['C999', '01', '01']);
   });
   test('COMERCIAL cannot read another vendor order detail', async function() {
     const { request, app, mockService } = makeMutationApp({ user: { code: '01', role: 'COMERCIAL' }, orderVendor: '02' });

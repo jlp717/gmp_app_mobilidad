@@ -221,7 +221,7 @@ describe('DDD pedidos route contracts', () => {
     expect(mockPedidosRepo.searchProducts).not.toHaveBeenCalled();
   });
 
-  test('GET /products client scope checks CLP, CLI.CODIGOVENDEDOR and LACLAE', async () => {
+  test('GET /products client scope checks CLP.VENDEDORCOMERCIAL and LACLAE', async () => {
     const db = require('../config/db');
     mockPedidosRepo.searchProducts.mockResolvedValue({ products: [], count: 0 });
 
@@ -232,9 +232,11 @@ describe('DDD pedidos route contracts', () => {
     expect(res.status).toBe(200);
     const scopeSql = db.queryWithParams.mock.calls[0][0];
     expect(scopeSql).toMatch(/DSEDAC\.CLP/);
-    expect(scopeSql).toMatch(/CLI\.CODIGOVENDEDOR/);
+    expect(scopeSql).toMatch(/VENDEDORCOMERCIAL/);
     expect(scopeSql).toMatch(/DSED\.LACLAE/);
-    expect(db.queryWithParams.mock.calls[0][1]).toEqual(['4300001091', '98', '98', '98']);
+    expect(scopeSql).not.toMatch(/CLI\.CODIGOVENDEDOR/);
+    expect(scopeSql).not.toMatch(/CODIGOVENDEDOR/);
+    expect(db.queryWithParams.mock.calls[0][1]).toEqual(['4300001091', '98', '98']);
   });
 
   test('GET /products allows JEFE_VENTAS when login vendor mismatches assigned client vendor', async () => {

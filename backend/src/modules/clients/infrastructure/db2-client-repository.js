@@ -5,7 +5,35 @@
 const { ClientRepository } = require('../domain/client-repository');
 const { Client, ClientDetail } = require('../domain/client');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
-const { VENDOR_COLUMN, sanitizeCodeList } = require('../../../../utils/common');
+const {
+  VENDOR_COLUMN,
+  sanitizeCodeList,
+  buildClientListVendorSqlFilter,
+  getVendorColumnExpr,
+  MIN_YEAR,
+} = require('../../../../utils/common');
+
+const CLIENT_VENDOR_SELECT_SQL = `
+        COALESCE(
+          (SELECT TRIM(MIN(CLP.VENDEDORCOMERCIAL))
+             FROM DSEDAC.CLP CLP
+            WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(CLI.CODIGOCLIENTE)),
+          (SELECT TRIM(LAC_VENDOR)
+             FROM (
+               SELECT TRIM(${getVendorColumnExpr('LAC')}) AS LAC_VENDOR,
+                      ROW_NUMBER() OVER (
+                        ORDER BY LAC.LCAADC DESC, LAC.LCMMDC DESC, LAC.LCDDDC DESC
+                      ) AS RN
+                 FROM DSED.LACLAE LAC
+                WHERE TRIM(LAC.LCCDCL) = TRIM(CLI.CODIGOCLIENTE)
+                  AND LAC.LCAADC >= ${MIN_YEAR}
+                  AND LAC.TPDC = 'LAC'
+                  AND LAC.LCTPVT IN ('CC', 'VC')
+                  AND LAC.LCCLLN IN ('AB', 'VT')
+                  AND LAC.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
+             ) X
+            WHERE RN = 1)
+        ) AS VENDEDOR`;
 
 class Db2ClientRepository extends ClientRepository {
   constructor(dbPool) {
@@ -14,9 +42,7 @@ class Db2ClientRepository extends ClientRepository {
   }
 
   async findAll({ vendedorCodes, search = '', limit = 100, offset = 0 }) {
-    const vendorFilter = vendedorCodes === 'ALL'
-      ? '1=1'
-      : `CLI.CODIGOVENDEDOR IN (${sanitizeCodeList(vendedorCodes)})`;
+    const vendorFilter = buildClientListVendorSqlFilter(vendedorCodes, 'CLI');
     const searchFilter = search
       ? `AND (CLI.NOMBRECLIENTE LIKE ? OR CLI.CODIGOCLIENTE LIKE ?)`
       : '';
@@ -34,11 +60,11 @@ class Db2ClientRepository extends ClientRepository {
         CLI.TELEFONO1 AS TELEFONO,
         CLI.EMAIL,
         CLI.CODCLI AS TARIFA,
-        CLI.CODIGOVENDEDOR AS VENDEDOR,
+        ${CLIENT_VENDOR_SELECT_SQL},
         CASE WHEN CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0 THEN 1 ELSE 0 END AS ACTIVO
       FROM DSEDAC.CLI CLI
-      WHERE ${vendorFilter}
-        AND (CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0)
+      WHERE (CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0)
+        ${vendorFilter}
         ${searchFilter}
       ORDER BY CLI.NOMBRECLIENTE
       FETCH FIRST ? ROWS ONLY OFFSET ? ROWS
@@ -59,7 +85,7 @@ class Db2ClientRepository extends ClientRepository {
         CLI.TELEFONO1 AS TELEFONO,
         CLI.EMAIL,
         CLI.CODCLI AS TARIFA,
-        CLI.CODIGOVENDEDOR AS VENDEDOR,
+        ${CLIENT_VENDOR_SELECT_SQL},
         CASE WHEN CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0 THEN 1 ELSE 0 END AS ACTIVO
       FROM DSEDAC.CLI CLI
       WHERE TRIM(CLI.CODIGOCLIENTE) = ?

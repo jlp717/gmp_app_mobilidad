@@ -70,7 +70,7 @@ describe('demo regression: products 403 user 98 + client 4300001091', () => {
     db.queryWithParams.mockResolvedValue([{ OK: 1 }]);
   });
 
-  test('auth SQL checks CLP OR CLI.CODIGOVENDEDOR OR LACLAE for commercial user 98', async () => {
+  test('auth SQL checks CLP.VENDEDORCOMERCIAL OR LACLAE for commercial user 98', async () => {
     const db = require('../config/db');
     const res = await request(makePedidosApp({ id: '98', code: '98', role: 'COMERCIAL' }))
       .get('/products')
@@ -79,9 +79,11 @@ describe('demo regression: products 403 user 98 + client 4300001091', () => {
     expect(res.status).toBe(200);
     const scopeSql = db.queryWithParams.mock.calls[0][0];
     expect(scopeSql).toMatch(/DSEDAC\.CLP/);
-    expect(scopeSql).toMatch(/CLI\.CODIGOVENDEDOR/);
+    expect(scopeSql).toMatch(/VENDEDORCOMERCIAL/);
     expect(scopeSql).toMatch(/DSED\.LACLAE/);
-    expect(db.queryWithParams.mock.calls[0][1]).toEqual(['4300001091', '98', '98', '98']);
+    expect(scopeSql).not.toMatch(/CLI\.CODIGOVENDEDOR/);
+    expect(scopeSql).not.toMatch(/CODIGOVENDEDOR/);
+    expect(db.queryWithParams.mock.calls[0][1]).toEqual(['4300001091', '98', '98']);
   });
 
   test('JEFE_VENTAS retries with assigned client vendor 02 when login vendor 98 mismatches', async () => {

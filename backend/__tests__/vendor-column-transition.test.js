@@ -35,7 +35,7 @@ describe('vendor column transition filter', () => {
         expect(getVendorVisibilityScope('35')).toEqual(['35']);
     });
 
-    test('buildClientVendorParamFilter checks CLP, CLI and transition-aware LACLAE vendor column', () => {
+    test('buildClientVendorParamFilter checks CLP and transition-aware LACLAE vendor column', () => {
         process.env.VENDOR_COLUMN = 'R1_T8CDVD';
         jest.resetModules();
 
@@ -43,13 +43,15 @@ describe('vendor column transition filter', () => {
         const { clause, params } = buildClientVendorParamFilter(['02'], 'CLI');
 
         expect(clause).toMatch(/DSEDAC\.CLP/);
-        expect(clause).toMatch(/CLI\.CODIGOVENDEDOR/);
+        expect(clause).toMatch(/VENDEDORCOMERCIAL/);
         expect(clause).toMatch(/DSED\.LACLAE/);
         expect(clause).toMatch(/CASE WHEN LAC\.LCMMDC/);
-        expect(params).toEqual(['02', '02', '02']);
+        expect(clause).not.toMatch(/CLI\.CODIGOVENDEDOR/);
+        expect(clause).not.toMatch(/CODIGOVENDEDOR/);
+        expect(params).toEqual(['02', '02']);
     });
 
-    test('buildLaclaeBoundedClientCodesSql scopes LACLAE via CLP and CLI without full scan', () => {
+    test('buildLaclaeBoundedClientCodesSql scopes LACLAE via CLP without full scan', () => {
         const { buildClientListVendorSqlFilter, buildLaclaeBoundedClientCodesSql } = require('../utils/common');
 
         const cliFilter = buildClientListVendorSqlFilter('02', 'C');
@@ -57,9 +59,49 @@ describe('vendor column transition filter', () => {
 
         expect(cliFilter).toMatch(/DSEDAC\.CLP/);
         expect(cliFilter).toMatch(/FETCH FIRST 1 ROW ONLY/);
+        expect(cliFilter).not.toMatch(/CODIGOVENDEDOR/);
         expect(laclaeFilter).toMatch(/LCCDCL IN/);
         expect(laclaeFilter).toMatch(/DSEDAC\.CLP/);
-        expect(laclaeFilter).toMatch(/DSEDAC\.CLI/);
+        expect(laclaeFilter).not.toMatch(/DSEDAC\.CLI.*CODIGOVENDEDOR/);
+        expect(laclaeFilter).not.toMatch(/CODIGOVENDEDOR/);
+    });
+
+    test('client vendor SQL helpers never reference CLI.CODIGOVENDEDOR', () => {
+        process.env.VENDOR_COLUMN = 'R1_T8CDVD';
+        jest.resetModules();
+
+        const {
+            buildClientVendorParamFilter,
+            buildClientListVendorSqlFilter,
+            buildLaclaeBoundedClientCodesSql,
+        } = require('../utils/common');
+
+        const sqlFragments = [
+            buildClientVendorParamFilter(['02', '98'], 'CLI').clause,
+            buildClientListVendorSqlFilter('02,98', 'C'),
+            buildLaclaeBoundedClientCodesSql('02,98'),
+        ];
+
+        for (const sql of sqlFragments) {
+            expect(sql).not.toMatch(/CLI\.CODIGOVENDEDOR/);
+            expect(sql).not.toMatch(/CODIGOVENDEDOR/);
+        }
+    });
+
+    test('DDD client and dashboard repositories avoid CLI.CODIGOVENDEDOR', () => {
+        const fs = require('fs');
+        const path = require('path');
+        const repoFiles = [
+            '../src/modules/clients/infrastructure/db2-client-repository.js',
+            '../src/modules/dashboard/infrastructure/db2-dashboard-repository.js',
+        ];
+
+        for (const relPath of repoFiles) {
+            const source = fs.readFileSync(path.join(__dirname, relPath), 'utf8');
+            expect(source).toMatch(/buildClientListVendorSqlFilter/);
+            expect(source).not.toMatch(/CLI\.CODIGOVENDEDOR/);
+            expect(source).not.toMatch(/CODIGOVENDEDOR/);
+        }
     });
 
     test('commission columns split sales and objective by default', () => {

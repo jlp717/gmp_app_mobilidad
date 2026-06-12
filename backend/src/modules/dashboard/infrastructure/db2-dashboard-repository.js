@@ -5,7 +5,7 @@
 const { DashboardRepository } = require('../domain/dashboard-repository');
 const { DashboardMetrics, SalesEvolutionPoint, TopClient, TopProduct } = require('../domain/dashboard-metrics');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
-const { VENDOR_COLUMN, LACLAE_SALES_FILTER, sanitizeCodeList } = require('../../../../utils/common');
+const { VENDOR_COLUMN, LACLAE_SALES_FILTER, sanitizeCodeList, buildClientListVendorSqlFilter } = require('../../../../utils/common');
 
 class Db2DashboardRepository extends DashboardRepository {
   constructor(dbPool) {
@@ -243,9 +243,7 @@ class Db2DashboardRepository extends DashboardRepository {
   }
 
   async getClientConditions(vendedorCodes) {
-    const vendorFilter = vendedorCodes === 'ALL'
-      ? '1=1'
-      : `CLI.CODIGOVENDEDOR IN (${sanitizeCodeList(vendedorCodes)})`;
+    const vendorFilter = buildClientListVendorSqlFilter(vendedorCodes, 'CLI');
 
     const sql = `
       SELECT 
@@ -258,8 +256,8 @@ class Db2DashboardRepository extends DashboardRepository {
         CLI.EMAIL,
         CLI.CODCLI AS TARIFA
       FROM DSEDAC.CLI CLI
-      WHERE ${vendorFilter}
-        AND (CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0)
+      WHERE (CLI.ANOBAJA IS NULL OR CLI.ANOBAJA = 0)
+        ${vendorFilter}
       ORDER BY CLI.NOMBRECLIENTE
     `;
 
