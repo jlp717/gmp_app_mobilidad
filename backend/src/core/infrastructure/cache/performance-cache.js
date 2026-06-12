@@ -14,6 +14,45 @@ const TTL_CONFIG = {
 
 const MAX_L1_ENTRIES = 1000;
 const MAX_L2_ENTRIES = 5000;
+const PREWARM_DEFAULT_CONCURRENCY = 5;
+const PREWARM_MAX_CONCURRENCY = 10;
+
+function getRedisCacheAdapter() {
+  const redisCache = global.redisCache;
+  if (!redisCache || typeof redisCache !== 'object') return null;
+
+  const get = typeof redisCache.get === 'function'
+    ? function getValue(key) { return redisCache.get(key); }
+    : null;
+  const set = typeof redisCache.setex === 'function'
+    ? function setWithTtl(key, ttlSeconds, value) { return redisCache.setex(key, ttlSeconds, value); }
+    : (typeof redisCache.set === 'function'
+      ? async function setWithFallback(key, ttlSeconds, value) {
+          try {
+            return await redisCache.set(key, value, 'EX', ttlSeconds);
+          } catch (_err) {
+            return redisCache.set(key, value);
+          }
+        }
+      : null);
+  const del = typeof redisCache.del === 'function'
+    ? function deleteKeyOrPattern(keyOrPattern) { return redisCache.del(keyOrPattern); }
+    : null;
+
+  if (!get && !set && !del) return null;
+  return { get, set, del };
+}
+function parseCachedPayload(value) {
+  if (value == null) return null;
+  if (typeof value !== 'string') return value;
+  return JSON.parse(value);
+}
+
+function safeFireAndForget(promiseLike) {
+  if (promiseLike && typeof promiseLike.catch === 'function') {
+    promiseLike.catch(() => {});
+  }
+}
 
 class PerformanceCache {
   constructor() {
@@ -213,20 +252,34 @@ class PerformanceCache {
   /**
    * Pre-warm cache for ALL queries (called during off-peak hours)
    */
-  async preWarmAllQueries(fetchFns) {
+  async preWarmAllQueries(fetchFns, options = {}) {
     const allTTL = TTL_CONFIG.JEFE_ALL;
-    for (const [key, fetchFn] of Object.entries(fetchFns)) {
+    const redisCache = getRedisCacheAdapter();
+    const configuredConcurrency = parseInt(options.batchSize ?? globalThis.process?.env?.PERFORMANCE_CACHE_PREWARM_BATCH_SIZE, 10);
+    const batchSize = Math.min(
+      PREWARM_MAX_CONCURRENCY,
+      Math.max(1, Number.isFinite(configuredConcurrency) ? configuredConcurrency : PREWARM_DEFAULT_CONCURRENCY)
+    );
+    const warmCacheEntry = async function warmCacheEntry(entry) {
+      const key = entry[0];
+      const fetchFn = entry[1];
       try {
         const data = await fetchFn();
         this.setL1(`ALL:${key}`, data, allTTL.l1);
-        const redisCache = getRedisCacheAdapter();
         if (redisCache?.set) {
           await redisCache.set(`ALL:${key}`, allTTL.l2, JSON.stringify(data));
         }
       } catch (err) {
-        const logger = require('../../../../middleware/logger');
+        const logger = require("../../../../middleware/logger");
         logger.warn(`[PerformanceCache] Cache pre-warm failed for ${key}: ${err.message}`);
       }
+    };
+    const entries = Object.entries(fetchFns || {});
+    for (let i = 0; i < entries.length; i += batchSize) {
+      const batch = entries.slice(i, i + batchSize).map(function buildWarmTask(entry) {
+        return warmCacheEntry.call(this, entry);
+      }, this);
+      await Promise.allSettled(batch);
     }
   }
 }

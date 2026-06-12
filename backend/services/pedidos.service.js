@@ -3701,8 +3701,8 @@ async function getOrderAlbaran(orderId) {
 async function getRecommendations(clientCode, vendedorCode) {
     if (!clientCode) throw new Error('clientCode is required');
 
-    const trimClient = clientCode.trim();
-    const trimVendor = (vendedorCode || '').trim();
+    const trimClient = truncate(clientCode, 10);
+    const trimVendor = truncate((vendedorCode || '').split(',')[0], 2);
 
     // Strategy 1: Client purchase history (last 12 months)
     // FIX 2026-05-15: ampliamos las metricas devueltas porque la UI mostraba
@@ -3723,7 +3723,7 @@ async function getRecommendations(clientCode, vendedorCode) {
             COALESCE(AVG(L.CANTIDADENVASES), 0) AS avgEnvases,
             MAX(L.ANODOCUMENTO * 10000 + L.MESDOCUMENTO * 100 + L.DIADOCUMENTO) AS lastPurchase
         FROM DSEDAC.LINDTO L
-        WHERE TRIM(L.CODIGOCLIENTEALBARAN) = ?
+        WHERE TRIM(L.CODIGOCLIENTEALBARAN) = CAST(? AS VARCHAR(10))
           AND L.ANODOCUMENTO >= YEAR(CURRENT_DATE) - 1
           AND L.TIPOVENTA IN ('CC', 'VC')
           AND L.CLASELINEA IN ('AB', 'VT')
@@ -3767,13 +3767,12 @@ async function getRecommendations(clientCode, vendedorCode) {
     if (trimVendor) {
         // Handle multi-vendor codes (comma-separated) ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢€â„¢ÃƒÆ’Ã¢€Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢€Å¡Ã‚Â¬ÃƒÂ¢Ã¢€Å¾Ã‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢€â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢€Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢€Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢€â„¢ÃƒÆ’Ã¢€Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢€Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢€â„¢ÃƒÆ’Ã¢€Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢€Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢€Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢€Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢€â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢€Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢€Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢€â„¢ÃƒÆ’Ã¢€Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€žÂ¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢€Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢€â„¢ÃƒÆ’Ã¢€Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢€Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢€Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢€â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢€Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢€Å¡Ãƒâ€šÃ‚Â use first code only
         // CODIGOVENDEDOR is CHAR(2), can't hold the full comma string
-        const singleVendor = trimVendor.split(',')[0].trim().substring(0, 2);
         const similarSql = `
             SELECT TRIM(L.CODIGOARTICULO) AS code,
                 TRIM(L.DESCRIPCION) AS name,
                 COUNT(DISTINCT L.CODIGOCLIENTEALBARAN) AS clientCount
             FROM DSEDAC.LINDTO L
-            WHERE TRIM(L.CODIGOVENDEDOR) = ?
+            WHERE TRIM(L.CODIGOVENDEDOR) = CAST(? AS VARCHAR(2))
               AND L.ANODOCUMENTO = YEAR(CURRENT_DATE)
               AND L.TIPOVENTA IN ('CC', 'VC')
               AND L.CLASELINEA IN ('AB', 'VT')
@@ -3781,7 +3780,7 @@ async function getRecommendations(clientCode, vendedorCode) {
               AND NOT EXISTS (
                   SELECT 1 FROM DSEDAC.LINDTO L2
                   WHERE L2.CODIGOARTICULO = L.CODIGOARTICULO
-                    AND TRIM(L2.CODIGOCLIENTEALBARAN) = ?
+                    AND TRIM(L2.CODIGOCLIENTEALBARAN) = CAST(? AS VARCHAR(10))
                     AND (L2.ANODOCUMENTO * 12 + L2.MESDOCUMENTO)
                         >= (YEAR(CURRENT_DATE) * 12 + MONTH(CURRENT_DATE) - 3)
               )
@@ -3790,7 +3789,7 @@ async function getRecommendations(clientCode, vendedorCode) {
             ORDER BY clientCount DESC
             FETCH FIRST 10 ROWS ONLY`;
         try {
-            const similarRows = await queryWithParams(similarSql, [singleVendor, trimClient]);
+            const similarRows = await queryWithParams(similarSql, [trimVendor, trimClient]);
             similar = (similarRows || []).map(r => ({
                 code: (r.CODE || '').trim(),
                 name: (r.NAME || '').trim(),
@@ -3806,11 +3805,13 @@ async function getRecommendations(clientCode, vendedorCode) {
     const allCodes = [
         ...history.map(h => h.code),
         ...similar.map(s => s.code),
-    ].filter(Boolean);
+    ]
+        .map((code) => truncate(code, 10))
+        .filter(Boolean);
 
     if (allCodes.length > 0) {
         try {
-            const placeholders = allCodes.map(() => '?').join(',');
+            const placeholders = allCodes.map(() => 'CAST(? AS VARCHAR(10))').join(',');
             const enrichSql = `
                 SELECT
                     TRIM(A.CODIGOARTICULO) AS CODE,
@@ -3838,7 +3839,7 @@ async function getRecommendations(clientCode, vendedorCode) {
                 LEFT JOIN DSEDAC.ARA TC ON A.CODIGOARTICULO = TC.CODIGOARTICULO
                     AND TC.CODIGOTARIFA = (
                         SELECT CLC.CODIGOTARIFA FROM DSEDAC.CLC CLC
-                        WHERE TRIM(CLC.CODIGOCLIENTE) = ?
+                        WHERE TRIM(CLC.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
                         FETCH FIRST 1 ROW ONLY
                     )
                 WHERE TRIM(A.CODIGOARTICULO) IN (${placeholders})

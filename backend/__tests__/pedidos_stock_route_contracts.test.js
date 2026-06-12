@@ -133,7 +133,7 @@ describe('pedidos client evolution route contract', () => {
 
     const clientScopeCall = mockQueryWithParams.mock.calls[0];
     expect(clientScopeCall[0]).toContain('DSEDAC.CLP');
-    expect(clientScopeCall[1]).toEqual(['C001', '01']);
+    expect(clientScopeCall[1]).toEqual(['C001', '01', '01', '01']);
 
     const monthlyCall = mockQueryWithParams.mock.calls[1];
     expect(monthlyCall[0]).toMatch(/LCCDVD|R1_T8CDVD/);

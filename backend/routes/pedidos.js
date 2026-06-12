@@ -36,7 +36,10 @@ const router = express.Router();
 const pedidosService = require('../services/pedidos.service');
 const logger = require('../middleware/logger');
 const {
+    buildClientVendorParamFilter,
+    lookupClientAssignedVendorCodes,
     getVendorColumnExpr,
+    getVendorVisibilityScope,
     sanitizeCodeListForParams,
     sanitizeForSQL,
 } = require('../utils/common');
@@ -148,7 +151,7 @@ function getPedidoUserContext(req) {
         .toUpperCase();
     return {
         code: normalizePedidoCode(
-            user.code || user.codigo || user.codigoVendedor || user.vendedorCode || user.userId,
+            user.code || user.codigo || user.codigoVendedor || user.vendedorCode || user.userId || user.id,
         ),
         isManager: user.isJefeVentas === true || role === 'JEFE_VENTAS' || role === 'ADMIN',
         visibleVendorCodes: Array.isArray(user.vendorCodes || user.vendedorCodes)
@@ -167,9 +170,10 @@ function resolvePedidoVendorScope(req, requestedVendorCodes) {
         if (!context.code) {
             return { ok: false, error: 'Usuario comercial sin vendedor asignado' };
         }
+        const visibilityCodes = getVendorVisibilityScope(context.code);
         if (requestedAll) {
-            codes = [context.code];
-        } else if (codes.some(code => !pedidoCodesMatch(code, context.code))) {
+            codes = visibilityCodes;
+        } else if (codes.some((code) => !visibilityCodes.some((allowed) => pedidoCodesMatch(code, allowed)))) {
             return { ok: false, error: 'COMERCIAL solo puede consultar su vendedor' };
         }
     } else if (context.visibleVendorCodes.length > 0) {
@@ -206,7 +210,7 @@ function authorizePedidoVendorCode(req, vendedorCode, action = 'consultar') {
 }
 
 async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action = 'consultar') {
-    const client = normalizePedidoCode(clientCode);
+    const client = normalizePedidoCode(clientCode).substring(0, 10);
     if (!client) {
         return { ok: false, status: 400, body: pedidoForbiddenBody('INVALID_CLIENT', 'clientCode invalido') };
     }
@@ -214,8 +218,9 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
     if (!vendorScope.ok) {
         return { ok: false, status: 403, body: pedidoForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error) };
     }
+    const context = getPedidoUserContext(req);
     const clientVendorFilter = buildClientVendorParamFilter(vendorScope.codes, 'CLI');
-    const rows = await queryWithParams(
+    let rows = await queryWithParams(
         `SELECT 1
            FROM DSEDAC.CLI CLI
           WHERE TRIM(CLI.CODIGOCLIENTE) = ?
@@ -223,6 +228,24 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
           FETCH FIRST 1 ROW ONLY`,
         [client, ...clientVendorFilter.params],
     );
+    let effectiveVendorCodes = vendorScope.codes;
+    if ((!rows || rows.length === 0) && context.isManager) {
+        const assignedVendors = await lookupClientAssignedVendorCodes(client);
+        if (assignedVendors.length > 0) {
+            const retryFilter = buildClientVendorParamFilter(assignedVendors, 'CLI');
+            rows = await queryWithParams(
+                `SELECT 1
+                   FROM DSEDAC.CLI CLI
+                  WHERE TRIM(CLI.CODIGOCLIENTE) = ?
+                    ${retryFilter.clause}
+                  FETCH FIRST 1 ROW ONLY`,
+                [client, ...retryFilter.params],
+            );
+            if (rows && rows.length > 0) {
+                effectiveVendorCodes = assignedVendors;
+            }
+        }
+    }
     if (!rows || rows.length === 0) {
         return {
             ok: false,
@@ -230,7 +253,7 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
             body: pedidoForbiddenBody('FORBIDDEN_CLIENT_VENDOR', `No autorizado para ${action} este cliente con ese vendedor`),
         };
     }
-    return { ok: true, clientCode: client, vendorCodes: vendorScope.codes };
+    return { ok: true, clientCode: client, vendorCodes: effectiveVendorCodes };
 }
 
 async function authorizePedidoAccess(req, orderId, action = 'consultar') {
@@ -254,22 +277,6 @@ async function authorizePedidoAccess(req, orderId, action = 'consultar') {
 
 async function authorizePedidoMutation(req, orderId) {
     return authorizePedidoAccess(req, orderId, 'mutar');
-}
-
-function buildClientVendorParamFilter(vendorCodes, clientAlias = 'CLI') {
-    if (!Array.isArray(vendorCodes) || vendorCodes.length === 0) {
-        return { clause: '', params: [] };
-    }
-    return {
-        clause: `
-              AND EXISTS (
-                  SELECT 1
-                    FROM DSEDAC.CLP CLP
-                   WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(${clientAlias}.CODIGOCLIENTE)
-                     AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${vendorCodes.map(() => '?').join(',')})
-              )`,
-        params: vendorCodes,
-    };
 }
 
 function buildLaclaeVendorParamFilter(vendorCodes, alias = 'L') {

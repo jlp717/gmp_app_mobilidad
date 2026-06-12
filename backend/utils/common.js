@@ -215,6 +215,133 @@ function getVendorVisibilityScope(vendorCode) {
 }
 
 /**
+ * Semi-join filter: client belongs to vendor scope via CLP, CLI.CODIGOVENDEDOR,
+ * or LACLAE sales history (same discovery path as GET /api/clients).
+ */
+function buildClientVendorParamFilter(vendorCodes, clientAlias = 'CLI') {
+    if (!Array.isArray(vendorCodes) || vendorCodes.length === 0) {
+        return { clause: '', params: [] };
+    }
+    const safeCodes = vendorCodes
+        .map((code) => String(code || '').trim())
+        .filter((code) => /^[a-zA-Z0-9]{1,10}$/.test(code));
+    if (safeCodes.length === 0) {
+        return { clause: '', params: [] };
+    }
+    const placeholders = safeCodes.map(() => '?').join(',');
+    const laclaeVendorCol = getVendorColumnExpr('LAC');
+    return {
+        clause: `
+      AND (
+        EXISTS (
+          SELECT 1
+            FROM DSEDAC.CLP CLP
+           WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(${clientAlias}.CODIGOCLIENTE)
+             AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${placeholders})
+        )
+        OR TRIM(${clientAlias}.CODIGOVENDEDOR) IN (${placeholders})
+        OR EXISTS (
+          SELECT 1
+            FROM DSED.LACLAE LAC
+           WHERE TRIM(LAC.LCCDCL) = TRIM(${clientAlias}.CODIGOCLIENTE)
+             AND LAC.TPDC = 'LAC'
+             AND LAC.LCTPVT IN ('CC', 'VC')
+             AND LAC.LCCLLN IN ('AB', 'VT')
+             AND LAC.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
+             AND LAC.LCAADC >= ${MIN_YEAR}
+             AND TRIM(${laclaeVendorCol}) IN (${placeholders})
+        )
+      )`,
+        params: [...safeCodes, ...safeCodes, ...safeCodes],
+    };
+}
+
+/**
+ * Query-side client discovery for vendor-scoped lists (no LACLAE full scan).
+ * Uses CLP + CLI.CODIGOVENDEDOR first; LACLAE only as EXISTS with FETCH FIRST 1.
+ */
+function buildClientListVendorSqlFilter(vendorCodes, clientAlias = 'C') {
+    if (!vendorCodes || vendorCodes === 'ALL' || String(vendorCodes).trim() === '') {
+        return '';
+    }
+    const codes = String(vendorCodes).split(',')
+        .map((code) => code.trim())
+        .filter((code) => /^[a-zA-Z0-9]+$/.test(code));
+    if (codes.length === 0) return 'AND 1=0';
+    const inList = codes.map((code) => `'${code}'`).join(',');
+    const laclaeVendorCol = getVendorColumnExpr('LAC');
+    return `AND (
+        TRIM(${clientAlias}.CODIGOVENDEDOR) IN (${inList})
+        OR EXISTS (
+            SELECT 1
+              FROM DSEDAC.CLP CLP
+             WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(${clientAlias}.CODIGOCLIENTE)
+               AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${inList})
+        )
+        OR EXISTS (
+            SELECT 1
+              FROM DSED.LACLAE LAC
+             WHERE TRIM(LAC.LCCDCL) = TRIM(${clientAlias}.CODIGOCLIENTE)
+               AND LAC.LCAADC >= ${MIN_YEAR}
+               AND LAC.TPDC = 'LAC'
+               AND LAC.LCTPVT IN ('CC', 'VC')
+               AND LAC.LCCLLN IN ('AB', 'VT')
+               AND LAC.LCSRAB NOT IN ('N', 'Z')
+               AND TRIM(${laclaeVendorCol}) IN (${inList})
+            FETCH FIRST 1 ROW ONLY
+        )
+    )`;
+}
+
+/**
+ * Bound LACLAE scans to vendor client codes from CLP/CLI (no index on LACLAE required).
+ */
+function buildLaclaeBoundedClientCodesSql(vendorCodes) {
+    if (!vendorCodes || vendorCodes === 'ALL' || String(vendorCodes).trim() === '') {
+        return '';
+    }
+    const codes = String(vendorCodes).split(',')
+        .map((code) => code.trim())
+        .filter((code) => /^[a-zA-Z0-9]+$/.test(code));
+    if (codes.length === 0) return 'AND 1=0';
+    const inList = codes.map((code) => `'${code}'`).join(',');
+    const laclaeVendorCol = getVendorColumnExpr('');
+    return `AND LCCDCL IN (
+        SELECT TRIM(CLP.CODIGOCLIENTE) FROM DSEDAC.CLP CLP WHERE TRIM(CLP.VENDEDORCOMERCIAL) IN (${inList})
+        UNION
+        SELECT TRIM(C.CODIGOCLIENTE) FROM DSEDAC.CLI C WHERE TRIM(C.CODIGOVENDEDOR) IN (${inList}) AND C.ANOBAJA = 0
+    ) AND TRIM(${laclaeVendorCol}) IN (${inList})`;
+}
+
+async function lookupClientAssignedVendorCodes(clientCode) {
+    const client = String(clientCode || '').trim();
+    if (!client) return [];
+    const rows = await queryWithParams(
+        `SELECT DISTINCT TRIM(VENDOR_CODE) AS VENDOR_CODE
+           FROM (
+             SELECT TRIM(CLP.VENDEDORCOMERCIAL) AS VENDOR_CODE
+               FROM DSEDAC.CLP CLP
+              WHERE TRIM(CLP.CODIGOCLIENTE) = ?
+             UNION
+             SELECT TRIM(CLI.CODIGOVENDEDOR) AS VENDOR_CODE
+               FROM DSEDAC.CLI CLI
+              WHERE TRIM(CLI.CODIGOCLIENTE) = ?
+             UNION
+             SELECT TRIM(LAC.LCCDVD) AS VENDOR_CODE
+               FROM DSED.LACLAE LAC
+              WHERE TRIM(LAC.LCCDCL) = ?
+                AND LAC.LCAADC >= ?
+                AND LAC.TPDC = 'LAC'
+           ) V
+          WHERE VENDOR_CODE IS NOT NULL AND TRIM(VENDOR_CODE) <> ''`,
+        [client, client, client, MIN_YEAR],
+    );
+    return (rows || [])
+        .map((row) => String(row.VENDOR_CODE || row.vendor_code || '').trim())
+        .filter(Boolean);
+}
+
+/**
  * Chunk vendor codes and execute a query with UNION ALL across batches.
  * Prevents ODBC 22001/CWB0111 errors when passing 90+ vendor codes.
  *
@@ -571,6 +698,10 @@ module.exports = {
     buildDateFilter,
     getVendorName,
     getVendorVisibilityScope,
+    buildClientVendorParamFilter,
+    buildClientListVendorSqlFilter,
+    buildLaclaeBoundedClientCodesSql,
+    lookupClientAssignedVendorCodes,
     getBSales,
     getBSalesByVendor,
     aggregateBSalesByMonth,

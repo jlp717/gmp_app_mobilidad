@@ -368,6 +368,7 @@ router.post('/send-email', verifyToken, async (req, res, next) => {
  * Now redirects to send-email
  */
 router.post('/share/email', verifyToken, async (req, res, next) => {
+    res.set('Cache-Control', 'no-store');
     try {
         const { serie, numero, ejercicio, destinatario, clienteNombre } = req.body;
 
@@ -400,13 +401,13 @@ router.post('/share/email', verifyToken, async (req, res, next) => {
             clienteNombre: clienteNombre || factura.header.clienteNombre
         });
 
-        const result = await sendEmailWithPdf({
+        const result = await withFacturaEmailTimeout(sendEmailWithPdf({
             to: destinatario,
             subject: emailSubject,
             htmlBody,
             pdfBuffer,
             pdfFilename: `Factura_${serie}_${numero}_${ejercicio}.pdf`
-        });
+        }));
 
         res.json({
             success: true,
@@ -415,7 +416,7 @@ router.post('/share/email', verifyToken, async (req, res, next) => {
         });
     } catch (error) {
         logger.error(`Error en POST /facturas/share/email: ${error.message}`);
-        next(error);
+        return sendEmailFailureResponse(res, error);
     }
 });
 

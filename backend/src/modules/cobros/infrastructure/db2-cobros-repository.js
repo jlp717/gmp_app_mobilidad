@@ -154,7 +154,23 @@ function normalizeToken(rawToken) {
 }
 
 function legacyOrderReference(order) {
-  return `${trim(order.SERIEPEDIDO)}-${trim(order.NUMEROPEDIDO)}`;
+  return `${trim(order.SERIEPEDIDO)}-${trim(order.NUMERODOCUMENTO || order.NUMEROPEDIDO)}`;
+}
+
+function formatRepartidorDocKey(serie, numero) {
+  return `${trim(serie)}-${trim(numero)}`;
+}
+
+function parseDocReference(reference) {
+  const value = trim(reference);
+  const dashIndex = value.lastIndexOf('-');
+  if (dashIndex <= 0) {
+    return { serie: value, numero: null };
+  }
+  return {
+    serie: value.slice(0, dashIndex),
+    numero: value.slice(dashIndex + 1),
+  };
 }
 
 function stableOrderReference(order) {
@@ -610,7 +626,8 @@ class Db2CobrosRepository extends CobrosRepository {
     try {
       const repartidorSql = `
         SELECT TRIM(R.CODIGOCLIENTEALBARAN) AS CLIENTE,
-               TRIM(R.SERIEDOCUMENTO) || '-' || TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) AS DOC_KEY,
+               TRIM(R.SERIEDOCUMENTO) AS SERIE,
+               R.NUMERODOCUMENTO AS NUMERO,
                COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_APP
           FROM ${APP_SCHEMA}.REPARTIDOR_COBROS R
          WHERE EXISTS (
@@ -622,11 +639,13 @@ class Db2CobrosRepository extends CobrosRepository {
               ${emptyClientFilter}
               ${vendorClause}
          )
-         GROUP BY TRIM(R.CODIGOCLIENTEALBARAN), TRIM(R.SERIEDOCUMENTO), TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20)))`;
+         GROUP BY R.CODIGOCLIENTEALBARAN, R.SERIEDOCUMENTO, R.NUMERODOCUMENTO`;
       const rows = queryParams.length > 0
         ? await queryWithParams(repartidorSql, queryParams, [])
         : await query(repartidorSql, false);
-      for (const row of rows || []) add(row.CLIENTE, row.DOC_KEY, row.TOTAL_APP);
+      for (const row of rows || []) {
+        add(row.CLIENTE, formatRepartidorDocKey(row.SERIE, row.NUMERO), row.TOTAL_APP);
+      }
     } catch (error) {
       logger.warn(`[COBROS_REPO] App-side REPARTIDOR_COBROS doc summary subtract skipped: ${error.message}`);
     }
@@ -677,7 +696,7 @@ class Db2CobrosRepository extends CobrosRepository {
               AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
               ${vendorClause}
          )
-         GROUP BY TRIM(R.CODIGOCLIENTEALBARAN)`;
+         GROUP BY R.CODIGOCLIENTEALBARAN`;
       const rows = queryParams.length > 0
         ? await queryWithParams(repartidorSql, queryParams, [])
         : await query(repartidorSql, false);
@@ -699,15 +718,18 @@ class Db2CobrosRepository extends CobrosRepository {
 
     try {
       const repartidorRows = await queryWithParams(
-        `SELECT TRIM(SERIEDOCUMENTO) || '-' || TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20))) AS DOC_KEY,
+        `SELECT TRIM(SERIEDOCUMENTO) AS SERIE,
+                NUMERODOCUMENTO AS NUMERO,
                 COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL
            FROM ${APP_SCHEMA}.REPARTIDOR_COBROS
           WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
-          GROUP BY TRIM(SERIEDOCUMENTO), TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20)))`,
+          GROUP BY SERIEDOCUMENTO, NUMERODOCUMENTO`,
         [trim(clientCode)],
         [],
       );
-      for (const row of repartidorRows || []) add(row.DOC_KEY, row.TOTAL);
+      for (const row of repartidorRows || []) {
+        add(formatRepartidorDocKey(row.SERIE, row.NUMERO), row.TOTAL);
+      }
     } catch (error) {
       logger.warn(`[COBROS_REPO] App-side REPARTIDOR_COBROS doc subtract skipped: ${error.message}`);
     }
@@ -817,12 +839,14 @@ class Db2CobrosRepository extends CobrosRepository {
       // El comercial NO puede recobrar lo que el repartidor ya cobro al entregar.
       let paidRepartidorCents = 0;
       try {
+        const docRef = parseDocReference(legacyOrderReference(order));
         const repartidorRows = await conn.query(
           `SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
              FROM ${APP_SCHEMA}.REPARTIDOR_COBROS
             WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
-              AND (TRIM(SERIEDOCUMENTO) || '-' || TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20)))) = ?`,
-          [normalizedClient, legacyOrderReference(order)],
+              AND TRIM(SERIEDOCUMENTO) = ?
+              AND NUMERODOCUMENTO = ?`,
+          [normalizedClient, docRef.serie, docRef.numero],
         );
         paidRepartidorCents = toCents(repartidorRows?.[0]?.TOTAL_REP);
         if (paidRepartidorCents > 0) {

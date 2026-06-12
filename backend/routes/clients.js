@@ -12,7 +12,9 @@ const {
   sanitizeForSQL,
   sanitizeCodeList,
   handleRouteError,
-  getCurrentDate
+  getCurrentDate,
+  buildClientListVendorSqlFilter,
+  buildLaclaeBoundedClientCodesSql,
 } = require('../utils/common');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
@@ -25,7 +27,7 @@ const { getClientDays } = require('../services/laclae');
 const getClientsHandler = async (req, res) => {
   const startTime = Date.now();
   try {
-    const { vendedorCodes, search, limit = 1000, offset = 0 } = req.query;
+    const { vendedorCodes, search, limit = 100, offset = 0 } = req.query;
     const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
     const isSearchQuery = !!search;
 
@@ -61,10 +63,12 @@ const getClientsHandler = async (req, res) => {
       }
     }
 
-    // Also prepare version for LACLAE tables (LV + S subqueries use LCCDCL, not C.CODIGOCLIENTE)
-    const laclaeClientCodesFilter = clientCodesFilter
+    const vendorScopedCliFilter = clientCodesFilter
+        ? ''
+        : buildClientListVendorSqlFilter(vendedorCodes, 'C');
+    const laclaeBoundedFilter = clientCodesFilter
         ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL')
-        : '';
+        : buildLaclaeBoundedClientCodesSql(vendedorCodes);
 
     // Generate Cache Key (v5 = optimized with pre-filtered client codes)
     const cacheKey = `clients:list:v5:${vendedorCodes || 'ALL'}:${safeSearch || 'none'}:${limit}:${offset}`;
@@ -106,7 +110,7 @@ const getClientsHandler = async (req, res) => {
           AND LCTPVT IN ('CC', 'VC')
           AND LCCLLN IN ('AB', 'VT')
           AND LCSRAB NOT IN ('N', 'Z')
-          ${clientCodesFilter ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL') : vendedorFilter.replace(/L\./g, '')}
+          ${laclaeBoundedFilter || vendedorFilter.replace(/L\./g, '')}
         GROUP BY LCCDCL
       ) S ON C.CODIGOCLIENTE = S.CLIENT_CODE
       -- FIX 2026-05-15: el LATERAL JOIN original ejecutaba 1 sub-query por
@@ -128,13 +132,13 @@ const getClientsHandler = async (req, res) => {
             AND LCTPVT IN ('CC', 'VC')
             AND LCCLLN IN ('AB', 'VT')
             AND LCSRAB NOT IN ('N', 'Z')
-            ${laclaeClientCodesFilter}
+            ${laclaeBoundedFilter}
         ) X
         WHERE RN = 1
       ) LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE
       LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
       WHERE C.ANOBAJA = 0
-        ${clientCodesFilter || (!vendedorCodes || vendedorCodes === 'ALL' || vendedorCodes.trim() === '' ? '' : `AND LV.LAST_VENDOR IS NOT NULL`)}
+        ${clientCodesFilter || vendorScopedCliFilter}
         ${searchFilter}
       ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
       OFFSET ${parseInt(offset)} ROWS

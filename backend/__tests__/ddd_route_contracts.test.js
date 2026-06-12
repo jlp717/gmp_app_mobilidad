@@ -103,7 +103,7 @@ jest.mock('../routes/entregas', () => {
   return router;
 });
 
-const { createPedidosRoutes, createCobrosRoutes, createEntregasRoutes } = require('../src/shared/routes/ddd-adapters');
+const { createPedidosRoutes, createCobrosRoutes, createEntregasRoutes, createClientsRoutes, createCommissionsRoutes } = require('../src/shared/routes/ddd-adapters');
 
 function makeApp(router, user = { id: '01', code: '01', role: 'COMERCIAL' }) {
   const app = express();
@@ -221,6 +221,47 @@ describe('DDD pedidos route contracts', () => {
     expect(mockPedidosRepo.searchProducts).not.toHaveBeenCalled();
   });
 
+  test('GET /products client scope checks CLP, CLI.CODIGOVENDEDOR and LACLAE', async () => {
+    const db = require('../config/db');
+    mockPedidosRepo.searchProducts.mockResolvedValue({ products: [], count: 0 });
+
+    const res = await request(makeApp(createPedidosRoutes(), { id: '98', code: '98', role: 'COMERCIAL' }))
+      .get('/products')
+      .query({ vendedorCodes: '98', clientCode: '4300001091' });
+
+    expect(res.status).toBe(200);
+    const scopeSql = db.queryWithParams.mock.calls[0][0];
+    expect(scopeSql).toMatch(/DSEDAC\.CLP/);
+    expect(scopeSql).toMatch(/CLI\.CODIGOVENDEDOR/);
+    expect(scopeSql).toMatch(/DSED\.LACLAE/);
+    expect(db.queryWithParams.mock.calls[0][1]).toEqual(['4300001091', '98', '98', '98']);
+  });
+
+  test('GET /products allows JEFE_VENTAS when login vendor mismatches assigned client vendor', async () => {
+    const db = require('../config/db');
+    mockPedidosRepo.searchProducts.mockResolvedValue({ products: [], count: 0 });
+    db.queryWithParams
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ VENDOR_CODE: '02' }])
+      .mockResolvedValueOnce([{ OK: 1 }]);
+
+    const res = await request(makeApp(createPedidosRoutes(), {
+      id: '98',
+      code: '98',
+      role: 'JEFE_VENTAS',
+      isJefeVentas: true,
+    }))
+      .get('/products')
+      .query({ vendedorCodes: '98', clientCode: '4300001091' });
+
+    expect(res.status).toBe(200);
+    expect(db.queryWithParams.mock.calls.length).toBeGreaterThanOrEqual(3);
+    expect(mockPedidosRepo.searchProducts).toHaveBeenCalledWith(expect.objectContaining({
+      vendedorCodes: '02',
+      clientCode: '4300001091',
+    }));
+  });
+
   test('GET /products strips cost and minimum price for commercial users', async () => {
     mockPedidosRepo.searchProducts.mockResolvedValue({
       products: [{
@@ -241,6 +282,23 @@ describe('DDD pedidos route contracts', () => {
     expect(res.body.products[0].precioVenta).toBe(10);
     expect(res.body.products[0]).not.toHaveProperty('precioCosto');
     expect(res.body.products[0]).not.toHaveProperty('precioMinimo');
+  });
+
+  test('GET /products and /products/:code cache keys include margin-aware authenticated scope', async function () {
+    mockPedidosRepo.searchProducts.mockResolvedValue({ products: [{ code: 'P001', name: 'Producto', precioVenta: 10 }], count: 1 });
+    mockPedidosRepo.getProductDetail.mockResolvedValue({ code: 'P001', name: 'Producto', precioVenta: 10 });
+    const commercialUser = { id: '01', code: '01', role: 'COMERCIAL' };
+    const managerUser = { id: '80', code: '80', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: ['01'] };
+    await request(makeApp(createPedidosRoutes(), commercialUser)).get('/products').query({ vendedorCodes: '01', clientCode: 'C001' });
+    await request(makeApp(createPedidosRoutes(), managerUser)).get('/products').query({ vendedorCodes: '01', clientCode: 'C001' });
+    await request(makeApp(createPedidosRoutes(), commercialUser)).get('/products/P001').query({ vendedorCodes: '01' });
+    await request(makeApp(createPedidosRoutes(), managerUser)).get('/products/P001').query({ vendedorCodes: '01' });
+    const cacheKeys = mockCache.set.mock.calls.map(function (call) { return call[0]; });
+    expect(cacheKeys[0]).toContain('ddd:products:scope:v2:role=COMERCIAL:user=01:visible=self:canSeeMargin=0');
+    expect(cacheKeys[1]).toContain('ddd:products:scope:v2:role=JEFE_VENTAS:user=80:visible=01:canSeeMargin=1');
+    expect(cacheKeys[2]).toContain('ddd:product:scope:v2:role=COMERCIAL:user=01:visible=self:canSeeMargin=0:P001');
+    expect(cacheKeys[3]).toContain('ddd:product:scope:v2:role=JEFE_VENTAS:user=80:visible=01:canSeeMargin=1:P001');
+    expect(new Set(cacheKeys).size).toBe(cacheKeys.length);
   });
 
   test('GET /:id rejects cross-vendor commercial ownership', async () => {
@@ -375,6 +433,30 @@ describe('DDD pedidos route contracts', () => {
 
     expect(res.status).toBe(410);
     expect(res.body.code).toBe('DIRECT_CONFIRM_DISABLED');
+  });
+});
+
+
+describe('DDD clients/commissions cache scope contracts', () => {
+  test('GET / cache keys include authenticated role user visibility and margin scope', async () => {
+    const { cachedQuery } = require('../services/query-optimizer');
+    const { performanceCache } = require('../src/core/infrastructure/cache/performance-cache');
+    cachedQuery.mockResolvedValueOnce([]);
+    const managerUser = { id: '80', code: '80', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: ['01'] };
+
+    await request(makeApp(createClientsRoutes(), managerUser))
+      .get('/')
+      .query({ vendedorCodes: 'ALL', limit: 10, offset: 0 });
+
+    await request(makeApp(createCommissionsRoutes(), managerUser))
+      .get('/')
+      .query({ vendedorCode: '01', year: '2026' });
+
+    const cacheKeys = performanceCache.getOrFetch.mock.calls.map(function (call) { return call[0]; });
+    expect(cacheKeys).toEqual(expect.arrayContaining([
+      expect.stringContaining('ddd:clients:v1:scope:v2:role=JEFE_VENTAS:user=80:visible=01:canSeeMargin=1'),
+      expect.stringContaining('ddd:commissions:v2:scope:v2:role=JEFE_VENTAS:user=80:visible=01:canSeeMargin=1'),
+    ]));
   });
 });
 

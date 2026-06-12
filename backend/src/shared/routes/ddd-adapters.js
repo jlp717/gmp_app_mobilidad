@@ -28,7 +28,17 @@ const { performanceCache } = require('../../core/infrastructure/cache/performanc
 const { cachedQuery } = require('../../../services/query-optimizer');
 const { query, queryWithParams } = require('../../../config/db');
 const { TTL: RedisTTL } = require('../../../services/redis-cache');
-const { buildVendedorFilterLACLAE, sanitizeForSQL, MIN_YEAR, getVendorVisibilityScope, getVendorColumnExpr } = require('../../../utils/common');
+const {
+  buildClientVendorParamFilter,
+  buildVendedorFilterLACLAE,
+  sanitizeForSQL,
+  MIN_YEAR,
+  getVendorVisibilityScope,
+  getVendorColumnExpr,
+  buildClientListVendorSqlFilter,
+  buildLaclaeBoundedClientCodesSql,
+  lookupClientAssignedVendorCodes,
+} = require('../../../utils/common');
 const { getClientCodesFromCache } = require('../../../services/laclae');
 
 // TTL constants (milliseconds)
@@ -168,9 +178,10 @@ function resolvePedidoVendorScope(req, requestedVendorCodes) {
 
   if (!context.isManager) {
     if (!context.code) return { ok: false, error: 'Usuario comercial sin vendedor asignado' };
+    const visibilityCodes = getVendorVisibilityScope(context.code);
     if (requestedAll) {
-      codes = [context.code];
-    } else if (codes.some((code) => !salesCodesMatch(code, context.code))) {
+      codes = visibilityCodes;
+    } else if (codes.some((code) => !visibilityCodes.some((allowed) => salesCodesMatch(code, allowed)))) {
       return { ok: false, error: 'COMERCIAL solo puede operar su vendedor' };
     }
   } else if (context.visibleVendorCodes.length > 0) {
@@ -202,22 +213,6 @@ function authorizePedidoVendorCode(req, vendedorCode, action = 'operar') {
   return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_VENDOR', `COMERCIAL solo puede ${action} su vendedor`) };
 }
 
-function buildClientVendorParamFilter(vendorCodes, clientAlias = 'CLI') {
-  if (!Array.isArray(vendorCodes) || vendorCodes.length === 0) {
-    return { clause: '', params: [] };
-  }
-  return {
-    clause: `
-      AND EXISTS (
-        SELECT 1
-          FROM DSEDAC.CLP CLP
-         WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(${clientAlias}.CODIGOCLIENTE)
-           AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${vendorCodes.map(() => '?').join(',')})
-      )`,
-    params: vendorCodes,
-  };
-}
-
 function buildLaclaeVendorParamFilter(vendorCodes, alias = "L") {
   if (!Array.isArray(vendorCodes) || vendorCodes.length === 0) {
     return { clause: "", params: [] };
@@ -231,13 +226,14 @@ function buildLaclaeVendorParamFilter(vendorCodes, alias = "L") {
 
 
 async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action = 'operar') {
-  const client = normalizePedidoCode(clientCode);
+  const client = normalizePedidoCode(clientCode).substring(0, 10);
   if (!client) return { ok: false, status: 400, body: dddForbiddenBody('INVALID_CLIENT', 'clientCode invalido') };
+  const context = getPedidoUserContext(req);
   const vendorScope = resolvePedidoVendorScope(req, vendedorCodes);
   if (!vendorScope.ok) return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error) };
 
   const clientVendorFilter = buildClientVendorParamFilter(vendorScope.codes, 'CLI');
-  const rows = await queryWithParams(
+  let rows = await queryWithParams(
     `SELECT 1
        FROM DSEDAC.CLI CLI
       WHERE TRIM(CLI.CODIGOCLIENTE) = ?
@@ -245,10 +241,28 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
       FETCH FIRST 1 ROW ONLY`,
     [client, ...clientVendorFilter.params],
   );
+  let effectiveVendorCodes = vendorScope.codes;
+  if ((!rows || rows.length === 0) && context.isManager) {
+    const assignedVendors = await lookupClientAssignedVendorCodes(client);
+    if (assignedVendors.length > 0) {
+      const retryFilter = buildClientVendorParamFilter(assignedVendors, 'CLI');
+      rows = await queryWithParams(
+        `SELECT 1
+           FROM DSEDAC.CLI CLI
+          WHERE TRIM(CLI.CODIGOCLIENTE) = ?
+            ${retryFilter.clause}
+          FETCH FIRST 1 ROW ONLY`,
+        [client, ...retryFilter.params],
+      );
+      if (rows && rows.length > 0) {
+        effectiveVendorCodes = assignedVendors;
+      }
+    }
+  }
   if (!rows || rows.length === 0) {
     return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_CLIENT_VENDOR', `No autorizado para ${action} este cliente con ese vendedor`) };
   }
-  return { ok: true, clientCode: client, vendorCodes: vendorScope.codes };
+  return { ok: true, clientCode: client, vendorCodes: effectiveVendorCodes };
 }
 
 async function authorizePedidoMutation(req, orderId, action = 'mutar') {
@@ -2143,9 +2157,10 @@ function createClientsRoutes() {
 
   router.get('/', async (req, res) => {
     try {
-      const { vendedorCodes, search, limit = 1000, offset = 0 } = req.query;
+      const { vendedorCodes, search, limit = 100, offset = 0 } = req.query;
       const isAllQuery = vendedorCodes === 'ALL' || !vendedorCodes;
-      const cacheKey = `ddd:clients:v1:${vendedorCodes || 'all'}:${search || 'none'}:${limit}:${offset}`;
+      const cacheScope = buildCacheSecurityScope(req, { includeMargin: true });
+      const cacheKey = `ddd:clients:v1:${cacheScope}:${vendedorCodes || 'all'}:${search || 'none'}:${limit}:${offset}`;
       const role = req?.user?.role || 'COMERCIAL';
       const ttlSec = performanceCache.getTTL(role, isAllQuery);
 
@@ -2175,6 +2190,13 @@ function createClientsRoutes() {
                           OR UPPER(C.POBLACION) LIKE '%${safeSearch}%')`;
         }
 
+        const vendorScopedCliFilter = clientCodesFilter
+          ? ''
+          : buildClientListVendorSqlFilter(vendedorCodes, 'C');
+        const laclaeBoundedFilter = clientCodesFilter
+          ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL')
+          : buildLaclaeBoundedClientCodesSql(vendedorCodes);
+
         const clients = await cachedQuery(query, `
           SELECT
             C.CODIGOCLIENTE as code,
@@ -2200,20 +2222,28 @@ function createClientsRoutes() {
             WHERE LCAADC >= ${MIN_YEAR} AND TPDC = 'LAC'
               AND LCTPVT IN ('CC', 'VC') AND LCCLLN IN ('AB', 'VT')
               AND LCSRAB NOT IN ('N', 'Z')
-              ${clientCodesFilter ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL') : vendorFilter.replace(/L\./g, '')}
+              ${laclaeBoundedFilter || vendorFilter.replace(/L\./g, '')}
             GROUP BY LCCDCL
           ) S ON C.CODIGOCLIENTE = S.CLIENT_CODE
-          LEFT JOIN LATERAL (
-            SELECT LCCDVD as LAST_VENDOR FROM DSED.LACLAE
-            WHERE LCCDCL = ${clientCodesFilter ? 'C.CODIGOCLIENTE' : 'S.CLIENT_CODE'}
-              AND LCAADC >= ${MIN_YEAR} AND TPDC = 'LAC'
-              AND LCTPVT IN ('CC', 'VC') AND LCCLLN IN ('AB', 'VT')
-              AND LCSRAB NOT IN ('N', 'Z')
-            ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC
-            FETCH FIRST 1 ROWS ONLY
-          ) LV ON 1=1
+          LEFT JOIN (
+            SELECT CLIENT_CODE, LAST_VENDOR FROM (
+              SELECT
+                LCCDCL AS CLIENT_CODE,
+                LCCDVD AS LAST_VENDOR,
+                ROW_NUMBER() OVER (
+                  PARTITION BY LCCDCL
+                  ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC
+                ) AS RN
+              FROM DSED.LACLAE
+              WHERE LCAADC >= ${MIN_YEAR} AND TPDC = 'LAC'
+                AND LCTPVT IN ('CC', 'VC') AND LCCLLN IN ('AB', 'VT')
+                AND LCSRAB NOT IN ('N', 'Z')
+                ${laclaeBoundedFilter}
+            ) X
+            WHERE RN = 1
+          ) LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE
           LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
-          WHERE C.ANOBAJA = 0 ${clientCodesFilter || `AND LV.LAST_VENDOR IS NOT NULL`} ${searchFilter}
+          WHERE C.ANOBAJA = 0 ${clientCodesFilter || vendorScopedCliFilter} ${searchFilter}
           ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
           OFFSET ${parseInt(offset)} ROWS FETCH FIRST ${parseInt(limit)} ROWS ONLY
         `, cacheKey, RedisTTL.LONG);
@@ -2269,7 +2299,8 @@ function createCommissionsRoutes() {
 
       const selectedYear = parseInt(year) || new Date().getFullYear();
       const prevYear = selectedYear - 1;
-      const cacheKey = `ddd:commissions:v2:${safeVendedorCode}:${selectedYear}`;
+      const cacheScope = buildCacheSecurityScope(req, { includeMargin: true });
+      const cacheKey = `ddd:commissions:v2:${cacheScope}:${safeVendedorCode}:${selectedYear}`;
 
       const result = await performanceCache.getOrFetch(cacheKey, async () => {
         const { queryWithParams: qp } = require('../../../config/db');

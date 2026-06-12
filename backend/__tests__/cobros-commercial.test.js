@@ -436,6 +436,20 @@ describe('commercial cobros hardening', () => {
     })).rejects.toMatchObject({ code: 'FORBIDDEN_CLIENT_VENDOR' });
   });
 
+  test('getAppSideCobrosByDoc groups REPARTIDOR_COBROS by raw columns for DB2 prepare', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([
+      { SERIE: 'M', NUMERO: 123, TOTAL: '30.00' },
+    ]);
+    const repo = new Db2CobrosRepository();
+
+    const adjustments = await repo.getAppSideCobrosByDoc('C001');
+
+    const [sql] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toMatch(/GROUP BY SERIEDOCUMENTO, NUMERODOCUMENTO/i);
+    expect(sql).not.toMatch(/TRIM\(CAST\(NUMERODOCUMENTO AS VARCHAR/i);
+    expect(adjustments.get('M-123')).toBe(30);
+  });
+
   test('registerPayment accepts a real CVC document reference and stores a stable CVC reference', async () => {
     mockQuery.mockResolvedValue([{ 1: 1 }]);
     mockPoolConnect.mockResolvedValue({ query: mockConnQuery, close: mockConnClose });
@@ -489,5 +503,10 @@ describe('commercial cobros hardening', () => {
       'COMERCIAL',
       '01',
     ]));
+    const repartidorCall = mockConnQuery.mock.calls.find(([sql]) =>
+      /FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql) && /TRIM\(SERIEDOCUMENTO\) = \?/i.test(sql),
+    );
+    expect(repartidorCall).toBeDefined();
+    expect(repartidorCall[1]).toEqual(['C001', 'M', '123']);
   });
 });

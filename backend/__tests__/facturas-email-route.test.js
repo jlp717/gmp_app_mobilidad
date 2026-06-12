@@ -77,3 +77,27 @@ describe('POST /api/facturas/send-email', () => {
     expect(res.headers['cache-control']).toBe('no-store');
   });
 });
+
+describe("POST /api/facturas/share/email", () => {
+  test("times out with same typed response and no-store header", async () => {
+    mockSendEmailWithPdf.mockReturnValue(new Promise(() => {}));
+
+    const res = await request(makeApp())
+      .post("/api/facturas/share/email")
+      .send({
+        serie: "F",
+        numero: 4306,
+        ejercicio: 2026,
+        destinatario: "cliente@example.com",
+      });
+
+    expect(res.status).toBe(504);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: "EMAIL_SEND_TIMEOUT",
+      error: "No se pudo completar el envío de email en este momento.",
+    });
+    expect(res.body.no_retry_reason).toContain("no reintentar automaticamente");
+    expect(res.headers["cache-control"]).toBe("no-store");
+  });
+});
