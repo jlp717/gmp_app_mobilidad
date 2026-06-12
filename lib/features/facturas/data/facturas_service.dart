@@ -15,7 +15,6 @@ import 'package:printing/printing.dart';
 
 /// Model for invoice list item
 class Factura {
-
   Factura({
     required this.id,
     required this.serie,
@@ -32,9 +31,15 @@ class Factura {
   });
 
   factory Factura.fromJson(Map<String, dynamic> json) {
-    final serverTotal = (json['total'] is num ? (json['total'] as num).toDouble() : double.tryParse(json['total']?.toString() ?? '0') ?? 0.0);
-    final base = (json['base'] is num ? (json['base'] as num).toDouble() : double.tryParse(json['base']?.toString() ?? '0') ?? 0.0);
-    final iva = (json['iva'] is num ? (json['iva'] as num).toDouble() : double.tryParse(json['iva']?.toString() ?? '0') ?? 0.0);
+    final serverTotal = (json['total'] is num
+        ? (json['total'] as num).toDouble()
+        : double.tryParse(json['total']?.toString() ?? '0') ?? 0.0);
+    final base = (json['base'] is num
+        ? (json['base'] as num).toDouble()
+        : double.tryParse(json['base']?.toString() ?? '0') ?? 0.0);
+    final iva = (json['iva'] is num
+        ? (json['iva'] as num).toDouble()
+        : double.tryParse(json['iva']?.toString() ?? '0') ?? 0.0);
     // We trust the total from the server since multi-base invoices
     // might not expose all bases in the list view.
     final finalTotal = serverTotal;
@@ -45,8 +50,12 @@ class Factura {
     return Factura(
       id: json['id']?.toString() ?? '',
       serie: json['serie']?.toString() ?? '',
-      numero: json['numero'] is int ? (json['numero'] as int) : int.tryParse(json['numero']?.toString() ?? '0') ?? 0,
-      ejercicio: json['ejercicio'] is int ? (json['ejercicio'] as int) : int.tryParse(json['ejercicio']?.toString() ?? '0') ?? 0,
+      numero: json['numero'] is int
+          ? (json['numero'] as int)
+          : int.tryParse(json['numero']?.toString() ?? '0') ?? 0,
+      ejercicio: json['ejercicio'] is int
+          ? (json['ejercicio'] as int)
+          : int.tryParse(json['ejercicio']?.toString() ?? '0') ?? 0,
       fecha: json['fecha']?.toString() ?? '',
       clienteId: json['clienteId']?.toString() ?? '',
       clienteNombre: displayName,
@@ -75,16 +84,17 @@ class Factura {
 
 /// Model for invoice detail
 class FacturaDetail {
-
   FacturaDetail({required this.header, required this.lines});
 
   factory FacturaDetail.fromJson(Map<String, dynamic> json) {
     final headerJson = json['header'] as Map<String, dynamic>? ?? {};
     final linesJson = json['lines'] as List? ?? [];
-    
+
     return FacturaDetail(
       header: FacturaHeader.fromJson(headerJson),
-      lines: linesJson.map((l) => FacturaLine.fromJson(l as Map<String, dynamic>)).toList(),
+      lines: linesJson
+          .map((l) => FacturaLine.fromJson(l as Map<String, dynamic>))
+          .toList(),
     );
   }
   final FacturaHeader header;
@@ -92,7 +102,6 @@ class FacturaDetail {
 }
 
 class FacturaHeader {
-
   FacturaHeader({
     required this.serie,
     required this.numero,
@@ -116,8 +125,12 @@ class FacturaHeader {
     final fiscal = json['nombreFiscal']?.toString() ?? '';
     return FacturaHeader(
       serie: json['serie']?.toString() ?? '',
-      numero: json['numero'] is int ? (json['numero'] as int) : int.tryParse(json['numero']?.toString() ?? '0') ?? 0,
-      ejercicio: json['ejercicio'] is int ? (json['ejercicio'] as int) : int.tryParse(json['ejercicio']?.toString() ?? '0') ?? 0,
+      numero: json['numero'] is int
+          ? (json['numero'] as int)
+          : int.tryParse(json['numero']?.toString() ?? '0') ?? 0,
+      ejercicio: json['ejercicio'] is int
+          ? (json['ejercicio'] as int)
+          : int.tryParse(json['ejercicio']?.toString() ?? '0') ?? 0,
       fecha: json['fecha']?.toString() ?? '',
       clienteId: json['clienteId']?.toString() ?? '',
       clienteNombre: displayName,
@@ -126,8 +139,13 @@ class FacturaHeader {
       clienteDireccion: json['clienteDireccion']?.toString() ?? '',
       clientePoblacion: json['clientePoblacion']?.toString() ?? '',
       clienteNif: json['clienteNif']?.toString() ?? '',
-      total: (json['total'] is num ? (json['total'] as num) : double.tryParse(json['total']?.toString() ?? '0') ?? 0).toDouble(),
-      bases: basesJson.map((b) => FacturaBase.fromJson(b as Map<String, dynamic>)).toList(),
+      total: (json['total'] is num
+              ? (json['total'] as num)
+              : double.tryParse(json['total']?.toString() ?? '0') ?? 0)
+          .toDouble(),
+      bases: basesJson
+          .map((b) => FacturaBase.fromJson(b as Map<String, dynamic>))
+          .toList(),
     );
   }
   final String serie;
@@ -148,14 +166,19 @@ class FacturaHeader {
 }
 
 class FacturaBase {
-
   FacturaBase({required this.base, required this.pct, required this.iva});
 
   factory FacturaBase.fromJson(Map<String, dynamic> json) {
     return FacturaBase(
-      base: (json['base'] is num ? (json['base'] as num).toDouble() : double.tryParse(json['base']?.toString() ?? '0') ?? 0),
-      pct: (json['pct'] is num ? (json['pct'] as num).toDouble() : double.tryParse(json['pct']?.toString() ?? '0') ?? 0),
-      iva: (json['iva'] is num ? (json['iva'] as num).toDouble() : double.tryParse(json['iva']?.toString() ?? '0') ?? 0),
+      base: (json['base'] is num
+          ? (json['base'] as num).toDouble()
+          : double.tryParse(json['base']?.toString() ?? '0') ?? 0),
+      pct: (json['pct'] is num
+          ? (json['pct'] as num).toDouble()
+          : double.tryParse(json['pct']?.toString() ?? '0') ?? 0),
+      iva: (json['iva'] is num
+          ? (json['iva'] as num).toDouble()
+          : double.tryParse(json['iva']?.toString() ?? '0') ?? 0),
     );
   }
   final double base;
@@ -164,7 +187,6 @@ class FacturaBase {
 }
 
 class FacturaLine {
-
   FacturaLine({
     required this.codigo,
     required this.descripcion,
@@ -178,10 +200,18 @@ class FacturaLine {
     return FacturaLine(
       codigo: json['codigo']?.toString() ?? '',
       descripcion: json['descripcion']?.toString() ?? '',
-      cantidad: (json['cantidad'] is num ? (json['cantidad'] as num).toDouble() : double.tryParse(json['cantidad']?.toString() ?? '0') ?? 0),
-      precio: (json['precio'] is num ? (json['precio'] as num).toDouble() : double.tryParse(json['precio']?.toString() ?? '0') ?? 0),
-      importe: (json['importe'] is num ? (json['importe'] as num).toDouble() : double.tryParse(json['importe']?.toString() ?? '0') ?? 0),
-      descuento: (json['descuento'] is num ? (json['descuento'] as num).toDouble() : double.tryParse(json['descuento']?.toString() ?? '0') ?? 0),
+      cantidad: (json['cantidad'] is num
+          ? (json['cantidad'] as num).toDouble()
+          : double.tryParse(json['cantidad']?.toString() ?? '0') ?? 0),
+      precio: (json['precio'] is num
+          ? (json['precio'] as num).toDouble()
+          : double.tryParse(json['precio']?.toString() ?? '0') ?? 0),
+      importe: (json['importe'] is num
+          ? (json['importe'] as num).toDouble()
+          : double.tryParse(json['importe']?.toString() ?? '0') ?? 0),
+      descuento: (json['descuento'] is num
+          ? (json['descuento'] as num).toDouble()
+          : double.tryParse(json['descuento']?.toString() ?? '0') ?? 0),
     );
   }
   final String codigo;
@@ -194,7 +224,6 @@ class FacturaLine {
 
 /// Summary model
 class FacturaSummary {
-
   FacturaSummary({
     required this.totalFacturas,
     required this.totalImporte,
@@ -204,10 +233,18 @@ class FacturaSummary {
 
   factory FacturaSummary.fromJson(Map<String, dynamic> json) {
     return FacturaSummary(
-      totalFacturas: json['totalFacturas'] is int ? (json['totalFacturas'] as int) : int.tryParse(json['totalFacturas']?.toString() ?? '0') ?? 0,
-      totalImporte: (json['totalImporte'] is num ? (json['totalImporte'] as num).toDouble() : double.tryParse(json['totalImporte']?.toString() ?? '0') ?? 0),
-      totalBase: (json['totalBase'] is num ? (json['totalBase'] as num).toDouble() : double.tryParse(json['totalBase']?.toString() ?? '0') ?? 0),
-      totalIva: (json['totalIva'] is num ? (json['totalIva'] as num).toDouble() : double.tryParse(json['totalIva']?.toString() ?? '0') ?? 0),
+      totalFacturas: json['totalFacturas'] is int
+          ? (json['totalFacturas'] as int)
+          : int.tryParse(json['totalFacturas']?.toString() ?? '0') ?? 0,
+      totalImporte: (json['totalImporte'] is num
+          ? (json['totalImporte'] as num).toDouble()
+          : double.tryParse(json['totalImporte']?.toString() ?? '0') ?? 0),
+      totalBase: (json['totalBase'] is num
+          ? (json['totalBase'] as num).toDouble()
+          : double.tryParse(json['totalBase']?.toString() ?? '0') ?? 0),
+      totalIva: (json['totalIva'] is num
+          ? (json['totalIva'] as num).toDouble()
+          : double.tryParse(json['totalIva']?.toString() ?? '0') ?? 0),
     );
   }
   final int totalFacturas;
@@ -218,7 +255,29 @@ class FacturaSummary {
 
 /// Service class for facturas API calls
 class FacturasService {
-  
+  static DateTime? _parseFacturaDate(String value) {
+    if (value.isEmpty) return null;
+
+    final isoDate = DateTime.tryParse(value);
+    if (isoDate != null) return isoDate;
+
+    if (!value.contains('/')) return null;
+    final parts = value.split('/');
+    if (parts.length != 3) return null;
+
+    final day = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final year = int.tryParse(parts[2]);
+    if (day == null || month == null || year == null) return null;
+    if (year < 1900 || month < 1 || month > 12 || day < 1 || day > 31)
+      return null;
+
+    final parsed = DateTime(year, month, day);
+    if (parsed.year != year || parsed.month != month || parsed.day != day)
+      return null;
+    return parsed;
+  }
+
   /// Get list of invoices
   /// Get list of invoices
   /// Get list of invoices
@@ -232,6 +291,8 @@ class FacturasService {
     String? docSearch,
     String? dateFrom,
     String? dateTo,
+    int limit = 250,
+    int offset = 0,
   }) async {
     try {
       var url = '/facturas?vendedorCodes=$vendedorCodes';
@@ -242,111 +303,83 @@ class FacturasService {
         if (year != null) url += '&year=$year';
         if (month != null) url += '&month=$month';
       }
-      
-      if (search != null && search.isNotEmpty) url += '&search=${Uri.encodeComponent(search)}';
+      if (search != null && search.isNotEmpty) {
+        url += '&search=${Uri.encodeComponent(search)}';
+      }
       if (clientId != null) url += '&clientId=$clientId';
-      if (clientSearch != null && clientSearch.isNotEmpty) url += '&clientSearch=${Uri.encodeComponent(clientSearch)}';
-      if (docSearch != null && docSearch.isNotEmpty) url += '&docSearch=${Uri.encodeComponent(docSearch)}';
+      if (clientSearch != null && clientSearch.isNotEmpty) {
+        url += '&clientSearch=${Uri.encodeComponent(clientSearch)}';
+      }
+      if (docSearch != null && docSearch.isNotEmpty) {
+        url += '&docSearch=${Uri.encodeComponent(docSearch)}';
+      }
+      url += '&limit=$limit&offset=$offset';
 
-      final cacheKey = 'facturas_${vendedorCodes}_${year ?? 'all'}_${month ?? 'all'}_${dateFrom ?? ''}_${dateTo ?? ''}_${clientSearch ?? ''}_${docSearch ?? ''}';
-      
+      final cacheKey = [
+        'facturas',
+        vendedorCodes,
+        year ?? 'all',
+        month ?? 'all',
+        dateFrom ?? '',
+        dateTo ?? '',
+        clientSearch ?? '',
+        docSearch ?? '',
+        limit,
+        offset,
+      ].join('_');
+
       final response = await ApiClient.get(
         url,
         cacheKey: cacheKey,
-        cacheTTL: CacheService.shortTTL, 
+        cacheTTL: CacheService.shortTTL,
       );
-      
+
       if (response['success'] == true && response['facturas'] != null) {
         final list = response['facturas'] as List<dynamic>;
-        var facturas = list.map((e) => Factura.fromJson(e as Map<String, dynamic>)).toList();
+        var facturas = list
+            .map((e) => Factura.fromJson(e as Map<String, dynamic>))
+            .toList();
 
-        // ---------------------------------------------------------
-        // SENIOR FIX: Strict Client-Side Filtering (v9.3)
-        // ---------------------------------------------------------
-        
         // Scenario A: Date Range Filter (Prioritized)
         if (dateFrom != null && dateTo != null) {
-           try {
-              // Parse params (yyyy-MM-dd)
-              final start = DateTime.parse(dateFrom); 
-              // End date inclusive: 2025-01-01 -> 2025-01-01 23:59:59
-              final end = DateTime.parse(dateTo).add(const Duration(days: 1)).subtract(const Duration(milliseconds: 1)); 
-              
-              facturas = facturas.where((f) {
-                if (f.fecha.isEmpty) return false;
-                DateTime? valDate;
-                
-                // 1. Try ISO
-                try { valDate = DateTime.parse(f.fecha); } catch (_) {}
-                
-                // 2. Try European (dd/MM/yyyy)
-                if (valDate == null && f.fecha.contains('/')) {
-                   final parts = f.fecha.split('/');
-                   if (parts.length == 3) {
-                      valDate = DateTime(
-                        int.parse(parts[2]), // year
-                        int.parse(parts[1]), // month
-                        int.parse(parts[0]), // day
-                      );
-                   }
-                }
-                
-                if (valDate == null) return false; // invalid date = hidden
-                
-                // Inclusive check
-                return valDate.isAfter(start.subtract(const Duration(milliseconds: 1))) && 
-                       valDate.isBefore(end.add(const Duration(milliseconds: 1)));
-              }).toList();
-           } catch (e) {
-             debugPrint('Error filtering range: $e');
-           }
-        } 
+          try {
+            final start = DateTime.parse(dateFrom);
+            final end = DateTime.parse(dateTo)
+                .add(const Duration(days: 1))
+                .subtract(const Duration(milliseconds: 1));
+
+            facturas = facturas.where((f) {
+              final valDate = _parseFacturaDate(f.fecha);
+              if (valDate == null) return false;
+
+              return valDate.isAfter(
+                      start.subtract(const Duration(milliseconds: 1))) &&
+                  valDate.isBefore(end.add(const Duration(milliseconds: 1)));
+            }).toList();
+          } catch (e) {
+            debugPrint('Error filtering range: $e');
+          }
+        }
         // Scenario B: Year Filter (Strict)
         else if (year != null) {
-           debugPrint('[FACTURAS_SERVICE] Filtering by Year: $year. Input Items: ${facturas.length}');
-           final originalCount = facturas.length;
-           
-           facturas = facturas.where((f) {
-              // 1. Check 'ejercicio' field (Fast & Reliable)
-              if (f.ejercicio != 0) {
-                 // STRICT CHECK: Ensure types align
-                 if (f.ejercicio != year) {
-                     // print('Excluded Item: ${f.numeroFormateado} (Year: ${f.ejercicio} vs Target: $year)');
-                     return false;
-                 }
-                 return true;
-              }
-              
-              // 2. Fallback: Parse date if ejercicio is 0 or missing
-               try {
-                  if (f.fecha.isEmpty) return false; // No date, SAFE to hide if year filtered
-                  
-                  int? docYear;
-                  // Try ISO
-                  try { docYear = DateTime.parse(f.fecha).year; } catch (_) {}
-                  
-                  // Try dd/MM/yyyy
-                  if (docYear == null && f.fecha.contains('/')) {
-                     final parts = f.fecha.split('/');
-                     if (parts.length == 3) {
-                       docYear = int.tryParse(parts[2]);
-                     }
-                  }
-                  
-                  if (docYear != null && docYear != year) {
-                      return false;
-                  }
-                  
-                  // If we can't determine year, should we show it? 
-                  // User wants STRICT filtering. If we assume 'all' then we leak.
-                  // BETTER: If year filter is active, only show items CONFIRMED to be in that year.
-                  return docYear == year;
-               } catch (e) {
-                 return false; 
-               }
-           }).toList();
-           
-           debugPrint('[FACTURAS_SERVICE] After Year Filter: ${facturas.length} (Filtered out ${originalCount - facturas.length})');
+          debugPrint(
+            '[FACTURAS_SERVICE] Filtering by Year: $year. Input Items: ${facturas.length}',
+          );
+          final originalCount = facturas.length;
+
+          facturas = facturas.where((f) {
+            if (f.ejercicio != 0) {
+              return f.ejercicio == year;
+            }
+
+            final docYear = _parseFacturaDate(f.fecha)?.year;
+            return docYear == year;
+          }).toList();
+
+          debugPrint(
+            '[FACTURAS_SERVICE] After Year Filter: ${facturas.length} '
+            '(Filtered out ${originalCount - facturas.length})',
+          );
         }
 
         return facturas;
@@ -363,16 +396,18 @@ class FacturasService {
     try {
       // Years rarely change - cache for 1 hour
       final cacheKey = 'facturas_years_$vendedorCodes';
-      
+
       final response = await ApiClient.get(
         '/facturas/years?vendedorCodes=$vendedorCodes',
         cacheKey: cacheKey,
         cacheTTL: CacheService.longTTL, // 24 hours - years don't change often
       );
-      
+
       if (response['success'] == true && response['years'] != null) {
         final list = response['years'] as List<dynamic>;
-        return list.map((e) => e is int ? e : int.tryParse(e.toString()) ?? 0).toList();
+        return list
+            .map((e) => e is int ? e : int.tryParse(e.toString()) ?? 0)
+            .toList();
       }
       return [DateTime.now().year];
     } catch (e) {
@@ -401,23 +436,28 @@ class FacturasService {
         if (year != null) url += '&year=$year';
         if (month != null) url += '&month=$month';
       }
-      
-      if (search != null && search.isNotEmpty) url += '&search=${Uri.encodeComponent(search)}';
+
+      if (search != null && search.isNotEmpty)
+        url += '&search=${Uri.encodeComponent(search)}';
       if (clientId != null) url += '&clientId=$clientId';
-      if (clientSearch != null && clientSearch.isNotEmpty) url += '&clientSearch=${Uri.encodeComponent(clientSearch)}';
-      if (docSearch != null && docSearch.isNotEmpty) url += '&docSearch=${Uri.encodeComponent(docSearch)}';
+      if (clientSearch != null && clientSearch.isNotEmpty)
+        url += '&clientSearch=${Uri.encodeComponent(clientSearch)}';
+      if (docSearch != null && docSearch.isNotEmpty)
+        url += '&docSearch=${Uri.encodeComponent(docSearch)}';
 
       // Cache summary with same key pattern as list
-      final cacheKey = 'facturas_summary_${vendedorCodes}_${year ?? 'all'}_${month ?? 'all'}_${dateFrom ?? ''}_${dateTo ?? ''}';
-      
+      final cacheKey =
+          'facturas_summary_${vendedorCodes}_${year ?? 'all'}_${month ?? 'all'}_${dateFrom ?? ''}_${dateTo ?? ''}';
+
       final response = await ApiClient.get(
         url,
         cacheKey: cacheKey,
         cacheTTL: CacheService.shortTTL, // 5 minutes
       );
-      
+
       if (response['success'] == true && response['summary'] != null) {
-        return FacturaSummary.fromJson(response['summary'] as Map<String, dynamic>);
+        return FacturaSummary.fromJson(
+            response['summary'] as Map<String, dynamic>);
       }
       return null;
     } catch (e) {
@@ -427,12 +467,18 @@ class FacturasService {
   }
 
   /// Get invoice detail
-  static Future<FacturaDetail?> getDetail(String serie, int numero, int ejercicio) async {
+  static Future<FacturaDetail?> getDetail(
+      String serie, int numero, int ejercicio) async {
     try {
-      final response = await ApiClient.get('/facturas/$serie/$numero/$ejercicio');
-      
+      final response = await ApiClient.get(
+        '/facturas/$serie/$numero/$ejercicio',
+        cacheKey: 'facturas_detail_${serie}_${numero}_$ejercicio',
+        cacheTTL: CacheService.defaultTTL,
+      );
+
       if (response['success'] == true && response['factura'] != null) {
-        return FacturaDetail.fromJson(response['factura'] as Map<String, dynamic>);
+        return FacturaDetail.fromJson(
+            response['factura'] as Map<String, dynamic>);
       }
       return null;
     } catch (e) {
@@ -442,11 +488,12 @@ class FacturasService {
   }
 
   /// Preview PDF (uses Printing package as viewer)
-  static Future<void> previewFacturaPdf(String serie, int numero, int ejercicio) async {
+  static Future<void> previewFacturaPdf(
+      String serie, int numero, int ejercicio) async {
     try {
       final file = await downloadFacturaPdf(serie, numero, ejercicio);
       final bytes = await file.readAsBytes();
-      
+
       // Use Printing package to "print" which opens a system preview
       // This is the cleanest way to view a PDF and offers a print option
       await Printing.layoutPdf(
@@ -475,7 +522,7 @@ class FacturasService {
         'telefono': telefono,
         'clienteNombre': clienteNombre,
       });
-      
+
       if (response['success'] == true && response['whatsappUrl'] != null) {
         return response['whatsappUrl'] as String?;
       }
@@ -502,7 +549,7 @@ class FacturasService {
         'destinatario': destinatario,
         'clienteNombre': clienteNombre,
       });
-      
+
       if (response['success'] == true && response['mailtoUrl'] != null) {
         return response['mailtoUrl'] as String?;
       }
@@ -514,15 +561,18 @@ class FacturasService {
   }
 
   /// Download PDF
-  static Future<File> downloadFacturaPdf(String serie, int numero, int ejercicio) async {
+  static Future<File> downloadFacturaPdf(
+      String serie, int numero, int ejercicio) async {
     try {
       // Use ApiClient to get bytes directly - authentication is handled automatically
       // FIX: Add timestamp to bust Dio HTTP cache on repeated downloads
       final ts = DateTime.now().millisecondsSinceEpoch;
-      final bytes = await ApiClient.getBytes('/facturas/$serie/$numero/$ejercicio/pdf?_t=$ts');
+      final bytes = await ApiClient.getBytes(
+          '/facturas/$serie/$numero/$ejercicio/pdf?_t=$ts');
 
       final dir = await getTemporaryDirectory();
-      final file = File('${dir.path}/Factura_${serie}_${numero}_$ejercicio.pdf');
+      final file =
+          File('${dir.path}/Factura_${serie}_${numero}_$ejercicio.pdf');
       await file.writeAsBytes(bytes);
       return file;
     } catch (e) {
@@ -532,12 +582,14 @@ class FacturasService {
   }
 
   /// Download PDF as raw bytes (for in-app preview)
-  static Future<List<int>> downloadFacturaPdfBytes(String serie, int numero, int ejercicio) async {
+  static Future<List<int>> downloadFacturaPdfBytes(
+      String serie, int numero, int ejercicio) async {
     try {
       // FIX: Add timestamp to bust Dio HTTP cache — without this, second request
       // returns cached response and PDF appears blank/corrupted on re-open
       final ts = DateTime.now().millisecondsSinceEpoch;
-      final bytes = await ApiClient.getBytes('/facturas/$serie/$numero/$ejercicio/pdf?preview=true&_t=$ts');
+      final bytes = await ApiClient.getBytes(
+          '/facturas/$serie/$numero/$ejercicio/pdf?preview=true&_t=$ts');
       return bytes;
     } catch (e) {
       debugPrint('Error downloading PDF bytes: $e');

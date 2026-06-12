@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -41,6 +42,7 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   DateTime _selectedDate = DateTime.now();
   List<Map<String, dynamic>> _weekDays = [];
   bool _isLoadingWeek = false;
+  int _weekLoadGeneration = 0;
   String? _lastLoadedId;
   final TextEditingController _searchClientController = TextEditingController();
   final TextEditingController _searchAlbaranController =
@@ -59,7 +61,11 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
       vsync: this,
     );
     // Pre-fetch repartidores list once
-    _repartidoresFuture = ApiClient.getList('/auth/repartidores').then(
+    _repartidoresFuture = ApiClient.getList(
+      '/auth/repartidores',
+      cacheKey: 'auth:repartidores',
+      cacheTTL: CacheService.longTTL,
+    ).then(
       (val) => val.map((e) => e as Map<String, dynamic>).toList(),
     );
 
@@ -122,22 +128,31 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
   }
 
   Future<void> _loadWeekData(String repartidorId) async {
-    if (_isLoadingWeek) return;
+    final generation = ++_weekLoadGeneration;
+    final requestDate = _selectedDate;
     if (mounted) setState(() => _isLoadingWeek = true);
 
     try {
       final response = await ApiClient.get(
-        '/repartidor/rutero/week/$repartidorId?date=${_selectedDate.toIso8601String()}',
+        '/repartidor/rutero/week/$repartidorId?date=${requestDate.toIso8601String()}',
+        cacheKey:
+            'repartidor:rutero-week:$repartidorId:${requestDate.toIso8601String().substring(0, 10)}',
+        cacheTTL: const Duration(minutes: 2),
       );
-      if (response['success'] == true && mounted) {
+      if (generation != _weekLoadGeneration || !mounted) return;
+      if (response['success'] == true) {
         setState(() {
           _weekDays = List<Map<String, dynamic>>.from(response['days'] as List);
         });
       }
     } catch (e) {
-      debugPrint('Error loading week data: $e');
+      if (generation == _weekLoadGeneration) {
+        debugPrint('Error loading week data: $e');
+      }
     } finally {
-      if (mounted) setState(() => _isLoadingWeek = false);
+      if (mounted && generation == _weekLoadGeneration) {
+        setState(() => _isLoadingWeek = false);
+      }
     }
   }
 
@@ -220,7 +235,8 @@ class _RepartidorRuteroPageState extends ConsumerState<RepartidorRuteroPage>
               decoration: BoxDecoration(
                 color: AppTheme.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
+                border:
+                    Border.all(color: AppTheme.error.withValues(alpha: 0.3)),
               ),
               child: Row(
                 children: [

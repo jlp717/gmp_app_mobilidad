@@ -1,7 +1,7 @@
 {
     "$schema":  "https://opencode.ai/config.json",
     "model":  "openai/gpt-5.5",
-    "small_model":  "openai/gpt-5.4-mini",
+    "small_model":  "opencode-go/deepseek-v4-flash",
     "default_agent":  "chief-engineer-assistant",
     "username":  "Javier",
     "share":  "disabled",
@@ -44,12 +44,15 @@
                     },
     "compaction":  {
                        "auto":  true,
-                       "tail_turns":  20
+                       "prune":  true,
+                       "reserved":  30000,
+                       "tail_turns":  8
                    },
     "enabled_providers":  [
                               "openai",
                               "cursor-acp",
-                              "opencode-go"
+                              "opencode-go",
+                              "opencode"
                           ],
     "disabled_providers":  [
                                "nvidia",
@@ -78,6 +81,11 @@
                                               "effect":  "allow",
                                               "action":  "provider.use",
                                               "resource":  "opencode-go"
+                                          },
+                                          {
+                                              "effect":  "allow",
+                                              "action":  "provider.use",
+                                              "resource":  "opencode"
                                           }
                                       ]
                      },
@@ -115,7 +123,8 @@
                    "./.opencode/plugins/anti-doom-loop.ts",
                    "./.opencode/plugins/mobile-mode-detector.ts",
                    "./.opencode/plugins/same-error-detector.ts",
-                   "./.opencode/plugins/production-safety-guard.ts"
+                   "./.opencode/plugins/production-safety-guard.ts",
+                   "./.opencode/plugins/user-correction-capture.ts"
                ],
     "tools":  {
                   "voice-synthesis":  true,
@@ -128,7 +137,18 @@
                   "file-gate-check":  true,
                   "metrics-push":  true,
                   "production-approval-gate":  true,
-                  "elite-quality-gate":  true
+                  "elite-quality-gate":  true,
+                  "decision-router":  true,
+                  "agent-roster-audit":  true,
+                  "flow-policy-check":  true,
+                  "team-curator-report":  true,
+                  "model-assignment-audit":  true,
+                  "workflow-state-audit":  true,
+                  "plan-approval-gate":  true,
+                  "readiness-smoke":  true,
+                  "correction-capture":  true,
+                  "handoff-ledger":  true,
+                  "daily-digest-summary":  true
               },
     "command":  {
                     "quality":  {
@@ -136,6 +156,66 @@
                                     "agent":  "chief-engineer-assistant",
                                     "template":  "Ejecuta elite-quality-gate y corrige o delega cualquier bloqueo. Argumentos: $ARGUMENTS"
                                 },
+                    "route":  {
+                                  "description":  "Calcula tier, agentes, MCPs, gates y evidencias antes de ejecutar una peticion.",
+                                  "agent":  "chief-engineer-assistant",
+                                  "template":  "Ejecuta prompt-optimizer y decision-router sobre esta peticion. No implementes todavia; devuelve ruta, riesgos, gates y evidencias: $ARGUMENTS"
+                              },
+                    "flow-check":  {
+                                      "description":  "Valida la ruta V4 contra politicas de agentes, MCPs, skills, gates y evidencias.",
+                                      "agent":  "chief-engineer-assistant",
+                                      "template":  "Ejecuta flow-policy-check sobre la ruta actual o task_id. Si hay BLOCK, corrige la ruta antes de delegar. Argumentos: $ARGUMENTS"
+                                  },
+                    "classify":  {
+                                      "description":  "Clasifica una peticion sin ejecutar: workflow, riesgo, modelo, autonomia y verificacion.",
+                                      "agent":  "chief-engineer-assistant",
+                                      "template":  "Ejecuta prompt-optimizer, decision-router y flow-policy-check sin implementar. Devuelve classification, agentes, MCPs, gates y stop_conditions: $ARGUMENTS"
+                                  },
+                    "route-eval":  {
+                                      "description":  "Ejecuta escenarios de regresion del decision-router.",
+                                      "agent":  "chief-engineer-assistant",
+                                      "template":  "Ejecuta decision-router con self_test=true. Si falla, no implementes nada y muestra diferencias: $ARGUMENTS"
+                                  },
+                    "team-curator":  {
+                                      "description":  "Genera reporte curador semanal del equipo y opcionalmente lo envia a Telegram.",
+                                      "agent":  "team-curator",
+                                      "template":  "Ejecuta team-curator-report. Si ARGUMENTS contiene telegram, envia resumen a Telegram. Argumentos: $ARGUMENTS"
+                                  },
+                    "model-audit":  {
+                                      "description":  "Audita modelos pinneados por agente y fallback policy.",
+                                      "agent":  "team-curator",
+                                      "template":  "Ejecuta model-assignment-audit. Si hay BLOCK, no ejecutes Tier 2/3 hasta corregirlo. Argumentos: $ARGUMENTS"
+                                  },
+                    "state-audit":  {
+                                      "description":  "Audita maquina de estados, transiciones y gates de aprobacion.",
+                                      "agent":  "team-curator",
+                                      "template":  "Ejecuta workflow-state-audit. Si hay BLOCK, no ejecutes Tier 2/3 hasta corregirlo. Argumentos: $ARGUMENTS"
+                                  },
+                    "approve-plan":  {
+                                      "description":  "Aprueba explicitamente el plan de una tarea antes de editar codigo.",
+                                      "agent":  "chief-engineer-assistant",
+                                      "template":  "Ejecuta plan-approval-gate con action=approve para el task_id indicado. Solo acepta frases como 'apruebo el plan' o 'adelante con el plan'. Argumentos: $ARGUMENTS"
+                                  },
+                    "readiness":  {
+                                      "description":  "Smoke test barato de proveedores, Cursor, MCPs, skills, tools, comandos y ultimo preflight.",
+                                      "agent":  "team-curator",
+                                      "template":  "Ejecuta readiness-smoke. Si hay BLOCK, no inicies Tier 2/3 hasta corregirlo. Argumentos: $ARGUMENTS"
+                                  },
+                    "teach":  {
+                                  "description":  "Guarda una correccion de Javier como memoria prioritaria.",
+                                  "agent":  "chief-engineer-assistant",
+                                  "template":  "Ejecuta correction-capture con correction_text=$ARGUMENTS, source=slash:/teach y severity=correction. Confirma en una frase que queda guardado."
+                              },
+                    "workflow":  {
+                                     "description":  "Ejecuta o inspecciona el flujo V4 faseado con state, TEAM_TRACE y gates.",
+                                     "agent":  "chief-engineer-assistant",
+                                     "template":  "Aplica el flujo V4 completo con prompt-optimizer, decision-router, autonomous-flow, state y TEAM_TRACE. Argumentos: $ARGUMENTS"
+                                 },
+                    "verify":  {
+                                   "description":  "Verifica cambios con QA, AppSec, SRE, elite-quality-gate y evidencia de release.",
+                                   "agent":  "qa-automation-lead",
+                                   "template":  "Ejecuta verificacion integral segun decision-router y autonomous-flow. Argumentos: $ARGUMENTS"
+                               },
                     "voice":  {
                                   "description":  "Activa o desactiva modo voz Chief Engineer.",
                                   "agent":  "chief-engineer-assistant",
@@ -148,8 +228,8 @@
                                  },
                     "digest":  {
                                    "description":  "Genera Daily Digest manual.",
-                                   "agent":  "tech-radar-agent",
-                                   "template":  "Genera digest manual con argumentos: $ARGUMENTS"
+                                   "agent":  "chief-engineer-assistant",
+                                   "template":  "Ejecuta daily-digest-summary. Devuelve solo el resumen operativo accionable; no uses N/A, no Telegram salvo que ARGUMENTS lo pida explicitamente. Argumentos: $ARGUMENTS"
                                },
                     "retro":  {
                                   "description":  "Lanza o consulta retrospectivas.",
@@ -157,12 +237,137 @@
                                   "template":  "Gestiona retrospectiva con argumentos: $ARGUMENTS"
                               },
                     "adelante":  {
-                                  "description":  "Confirma promocion a produccion durante una ventana auditada.",
-                                  "agent":  "chief-engineer-assistant",
-                                  "template":  "Gestiona confirmacion de produccion con argumentos: $ARGUMENTS"
-                              }
+                                     "description":  "Confirma promocion a produccion durante una ventana auditada.",
+                                     "agent":  "chief-engineer-assistant",
+                                     "template":  "Gestiona confirmacion de produccion con argumentos: $ARGUMENTS"
+                                 }
                 },
     "mcp":  {
-
-            }
+                "context7":  {
+                                 "enabled":  true
+                             },
+                "ddg-search":  {
+                                   "enabled":  true
+                               },
+                "fetch":  {
+                              "enabled":  true
+                          },
+                "git":  {
+                            "enabled":  true
+                        },
+                "beads":  {
+                              "enabled":  true
+                          },
+                "time":  {
+                             "enabled":  true
+                         },
+                "memory":  {
+                               "enabled":  true
+                           },
+                "sequential-thinking":  {
+                                            "enabled":  true
+                                        },
+                "dart-flutter-mcp":  {
+                                         "enabled":  true
+                                     },
+                "pub-mcp":  {
+                                "enabled":  true
+                            },
+                "ibm-db2-mcp":  {
+                                    "enabled":  true
+                                },
+                "gmp-deploy-ssh":  {
+                                       "enabled":  true
+                                   },
+                "playwright":  {
+                                   "enabled":  true
+                               },
+                "chrome-devtools":  {
+                                        "enabled":  true
+                                    },
+                "github":  {
+                               "enabled":  true
+                           },
+                "gh_grep":  {
+                                "enabled":  true
+                            },
+                "firecrawl":  {
+                                  "enabled":  false
+                              },
+                "sentry":  {
+                               "enabled":  false
+                           },
+                "supabase":  {
+                                 "enabled":  false
+                             },
+                "postgres":  {
+                                 "enabled":  false
+                             },
+                "telegram":  {
+                                 "enabled":  false
+                             },
+                "filesystem":  {
+                                   "enabled":  false
+                               },
+                "claude-flow":  {
+                                    "enabled":  false
+                                },
+                "guardvibe":  {
+                                  "enabled":  false
+                              }
+            },
+    "provider":  {
+                     "openai":  {
+                                    "options":  {
+                                                    "timeout":  600000,
+                                                    "chunkTimeout":  60000
+                                                },
+                                    "models":  {
+                                                   "gpt-5.5":  {
+                                                                   "options":  {
+                                                                                   "reasoningEffort":  "high",
+                                                                                   "textVerbosity":  "low",
+                                                                                   "reasoningSummary":  "auto"
+                                                                               },
+                                                                   "variants":  {
+                                                                                    "medium":  {
+                                                                                                   "reasoningEffort":  "medium",
+                                                                                                   "textVerbosity":  "low",
+                                                                                                   "reasoningSummary":  "auto"
+                                                                                               },
+                                                                                    "high":  {
+                                                                                                 "reasoningEffort":  "high",
+                                                                                                 "textVerbosity":  "low",
+                                                                                                 "reasoningSummary":  "auto"
+                                                                                             },
+                                                                                    "xhigh":  {
+                                                                                                  "reasoningEffort":  "high",
+                                                                                                  "textVerbosity":  "low",
+                                                                                                  "reasoningSummary":  "auto"
+                                                                                              }
+                                                                                }
+                                                               }
+                                               }
+                                }
+,
+                     "opencode":  {
+                                      "models":  {
+                                                     "deepseek-v4-flash-free":  {
+                                                                                     "name":  "DeepSeek V4 Flash Free"
+                                                                                 },
+                                                     "mimo-v2.5-free":  {
+                                                                            "name":  "MiMo V2.5 Free"
+                                                                        },
+                                                     "minimax-m3-free":  {
+                                                                              "name":  "MiniMax M3 Free"
+                                                                          },
+                                                     "nemotron-3-super-free":  {
+                                                                                   "name":  "Nemotron 3 Super Free"
+                                                                               },
+                                                     "big-pickle":  {
+                                                                        "name":  "Big Pickle"
+                                                                    }
+                                                 }
+                                  }
+                 }
 }

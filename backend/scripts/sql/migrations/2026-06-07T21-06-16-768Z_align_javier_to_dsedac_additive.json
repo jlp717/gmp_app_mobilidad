@@ -1,0 +1,45 @@
+{
+  "ts": "2026-06-07T21:06:16.769Z",
+  "appSchema": "JAVIER",
+  "erpSchema": "DSEDAC",
+  "apply": true,
+  "statementsCount": 0,
+  "details": [
+    {
+      "feature": "PEDIDOS_COMERCIAL_CAB",
+      "source": "DSEDAC.CPC",
+      "target": "JAVIER.PEDIDOS_CAB",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": []
+    },
+    {
+      "feature": "PEDIDOS_COMERCIAL_LIN",
+      "source": "DSEDAC.LPC",
+      "target": "JAVIER.PEDIDOS_LIN",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": []
+    },
+    {
+      "feature": "COBROS_COMERCIAL",
+      "source": "DSEDAC.CRC",
+      "target": "JAVIER.COBROS",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": []
+    },
+    {
+      "feature": "COBROS_REPARTIDOR",
+      "source": "DSEDAC.CRCA",
+      "target": "JAVIER.REPARTIDOR_COBROS",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": []
+    }
+  ],
+  "notes": [
+    "COBROS_COMERCIAL: skipped ID by rule"
+  ],
+  "applied": []
+}

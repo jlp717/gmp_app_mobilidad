@@ -5,18 +5,27 @@ library;
 
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_models.dart';
 
 class BolsaService {
   static const _base = '/bolsa';
 
   /// GET /api/bolsa/:vendedorCode/status
-  static Future<BolsaStatus> getStatus(String vendedorCode) async {
+  static Future<BolsaStatus> getStatus(
+    String vendedorCode, {
+    bool forceRefresh = false,
+  }) async {
     final code = vendedorCode.trim();
     if (code.isEmpty) {
       throw ArgumentError('vendedorCode is required');
     }
-    final response = await ApiClient.get('$_base/$code/status');
+    final response = await ApiClient.get(
+      '$_base/$code/status',
+      cacheKey: 'bolsa:status:$code',
+      cacheTTL: const Duration(minutes: 2),
+      forceRefresh: forceRefresh,
+    );
     final raw = response['bolsa'];
     if (raw is Map<String, dynamic>) {
       return BolsaStatus.fromJson(raw);
@@ -34,6 +43,7 @@ class BolsaService {
     int? year,
     int? month,
     int limit = 50,
+    bool forceRefresh = false,
   }) async {
     final code = vendedorCode.trim();
     if (code.isEmpty) return [];
@@ -44,14 +54,22 @@ class BolsaService {
       final response = await ApiClient.get(
         '$_base/$code/movements',
         queryParameters: params,
+        cacheKey:
+            'bolsa:movements:$code:${year ?? 'all'}:${month ?? 'all'}:$limit',
+        cacheTTL: CacheService.shortTTL,
+        forceRefresh: forceRefresh,
       );
       final list = response['movements'] as List? ?? [];
       return list
-          .map((m) => BolsaMovimiento.fromJson(m as Map<String, dynamic>))
+          .map(
+            (m) => BolsaMovimiento.fromJson(
+              Map<String, dynamic>.from(m as Map),
+            ),
+          )
           .toList();
     } catch (e) {
       debugPrint('[BolsaService] getMovements error: $e');
-      return [];
+      rethrow;
     }
   }
 
@@ -59,6 +77,7 @@ class BolsaService {
   static Future<List<BolsaMonthlyPoint>> getHistory(
     String vendedorCode, {
     int months = 12,
+    bool forceRefresh = false,
   }) async {
     final code = vendedorCode.trim();
     if (code.isEmpty) return [];
@@ -66,6 +85,9 @@ class BolsaService {
       final response = await ApiClient.get(
         '$_base/$code/history',
         queryParameters: <String, dynamic>{'months': months.toString()},
+        cacheKey: 'bolsa:history:$code:$months',
+        cacheTTL: CacheService.defaultTTL,
+        forceRefresh: forceRefresh,
       );
       final list = response['points'] as List? ?? [];
       return list
@@ -73,7 +95,7 @@ class BolsaService {
           .toList();
     } catch (e) {
       debugPrint('[BolsaService] getHistory error: $e');
-      return [];
+      rethrow;
     }
   }
 
@@ -96,6 +118,9 @@ class BolsaService {
     if (month != null) body['month'] = month;
 
     final response = await ApiClient.put('$_base/$code/config', data: body);
+    await CacheService.invalidateByPrefix('bolsa:status:$code');
+    await CacheService.invalidateByPrefix('bolsa:movements:$code:');
+    await CacheService.invalidateByPrefix('bolsa:history:$code:');
     if (response['success'] == true && response['bolsa'] is Map) {
       return BolsaStatus.fromJson(
         Map<String, dynamic>.from(response['bolsa'] as Map),

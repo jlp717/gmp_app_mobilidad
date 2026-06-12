@@ -19,12 +19,10 @@ class BolsaStatus {
   });
 
   factory BolsaStatus.fromJson(Map<String, dynamic> json) {
-    double n(dynamic v) => v is num
-        ? v.toDouble()
-        : double.tryParse(v?.toString() ?? '') ?? 0;
-    int i(dynamic v) => v is num
-        ? v.toInt()
-        : int.tryParse(v?.toString() ?? '') ?? 0;
+    double n(dynamic v) =>
+        v is num ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0;
+    int i(dynamic v) =>
+        v is num ? v.toInt() : int.tryParse(v?.toString() ?? '') ?? 0;
     return BolsaStatus(
       id: json['id'] != null ? i(json['id']) : null,
       vendedor: (json['vendedor'] ?? '').toString().trim(),
@@ -50,9 +48,8 @@ class BolsaStatus {
 
   /// Porcentaje del límite consumido (0-100).
   double get porcentajeConsumido {
-    final base = (limiteImporte > 0)
-        ? limiteImporte
-        : (acumulado > 0 ? acumulado : 0);
+    final base =
+        (limiteImporte > 0) ? limiteImporte : (acumulado > 0 ? acumulado : 0);
     if (base <= 0) return 0;
     return (consumido / base * 100).clamp(0, 100).toDouble();
   }
@@ -116,12 +113,38 @@ class BolsaMovimiento {
     this.descripcion = '',
     this.pedidoId,
     this.fecha,
+    this.lineId,
+    this.precioMinimoCongelado,
+    this.precioVenta,
+    this.cantidad,
+    this.unidadMedida,
+    this.idempotencyKey,
   });
 
   factory BolsaMovimiento.fromJson(Map<String, dynamic> json) {
-    double n(dynamic v) => v is num
-        ? v.toDouble()
-        : double.tryParse(v?.toString() ?? '') ?? 0;
+    double n(dynamic v) =>
+        v is num ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0;
+    double? nullableNumber(dynamic v) {
+      if (v == null) return null;
+      if (v is num) return v.toDouble();
+      final text = v.toString().trim();
+      if (text.isEmpty) return null;
+      return double.tryParse(text);
+    }
+
+    int? nullableInt(dynamic v) {
+      if (v == null) return null;
+      if (v is num) return v.toInt();
+      final text = v.toString().trim();
+      if (text.isEmpty) return null;
+      return int.tryParse(text);
+    }
+
+    String? nullableText(dynamic v) {
+      final text = v?.toString().trim() ?? '';
+      return text.isEmpty ? null : text;
+    }
+
     return BolsaMovimiento(
       id: (json['id'] is num)
           ? (json['id'] as num).toInt()
@@ -132,10 +155,14 @@ class BolsaMovimiento {
       saldoPosterior: n(json['saldoPosterior']),
       codigoArticulo: (json['codigoArticulo'] ?? '').toString().trim(),
       descripcion: (json['descripcion'] ?? '').toString().trim(),
-      pedidoId: json['pedidoId'] is num
-          ? (json['pedidoId'] as num).toInt()
-          : int.tryParse(json['pedidoId']?.toString() ?? ''),
+      pedidoId: nullableInt(json['pedidoId']),
       fecha: DateTime.tryParse((json['fecha'] as String?) ?? ''),
+      lineId: nullableInt(json['lineId']),
+      precioMinimoCongelado: nullableNumber(json['precioMinimoCongelado']),
+      precioVenta: nullableNumber(json['precioVenta']),
+      cantidad: nullableNumber(json['cantidad']),
+      unidadMedida: nullableText(json['unidadMedida']),
+      idempotencyKey: nullableText(json['idempotencyKey']),
     );
   }
 
@@ -148,6 +175,24 @@ class BolsaMovimiento {
   final String descripcion;
   final int? pedidoId;
   final DateTime? fecha;
+
+  /// Identificador de la línea de pedido que originó el movimiento.
+  final int? lineId;
+
+  /// Precio mínimo unitario aplicado y congelado para la línea.
+  final double? precioMinimoCongelado;
+
+  /// Precio de venta unitario usado en el cálculo del movimiento.
+  final double? precioVenta;
+
+  /// Cantidad vendida o consumida asociada a la línea.
+  final double? cantidad;
+
+  /// Unidad de medida enviada por backend para la cantidad.
+  final String? unidadMedida;
+
+  /// Clave idempotente del movimiento para trazabilidad.
+  final String? idempotencyKey;
 
   /// Importe con signo: positivo si acumulación, negativo si consumo.
   double get importeFirmado => tipo.isCredit ? importe : -importe;
@@ -164,12 +209,10 @@ class BolsaMonthlyPoint {
   });
 
   factory BolsaMonthlyPoint.fromJson(Map<String, dynamic> json) {
-    double n(dynamic v) => v is num
-        ? v.toDouble()
-        : double.tryParse(v?.toString() ?? '') ?? 0;
-    int i(dynamic v) => v is num
-        ? v.toInt()
-        : int.tryParse(v?.toString() ?? '') ?? 0;
+    double n(dynamic v) =>
+        v is num ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0;
+    int i(dynamic v) =>
+        v is num ? v.toInt() : int.tryParse(v?.toString() ?? '') ?? 0;
     return BolsaMonthlyPoint(
       ejercicio: i(json['ejercicio']),
       mes: i(json['mes']),

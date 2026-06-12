@@ -32,7 +32,10 @@ void main() {
 
     await tester.pumpWidget(
       wrap(
-        const RepartidorLiquidacionDiariaPage(repartidorId: '94'),
+        const RepartidorLiquidacionDiariaPage(
+          repartidorId: '94',
+          showMonthlySummary: false,
+        ),
         overrides: [
           repartidorDailySummaryProvider(args).overrideWith(
             (ref) async => RepartidorDailySummary(
@@ -72,7 +75,10 @@ void main() {
 
     await tester.pumpWidget(
       wrap(
-        const RepartidorLiquidacionDiariaPage(repartidorId: '94'),
+        const RepartidorLiquidacionDiariaPage(
+          repartidorId: '94',
+          showMonthlySummary: false,
+        ),
         overrides: [
           repartidorDailySummaryProvider(args).overrideWith(
             (ref) async => RepartidorDailySummary(
@@ -94,7 +100,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Grabar Liquidacion'));
+    await tester.tap(find.byType(ElevatedButton).last);
     await tester.pumpAndSettle();
 
     expect(find.text('Obligatorio'), findsNWidgets(2));

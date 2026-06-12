@@ -19,7 +19,7 @@ const helmet = require('helmet');
 const compression = require('compression');
 const logger = require('./middleware/logger');
 const { verifyToken, handleRefreshToken, handleLogout } = require('./middleware/auth');
-  const { initDb, query, getPoolMetrics } = require('./config/db');
+  const { initDb, query, queryWithParams, getPoolMetrics } = require('./config/db');
 const {
     globalLimiter,
     createSecurityHeaders,
@@ -231,7 +231,6 @@ app.use(validateContentType);
 app.use(prometheusMetrics);  // Prometheus metrics collection (must be before other middleware)
 app.use(networkOptimizer);  // HTTP/2 hints, ETag, cache headers
 app.use(responseCoalescing); // Combine identical concurrent requests
-app.use(cacheMiddleware);    // In-memory HTTP cache with TTL
 app.use(invalidationMiddleware); // Cache invalidation on mutations
 
 // ==================== AUDIT MIDDLEWARE (logs IP, user, action) ====================
@@ -455,6 +454,7 @@ if (process.env.USE_TS_ROUTES === 'true' && global.__TS_APP__) {
 } else {
   // Legacy JavaScript routes
   app.use('/api', verifyToken);
+  app.use('/api', cacheMiddleware); // Authenticated HTTP cache; requires req.user from verifyToken
 
   // Mount Protected Modules
   app.use('/api/dashboard', dashboardRoutes);
@@ -766,9 +766,10 @@ app.use((err, req, res, next) => {
 
 // Prevent crashes from unhandled exceptions (like header errors)
 process.on('uncaughtException', (err) => {
-  // Log with logger for proper formatting
+  // Log with logger for proper formatting (stack incluido: sin él no hay
+  // forma de diagnosticar el origen de la excepción en producción)
   if (typeof logger !== 'undefined') {
-    logger.error(`🔥 UNCAUGHT EXCEPTION: ${err.message}`);
+    logger.error(`🔥 UNCAUGHT EXCEPTION: ${err.message}\n${err.stack || '(no stack)'}`);
   } else {
     console.error(`🔥 UNCAUGHT EXCEPTION: ${err.message}`, err.stack);
   }
@@ -787,7 +788,9 @@ process.on('uncaughtException', (err) => {
 // Handle unhandled rejections gracefully — DO NOT exit on every rejected promise
 // This was the #1 cause of 181 PM2 restarts (any async error = process.exit)
 process.on('unhandledRejection', (reason, promise) => {
-  const msg = reason instanceof Error ? reason.message : String(reason);
+  const msg = reason instanceof Error
+    ? `${reason.message}\n${reason.stack || ''}`
+    : String(reason);
   if (typeof logger !== 'undefined') {
     logger.warn(`⚠️ Unhandled promise rejection: ${msg}`);
   } else {

@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const crypto = require('crypto');
 const logger = require('../middleware/logger');
 const { verifyToken } = require('../middleware/auth');
 const { query, queryWithParams } = require('../config/db');
@@ -23,6 +24,27 @@ const {
 } = require('../utils/common');
 
 const DASHBOARD_CACHE_VERSION = 'v20260602-b-sales-all';
+
+function clampInt(value, defaultValue, min, max) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed)) return defaultValue;
+    return Math.max(min, Math.min(max, parsed));
+}
+
+function canonicalQueryKey(query, overrides = {}) {
+    const merged = { ...(query || {}), ...overrides };
+    return Object.keys(merged)
+        .sort()
+        .map((key) => `${key}=${String(merged[key] ?? '')}`)
+        .join('&');
+}
+
+function hashValues(values) {
+    const normalized = [...new Set((values || []).map((v) => String(v).trim()).filter(Boolean))]
+        .sort()
+        .join(',');
+    return crypto.createHash('sha1').update(normalized).digest('hex').slice(0, 16);
+}
 
 function buildVendedorFilterParameterized(vendedorCodes, tableAlias = 'L') {
     if (!vendedorCodes || vendedorCodes === 'ALL') return { filter: '', params: [] };
@@ -227,7 +249,11 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
             logger.info(`[DASHBOARD] Jefe de ventas detected in matrix-data, setting vendedorCodes to 'ALL'`);
         }
         
-        const cacheKey = `dashboard:matrix:v2:${JSON.stringify(req.query)}`;
+        const cacheKey = `dashboard:matrix:v3:${canonicalQueryKey(req.query, {
+            vendedorCodes: vendedorCodes || 'ALL',
+            userRole: req.user?.role || '',
+            userCode: req.user?.code || req.user?.id || ''
+        })}`;
 
         const { redisCache } = require('../services/redis-cache');
         const cachedResult = await redisCache.get('matrix', cacheKey);
@@ -402,7 +428,7 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
                 const placeholders = vCodes.map(() => '?').join(',');
                 nameLookups.push(lookup(
                     `SELECT TRIM(CODIGOVENDEDOR) as CODE, TRIM(NOMBREVENDEDOR) as NAME FROM DSEDAC.VDD WHERE CODIGOVENDEDOR IN (${placeholders})`,
-                    `names:vendors:${vCodes.length}`,
+                    `names:vendors:${hashValues(vCodes)}`,
                     vCodes
                 ).then(d => ({ type: 'vendor', data: d })));
             }
@@ -416,7 +442,7 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
                 const placeholders = codesToQuery.map(() => '?').join(',');
                 nameLookups.push(lookup(
                     `SELECT TRIM(CODIGOCLIENTE) as CODE, COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), TRIM(NOMBRECLIENTE)) as NAME FROM DSEDAC.CLI WHERE CODIGOCLIENTE IN (${placeholders})`,
-                    `names:clients:${cCodes.length}`,
+                    `names:clients:${hashValues(codesToQuery)}`,
                     codesToQuery
                 ).then(d => ({ type: 'client', data: d })));
             }
@@ -435,7 +461,7 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
                     `SELECT TRIM(A.CODIGOARTICULO) as CODE, TRIM(A.DESCRIPCIONARTICULO) as NAME, TRIM(A.CODIGOFAMILIA) as FAM_CODE, COALESCE(TRIM(F.DESCRIPCIONFAMILIA), TRIM(A.CODIGOFAMILIA)) as FAM_NAME
                      FROM DSEDAC.ART A LEFT JOIN DSEDAC.FAM F ON A.CODIGOFAMILIA = F.CODIGOFAMILIA
                      WHERE A.CODIGOARTICULO IN (${placeholders})`,
-                    `names:products:${codesArr.length}`,
+                    `names:products:${hashValues(codesArr)}`,
                     codesArr
                 ).then(d => ({ type: 'art_mix', data: d })));
             }
@@ -644,7 +670,8 @@ router.get('/sales-evolution', verifyToken, async (req, res) => {
 
 router.get('/recent-sales', verifyToken, async (req, res) => {
     try {
-        let { vendedorCodes, limit = 20 } = req.query;
+        let { vendedorCodes } = req.query;
+        const limit = clampInt(req.query.limit, 20, 1, 100);
         
         // For jefes de ventas, if no specific vendor codes are requested, use 'ALL'
         if (req.user?.isJefeVentas && (!vendedorCodes || vendedorCodes === req.user?.code)) {
@@ -673,7 +700,7 @@ router.get('/recent-sales', verifyToken, async (req, res) => {
       GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO, L.DIADOCUMENTO,
         L.CODIGOCLIENTEALBARAN, C.NOMBRECLIENTE, L.CODIGOVENDEDOR, L.SERIEDOCUMENTO
       ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
-      FETCH FIRST ${parseInt(limit)} ROWS ONLY
+      FETCH FIRST ${limit} ROWS ONLY
         `;
 
         const sales = await cachedQuery(queryWithParams, sql, cacheKey, recentTTL, vendedorResult.params);
@@ -699,7 +726,8 @@ router.get('/recent-sales', verifyToken, async (req, res) => {
 
 router.get('/products-search', verifyToken, async (req, res) => {
     try {
-        const { query: searchTerm, limit = 50 } = req.query;
+        const { query: searchTerm } = req.query;
+        const limit = clampInt(req.query.limit, 50, 1, 100);
 
         let whereClause = "WHERE 1=1";
         const params = [];
@@ -716,7 +744,7 @@ router.get('/products-search', verifyToken, async (req, res) => {
             FROM DSEDAC.ART
             ${whereClause}
             ORDER BY DESCRIPCIONARTICULO
-            FETCH FIRST ${parseInt(limit)} ROWS ONLY
+            FETCH FIRST ${limit} ROWS ONLY
         `;
 
         const cacheKey = `search:products:${searchTerm || 'all'}:${limit}`;

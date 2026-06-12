@@ -20,6 +20,7 @@ class BolsaProvider with ChangeNotifier {
   bool _isLoading = false;
   String? _error;
   String? _currentVendor;
+  int _loadGeneration = 0;
 
   // Filtros de movimientos
   BolsaMovimientoTipo? _tipoFilter; // null = todos
@@ -42,7 +43,10 @@ class BolsaProvider with ChangeNotifier {
       if (_tipoFilter != null && m.tipo != _tipoFilter) return false;
       if (q.isNotEmpty) {
         final hay = m.codigoArticulo.toLowerCase().contains(q) ||
-            m.descripcion.toLowerCase().contains(q);
+            m.descripcion.toLowerCase().contains(q) ||
+            (m.pedidoId?.toString().contains(q) ?? false) ||
+            (m.lineId?.toString().contains(q) ?? false) ||
+            (m.idempotencyKey?.toLowerCase().contains(q) ?? false);
         if (!hay) return false;
       }
       return true;
@@ -78,39 +82,55 @@ class BolsaProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  void _clearVendorSelection({String? message}) {
+    _loadGeneration++;
+    _status = null;
+    _movements = [];
+    _history = [];
+    _currentVendor = null;
+    _isLoading = false;
+    _error = message;
+    notifyListeners();
+  }
+
   Future<void> load(String vendedorCode, {bool force = false}) async {
     final code = vendedorCode.trim();
-    if (code.isEmpty) {
-      _status = null;
-      _movements = [];
-      _currentVendor = null;
-      _error = 'Selecciona un vendedor para ver su bolsa';
-      notifyListeners();
+    if (code.isEmpty || code.toUpperCase() == 'ALL') {
+      _clearVendorSelection(
+        message:
+            code.isEmpty ? 'Selecciona un vendedor para ver su bolsa' : null,
+      );
       return;
     }
     if (!force && _currentVendor == code && _status != null) return;
     _isLoading = true;
     _error = null;
     _currentVendor = code;
+    final generation = ++_loadGeneration;
     notifyListeners();
     try {
       final results = await Future.wait([
-        BolsaService.getStatus(code),
-        BolsaService.getMovements(code, limit: 100),
-        BolsaService.getHistory(code, months: 12),
+        BolsaService.getStatus(code, forceRefresh: force),
+        BolsaService.getMovements(code, limit: 100, forceRefresh: force),
+        BolsaService.getHistory(code, months: 12, forceRefresh: force),
       ]);
+      if (generation != _loadGeneration || _currentVendor != code) return;
       _status = results[0] as BolsaStatus;
-      _movements = (results[1] as List<BolsaMovimiento>)
-          .toList(growable: false);
-      _history = (results[2] as List<BolsaMonthlyPoint>)
-          .toList(growable: false);
+      _movements =
+          (results[1] as List<BolsaMovimiento>).toList(growable: false);
+      _history =
+          (results[2] as List<BolsaMonthlyPoint>).toList(growable: false);
       _error = null;
     } catch (e) {
-      _error = e.toString();
-      debugPrint('[BolsaProvider] load error: $e');
+      if (generation == _loadGeneration) {
+        _error = e.toString();
+        debugPrint('[BolsaProvider] load error: $e');
+      }
     } finally {
-      _isLoading = false;
-      notifyListeners();
+      if (generation == _loadGeneration) {
+        _isLoading = false;
+        notifyListeners();
+      }
     }
   }
 

@@ -9,6 +9,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class ProductsHistoryPage extends StatefulWidget {
@@ -74,6 +75,15 @@ class _ProductsHistoryPageState extends State<ProductsHistoryPage> {
           if (_productCode.isNotEmpty) 'productCode': _productCode,
           'limit': '300',
         },
+        cacheKey: [
+          'products-history-page',
+          _from.toIso8601String().substring(0, 10),
+          _to.toIso8601String().substring(0, 10),
+          widget.initialVendedorCode ?? 'ALL',
+          _clientCode,
+          _productCode,
+        ].join(':'),
+        cacheTTL: CacheService.defaultTTL,
       );
       if (response['success'] == true) {
         setState(() {

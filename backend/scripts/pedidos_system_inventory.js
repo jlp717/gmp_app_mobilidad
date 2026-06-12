@@ -32,10 +32,24 @@ const REQUIRED = {
   ],
 };
 
+const ALIGNMENT_PAIRS = [
+  { test: 'JAVIER.PEDIDOS_CAB', production: 'DSEDAC.CPC' },
+  { test: 'JAVIER.PEDIDOS_LIN', production: 'DSEDAC.LPC' },
+];
+
+
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(name + " environment variable is required");
+  }
+  return value;
+}
+
 function connectionString() {
   const dsn = process.env.ODBC_DSN || 'GMP';
-  const uid = process.env.ODBC_UID || 'JAVIER';
-  const pwd = process.env.ODBC_PWD || 'JAVIER';
+  const uid = requireEnv('ODBC_UID');
+  const pwd = requireEnv('ODBC_PWD');
   return [
     `DSN=${dsn}`,
     `UID=${uid}`,
@@ -73,6 +87,72 @@ function requiredCoverage(columns, required) {
   return { ok: missing.length === 0, missing };
 }
 
+function indexColumns(columns) {
+  if (!columns.ok) return new Map();
+  return new Map(columns.rows.map(row => [
+    String(row.COLUMN_NAME || '').trim().toUpperCase(),
+    {
+      name: String(row.COLUMN_NAME || '').trim().toUpperCase(),
+      type: String(row.DATA_TYPE || '').trim().toUpperCase(),
+      length: Number(row.LENGTH) || 0,
+      scale: Number(row.NUMERIC_SCALE) || 0,
+      nullable: String(row.IS_NULLABLE || '').trim().toUpperCase(),
+    },
+  ]));
+}
+
+function compareColumns(testColumns, productionColumns) {
+  if (!testColumns.ok || !productionColumns.ok) {
+    return {
+      ok: false,
+      error: testColumns.error || productionColumns.error,
+      missingInTest: [],
+      typeMismatches: [],
+    };
+  }
+
+  const testByName = indexColumns(testColumns);
+  const productionByName = indexColumns(productionColumns);
+  const missingInTest = [];
+  const typeMismatches = [];
+
+  for (const [name, production] of productionByName.entries()) {
+    const test = testByName.get(name);
+    if (!test) {
+      missingInTest.push(name);
+      continue;
+    }
+    if (
+      test.type !== production.type ||
+      test.length !== production.length ||
+      test.scale !== production.scale
+    ) {
+      typeMismatches.push({
+        column: name,
+        test: { type: test.type, length: test.length, scale: test.scale },
+        production: {
+          type: production.type,
+          length: production.length,
+          scale: production.scale,
+        },
+      });
+    }
+  }
+
+  return {
+    ok: missingInTest.length === 0 && typeMismatches.length === 0,
+    productionColumnCount: productionByName.size,
+    testColumnCount: testByName.size,
+    missingInTest,
+    typeMismatches,
+  };
+}
+
+function splitQualifiedName(name) {
+  const [schema, table] = name.split('.');
+  return { schema, table };
+}
+
 async function main() {
   await fs.mkdir(OUTPUT_DIR, { recursive: true });
   const conn = await odbc.connect(connectionString());
@@ -89,6 +169,7 @@ async function main() {
     },
     tables: {},
     checks: {},
+    alignment: {},
     diagnostics: {},
   };
 
@@ -98,6 +179,21 @@ async function main() {
       const columns = await tableColumns(conn, schema, table);
       result.tables[`${schema}.${table}`] = columns;
       result.checks[`${schema}.${table}`] = requiredCoverage(columns, required);
+    }
+
+    for (const pair of ALIGNMENT_PAIRS) {
+      const test = splitQualifiedName(pair.test);
+      const production = splitQualifiedName(pair.production);
+      const testColumns = await tableColumns(conn, test.schema, test.table);
+      const productionColumns = await tableColumns(
+        conn,
+        production.schema,
+        production.table,
+      );
+      result.alignment[`${pair.test}<->${pair.production}`] = compareColumns(
+        testColumns,
+        productionColumns,
+      );
     }
 
     result.diagnostics.recentCpcSeries = await safeQuery(conn, `
@@ -141,6 +237,18 @@ async function main() {
     ...Object.entries(result.checks).map(([name, check]) =>
       `- ${name}: ${check.ok ? 'OK' : `MISSING ${check.missing.join(', ')}`}`
     ),
+    '',
+    '## JAVIER vs DSEDAC Alignment',
+    ...Object.entries(result.alignment).map(([name, check]) => {
+      if (check.ok) return `- ${name}: OK`;
+      const missing = check.missingInTest?.length
+        ? ` missing=${check.missingInTest.join(', ')}`
+        : '';
+      const mismatches = check.typeMismatches?.length
+        ? ` type_mismatches=${check.typeMismatches.map(item => item.column).join(', ')}`
+        : '';
+      return `- ${name}: FAIL${missing}${mismatches}`;
+    }),
     '',
     `JSON: ${jsonPath}`,
   ];

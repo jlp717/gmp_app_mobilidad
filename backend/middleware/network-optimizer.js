@@ -39,8 +39,8 @@ const COMPRESSION_CONFIG = {
  * Cache control headers by route pattern
  */
 const CACHE_CONTROL = {
-    '/api/products': 'public, max-age=86400, stale-while-revalidate=3600',
-    '/api/vendedores': 'public, max-age=86400, stale-while-revalidate=3600',
+    '/api/products': 'private, max-age=600, stale-while-revalidate=60',
+    '/api/vendedores': 'private, max-age=600, stale-while-revalidate=60',
     '/api/dashboard/metrics': 'private, max-age=60, stale-while-revalidate=30',
     '/api/dashboard/sales-evolution': 'private, max-age=300, stale-while-revalidate=60',
     '/api/dashboard/matrix-data': 'private, max-age=300, stale-while-revalidate=60',
@@ -222,7 +222,7 @@ function responseCoalescing(req, res, next) {
                 res.json(result);
             })
             .catch(err => {
-                res.status(500).json({ error: err.message });
+                res.status(500).json({ error: 'Request coalescing failed', code: 'COALESCING_ERROR' });
             });
 
         return; // Don't call next

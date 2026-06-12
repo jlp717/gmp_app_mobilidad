@@ -1,0 +1,155 @@
+'use strict';
+
+const request = require('supertest');
+const express = require('express');
+
+const mockGetOrCreateBolsa = jest.fn();
+const mockGetMovimientos = jest.fn();
+let mockUser = { code: '01', role: 'COMERCIAL' };
+
+jest.mock('../services/bolsa-comercial.service', function() { return {
+  getOrCreateBolsa: mockGetOrCreateBolsa,
+  getMovimientos: mockGetMovimientos,
+  getHistorialMensual: jest.fn(),
+  updateBolsaConfig: jest.fn(),
+}; });
+
+jest.mock('../middleware/auth', function() { return {
+  verifyToken: function(req, _res, next) {
+    req.user = mockUser;
+    next();
+  },
+  requireRoles: function() { return function(_req, _res, next) { next(); }; },
+}; });
+
+jest.mock('../middleware/security', function() { return {
+  bolsaLimiter: function(_req, _res, next) { next(); },
+}; });
+
+jest.mock('../middleware/logger', function() { return {
+  info: jest.fn(),
+  warn: jest.fn(),
+  error: jest.fn(),
+  debug: jest.fn(),
+}; });
+
+const bolsaRouter = require('../routes/bolsa');
+
+function makeApp() {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/bolsa', bolsaRouter);
+  return app;
+}
+
+beforeEach(function() {
+  jest.clearAllMocks();
+  mockUser = { code: '01', role: 'COMERCIAL' };
+});
+
+describe('bolsa route validation contracts', function() {
+  test('GET /api/bolsa/:vendedorCode/status returns machine-readable validation error', async function() {
+    const res = await request(makeApp()).get('/api/bolsa/bad-code/status');
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 'INVALID_VENDEDOR_CODE',
+      error: 'Invalid vendedorCode format',
+    });
+    expect(mockGetOrCreateBolsa).not.toHaveBeenCalled();
+  });
+
+  test('GET /api/bolsa/:vendedorCode/movements returns machine-readable validation error', async function() {
+    const res = await request(makeApp()).get('/api/bolsa/bad-code/movements');
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 'INVALID_VENDEDOR_CODE',
+      error: 'Invalid vendedorCode format',
+    });
+    expect(mockGetMovimientos).not.toHaveBeenCalled();
+  });
+
+  test('GET /api/bolsa/:vendedorCode/movements returns detailed movement contract fields', async function() {
+    mockUser = { code: '80', role: 'JEFE_VENTAS', isJefeVentas: true };
+    const movement = {
+      id: 1,
+      tipo: 'ACUMULACION',
+      importe: 6,
+      saldoAnterior: 300,
+      saldoPosterior: 306,
+      codigoArticulo: 'ART-OVER',
+      descripcion: 'Producto sobre minimo',
+      pedidoId: 42,
+      fecha: '2026-06-09T23:36:39.000Z',
+      lineId: 7,
+      precioMinimoCongelado: 10,
+      precioVenta: 12,
+      cantidad: 3,
+      unidadMedida: 'CAJAS',
+      idempotencyKey: 'pedido-42-line-7-over-min',
+    };
+    mockGetMovimientos.mockResolvedValueOnce([movement]);
+
+    const res = await request(makeApp())
+      .get('/api/bolsa/10/movements?year=2026&month=6&limit=25');
+
+    expect(res.status).toBe(200);
+    expect(mockGetMovimientos).toHaveBeenCalledWith('10', 2026, 6, 25);
+    expect(res.body).toMatchObject({
+      success: true,
+      movements: [
+        {
+          id: 1,
+          tipo: 'ACUMULACION',
+          importe: 6,
+          saldoAnterior: 300,
+          saldoPosterior: 306,
+          codigoArticulo: 'ART-OVER',
+          descripcion: 'Producto sobre minimo',
+          pedidoId: 42,
+          fecha: '2026-06-09T23:36:39.000Z',
+          lineId: 7,
+          precioMinimoCongelado: 10,
+          precioVenta: 12,
+          cantidad: 3,
+          unidadMedida: 'CAJAS',
+          idempotencyKey: 'pedido-42-line-7-over-min',
+        },
+      ],
+    });
+  });
+});
+
+
+describe('bolsa route authorization and public errors', function() {
+  test('GET /api/bolsa/:vendedorCode/status allows COMERCIAL to access own vendor only', async function() {
+    mockUser = { code: '01', role: 'COMERCIAL' };
+    mockGetOrCreateBolsa.mockResolvedValueOnce({ vendedor: '01', saldoDisponible: 300 });
+    const own = await request(makeApp()).get('/api/bolsa/01/status');
+    const cross = await request(makeApp()).get('/api/bolsa/02/status').set('x-request-id', 'req-cross');
+    expect(own.status).toBe(200);
+    expect(mockGetOrCreateBolsa).toHaveBeenCalledWith('01', expect.any(Number), expect.any(Number));
+    expect(cross.status).toBe(403);
+    expect(cross.body).toMatchObject({ success: false, code: 'FORBIDDEN_VENDOR', error: 'No autorizado para consultar este vendedor', request_id: 'req-cross' });
+    expect(mockGetOrCreateBolsa).toHaveBeenCalledTimes(1);
+  });
+  test('GET /api/bolsa/:vendedorCode/status allows JEFE_VENTAS cross-vendor access', async function() {
+    mockUser = { code: '80', role: 'JEFE_VENTAS', isJefeVentas: true };
+    mockGetOrCreateBolsa.mockResolvedValueOnce({ vendedor: '02', saldoDisponible: 300 });
+    const res = await request(makeApp()).get('/api/bolsa/02/status');
+    expect(res.status).toBe(200);
+    expect(mockGetOrCreateBolsa).toHaveBeenCalledWith('02', expect.any(Number), expect.any(Number));
+  });
+  test('GET /api/bolsa/:vendedorCode/status hides raw DB2 errors behind public code and request_id', async function() {
+    mockUser = { code: '01', role: 'COMERCIAL' };
+    mockGetOrCreateBolsa.mockRejectedValueOnce(new Error('SQLSTATE 42S02 ODBC table missing'));
+    const res = await request(makeApp()).get('/api/bolsa/01/status').set('x-request-id', 'req-db2');
+    expect(res.status).toBe(500);
+    expect(res.body).toMatchObject({ success: false, code: 'BOLSA_INTERNAL_ERROR', error: 'No se pudo procesar la bolsa comercial', request_id: 'req-db2' });
+    expect(JSON.stringify(res.body)).not.toContain('SQLSTATE');
+    expect(JSON.stringify(res.body)).not.toContain('ODBC');
+  });
+});

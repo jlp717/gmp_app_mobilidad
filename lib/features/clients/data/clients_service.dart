@@ -4,6 +4,7 @@ library;
 
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 
 class ClientsService {
@@ -55,6 +56,8 @@ class ClientsService {
     return ApiClient.get(
       '${ApiConfig.clientDetail}/$clientCode',
       queryParameters: {'vendedorCodes': vendedorCodes},
+      cacheKey: 'clients:detail:$clientCode:$vendedorCodes',
+      cacheTTL: CacheService.shortTTL,
     );
   }
 
@@ -72,6 +75,7 @@ class ClientsService {
       },
       syncType: 'update_client_notes',
     );
+    await CacheService.invalidateByPrefix('clients:detail:$clientCode:');
   }
 
   /// Fetch client sales history
@@ -89,6 +93,14 @@ class ClientsService {
         'limit': limit.toString(),
         'groupByFamily': groupByFamily.toString(),
       },
+      cacheKey: [
+        'clients:sales-history',
+        clientCode,
+        vendedorCodes,
+        limit,
+        groupByFamily,
+      ].join(':'),
+      cacheTTL: CacheService.defaultTTL,
     );
     final rawList = response['history'] ?? [];
     final isGrouped = response['grouped'] ?? false;
@@ -129,6 +141,17 @@ class ClientsService {
     final response = await ApiClient.get(
       '${ApiConfig.clientDetail}/$clientCode/sales-history/family',
       queryParameters: params,
+      cacheKey: [
+        'clients:family-products',
+        clientCode,
+        vendedorCodes,
+        family1,
+        family2 ?? '',
+        family3 ?? '',
+        groupLevel,
+        limit,
+      ].join(':'),
+      cacheTTL: CacheService.defaultTTL,
     );
     return ((response['products'] as List?) ?? [])
         .map((item) => Map<String, dynamic>.from(item as Map))
@@ -146,6 +169,8 @@ class ClientsService {
         'clientCode': clientCode,
         'vendedorCodes': vendedorCodes,
       },
+      cacheKey: 'clients:sales-summary:$clientCode:$vendedorCodes',
+      cacheTTL: CacheService.defaultTTL,
     );
   }
 }

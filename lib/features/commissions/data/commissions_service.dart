@@ -9,22 +9,23 @@ class CommissionsService {
   /// Get Commissions Summary - cached for 15 minutes
   static Future<Map<String, dynamic>> getSummary({
     required String vendedorCode,
-    dynamic year = 2026,
+    dynamic year,
     bool forceRefresh = false,
   }) async {
     try {
+      final resolvedYear = year ?? DateTime.now().year;
       // Bust cache when the commission sales payload changes.
       final cacheKey = [
         'commissions_v14_final_sources',
         vendedorCode,
-        year,
+        resolvedYear,
       ].join('_');
 
       final result = await OfflineAwareApi.get(
         '/commissions/summary',
         queryParameters: {
           'vendedorCode': vendedorCode,
-          'year': year.toString(),
+          'year': resolvedYear.toString(),
           if (forceRefresh) 'forceRefresh': 'true',
         },
         cacheKey: cacheKey,

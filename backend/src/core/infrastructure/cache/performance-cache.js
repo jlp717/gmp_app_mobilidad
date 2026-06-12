@@ -129,12 +129,13 @@ class PerformanceCache {
     }
 
     // L2 Check (Redis if available)
-    if (global.redisCache) {
+    const redisCache = getRedisCacheAdapter();
+    if (redisCache?.get) {
       try {
-        const l2Data = await global.redisCache.get(key);
+        const l2Data = await redisCache.get(key);
         if (l2Data) {
           this._stats.l2Hits++;
-          const parsed = JSON.parse(l2Data);
+          const parsed = parseCachedPayload(l2Data);
           this.setL1(key, parsed, ttlConfig.l1); // Populate L1 from L2
           return { data: parsed, source: 'L2', cached: true };
         }
@@ -149,9 +150,9 @@ class PerformanceCache {
 
     // Populate both caches
     this.setL1(key, data, ttlConfig.l1);
-    if (global.redisCache) {
+    if (redisCache?.set) {
       try {
-        await global.redisCache.setex(key, ttlConfig.l2, JSON.stringify(data));
+        await redisCache.set(key, ttlConfig.l2, JSON.stringify(data));
       } catch (err) {
         // Redis unavailable, L1 only
       }
@@ -174,8 +175,9 @@ class PerformanceCache {
     }
 
     // L2 invalidation
-    if (global.redisCache) {
-      global.redisCache.del(pattern).catch(() => {});
+    const redisCache = getRedisCacheAdapter();
+    if (redisCache?.del) {
+      safeFireAndForget(redisCache.del(pattern));
     }
   }
 
@@ -185,8 +187,11 @@ class PerformanceCache {
   invalidateAll() {
     this._l1Cache.clear();
     this._l1AccessOrder = [];
-    if (global.redisCache) {
-      global.redisCache.flushdb().catch(() => {});
+    const redisCache = getRedisCacheAdapter();
+    if (redisCache?.del) {
+      ['ALL:*', 'JEFE_VENTAS:*', 'ADMIN:*', 'COMERCIAL:*', 'REPARTIDOR:*'].forEach((safePattern) => {
+        safeFireAndForget(redisCache.del(safePattern));
+      });
     }
   }
 
@@ -214,11 +219,13 @@ class PerformanceCache {
       try {
         const data = await fetchFn();
         this.setL1(`ALL:${key}`, data, allTTL.l1);
-        if (global.redisCache) {
-          await global.redisCache.setex(`ALL:${key}`, allTTL.l2, JSON.stringify(data));
+        const redisCache = getRedisCacheAdapter();
+        if (redisCache?.set) {
+          await redisCache.set(`ALL:${key}`, allTTL.l2, JSON.stringify(data));
         }
       } catch (err) {
-        console.error(`Cache pre-warm failed for ${key}:`, err.message);
+        const logger = require('../../../../middleware/logger');
+        logger.warn(`[PerformanceCache] Cache pre-warm failed for ${key}: ${err.message}`);
       }
     }
   }

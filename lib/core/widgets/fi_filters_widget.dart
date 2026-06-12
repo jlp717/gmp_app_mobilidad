@@ -1,10 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
+String _cacheKeyFromParams(Map<String, Object?> params) {
+  final keys = params.keys.toList()..sort();
+  return keys
+      .map(
+        (key) => '$key=${Uri.encodeComponent(params[key]?.toString() ?? '')}',
+      )
+      .join('&');
+}
+
 /// Widget reutilizable para filtros jerárquicos FI1-FI5
-/// 
+///
 /// Estructura de jerarquía:
 /// - FI1: Categoría principal (ej: PRODUCTOS DEL MAR, CARNE CONGELADA)
 /// - FI2: Subcategoría (ej: LANGOSTINO, GAMBA) - depende de FI1
@@ -12,30 +22,31 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 /// - FI4: Características especiales (SIN GLUTEN, VEGANO) (~18% artículos)
 /// - FI5: Tipo de conservación (CONGELADO, HELADO, CARNE FRESCA)
 class FiFiltersWidget extends StatefulWidget {
-
   const FiFiltersWidget({
-    required this.onFiltersChanged, super.key,
+    required this.onFiltersChanged,
+    super.key,
     this.initialFilters,
     this.availableOptions,
     this.compact = true,
     this.showAdvanced = false,
     this.enabled = true,
   });
+
   /// Callback cuando los filtros cambian
   final Function(FiFilterState) onFiltersChanged;
-  
+
   /// Filtros iniciales (opcional)
   final FiFilterState? initialFilters;
-  
+
   /// Opciones disponibles precargadas (para evitar llamadas al API)
   final FiFilterOptions? availableOptions;
-  
+
   /// Si se muestra compacto (2 columnas) o expandido
   final bool compact;
-  
+
   /// Mostrar solo FI principales (FI1, FI2, FI5) u ocultar FI3/FI4
   final bool showAdvanced;
-  
+
   /// Si el widget está habilitado
   final bool enabled;
 
@@ -50,21 +61,21 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
   String? _selectedFi3;
   String? _selectedFi4;
   String? _selectedFi5;
-  
+
   // Available options (loaded from API or passed as prop)
   List<FiOption> _fi1Options = [];
   List<FiOption> _fi2Options = [];
   List<FiOption> _fi3Options = [];
   List<FiOption> _fi4Options = [];
   List<FiOption> _fi5Options = [];
-  
+
   // Loading states
   bool _loadingFi1 = false;
   bool _loadingFi2 = false;
   bool _loadingFi3 = false;
   bool _loadingFi4 = false;
   bool _loadingFi5 = false;
-  
+
   // Count of matching articles
   final int _articleCount = 0;
 
@@ -82,7 +93,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
       _selectedFi4 = widget.initialFilters!.fi4;
       _selectedFi5 = widget.initialFilters!.fi5;
     }
-    
+
     if (widget.availableOptions != null) {
       _fi1Options = widget.availableOptions!.fi1;
       _fi2Options = widget.availableOptions!.fi2;
@@ -99,7 +110,8 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
   void didUpdateWidget(FiFiltersWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
     // If available options changed externally, update local state
-    if (widget.availableOptions != oldWidget.availableOptions && widget.availableOptions != null) {
+    if (widget.availableOptions != oldWidget.availableOptions &&
+        widget.availableOptions != null) {
       setState(() {
         _fi1Options = widget.availableOptions!.fi1;
         _fi2Options = widget.availableOptions!.fi2;
@@ -113,11 +125,15 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
   /// Load FI1 options from API
   Future<void> _loadFi1Options() async {
     if (_fi1Options.isNotEmpty) return;
-    
+
     setState(() => _loadingFi1 = true);
     try {
-      final response = await ApiClient.get('/filters/fi1');
-      if (response['success'] == true) {
+      final response = await ApiClient.get(
+        '/filters/fi1',
+        cacheKey: 'filters:fi1',
+        cacheTTL: CacheService.longTTL,
+      );
+      if (mounted && response['success'] == true) {
         setState(() {
           _fi1Options = (response['filters'] as List)
               .map((f) => FiOption.fromJson(f as Map<String, dynamic>))
@@ -127,7 +143,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
     } catch (e) {
       debugPrint('Error loading FI1: $e');
     } finally {
-      setState(() => _loadingFi1 = false);
+      if (mounted) setState(() => _loadingFi1 = false);
     }
   }
 
@@ -137,13 +153,18 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
       setState(() => _fi2Options = []);
       return;
     }
-    
+
     setState(() => _loadingFi2 = true);
     try {
-      final response = await ApiClient.get('/filters/fi2', queryParameters: {
-        'fi1Code': _selectedFi1,
-      },);
-      if (response['success'] == true) {
+      final response = await ApiClient.get(
+        '/filters/fi2',
+        queryParameters: {
+          'fi1Code': _selectedFi1,
+        },
+        cacheKey: 'filters:fi2:${_selectedFi1 ?? ''}',
+        cacheTTL: CacheService.longTTL,
+      );
+      if (mounted && response['success'] == true) {
         setState(() {
           _fi2Options = (response['filters'] as List)
               .map((f) => FiOption.fromJson(f as Map<String, dynamic>))
@@ -153,7 +174,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
     } catch (e) {
       debugPrint('Error loading FI2: $e');
     } finally {
-      setState(() => _loadingFi2 = false);
+      if (mounted) setState(() => _loadingFi2 = false);
     }
   }
 
@@ -163,15 +184,20 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
       setState(() => _fi3Options = []);
       return;
     }
-    
+
     setState(() => _loadingFi3 = true);
     try {
       final params = <String, String>{};
       if (_selectedFi1 != null) params['fi1Code'] = _selectedFi1!;
       if (_selectedFi2 != null) params['fi2Code'] = _selectedFi2!;
-      
-      final response = await ApiClient.get('/filters/fi3', queryParameters: params);
-      if (response['success'] == true) {
+
+      final response = await ApiClient.get(
+        '/filters/fi3',
+        queryParameters: params,
+        cacheKey: 'filters:fi3:${_cacheKeyFromParams(params)}',
+        cacheTTL: CacheService.longTTL,
+      );
+      if (mounted && response['success'] == true) {
         setState(() {
           _fi3Options = (response['filters'] as List)
               .map((f) => FiOption.fromJson(f as Map<String, dynamic>))
@@ -181,7 +207,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
     } catch (e) {
       debugPrint('Error loading FI3: $e');
     } finally {
-      setState(() => _loadingFi3 = false);
+      if (mounted) setState(() => _loadingFi3 = false);
     }
   }
 
@@ -193,9 +219,14 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
       if (_selectedFi1 != null) params['fi1Code'] = _selectedFi1!;
       if (_selectedFi2 != null) params['fi2Code'] = _selectedFi2!;
       if (_selectedFi3 != null) params['fi3Code'] = _selectedFi3!;
-      
-      final response = await ApiClient.get('/filters/fi4', queryParameters: params);
-      if (response['success'] == true) {
+
+      final response = await ApiClient.get(
+        '/filters/fi4',
+        queryParameters: params,
+        cacheKey: 'filters:fi4:${_cacheKeyFromParams(params)}',
+        cacheTTL: CacheService.longTTL,
+      );
+      if (mounted && response['success'] == true) {
         setState(() {
           _fi4Options = (response['filters'] as List)
               .map((f) => FiOption.fromJson(f as Map<String, dynamic>))
@@ -205,18 +236,22 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
     } catch (e) {
       debugPrint('Error loading FI4: $e');
     } finally {
-      setState(() => _loadingFi4 = false);
+      if (mounted) setState(() => _loadingFi4 = false);
     }
   }
 
   /// Load FI5 options (independent, always loaded)
   Future<void> _loadFi5Options() async {
     if (_fi5Options.isNotEmpty) return;
-    
+
     setState(() => _loadingFi5 = true);
     try {
-      final response = await ApiClient.get('/filters/fi5');
-      if (response['success'] == true) {
+      final response = await ApiClient.get(
+        '/filters/fi5',
+        cacheKey: 'filters:fi5',
+        cacheTTL: CacheService.longTTL,
+      );
+      if (mounted && response['success'] == true) {
         setState(() {
           _fi5Options = (response['filters'] as List)
               .map((f) => FiOption.fromJson(f as Map<String, dynamic>))
@@ -226,19 +261,21 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
     } catch (e) {
       debugPrint('Error loading FI5: $e');
     } finally {
-      setState(() => _loadingFi5 = false);
+      if (mounted) setState(() => _loadingFi5 = false);
     }
   }
 
   /// Notify parent of filter changes
   void _notifyFiltersChanged() {
-    widget.onFiltersChanged(FiFilterState(
-      fi1: _selectedFi1,
-      fi2: _selectedFi2,
-      fi3: _selectedFi3,
-      fi4: _selectedFi4,
-      fi5: _selectedFi5,
-    ),);
+    widget.onFiltersChanged(
+      FiFilterState(
+        fi1: _selectedFi1,
+        fi2: _selectedFi2,
+        fi3: _selectedFi3,
+        fi4: _selectedFi4,
+        fi5: _selectedFi5,
+      ),
+    );
   }
 
   /// Handle FI1 selection change
@@ -253,7 +290,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
       _fi3Options = [];
       _fi4Options = [];
     });
-    
+
     if (value != null) {
       _loadFi2Options();
       if (widget.showAdvanced) {
@@ -274,7 +311,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
       _fi3Options = [];
       _fi4Options = [];
     });
-    
+
     if (widget.showAdvanced && value != null) {
       _loadFi3Options();
       _loadFi4Options();
@@ -289,7 +326,7 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
       _selectedFi4 = null;
       _fi4Options = [];
     });
-    
+
     if (value != null) {
       _loadFi4Options();
     }
@@ -324,11 +361,11 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
   }
 
   /// Check if any filter is active
-  bool get hasActiveFilters => 
-      _selectedFi1 != null || 
-      _selectedFi2 != null || 
-      _selectedFi3 != null || 
-      _selectedFi4 != null || 
+  bool get hasActiveFilters =>
+      _selectedFi1 != null ||
+      _selectedFi2 != null ||
+      _selectedFi3 != null ||
+      _selectedFi4 != null ||
       _selectedFi5 != null;
 
   @override
@@ -396,7 +433,8 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
                     loading: _loadingFi3,
                     onChanged: widget.enabled ? _onFi3Changed : null,
                     icon: Icons.tune,
-                    enabled: _selectedFi1 != null && (_fi3Options.isNotEmpty || _loadingFi3),
+                    enabled: _selectedFi1 != null &&
+                        (_fi3Options.isNotEmpty || _loadingFi3),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -409,7 +447,8 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
                     loading: _loadingFi4,
                     onChanged: widget.enabled ? _onFi4Changed : null,
                     icon: Icons.eco,
-                    enabled: _selectedFi1 != null && (_fi4Options.isNotEmpty || _loadingFi4),
+                    enabled: _selectedFi1 != null &&
+                        (_fi4Options.isNotEmpty || _loadingFi4),
                   ),
                 ),
               ],
@@ -424,7 +463,8 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
             child: TextButton.icon(
               onPressed: widget.enabled ? clearFilters : null,
               icon: const Icon(Icons.clear_all, size: 16),
-              label: const Text('Limpiar filtros', style: TextStyle(fontSize: 11)),
+              label:
+                  const Text('Limpiar filtros', style: TextStyle(fontSize: 11)),
               style: TextButton.styleFrom(
                 foregroundColor: AppTheme.error,
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -519,26 +559,27 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
     final isActive = value != null;
     final effectiveEnabled = enabled && !loading && widget.enabled;
     final hasOptions = options.isNotEmpty;
-    
+
     // Colores consistentes con el diseño de la app
     Color getBorderColor() {
       if (!effectiveEnabled) return Colors.grey.shade700;
       if (isActive) return AppTheme.neonBlue;
       return Colors.grey.shade600;
     }
-    
+
     Color getFillColor() {
-      if (!effectiveEnabled) return AppTheme.surfaceColor.withValues(alpha: 0.5);
+      if (!effectiveEnabled)
+        return AppTheme.surfaceColor.withValues(alpha: 0.5);
       if (isActive) return AppTheme.neonBlue.withValues(alpha: 0.15);
       return AppTheme.surfaceColor;
     }
-    
+
     Color getIconColor() {
       if (!effectiveEnabled) return Colors.grey.shade600;
       if (isActive) return AppTheme.neonBlue;
       return AppTheme.textSecondary;
     }
-    
+
     return SizedBox(
       height: 36 * Responsive.landscapeScale(context),
       child: DropdownButtonFormField<String?>(
@@ -547,7 +588,9 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
           labelText: label,
           labelStyle: TextStyle(
             fontSize: 10,
-            color: effectiveEnabled ? (isActive ? AppTheme.neonBlue : AppTheme.textSecondary) : Colors.grey.shade600,
+            color: effectiveEnabled
+                ? (isActive ? AppTheme.neonBlue : AppTheme.textSecondary)
+                : Colors.grey.shade600,
             fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
           ),
           prefixIcon: loading
@@ -571,11 +614,13 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
           isDense: true,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: getBorderColor(), width: isActive ? 1.5 : 1),
+            borderSide:
+                BorderSide(color: getBorderColor(), width: isActive ? 1.5 : 1),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: getBorderColor(), width: isActive ? 1.5 : 1),
+            borderSide:
+                BorderSide(color: getBorderColor(), width: isActive ? 1.5 : 1),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
@@ -595,7 +640,9 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
         ),
         icon: Icon(
           Icons.arrow_drop_down,
-          color: effectiveEnabled ? (isActive ? AppTheme.neonBlue : Colors.white54) : Colors.grey.shade700,
+          color: effectiveEnabled
+              ? (isActive ? AppTheme.neonBlue : Colors.white54)
+              : Colors.grey.shade700,
         ),
         items: [
           DropdownMenuItem<String?>(
@@ -608,14 +655,16 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
               ),
             ),
           ),
-          ...options.map((opt) => DropdownMenuItem<String?>(
-            value: opt.code,
-            child: Text(
-              opt.displayName,
-              style: const TextStyle(fontSize: 11),
-              overflow: TextOverflow.ellipsis,
+          ...options.map(
+            (opt) => DropdownMenuItem<String?>(
+              value: opt.code,
+              child: Text(
+                opt.displayName,
+                style: const TextStyle(fontSize: 11),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),),
+          ),
         ],
         onChanged: effectiveEnabled ? onChanged : null,
         isExpanded: true,
@@ -626,7 +675,6 @@ class _FiFiltersWidgetState extends State<FiFiltersWidget> {
 
 /// State holder for FI filter selections
 class FiFilterState {
-
   const FiFilterState({
     this.fi1,
     this.fi2,
@@ -640,7 +688,8 @@ class FiFilterState {
   final String? fi4;
   final String? fi5;
 
-  bool get isEmpty => fi1 == null && fi2 == null && fi3 == null && fi4 == null && fi5 == null;
+  bool get isEmpty =>
+      fi1 == null && fi2 == null && fi3 == null && fi4 == null && fi5 == null;
   bool get isNotEmpty => !isEmpty;
 
   Map<String, String> toQueryParams() {
@@ -654,12 +703,12 @@ class FiFilterState {
   }
 
   @override
-  String toString() => 'FiFilterState(fi1: $fi1, fi2: $fi2, fi3: $fi3, fi4: $fi4, fi5: $fi5)';
+  String toString() =>
+      'FiFilterState(fi1: $fi1, fi2: $fi2, fi3: $fi3, fi4: $fi4, fi5: $fi5)';
 }
 
 /// Available options for FI filters
 class FiFilterOptions {
-
   const FiFilterOptions({
     this.fi1 = const [],
     this.fi2 = const [],
@@ -685,13 +734,14 @@ class FiFilterOptions {
 
   static List<FiOption> _parseOptions(dynamic data) {
     if (data == null) return [];
-    return (data as List).map((f) => FiOption.fromJson(f as Map<String, dynamic>)).toList();
+    return (data as List)
+        .map((f) => FiOption.fromJson(f as Map<String, dynamic>))
+        .toList();
   }
 }
 
 /// Single FI filter option
 class FiOption {
-
   const FiOption({
     required this.code,
     required this.name,
@@ -702,7 +752,9 @@ class FiOption {
     return FiOption(
       code: json['code']?.toString() ?? '',
       name: json['name']?.toString() ?? '',
-      count: json['count'] is int ? (json['count'] as int) : int.tryParse(json['count']?.toString() ?? '0') ?? 0,
+      count: json['count'] is int
+          ? (json['count'] as int)
+          : int.tryParse(json['count']?.toString() ?? '0') ?? 0,
     );
   }
   final String code;

@@ -14,7 +14,12 @@ from datetime import datetime
 
 # CONFIGURACIÓN
 CSV_DIR = "/var/www/powerbi-data"
-DSN = "DSN=GMP;UID=JAVIER;PWD=JAVIER"
+ODBC_DSN = os.getenv("ODBC_DSN", "GMP")
+ODBC_UID = os.getenv("ODBC_UID") or os.getenv("DB2_UID")
+ODBC_PWD = os.getenv("ODBC_PASSWORD") or os.getenv("ODBC_PWD") or os.getenv("DB2_PASSWORD")
+if not ODBC_UID or not ODBC_PWD:
+    raise RuntimeError("Missing DB2 credentials. Set ODBC_UID and ODBC_PASSWORD in the environment.")
+DSN = f"DSN={ODBC_DSN};UID={ODBC_UID};PWD={ODBC_PWD}"
 
 # Tablas/vistas a exportar
 EXPORTS = [

@@ -124,6 +124,72 @@ describe('facturas service fiscal totals', () => {
     expect(mockQueryWithParams.mock.calls[0][0]).toMatch(/FROM\s+DSEDAC\.CFC\s+CFC/i);
   });
 
+  test('getFacturasRaw bounds list queries with OFFSET/FETCH and clamps limit', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([]);
+
+    await facturasService.getFacturasRaw({
+      vendedorCodes: '02',
+      year: 2026,
+      limit: 9999,
+      offset: -25,
+    });
+
+    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toMatch(/OFFSET\s+\?\s+ROWS\s+FETCH\s+NEXT\s+\?\s+ROWS\s+ONLY/i);
+    expect(params[params.length - 2]).toBe(0);
+    expect(params[params.length - 1]).toBe(500);
+  });
+
+  test('getFacturasRaw applies pagination after merging vendor batches', async () => {
+    mockQueryWithParams
+      .mockResolvedValueOnce([
+        {
+          SERIE: 'F',
+          NUMERO: 1,
+          EJERCICIO: 2026,
+          DIA: 1,
+          MES: 1,
+          ANO: 2026,
+          CODIGO_CLIENTE: 'C01',
+          NOMBRE_CLIENTE: 'Cliente viejo',
+          TOTAL: 10,
+          BASE: 8,
+          IVA: 2,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          SERIE: 'F',
+          NUMERO: 2,
+          EJERCICIO: 2026,
+          DIA: 2,
+          MES: 1,
+          ANO: 2026,
+          CODIGO_CLIENTE: 'C02',
+          NOMBRE_CLIENTE: 'Cliente nuevo',
+          TOTAL: 20,
+          BASE: 16,
+          IVA: 4,
+        },
+      ]);
+
+    const facturas = await facturasService.getFacturasRaw({
+      vendedorCodes: '01,02,03,04,05,06,07,08,09,10,11,12,13,14,15,16',
+      year: 2026,
+      limit: 1,
+      offset: 1,
+    });
+
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(2);
+    for (const call of mockQueryWithParams.mock.calls) {
+      const params = call[1];
+      expect(params[params.length - 2]).toBe(0);
+      expect(params[params.length - 1]).toBe(2);
+    }
+    expect(facturas).toHaveLength(1);
+    expect(facturas[0].numero).toBe(1);
+  });
+
   test('getSummary totals base and IVA from CFC official totals', async () => {
     mockQueryWithParams.mockResolvedValueOnce([
       {

@@ -29,7 +29,7 @@ void main() {
         showCommissions: false,
       );
 
-      expect(items.length, 7);
+      expect(items.length, 8);
       expect(items.any((i) => i.label == 'Panel'), false);
       expect(items[0].label, 'Clientes');
       expect(items.any((i) => i.label == 'Liquidacion Diaria'), true);
@@ -46,7 +46,7 @@ void main() {
         showCommissions: false,
       );
 
-      expect(items.length, 8);
+      expect(items.length, 9);
       expect(items[0].label, 'Panel');
     });
 
@@ -58,8 +58,9 @@ void main() {
         showCommissions: true,
       );
 
-      expect(items.length, 10);
+      expect(items.length, 11);
       expect(items[0].label, 'Panel');
+      expect(items.any((i) => i.label == 'Bolsa'), true);
     });
 
     test('Comercial shows Comisiones when showCommissions is true', () {

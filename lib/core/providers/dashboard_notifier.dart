@@ -18,8 +18,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/models/dashboard_models.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+
+String _cacheKeyFromParams(Map<String, Object?> params) {
+  final keys = params.keys.toList()..sort();
+  return keys
+      .map(
+        (key) => '$key=${Uri.encodeComponent(params[key]?.toString() ?? '')}',
+      )
+      .join('&');
+}
 
 // ============================================================
 // STATE
@@ -193,8 +203,12 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
 
   Future<DashboardMetrics?> _fetchMetrics(Map<String, String> params) async {
     try {
-      final response = await ApiClient.get(ApiConfig.dashboardMetrics,
-          queryParameters: params);
+      final response = await ApiClient.get(
+        ApiConfig.dashboardMetrics,
+        queryParameters: params,
+        cacheKey: 'dashboard:metrics:${_cacheKeyFromParams(params)}',
+        cacheTTL: CacheService.shortTTL,
+      );
       if (response == null) return null;
       return DashboardMetrics.fromJson(response as Map<String, dynamic>);
     } catch (e) {
@@ -206,8 +220,12 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
   Future<List<RecentSale>> _fetchRecentSales(Map<String, String> params) async {
     try {
       final p = Map<String, String>.from(params)..['limit'] = '15';
-      final response =
-          await ApiClient.get(ApiConfig.recentSales, queryParameters: p);
+      final response = await ApiClient.get(
+        ApiConfig.recentSales,
+        queryParameters: p,
+        cacheKey: 'dashboard:recent-sales:${_cacheKeyFromParams(p)}',
+        cacheTTL: const Duration(minutes: 2),
+      );
       if (response == null) return [];
       final list =
           response['sales'] as List? ?? response['data'] as List? ?? [];
@@ -224,8 +242,12 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
       Map<String, String> params) async {
     try {
       final p = Map<String, String>.from(params)..['months'] = '12';
-      final response =
-          await ApiClient.get(ApiConfig.salesEvolution, queryParameters: p);
+      final response = await ApiClient.get(
+        ApiConfig.salesEvolution,
+        queryParameters: p,
+        cacheKey: 'dashboard:sales-evolution:${_cacheKeyFromParams(p)}',
+        cacheTTL: CacheService.defaultTTL,
+      );
       if (response == null) return [];
       final dataList =
           response['evolution'] as List? ?? response['data'] as List? ?? [];
@@ -240,8 +262,12 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
 
   Future<YoYComparison?> _fetchYoYComparison(Map<String, String> params) async {
     try {
-      final response =
-          await ApiClient.get(ApiConfig.yoyComparison, queryParameters: params);
+      final response = await ApiClient.get(
+        ApiConfig.yoyComparison,
+        queryParameters: params,
+        cacheKey: 'dashboard:yoy:${_cacheKeyFromParams(params)}',
+        cacheTTL: CacheService.defaultTTL,
+      );
       if (response == null) return null;
       return YoYComparison.fromJson(response as Map<String, dynamic>);
     } catch (e) {
@@ -253,8 +279,12 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
   Future<List<TopProduct>> _fetchTopProducts(Map<String, String> params) async {
     try {
       final p = Map<String, String>.from(params)..['limit'] = '10';
-      final response =
-          await ApiClient.get(ApiConfig.topProducts, queryParameters: p);
+      final response = await ApiClient.get(
+        ApiConfig.topProducts,
+        queryParameters: p,
+        cacheKey: 'dashboard:top-products:${_cacheKeyFromParams(p)}',
+        cacheTTL: CacheService.defaultTTL,
+      );
       if (response == null) return [];
       final list =
           response['products'] as List? ?? response['data'] as List? ?? [];
@@ -270,8 +300,12 @@ class DashboardNotifier extends AutoDisposeAsyncNotifier<DashboardState> {
   Future<List<TopClient>> _fetchTopClients(Map<String, String> params) async {
     try {
       final p = Map<String, String>.from(params)..['limit'] = '10';
-      final response =
-          await ApiClient.get(ApiConfig.topClients, queryParameters: p);
+      final response = await ApiClient.get(
+        ApiConfig.topClients,
+        queryParameters: p,
+        cacheKey: 'dashboard:top-clients:${_cacheKeyFromParams(p)}',
+        cacheTTL: CacheService.defaultTTL,
+      );
       if (response == null) return [];
       final list =
           response['clients'] as List? ?? response['data'] as List? ?? [];

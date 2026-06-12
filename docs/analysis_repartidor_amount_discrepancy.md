@@ -161,7 +161,7 @@ Long product descriptions in `LAC.DESCRIPCION` (e.g., "PAN BARRA RIQUIÑA MEDIT.
    - `database.ts` ODBCPool class has no `ensureUtf8()` equivalent
    - Affects ALL TypeScript services when `USE_TS_ROUTES=true` (currently off by default)
 
-2. **Standalone API server** (`backend/src/api-server.ts` line 14): hardcoded `DSN=GMP;UID=JAVIER;PWD=JAVIER` — missing CCSID and NAM
+2. **Standalone API server** (`backend/src/api-server.ts` line 14): verify connection string uses environment credentials and includes CCSID/NAM consistently.
 
 3. **Standalone scripts** (~80+ in `backend/scripts/`): each creates own connection without CCSID=1208
 

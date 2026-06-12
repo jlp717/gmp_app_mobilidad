@@ -8,6 +8,7 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart';
 
 /// Builds a backend-safe idempotency token for one commercial payment attempt.
@@ -50,6 +51,7 @@ class CobrosProvider extends ChangeNotifier {
 
   bool _isLoading = false;
   String? _error;
+  bool _disposed = false;
 
   List<Albaran> _albaranesPendientes = [];
   Albaran? _albaranActual;
@@ -143,8 +145,11 @@ class CobrosProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      final response =
-          await ApiClient.get('/entregas/pendientes/$employeeCode');
+      final response = await ApiClient.get(
+        '/entregas/pendientes/$employeeCode',
+        cacheKey: 'entregas:pendientes:$employeeCode:default',
+        cacheTTL: const Duration(minutes: 2),
+      );
       if (response['success'] == true) {
         _albaranesPendientes = (response['albaranes'] as List<dynamic>?)
                 ?.map((e) => Albaran.fromJson(e as Map<String, dynamic>))
@@ -155,7 +160,6 @@ class CobrosProvider extends ChangeNotifier {
       }
     } catch (e) {
       _error = 'Error de conexión: $e';
-      if (kDebugMode) _cargarDatosEjemplo();
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -166,8 +170,11 @@ class CobrosProvider extends ChangeNotifier {
     _isLoading = true;
     notifyListeners();
     try {
-      final response =
-          await ApiClient.get('/entregas/albaran/$numeroAlbaran/$ejercicio');
+      final response = await ApiClient.get(
+        '/entregas/albaran/$numeroAlbaran/$ejercicio',
+        cacheKey: 'entregas:albaran:$numeroAlbaran:$ejercicio',
+        cacheTTL: const Duration(minutes: 2),
+      );
       if (response['success'] == true && response['albaran'] != null) {
         _albaranActual =
             Albaran.fromJson(response['albaran'] as Map<String, dynamic>);
@@ -199,6 +206,9 @@ class CobrosProvider extends ChangeNotifier {
         'longitud': longitud,
       });
       if (response['success'] == true) {
+        await CacheService.invalidateByPrefix(
+          'entregas:pendientes:$employeeCode:',
+        );
         final index = _albaranesPendientes
             .indexWhere((a) => a.items.any((i) => i.itemId == itemId));
         if (index >= 0) {
@@ -241,6 +251,19 @@ class CobrosProvider extends ChangeNotifier {
     }
   }
 
+  String _buildEntregaCompletionIdempotencyKey(String albaranId) {
+    final timestamp = DateTime.now().microsecondsSinceEpoch;
+    final safeEmployee = employeeCode
+        .trim()
+        .replaceAll(RegExp('[^A-Za-z0-9_.:-]'), '-')
+        .replaceFirst(RegExp(r'^$'), 'sin-repartidor');
+    final safeAlbaran = albaranId
+        .trim()
+        .replaceAll(RegExp('[^A-Za-z0-9_.:-]'), '-')
+        .replaceFirst(RegExp(r'^$'), 'sin-albaran');
+    return 'entrega:$safeEmployee:$safeAlbaran:$timestamp';
+  }
+
   Future<bool> completarEntrega(
     String albaranId, {
     String? observaciones,
@@ -249,30 +272,64 @@ class CobrosProvider extends ChangeNotifier {
       (a) => a.id == albaranId,
       orElse: () => throw Exception('Albarán no encontrado'),
     );
-    var allSucceeded = true;
-    for (final item in albaran.items) {
-      if (item.estado != EstadoEntrega.entregado) {
-        final ok = await actualizarEstadoEntrega(
-          itemId: item.itemId,
-          estado: EstadoEntrega.entregado,
-          cantidadEntregada: item.cantidadPedida,
-          observaciones: observaciones,
-        );
-        if (!ok) allSucceeded = false;
-      }
-    }
-    if (allSucceeded) {
+    final pendingItems = albaran.items
+        .where((item) => item.estado != EstadoEntrega.entregado)
+        .toList(growable: false);
+
+    if (pendingItems.isEmpty) {
       albaran.estado = EstadoEntrega.entregado;
-    } else {
-      _error = 'No se pudieron completar todos los ítems de la entrega';
+      notifyListeners();
+      return true;
     }
-    notifyListeners();
-    return allSucceeded;
+
+    try {
+      final response = await ApiClient.post('/entregas/update', {
+        'idempotencyKey': _buildEntregaCompletionIdempotencyKey(albaranId),
+        'albaranId': albaran.id,
+        'status': EstadoEntrega.entregado.name.toUpperCase(),
+        'repartidorId': employeeCode,
+        'observaciones': observaciones,
+        'items': pendingItems
+            .map(
+              (item) => {
+                'itemId': item.itemId,
+                'status': EstadoEntrega.entregado.name.toUpperCase(),
+                'cantidadEntregada': item.cantidadPedida,
+                'observaciones': observaciones,
+              },
+            )
+            .toList(growable: false),
+      });
+
+      if (response['success'] == true) {
+        await CacheService.invalidateByPrefix(
+          'entregas:pendientes:$employeeCode:',
+        );
+        for (final item in pendingItems) {
+          item.estado = EstadoEntrega.entregado;
+          item.cantidadEntregada = item.cantidadPedida;
+        }
+        albaran.estado = EstadoEntrega.entregado;
+        _error = null;
+        notifyListeners();
+        return true;
+      }
+
+      _error = (response['error'] as String?) ??
+          'No se pudieron completar todos los ítems de la entrega';
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'Error completando entrega: $e';
+      notifyListeners();
+      return false;
+    }
   }
 
   Future<void> cargarPendingSummary(
     String? vendedorCode, {
     List<String>? vendedorCodes,
+    bool forceRefresh = false,
   }) async {
     _isLoading = true;
     _error = null;
@@ -292,7 +349,12 @@ class CobrosProvider extends ChangeNotifier {
         _lastSummaryVendorCodes = null;
         endpoint = '/cobros/pending-summary/ALL';
       }
-      final response = await ApiClient.get(endpoint);
+      final response = await ApiClient.get(
+        endpoint,
+        cacheKey: 'cobros:pending-summary:$endpoint',
+        cacheTTL: const Duration(minutes: 2),
+        forceRefresh: forceRefresh,
+      );
       if (response['success'] == true) {
         final raw = response['summary'] as Map<String, dynamic>? ?? {};
         _pendingSummary =
@@ -333,12 +395,20 @@ class CobrosProvider extends ChangeNotifier {
     return estadoFromPendingSummaryEntry(entry);
   }
 
-  Future<void> cargarCobrosPendientes(String codigoCliente) async {
+  Future<void> cargarCobrosPendientes(
+    String codigoCliente, {
+    bool forceRefresh = false,
+  }) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
     try {
-      final response = await ApiClient.get('/cobros/$codigoCliente/pendientes');
+      final response = await ApiClient.get(
+        '/cobros/$codigoCliente/pendientes',
+        cacheKey: 'cobros:pendientes:$codigoCliente',
+        cacheTTL: const Duration(minutes: 1),
+        forceRefresh: forceRefresh,
+      );
       if (response['success'] == true) {
         final payload = response['pendientes'] is Map
             ? Map<String, dynamic>.from(response['pendientes'] as Map)
@@ -363,7 +433,11 @@ class CobrosProvider extends ChangeNotifier {
 
   Future<void> verificarEstadoCliente(String codigoCliente) async {
     try {
-      final response = await ApiClient.get('/cobros/$codigoCliente/estado');
+      final response = await ApiClient.get(
+        '/cobros/$codigoCliente/estado',
+        cacheKey: 'cobros:estado:$codigoCliente',
+        cacheTTL: const Duration(minutes: 1),
+      );
       if (response['success'] == true && response['estadoCliente'] != null) {
         _estadoClienteActual = EstadoCliente.fromJson(
           response['estadoCliente'] as Map<String, dynamic>,
@@ -371,7 +445,9 @@ class CobrosProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
+      debugPrint('[CobrosProvider] verificarEstadoCliente error: $e');
       _estadoClienteActual = null;
+      notifyListeners();
     }
   }
 
@@ -384,6 +460,7 @@ class CobrosProvider extends ChangeNotifier {
     required TipoModoCobro tipoModo,
     String? codigoUsuario,
     String? observaciones,
+    bool reloadAfter = true,
   }) async {
     try {
       final response =
@@ -403,16 +480,22 @@ class CobrosProvider extends ChangeNotifier {
         ),
       });
       if (response['success'] == true) {
-        await cargarCobrosPendientes(codigoCliente);
-        // Refresca el summary agregado para que la lista principal se actualice.
-        // Solo si ya teniamos un summary cargado (vendedor conocido).
-        if (_pendingSummary.isNotEmpty) {
-          // No bloqueamos el flujo de UI con await: fire-and-forget.
-          // ignore: unawaited_futures
-          cargarPendingSummary(
-            _lastSummaryVendorCode,
-            vendedorCodes: _lastSummaryVendorCodes,
-          );
+        await CacheService.invalidate('cobros:pendientes:$codigoCliente');
+        await CacheService.invalidate('cobros:estado:$codigoCliente');
+        await CacheService.invalidateByPrefix('cobros:pending-summary:');
+        if (reloadAfter) {
+          await cargarCobrosPendientes(codigoCliente, forceRefresh: true);
+          // Refresca el summary agregado para que la lista principal se actualice.
+          // Solo si ya teniamos un summary cargado (vendedor conocido).
+          if (_pendingSummary.isNotEmpty) {
+            // No bloqueamos el flujo de UI con await: fire-and-forget.
+            // ignore: unawaited_futures
+            cargarPendingSummary(
+              _lastSummaryVendorCode,
+              vendedorCodes: _lastSummaryVendorCodes,
+              forceRefresh: true,
+            );
+          }
         }
         return true;
       }
@@ -422,53 +505,6 @@ class CobrosProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
-  }
-
-  void _cargarDatosEjemplo() {
-    final now = DateTime.now();
-    _albaranesPendientes = [
-      Albaran(
-        id: '2026-A-1001',
-        numeroAlbaran: 1001,
-        codigoCliente: '9900',
-        nombreCliente: 'BAR EL RINCÓN',
-        direccion: 'C/ Mayor, 15 - Madrid',
-        fecha: now,
-        importeTotal: 245.80,
-        esCTR: true,
-        items: [
-          EntregaItem(
-            itemId: '1001-1',
-            codigoArticulo: 'COCA2L',
-            descripcion: 'Coca-Cola 2L Pack 6',
-            cantidadPedida: 5,
-          ),
-          EntregaItem(
-            itemId: '1001-2',
-            codigoArticulo: 'AGUA1L',
-            descripcion: 'Agua Mineral 1.5L Pack 6',
-            cantidadPedida: 10,
-          ),
-        ],
-      ),
-      Albaran(
-        id: '2026-A-1002',
-        numeroAlbaran: 1002,
-        codigoCliente: '8801',
-        nombreCliente: 'RESTAURANTE LA PLAZA',
-        direccion: 'Plaza España, 3 - Madrid',
-        fecha: now,
-        importeTotal: 532.40,
-        items: [
-          EntregaItem(
-            itemId: '1002-1',
-            codigoArticulo: 'CERV33',
-            descripcion: 'Cerveza 33cl Caja 24',
-            cantidadPedida: 8,
-          ),
-        ],
-      ),
-    ];
   }
 
   void limpiarDatos() {
@@ -482,7 +518,17 @@ class CobrosProvider extends ChangeNotifier {
   }
 
   @override
+  void notifyListeners() {
+    // Guard: el provider es autoDispose y hay recargas fire-and-forget
+    // (p.ej. cargarPendingSummary tras registrarCobro). Nunca emitir
+    // estado después de dispose.
+    if (_disposed) return;
+    super.notifyListeners();
+  }
+
+  @override
   void dispose() {
+    _disposed = true;
     super.dispose();
   }
 }

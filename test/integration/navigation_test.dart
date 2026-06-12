@@ -92,32 +92,32 @@ void main() {
       );
       expect(almacen.length, 5);
 
-      // Repartidor (jefe): Panel + 7 items
+      // Repartidor (jefe): Panel + 8 items
       final repartidorJefe = NavigationConfigService.getNavItems(
         isAlmacen: false,
         isRepartidor: true,
         isJefeVentas: true,
         showCommissions: false,
       );
-      expect(repartidorJefe.length, 8);
+      expect(repartidorJefe.length, 9);
 
-      // Repartidor (regular): 7 items
+      // Repartidor (regular): 8 items
       final repartidor = NavigationConfigService.getNavItems(
         isAlmacen: false,
         isRepartidor: true,
         isJefeVentas: false,
         showCommissions: false,
       );
-      expect(repartidor.length, 7);
+      expect(repartidor.length, 8);
 
-      // Jefe Ventas: 10 items (Panel + 9)
+      // Jefe Ventas: 11 items (Panel + 10)
       final jefe = NavigationConfigService.getNavItems(
         isAlmacen: false,
         isRepartidor: false,
         isJefeVentas: true,
         showCommissions: true,
       );
-      expect(jefe.length, 10);
+      expect(jefe.length, 11);
     });
   });
 }

@@ -12,6 +12,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class ProductComparativeStrip extends StatefulWidget {
@@ -52,6 +53,13 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
           if (widget.vendedorCode != null && widget.vendedorCode!.isNotEmpty)
             'vendedorCode': widget.vendedorCode!,
         },
+        cacheKey: [
+          'pedidos:product-comparative',
+          widget.productCode,
+          widget.clientCode ?? '',
+          widget.vendedorCode ?? '',
+        ].join(':'),
+        cacheTTL: CacheService.shortTTL,
       );
       if (mounted && response['success'] == true) {
         setState(() => _data = response);
@@ -63,8 +71,7 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
     }
   }
 
-  String _fmtInt(num? v) =>
-      (v ?? 0).toDouble().round().toString();
+  String _fmtInt(num? v) => (v ?? 0).toDouble().round().toString();
 
   String _fmtPct(num? v) {
     if (v == null) return '—';
@@ -118,8 +125,7 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: color.withValues(alpha: 0.08),
             borderRadius: BorderRadius.circular(10),
@@ -150,8 +156,7 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
                         children: [
                           TextSpan(
                             text: '${_fmtInt(ytdCur)} cj',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w700),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                           TextSpan(
                             text: '  vs ',
@@ -177,8 +182,8 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
                     ),
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 3),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                     decoration: BoxDecoration(
                       color: color.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(6),
@@ -272,13 +277,11 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
     Color color,
   ) {
     final monthsCur = (cur['monthly'] as List? ?? const [])
-        .map((e) =>
-            (e as Map<String, dynamic>?)?['envases'] as num? ?? 0)
+        .map((e) => (e as Map<String, dynamic>?)?['envases'] as num? ?? 0)
         .map((e) => e.toDouble())
         .toList();
     final monthsPrev = (prev['monthly'] as List? ?? const [])
-        .map((e) =>
-            (e as Map<String, dynamic>?)?['envases'] as num? ?? 0)
+        .map((e) => (e as Map<String, dynamic>?)?['envases'] as num? ?? 0)
         .map((e) => e.toDouble())
         .toList();
     if (monthsCur.length != 12 || monthsPrev.length != 12) {
@@ -349,9 +352,8 @@ class _ProductComparativeStripState extends State<ProductComparativeStrip> {
                           ? color
                           : Colors.white.withValues(alpha: 0.45),
                       fontSize: 9,
-                      fontWeight: isCurrentMonth
-                          ? FontWeight.w700
-                          : FontWeight.normal,
+                      fontWeight:
+                          isCurrentMonth ? FontWeight.w700 : FontWeight.normal,
                     ),
                   ),
                 ],

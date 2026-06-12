@@ -1,0 +1,1214 @@
+{
+  "ts": "2026-06-07T19:39:41.185Z",
+  "appSchema": "JAVIER",
+  "erpSchema": "DSEDAC",
+  "apply": false,
+  "statementsCount": 233,
+  "details": [
+    {
+      "feature": "PEDIDOS_COMERCIAL_CAB",
+      "source": "DSEDAC.CPC",
+      "target": "JAVIER.PEDIDOS_CAB",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": [
+        {
+          "name": "SUBEMPRESAPEDIDO",
+          "type": "CHAR(3)",
+          "nullable": "N"
+        },
+        {
+          "name": "EJERCICIOPEDIDO",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "TERMINALPEDIDO",
+          "type": "NUMERIC(3,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOCLIENTEALBARAN",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOCLIENTEFACTURA",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOCLIENTECADENA",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOVENDEDORCOBRO",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOPROMOTORPREVENTA",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOCOMERCIAL",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGORUTA",
+          "type": "CHAR(4)",
+          "nullable": "N"
+        },
+        {
+          "name": "RECARGOSN",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEBASEIMPONIBLEBRUTA1",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEBASEIMPONIBLE1",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "PORCENTAJEIVA1",
+          "type": "NUMERIC(5,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEIVA1",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "PORCENTAJERECARGO1",
+          "type": "NUMERIC(5,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTERECARGO1",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEBASEIMPONIBLEBRUTA2",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEBASEIMPONIBLE2",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "PORCENTAJEIVA2",
+          "type": "NUMERIC(5,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEIVA2",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "PORCENTAJERECARGO2",
+          "type": "NUMERIC(5,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTERECARGO2",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEBASEIMPONIBLEBRUTA3",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEBASEIMPONIBLE3",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "PORCENTAJEIVA3",
+          "type": "NUMERIC(5,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEIVA3",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "PORCENTAJERECARGO3",
+          "type": "NUMERIC(5,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTERECARGO3",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEBASEIMPONIBLEBRUTA4",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEBASEIMPONIBLE4",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "PORCENTAJEIVA4",
+          "type": "NUMERIC(5,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEIVA4",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "PORCENTAJERECARGO4",
+          "type": "NUMERIC(5,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTERECARGO4",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEBASEIMPONIBLEBRUTA5",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEBASEIMPONIBLE5",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "PORCENTAJEIVA5",
+          "type": "NUMERIC(5,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEIVA5",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "PORCENTAJERECARGO5",
+          "type": "NUMERIC(5,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTERECARGO5",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "PORCENTAJEDESCUENTO1",
+          "type": "NUMERIC(5,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "PORCENTAJEDESCUENTO2",
+          "type": "NUMERIC(5,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEBRUTO",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEDEVOLUCION",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEDESCUENTO1",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEDESCUENTO2",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEBONIFICACION",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTESINCARGO",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "EMPRESACONTABLE",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "SITUACIONALBARAN",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "SUBEMPRESAALBARAN",
+          "type": "CHAR(3)",
+          "nullable": "N"
+        },
+        {
+          "name": "EJERCICIOALBARAN",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "SERIEALBARAN",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "TERMINALALBARAN",
+          "type": "NUMERIC(3,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "NUMEROALBARAN",
+          "type": "NUMERIC(6,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "SITUACIONCARGA",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "SUBEMPRESACARGA",
+          "type": "CHAR(3)",
+          "nullable": "N"
+        },
+        {
+          "name": "EJERCICIOCARGA",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "SERIECARGA",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "TERMINALCARGA",
+          "type": "NUMERIC(3,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "NUMEROCARGA",
+          "type": "NUMERIC(6,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "SITUACIONPEDIDO",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOSUBDISTRIBUIDOR",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOOPERACION",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "OBSERVACION1",
+          "type": "CHAR(50)",
+          "nullable": "N"
+        },
+        {
+          "name": "OBSERVACION2",
+          "type": "CHAR(50)",
+          "nullable": "N"
+        },
+        {
+          "name": "DIACREACION",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "MESCREACION",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "ANOCREACION",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "HORACREACION",
+          "type": "NUMERIC(6,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "LATITUD",
+          "type": "NUMERIC(15,6)",
+          "nullable": "N"
+        },
+        {
+          "name": "LONGITUD",
+          "type": "NUMERIC(15,6)",
+          "nullable": "N"
+        },
+        {
+          "name": "EJERCICIOORDENPREPARACION",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "NUMEROORDENPREPARACION",
+          "type": "NUMERIC(6,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "ESTADOORDENPREPARACION",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOVENDEDORUSUARIO",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOVENDEDORPUNTEO",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "EFECTIVOTALON",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTECOBRADO",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEREDONDEO",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEBONIFICACIONDIRECTA",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IDENTICKETCLIENTE",
+          "type": "CHAR(15)",
+          "nullable": "N"
+        },
+        {
+          "name": "IDENTICKET",
+          "type": "CHAR(15)",
+          "nullable": "N"
+        },
+        {
+          "name": "LINEASKILOSN",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "PROCESADOSN",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "REMOTOSN",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "DIALLEGADA",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "MESLLEGADA",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "ANOLLEGADA",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "HORALLEGADA",
+          "type": "NUMERIC(6,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOUSUARIO",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "DIAPRIMERPAGO",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "MESPRIMERPAGO",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "ANOPRIMERPAGO",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOTIPOPEDIDO",
+          "type": "CHAR(3)",
+          "nullable": "N"
+        },
+        {
+          "name": "REFERENCIAPEDIDOCLIENTE",
+          "type": "CHAR(17)",
+          "nullable": "N"
+        },
+        {
+          "name": "TRAZABILIDADPEDIDO",
+          "type": "CHAR(30)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOLOCALIZACIONENTREGA",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "DIASERVICIO",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "MESSERVICIO",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "ANOSERVICIO",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGODELEGACION",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "ESTADOPRODUCCION",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "ESTADOPRODUCCIONWEB",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "CONFORMADOSN",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "FACTORCONVERSION",
+          "type": "NUMERIC(10,4)",
+          "nullable": "N"
+        },
+        {
+          "name": "DIAESTADO",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "MESESTADO",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "ANOESTADO",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "SUBEMPRESAPROYECTO",
+          "type": "CHAR(3)",
+          "nullable": "N"
+        },
+        {
+          "name": "EJERCICIOPROYECTO",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "SERIEPROYECTO",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "TERMINALPROYECTO",
+          "type": "NUMERIC(3,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "NUMEROPROYECTO",
+          "type": "NUMERIC(6,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "MATRICULA",
+          "type": "CHAR(20)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPRESOSN",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "DIAIMPRESO",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "MESIMPRESO",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "ANOIMPRESO",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "ENVIADOSN",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "DIAENVIADO",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "MESENVIADO",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "ANOENVIADO",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "NUMEROBULTOS",
+          "type": "NUMERIC(5,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOCONDUCTOR",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "MARCAACTUALIZACION",
+          "type": "VARCHAR(50)",
+          "nullable": "N"
+        }
+      ]
+    },
+    {
+      "feature": "PEDIDOS_COMERCIAL_LIN",
+      "source": "DSEDAC.LPC",
+      "target": "JAVIER.PEDIDOS_LIN",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": [
+        {
+          "name": "SUBEMPRESAPEDIDO",
+          "type": "CHAR(3)",
+          "nullable": "N"
+        },
+        {
+          "name": "EJERCICIOPEDIDO",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "SERIEPEDIDO",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "TERMINALPEDIDO",
+          "type": "NUMERIC(3,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "NUMEROPEDIDO",
+          "type": "NUMERIC(6,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "SECUENCIAPEDIDO",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "DIADOCUMENTO",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "MESDOCUMENTO",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "ANODOCUMENTO",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "HORADOCUMENTO",
+          "type": "NUMERIC(6,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOCLIENTEALBARAN",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOCLIENTEFACTURA",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOCLIENTECADENA",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOVENDEDOR",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOVENDEDORCOBRO",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOPROMOTORPREVENTA",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOCOMERCIAL",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGORUTA",
+          "type": "CHAR(4)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOFORMAPAGO",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOTARIFA",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOALMACEN",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "RECARGOSN",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOIVA",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "PORCENTAJEDESCUENTO",
+          "type": "NUMERIC(5,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEDESCUENTOUNIDAD",
+          "type": "NUMERIC(5,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "CANTIDADENVASESSERVIDOS",
+          "type": "NUMERIC(7,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "CANTIDADUNIDADESSERVIDAS",
+          "type": "NUMERIC(10,5)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOLOTE",
+          "type": "CHAR(30)",
+          "nullable": "N"
+        },
+        {
+          "name": "CANTIDADENVASESPICADOS",
+          "type": "NUMERIC(7,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "CANTIDADUNIDADESPICADAS",
+          "type": "NUMERIC(10,5)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGODESTRUCCIONPRODUCTO",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "VALORDESTRUCCIONPRODUCTO",
+          "type": "NUMERIC(9,4)",
+          "nullable": "N"
+        },
+        {
+          "name": "PRECIOKILOS",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEDESTRUCCIONPRODUCTO",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOPROMOCIONREGALO",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "SECUENCIAPROMOCIONREGALO",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "CAJASUNIDADES",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "PRECIOTARIFA01",
+          "type": "NUMERIC(9,4)",
+          "nullable": "N"
+        },
+        {
+          "name": "ORDENPREPARACION",
+          "type": "NUMERIC(6,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "PORCENTAJEDESCUENTO02",
+          "type": "NUMERIC(5,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOCONCEPTOFACTURACION",
+          "type": "CHAR(3)",
+          "nullable": "N"
+        },
+        {
+          "name": "NUMEROPROYECTO",
+          "type": "CHAR(20)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOPROVEEDOR",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "UNIDADESPEDIRPROVEEDOR",
+          "type": "NUMERIC(10,5)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOESTADOPROVEEDOR",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "SUBEMPRESAORIGEN",
+          "type": "CHAR(3)",
+          "nullable": "N"
+        },
+        {
+          "name": "EJERCICIOORIGEN",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "SERIEORIGEN",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "TERMINALORIGEN",
+          "type": "NUMERIC(3,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "NUMEROORIGEN",
+          "type": "NUMERIC(6,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "SECUENCIAORIGEN",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOFASE",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOOPERACION",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "SECUENCIAMANOOBRA",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOKIT",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "CANTIDADPALES",
+          "type": "NUMERIC(9,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOESTADO",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "MARCAACTUALIZACION",
+          "type": "VARCHAR(50)",
+          "nullable": "N"
+        }
+      ]
+    },
+    {
+      "feature": "COBROS_COMERCIAL",
+      "source": "DSEDAC.CRC",
+      "target": "JAVIER.COBROS",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": [
+        {
+          "name": "SUBEMPRESARECIBO",
+          "type": "CHAR(3)",
+          "nullable": "N"
+        },
+        {
+          "name": "EJERCICIORECIBO",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "SERIERECIBO",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "TERMINALRECIBO",
+          "type": "NUMERIC(3,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "NUMERORECIBO",
+          "type": "NUMERIC(6,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOCLIENTEFACTURA",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOSUBDISTRIBUIDOR",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOVENDEDOR",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "TIPORECIBO",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "DIADOCUMENTO",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "MESDOCUMENTO",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "ANODOCUMENTO",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "HORADOCUMENTO",
+          "type": "NUMERIC(6,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTECOBRADO",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTEREDONDEO",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "EFECTIVOTALON",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "NUMEROTALON",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "DIAVENCIMIENTO",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "MESVENCIMIENTO",
+          "type": "NUMERIC(2,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "ANOVENCIMIENTO",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOENTIDADBANCARIA",
+          "type": "CHAR(4)",
+          "nullable": "N"
+        },
+        {
+          "name": "OFICINIEXTERIOR",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOVENDEDORUSUARIO",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "SUBEMPRESALIQUIDACION",
+          "type": "CHAR(3)",
+          "nullable": "N"
+        },
+        {
+          "name": "EJERCICIOLIQUIDACION",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "SERIELIQUIDACION",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "TERMINALLIQUIDACION",
+          "type": "NUMERIC(3,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "NUMEROLIQUIDACION",
+          "type": "NUMERIC(6,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "IDMARCALIQUIDACION",
+          "type": "CHAR(30)",
+          "nullable": "N"
+        },
+        {
+          "name": "MARCAACTUALIZACION",
+          "type": "VARCHAR(50)",
+          "nullable": "N"
+        }
+      ]
+    },
+    {
+      "feature": "COBROS_REPARTIDOR",
+      "source": "DSEDAC.CRCA",
+      "target": "JAVIER.REPARTIDOR_COBROS",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": [
+        {
+          "name": "SUBEMPRESAREGISTRO",
+          "type": "CHAR(3)",
+          "nullable": "N"
+        },
+        {
+          "name": "EJERCICIOREGISTRO",
+          "type": "NUMERIC(4,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "SERIEREGISTRO",
+          "type": "CHAR(1)",
+          "nullable": "N"
+        },
+        {
+          "name": "TERMINALREGISTRO",
+          "type": "NUMERIC(3,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "NUMEROREGISTRO",
+          "type": "NUMERIC(6,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "NUMEROREGISTROORIGINAL",
+          "type": "NUMERIC(6,0)",
+          "nullable": "N"
+        },
+        {
+          "name": "CUENTACOBRADO",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "CUENTATALONES",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "CUENTADESCUENTO",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTETOTALCOBRADO",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTETOTALTALONES",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTETOTALOTROS",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTETOTALDESCUENTO",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "IMPORTETOTALPENDIENTE",
+          "type": "NUMERIC(10,2)",
+          "nullable": "N"
+        },
+        {
+          "name": "EXTENSIONCONCEPTO",
+          "type": "CHAR(40)",
+          "nullable": "N"
+        },
+        {
+          "name": "CODIGOCONCEPTOCONTRAPARTIDA",
+          "type": "CHAR(2)",
+          "nullable": "N"
+        },
+        {
+          "name": "DESCCONCEPTOCONTRAPARTIDA",
+          "type": "CHAR(40)",
+          "nullable": "N"
+        },
+        {
+          "name": "EXTCONCEPTOCONTRAPARTIDA",
+          "type": "CHAR(40)",
+          "nullable": "N"
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "COBROS_COMERCIAL: skipped ID by rule"
+  ],
+  "applied": []
+}

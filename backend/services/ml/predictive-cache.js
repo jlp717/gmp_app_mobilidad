@@ -5,8 +5,27 @@
  * Predicts which data users will need next
  */
 
-const tf = require('@tensorflow/tfjs-node');
+let tf = null;
+let tfLoadError = null;
+try {
+    tf = require('@tensorflow/tfjs-node');
+} catch (error) {
+    tfLoadError = error;
+}
 const logger = require('../../middleware/logger');
+let tfUnavailableLogged = false;
+
+function logTensorFlowUnavailable() {
+    if (tfUnavailableLogged) return;
+    tfUnavailableLogged = true;
+    let reason = 'TensorFlow native runtime is unavailable';
+    if (tfLoadError) {
+        if (tfLoadError.code === 'MODULE_NOT_FOUND') {
+            reason = '@tensorflow/tfjs-node is not installed';
+        }
+    }
+    logger.warn('[PredictiveCache] TensorFlow disabled; using popularity fallback (' + reason + ')');
+}
 const { redisCache, TTL } = require('../redis-cache');
 const fs = require('fs');
 const path = require('path');
@@ -48,6 +67,12 @@ class PredictiveCacheService {
      * Initialize the predictive cache service
      */
     async init() {
+        if (!tf) {
+            logTensorFlowUnavailable();
+            this.model = null;
+            return false;
+        }
+
         try {
             // Try to load existing model
             if (fs.existsSync(MODEL_CONFIG.modelPath)) {
@@ -69,6 +94,10 @@ class PredictiveCacheService {
      * Create neural network model
      */
     _createModel() {
+        if (!tf) {
+            throw new Error('TensorFlow runtime unavailable');
+        }
+
         const model = tf.sequential();
 
         // Input layer
@@ -171,6 +200,14 @@ class PredictiveCacheService {
     async predict(userId, currentEndpoint) {
         if (!this.model) {
             await this.init();
+        }
+
+        if (!this.model) {
+            return this._getPopularEndpoints();
+        }
+
+        if (!tf) {
+            return this._getPopularEndpoints();
         }
 
         try {
@@ -279,6 +316,18 @@ class PredictiveCacheService {
             return false;
         }
 
+        if (!tf) {
+            logTensorFlowUnavailable();
+            return false;
+        }
+
+        if (!this.model) {
+            await this.init();
+            if (!this.model) {
+                return false;
+            }
+        }
+
         this.isTraining = true;
         logger.info('[PredictiveCache] 🎓 Starting model training...');
 
@@ -323,6 +372,10 @@ class PredictiveCacheService {
      * Prepare training data
      */
     _prepareTrainingData() {
+        if (!tf) {
+            throw new Error('TensorFlow runtime unavailable');
+        }
+
         const xData = [];
         const yData = [];
 
@@ -368,6 +421,7 @@ class PredictiveCacheService {
             hitRate: `${hitRate}%`,
             historySize: accessHistory.length,
             uniqueEndpoints: endpointIndex.size,
+            tensorflowAvailable: Boolean(tf),
             isTraining: this.isTraining,
             lastPrediction: this.lastPrediction,
         };

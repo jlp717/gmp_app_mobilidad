@@ -35,11 +35,16 @@ const express = require('express');
 const router = express.Router();
 const pedidosService = require('../services/pedidos.service');
 const logger = require('../middleware/logger');
-const { sanitizeForSQL } = require('../utils/common');
+const {
+    getVendorColumnExpr,
+    sanitizeCodeListForParams,
+    sanitizeForSQL,
+} = require('../utils/common');
 const { queryWithParams, query } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
 const { verifyToken } = require('../middleware/auth');
 const { TTL } = require('../services/redis-cache');
+const { db2WriteTable } = require('../utils/db2-schemas');
 
 // =============================================================================
 // ALL ROUTES REQUIRE AUTHENTICATION
@@ -85,6 +90,11 @@ function stripMarginFromProduct(product, user) {
     const clean = { ...product };
     delete clean.precioMinimo;
     delete clean.precioCosto;
+    delete clean.costo;
+    delete clean.margen;
+    delete clean.importeCosto;
+    delete clean.importeMargen;
+    delete clean.porcentajeMargen;
     return clean;
 }
 
@@ -107,6 +117,172 @@ function parseFloatSafe(value, defaultVal) {
     return isNaN(parsed) ? defaultVal : parsed;
 }
 
+function buildUpdatePedidoEstadoSql() {
+    return [
+        'UPDATE',
+        db2WriteTable('PEDIDOS_CAB'),
+        'SET ESTADO = ?, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?',
+    ].join(' ');
+}
+
+function normalizePedidoCode(value) {
+    return String(value || '').trim();
+}
+
+function normalizePedidoCodeList(value) {
+    return sanitizeCodeListForParams(String(value || ''), 10);
+}
+
+function pedidoCodesMatch(left, right) {
+    const leftCode = normalizePedidoCode(left);
+    const rightCode = normalizePedidoCode(right);
+    if (!leftCode || !rightCode) return false;
+    if (leftCode === rightCode) return true;
+    return leftCode.replace(/^0+/, '') === rightCode.replace(/^0+/, '');
+}
+
+function getPedidoUserContext(req) {
+    const user = req.user || {};
+    const role = String(user.role || user.userRole || user.tipo || 'COMERCIAL')
+        .trim()
+        .toUpperCase();
+    return {
+        code: normalizePedidoCode(
+            user.code || user.codigo || user.codigoVendedor || user.vendedorCode || user.userId,
+        ),
+        isManager: user.isJefeVentas === true || role === 'JEFE_VENTAS' || role === 'ADMIN',
+        visibleVendorCodes: Array.isArray(user.vendorCodes || user.vendedorCodes)
+            ? (user.vendorCodes || user.vendedorCodes).map(normalizePedidoCode).filter(Boolean)
+            : [],
+    };
+}
+
+function resolvePedidoVendorScope(req, requestedVendorCodes) {
+    const requestedRaw = normalizePedidoCode(requestedVendorCodes || 'ALL');
+    const requestedAll = !requestedRaw || requestedRaw.toUpperCase() === 'ALL';
+    const context = getPedidoUserContext(req);
+    let codes = requestedAll ? [] : normalizePedidoCodeList(requestedRaw);
+
+    if (!context.isManager) {
+        if (!context.code) {
+            return { ok: false, error: 'Usuario comercial sin vendedor asignado' };
+        }
+        if (requestedAll) {
+            codes = [context.code];
+        } else if (codes.some(code => !pedidoCodesMatch(code, context.code))) {
+            return { ok: false, error: 'COMERCIAL solo puede consultar su vendedor' };
+        }
+    } else if (context.visibleVendorCodes.length > 0) {
+        if (requestedAll) {
+            codes = context.visibleVendorCodes;
+        } else if (codes.some(code => !context.visibleVendorCodes.some(visible => pedidoCodesMatch(code, visible)))) {
+            return { ok: false, error: 'JEFE_VENTAS no puede consultar vendedores fuera de su alcance' };
+        }
+    }
+
+    return { ok: true, codes: [...new Set(codes)] };
+}
+
+function pedidoForbiddenBody(code, error) {
+    return { success: false, code, error };
+}
+
+function authorizePedidoVendorCode(req, vendedorCode, action = 'consultar') {
+    const context = getPedidoUserContext(req);
+    const vendor = normalizePedidoCode(vendedorCode);
+    if (!vendor) {
+        return { ok: false, status: 400, body: pedidoForbiddenBody('INVALID_VENDOR', 'vendedorCode invalido') };
+    }
+    if (context.isManager) {
+        if (context.visibleVendorCodes.length === 0 || context.visibleVendorCodes.some(code => pedidoCodesMatch(code, vendor))) {
+            return { ok: true, vendedorCode: vendor };
+        }
+        return { ok: false, status: 403, body: pedidoForbiddenBody('FORBIDDEN_VENDOR', `JEFE_VENTAS no puede ${action} vendedores fuera de su alcance`) };
+    }
+    if (context.code && pedidoCodesMatch(context.code, vendor)) {
+        return { ok: true, vendedorCode: vendor };
+    }
+    return { ok: false, status: 403, body: pedidoForbiddenBody('FORBIDDEN_VENDOR', `COMERCIAL solo puede ${action} su vendedor`) };
+}
+
+async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action = 'consultar') {
+    const client = normalizePedidoCode(clientCode);
+    if (!client) {
+        return { ok: false, status: 400, body: pedidoForbiddenBody('INVALID_CLIENT', 'clientCode invalido') };
+    }
+    const vendorScope = resolvePedidoVendorScope(req, vendedorCodes);
+    if (!vendorScope.ok) {
+        return { ok: false, status: 403, body: pedidoForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error) };
+    }
+    const clientVendorFilter = buildClientVendorParamFilter(vendorScope.codes, 'CLI');
+    const rows = await queryWithParams(
+        `SELECT 1
+           FROM DSEDAC.CLI CLI
+          WHERE TRIM(CLI.CODIGOCLIENTE) = ?
+            ${clientVendorFilter.clause}
+          FETCH FIRST 1 ROW ONLY`,
+        [client, ...clientVendorFilter.params],
+    );
+    if (!rows || rows.length === 0) {
+        return {
+            ok: false,
+            status: 403,
+            body: pedidoForbiddenBody('FORBIDDEN_CLIENT_VENDOR', `No autorizado para ${action} este cliente con ese vendedor`),
+        };
+    }
+    return { ok: true, clientCode: client, vendorCodes: vendorScope.codes };
+}
+
+async function authorizePedidoAccess(req, orderId, action = 'consultar') {
+    const ownership = await pedidosService.getOrderVendorForAuth(orderId);
+    if (!ownership) {
+        return { ok: false, status: 404, body: { success: false, code: 'ORDER_NOT_FOUND', error: 'Pedido no encontrado' } };
+    }
+    const context = getPedidoUserContext(req);
+    const orderVendor = normalizePedidoCode(ownership.vendedorCode);
+    if (context.isManager) {
+        if (context.visibleVendorCodes.length === 0 || context.visibleVendorCodes.some(code => pedidoCodesMatch(code, orderVendor))) {
+            return { ok: true, ownership };
+        }
+        return { ok: false, status: 403, body: { success: false, code: 'FORBIDDEN_VENDOR', error: `JEFE_VENTAS no puede ${action} pedidos fuera de su alcance` } };
+    }
+    if (context.code && pedidoCodesMatch(context.code, orderVendor)) {
+        return { ok: true, ownership };
+    }
+    return { ok: false, status: 403, body: { success: false, code: 'FORBIDDEN_VENDOR', error: `COMERCIAL solo puede ${action} pedidos de su vendedor` } };
+}
+
+async function authorizePedidoMutation(req, orderId) {
+    return authorizePedidoAccess(req, orderId, 'mutar');
+}
+
+function buildClientVendorParamFilter(vendorCodes, clientAlias = 'CLI') {
+    if (!Array.isArray(vendorCodes) || vendorCodes.length === 0) {
+        return { clause: '', params: [] };
+    }
+    return {
+        clause: `
+              AND EXISTS (
+                  SELECT 1
+                    FROM DSEDAC.CLP CLP
+                   WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(${clientAlias}.CODIGOCLIENTE)
+                     AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${vendorCodes.map(() => '?').join(',')})
+              )`,
+        params: vendorCodes,
+    };
+}
+
+function buildLaclaeVendorParamFilter(vendorCodes, alias = 'L') {
+    if (!Array.isArray(vendorCodes) || vendorCodes.length === 0) {
+        return { clause: '', params: [] };
+    }
+    const vendorColumn = getVendorColumnExpr(alias);
+    return {
+        clause: `AND TRIM(${vendorColumn}) IN (${vendorCodes.map(() => '?').join(',')})`,
+        params: vendorCodes,
+    };
+}
+
 // =============================================================================
 // PRODUCT CATALOG
 // =============================================================================
@@ -127,14 +303,19 @@ router.get('/products', async (req, res) => {
             return res.status(400).json({ success: false, error: 'clientCode is required for product catalog access' });
         }
 
+        const clientAccess = await authorizePedidoClientScope(req, clientCode, vendedorCodes, 'consultar catalogo');
+        if (!clientAccess.ok) {
+            return res.status(clientAccess.status).json(clientAccess.body);
+        }
+
         const search = req.query.search ? sanitizeForSQL(req.query.search) : undefined;
         const limit = parseIntSafe(req.query.limit, 50);
         const offset = parseIntSafe(req.query.offset, 0);
 
         const result = await pedidosService.searchProducts({
-            vendedorCodes,
+            vendedorCodes: clientAccess.vendorCodes.length > 0 ? clientAccess.vendorCodes.join(',') : vendedorCodes,
             search,
-            clientCode: String(clientCode).trim(),
+            clientCode: clientAccess.clientCode,
             family: family ? String(family).trim() : undefined,
             marca: marca ? String(marca).trim() : undefined,
             // Req #14: filtro Nestlé / otras prefamilias.
@@ -160,13 +341,25 @@ router.get('/products/:code', async (req, res) => {
         const code = String(req.params.code).trim();
         const clientCode = req.query.clientCode ? String(req.query.clientCode).trim() : undefined;
 
+        if (clientCode) {
+            const clientAccess = await authorizePedidoClientScope(
+                req,
+                clientCode,
+                req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+                'consultar producto',
+            );
+            if (!clientAccess.ok) {
+                return res.status(clientAccess.status).json(clientAccess.body);
+            }
+        }
+
         const product = await pedidosService.getProductDetail(code, clientCode);
 
         if (!product) {
             return res.status(404).json({ success: false, error: 'Product not found' });
         }
 
-        res.json({ success: true, product });
+        res.json({ success: true, product: stripMarginFromProduct(product, req.user) });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /products/${req.params.code}: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
@@ -190,6 +383,33 @@ router.get('/products/:code/stock', async (req, res) => {
     }
 });
 
+/**
+ * POST /api/pedidos/products/stock-batch
+ * Real-time stock for multiple products in one DB2 query chunk.
+ */
+router.post('/products/stock-batch', async (req, res) => {
+    try {
+        const rawCodes = Array.isArray(req.body?.codes) ? req.body.codes : [];
+        const codes = [...new Set(rawCodes
+            .map(code => String(code || '').trim())
+            .filter(Boolean))]
+            .slice(0, 200);
+        const almacen = parseIntSafe(req.body?.almacen, 1);
+
+        if (codes.length === 0) {
+            return res.status(400).json({ success: false, error: 'codes array is required' });
+        }
+
+        const stockMap = await pedidosService.getStockBatch(codes, almacen);
+        const stock = Object.fromEntries(stockMap.entries());
+
+        res.json({ success: true, stock });
+    } catch (error) {
+        logger.error(`[PEDIDOS] Error in POST /products/stock-batch: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // =============================================================================
 // CLIENT PRICING
 // =============================================================================
@@ -201,8 +421,17 @@ router.get('/products/:code/stock', async (req, res) => {
 router.get('/client-prices/:clientCode', async (req, res) => {
     try {
         const clientCode = String(req.params.clientCode).trim();
+        const clientAccess = await authorizePedidoClientScope(
+            req,
+            clientCode,
+            req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+            'consultar precios',
+        );
+        if (!clientAccess.ok) {
+            return res.status(clientAccess.status).json(clientAccess.body);
+        }
 
-        const pricing = await pedidosService.getClientPricing(clientCode);
+        const pricing = await pedidosService.getClientPricing(clientAccess.clientCode);
 
         res.json({ success: true, pricing });
     } catch (error) {
@@ -254,6 +483,10 @@ router.get('/families/detailed', async (req, res) => {
 router.get('/draft-status/:vendedorCode', async (req, res) => {
     try {
         const code = String(req.params.vendedorCode || '').trim();
+        const vendorAccess = authorizePedidoVendorCode(req, code, 'consultar');
+        if (!vendorAccess.ok) {
+            return res.status(vendorAccess.status).json(vendorAccess.body);
+        }
         const result = await pedidosService.checkDraftAccumulation(code);
         res.json({ success: true, ...result });
     } catch (error) {
@@ -265,6 +498,10 @@ router.get('/draft-status/:vendedorCode', async (req, res) => {
 router.post('/draft-status/:vendedorCode/auto-confirm', async (req, res) => {
     try {
         const code = String(req.params.vendedorCode || '').trim();
+        const vendorAccess = authorizePedidoVendorCode(req, code, 'auto-confirmar');
+        if (!vendorAccess.ok) {
+            return res.status(vendorAccess.status).json(vendorAccess.body);
+        }
         const result = await pedidosService.checkDraftAccumulation(code, {
             autoConfirm: true,
             options: { userId: req.user?.codigo || req.user?.userId || 'API' },
@@ -297,7 +534,16 @@ router.get('/brands', async (req, res) => {
 router.get('/client-balance/:clientCode', async (req, res) => {
     try {
         const clientCode = String(req.params.clientCode).trim();
-        const balance = await pedidosService.getClientBalance(clientCode);
+        const clientAccess = await authorizePedidoClientScope(
+            req,
+            clientCode,
+            req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+            'consultar balance',
+        );
+        if (!clientAccess.ok) {
+            return res.status(clientAccess.status).json(clientAccess.body);
+        }
+        const balance = await pedidosService.getClientBalance(clientAccess.clientCode);
         res.json({ success: true, balance });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /client-balance: ${error.message}`);
@@ -310,7 +556,11 @@ router.get('/client-balance/:clientCode', async (req, res) => {
 // =============================================================================
 router.get('/analytics', async (req, res) => {
     try {
-        const vendedorCodes = req.query.vendedorCodes || 'ALL';
+        const vendorScope = resolvePedidoVendorScope(req, req.query.vendedorCodes || 'ALL');
+        if (!vendorScope.ok) {
+            return res.status(403).json({ success: false, code: 'FORBIDDEN_VENDOR', error: vendorScope.error });
+        }
+        const vendedorCodes = vendorScope.codes.length > 0 ? vendorScope.codes.join(',') : 'ALL';
         const analytics = await pedidosService.getOrderAnalytics(vendedorCodes);
         res.json({ success: true, analytics });
     } catch (error) {
@@ -328,7 +578,20 @@ router.post('/complementary', async (req, res) => {
         if (!productCodes || !Array.isArray(productCodes) || productCodes.length === 0) {
             return res.status(400).json({ success: false, error: 'productCodes array is required' });
         }
-        const products = await pedidosService.getComplementaryProducts(productCodes, clientCode);
+        let effectiveClientCode = clientCode;
+        if (clientCode) {
+            const clientAccess = await authorizePedidoClientScope(
+                req,
+                clientCode,
+                req.body.vendedorCodes || req.body.vendedorCode || req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+                'consultar complementarios',
+            );
+            if (!clientAccess.ok) {
+                return res.status(clientAccess.status).json(clientAccess.body);
+            }
+            effectiveClientCode = clientAccess.clientCode;
+        }
+        const products = await pedidosService.getComplementaryProducts(productCodes, effectiveClientCode);
         res.json({ success: true, products });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in POST /complementary: ${error.message}`);
@@ -353,7 +616,12 @@ router.get('/recommendations/:clientCode', async (req, res) => {
             return res.status(400).json({ success: false, error: 'vendedorCode is required' });
         }
 
-        const recommendations = await pedidosService.getRecommendations(clientCode, vendedorCode);
+        const clientAccess = await authorizePedidoClientScope(req, clientCode, vendedorCode, 'consultar recomendaciones');
+        if (!clientAccess.ok) {
+            return res.status(clientAccess.status).json(clientAccess.body);
+        }
+
+        const recommendations = await pedidosService.getRecommendations(clientAccess.clientCode, vendedorCode);
 
         res.json({
             success: true,
@@ -383,6 +651,16 @@ router.get('/product-history/:productCode/:clientCode', async (req, res) => {
             return res.status(400).json({ success: false, error: 'productCode and clientCode are required' });
         }
 
+        const clientAccess = await authorizePedidoClientScope(
+            req,
+            clientCode,
+            req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+            'consultar historico',
+        );
+        if (!clientAccess.ok) {
+            return res.status(clientAccess.status).json(clientAccess.body);
+        }
+
         const currentYear = new Date().getFullYear();
         const startYear = currentYear - 2;
 
@@ -410,7 +688,7 @@ router.get('/product-history/:productCode/:clientCode', async (req, res) => {
         ORDER BY L.LCAADC DESC, L.LCMMDC ASC
     `;
 
-        const rows = await queryWithParams(sql, [clientCode, productCode, startYear, 'CC', 'VC', 'AB', 'VT', 'N', 'Z', 'G', 'D']);
+        const rows = await queryWithParams(sql, [clientAccess.clientCode, productCode, startYear, 'CC', 'VC', 'AB', 'VT', 'N', 'Z', 'G', 'D']);
 
         // Build years structure
         const years = {};
@@ -497,8 +775,18 @@ router.get('/promotions', async (req, res) => {
         if (!trimmedClient) {
             return res.status(400).json({ success: false, error: 'clientCode is required for promotions' });
         }
+
+        const clientAccess = await authorizePedidoClientScope(
+            req,
+            trimmedClient,
+            req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+            'consultar promociones',
+        );
+        if (!clientAccess.ok) {
+            return res.status(clientAccess.status).json(clientAccess.body);
+        }
         
-        const promotions = await pedidosService.getActivePromotions(trimmedClient);
+        const promotions = await pedidosService.getActivePromotions(clientAccess.clientCode);
         res.json({ success: true, promotions });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /promotions: ${error.message}`);
@@ -522,10 +810,11 @@ router.get('/', async (req, res) => {
             return res.status(400).json({ success: false, error: 'vendedorCodes is required' });
         }
 
-        // Handle 'ALL' vendor code for JEFE_VENTAS
-        const effectiveVendedorCodes = (vendedorCodes === 'ALL' && req.user && req.user.isJefeVentas)
-            ? 'ALL'
-            : vendedorCodes;
+        const vendorScope = resolvePedidoVendorScope(req, vendedorCodes);
+        if (!vendorScope.ok) {
+            return res.status(403).json({ success: false, code: 'FORBIDDEN_VENDOR', error: vendorScope.error });
+        }
+        const effectiveVendedorCodes = vendorScope.codes.length > 0 ? vendorScope.codes.join(',') : 'ALL';
 
         const result = await pedidosService.getOrders({
             vendedorCodes: effectiveVendedorCodes,
@@ -557,7 +846,11 @@ router.get('/', async (req, res) => {
  */
 router.get('/orders/stats', async (req, res) => {
     try {
-        const vendedorCodes = req.query.vendedorCodes || 'ALL';
+        const vendorScope = resolvePedidoVendorScope(req, req.query.vendedorCodes || 'ALL');
+        if (!vendorScope.ok) {
+            return res.status(403).json({ success: false, code: 'FORBIDDEN_VENDOR', error: vendorScope.error });
+        }
+        const vendedorCodes = vendorScope.codes.length > 0 ? vendorScope.codes.join(',') : 'ALL';
         const stats = await pedidosService.getOrderStats(
             vendedorCodes,
             req.query.dateFrom ? String(req.query.dateFrom).trim() : undefined,
@@ -584,7 +877,12 @@ router.get('/delivery-options', async (req, res) => {
             return res.status(400).json({ success: false, error: 'clientCode and vendedorCode are required' });
         }
 
-        const options = await pedidosService.getDeliveryOptions({ clientCode, vendedorCode, deliveryDate });
+        const clientAccess = await authorizePedidoClientScope(req, clientCode, vendedorCode, 'consultar reparto');
+        if (!clientAccess.ok) {
+            return res.status(clientAccess.status).json(clientAccess.body);
+        }
+
+        const options = await pedidosService.getDeliveryOptions({ clientCode: clientAccess.clientCode, vendedorCode, deliveryDate });
         res.json({ success: true, options });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /delivery-options: ${error.message}`);
@@ -613,7 +911,13 @@ router.get('/available-vehicles', async (req, res) => {
  */
 router.get('/:id/albaran', async (req, res) => {
     try {
-        const albaranes = await pedidosService.getOrderAlbaran(req.params.id);
+        const id = parseIntSafe(req.params.id, null);
+        if (id === null) return res.status(400).json({ success: false, error: 'Invalid order id' });
+        const ownership = await authorizePedidoAccess(req, id, 'consultar');
+        if (!ownership.ok) {
+            return res.status(ownership.status).json(ownership.body);
+        }
+        const albaranes = await pedidosService.getOrderAlbaran(id);
         res.json({ success: true, albaranes });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /${req.params.id}/albaran: ${error.message}`);
@@ -629,6 +933,10 @@ router.get('/:id/clone', async (req, res) => {
     try {
         const id = parseIntSafe(req.params.id, null);
         if (id === null) return res.status(400).json({ success: false, error: 'Invalid order id' });
+        const ownership = await authorizePedidoAccess(req, id, 'clonar');
+        if (!ownership.ok) {
+            return res.status(ownership.status).json(ownership.body);
+        }
         const data = await pedidosService.cloneOrder(id);
         res.json({ success: true, order: data });
     } catch (error) {
@@ -645,6 +953,10 @@ router.get('/:id/pdf', async (req, res) => {
     try {
         const id = parseIntSafe(req.params.id, null);
         if (id === null) return res.status(400).json({ success: false, error: 'Invalid order id' });
+        const ownership = await authorizePedidoAccess(req, id, 'consultar');
+        if (!ownership.ok) {
+            return res.status(ownership.status).json(ownership.body);
+        }
         const detail = await pedidosService.generateOrderPdf(id);
         res.json({ success: true, order: detail });
     } catch (error) {
@@ -671,11 +983,37 @@ router.get('/product-comparative/:productCode', async (req, res) => {
         const currentYear = now.getFullYear();
         const previousYear = currentYear - 1;
 
+        let effectiveVendorCodes = [];
+        if (vendedorCode) {
+            const vendorScope = resolvePedidoVendorScope(req, vendedorCode);
+            if (!vendorScope.ok) {
+                return res.status(403).json({ success: false, code: 'FORBIDDEN_VENDOR', error: vendorScope.error });
+            }
+            effectiveVendorCodes = vendorScope.codes;
+        }
+        if (clientCode) {
+            const clientAccess = await authorizePedidoClientScope(
+                req,
+                clientCode,
+                effectiveVendorCodes.length > 0 ? effectiveVendorCodes.join(',') : (vendedorCode || 'ALL'),
+                'consultar comparativa',
+            );
+            if (!clientAccess.ok) {
+                return res.status(clientAccess.status).json(clientAccess.body);
+            }
+        }
+
         const where = [`TRIM(L.LCCDRF) = ?`, `L.LCTPVT IN ('CC','VC')`,
                        `L.LCCLLN IN ('VT','AB')`, `L.LCSRAB NOT IN ('N','Z','G','D')`];
         const params = [productCode];
         if (clientCode) { where.push('TRIM(L.LCCDCL) = ?'); params.push(clientCode); }
-        if (vendedorCode && vendedorCode.toUpperCase() !== 'ALL') { where.push('TRIM(L.LCCDVD) = ?'); params.push(vendedorCode); }
+        if (effectiveVendorCodes.length === 1) {
+            where.push('TRIM(L.LCCDVD) = ?');
+            params.push(effectiveVendorCodes[0]);
+        } else if (effectiveVendorCodes.length > 1) {
+            where.push(`TRIM(L.LCCDVD) IN (${effectiveVendorCodes.map(() => '?').join(',')})`);
+            params.push(...effectiveVendorCodes);
+        }
         const whereSql = where.join(' AND ');
 
         const sqlByMonth = `
@@ -758,15 +1096,28 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
         if (!clientCode) {
             return res.status(400).json({ success: false, error: 'clientCode requerido' });
         }
+
+        const vendorScope = resolvePedidoVendorScope(req, vendedorCodes);
+        if (!vendorScope.ok) {
+            return res.status(403).json({
+                success: false,
+                error: vendorScope.error,
+            });
+        }
+        const clientVendorFilter = buildClientVendorParamFilter(vendorScope.codes, 'CLI');
+        const laclaeVendorFilter = buildLaclaeVendorParamFilter(vendorScope.codes, 'L');
         
         // Verify client belongs to vendor scope
         const clientCheckQuery = `
-            SELECT 1 FROM DSEDAC.CLI 
-            WHERE TRIM(CODIGOCLIENTE) = ?
-              ${buildVendedorFilter(vendedorCodes)}
+            SELECT 1 FROM DSEDAC.CLI CLI
+            WHERE TRIM(CLI.CODIGOCLIENTE) = ?
+              ${clientVendorFilter.clause}
             FETCH FIRST 1 ROWS ONLY
         `;
-        const clientCheck = await queryWithParams(clientCheckQuery, [clientCode]);
+        const clientCheck = await queryWithParams(
+            clientCheckQuery,
+            [clientCode, ...clientVendorFilter.params],
+        );
 
         if (clientCheck.length === 0) {
             return res.status(403).json({ 
@@ -785,11 +1136,14 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
             FROM DSED.LACLAE L
             WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
               AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
-              ${buildVendedorFilter(vendedorCodes, 'L')}
+              ${laclaeVendorFilter.clause}
             GROUP BY L.LCAADC, L.LCMMDC
             ORDER BY L.LCAADC ASC, L.LCMMDC ASC
         `;
-        const monthlyData = await queryWithParams(monthlyQuery, [clientCode, startYear, 'CC', 'VC', 'AB', 'VT']);
+        const monthlyData = await queryWithParams(
+            monthlyQuery,
+            [clientCode, startYear, 'CC', 'VC', 'AB', 'VT', ...laclaeVendorFilter.params],
+        );
 
         const topProductsQuery = `
             SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME,
@@ -798,12 +1152,15 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
             LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
             WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
               AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
-              ${buildVendedorFilter(vendedorCodes, 'L')}
+              ${laclaeVendorFilter.clause}
             GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
             ORDER BY TOTAL_SALES DESC
             FETCH FIRST 20 ROWS ONLY
         `;
-        const topProductsData = await queryWithParams(topProductsQuery, [clientCode, currentYear - 1, 'CC', 'VC', 'AB', 'VT']);
+        const topProductsData = await queryWithParams(
+            topProductsQuery,
+            [clientCode, currentYear - 1, 'CC', 'VC', 'AB', 'VT', ...laclaeVendorFilter.params],
+        );
 
         const returnsQuery = `
             SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
@@ -813,15 +1170,19 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
             LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
             WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
               AND (L.LCSRAB = 'D' OR L.LCTPVT = 'DV')
-              ${buildVendedorFilter(vendedorCodes, 'L')}
+              ${laclaeVendorFilter.clause}
             GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
             ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC
             FETCH FIRST 50 ROWS ONLY
         `;
-        const returnsData = await queryWithParams(returnsQuery, [clientCode, startYear]);
+        const returnsData = await queryWithParams(
+            returnsQuery,
+            [clientCode, startYear, ...laclaeVendorFilter.params],
+        );
 
         res.json({
             success: true,
+            years: [startYear, startYear + 1, currentYear],
             monthlySales: monthlyData.map(r => ({ year: r.YEAR, month: r.MONTH, sales: parseFloat(r.SALES), units: parseFloat(r.UNITS) })),
             topProducts: topProductsData.map(r => ({ code: r.CODE, name: r.NAME, totalSales: parseFloat(r.TOTAL_SALES), totalUnits: parseFloat(r.TOTAL_UNITS) })),
             returns: returnsData.map(r => ({ year: r.YEAR, month: r.MONTH, productCode: r.PRODUCT_CODE, productName: r.PRODUCT_NAME, units: parseFloat(r.UNITS), amount: parseFloat(r.AMOUNT) })),
@@ -841,6 +1202,11 @@ router.get('/:id', async (req, res) => {
         const id = parseIntSafe(req.params.id, null);
         if (id === null) {
             return res.status(400).json({ success: false, error: 'Invalid order id' });
+        }
+
+        const ownership = await authorizePedidoAccess(req, id, 'consultar');
+        if (!ownership.ok) {
+            return res.status(ownership.status).json(ownership.body);
         }
 
         const order = await pedidosService.getOrderDetail(id);
@@ -879,21 +1245,46 @@ router.post('/create', async (req, res) => {
             return res.status(400).json({ success: false, error: 'At least 1 order line is required' });
         }
 
+        const vendorAccess = authorizePedidoVendorCode(req, vendedorCode, 'crear pedidos para');
+        if (!vendorAccess.ok) {
+            return res.status(vendorAccess.status).json(vendorAccess.body);
+        }
+        const clientAccess = await authorizePedidoClientScope(req, clientCode, vendorAccess.vendedorCode, 'crear pedidos para');
+        if (!clientAccess.ok) {
+            return res.status(clientAccess.status).json(clientAccess.body);
+        }
+
+        const idempotencyKey = pedidosService.extractIdempotencyKeyFromRequest(req);
         const order = await pedidosService.createOrder({
-            clientCode: String(clientCode).trim(),
+            clientCode: clientAccess.clientCode,
             clientName: clientName ? String(clientName).trim() : '',
-            vendedorCode: String(vendedorCode).trim(),
+            vendedorCode: vendorAccess.vendedorCode,
             tipoventa: tipoventa ? String(tipoventa).trim() : undefined,
             almacen: almacen ? String(almacen).trim() : undefined,
             tarifa: tarifa ? String(tarifa).trim() : undefined,
             descuentoGlobal: descuentoGlobal ? parseFloat(descuentoGlobal) : 0,
             observaciones: observaciones ? String(observaciones).trim() : '',
             lines,
-            userId: req.user ? req.user.vendedorCode : undefined
+            userId: req.user?.code || req.user?.codigo || req.user?.vendedorCode || undefined,
+            idempotencyKey,
         });
 
-        res.status(201).json({ success: true, order });
+        if (order.idempotent) {
+            return res.status(200).json({
+                success: true,
+                idempotent: true,
+                order: stripMarginFromOrder(order, req.user),
+            });
+        }
+
+        res.status(201).json({ success: true, order: stripMarginFromOrder(order, req.user) });
     } catch (error) {
+        if (error.code === 'INVALID_IDEMPOTENCY_KEY') {
+            return res.status(400).json({ success: false, code: error.code, error: error.message });
+        }
+        if (error.code === 'IDEMPOTENCY_CONFLICT') {
+            return res.status(409).json({ success: false, code: error.code, error: error.message });
+        }
         logger.error(`[PEDIDOS] Error in POST /create: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }
@@ -908,6 +1299,11 @@ router.put('/:id/lines', async (req, res) => {
         const id = parseIntSafe(req.params.id, null);
         if (id === null) {
             return res.status(400).json({ success: false, error: 'Invalid order id' });
+        }
+
+        const ownership = await authorizePedidoMutation(req, id);
+        if (!ownership.ok) {
+            return res.status(ownership.status).json(ownership.body);
         }
 
         const {
@@ -961,13 +1357,18 @@ router.put('/:id/lines/:lineId', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid order or line id' });
         }
 
+        const ownership = await authorizePedidoMutation(req, id);
+        if (!ownership.ok) {
+            return res.status(ownership.status).json(ownership.body);
+        }
+
         const { cantidadEnvases, cantidadUnidades, precioVenta, unidadMedida, claseLinea } = req.body;
 
         if (claseLinea !== undefined && !['VT', 'SC'].includes(claseLinea)) {
             return res.status(400).json({ success: false, error: 'claseLinea inválida' });
         }
 
-        const line = await pedidosService.updateOrderLine(id, lineId, {
+        const line = await pedidosService.updateOrderLine(lineId, {
             cantidadEnvases: cantidadEnvases !== undefined ? parseFloatSafe(cantidadEnvases, 0) : undefined,
             cantidadUnidades: cantidadUnidades !== undefined ? parseFloatSafe(cantidadUnidades, 0) : undefined,
             precioVenta: precioVenta !== undefined ? parseFloat(precioVenta) || 0 : undefined,
@@ -997,7 +1398,12 @@ router.delete('/:id/lines/:lineId', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid order or line id' });
         }
 
-        await pedidosService.deleteOrderLine(id, lineId);
+        const ownership = await authorizePedidoMutation(req, id);
+        if (!ownership.ok) {
+            return res.status(ownership.status).json(ownership.body);
+        }
+
+        await pedidosService.deleteOrderLine(lineId, id);
 
         res.json({ success: true });
     } catch (error) {
@@ -1024,6 +1430,11 @@ router.put('/:id/confirm', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid order id' });
         }
 
+        const ownership = await authorizePedidoMutation(req, id);
+        if (!ownership.ok) {
+            return res.status(ownership.status).json(ownership.body);
+        }
+
         const { saleType, forceConfirm, deliveryDate, vehicleCode, driverCode, routeCode } = req.body;
         if (!saleType || !['CC', 'VC', 'NV'].includes(saleType)) {
             return res.status(400).json({ success: false, error: 'saleType must be CC, VC, or NV' });
@@ -1039,17 +1450,37 @@ router.put('/:id/confirm', async (req, res) => {
         };
         const order = await pedidosService.confirmOrder(id, saleType, options);
 
-        // P0-C: If stock validation blocked the order, return 409 with alternatives
+        // P0-C / P0-BOLSA: If validation blocked the order, return typed 409 payload.
         if (order.blocked) {
-            logger.warn(`[PEDIDOS] Order #${id} blocked due to stock: ${order.message}`);
-            return res.status(409).json({
+            logger.warn(`[PEDIDOS] Order #${id} blocked due to ${order.reason || 'UNKNOWN'}: ${order.message}`);
+            const blockedCode = order.reason || (
+                order.deficit !== undefined || order.saldoBolsa !== undefined
+                    ? 'BOLSA_INSUFICIENTE'
+                    : 'STOCK_INSUFICIENTE'
+            );
+            const payload = {
                 success: false,
                 blocked: true,
                 reason: order.reason,
+                code: blockedCode,
                 message: order.message,
-                stockWarnings: order.stockWarnings,
-                alternatives: order.alternatives
-            });
+            };
+
+            if (order.reason === 'BOLSA_INSUFICIENTE') {
+                if (order.deficit !== undefined) payload.deficit = order.deficit;
+                if (order.saldoBolsa !== undefined) payload.saldoBolsa = order.saldoBolsa;
+                if (order.warnings !== undefined) payload.warnings = order.warnings;
+                payload.details = {
+                    deficit: order.deficit,
+                    saldoBolsa: order.saldoBolsa,
+                    warnings: order.warnings,
+                };
+            } else {
+                payload.stockWarnings = order.stockWarnings;
+                payload.alternatives = order.alternatives;
+            }
+
+            return res.status(409).json(payload);
         }
 
         logger.info(`[PEDIDOS] Order #${id} confirmed successfully`);
@@ -1084,6 +1515,11 @@ router.delete('/:id', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid order id' });
         }
 
+        const ownership = await authorizePedidoMutation(req, id);
+        if (!ownership.ok) {
+            return res.status(ownership.status).json(ownership.body);
+        }
+
         await pedidosService.cancelOrder(id);
 
         res.json({ success: true });
@@ -1104,7 +1540,11 @@ router.put('/:id/lines/:lineId/delete', async (req, res) => {
         if (id === null || lineId === null) {
             return res.status(400).json({ success: false, error: 'Invalid order or line id' });
         }
-        await pedidosService.deleteOrderLine(id, lineId);
+        const ownership = await authorizePedidoMutation(req, id);
+        if (!ownership.ok) {
+            return res.status(ownership.status).json(ownership.body);
+        }
+        await pedidosService.deleteOrderLine(lineId, id);
         res.json({ success: true });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/lines/${req.params.lineId}/delete: ${error.message}`);
@@ -1120,6 +1560,11 @@ router.put('/:id/cancel', async (req, res) => {
         if (id === null) {
             return res.status(400).json({ success: false, error: 'Invalid order id' });
         }
+        const ownership = await authorizePedidoMutation(req, id);
+        if (!ownership.ok) {
+            return res.status(ownership.status).json(ownership.body);
+        }
+
         await pedidosService.cancelOrder(id, { userId: req.user?.code || 'SYSTEM' });
         res.json({ success: true });
     } catch (error) {
@@ -1140,6 +1585,11 @@ router.put('/:id/status', async (req, res) => {
         if (id === null) {
             return res.status(400).json({ success: false, error: 'Invalid order id' });
         }
+        const ownership = await authorizePedidoMutation(req, id);
+        if (!ownership.ok) {
+            return res.status(ownership.status).json(ownership.body);
+        }
+
         const { status } = req.body;
         if (!status) {
             return res.status(400).json({ success: false, error: 'Status is required' });
@@ -1217,16 +1667,19 @@ router.get('/debug/estados', debugMiddleware, (req, res) => {
     res.json({
         estados: {
             BORRADOR: 'Estado inicial. Pedido creado en la app pero sin confirmar.',
+            PENDIENTE_APROBACION: 'Pedido pendiente de aprobacion antes de confirmarlo.',
+            CONFIRMANDO: 'Estado tecnico temporal mientras se valida stock y se confirma.',
             CONFIRMADO: 'Pedido confirmado por el comercial. Listo para proceso de almacén.',
             ENVIADO: 'Pedido enviado/entregado. Se marca externamente (CPC/albarán generado).',
             ANULADO: 'Pedido anulado/cancelado.'
         },
         transiciones: {
             'BORRADOR -> CONFIRMADO': 'Usuario confirma en detalle del pedido (botón)',
+            'BORRADOR -> PENDIENTE_APROBACION -> CONFIRMADO': 'Flujo con aprobacion previa antes de validar stock y confirmar',
             'CONFIRMADO -> ENVIADO': 'Se marcaexternamente cuando se genera albarán',
             'BORRADOR/CONFIRMADO -> ANULADO': 'Usuario cancela el pedido'
         },
-        valoresPermitidos: ['BORRADOR', 'CONFIRMADO', 'ENVIADO', 'ANULADO']
+        valoresPermitidos: ['BORRADOR', 'PENDIENTE_APROBACION', 'CONFIRMANDO', 'CONFIRMADO', 'ENVIADO', 'ANULADO']
     });
 });
 
@@ -1238,26 +1691,28 @@ router.get('/debug/estados', debugMiddleware, (req, res) => {
 router.post('/debug/set-estado', debugMiddleware, async (req, res) => {
     try {
         const { orderId, estado } = req.body;
-        const estadosValidos = ['BORRADOR', 'CONFIRMADO', 'ENVIADO', 'ANULADO'];
+        const estadosValidos = ['BORRADOR', 'PENDIENTE_APROBACION', 'CONFIRMADO', 'ENVIADO', 'ANULADO'];
         
         if (!orderId) {
             return res.status(400).json({ success: false, error: 'Falta orderId' });
         }
-        if (!estado || !estadosValidos.includes(estado)) {
+        const canonicalEstado = pedidosService.canonicalOrderStatus(estado);
+        if (!estado || !estadosValidos.includes(canonicalEstado)) {
             return res.status(400).json({ 
                 success: false, 
                 error: `Estado inválido. Valores: ${estadosValidos.join(', ')}` 
             });
         }
-        
+
+        const storedEstado = pedidosService.storedOrderStatus(canonicalEstado);
         await queryWithParams(
-            `UPDATE JAVIER.PEDIDOS_CAB SET ESTADO = ?, UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`,
-            [estado, orderId],
+            buildUpdatePedidoEstadoSql(),
+            [storedEstado, orderId],
             false
         );
         
-        logger.info(`[DEBUG] Pedido #${orderId} -> ESTADO = ${estado}`);
-        res.json({ success: true, orderId, estado });
+        logger.info(`[DEBUG] Pedido #${orderId} -> ESTADO = ${storedEstado} (canonical: ${canonicalEstado})`);
+        res.json({ success: true, orderId, estado: canonicalEstado, storedEstado });
     } catch (error) {
         logger.error(`[DEBUG] Error set-estado: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
@@ -1279,7 +1734,7 @@ router.get('/debug/list-estados', debugMiddleware, async (req, res) => {
 
         if (vendedorCode) {
             sql = `
-                SELECT ID, NUMEROPEDIDO, SERIE, CODIGOCLIENTE, ESTADO, IMPORTETOTAL,
+                SELECT ID, NUMEROPEDIDO, SERIEPEDIDO, CODIGOCLIENTE, ESTADO, IMPORTETOTAL,
                        DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO
                 FROM JAVIER.PEDIDOS_CAB
                 WHERE TRIM(CODIGOVENDEDOR) = CAST(? AS VARCHAR(50))
@@ -1288,7 +1743,7 @@ router.get('/debug/list-estados', debugMiddleware, async (req, res) => {
             params = [vendedorCode];
         } else {
             sql = `
-                SELECT ID, NUMEROPEDIDO, SERIE, CODIGOCLIENTE, ESTADO, IMPORTETOTAL,
+                SELECT ID, NUMEROPEDIDO, SERIEPEDIDO, CODIGOCLIENTE, ESTADO, IMPORTETOTAL,
                        DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO
                 FROM JAVIER.PEDIDOS_CAB
                 ORDER BY ID DESC FETCH FIRST ${limit} ROWS ONLY
@@ -1325,8 +1780,8 @@ router.get('/debug/list-estados', debugMiddleware, async (req, res) => {
  */
 router.get('/purchase-history-global', async (req, res) => {
     try {
-        const userIsJefe = req.user?.userRole === 'JEFE_VENTAS' || req.user?.userRole === 'ADMIN';
-        const userVendor = String(req.user?.codigo || req.user?.userId || '').trim();
+        const userIsJefe = req.user?.role === 'JEFE_VENTAS' || req.user?.role === 'ADMIN';
+        const userVendor = String(req.user?.code || '').trim();
 
         // Fechas
         const now = new Date();
@@ -1338,7 +1793,16 @@ router.get('/purchase-history-global', async (req, res) => {
 
         // Filtros
         let vendor = String(req.query.vendedorCode || '').trim();
-        if (!userIsJefe && userVendor) vendor = userVendor; // comercial solo ve lo suyo
+        if (!userIsJefe) {
+            if (!userVendor) {
+                return res.status(403).json({
+                    success: false,
+                    code: 'FORBIDDEN_VENDOR',
+                    error: 'COMERCIAL sin vendedor autenticado',
+                });
+            }
+            vendor = userVendor; // comercial solo ve lo suyo
+        }
         const isAllVendor = !vendor || vendor.toUpperCase() === 'ALL';
         const clientCode = String(req.query.clientCode || '').trim();
         const productCode = String(req.query.productCode || '').trim();
@@ -1452,13 +1916,11 @@ router.get('/purchase-history-global', async (req, res) => {
         const lastYearSql = `
             SELECT COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_LAST_YEAR
             FROM DSED.LACLAE L
-            WHERE (L.LCAADC * 10000 + L.LCMMDC * 100 + L.LCDDDC) BETWEEN ? AND ?
-              AND L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('VT','AB')
-              AND L.LCSRAB NOT IN ('N','Z','G','D')
+            WHERE ${whereSql}
         `;
         const lastYearFrom = (from.getFullYear() - 1) * 10000 + (from.getMonth() + 1) * 100 + from.getDate();
         const lastYearTo = (to.getFullYear() - 1) * 10000 + (to.getMonth() + 1) * 100 + to.getDate();
-        const lastYearParams = [lastYearFrom, lastYearTo];
+        const lastYearParams = [lastYearFrom, lastYearTo, ...params.slice(2)];
 
         // 5) Mensual por año: agrupa importe por ANO y MES para gráfico multi-año
         const monthlyByYearSql = `

@@ -7,6 +7,7 @@ import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/async_operation_modal.dart';
@@ -260,6 +261,8 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
       final response = await ApiClient.get(
         '/entregas/signers/$codigoCliente',
         queryParameters: {'entregaId': widget.albaran.id},
+        cacheKey: 'entregas:signers:$codigoCliente:${widget.albaran.id}',
+        cacheTTL: CacheService.defaultTTL,
       );
       if (response['success'] == true && mounted) {
         final signers = response['signers'] as List;
@@ -1629,13 +1632,15 @@ class _RuteroDetailModalState extends State<RuteroDetailModal>
                                   color: AppTheme.textPrimary, fontSize: 13)),
                           if (widget.albaran.nombreFiscal != null &&
                               widget.albaran.nombreFiscal!.isNotEmpty &&
-                              widget.albaran.nombreFiscal!.toUpperCase() != widget.albaran.nombreCliente.toUpperCase())
+                              widget.albaran.nombreFiscal!.toUpperCase() !=
+                                  widget.albaran.nombreCliente.toUpperCase())
                             Padding(
                               padding: const EdgeInsets.only(top: 2),
                               child: Text(
                                 'N. fiscal: ${widget.albaran.nombreFiscal}',
                                 style: TextStyle(
-                                    color: AppTheme.textSecondary, fontSize: 11),
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 11),
                               ),
                             ),
                           const SizedBox(height: 8),

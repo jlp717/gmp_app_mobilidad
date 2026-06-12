@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 const odbc = require('odbc');
+const db2ConnectionString = require('./db2-connection');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
-const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
+const CONN = db2ConnectionString();
 
 const OMITIR = ['ID', 'MARCAACTUALIZACION'];
 
@@ -20,7 +21,7 @@ async function getColumns(conn, table) {
 (async () => {
   const pool = await odbc.pool(CONN);
   const conn = await pool.connect();
-  console.log('✅ Conectado\n');
+  console.log('âœ… Conectado\n');
 
   // Verificar duplicados en CPC
   console.log('=== Verificando duplicados en CPC ===\n');
@@ -50,7 +51,7 @@ async function getColumns(conn, table) {
   const lines = [];
 
   lines.push('-- ============================================================================');
-  lines.push('-- VISTA DE DEUDA BASE — JAVIER');
+  lines.push('-- VISTA DE DEUDA BASE â€” JAVIER');
   lines.push('-- Ancla: DSEDAC.CVC (1 fila = 1 vencimiento/documento de deuda)');
   lines.push('-- JOINs: CPC (albaran/pedido), CLI (cliente), CLC (credito), CLP (riesgo)');
   lines.push('-- FILTRO: IMPORTEPENDIENTE <> 0, no anulado, emision >= 01/01/2003');
@@ -175,11 +176,11 @@ async function getColumns(conn, table) {
   const mdPath = path.resolve(__dirname, '..', '..', 'VISTA_DEUDA_COMPLETA.md');
   fs.writeFileSync(mdPath, '```sql\n' + sql + '\n```\n');
 
-  console.log(`\n✅ SQL generado:`);
+  console.log(`\nâœ… SQL generado:`);
   console.log(`   Columnas: ~${(sql.match(/,/g) || []).length}`);
   console.log(`   Bytes (con comentarios): ${bytes}`);
   console.log(`   Bytes (sin comentarios): ${bytesNoComments}`);
-  console.log(`   ${bytesNoComments < 10000 ? '✅ Cabe en catalogo' : '⚠️ Supera 10000 bytes'}`);
+  console.log(`   ${bytesNoComments < 10000 ? 'âœ… Cabe en catalogo' : 'âš ï¸ Supera 10000 bytes'}`);
 
   await conn.close();
   await pool.close();

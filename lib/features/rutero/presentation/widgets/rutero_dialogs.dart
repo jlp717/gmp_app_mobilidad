@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 /// Widget de selección de día destino para mover cliente
 /// Excluye Domingo de las opciones
 class DaySelectorDialog extends StatelessWidget {
-
   const DaySelectorDialog({
-    required this.currentDay, required this.clientName, required this.clientCode, super.key,
+    required this.currentDay,
+    required this.clientName,
+    required this.clientCode,
+    super.key,
   });
   final String currentDay;
   final String clientName;
@@ -34,9 +37,8 @@ class DaySelectorDialog extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Días disponibles: todos menos Domingo y el día actual
-    final availableDays = dayLabels.keys
-        .where((d) => d != currentDay.toLowerCase())
-        .toList();
+    final availableDays =
+        dayLabels.keys.where((d) => d != currentDay.toLowerCase()).toList();
 
     return AlertDialog(
       backgroundColor: AppTheme.surfaceColor,
@@ -58,7 +60,9 @@ class DaySelectorDialog extends StatelessWidget {
           ),
           Text(
             'Código: $clientCode',
-            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary.withValues(alpha: 0.7)),
+            style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.textSecondary.withValues(alpha: 0.7)),
           ),
         ],
       ),
@@ -74,7 +78,8 @@ class DaySelectorDialog extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppTheme.warning.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: AppTheme.warning.withValues(alpha: 0.3)),
+                border:
+                    Border.all(color: AppTheme.warning.withValues(alpha: 0.3)),
               ),
               child: const Row(
                 children: [
@@ -95,12 +100,14 @@ class DaySelectorDialog extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
             ),
             const SizedBox(height: 12),
-            ...availableDays.map((day) => _DayOption(
-              day: day,
-              label: dayLabels[day] ?? day,
-              icon: dayIcons[day] ?? Icons.calendar_today,
-              onTap: () => Navigator.pop(context, day),
-            ),),
+            ...availableDays.map(
+              (day) => _DayOption(
+                day: day,
+                label: dayLabels[day] ?? day,
+                icon: dayIcons[day] ?? Icons.calendar_today,
+                onTap: () => Navigator.pop(context, day),
+              ),
+            ),
           ],
         ),
       ),
@@ -115,7 +122,6 @@ class DaySelectorDialog extends StatelessWidget {
 }
 
 class _DayOption extends StatelessWidget {
-
   const _DayOption({
     required this.day,
     required this.label,
@@ -145,10 +151,12 @@ class _DayOption extends StatelessWidget {
                 const SizedBox(width: 12),
                 Text(
                   label.toUpperCase(),
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 const Spacer(),
-                const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                const Icon(Icons.arrow_forward_ios,
+                    size: 16, color: Colors.grey),
               ],
             ),
           ),
@@ -160,9 +168,12 @@ class _DayOption extends StatelessWidget {
 
 /// Widget de selección de posición en el día destino
 class PositionSelectorDialog extends StatefulWidget {
-
   const PositionSelectorDialog({
-    required this.targetDay, required this.vendorCode, required this.role, required this.clientName, super.key,
+    required this.targetDay,
+    required this.vendorCode,
+    required this.role,
+    required this.clientName,
+    super.key,
   });
   final String targetDay;
   final String vendorCode;
@@ -192,8 +203,11 @@ class _PositionSelectorDialogState extends State<PositionSelectorDialog> {
           'vendedorCodes': widget.vendorCode,
           'role': widget.role,
         },
+        cacheKey:
+            'rutero:positions:${widget.targetDay}:${widget.vendorCode}:${widget.role}',
+        cacheTTL: CacheService.realtimeTTL,
       );
-      
+
       if (mounted) {
         setState(() {
           _totalClients = (response['count'] as int?) ?? 0;
@@ -232,7 +246,8 @@ class _PositionSelectorDialogState extends State<PositionSelectorDialog> {
               children: [
                 Text(
                   'El ${_getDayLabel(widget.targetDay)} tiene $_totalClients cliente(s).',
-                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                  style: const TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 13),
                 ),
                 const SizedBox(height: 16),
                 const Text(
@@ -257,9 +272,11 @@ class _PositionSelectorDialogState extends State<PositionSelectorDialog> {
                 if (_totalClients > 1)
                   _PositionOption(
                     label: 'Elegir posición específica',
-                    subtitle: 'Seleccionar número del 1 al ${_totalClients + 1}',
+                    subtitle:
+                        'Seleccionar número del 1 al ${_totalClients + 1}',
                     icon: Icons.pin_drop,
-                    isSelected: _selectedPosition != 'start' && _selectedPosition != 'end',
+                    isSelected: _selectedPosition != 'start' &&
+                        _selectedPosition != 'end',
                     onTap: _showPositionPicker,
                   ),
               ],
@@ -298,7 +315,7 @@ class _PositionSelectorDialogState extends State<PositionSelectorDialog> {
         initialValue: 1,
       ),
     );
-    
+
     if (result != null && mounted) {
       setState(() => _selectedPosition = result.toString());
     }
@@ -306,7 +323,6 @@ class _PositionSelectorDialogState extends State<PositionSelectorDialog> {
 }
 
 class _PositionOption extends StatelessWidget {
-
   const _PositionOption({
     required this.label,
     required this.subtitle,
@@ -325,7 +341,9 @@ class _PositionOption extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: isSelected ? AppTheme.neonPink.withValues(alpha: 0.1) : AppTheme.darkSurface,
+        color: isSelected
+            ? AppTheme.neonPink.withValues(alpha: 0.1)
+            : AppTheme.darkSurface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isSelected ? AppTheme.neonPink : Colors.transparent,
@@ -339,7 +357,9 @@ class _PositionOption extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           child: Row(
             children: [
-              Icon(icon, color: isSelected ? AppTheme.neonPink : Colors.grey, size: 24),
+              Icon(icon,
+                  color: isSelected ? AppTheme.neonPink : Colors.grey,
+                  size: 24),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -354,13 +374,15 @@ class _PositionOption extends StatelessWidget {
                     ),
                     Text(
                       subtitle,
-                      style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                      style: const TextStyle(
+                          fontSize: 11, color: AppTheme.textSecondary),
                     ),
                   ],
                 ),
               ),
               if (isSelected)
-                const Icon(Icons.check_circle, color: AppTheme.neonPink, size: 20),
+                const Icon(Icons.check_circle,
+                    color: AppTheme.neonPink, size: 20),
             ],
           ),
         ),
@@ -370,7 +392,6 @@ class _PositionOption extends StatelessWidget {
 }
 
 class _NumberPickerDialog extends StatefulWidget {
-
   const _NumberPickerDialog({
     required this.max,
     required this.initialValue,
@@ -413,10 +434,12 @@ class _NumberPickerDialogState extends State<_NumberPickerDialog> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               IconButton(
-                onPressed: _value > 1 ? () => setState(() {
-                  _value--;
-                  _controller.text = _value.toString();
-                }) : null,
+                onPressed: _value > 1
+                    ? () => setState(() {
+                          _value--;
+                          _controller.text = _value.toString();
+                        })
+                    : null,
                 icon: const Icon(Icons.remove_circle),
                 color: AppTheme.neonBlue,
               ),
@@ -439,10 +462,12 @@ class _NumberPickerDialogState extends State<_NumberPickerDialog> {
                 ),
               ),
               IconButton(
-                onPressed: _value < widget.max ? () => setState(() {
-                  _value++;
-                  _controller.text = _value.toString();
-                }) : null,
+                onPressed: _value < widget.max
+                    ? () => setState(() {
+                          _value++;
+                          _controller.text = _value.toString();
+                        })
+                    : null,
                 icon: const Icon(Icons.add_circle),
                 color: AppTheme.neonBlue,
               ),
@@ -467,9 +492,13 @@ class _NumberPickerDialogState extends State<_NumberPickerDialog> {
 
 /// Modal de confirmación final para mover cliente
 class MoveConfirmationDialog extends StatelessWidget {
-
   const MoveConfirmationDialog({
-    required this.clientName, required this.clientCode, required this.fromDay, required this.toDay, required this.position, super.key,
+    required this.clientName,
+    required this.clientCode,
+    required this.fromDay,
+    required this.toDay,
+    required this.position,
+    super.key,
   });
   final String clientName;
   final String clientCode;
@@ -528,7 +557,8 @@ class MoveConfirmationDialog extends StatelessWidget {
                         color: AppTheme.neonBlue.withValues(alpha: 0.2),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.person, color: AppTheme.neonBlue, size: 20),
+                      child: const Icon(Icons.person,
+                          color: AppTheme.neonBlue, size: 20),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -537,11 +567,13 @@ class MoveConfirmationDialog extends StatelessWidget {
                         children: [
                           Text(
                             clientName,
-                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 16),
                           ),
                           Text(
                             clientCode,
-                            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                            style: const TextStyle(
+                                color: AppTheme.textSecondary, fontSize: 12),
                           ),
                         ],
                       ),
@@ -557,10 +589,13 @@ class MoveConfirmationDialog extends StatelessWidget {
                     Expanded(
                       child: Column(
                         children: [
-                          const Text('DE', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                          const Text('DE',
+                              style:
+                                  TextStyle(fontSize: 10, color: Colors.grey)),
                           const SizedBox(height: 4),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
                               color: AppTheme.error.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(8),
@@ -576,14 +611,18 @@ class MoveConfirmationDialog extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const Icon(Icons.arrow_forward, color: AppTheme.neonPink, size: 28),
+                    const Icon(Icons.arrow_forward,
+                        color: AppTheme.neonPink, size: 28),
                     Expanded(
                       child: Column(
                         children: [
-                          const Text('A', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                          const Text('A',
+                              style:
+                                  TextStyle(fontSize: 10, color: Colors.grey)),
                           const SizedBox(height: 4),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
                             decoration: BoxDecoration(
                               color: AppTheme.success.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(8),
@@ -604,7 +643,8 @@ class MoveConfirmationDialog extends StatelessWidget {
                 const SizedBox(height: 12),
                 Text(
                   'Se insertará ${_getPositionLabel(position)}',
-                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                  style: const TextStyle(
+                      fontSize: 12, color: AppTheme.textSecondary),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -639,9 +679,10 @@ class MoveConfirmationDialog extends StatelessWidget {
 
 /// Modal de confirmación para guardar el nuevo orden (reordenamiento)
 class ReorderConfirmationDialog extends StatelessWidget {
-
   const ReorderConfirmationDialog({
-    required this.changesCount, required this.day, super.key,
+    required this.changesCount,
+    required this.day,
+    super.key,
   });
   final int changesCount;
   final String day;

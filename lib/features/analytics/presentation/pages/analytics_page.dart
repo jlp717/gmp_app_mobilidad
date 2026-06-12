@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/utils/date_formatter.dart';
@@ -21,7 +22,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   // Filter state
   final Set<int> _selectedYears = {DateTime.now().year}; // Multi-select years
   int? _selectedMonth; // null = "Todo"
- String _granularity = 'month'; // 'month' or 'week'
+  String _granularity = 'month'; // 'month' or 'week'
   bool _upToToday = false; // YTD toggle
 
   // Data state
@@ -32,7 +33,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Map<String, dynamic>? _trendsData;
   List<Map<String, dynamic>> _marginsData = [];
   Map<String, dynamic>? _kpiData;
-  
+
   bool _isLoading = false;
 
   @override
@@ -43,53 +44,87 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   Future<void> _fetchAllData() async {
     setState(() => _isLoading = true);
-    
+
     try {
       // Build filter params
       final yearsParam = _selectedYears.join(',');
       final monthParam = _selectedMonth?.toString() ?? '';
       final upToTodayParam = _upToToday.toString();
-      
+
       // Fetch all data in parallel with caching for LACLAE-heavy endpoints
       final yoyYear = _selectedYears.first.toString();
       final results = await Future.wait([
-        ApiClient.get('/dashboard/sales-evolution', queryParameters: {
-          'years': yearsParam,
-          'granularity': _granularity,
-          'upToToday': upToTodayParam,
-          'months': '36',
-        },),
-        ApiClient.get('/dashboard/yoy-comparison', queryParameters: {
-          'year': yoyYear,
-        }, cacheKey: 'analytics_yoy_$yoyYear', cacheTTL: const Duration(hours: 6)),
-        ApiClient.get('/analytics/top-clients', queryParameters: {
-          'year': yoyYear,
-          if (monthParam.isNotEmpty) 'month': monthParam,
-          'limit': '10',
-        }, cacheKey: 'analytics_top_clients_$yoyYear${monthParam.isNotEmpty ? "_$monthParam" : ""}', cacheTTL: const Duration(hours: 3)),
-        ApiClient.get('/analytics/top-products', queryParameters: {
-          'year': yoyYear,
-          if (monthParam.isNotEmpty) 'month': monthParam,
-          'limit': '10',
-        }, cacheKey: 'analytics_top_products_$yoyYear${monthParam.isNotEmpty ? "_$monthParam" : ""}', cacheTTL: const Duration(hours: 3)),
-        ApiClient.get('/analytics/trends'),
-        ApiClient.get('/analytics/margins', queryParameters: {
-          'year': yoyYear,
-        }, cacheKey: 'analytics_margins_$yoyYear', cacheTTL: const Duration(hours: 6)),
-        ApiClient.get('/dashboard/metrics', cacheKey: 'analytics_dash_metrics_$yoyYear', cacheTTL: const Duration(minutes: 30)),
+        ApiClient.get(
+          '/dashboard/sales-evolution',
+          queryParameters: {
+            'years': yearsParam,
+            'granularity': _granularity,
+            'upToToday': upToTodayParam,
+            'months': '36',
+          },
+          cacheKey:
+              'analytics:evolution:$yearsParam:$_granularity:$upToTodayParam',
+          cacheTTL: CacheService.defaultTTL,
+        ),
+        ApiClient.get('/dashboard/yoy-comparison',
+            queryParameters: {
+              'year': yoyYear,
+            },
+            cacheKey: 'analytics_yoy_$yoyYear',
+            cacheTTL: const Duration(hours: 6)),
+        ApiClient.get('/analytics/top-clients',
+            queryParameters: {
+              'year': yoyYear,
+              if (monthParam.isNotEmpty) 'month': monthParam,
+              'limit': '10',
+            },
+            cacheKey:
+                'analytics_top_clients_$yoyYear${monthParam.isNotEmpty ? "_$monthParam" : ""}',
+            cacheTTL: const Duration(hours: 3)),
+        ApiClient.get('/analytics/top-products',
+            queryParameters: {
+              'year': yoyYear,
+              if (monthParam.isNotEmpty) 'month': monthParam,
+              'limit': '10',
+            },
+            cacheKey:
+                'analytics_top_products_$yoyYear${monthParam.isNotEmpty ? "_$monthParam" : ""}',
+            cacheTTL: const Duration(hours: 3)),
+        ApiClient.get(
+          '/analytics/trends',
+          cacheKey: 'analytics:trends',
+          cacheTTL: CacheService.defaultTTL,
+        ),
+        ApiClient.get('/analytics/margins',
+            queryParameters: {
+              'year': yoyYear,
+            },
+            cacheKey: 'analytics_margins_$yoyYear',
+            cacheTTL: const Duration(hours: 6)),
+        ApiClient.get('/dashboard/metrics',
+            cacheKey: 'analytics_dash_metrics_$yoyYear',
+            cacheTTL: const Duration(minutes: 30)),
       ]);
 
       setState(() {
         final rawEvolution = results[0]['evolution'] ?? [];
-        _evolutionData = (rawEvolution as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+        _evolutionData = (rawEvolution as List)
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .toList();
         _yoyData = results[1];
         final rawClients = results[2]['clients'] ?? [];
-        _topClients = (rawClients as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+        _topClients = (rawClients as List)
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .toList();
         final rawProducts = results[3]['products'] ?? [];
-        _topProducts = (rawProducts as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+        _topProducts = (rawProducts as List)
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .toList();
         _trendsData = results[4];
         final rawMargins = results[5]['margins'] ?? [];
-        _marginsData = (rawMargins as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+        _marginsData = (rawMargins as List)
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .toList();
         _kpiData = results[6];
         _isLoading = false;
       });
@@ -108,7 +143,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           : RefreshIndicator(
               onRefresh: _fetchAllData,
               child: SingleChildScrollView(
-                padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
+                padding: EdgeInsets.all(
+                    Responsive.padding(context, small: 10, large: 16)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -141,7 +177,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           Icons.analytics,
           color: AppTheme.neonBlue,
           size: Responsive.iconSize(
-            context, phone: 24, desktop: 32,
+            context,
+            phone: 24,
+            desktop: 32,
           ),
         ),
         const SizedBox(width: 12),
@@ -150,7 +188,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           style: TextStyle(
             color: Colors.white,
             fontSize: Responsive.fontSize(
-              context, small: 18, large: 24,
+              context,
+              small: 18,
+              large: 24,
             ),
             fontWeight: FontWeight.bold,
           ),
@@ -172,12 +212,16 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         children: [
           const Text(
             'Filtros',
-            style: TextStyle(color: AppTheme.neonBlue, fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(
+                color: AppTheme.neonBlue,
+                fontSize: 16,
+                fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
-          
+
           // Year multi-select chips
-          const Text('Años:', style: TextStyle(color: Colors.white70, fontSize: 14)),
+          const Text('Años:',
+              style: TextStyle(color: Colors.white70, fontSize: 14)),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -208,9 +252,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               );
             }).toList(),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Month dropdown
           Row(
             children: [
@@ -218,7 +262,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Mes:', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                    const Text('Mes:',
+                        style: TextStyle(color: Colors.white70, fontSize: 14)),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<int?>(
                       initialValue: _selectedMonth,
@@ -229,16 +274,19 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                           borderRadius: BorderRadius.circular(8),
                           borderSide: BorderSide.none,
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
                       ),
                       dropdownColor: AppTheme.darkBase,
                       style: const TextStyle(color: Colors.white),
                       items: [
                         const DropdownMenuItem(child: Text('Todo el año')),
-                        ...List.generate(12, (i) => i + 1).map((month) => DropdownMenuItem(
-                          value: month,
-                          child: Text(DateFormatter.getMonthName(month)),
-                        ),),
+                        ...List.generate(12, (i) => i + 1).map(
+                          (month) => DropdownMenuItem(
+                            value: month,
+                            child: Text(DateFormatter.getMonthName(month)),
+                          ),
+                        ),
                       ],
                       onChanged: (value) {
                         setState(() => _selectedMonth = value);
@@ -249,18 +297,25 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 ),
               ),
               const SizedBox(width: 16),
-              
+
               // Granularity toggle
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Vista:', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                    const Text('Vista:',
+                        style: TextStyle(color: Colors.white70, fontSize: 14)),
                     const SizedBox(height: 8),
                     SegmentedButton<String>(
                       segments: const [
-                        ButtonSegment(value: 'month', label: Text('Mensual'), icon: Icon(Icons.calendar_month, size: 16)),
-                        ButtonSegment(value: 'week', label: Text('Semanal'), icon: Icon(Icons.calendar_view_week, size: 16)),
+                        ButtonSegment(
+                            value: 'month',
+                            label: Text('Mensual'),
+                            icon: Icon(Icons.calendar_month, size: 16)),
+                        ButtonSegment(
+                            value: 'week',
+                            label: Text('Semanal'),
+                            icon: Icon(Icons.calendar_view_week, size: 16)),
                       ],
                       selected: {_granularity},
                       onSelectionChanged: (Set<String> selection) {
@@ -268,13 +323,15 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                         _fetchAllData();
                       },
                       style: ButtonStyle(
-                        backgroundColor: WidgetStateProperty.resolveWith((states) {
+                        backgroundColor:
+                            WidgetStateProperty.resolveWith((states) {
                           if (states.contains(WidgetState.selected)) {
                             return AppTheme.neonBlue.withValues(alpha: 0.3);
                           }
                           return AppTheme.darkBase;
                         }),
-                        foregroundColor: WidgetStateProperty.resolveWith((states) {
+                        foregroundColor:
+                            WidgetStateProperty.resolveWith((states) {
                           if (states.contains(WidgetState.selected)) {
                             return AppTheme.neonBlue;
                           }
@@ -287,14 +344,17 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               ),
             ],
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // YTD Toggle
           SwitchListTile(
-            title: const Text('Hasta hoy (YTD)', style: TextStyle(color: Colors.white, fontSize: 14)),
+            title: const Text('Hasta hoy (YTD)',
+                style: TextStyle(color: Colors.white, fontSize: 14)),
             subtitle: Text(
-              _upToToday ? 'Comparando solo hasta la fecha actual' : 'Comparando períodos completos',
+              _upToToday
+                  ? 'Comparando solo hasta la fecha actual'
+                  : 'Comparando períodos completos',
               style: const TextStyle(color: Colors.white54, fontSize: 12),
             ),
             value: _upToToday,
@@ -305,7 +365,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             activeThumbColor: AppTheme.neonGreen,
             contentPadding: EdgeInsets.zero,
           ),
-          
+
           // Filter summary
           const SizedBox(height: 12),
           Container(
@@ -316,7 +376,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.filter_list, color: AppTheme.neonBlue, size: 16),
+                const Icon(Icons.filter_list,
+                    color: AppTheme.neonBlue, size: 16),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -334,8 +395,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   String _buildFilterSummary() {
     final years = _selectedYears.toList()..sort();
-    final yearStr = years.length == 1 ? years.first.toString() : '${years.first}-${years.last}';
-    final monthStr = _selectedMonth != null ? DateFormatter.getMonthName(_selectedMonth!) : 'Todo el año';
+    final yearStr = years.length == 1
+        ? years.first.toString()
+        : '${years.first}-${years.last}';
+    final monthStr = _selectedMonth != null
+        ? DateFormatter.getMonthName(_selectedMonth!)
+        : 'Todo el año';
     final viewStr = _granularity == 'week' ? 'Semanal' : 'Mensual';
     final ytdStr = _upToToday ? ' (Hasta hoy)' : '';
     return '$yearStr • $monthStr • $viewStr$ytdStr';
@@ -343,31 +408,31 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   Widget _buildKPISection() {
     if (_kpiData == null) return const SizedBox();
-    
+
     // Calculate totals from evolution data - group by year+month to avoid duplicates
     final monthlyData = <String, Map<String, dynamic>>{};
-    
+
     for (final item in _evolutionData) {
       final year = item['year'] as int;
       if (_selectedYears.contains(year)) {
         final month = item['month'] as int;
         final key = '$year-$month';
-        
+
         // Only count each year-month combination once
         if (!monthlyData.containsKey(key)) {
           monthlyData[key] = item;
         }
       }
     }
-    
+
     var totalSales = 0;
     var totalClients = 0;
-    
+
     for (final item in monthlyData.values) {
       totalSales += (item['totalSales'] as num?)?.toDouble() ?? 0.0;
       totalClients += (item['uniqueClients'] as num?)?.toInt() ?? 0;
     }
-    
+
     const totalMargin = 0.0; // Not available in CVC
 
     return Column(
@@ -375,19 +440,34 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       children: [
         Text(
           'Indicadores Clave',
-          style: TextStyle(color: Colors.white, fontSize: Responsive.fontSize(context, small: 15, large: 18), fontWeight: FontWeight.bold),
+          style: TextStyle(
+              color: Colors.white,
+              fontSize: Responsive.fontSize(context, small: 15, large: 18),
+              fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 12),
         Row(
           children: [
-            Expanded(child: _buildKPICard('Ventas Totales', CurrencyFormatter.formatWhole(totalSales), Icons.attach_money, AppTheme.neonBlue)),
+            Expanded(
+                child: _buildKPICard(
+                    'Ventas Totales',
+                    CurrencyFormatter.formatWhole(totalSales),
+                    Icons.attach_money,
+                    AppTheme.neonBlue)),
             const SizedBox(width: 12),
             // Only show margin if > 0
-            if (totalMargin > 0) ...[  
-              Expanded(child: _buildKPICard('Margen Total', CurrencyFormatter.formatWhole(totalMargin), Icons.trending_up, AppTheme.neonGreen)),
+            if (totalMargin > 0) ...[
+              Expanded(
+                  child: _buildKPICard(
+                      'Margen Total',
+                      CurrencyFormatter.formatWhole(totalMargin),
+                      Icons.trending_up,
+                      AppTheme.neonGreen)),
               const SizedBox(width: 12),
             ],
-            Expanded(child: _buildKPICard('Clientes Únicos', totalClients.toString(), Icons.people, AppTheme.neonPurple)),
+            Expanded(
+                child: _buildKPICard('Clientes Únicos', totalClients.toString(),
+                    Icons.people, AppTheme.neonPurple)),
           ],
         ),
       ],
@@ -396,7 +476,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   Widget _buildKPICard(String title, String value, IconData icon, Color color) {
     return Container(
-      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
+      padding:
+          EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [color.withValues(alpha: 0.1), color.withValues(alpha: 0.05)],
@@ -411,11 +492,13 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         children: [
           Icon(icon, color: color, size: 32),
           const SizedBox(height: 12),
-          Text(title, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          Text(title,
+              style: const TextStyle(color: Colors.white70, fontSize: 12)),
           const SizedBox(height: 4),
           Text(
             value,
-            style: TextStyle(color: color, fontSize: 20, fontWeight: FontWeight.bold),
+            style: TextStyle(
+                color: color, fontSize: 20, fontWeight: FontWeight.bold),
             overflow: TextOverflow.ellipsis,
           ),
         ],
@@ -425,7 +508,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   Widget _buildEvolutionChart() {
     if (_evolutionData.isEmpty) {
-      return const Card(child: Padding(padding: EdgeInsets.all(32), child: Center(child: Text('No hay datos de evolución'))));
+      return const Card(
+          child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(child: Text('No hay datos de evolución'))));
     }
 
     return Container(
@@ -442,7 +528,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             children: [
               Text(
                 'Evolución de Ventas',
-                style: TextStyle(color: Colors.white, fontSize: Responsive.fontSize(context, small: 15, large: 18), fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: Colors.white,
+                    fontSize:
+                        Responsive.fontSize(context, small: 15, large: 18),
+                    fontWeight: FontWeight.bold),
               ),
               const Spacer(),
               if (_selectedYears.length > 1) _buildChartLegend(),
@@ -464,7 +554,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       2024: AppTheme.neonBlue,
       2025: AppTheme.neonGreen,
     };
-    
+
     return Wrap(
       spacing: 16,
       children: _selectedYears.map((year) {
@@ -479,7 +569,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             const SizedBox(width: 4),
             Text(
               year.toString(),
-              style: TextStyle(color: yearColors[year] ?? Colors.white, fontSize: 12),
+              style: TextStyle(
+                  color: yearColors[year] ?? Colors.white, fontSize: 12),
             ),
           ],
         );
@@ -491,16 +582,16 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     // Group data by year - ONLY for selected years
     final dataByYear = <int, List<FlSpot>>{};
     final allMonths = <int>{};
-    
+
     for (final item in _evolutionData) {
       final year = item['year'] as int;
-      
+
       // FILTER: Only include data for selected years
       if (!_selectedYears.contains(year)) continue;
-      
+
       final month = item['month'] as int;
       final sales = (item['totalSales'] as num?)?.toDouble() ?? 0.0;
-      
+
       dataByYear.putIfAbsent(year, () => []);
       dataByYear[year]!.add(FlSpot(month.toDouble(), sales));
       allMonths.add(month);
@@ -512,7 +603,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       2024: AppTheme.neonBlue,
       2025: AppTheme.neonGreen,
     };
-    
+
     final lineBarsData = dataByYear.entries.map((entry) {
       return LineChartBarData(
         spots: entry.value..sort((a, b) => a.x.compareTo(b.x)),
@@ -613,11 +704,13 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               final month = spot.x.toInt();
               // Find which year this spot belongs to by checking bar index
               final barIndex = touchedSpots.indexOf(spot);
-              final year = dataByYear.keys.toList()[barIndex % dataByYear.length];
-              
+              final year =
+                  dataByYear.keys.toList()[barIndex % dataByYear.length];
+
               return LineTooltipItem(
                 '${DateFormatter.getMonthName(month, short: true)} $year\n${CurrencyFormatter.format(spot.y)}',
-                TextStyle(color: spot.bar.gradient?.colors.first ?? spot.bar.color),
+                TextStyle(
+                    color: spot.bar.gradient?.colors.first ?? spot.bar.color),
               );
             }).toList();
           },
@@ -628,17 +721,18 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   Widget _buildYoYComparison() {
     if (_yoyData == null) return const SizedBox();
-    
+
     final currentYear = _yoyData!['currentYear'] ?? {};
     final lastYear = _yoyData!['lastYear'] ?? {};
     final growth = _yoyData!['growth'] ?? {};
-    
+
     final currentSales = (currentYear['sales'] as num?)?.toDouble() ?? 0.0;
     final lastSales = (lastYear['sales'] as num?)?.toDouble() ?? 0.0;
     final growthPercent = (growth['salesPercent'] as num?)?.toDouble() ?? 0.0;
 
     return Container(
-      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
+      padding:
+          EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
@@ -649,7 +743,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         children: [
           Text(
             'Comparativa Interanual',
-            style: TextStyle(color: Colors.white, fontSize: Responsive.fontSize(context, small: 15, large: 18), fontWeight: FontWeight.bold),
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: Responsive.fontSize(context, small: 15, large: 18),
+                fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 16),
           Row(
@@ -693,7 +790,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           const SizedBox(height: 8),
           Text(
             value,
-            style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(
+                color: color, fontSize: 16, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
         ],
@@ -704,7 +802,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Widget _buildGrowthCard(double percent) {
     final isPositive = percent >= 0;
     final color = isPositive ? AppTheme.neonGreen : Colors.redAccent;
-    
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -722,7 +820,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           const SizedBox(height: 4),
           Text(
             '${isPositive ? '+' : ''}${percent.toStringAsFixed(1)}%',
-            style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(
+                color: color, fontSize: 18, fontWeight: FontWeight.bold),
           ),
         ],
       ),
@@ -733,7 +832,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     if (_marginsData.isEmpty) return const SizedBox();
 
     return Container(
-      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
+      padding:
+          EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
@@ -744,7 +844,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         children: [
           Text(
             'Análisis de Márgenes',
-            style: TextStyle(color: Colors.white, fontSize: Responsive.fontSize(context, small: 15, large: 18), fontWeight: FontWeight.bold),
+            style: TextStyle(
+                color: Colors.white,
+                fontSize: Responsive.fontSize(context, small: 15, large: 18),
+                fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 24),
           SizedBox(
@@ -761,8 +864,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       final index = entry.key;
       final item = entry.value;
       final month = item['month'] as int;
-      final marginPercent = ((item['marginPercent'] as num?)?.toDouble() ?? 0.0).abs();
-      
+      final marginPercent =
+          ((item['marginPercent'] as num?)?.toDouble() ?? 0.0).abs();
+
       return BarChartGroupData(
         x: month,
         barRods: [
@@ -772,7 +876,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             width: 16,
             borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
             gradient: LinearGradient(
-              colors: [AppTheme.neonGreen, AppTheme.neonGreen.withValues(alpha: 0.5)],
+              colors: [
+                AppTheme.neonGreen,
+                AppTheme.neonGreen.withValues(alpha: 0.5)
+              ],
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
             ),
@@ -814,7 +921,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       ),
       gridData: FlGridData(
         drawVerticalLine: false,
-        getDrawingHorizontalLine: (value) => const FlLine(color: Colors.white10, strokeWidth: 1),
+        getDrawingHorizontalLine: (value) =>
+            const FlLine(color: Colors.white10, strokeWidth: 1),
       ),
       borderData: FlBorderData(show: false),
       barTouchData: BarTouchData(
@@ -833,22 +941,22 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   Widget _buildTrendsSection() {
     if (_trendsData == null) return const SizedBox();
-    
+
     final trend = _trendsData!['trend'] ?? 'stable';
     final predictions = _trendsData!['predictions'] as List? ?? [];
-    
+
     // Get current month for next month prediction labels
     final now = DateTime.now();
     final nextMonths = List.generate(3, (i) {
       final futureMonth = DateTime(now.year, now.month + i + 1);
       return DateFormatter.getMonthName(futureMonth.month, short: true);
     });
-    
+
     // Trend icon and color
     IconData trendIcon;
     Color trendColor;
     String trendText;
-    
+
     if (trend == 'upward') {
       trendIcon = Icons.trending_up;
       trendColor = AppTheme.neonGreen;
@@ -879,7 +987,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               const SizedBox(width: 8),
               Text(
                 trendText,
-                style: TextStyle(color: trendColor, fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: trendColor,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -912,16 +1023,21 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           const SizedBox(height: 20),
           const Text(
             'Ventas Estimadas Próximos 3 Meses',
-            style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+            style: TextStyle(
+                color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 12),
           ...predictions.asMap().entries.map((entry) {
             final index = entry.key;
             final prediction = entry.value;
-            final predictedSales = (prediction['predictedSales'] as num?)?.toDouble() ?? 0.0;
-            final confidence = (prediction['confidence'] as num?)?.toDouble() ?? 0.0;
-            final monthName = index < nextMonths.length ? nextMonths[index] : 'Mes ${index + 1}';
-            
+            final predictedSales =
+                (prediction['predictedSales'] as num?)?.toDouble() ?? 0.0;
+            final confidence =
+                (prediction['confidence'] as num?)?.toDouble() ?? 0.0;
+            final monthName = index < nextMonths.length
+                ? nextMonths[index]
+                : 'Mes ${index + 1}';
+
             return _buildPredictionItem(
               monthName,
               CurrencyFormatter.formatWhole(predictedSales),
@@ -934,7 +1050,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     );
   }
 
-  Widget _buildPredictionItem(String monthName, String salesValue, double confidence, Color trendColor) {
+  Widget _buildPredictionItem(String monthName, String salesValue,
+      double confidence, Color trendColor) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Column(
@@ -945,11 +1062,17 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             children: [
               Text(
                 monthName,
-                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500),
               ),
               Text(
                 salesValue,
-                style: TextStyle(color: trendColor, fontSize: 14, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: trendColor,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold),
               ),
             ],
           ),
@@ -1001,7 +1124,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         children: [
           const Text(
             'Top 10 Clientes',
-            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(
+                color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           ..._topClients.asMap().entries.map((entry) {
@@ -1009,7 +1133,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             final client = entry.value;
             final name = (client['name'] as String?) ?? '';
             final sales = (client['totalSales'] as num?)?.toDouble() ?? 0.0;
-            return _buildRankedListItem(index + 1, name, CurrencyFormatter.formatWhole(sales));
+            return _buildRankedListItem(
+                index + 1, name, CurrencyFormatter.formatWhole(sales));
           }),
         ],
       ),
@@ -1029,7 +1154,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         children: [
           const Text(
             'Top 10 Productos',
-            style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+            style: TextStyle(
+                color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
           ..._topProducts.asMap().entries.map((entry) {
@@ -1037,7 +1163,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             final product = entry.value;
             final name = (product['name'] as String?) ?? '';
             final sales = (product['totalSales'] as num?)?.toDouble() ?? 0.0;
-            return _buildRankedListItem(index + 1, name, CurrencyFormatter.formatWhole(sales));
+            return _buildRankedListItem(
+                index + 1, name, CurrencyFormatter.formatWhole(sales));
           }),
         ],
       ),
@@ -1064,7 +1191,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             child: Center(
               child: Text(
                 rank.toString(),
-                style: TextStyle(color: rankColor, fontSize: 11, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: rankColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold),
               ),
             ),
           ),
@@ -1078,7 +1208,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           ),
           Text(
             value,
-            style: const TextStyle(color: AppTheme.neonBlue, fontSize: 12, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+                color: AppTheme.neonBlue,
+                fontSize: 12,
+                fontWeight: FontWeight.bold),
           ),
         ],
       ),

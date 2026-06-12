@@ -1,0 +1,89 @@
+{
+  "ts": "2026-06-11T21:33:34.311Z",
+  "apply": true,
+  "changes": [
+    {
+      "table": "JAVIER.PEDIDOS_CAB",
+      "column": "NUMEROPEDIDO",
+      "defaultSql": "0",
+      "prodRef": "DSEDAC.CPC"
+    },
+    {
+      "table": "JAVIER.PEDIDOS_CAB",
+      "column": "CODIGOVENDEDOR",
+      "defaultSql": "' '",
+      "prodRef": "DSEDAC.CPC"
+    },
+    {
+      "table": "JAVIER.PEDIDOS_LIN",
+      "column": "CODIGOARTICULO",
+      "defaultSql": "' '",
+      "prodRef": "DSEDAC.LPC"
+    }
+  ],
+  "statements": [
+    "ALTER TABLE JAVIER.PEDIDOS_CAB ALTER COLUMN NUMEROPEDIDO SET DEFAULT 0",
+    "ALTER TABLE JAVIER.PEDIDOS_CAB ALTER COLUMN CODIGOVENDEDOR SET DEFAULT ' '",
+    "ALTER TABLE JAVIER.PEDIDOS_LIN ALTER COLUMN CODIGOARTICULO SET DEFAULT ' '"
+  ],
+  "before": [
+    {
+      "table": "JAVIER.PEDIDOS_CAB",
+      "COLUMN_NAME": "NUMEROPEDIDO",
+      "IS_NULLABLE": "N",
+      "HAS_DEFAULT": "N",
+      "COLUMN_DEFAULT": null
+    },
+    {
+      "table": "JAVIER.PEDIDOS_CAB",
+      "COLUMN_NAME": "CODIGOVENDEDOR",
+      "IS_NULLABLE": "N",
+      "HAS_DEFAULT": "N",
+      "COLUMN_DEFAULT": null
+    },
+    {
+      "table": "JAVIER.PEDIDOS_LIN",
+      "COLUMN_NAME": "CODIGOARTICULO",
+      "IS_NULLABLE": "N",
+      "HAS_DEFAULT": "N",
+      "COLUMN_DEFAULT": null
+    }
+  ],
+  "applied": [
+    {
+      "statement": "ALTER TABLE JAVIER.PEDIDOS_CAB ALTER COLUMN NUMEROPEDIDO SET DEFAULT 0",
+      "status": "OK"
+    },
+    {
+      "statement": "ALTER TABLE JAVIER.PEDIDOS_CAB ALTER COLUMN CODIGOVENDEDOR SET DEFAULT ' '",
+      "status": "OK"
+    },
+    {
+      "statement": "ALTER TABLE JAVIER.PEDIDOS_LIN ALTER COLUMN CODIGOARTICULO SET DEFAULT ' '",
+      "status": "OK"
+    }
+  ],
+  "after": [
+    {
+      "table": "JAVIER.PEDIDOS_CAB",
+      "COLUMN_NAME": "NUMEROPEDIDO",
+      "IS_NULLABLE": "N",
+      "HAS_DEFAULT": "Y",
+      "COLUMN_DEFAULT": "0"
+    },
+    {
+      "table": "JAVIER.PEDIDOS_CAB",
+      "COLUMN_NAME": "CODIGOVENDEDOR",
+      "IS_NULLABLE": "N",
+      "HAS_DEFAULT": "Y",
+      "COLUMN_DEFAULT": "' '"
+    },
+    {
+      "table": "JAVIER.PEDIDOS_LIN",
+      "COLUMN_NAME": "CODIGOARTICULO",
+      "IS_NULLABLE": "N",
+      "HAS_DEFAULT": "Y",
+      "COLUMN_DEFAULT": "' '"
+    }
+  ]
+}

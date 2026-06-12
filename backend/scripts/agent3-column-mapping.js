@@ -1,8 +1,9 @@
 const odbc = require('odbc');
+const db2ConnectionString = require('./db2-connection');
 const fs = require('fs');
 const path = require('path');
 
-const DB_CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208';
+const DB_CONN = db2ConnectionString();
 
 // Table pairs: [JAVIER table, DSEDAC equivalent]
 const TABLE_PAIRS = [
@@ -313,7 +314,7 @@ async function analyzePair(conn, pair) {
     console.log(`DSEDAC-only columns: ${report.globalSummary.totalNoMatchDsedac}`);
     console.log(`Warnings: ${report.globalSummary.warnings.length}`);
     for (const w of report.globalSummary.warnings) {
-      console.log(`  ⚠ ${w.pair}: ${w.issue}`);
+      console.log(`  âš  ${w.pair}: ${w.issue}`);
     }
     console.log(`\n=== SAVED: ${outPath} ===`);
     console.log(`Size: ${(fs.statSync(outPath).size / 1024).toFixed(1)} KB`);

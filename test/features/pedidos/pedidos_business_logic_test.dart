@@ -1,4 +1,7 @@
+import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_order_api.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
@@ -51,6 +54,41 @@ class _RecordingOrderApi implements PedidosOrderApi {
         'driverCode': driverCode,
         'routeCode': routeCode,
       },
+    };
+  }
+}
+
+class _BlockingOrderApi implements PedidosOrderApi {
+  final Completer<Map<String, dynamic>> createCompleter =
+      Completer<Map<String, dynamic>>();
+  int createOrderCalls = 0;
+  int confirmOrderCalls = 0;
+
+  @override
+  Future<Map<String, dynamic>> createOrder({
+    required String clientCode,
+    required String clientName,
+    required String vendedorCode,
+    required String tipoVenta,
+    required List<OrderLine> lines,
+    required String observaciones,
+  }) {
+    createOrderCalls++;
+    return createCompleter.future;
+  }
+
+  @override
+  Future<Map<String, dynamic>> confirmOrder(
+    int orderId,
+    String saleType, {
+    String? deliveryDate,
+    String? vehicleCode,
+    String? driverCode,
+    String? routeCode,
+  }) async {
+    confirmOrderCalls++;
+    return {
+      'header': {'id': orderId, 'estado': 'CONFIRMADO'},
     };
   }
 }
@@ -116,6 +154,94 @@ void main() {
       expect(line.importeCosto, 11.25);
       expect(line.cantidadUnidades, 3);
     });
+
+    test('estimates bolsa impact without double-counting box-equivalent units',
+        () {
+      final line = OrderLine(
+        codigoArticulo: 'P005',
+        descripcion: 'Producto bolsa',
+        cantidadEnvases: 2,
+        cantidadUnidades: 24,
+        unidadMedida: 'CAJAS',
+        unidadesCaja: 12,
+        precioVenta: 12,
+        precioMinimo: 10,
+      );
+
+      final impact = line.estimatedBolsaImpact;
+
+      expect(line.billingQuantity, 2);
+      expect(impact.hasImpact, isTrue);
+      expect(impact.acumulacion, 4);
+      expect(impact.consumo, 0);
+      expect(impact.neto, 4);
+    });
+
+    test('parses persisted bolsa trace from order detail payload', () {
+      final detail = OrderDetail.fromJson({
+        'id': 42,
+        'numeroPedido': 1001,
+        'clienteCode': 'C001',
+        'clienteName': 'Cliente',
+        'vendedorCode': '10',
+        'fecha': '10/06/2026',
+        'estado': 'CONFIRMADO',
+        'tipoVenta': 'CC',
+        'total': 24,
+        'bolsaSummary': {
+          'acumulacion': 4,
+          'consumo': 0,
+          'neto': 4,
+          'movementCount': 1,
+        },
+        'bolsaMovements': [
+          {
+            'id': 99,
+            'tipo': 'ACUMULACION',
+            'importe': 4,
+            'pedidoId': 42,
+            'lineId': 7,
+            'precioMinimoCongelado': 10,
+            'precioVenta': 12,
+            'cantidad': 2,
+            'unidadMedida': 'CAJAS',
+          }
+        ],
+        'lines': [
+          {
+            'id': 7,
+            'codigoArticulo': 'P005',
+            'descripcion': 'Producto bolsa',
+            'cantidadEnvases': 2,
+            'cantidadUnidades': 24,
+            'unidadMedida': 'CAJAS',
+            'unidadesCaja': 12,
+            'precioVenta': 12,
+            'precioMinimo': 10,
+            'bolsaImpact': {
+              'acumulacion': 4,
+              'consumo': 0,
+              'neto': 4,
+              'movementCount': 1,
+              'hasImpact': true,
+            },
+            'bolsaMovements': [
+              {
+                'id': 99,
+                'tipo': 'ACUMULACION',
+                'importe': 4,
+                'lineId': 7,
+              }
+            ],
+          }
+        ],
+      });
+
+      expect(detail.bolsaSummary.acumulacion, 4);
+      expect(detail.bolsaMovements.single.lineId, 7);
+      expect(detail.lines.single.bolsaImpact.hasImpact, isTrue);
+      expect(detail.lines.single.bolsaMovements.single.tipo, 'ACUMULACION');
+    });
   });
 
   group('Product minimum price per unit', () {
@@ -132,6 +258,35 @@ void main() {
 
       expect(product.minimumPriceForUnit('CAJAS'), 24);
       expect(product.minimumPriceForUnit('KILOGRAMOS'), 2);
+    });
+
+    test('stores line minimum and cost in the selected sale unit', () {
+      final provider = PedidosProvider();
+      provider.setClient('4300010363', 'Cliente test');
+
+      provider.addLine(
+        Product(
+          code: 'P006',
+          name: 'Producto unidades',
+          stockEnvases: 10,
+          unitsPerBox: 12,
+          precioTarifa1: 30,
+          precioMinimo: 24,
+          precioCosto: 12,
+        ),
+        0,
+        5,
+        'UNIDADES',
+        2.5,
+      );
+
+      final line = provider.lines.single;
+      expect(line.precioMinimo, 2);
+      expect(line.precioCosto, 1);
+      expect(line.billingQuantity, 5);
+      expect(line.importeVenta, 12.5);
+      expect(line.importeCosto, 5);
+      expect(line.estimatedBolsaImpact.acumulacion, 2.5);
     });
   });
 
@@ -200,7 +355,6 @@ void main() {
         expect(provider.totalCosto, 32);
         expect(provider.totalMargen, 28);
       },
-      skip: 'Gift auto-add pending in PedidosProvider',
     );
   });
 
@@ -296,11 +450,49 @@ void main() {
     });
   });
 
+  group('PedidosService confirmation conflicts', () {
+    test('maps bolsa-insufficient 409 to a typed blocked result', () async {
+      final rejectingBolsaConflict = InterceptorsWrapper(
+        onRequest: (options, handler) {
+          handler.reject(
+            DioException(
+              requestOptions: options,
+              response: Response<Map<String, dynamic>>(
+                requestOptions: options,
+                statusCode: 409,
+                data: const {
+                  'code': 'BOLSA_INSUFICIENTE',
+                  'error': 'BOLSA_INSUFICIENTE',
+                  'message': 'Saldo insuficiente en bolsa comercial',
+                },
+              ),
+              type: DioExceptionType.badResponse,
+            ),
+          );
+        },
+      );
+      ApiClient.dio.interceptors.add(rejectingBolsaConflict);
+      addTearDown(() {
+        ApiClient.dio.interceptors.remove(rejectingBolsaConflict);
+      });
+
+      final result = await PedidosService.confirmOrder(42, 'CC');
+
+      expect(result['blocked'], isTrue);
+      expect(result['code'], 'BOLSA_INSUFICIENTE');
+      expect(result['reason'], 'BOLSA_INSUFICIENTE');
+      expect(result['statusCode'], 409);
+    });
+  });
+
   group('PedidosProvider confirmation API contract', () {
     test('forwards selected delivery vehicle assignment to confirmation API',
         () async {
       final api = _RecordingOrderApi();
-      final provider = PedidosProvider(orderApi: api);
+      final provider = PedidosProvider(
+        orderApi: api,
+        refreshAfterConfirm: false,
+      );
       provider.setClient('4300010363', 'SUSHI LORCA, S.L.');
       provider.addLine(
         Product(
@@ -330,6 +522,38 @@ void main() {
       expect(api.confirmedVehicleCode, '44');
       expect(api.confirmedDriverCode, '88');
       expect(api.confirmedRouteCode, 'R9');
+    });
+    test('guards reentrant confirmation while a save is already in progress',
+        () async {
+      final api = _BlockingOrderApi();
+      final provider = PedidosProvider(
+        orderApi: api,
+        refreshAfterConfirm: false,
+      );
+      provider.setClient('4300010363', 'SUSHI LORCA, S.L.');
+      provider.addLine(
+        Product(
+          code: 'ART001',
+          name: 'Producto test',
+          stockEnvases: 10,
+          precioTarifa1: 10,
+        ),
+        1,
+        0,
+        'CAJAS',
+        10,
+      );
+
+      final first = provider.confirmOrder('57');
+      expect(api.createOrderCalls, 1);
+
+      final second = provider.confirmOrder('57');
+
+      api.createCompleter.complete({'id': 42, 'estado': 'BORRADOR'});
+      await Future.wait([first, second]);
+
+      expect(api.createOrderCalls, 1);
+      expect(api.confirmOrderCalls, 1);
     });
   });
 }

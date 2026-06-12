@@ -126,7 +126,7 @@ class _DraftsBody extends StatelessWidget {
                         ),
                         onPressed: () async {
                           await provider.deleteDraft(key);
-                          Navigator.pop(context);
+                          if (context.mounted) Navigator.pop(context);
                         },
                       ),
                     ],

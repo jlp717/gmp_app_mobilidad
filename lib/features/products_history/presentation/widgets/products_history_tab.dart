@@ -11,6 +11,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class ProductsHistoryTab extends StatefulWidget {
@@ -93,6 +94,17 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
           if (_marcaFilter.isNotEmpty) 'marca': _marcaFilter,
           'limit': '300',
         },
+        cacheKey: [
+          'products-history-tab',
+          _from.toIso8601String().substring(0, 10),
+          _to.toIso8601String().substring(0, 10),
+          _vendedorFilter,
+          _clientCode,
+          _productCode,
+          _familiaFilter,
+          _marcaFilter,
+        ].join(':'),
+        cacheTTL: CacheService.defaultTTL,
       );
       if (response['success'] == true) {
         setState(() {
@@ -870,9 +882,8 @@ class _ProductsHistoryTabState extends State<ProductsHistoryTab> {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 0.5),
                                     child: Container(
-                                      height:
-                                          (h < 2 ? (value > 0 ? 2 : 0) : h)
-                                              .toDouble(),
+                                      height: (h < 2 ? (value > 0 ? 2 : 0) : h)
+                                          .toDouble(),
                                       decoration: BoxDecoration(
                                         color: color.withValues(
                                             alpha: value > 0 ? 0.8 : 0),

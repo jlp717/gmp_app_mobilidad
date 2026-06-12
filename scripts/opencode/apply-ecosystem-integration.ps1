@@ -95,7 +95,7 @@ function Get-ModelForAgent([string]$Name) {
 
 function Get-FallbackForModel([string]$Model) {
   if ($Model -eq "cursor-acp/claude-opus-4-7") {
-    return "cursor-acp/gpt-5.5 -> cursor-acp/composer-2.5 -> openai/gpt-5.5-pro -> opencode-go/kimi-k2.6"
+    return "cursor-acp/gpt-5.5 -> cursor-acp/composer-2.5 -> openai/gpt-5.5-fast -> opencode-go/kimi-k2.6"
   }
   if ($Model -eq "cursor-acp/composer-2.5") {
     return "cursor-acp/claude-4.6-sonnet -> cursor-acp/gpt-5.5 -> opencode-go/kimi-k2.6"
@@ -456,7 +456,7 @@ limit: 9000
 
 # Team Capabilities
 
-- Tier A: `cursor-acp/claude-opus-4-7`, fallback `cursor-acp/gpt-5.5`, `cursor-acp/composer-2.5`, `openai/gpt-5.5-pro`, `opencode-go/kimi-k2.6`.
+- Tier A: `cursor-acp/claude-opus-4-7`, fallback `cursor-acp/gpt-5.5`, `cursor-acp/composer-2.5`, `openai/gpt-5.5-fast`, `opencode-go/kimi-k2.6`.
 - Tier B: `cursor-acp/composer-2.5`, fallback `cursor-acp/claude-4.6-sonnet`, `cursor-acp/gpt-5.5`, `opencode-go/kimi-k2.6`.
 - Tier C: `opencode-go/glm-5.1` para orquestadores y Repo-Explorer porque delega/responde con `Task` en pruebas reales; `opencode-go/kimi-k2.6` queda para investigacion externa/notificaciones sin `Task`.
 - Connected MCPs include filesystem, git, beads, telegram, DB2, SSH, Playwright, Context7, gh_grep.
@@ -993,7 +993,7 @@ if (-not $SkipGlobal) {
   foreach ($agent in $agentNames) {
     $model = Get-ModelForAgent $agent
     if ($model -eq "cursor-acp/claude-opus-4-7") {
-      $agents[$agent] = [ordered]@{ primary=$model; fallback=@("cursor-acp/gpt-5.5","cursor-acp/composer-2.5","openai/gpt-5.5-pro","opencode-go/kimi-k2.6") }
+      $agents[$agent] = [ordered]@{ primary=$model; fallback=@("cursor-acp/gpt-5.5","cursor-acp/composer-2.5","openai/gpt-5.5-fast","opencode-go/kimi-k2.6") }
     } elseif ($model -eq "cursor-acp/composer-2.5") {
       $agents[$agent] = [ordered]@{ primary=$model; fallback=@("cursor-acp/claude-4.6-sonnet","cursor-acp/gpt-5.5","opencode-go/kimi-k2.6") }
     } elseif ($model -eq "opencode-go/glm-5.1") {
@@ -1006,7 +1006,7 @@ if (-not $SkipGlobal) {
     '$schema' = "https://opencode.ai/fallback-models.schema.json"
     enabled = $true
     tiers = [ordered]@{
-      A = [ordered]@{ primary="cursor-acp/claude-opus-4-7"; fallback=@("cursor-acp/gpt-5.5","cursor-acp/composer-2.5","openai/gpt-5.5-pro","opencode-go/kimi-k2.6") }
+      A = [ordered]@{ primary="cursor-acp/claude-opus-4-7"; fallback=@("cursor-acp/gpt-5.5","cursor-acp/composer-2.5","openai/gpt-5.5-fast","opencode-go/kimi-k2.6") }
       B = [ordered]@{ primary="cursor-acp/composer-2.5"; fallback=@("cursor-acp/claude-4.6-sonnet","cursor-acp/gpt-5.5","opencode-go/kimi-k2.6") }
       C = [ordered]@{ primary="opencode-go/glm-5.1"; fallback=@("opencode-go/kimi-k2.6","opencode-go/deepseek-v4-pro","cursor-acp/composer-2.5") }
     }

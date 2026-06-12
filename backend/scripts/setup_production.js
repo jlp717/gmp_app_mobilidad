@@ -26,10 +26,18 @@ const path = require('path');
 const odbc = require('odbc');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 
+function requireEnv(name) {
+  const value = process['env'][name];
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error('Missing required environment variable ' + name);
+  }
+  return value;
+}
+
 function connectionString() {
   const dsn = process.env.ODBC_DSN || 'GMP';
-  const uid = process.env.ODBC_UID || 'JAVIER';
-  const pwd = process.env.ODBC_PWD || 'JAVIER';
+  const uid = requireEnv('ODBC_UID');
+  const pwd = requireEnv('ODBC_PWD');
   return [
     `DSN=${dsn}`, `UID=${uid}`, `PWD=${pwd}`,
     'NAM=1', 'CCSID=1208', 'CMPTDM=1',

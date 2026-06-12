@@ -5,35 +5,38 @@ import 'package:gmp_app_mobilidad/core/widgets/error_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/empty_state_widget.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 
+Future<void> pumpStateWidget(WidgetTester tester, Widget child) async {
+  await tester.pumpWidget(
+    MaterialApp(
+      home: Scaffold(body: child),
+    ),
+  );
+  await tester.pump(const Duration(seconds: 1));
+}
+
 void main() {
   group('ErrorStateWidget Tests', () {
     testWidgets('ErrorStateWidget displays message', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: ErrorStateWidget(
-              message: 'Something went wrong',
-            ),
-          ),
+      await pumpStateWidget(
+        tester,
+        const ErrorStateWidget(
+          message: 'Something went wrong',
         ),
       );
 
       expect(find.text('Something went wrong'), findsOneWidget);
-      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+      expect(find.byIcon(Icons.error_outline_rounded), findsOneWidget);
     });
 
     testWidgets('ErrorStateWidget shows retry button when callback provided',
         (tester) async {
       bool retried = false;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ErrorStateWidget(
-              message: 'Error occurred',
-              onRetry: () => retried = true,
-            ),
-          ),
+      await pumpStateWidget(
+        tester,
+        ErrorStateWidget(
+          message: 'Error occurred',
+          onRetry: () => retried = true,
         ),
       );
 
@@ -45,15 +48,12 @@ void main() {
     });
 
     testWidgets('ErrorStateWidget uses custom retry label', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ErrorStateWidget(
-              message: 'Error',
-              onRetry: () {},
-              retryLabel: 'Try Again',
-            ),
-          ),
+      await pumpStateWidget(
+        tester,
+        ErrorStateWidget(
+          message: 'Error',
+          onRetry: () {},
+          retryLabel: 'Try Again',
         ),
       );
 
@@ -63,13 +63,10 @@ void main() {
 
   group('EmptyStateWidget Tests', () {
     testWidgets('EmptyStateWidget displays title', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: EmptyStateWidget(
-              title: 'No items found',
-            ),
-          ),
+      await pumpStateWidget(
+        tester,
+        const EmptyStateWidget(
+          title: 'No items found',
         ),
       );
 
@@ -77,14 +74,11 @@ void main() {
     });
 
     testWidgets('EmptyStateWidget shows icon', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: EmptyStateWidget(
-              title: 'Empty',
-              icon: Icons.inbox,
-            ),
-          ),
+      await pumpStateWidget(
+        tester,
+        const EmptyStateWidget(
+          title: 'Empty',
+          icon: Icons.inbox,
         ),
       );
 
@@ -95,15 +89,12 @@ void main() {
         (tester) async {
       bool actionTriggered = false;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: EmptyStateWidget(
-              title: 'No data',
-              actionLabel: 'Add Item',
-              onAction: () => actionTriggered = true,
-            ),
-          ),
+      await pumpStateWidget(
+        tester,
+        EmptyStateWidget(
+          title: 'No data',
+          actionLabel: 'Add Item',
+          onAction: () => actionTriggered = true,
         ),
       );
 

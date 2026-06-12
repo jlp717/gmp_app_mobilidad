@@ -99,10 +99,7 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
-      final checkboxes =
-          tester.widgetList<CheckboxListTile>(find.byType(CheckboxListTile));
-      expect(checkboxes.first.value, true);
-      expect(checkboxes.last.value, false);
+      expect(find.byIcon(Icons.check_rounded), findsOneWidget);
     });
 
     testWidgets('allows selecting items', (tester) async {
@@ -137,9 +134,7 @@ void main() {
       await tester.tap(find.text('Option 1'));
       await tester.pump();
 
-      final checkboxes =
-          tester.widgetList<CheckboxListTile>(find.byType(CheckboxListTile));
-      expect(checkboxes.first.value, true);
+      expect(find.byIcon(Icons.check_rounded), findsOneWidget);
     });
 
     testWidgets('shows cancel and apply buttons', (tester) async {

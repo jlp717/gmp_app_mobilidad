@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/core/widgets/fi_filters_widget.dart';
@@ -136,6 +137,21 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           if (_fiFilters.fi5 != null) 'fi5': _fiFilters.fi5,
           'includeYoY': 'true',
         },
+        cacheKey: [
+          'client-matrix-advanced',
+          widget.clientCode,
+          _yearsParam,
+          _startMonth,
+          _endMonth,
+          _productCodeSearch,
+          _productNameSearch,
+          _fiFilters.fi1 ?? '',
+          _fiFilters.fi2 ?? '',
+          _fiFilters.fi3 ?? '',
+          _fiFilters.fi4 ?? '',
+          _fiFilters.fi5 ?? '',
+        ].join(':'),
+        cacheTTL: CacheService.defaultTTL,
       );
 
       setState(() {
@@ -317,6 +333,9 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
           'clientCode': widget.clientCode,
           'notes': notes,
         },
+      );
+      await CacheService.invalidateByPrefix(
+        'client-matrix-advanced:${widget.clientCode}:',
       );
 
       // Reload to reflect changes (and get modifiedBy info correct)
@@ -1203,7 +1222,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
             decoration: BoxDecoration(
               color: bgColor,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(color: borderColor, width: 1.5),
             ),
             child: Column(
@@ -3413,7 +3432,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                   margin: const EdgeInsets.only(right: 2),
                   decoration: BoxDecoration(
                     color: s > 0 ? bgColor : Colors.transparent,
-                    borderRadius: BorderRadius.circular(4),
+                    borderRadius: BorderRadius.circular(8),
                     border: Border.all(color: bc, width: bWidth),
                   ),
                   child: FittedBox(

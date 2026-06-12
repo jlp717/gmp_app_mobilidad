@@ -66,12 +66,14 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
 
   late String _selectedUnit;
   double? _selectedTariffUnitPrice;
-  bool _userOverrodePrice = false; // true cuando el usuario elige tarifa manualmente
+  bool _userOverrodePrice =
+      false; // true cuando el usuario elige tarifa manualmente
   bool _showWarehouseStock = false;
   List<TariffEntry> _tariffs = [];
   List<StockEntry> _stockByWarehouse = [];
   int _clientTarifaCode = 1;
   bool _loadingTariffs = true;
+  bool _editingExistingLine = false;
 
   Product get product => widget.product;
   bool get isDual => product.isDualFieldProduct;
@@ -87,6 +89,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
         break;
       }
     }
+    _editingExistingLine = existingLine != null;
     final rememberedUnit = prov.lastUnitForProduct(product.code);
     var selectedUnit = existingLine?.unidadMedida ??
         rememberedUnit ??
@@ -161,9 +164,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
     if (!_userOverrodePrice) {
       final prov = ref.read(pedidosProvider);
       final promo = prov.getPromo(product.code);
-      if (promo != null &&
-          promo.promoType == 'PRICE' &&
-          promo.promoPrice > 0) {
+      if (promo != null && promo.promoType == 'PRICE' && promo.promoPrice > 0) {
         final promoUnitPrice = promo.promoPrice;
         if (unit == 'CAJAS') {
           return promoUnitPrice *
@@ -184,6 +185,14 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
 
     // Prioridad 3: Precio de tarifa normal del producto
     return product.priceForUnit(unit);
+  }
+
+  double _priceFromBoxForSelection(double boxPrice, Product pricedProduct) {
+    if (boxPrice <= 0) return 0;
+    final unit = _selectedUnit.trim().toUpperCase();
+    if (unit == 'CAJAS') return boxPrice;
+    final qtyPerBox = pricedProduct.quantityPerBoxForUnit(unit);
+    return qtyPerBox > 0 ? boxPrice / qtyPerBox : boxPrice;
   }
 
   InputDecoration _qtyFieldDeco(Color color) {
@@ -229,9 +238,8 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
         );
         continue;
       }
-      final qty = unit == 'KILOGRAMOS'
-          ? stock.envases * product.quantityPerBoxForUnit(unit) + stock.unidades
-          : stock.envases * product.unitsPerBox + stock.unidades;
+      final qty =
+          stock.envases * product.quantityPerBoxForUnit(unit) + stock.unidades;
       parts.add('${_formatUnitQty(qty, unit)} ${Product.unitLabel(unit)}');
     }
     return parts.join(' / ');
@@ -249,7 +257,11 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
   }
 
   double _parseInputNumber(String raw) {
-    return double.tryParse(raw.replaceAll(',', '.').trim()) ?? 0;
+    final value = double.tryParse(raw.replaceAll(',', '.').trim()) ?? 0;
+    // Cantidades y precios nunca pueden ser negativos ni no-finitos:
+    // el teclado numérico permite teclear "-" y "1e99".
+    if (!value.isFinite || value < 0) return 0;
+    return value;
   }
 
   String _formatQtyForInput(double value, String unit) {
@@ -394,13 +406,21 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                 _tariffs = detail.tariffs;
                 _stockByWarehouse = detail.stockByWarehouse;
                 _clientTarifaCode = detail.codigoTarifaCliente;
-                if (detail.clientPrice > 0) {
-                  _priceController.text =
-                      _formatPriceForInput(detail.clientPrice);
+                if (detail.clientPrice > 0 &&
+                    !_userOverrodePrice &&
+                    !_editingExistingLine) {
+                  _priceController.text = _formatPriceForInput(
+                    _priceFromBoxForSelection(
+                      detail.clientPrice,
+                      detail.product,
+                    ),
+                  );
                 }
               });
             }
-          }).catchError((_) {});
+          }).catchError((Object e) {
+            debugPrint('[AddToOrderSheet] Error cargando tarifas/stock: $e');
+          });
         }
 
         final qty = isDual
@@ -1138,10 +1158,10 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
-                  onChanged: (_) {
-                    _userOverrodePrice = true;
-                    setModalState(() {});
-                  },
+                          onChanged: (_) {
+                            _userOverrodePrice = true;
+                            setModalState(() {});
+                          },
                           decoration: _qtyFieldDeco(AppTheme.neonGreen),
                         ),
                       ),
@@ -1258,11 +1278,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                         pedidosProvider.select((p) => p.isMarginVisible))) {
                       return const SizedBox.shrink();
                     }
-                    final costo = product.precioCosto > 0
-                        ? product.precioCosto
-                        : (product.precioMinimo > 0
-                            ? product.precioMinimo * 0.7
-                            : product.precioTarifa1 * 0.7);
+                    final costo = product.costForUnit(_selectedUnit);
                     final margen =
                         price > 0 ? ((price - costo) / price * 100) : 0.0;
                     final margenColor = margen >= 15
@@ -1364,7 +1380,17 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
     final inputUds = isDual ? _parseInputNumber(_unidadesController.text) : 0.0;
     final price = _parseInputNumber(_priceController.text);
 
-    if (inputQty <= 0 && inputUds <= 0) return;
+    if (inputQty <= 0 && inputUds <= 0) {
+      // Feedback visible: antes el botón no hacía nada en silencio.
+      ScaffoldMessenger.of(ctx).showSnackBar(
+        const SnackBar(
+          content: Text('Indica una cantidad mayor que 0'),
+          backgroundColor: AppTheme.warning,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
 
     final provider = ref.read(pedidosProvider);
 
@@ -1390,6 +1416,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
     final minPriceForUnit = product.minimumPriceForUnit(_selectedUnit);
     if (minPriceForUnit > 0 && price < minPriceForUnit) {
       final proceed = await _showPriceWarning(ctx, price, minPriceForUnit);
+      if (!mounted) return;
       if (proceed ?? false) {
         _performAddLine(provider);
       }

@@ -190,13 +190,17 @@ class OfflineAwareApi {
       }
     }
 
-    // Offline/limited: queue for later sync
+    // Offline/limited: queue for later sync with a stable clientRequestId
+    final operationId =
+        '${syncType ?? 'op'}_${DateTime.now().microsecondsSinceEpoch}';
+    final queuedPayload = Map<String, dynamic>.from(data);
+    queuedPayload.putIfAbsent('clientRequestId', () => operationId);
     final operation = SyncOperation(
-      id: '${syncType ?? 'op'}_${DateTime.now().microsecondsSinceEpoch}',
+      id: operationId,
       type: syncType ?? 'mutation',
       endpoint: endpoint,
       method: 'POST',
-      payload: data,
+      payload: queuedPayload,
     );
     await SyncQueueService.instance.enqueue(operation);
     debugPrint('[OfflineAware] Queued for sync: $endpoint');

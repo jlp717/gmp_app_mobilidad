@@ -179,10 +179,15 @@ class RedisCacheService {
      * Invalidate L1 cache by pattern
      */
     _invalidateL1ByPattern(pattern) {
-        const regex = new RegExp(pattern.replace('*', '.*'));
-        for (const key of L1_CACHE.keys()) {
-            if (regex.test(key)) {
-                L1_CACHE.delete(key);
+        const escaped = pattern
+            .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+            .replace(/\*/g, '.*');
+        const regex = new RegExp(`^${escaped}$`);
+        for (const cache of [L1_CACHE, L1_STALE_CACHE]) {
+            for (const key of cache.keys()) {
+                if (regex.test(key)) {
+                    cache.delete(key);
+                }
             }
         }
     }
@@ -352,18 +357,26 @@ class RedisCacheService {
      */
     async invalidatePattern(pattern) {
         // Invalidate local L1
-        this._invalidateL1ByPattern(`gmp:${pattern}`);
+        const fullPattern = `gmp:${pattern}`;
+        this._invalidateL1ByPattern(fullPattern);
 
         // Publish to all instances
         if (this.isConnected) {
             try {
-                await this.client.publish('cache:invalidate', JSON.stringify({ pattern: `gmp:${pattern}` }));
+                await this.client.publish('cache:invalidate', JSON.stringify({ pattern: fullPattern }));
 
-                // Also delete from Redis
-                const keys = await this.client.keys(`gmp:${pattern}`);
-                if (keys.length > 0) {
-                    await this.client.del(keys);
+                const keys = [];
+                if (typeof this.client.scanIterator === 'function') {
+                    for await (const key of this.client.scanIterator({ MATCH: fullPattern, COUNT: 500 })) {
+                        keys.push(key);
+                        if (keys.length >= 500) {
+                            await this.client.del(keys.splice(0, keys.length));
+                        }
+                    }
+                } else {
+                    keys.push(...await this.client.keys(fullPattern));
                 }
+                if (keys.length > 0) await this.client.del(keys);
 
                 logger.info(`[RedisCache] 🧹 Invalidated pattern: ${pattern} (${keys.length} keys)`);
             } catch (error) {
@@ -460,6 +473,7 @@ module.exports = {
     setCache: (ns, key, val, ttl) => redisCache.set(ns, key, val, ttl),
     deleteCache: (ns, key) => redisCache.delete(ns, key),
     invalidateCache: (pattern) => redisCache.invalidatePattern(pattern),
+    invalidateCachePattern: (pattern) => redisCache.invalidatePattern(pattern),
     deleteCachePattern: (pattern) => redisCache.invalidatePattern(pattern), // Alias for clarity
     getOrSetCache: (ns, key, fn, ttl) => redisCache.getOrSet(ns, key, fn, ttl),
     getCacheStats: () => redisCache.getStats(),

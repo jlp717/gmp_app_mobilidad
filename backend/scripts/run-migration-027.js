@@ -8,9 +8,17 @@
 require('dotenv').config();
 const odbc = require('odbc');
 
+function requireEnv(name) {
+  const value = process['env'][name];
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error(`Missing required environment variable ${name}`);
+  }
+  return value;
+}
+
 function buildConnStr() {
-  const uid = process.env.ODBC_UID || '';
-  const pwd = process.env.ODBC_PWD || '';
+  const uid = requireEnv('ODBC_UID');
+  const pwd = requireEnv('ODBC_PWD');
   return `DSN=GMP;UID=${uid};PWD=${pwd};NAM=1;CCSID=1208;`;
 }
 

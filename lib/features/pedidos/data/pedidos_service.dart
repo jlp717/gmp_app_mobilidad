@@ -124,6 +124,63 @@ class Product {
       yoyChange: _toDouble(json['yoyChange']),
     );
   }
+
+  Product copyWithStock({
+    double? stockEnvases,
+    double? stockUnidades,
+  }) {
+    return Product(
+      code: code,
+      name: name,
+      brand: brand,
+      family: family,
+      ean: ean,
+      unitsPerBox: unitsPerBox,
+      unitsFraction: unitsFraction,
+      unitsRetractil: unitsRetractil,
+      unitMeasure: unitMeasure,
+      weight: weight,
+      stockEnvases: stockEnvases ?? this.stockEnvases,
+      stockUnidades: stockUnidades ?? this.stockUnidades,
+      precioTarifa1: precioTarifa1,
+      precioMinimo: precioMinimo,
+      precioCliente: precioCliente,
+      precioCosto: precioCosto,
+      codigoTarifaCliente: codigoTarifaCliente,
+      precioTarifaCliente: precioTarifaCliente,
+      nameExt: nameExt,
+      familyName: familyName,
+      prefamilia: prefamilia,
+      subFamily: subFamily,
+      grupoGeneral: grupoGeneral,
+      tipoProducto: tipoProducto,
+      claseArticulo: claseArticulo,
+      categoria: categoria,
+      gama: gama,
+      codigoIva: codigoIva,
+      pesoNeto: pesoNeto,
+      volumen: volumen,
+      grados: grados,
+      calibre: calibre,
+      observacion1: observacion1,
+      observacion2: observacion2,
+      presentacion: presentacion,
+      formato: formato,
+      productoPesado: productoPesado,
+      trazable: trazable,
+      unidadPale: unidadPale,
+      unidadFilaPale: unidadFilaPale,
+      fechaAlta: fechaAlta,
+      anoBaja: anoBaja,
+      mesBaja: mesBaja,
+      unitType: unitType,
+      hasPurchased: hasPurchased,
+      salesThisYear: salesThisYear,
+      salesPrevYear: salesPrevYear,
+      yoyChange: yoyChange,
+    );
+  }
+
   final String code;
   final String name;
   final String brand;
@@ -184,6 +241,15 @@ class Product {
 
   /// Whether stock is available
   bool get hasStock => stockEnvases > 0 || stockUnidades > 0;
+
+  String get stockDisplay {
+    final parts = <String>[];
+    if (stockEnvases > 0) parts.add('${stockEnvases.toStringAsFixed(0)} cj');
+    if (stockUnidades > 0) {
+      parts.add('${stockUnidades.toStringAsFixed(0)} uds');
+    }
+    return parts.isEmpty ? 'Sin stock' : parts.join(' / ');
+  }
 
   /// Whether the product is discontinued
   bool get isDiscontinued => anoBaja > 0;
@@ -361,6 +427,22 @@ class Product {
     final qtyPerBox = quantityPerBoxForUnit(unit);
     if (qtyPerBox <= 0) return precioMinimo;
     return precioMinimo / qtyPerBox;
+  }
+
+  /// Cost expressed in the selected sale unit.
+  ///
+  /// Product catalog prices arrive as box-level values. Order lines must store
+  /// sale price, minimum price and cost in the same unit, otherwise margins and
+  /// bolsa impact are inflated for kg/unit/bandeja sales.
+  double costForUnit(String unit) {
+    final base = precioCosto > 0
+        ? precioCosto
+        : (precioMinimo > 0 ? precioMinimo * 0.7 : precioTarifa1 * 0.7);
+    if (base <= 0) return 0;
+    if (unit == 'CAJAS') return base;
+    final qtyPerBox = quantityPerBoxForUnit(unit);
+    if (qtyPerBox <= 0) return base;
+    return base / qtyPerBox;
   }
 
   /// Stock available expressed in the given unit type
@@ -689,6 +771,105 @@ class ProductDetail {
   final int codigoTarifaCliente;
 }
 
+class OrderBolsaImpact {
+  const OrderBolsaImpact({
+    this.acumulacion = 0,
+    this.consumo = 0,
+    this.neto = 0,
+    this.movementCount = 0,
+    this.hasImpact = false,
+  });
+
+  factory OrderBolsaImpact.fromJson(Map<String, dynamic>? json) {
+    if (json == null) return const OrderBolsaImpact();
+    return OrderBolsaImpact(
+      acumulacion: _toDouble(json['acumulacion']),
+      consumo: _toDouble(json['consumo']),
+      neto: _toDouble(json['neto']),
+      movementCount: _toInt(json['movementCount']),
+      hasImpact: json['hasImpact'] == true ||
+          _toInt(json['movementCount']) > 0 ||
+          _toDouble(json['acumulacion']) > 0 ||
+          _toDouble(json['consumo']) > 0,
+    );
+  }
+
+  final double acumulacion;
+  final double consumo;
+  final double neto;
+  final int movementCount;
+  final bool hasImpact;
+}
+
+class OrderBolsaMovement {
+  const OrderBolsaMovement({
+    required this.id,
+    required this.tipo,
+    required this.importe,
+    this.importeFirmado = 0,
+    this.saldoAnterior = 0,
+    this.saldoPosterior = 0,
+    this.codigoArticulo = '',
+    this.descripcion = '',
+    this.pedidoId,
+    this.lineId,
+    this.precioMinimoCongelado,
+    this.precioVenta,
+    this.cantidad,
+    this.unidadMedida,
+    this.idempotencyKey,
+    this.fecha,
+  });
+
+  factory OrderBolsaMovement.fromJson(Map<String, dynamic> json) {
+    return OrderBolsaMovement(
+      id: _toInt(json['id']),
+      tipo: (json['tipo'] ?? '').toString().trim(),
+      importe: _toDouble(json['importe']),
+      importeFirmado: _toDouble(json['importeFirmado']),
+      saldoAnterior: _toDouble(json['saldoAnterior']),
+      saldoPosterior: _toDouble(json['saldoPosterior']),
+      codigoArticulo: (json['codigoArticulo'] ?? '').toString().trim(),
+      descripcion: (json['descripcion'] ?? '').toString().trim(),
+      pedidoId: json['pedidoId'] == null ? null : _toInt(json['pedidoId']),
+      lineId: json['lineId'] == null ? null : _toInt(json['lineId']),
+      precioMinimoCongelado: json['precioMinimoCongelado'] == null
+          ? null
+          : _toDouble(json['precioMinimoCongelado']),
+      precioVenta:
+          json['precioVenta'] == null ? null : _toDouble(json['precioVenta']),
+      cantidad: json['cantidad'] == null ? null : _toDouble(json['cantidad']),
+      unidadMedida: (json['unidadMedida'] ?? '').toString().trim().isEmpty
+          ? null
+          : json['unidadMedida'].toString().trim(),
+      idempotencyKey: (json['idempotencyKey'] ?? '').toString().trim().isEmpty
+          ? null
+          : json['idempotencyKey'].toString().trim(),
+      fecha: DateTime.tryParse((json['fecha'] ?? '').toString()),
+    );
+  }
+
+  final int id;
+  final String tipo;
+  final double importe;
+  final double importeFirmado;
+  final double saldoAnterior;
+  final double saldoPosterior;
+  final String codigoArticulo;
+  final String descripcion;
+  final int? pedidoId;
+  final int? lineId;
+  final double? precioMinimoCongelado;
+  final double? precioVenta;
+  final double? cantidad;
+  final String? unidadMedida;
+  final String? idempotencyKey;
+  final DateTime? fecha;
+
+  bool get isConsumo => tipo.toUpperCase() == 'CONSUMO';
+  bool get isAcumulacion => tipo.toUpperCase() == 'ACUMULACION';
+}
+
 /// Order line (for cart and saved orders)
 class OrderLine {
   // 'VT' = Venta, 'SC' = Sin Cargo
@@ -715,9 +896,15 @@ class OrderLine {
     this.unidadesFraccion = 0,
     this.claseLinea = 'VT',
     this.tipoLinea = 'R',
+    this.promotionCode,
+    this.isAutoGift = false,
+    this.bolsaMovements = const [],
+    this.bolsaImpact = const OrderBolsaImpact(),
   });
 
   factory OrderLine.fromJson(Map<String, dynamic> json) {
+    final rawMovements = json['bolsaMovements'] as List? ?? const [];
+    final rawImpact = json['bolsaImpact'];
     return OrderLine(
       id: json['id'] != null ? _toInt(json['id']) : null,
       codigoArticulo: (json['codigoArticulo'] ?? json['CODIGOARTICULO'] ?? '')
@@ -752,8 +939,20 @@ class OrderLine {
           _toDouble(json['unidadesFraccion'] ?? json['UNIDADESFRACCION']),
       claseLinea:
           (json['claseLinea'] ?? json['CLASELINEA'] ?? 'VT').toString().trim(),
-      tipoLinea:
-          (json['tipoLinea'] ?? 'R').toString().trim(),
+      tipoLinea: (json['tipoLinea'] ?? 'R').toString().trim(),
+      promotionCode:
+          (json['promotionCode'] ?? json['PROMOTIONCODE'])?.toString().trim(),
+      isAutoGift: json['isAutoGift'] == true ||
+          json['autoGift'] == true ||
+          json['ISAUTOGIFT'] == true,
+      bolsaMovements: rawMovements
+          .map((m) => OrderBolsaMovement.fromJson(
+                Map<String, dynamic>.from(m as Map),
+              ))
+          .toList(),
+      bolsaImpact: rawImpact is Map
+          ? OrderBolsaImpact.fromJson(Map<String, dynamic>.from(rawImpact))
+          : const OrderBolsaImpact(),
     )..lineDiscountPct = _toDouble(
         json['lineDiscountPct'] ??
             json['DESCUENTO_LINEA'] ??
@@ -780,7 +979,11 @@ class OrderLine {
   double unidadesFraccion; // Support for dual-field unit logic
   String claseLinea;
   String tipoLinea;
+  String? promotionCode;
+  bool isAutoGift;
   double lineDiscountPct;
+  final List<OrderBolsaMovement> bolsaMovements;
+  final OrderBolsaImpact bolsaImpact;
 
   Map<String, dynamic> toJson() => {
         'codigoArticulo': codigoArticulo,
@@ -798,8 +1001,56 @@ class OrderLine {
         'ivaRate': ivaRate,
         'claseLinea': claseLinea,
         'tipoLinea': tipoLinea,
+        if (promotionCode != null && promotionCode!.isNotEmpty)
+          'promotionCode': promotionCode,
+        if (isAutoGift) 'isAutoGift': true,
         'lineDiscountPct': lineDiscountPct,
       };
+
+  double get billingQuantity {
+    final unit = unidadMedida.trim().toUpperCase();
+    if (unit == 'KILOGRAMOS' || unit == 'LITROS') return cantidadUnidades;
+    if (unit == 'CAJAS' || unit.isEmpty) {
+      if (cantidadEnvases > 0 && cantidadUnidades > 0) {
+        final expectedEquivalentUnits = cantidadEnvases * unidadesCaja;
+        final unitsAreBoxEquivalence =
+            (cantidadUnidades - expectedEquivalentUnits).abs() < 0.0001 ||
+                cantidadUnidades >= expectedEquivalentUnits;
+        return unitsAreBoxEquivalence
+            ? cantidadEnvases
+            : cantidadEnvases + (cantidadUnidades / unidadesCaja);
+      }
+      return cantidadEnvases;
+    }
+    return cantidadUnidades;
+  }
+
+  OrderBolsaImpact get estimatedBolsaImpact {
+    if (precioMinimo <= 0 || billingQuantity <= 0) {
+      return const OrderBolsaImpact();
+    }
+    final diff = double.parse(
+      ((precioVenta - precioMinimo) * billingQuantity).toStringAsFixed(2),
+    );
+    if (diff > 0) {
+      return OrderBolsaImpact(
+        acumulacion: diff,
+        neto: diff,
+        movementCount: 1,
+        hasImpact: true,
+      );
+    }
+    if (diff < 0) {
+      final consumo = diff.abs();
+      return OrderBolsaImpact(
+        consumo: consumo,
+        neto: -consumo,
+        movementCount: 1,
+        hasImpact: true,
+      );
+    }
+    return const OrderBolsaImpact();
+  }
 
   /// Recalculate amounts based on current qty and price.
   /// Also auto-computes the complementary quantity field:
@@ -904,12 +1155,17 @@ class OrderSummary {
     return OrderSummary(
       id: _toInt(json['id']),
       numeroPedido: _toInt(json['numeroPedido']),
-      clienteCode: (json['clienteCode'] ?? '').toString().trim(),
-      clienteName: (json['clienteName'] ?? '').toString().trim(),
-      vendedorCode: (json['vendedorCode'] ?? '').toString().trim(),
+      clienteCode:
+          (json['clienteCode'] ?? json['clienteId'] ?? '').toString().trim(),
+      clienteName: (json['clienteName'] ?? json['clienteNombre'] ?? '')
+          .toString()
+          .trim(),
+      vendedorCode:
+          (json['vendedorCode'] ?? json['vendedor'] ?? '').toString().trim(),
       fecha: (json['fecha'] ?? '').toString(),
       estado: (json['estado'] ?? '').toString().trim(),
-      tipoVenta: (json['tipoVenta'] ?? 'CC').toString().trim(),
+      tipoVenta:
+          (json['tipoVenta'] ?? json['tipoventa'] ?? 'CC').toString().trim(),
       total: _toDouble(json['total']),
       margen: _toDouble(json['margen']),
       lineCount: _toInt(json['lineCount']),
@@ -1115,19 +1371,39 @@ class OrderStats {
 
 /// Order detail (header + lines)
 class OrderDetail {
-  OrderDetail({required this.header, required this.lines});
+  OrderDetail({
+    required this.header,
+    required this.lines,
+    this.bolsaMovements = const [],
+    this.bolsaSummary = const OrderBolsaImpact(),
+  });
 
   factory OrderDetail.fromJson(Map<String, dynamic> json) {
+    final headerJson = json['header'] is Map
+        ? Map<String, dynamic>.from(json['header'] as Map)
+        : json;
     final linesJson = json['lines'] as List? ?? [];
+    final rawMovements = json['bolsaMovements'] as List? ?? const [];
+    final rawSummary = json['bolsaSummary'];
     return OrderDetail(
-      header: OrderSummary.fromJson(json),
+      header: OrderSummary.fromJson(headerJson),
       lines: linesJson
           .map((l) => OrderLine.fromJson(l as Map<String, dynamic>))
           .toList(),
+      bolsaMovements: rawMovements
+          .map((m) => OrderBolsaMovement.fromJson(
+                Map<String, dynamic>.from(m as Map),
+              ))
+          .toList(),
+      bolsaSummary: rawSummary is Map
+          ? OrderBolsaImpact.fromJson(Map<String, dynamic>.from(rawSummary))
+          : const OrderBolsaImpact(),
     );
   }
   final OrderSummary header;
   final List<OrderLine> lines;
+  final List<OrderBolsaMovement> bolsaMovements;
+  final OrderBolsaImpact bolsaSummary;
 }
 
 /// Recommendation item — enriquecido con datos reales de producto
@@ -1304,8 +1580,17 @@ class PedidosService {
       params['prefamily'] = prefamily;
     }
 
-    final cacheKey =
-        'pedidos:products:${clientCode ?? ''}:${search ?? ''}:${family ?? ''}:${marca ?? ''}:${prefamily ?? ''}:$offset';
+    final cacheKey = [
+      'pedidos:products',
+      vendedorCodes,
+      clientCode ?? '',
+      search ?? '',
+      family ?? '',
+      marca ?? '',
+      prefamily ?? '',
+      limit,
+      offset,
+    ].join(':');
     try {
       final response = await ApiClient.get(
         '$_base/products',
@@ -1381,6 +1666,35 @@ class PedidosService {
 
   // ── Filters ──
 
+  static Future<Map<String, Map<String, double>>> getStockBatch(
+    Iterable<String> codes,
+  ) async {
+    final uniqueCodes = codes
+        .map((code) => code.trim())
+        .where((code) => code.isNotEmpty)
+        .toSet()
+        .toList(growable: false);
+    if (uniqueCodes.isEmpty) return {};
+
+    try {
+      final response = await ApiClient.post(
+        '$_base/products/stock-batch',
+        {'codes': uniqueCodes},
+      );
+      final stock = response['stock'] as Map<String, dynamic>? ?? {};
+      return stock.map((code, raw) {
+        final value = raw as Map<String, dynamic>? ?? {};
+        return MapEntry(code.trim(), {
+          'envases': _toDouble(value['envases']),
+          'unidades': _toDouble(value['unidades']),
+        });
+      });
+    } catch (e) {
+      debugPrint('[PedidosService] Error getStockBatch: $e');
+      rethrow;
+    }
+  }
+
   static Future<List<String>> getFamilies() async {
     try {
       final response = await ApiClient.get(
@@ -1424,20 +1738,25 @@ class PedidosService {
     int almacen = 1,
     int tarifa = 1,
     String observaciones = '',
+    String? clientRequestId,
   }) async {
     try {
+      final payload = <String, dynamic>{
+        'clientCode': clientCode,
+        'clientName': clientName,
+        'vendedorCode': vendedorCode,
+        'tipoventa': tipoVenta,
+        'almacen': almacen,
+        'tarifa': tarifa,
+        'observaciones': observaciones,
+        'lines': lines.map((l) => l.toJson()).toList(),
+      };
+      if (clientRequestId != null && clientRequestId.trim().isNotEmpty) {
+        payload['clientRequestId'] = clientRequestId.trim();
+      }
       final response = await OfflineAwareApi.post(
         '$_base/create',
-        {
-          'clientCode': clientCode,
-          'clientName': clientName,
-          'vendedorCode': vendedorCode,
-          'tipoventa': tipoVenta,
-          'almacen': almacen,
-          'tarifa': tarifa,
-          'observaciones': observaciones,
-          'lines': lines.map((l) => l.toJson()).toList(),
-        },
+        payload,
         syncType: 'create_order',
       );
       // Invalidate orders cache
@@ -1485,8 +1804,22 @@ class PedidosService {
       final response = await ApiClient.get(
         _base,
         queryParameters: params,
-        cacheKey:
-            'pedidos:orders:$vendedorCodes:${status ?? ''}:${year ?? ''}:$offset',
+        cacheKey: [
+          'pedidos:orders',
+          vendedorCodes,
+          status ?? '',
+          year ?? '',
+          month ?? '',
+          dateFrom ?? '',
+          dateTo ?? '',
+          search ?? '',
+          minAmount?.toStringAsFixed(2) ?? '',
+          maxAmount?.toStringAsFixed(2) ?? '',
+          sortBy,
+          sortOrder,
+          limit,
+          offset,
+        ].join(':'),
         cacheTTL: const Duration(minutes: 2),
         forceRefresh: forceRefresh,
       );
@@ -1557,7 +1890,11 @@ class PedidosService {
 
   static Future<List<Map<String, dynamic>>> getAvailableVehicles() async {
     try {
-      final response = await ApiClient.get('$_base/available-vehicles');
+      final response = await ApiClient.get(
+        '$_base/available-vehicles',
+        cacheKey: 'pedidos:available-vehicles',
+        cacheTTL: const Duration(minutes: 10),
+      );
       return (response['vehicles'] as List? ?? [])
           .map((v) => Map<String, dynamic>.from(v as Map))
           .toList();
@@ -1569,7 +1906,11 @@ class PedidosService {
 
   static Future<List<Map<String, dynamic>>> getOrderAlbaran(int orderId) async {
     try {
-      final response = await ApiClient.get('$_base/$orderId/albaran');
+      final response = await ApiClient.get(
+        '$_base/$orderId/albaran',
+        cacheKey: 'pedidos:albaran:$orderId',
+        cacheTTL: const Duration(minutes: 2),
+      );
       return (response['albaranes'] as List? ?? [])
           .map((a) => Map<String, dynamic>.from(a as Map))
           .toList();
@@ -1663,14 +2004,17 @@ class PedidosService {
       if (routeCode != null && routeCode.trim().isNotEmpty) {
         data['routeCode'] = routeCode.trim();
       }
-      final response = await OfflineAwareApi.put(
+      final response = await ApiClient.put(
         '$_base/$orderId/confirm',
         data: data,
-        syncType: 'confirm_order',
       );
       CacheService.invalidate('pedidos:order:$orderId');
+      CacheService.invalidate('pedidos:albaran:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
       CacheService.invalidateByPrefix('pedidos:delivery:');
+      CacheService.invalidateByPrefix('bolsa:status:');
+      CacheService.invalidateByPrefix('bolsa:movements:');
+      CacheService.invalidateByPrefix('bolsa:history:');
       return _normalizeOrderResponse(response);
     } on OfflineException {
       // Offline: return optimistic result (queued)
@@ -1682,6 +2026,15 @@ class PedidosService {
       };
     } on ApiException catch (e) {
       // Capture only stock 409 as blocked. Delivery-date 409 must surface.
+      if (e.statusCode == 409 && e.code == 'BOLSA_INSUFICIENTE') {
+        return {
+          'blocked': true,
+          'code': 'BOLSA_INSUFICIENTE',
+          'reason': 'BOLSA_INSUFICIENTE',
+          'message': e.message,
+          'statusCode': 409,
+        };
+      }
       if (e.statusCode == 409 && e.message.toLowerCase().contains('stock')) {
         debugPrint('[PedidosService] Order blocked due to stock: ${e.message}');
         return {
@@ -1827,6 +2180,48 @@ class PedidosService {
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────
+
+/// Mapeo verificado DSEDAC/LFC (2026-06-11): {1:10%, 2:21%, 3:4%, 4:0%, 5:10%}.
+/// No usar DSEDAC.IVA (tabla pre-2010 desactualizada).
+const Map<String, double> kIvaRatesByCode = {
+  '0': 0.0,
+  '1': 0.10,
+  '2': 0.21,
+  '3': 0.04,
+  '4': 0.0,
+  '5': 0.10,
+};
+
+const double kIvaRateDefault = 0.21;
+
+double ivaRateFromCode(String? code) {
+  final normalized = (code ?? '').trim();
+  if (normalized.isEmpty) return kIvaRateDefault;
+  return kIvaRatesByCode[normalized] ?? kIvaRateDefault;
+}
+
+String ivaLabelFromCode(String? code) {
+  final normalized = (code ?? '').trim();
+  switch (normalized) {
+    case '0':
+    case '4':
+      return 'Exento (0%)';
+    case '1':
+    case '5':
+      return 'Reducido (10%)';
+    case '2':
+      return 'General (21%)';
+    case '3':
+      return 'Superreducido (4%)';
+    default:
+      final rate = kIvaRatesByCode[normalized];
+      if (rate != null) {
+        final pct = (rate * 100).round();
+        return 'Tipo $normalized ($pct%)';
+      }
+      return normalized.isEmpty ? '—' : 'Tipo $normalized';
+  }
+}
 
 double _toDouble(dynamic value, {double fallback = 0}) {
   if (value == null) return fallback;

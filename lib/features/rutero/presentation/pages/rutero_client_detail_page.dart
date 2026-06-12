@@ -2,6 +2,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/currency_formatter.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
@@ -10,9 +11,10 @@ import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/clien
 /// Shows exhaustive breakdown with charts, statistics, purchase history
 /// NO objectives data - purely sales/purchases analysis
 class RuteroClientDetailPage extends StatefulWidget {
-
   const RuteroClientDetailPage({
-    required this.clientCode, required this.clientName, super.key,
+    required this.clientCode,
+    required this.clientName,
+    super.key,
   });
   final String clientCode;
   final String clientName;
@@ -38,8 +40,18 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
   //    NumberFormat.currency(symbol: '€', decimalDigits: 0, locale: 'es_ES');
 
   static const List<String> _monthNames = [
-    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre',
   ];
 
   @override
@@ -72,6 +84,9 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
       final response = await ApiClient.get(
         '${ApiConfig.ruteroClientDetail}/${widget.clientCode}/detail',
         queryParameters: queryParams,
+        cacheKey:
+            'rutero:client-detail:${widget.clientCode}:$_selectedYear:${_selectedMonth ?? 'all'}',
+        cacheTTL: CacheService.defaultTTL,
       );
 
       setState(() {
@@ -96,14 +111,16 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              (_clientData['client']?['razonSocial'] as String?) ?? widget.clientName,
+              (_clientData['client']?['razonSocial'] as String?) ??
+                  widget.clientName,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
             Text(
               'Código: ${widget.clientCode}',
-              style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              style:
+                  const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
             ),
           ],
         ),
@@ -117,14 +134,19 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
               _loadData();
             },
             itemBuilder: (context) => ApiConfig.availableYears
-                .map((y) => PopupMenuItem(
-                      value: y,
-                      child: Text(y.toString(),
-                          style: TextStyle(
-                              fontWeight: y == _selectedYear
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,),),
-                    ),)
+                .map(
+                  (y) => PopupMenuItem(
+                    value: y,
+                    child: Text(
+                      y.toString(),
+                      style: TextStyle(
+                        fontWeight: y == _selectedYear
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                      ),
+                    ),
+                  ),
+                )
                 .toList(),
           ),
         ],
@@ -145,9 +167,15 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                         unselectedLabelColor: AppTheme.textSecondary,
                         labelStyle: const TextStyle(fontSize: 12),
                         tabs: const [
-                          Tab(text: 'Resumen', icon: Icon(Icons.dashboard, size: 16)),
-                          Tab(text: 'Compras', icon: Icon(Icons.shopping_cart, size: 16)),
-                          Tab(text: 'Productos', icon: Icon(Icons.inventory, size: 16)),
+                          Tab(
+                              text: 'Resumen',
+                              icon: Icon(Icons.dashboard, size: 16)),
+                          Tab(
+                              text: 'Compras',
+                              icon: Icon(Icons.shopping_cart, size: 16)),
+                          Tab(
+                              text: 'Productos',
+                              icon: Icon(Icons.inventory, size: 16)),
                         ],
                       ),
                     ),
@@ -188,11 +216,12 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
   // ==================== SUMMARY TAB ====================
   Widget _buildSummaryTab() {
     final totals = _clientData['totals'] as Map<String, dynamic>? ?? {};
-    final monthlyData =
-        List<Map<String, dynamic>>.from((_clientData['monthlyData'] as List?) ?? []);
-    final yearlyTotals =
-        List<Map<String, dynamic>>.from((_clientData['yearlyTotals'] as List?) ?? []);
-    final freq = _clientData['purchaseFrequency'] as Map<String, dynamic>? ?? {};
+    final monthlyData = List<Map<String, dynamic>>.from(
+        (_clientData['monthlyData'] as List?) ?? []);
+    final yearlyTotals = List<Map<String, dynamic>>.from(
+        (_clientData['yearlyTotals'] as List?) ?? []);
+    final freq =
+        _clientData['purchaseFrequency'] as Map<String, dynamic>? ?? {};
 
     return RefreshIndicator(
       onRefresh: _loadData,
@@ -258,18 +287,18 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
     final currentYear = (totals['currentYear'] as num?)?.toDouble() ?? 0;
     final lastYear = (totals['lastYear'] as num?)?.toDouble() ?? 0;
     final variation = (totals['variation'] as num?)?.toDouble() ?? 0;
-    
+
     // Lógica de colores:
     // 1) NUEVO en azul: ventas este año pero no el anterior
     // 2) Verde: mejoró vs año anterior
     // 3) Rojo: empeoró vs año anterior
     final isNew = lastYear < 0.01 && currentYear > 0;
     final isPositive = variation >= 0;
-    
+
     Color accentColor;
     IconData accentIcon;
     String badgeText;
-    
+
     if (isNew) {
       accentColor = AppTheme.neonBlue;
       accentIcon = Icons.star;
@@ -288,7 +317,10 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [accentColor.withValues(alpha: 0.2), accentColor.withValues(alpha: 0.1)],
+          colors: [
+            accentColor.withValues(alpha: 0.2),
+            accentColor.withValues(alpha: 0.1)
+          ],
         ),
         borderRadius: BorderRadius.circular(16),
       ),
@@ -308,15 +340,17 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                     ),
                     Text(
                       (totals['currentYearFormatted'] as String?) ?? '0 €',
-                      style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
+                      style:
+                          Theme.of(context).textTheme.headlineMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
                     ),
                   ],
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 decoration: BoxDecoration(
                   color: accentColor,
                   borderRadius: BorderRadius.circular(20),
@@ -335,9 +369,15 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildStatColumn('Año Anterior', isNew ? 'Sin ventas' : ((totals['lastYearFormatted'] as String?) ?? '0 €')),
               _buildStatColumn(
-                  'Promedio Mensual', (totals['monthlyAverageFormatted'] as String?) ?? '0 €',),
+                  'Año Anterior',
+                  isNew
+                      ? 'Sin ventas'
+                      : ((totals['lastYearFormatted'] as String?) ?? '0 €')),
+              _buildStatColumn(
+                'Promedio Mensual',
+                (totals['monthlyAverageFormatted'] as String?) ?? '0 €',
+              ),
             ],
           ),
         ],
@@ -348,7 +388,9 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
   Widget _buildStatColumn(String label, String value) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+        Text(label,
+            style:
+                const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
         const SizedBox(height: 4),
         Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
       ],
@@ -357,7 +399,8 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
 
   Widget _buildMonthlySalesChart(List<Map<String, dynamic>> monthlyData) {
     if (monthlyData.isEmpty) {
-      return const SizedBox(height: 200, child: Center(child: Text('Sin datos')));
+      return const SizedBox(
+          height: 200, child: Center(child: Text('Sin datos')));
     }
 
     final maxY = (_clientData['chartAxisMax'] as num?)?.toDouble() ?? 10000;
@@ -377,9 +420,8 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
             touchTooltipData: BarTouchTooltipData(
               getTooltipItem: (group, groupIndex, rod, rodIndex) {
                 final month = monthlyData[groupIndex];
-                final value = rodIndex == 0
-                    ? month['currentYear']
-                    : month['lastYear'];
+                final value =
+                    rodIndex == 0 ? month['currentYear'] : month['lastYear'];
                 return BarTooltipItem(
                   '${rodIndex == 0 ? _selectedYear : _selectedYear - 1}\n${CurrencyFormatter.formatWhole((value as num?)?.toDouble() ?? 0)}',
                   const TextStyle(color: Colors.white, fontSize: 11),
@@ -392,11 +434,13 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
               sideTitles: SideTitles(
                 showTitles: true,
                 getTitlesWidget: (value, meta) {
-                  if (value.toInt() >= 0 && value.toInt() < monthlyData.length) {
+                  if (value.toInt() >= 0 &&
+                      value.toInt() < monthlyData.length) {
                     return Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
-                        (monthlyData[value.toInt()]['monthName'] as String?) ?? '',
+                        (monthlyData[value.toInt()]['monthName'] as String?) ??
+                            '',
                         style: const TextStyle(fontSize: 9),
                       ),
                     );
@@ -411,7 +455,8 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                 showTitles: true,
                 reservedSize: 50,
                 getTitlesWidget: (value, meta) {
-                  if (value == 0) return const Text('0 €', style: TextStyle(fontSize: 9));
+                  if (value == 0)
+                    return const Text('0 €', style: TextStyle(fontSize: 9));
                   final formatted = value >= 1000
                       ? '${(value / 1000).toStringAsFixed(0)}K €'
                       : '${value.toInt()} €';
@@ -485,11 +530,11 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
           final isClientNew = _clientData['totals']?['isNewClient'] == true;
           final isMonthNew = lastYear < 0.01 && current > 0;
           final isPositive = variation >= 0;
-          
+
           Color accentColor;
           IconData accentIcon;
           String badgeText;
-          
+
           if (isClientNew && current > 0) {
             // Cliente nuevo - todo en azul
             accentColor = AppTheme.neonBlue;
@@ -522,10 +567,16 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
               style: const TextStyle(fontWeight: FontWeight.w500),
             ),
             subtitle: (isClientNew && current > 0)
-              ? Text('Cliente nuevo en $_selectedYear', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary))
-              : isMonthNew
-                ? Text('Sin ventas en ${_selectedYear - 1}', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary))
-                : Text('Anterior: ${month['lastYearFormatted']}', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                ? Text('Cliente nuevo en $_selectedYear',
+                    style: const TextStyle(
+                        fontSize: 11, color: AppTheme.textSecondary))
+                : isMonthNew
+                    ? Text('Sin ventas en ${_selectedYear - 1}',
+                        style: const TextStyle(
+                            fontSize: 11, color: AppTheme.textSecondary))
+                    : Text('Anterior: ${month['lastYearFormatted']}',
+                        style: const TextStyle(
+                            fontSize: 11, color: AppTheme.textSecondary)),
             trailing: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -535,7 +586,8 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
                     color: accentColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
@@ -572,7 +624,8 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
               children: [
                 Text(
                   '${y['year']}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 16),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -585,14 +638,16 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                       ),
                       Text(
                         'Prom. mensual: ${y['monthlyAverageFormatted']}',
-                        style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        style: const TextStyle(
+                            fontSize: 11, color: AppTheme.textSecondary),
                       ),
                     ],
                   ),
                 ),
                 Text(
                   '${y['activeMonths']} meses activos',
-                  style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                  style: const TextStyle(
+                      fontSize: 11, color: AppTheme.textSecondary),
                 ),
               ],
             ),
@@ -611,7 +666,9 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
-          color: isFrequent ? AppTheme.success.withValues(alpha: 0.3) : Colors.transparent,
+          color: isFrequent
+              ? AppTheme.success.withValues(alpha: 0.3)
+              : Colors.transparent,
         ),
       ),
       child: Row(
@@ -632,7 +689,8 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                 ),
                 Text(
                   '${freq['avgPurchasesPerMonth'] ?? 0} compras/mes promedio',
-                  style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                  style: const TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 12),
                 ),
               ],
             ),
@@ -650,8 +708,8 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
 
   // ==================== PURCHASES TAB ====================
   Widget _buildPurchasesTab() {
-    final purchases =
-        List<Map<String, dynamic>>.from((_clientData['productPurchases'] as List?) ?? []);
+    final purchases = List<Map<String, dynamic>>.from(
+        (_clientData['productPurchases'] as List?) ?? []);
 
     return Column(
       children: [
@@ -664,7 +722,10 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
             child: Row(
               children: [
                 _buildMonthChip(null, 'Todos'),
-                ...List.generate(12, (i) => _buildMonthChip(i + 1, _monthNames[i].substring(0, 3))),
+                ...List.generate(
+                    12,
+                    (i) =>
+                        _buildMonthChip(i + 1, _monthNames[i].substring(0, 3))),
               ],
             ),
           ),
@@ -694,11 +755,13 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                           children: [
                             Text(
                               'Código: ${p['productCode']} | Lote: ${p['lote'] ?? '-'}',
-                              style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                              style: const TextStyle(
+                                  fontSize: 10, color: AppTheme.textSecondary),
                             ),
                             Text(
                               'Fecha: ${p['date']} | Factura: ${p['invoice'] ?? '-'}',
-                              style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                              style: const TextStyle(
+                                  fontSize: 10, color: AppTheme.textSecondary),
                             ),
                           ],
                         ),
@@ -708,11 +771,13 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                           children: [
                             Text(
                               (p['totalFormatted'] as String?) ?? '0 €',
-                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
                             ),
                             Text(
                               '${p['quantity']} uds',
-                              style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                              style: const TextStyle(
+                                  fontSize: 11, color: AppTheme.textSecondary),
                             ),
                           ],
                         ),
@@ -744,8 +809,8 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
 
   // ==================== PRODUCTS TAB ====================
   Widget _buildProductsTab() {
-    final topProducts =
-        List<Map<String, dynamic>>.from((_clientData['topProducts'] as List?) ?? []);
+    final topProducts = List<Map<String, dynamic>>.from(
+        (_clientData['topProducts'] as List?) ?? []);
 
     if (topProducts.isEmpty) {
       return const Center(child: Text('No hay productos'));
@@ -768,7 +833,9 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                   child: Text(
                     '${index + 1}',
                     style: const TextStyle(
-                        fontWeight: FontWeight.bold, color: AppTheme.neonPurple,),
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.neonPurple,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -784,11 +851,13 @@ class _RuteroClientDetailPageState extends State<RuteroClientDetailPage>
                       ),
                       Text(
                         'Código: ${p['code']}',
-                        style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        style: const TextStyle(
+                            fontSize: 11, color: AppTheme.textSecondary),
                       ),
                       Text(
                         '${p['purchases']} compras | ${p['totalUnits']} unidades',
-                        style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
+                        style: const TextStyle(
+                            fontSize: 11, color: AppTheme.textSecondary),
                       ),
                     ],
                   ),

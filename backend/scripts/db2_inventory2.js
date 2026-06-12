@@ -1,5 +1,6 @@
 const odbc = require('odbc');
-const DB_CONFIG = `DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;CMPTDM=1;CPOOLMAX=3;CPOOLMIN=1;CPTOUT=60;COMMTIMEOUT=90;DBQ=GMP;`;
+const db2ConnectionString = require('./db2-connection');
+const DB_CONFIG = db2ConnectionString({ extras: 'NAM=1;CCSID=1208;CMPTDM=1;CPOOLMAX=3;CPOOLMIN=1;CPTOUT=60;COMMTIMEOUT=90;DBQ=GMP' });
 
 async function query(sql) {
   let pool = null, conn = null;
@@ -147,7 +148,7 @@ async function main() {
       WHERE A.TABLE_SCHEMA = 'DSED' AND B.TABLE_SCHEMA = 'JAVIER'
       ORDER BY A.TABLE_NAME
     `);
-    console.log('DSED ∩ JAVIER:', overlap2.map(r=>r.TABLE_NAME).join(', ') || 'NONE');
+    console.log('DSED âˆ© JAVIER:', overlap2.map(r=>r.TABLE_NAME).join(', ') || 'NONE');
     
     // JAVIER view definitions
     console.log('\n=== JAVIER V_CRUT view definition ===');

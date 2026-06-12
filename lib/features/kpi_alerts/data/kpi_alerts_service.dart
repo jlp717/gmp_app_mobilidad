@@ -16,7 +16,9 @@ class KpiAlert {
     required this.type,
     required this.severity,
     required this.message,
-    required this.sourceFile, required this.createdAt, this.rawData,
+    required this.sourceFile,
+    required this.createdAt,
+    this.rawData,
     this.typeExplanation = '',
     this.title = '',
     this.summary = '',
@@ -48,7 +50,8 @@ class KpiAlert {
       detail: json['detail']?.toString() ?? '',
       actions: (json['actions'] is List)
           ? List<String>.from(
-              (json['actions'] as List).map((a) => a.toString()),)
+              (json['actions'] as List).map((a) => a.toString()),
+            )
           : const [],
       meta: json['meta'] is Map
           ? Map<String, dynamic>.from(json['meta'] as Map)
@@ -70,9 +73,9 @@ class KpiAlert {
   final String typeExplanation;
 
   // Compact fields (from alert_transformer.js)
-  final String title;      // Max 6 words, e.g. "Ventas < objetivo"
-  final String summary;    // 1-2 lines, action-oriented
-  final String detail;     // Collapsible, 1-4 lines
+  final String title; // Max 6 words, e.g. "Ventas < objetivo"
+  final String summary; // 1-2 lines, action-oriented
+  final String detail; // Collapsible, 1-4 lines
   final List<String> actions; // e.g. ["Revisar surtido", "Ofrecer helados"]
   final Map<String, dynamic>? meta; // { lastPurchase, amount, target, ... }
   final Map<String, dynamic>? uiHint; // { color, icon }
@@ -148,6 +151,8 @@ class KpiAlertsService {
     try {
       final data = await ApiClient.get(
         '${ApiConfig.kpiAlerts}/client/$clientId',
+        cacheKey: 'kpi_alerts_client_$clientId',
+        cacheTTL: _cacheTTL,
       );
 
       if (data['success'] == true) {
@@ -157,12 +162,9 @@ class KpiAlertsService {
               ) ??
               [],
         );
-        final alerts = alertsJson
-            .map(KpiAlert.fromJson)
-            .toList()
+        final alerts = alertsJson.map(KpiAlert.fromJson).toList()
           ..sort(
-            (a, b) =>
-                a.priorityOrder.compareTo(b.priorityOrder),
+            (a, b) => a.priorityOrder.compareTo(b.priorityOrder),
           );
 
         _cache[clientId] = _CacheEntry(
@@ -217,12 +219,14 @@ class KpiAlertsService {
       final response = await ApiClient.get(
         '${ApiConfig.kpiAlerts}/clients',
         queryParameters: params,
-        cacheKey: 'kpi_alerts_clients_${vendedorCodes ?? "all"}_${type ?? "all"}_${severity ?? "all"}',
+        cacheKey:
+            'kpi_alerts_clients_${vendedorCodes ?? "all"}_${type ?? "all"}_${severity ?? "all"}',
         cacheTTL: const Duration(minutes: 5),
       );
 
       if (response['success'] == true) {
-        final codes = List<String>.from((response['clientCodes'] as List?) ?? []);
+        final codes =
+            List<String>.from((response['clientCodes'] as List?) ?? []);
         return codes;
       }
     } catch (e) {
@@ -266,14 +270,22 @@ class KpiAlertsService {
   /// Label legible para tipos de alerta
   String getKpiAlertTypeName(String type) {
     switch (type) {
-      case 'DESVIACION_VENTAS': return 'Ventas vs Objetivo';
-      case 'CUOTA_SIN_COMPRA': return 'Sin Compras';
-      case 'DESVIACION_REFERENCIACION': return 'Productos Pendientes';
-      case 'PROMOCION': return 'Promociones';
-      case 'ALTA_CLIENTE': return 'Cliente Nuevo';
-      case 'AVISO': return 'Avisos';
-      case 'MEDIOS_CLIENTE': return 'Equipamiento';
-      default: return type;
+      case 'DESVIACION_VENTAS':
+        return 'Ventas vs Objetivo';
+      case 'CUOTA_SIN_COMPRA':
+        return 'Sin Compras';
+      case 'DESVIACION_REFERENCIACION':
+        return 'Productos Pendientes';
+      case 'PROMOCION':
+        return 'Promociones';
+      case 'ALTA_CLIENTE':
+        return 'Cliente Nuevo';
+      case 'AVISO':
+        return 'Avisos';
+      case 'MEDIOS_CLIENTE':
+        return 'Equipamiento';
+      default:
+        return type;
     }
   }
 }

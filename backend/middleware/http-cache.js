@@ -35,6 +35,25 @@ function calculateHitRate() {
 let totalHits = 0;
 let totalMisses = 0;
 
+function getRequestPath(req) {
+    return (req.originalUrl || req.path || '').split('?')[0];
+}
+
+function isApiRequest(req) {
+    const path = getRequestPath(req);
+    return [path === '/api', path.startsWith('/api/'), req.baseUrl === '/api'].some(Boolean);
+}
+
+function isPublicApiRequest(req) {
+    const path = getRequestPath(req);
+    if (path.startsWith('/api/auth')) return true;
+    return ['/api/health', '/api/metrics', '/api/app/version', '/api/health/version-check'].includes(path);
+}
+
+function requiresVerifiedUserForCache(req) {
+    return isApiRequest(req) ? !isPublicApiRequest(req) : false;
+}
+
 function generateETag(data) {
     return `"${crypto.createHash('md5').update(JSON.stringify(data)).digest('hex').substring(0, 16)}"`;
 }
@@ -42,6 +61,8 @@ function generateETag(data) {
 function getAuthScope(req) {
     const userScope = req.user?.codigo || req.user?.code || req.user?.id;
     if (userScope) return String(userScope);
+
+    if (requiresVerifiedUserForCache(req)) return null;
 
     const authorization = req.headers.authorization || '';
     if (!authorization.startsWith('Bearer ')) return null;
@@ -185,6 +206,11 @@ function cached(cachePrefix, ttlSeconds) {
 
 function cacheMiddleware(req, res, next) {
     if (req.method === 'GET') {
+        if (requiresVerifiedUserForCache(req) ? !req.user : false) {
+            res.setHeader('Cache-Control', 'no-store');
+            return next();
+        }
+
         const path = req.path;
 
         if (path.includes('/dashboard/metrics')) {

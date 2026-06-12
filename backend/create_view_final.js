@@ -1,6 +1,15 @@
 const odbc = require('odbc');
 const fs = require('fs');
-const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
+const DB_DSN = process.env.ODBC_DSN || 'GMP';
+const DB_UID = process.env.ODBC_UID || process.env.DB2_UID;
+const DB_PWD = process.env.ODBC_PASSWORD || process.env.ODBC_PWD || process.env.DB2_PASSWORD;
+if (!DB_UID || !DB_PWD) {
+  throw new Error('Missing DB2 credentials. Set ODBC_UID and ODBC_PASSWORD in the environment.');
+}
+if (process.env.ALLOW_DB2_DDL !== 'I_UNDERSTAND_THIS_MUTATES_DB2') {
+  throw new Error('Refusing DB2 DDL. Set ALLOW_DB2_DDL=I_UNDERSTAND_THIS_MUTATES_DB2 to run this script intentionally.');
+}
+const CONN = `DSN=${DB_DSN};UID=${DB_UID};PWD=${DB_PWD};NAM=1;CCSID=1208;`;
 
 (async () => {
   const pool = await odbc.pool(CONN);

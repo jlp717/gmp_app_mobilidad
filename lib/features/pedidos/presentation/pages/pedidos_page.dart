@@ -1,6 +1,6 @@
 /// Pedidos Page
 /// ============
-/// Main order entry page with two tabs: Nuevo Pedido (catalog+cart) and Mis Pedidos (history)
+/// Main order entry page for commercial orders.
 library;
 
 import 'dart:async';
@@ -87,6 +87,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       'custom'; // 'custom', 'route', 'sales_desc', 'sales_asc'
   List<Map<String, dynamic>> _ruteroClientData = [];
   bool _isLoadingRuteroData = false;
+  String? _ruteroClientDataKey;
+  String? _devolucionesFutureKey;
+  Future<Map<String, dynamic>>? _devolucionesFuture;
   static const Map<String, String> _orderSortModeLabels = {
     'sales_desc': 'Mayor Acumulado',
     'sales_asc': 'Menor Acumulado',
@@ -175,6 +178,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     _vendorSubscription?.close();
     _stockRefreshTimer?.cancel();
     _autoSaveTimer?.cancel();
+    _debounceTimer?.cancel();
     _tabController.dispose();
     _catalogScrollController.dispose();
     try {
@@ -187,10 +191,14 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     if (_tabController.index == 1 && mounted) {
       if (!_misPedidosLoaded) {
         _misPedidosLoaded = true;
-        ref.read(pedidosProvider).loadOrderStats(vendedorCodes: _vendedorCodes);
-        _loadOrdersWithFilters(ref.read(pedidosProvider));
+        unawaited(
+          ref
+              .read(pedidosProvider)
+              .loadOrderStats(vendedorCodes: _vendedorCodes),
+        );
+        unawaited(_loadOrdersWithFilters(ref.read(pedidosProvider)));
         if (_ruteroClientData.isEmpty) {
-          _loadRuteroClientData();
+          unawaited(_loadRuteroClientData());
         }
       }
     }
@@ -241,6 +249,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     if (!mounted) return;
     _misPedidosLoaded = false;
     _ruteroClientData = [];
+    _ruteroClientDataKey = null;
+    _devolucionesFuture = null;
+    _devolucionesFutureKey = null;
     _loadInitialData();
   }
 
@@ -257,25 +268,27 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             backgroundColor: AppTheme.neonGreen,
           ),
         );
-        provider.loadOrders(vendedorCodes: _vendedorCodes, forceRefresh: true);
+        await provider.loadOrders(
+          vendedorCodes: _vendedorCodes,
+          forceRefresh: true,
+        );
       }
     } catch (e) {
       debugPrint('[PedidosPage] Offline init error: $e');
     }
   }
 
-  void _loadInitialData() {
+  void _loadInitialData({bool forceRefreshProducts = false}) {
     final provider = ref.read(pedidosProvider);
     final codes = _vendedorCodes;
     if (provider.hasClient) {
       provider.loadProducts(
         vendedorCodes: codes,
         reset: true,
-        forceRefresh: true,
+        forceRefresh: forceRefreshProducts,
       );
     }
     provider.loadFilters();
-    provider.loadOrders(vendedorCodes: codes);
     provider.loadPromotions();
 
     // Req #8: refrescar estado de borradores acumulados y notificar al usuario
@@ -1057,6 +1070,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                   );
                   if (confirm != true) return;
                 }
+                if (!mounted) return;
                 final result = await ClientSearchDialog.show(
                   context,
                   vendedorCodes: _vendedorCodes,
@@ -1067,19 +1081,25 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                     result['name']!,
                     clearCart: prov.lines.isNotEmpty,
                   );
-                  prov.loadProducts(
-                    vendedorCodes: _vendedorCodes,
-                    search: prov.productSearch,
-                    reset: true,
-                    forceRefresh: true,
+                  _devolucionesFuture = null;
+                  _devolucionesFutureKey = null;
+                  unawaited(
+                    prov.loadProducts(
+                      vendedorCodes: _vendedorCodes,
+                      search: prov.productSearch,
+                      reset: true,
+                      forceRefresh: true,
+                    ),
                   );
                   // Load recommendations + balance for the selected client
-                  prov.loadRecommendations(
-                    clientCode: result['code']!,
-                    vendedorCode: widget.employeeCode,
+                  unawaited(
+                    prov.loadRecommendations(
+                      clientCode: result['code']!,
+                      vendedorCode: widget.employeeCode,
+                    ),
                   );
-                  prov.loadClientBalance(result['code']!);
-                  prov.loadPromotions();
+                  unawaited(prov.loadClientBalance(result['code']!));
+                  unawaited(prov.loadPromotions());
                 }
               },
               borderRadius: BorderRadius.circular(12),
@@ -1351,7 +1371,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           cartQty: cartQty,
           cartQtySuffix: cartQtySuffix,
           onQuickAdd: () async {
-            HapticFeedback.lightImpact();
+            unawaited(HapticFeedback.lightImpact());
             final messenger = ScaffoldMessenger.of(context);
             messenger.hideCurrentSnackBar();
 
@@ -1368,6 +1388,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                   : product.availableUnits.first,
               initialQuantity: 1,
             );
+            if (!mounted) return;
             if (result == null || result['cleared'] == true) return;
             final unit = result['unit'] as String;
             final qty = (result['quantity'] as double?) ?? 0;
@@ -1389,7 +1410,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                 provider.addLine(product, envases, unidades, unit, price);
             if (err != null) {
               if (err.contains('Stock insuficiente')) {
-                showStockAlternativesSheet(
+                await showStockAlternativesSheet(
                   context: context,
                   outOfStockProduct: product,
                   provider: provider,
@@ -1410,7 +1431,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                 );
               }
             } else {
-              provider.loadComplementaryProducts();
+              unawaited(provider.loadComplementaryProducts());
               final unitLabel = Product.unitLabel(unit);
               final isWeight = unit == 'KILOGRAMOS' || unit == 'LITROS';
               final fmtQty = isWeight
@@ -1586,56 +1607,124 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
   }
 
-  // == TAB 4: Devoluciones (placeholder funcional) ==
+  // == TAB 4: Devoluciones ==
 
   Widget _buildDevolucionesTab() {
+    final provider = ref.watch(pedidosProvider);
+    if (!provider.hasClient) {
+      return _buildClientRequiredState(
+        title: 'Selecciona un cliente',
+        message: 'Las devoluciones se consultan por cliente comercial.',
+        icon: Icons.assignment_return_outlined,
+      );
+    }
+
+    final clientCode = provider.clientCode!.trim();
+    final vendorCodes = _vendedorCodes;
+
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _getDevolucionesData(clientCode, vendorCodes),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: AppTheme.neonBlue),
+          );
+        }
+
+        if (snapshot.hasError) {
+          return _buildDevolucionesError(
+            snapshot.error.toString(),
+            clientCode,
+            vendorCodes,
+          );
+        }
+
+        final data = snapshot.data ?? const <String, dynamic>{};
+        final returns = ((data['returns'] as List?) ?? const <dynamic>[])
+            .whereType<Map>()
+            .map(Map<String, dynamic>.from)
+            .toList();
+
+        return RefreshIndicator(
+          color: AppTheme.neonBlue,
+          backgroundColor: AppTheme.darkSurface,
+          onRefresh: () => _refreshDevolucionesData(clientCode, vendorCodes),
+          child: returns.isEmpty
+              ? ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(24),
+                  children: [
+                    const SizedBox(height: 80),
+                    Icon(
+                      Icons.assignment_return_outlined,
+                      size: 72,
+                      color: Colors.white.withValues(alpha: 0.25),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Sin devoluciones recientes',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'No constan devoluciones para este cliente en los '
+                      'ultimos tres anos.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.56),
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                )
+              : ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+                  children: [
+                    _buildDevolucionesSummary(returns),
+                    const SizedBox(height: 12),
+                    ...returns.map(_buildDevolucionCard),
+                  ],
+                ),
+        );
+      },
+    );
+  }
+
+  Widget _buildClientRequiredState({
+    required String title,
+    required String message,
+    required IconData icon,
+  }) {
     return Center(
-      child: SingleChildScrollView(
+      child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 60),
-            Icon(
-              Icons.assignment_return_outlined,
-              size: 72,
-              color: Colors.white.withValues(alpha: 0.25),
-            ),
-            const SizedBox(height: 18),
+            Icon(icon, size: 64, color: Colors.white.withValues(alpha: 0.28)),
+            const SizedBox(height: 16),
             Text(
-              'Devoluciones',
+              title,
+              textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.85),
-                fontSize: 22,
+                color: Colors.white.withValues(alpha: 0.86),
+                fontSize: 20,
                 fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Proximamente: registro de devoluciones de cliente con motivo,\n'
-              'linea original y validacion por jefe de ventas.',
+              message,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.55),
+                color: Colors.white.withValues(alpha: 0.56),
                 fontSize: 13,
-              ),
-            ),
-            const SizedBox(height: 24),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-              ),
-              child: const Text(
-                'EN DESARROLLO',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 11,
-                  letterSpacing: 1.2,
-                  fontWeight: FontWeight.w600,
-                ),
               ),
             ),
           ],
@@ -1643,6 +1732,266 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       ),
     );
   }
+
+  Future<Map<String, dynamic>> _getDevolucionesData(
+    String clientCode,
+    String vendorCodes, {
+    bool forceRefresh = false,
+  }) {
+    final key = '$clientCode|$vendorCodes';
+    if (!forceRefresh &&
+        _devolucionesFutureKey == key &&
+        _devolucionesFuture != null) {
+      return _devolucionesFuture!;
+    }
+
+    _devolucionesFutureKey = key;
+    _devolucionesFuture = ApiClient.get(
+      '/pedidos/client-evolution/$clientCode',
+      queryParameters: {'vendedorCodes': vendorCodes},
+      cacheKey: [
+        'pedidos',
+        'client-evolution',
+        clientCode,
+        vendorCodes,
+      ].join(':'),
+      cacheTTL: const Duration(minutes: 10),
+      forceRefresh: forceRefresh,
+    );
+    return _devolucionesFuture!;
+  }
+
+  Future<void> _refreshDevolucionesData(
+    String clientCode,
+    String vendorCodes,
+  ) async {
+    setState(() {
+      _devolucionesFuture = null;
+      _devolucionesFutureKey = null;
+    });
+    await _getDevolucionesData(
+      clientCode,
+      vendorCodes,
+      forceRefresh: true,
+    );
+    if (mounted) setState(() {});
+  }
+
+  Widget _buildDevolucionesError(
+    String error,
+    String clientCode,
+    String vendorCodes,
+  ) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      padding: const EdgeInsets.all(24),
+      children: [
+        const SizedBox(height: 80),
+        const Icon(Icons.error_outline, size: 56, color: AppTheme.error),
+        const SizedBox(height: 16),
+        const Text(
+          'No se pudieron cargar las devoluciones',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          error,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.58),
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 18),
+        Center(
+          child: ElevatedButton.icon(
+            onPressed: () => _refreshDevolucionesData(clientCode, vendorCodes),
+            icon: const Icon(Icons.refresh),
+            label: const Text('Reintentar'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDevolucionesSummary(List<Map<String, dynamic>> returns) {
+    final totalAmount = returns.fold<double>(
+      0,
+      (sum, item) => sum + ((item['amount'] as num?)?.toDouble() ?? 0),
+    );
+    final totalUnits = returns.fold<double>(
+      0,
+      (sum, item) => sum + ((item['units'] as num?)?.toDouble() ?? 0),
+    );
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.darkCard,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.error.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: _buildDevolucionesMetric(
+              'Importe',
+              PedidosFormatters.money(totalAmount),
+              AppTheme.error,
+            ),
+          ),
+          Expanded(
+            child: _buildDevolucionesMetric(
+              'Unidades',
+              PedidosFormatters.number(totalUnits, decimals: 1),
+              AppTheme.warning,
+            ),
+          ),
+          Expanded(
+            child: _buildDevolucionesMetric(
+              'Lineas',
+              returns.length.toString(),
+              AppTheme.neonBlue,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDevolucionesMetric(String label, String value, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+        ),
+        const SizedBox(height: 4),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDevolucionCard(Map<String, dynamic> item) {
+    final productName =
+        (item['productName'] ?? 'Producto sin descripcion').toString().trim();
+    final productCode = (item['productCode'] ?? '').toString().trim();
+    final units = (item['units'] as num?)?.toDouble() ?? 0;
+    final amount = (item['amount'] as num?)?.toDouble() ?? 0;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.darkCard,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppTheme.error.withValues(alpha: 0.24)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: AppTheme.error.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.assignment_return,
+              color: AppTheme.error,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  productName.isEmpty
+                      ? 'Producto sin descripcion'
+                      : productName,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  [
+                    if (productCode.isNotEmpty) 'Cod. $productCode',
+                    _formatReturnPeriod(item['year'], item['month']),
+                    '${PedidosFormatters.number(units, decimals: 1)} uds',
+                  ].join(' · '),
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 11,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            PedidosFormatters.money(amount),
+            style: const TextStyle(
+              color: AppTheme.error,
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatReturnPeriod(dynamic year, dynamic month) {
+    final y = year?.toString().trim() ?? '';
+    final parsedMonth = int.tryParse(month?.toString() ?? '');
+    if (y.isEmpty ||
+        parsedMonth == null ||
+        parsedMonth < 1 ||
+        parsedMonth > 12) {
+      return 'Fecha sin confirmar';
+    }
+    return '${_monthLabel(parsedMonth)} $y';
+  }
+
+  String _monthLabel(int month) => const [
+        'ene',
+        'feb',
+        'mar',
+        'abr',
+        'may',
+        'jun',
+        'jul',
+        'ago',
+        'sep',
+        'oct',
+        'nov',
+        'dic',
+      ][month - 1];
 
   // == TAB 2: Mis Pedidos ==
 
@@ -1668,7 +2017,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           },
           onStatusChanged: (status) {
             provider.setOrderStatusFilter(status);
-            _loadOrdersWithFilters(provider);
+            unawaited(_loadOrdersWithFilters(provider));
           },
           onDateFromChanged: (d) => setState(() => _orderDateFrom = d),
           onDateToChanged: (d) => setState(() => _orderDateTo = d),
@@ -1676,7 +2025,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           onMaxAmountChanged: (v) => setState(() => _orderMaxAmount = v),
           onSortByChanged: (v) => setState(() => _orderSortBy = v),
           onSortOrderChanged: (v) => setState(() => _orderSortOrder = v),
-          onApplyAdvanced: () => _loadOrdersWithFilters(provider),
+          onApplyAdvanced: () => unawaited(_loadOrdersWithFilters(provider)),
           onClearAll: () {
             setState(() {
               _orderSearch = '';
@@ -1689,7 +2038,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               _orderSortMode = 'custom';
             });
             provider.setOrderStatusFilter(null);
-            _loadOrdersWithFilters(provider);
+            unawaited(_loadOrdersWithFilters(provider));
           },
         ),
         // Rutero-style sort mode selector
@@ -1700,11 +2049,14 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             color: AppTheme.neonBlue,
             backgroundColor: AppTheme.darkSurface,
             onRefresh: () async {
-              await provider.loadOrderStats(
-                vendedorCodes: _vendedorCodes,
-                forceRefresh: true,
-              );
-              _loadOrdersWithFilters(provider);
+              await Future.wait([
+                provider.loadOrderStats(
+                  vendedorCodes: _vendedorCodes,
+                  forceRefresh: true,
+                ),
+                _loadOrdersWithFilters(provider, forceRefresh: true),
+                _loadRuteroClientData(forceRefresh: true),
+              ]);
             },
             child: _buildOrdersList(provider),
           ),
@@ -1717,44 +2069,68 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   void _debouncedLoadOrders(PedidosProvider provider) {
     _debounceTimer?.cancel();
     _debounceTimer = Timer(const Duration(milliseconds: 300), () {
-      _loadOrdersWithFilters(provider);
+      unawaited(_loadOrdersWithFilters(provider));
     });
   }
 
-  void _loadOrdersWithFilters(PedidosProvider provider) {
-    provider.loadOrders(
+  Future<void> _loadOrdersWithFilters(
+    PedidosProvider provider, {
+    bool forceRefresh = false,
+  }) {
+    return provider.loadOrders(
       vendedorCodes: _vendedorCodes,
       status: provider.orderStatusFilter,
-      dateFrom: _orderDateFrom != null
-          ? '${_orderDateFrom!.year}${_orderDateFrom!.month.toString().padLeft(2, '0')}${_orderDateFrom!.day.toString().padLeft(2, '0')}'
-          : null,
-      dateTo: _orderDateTo != null
-          ? '${_orderDateTo!.year}${_orderDateTo!.month.toString().padLeft(2, '0')}${_orderDateTo!.day.toString().padLeft(2, '0')}'
-          : null,
+      dateFrom: _formatOrderDate(_orderDateFrom),
+      dateTo: _formatOrderDate(_orderDateTo),
       search: _orderSearch.isNotEmpty ? _orderSearch : null,
       minAmount: _orderMinAmount,
       maxAmount: _orderMaxAmount,
       sortBy: _orderSortBy,
       sortOrder: _orderSortOrder,
-      forceRefresh: true,
+      forceRefresh: forceRefresh,
     );
   }
 
-  Future<void> _loadRuteroClientData() async {
+  String? _formatOrderDate(DateTime? date) {
+    if (date == null) return null;
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    return '${date.year}$month$day';
+  }
+
+  Future<void> _loadRuteroClientData({bool forceRefresh = false}) async {
     if (_isLoadingRuteroData) return;
+
+    final now = DateTime.now();
+    final weekdays = [
+      'lunes',
+      'martes',
+      'miercoles',
+      'jueves',
+      'viernes',
+      'sabado',
+      'domingo',
+    ];
+    final dayName = weekdays[now.weekday - 1];
+    final week = ((now.day + now.weekday - 2) ~/ 7) + 1;
+    final cacheKey = [
+      'pedidos',
+      'rutero-client-data',
+      _vendedorCodes,
+      now.year,
+      now.month,
+      week,
+      dayName,
+    ].join(':');
+
+    if (!forceRefresh &&
+        _ruteroClientDataKey == cacheKey &&
+        _ruteroClientData.isNotEmpty) {
+      return;
+    }
+
     setState(() => _isLoadingRuteroData = true);
     try {
-      final now = DateTime.now();
-      final weekdays = [
-        'lunes',
-        'martes',
-        'miercoles',
-        'jueves',
-        'viernes',
-        'sabado',
-        'domingo'
-      ];
-      final dayName = weekdays[now.weekday - 1];
       final response = await ApiClient.get(
         '${ApiConfig.ruteroDay}/$dayName',
         queryParameters: {
@@ -1762,12 +2138,16 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           'role': 'comercial',
           'year': now.year,
           'month': now.month,
-          'week': ((now.day + now.weekday - 2) ~/ 7) + 1,
+          'week': week,
         },
+        cacheKey: cacheKey,
+        cacheTTL: const Duration(minutes: 5),
+        forceRefresh: forceRefresh,
       );
       if (mounted) {
         final rawList = response['clients'] ?? <dynamic>[];
         setState(() {
+          _ruteroClientDataKey = cacheKey;
           _ruteroClientData = (rawList as List)
               .map((item) => Map<String, dynamic>.from(item as Map))
               .toList();
@@ -1785,7 +2165,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     setState(() => _orderSortMode = value);
     if (_ruteroClientData.isEmpty &&
         (value == 'custom' || value == 'sales_desc' || value == 'sales_asc')) {
-      _loadRuteroClientData();
+      unawaited(_loadRuteroClientData());
     }
   }
 
@@ -1815,7 +2195,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             _orderSortMode = 'custom';
           });
           provider.setOrderStatusFilter(null);
-          _loadOrdersWithFilters(provider);
+          unawaited(_loadOrdersWithFilters(provider));
         },
       );
     }
@@ -1890,23 +2270,34 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   Future<void> _showOrderDetail(OrderSummary order) async {
     final result = await OrderDetailSheet.show(context, orderId: order.id);
     if (result == 'cancelled' && mounted) {
-      _loadOrdersWithFilters(ref.read(pedidosProvider));
+      await _loadOrdersWithFilters(
+        ref.read(pedidosProvider),
+        forceRefresh: true,
+      );
     } else if (result != null && result.startsWith('clone:') && mounted) {
       final cloneId = int.tryParse(result.substring(6));
       if (cloneId != null) {
         final prov = ref.read(pedidosProvider);
         await prov.cloneOrderIntoCart(cloneId);
-        _tabController.animateTo(0);
-        if (mounted) {
+        if (!mounted) return;
+        if (prov.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                'Pedido #${order.numeroPedidoFormatted} clonado al carrito',
-              ),
-              backgroundColor: AppTheme.neonBlue,
+              content: Text(prov.error!),
+              backgroundColor: AppTheme.error,
             ),
           );
+          return;
         }
+        _tabController.animateTo(0);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Pedido #${order.numeroPedidoFormatted} clonado al carrito',
+            ),
+            backgroundColor: AppTheme.neonBlue,
+          ),
+        );
       }
     }
   }
@@ -1914,17 +2305,27 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   Future<void> _duplicateOrder(OrderSummary order) async {
     final prov = ref.read(pedidosProvider);
     await prov.cloneOrderIntoCart(order.id);
-    _tabController.animateTo(0);
-    if (mounted) {
+    if (!mounted) return;
+    // cloneOrderIntoCart captura el error internamente: comprobarlo para no
+    // mostrar un mensaje de éxito falso cuando la clonación ha fallado.
+    if (prov.error != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'Pedido #${order.numeroPedidoFormatted} duplicado al carrito',
-          ),
-          backgroundColor: AppTheme.neonBlue,
+          content: Text(prov.error!),
+          backgroundColor: AppTheme.error,
         ),
       );
+      return;
     }
+    _tabController.animateTo(0);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Pedido #${order.numeroPedidoFormatted} duplicado al carrito',
+        ),
+        backgroundColor: AppTheme.neonBlue,
+      ),
+    );
   }
 
   Future<void> _cancelOrder(OrderSummary order) async {
@@ -1958,16 +2359,32 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         ],
       ),
     );
-    if (confirm ?? false && mounted) {
-      await ref.read(pedidosProvider).cancelExistingOrder(order.id);
-      _loadOrdersWithFilters(ref.read(pedidosProvider));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Pedido anulado'),
-            backgroundColor: AppTheme.error,
-          ),
+    // Nota: antes era `confirm ?? false && mounted`, que por precedencia se
+    // evaluaba como `confirm ?? (false && mounted)` y nunca comprobaba mounted.
+    if ((confirm ?? false) && mounted) {
+      try {
+        await ref.read(pedidosProvider).cancelExistingOrder(order.id);
+        await _loadOrdersWithFilters(
+          ref.read(pedidosProvider),
+          forceRefresh: true,
         );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Pedido anulado'),
+              backgroundColor: AppTheme.error,
+            ),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error al anular: $e'),
+              backgroundColor: AppTheme.error,
+            ),
+          );
+        }
       }
     }
   }
@@ -2010,20 +2427,28 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         ],
       ),
     );
-    if (confirm ?? false && mounted) {
+    if ((confirm ?? false) && mounted) {
       try {
         await prov.cloneOrderIntoCart(order.id);
-        _tabController.animateTo(0);
-        if (mounted) {
+        if (!mounted) return;
+        if (prov.error != null) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(
-                'Borrador #${order.numeroPedidoFormatted} cargado en el carrito. Confirma desde el carrito.',
-              ),
-              backgroundColor: AppTheme.neonBlue,
+              content: Text(prov.error!),
+              backgroundColor: AppTheme.error,
             ),
           );
+          return;
         }
+        _tabController.animateTo(0);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Borrador #${order.numeroPedidoFormatted} cargado en el carrito. Confirma desde el carrito.',
+            ),
+            backgroundColor: AppTheme.neonBlue,
+          ),
+        );
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -2068,10 +2493,10 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         ],
       ),
     );
-    if (confirm ?? false && mounted) {
+    if ((confirm ?? false) && mounted) {
       try {
         await ref.read(pedidosProvider).cancelExistingOrder(order.id);
-        _loadOrdersWithFilters(ref.read(pedidosProvider));
+        await _loadOrdersWithFilters(ref.read(pedidosProvider));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -2094,7 +2519,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   }
 
   Future<void> _viewAlbaran(OrderSummary order) async {
-    AlbaranInfoDialog.show(context, orderId: order.id);
+    await AlbaranInfoDialog.show(context, orderId: order.id);
   }
 
   String _formatTime(DateTime dt) {

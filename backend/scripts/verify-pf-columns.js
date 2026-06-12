@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 const odbc = require('odbc');
+const db2ConnectionString = require('./db2-connection');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
-const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
+const CONN = db2ConnectionString();
 
 (async () => {
   const pool = await odbc.pool(CONN);
@@ -31,10 +32,10 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
     const onlyInLF = lfNames.filter(c => !pfNames.includes(c));
     const onlyInPF = pfNames.filter(c => !lfNames.includes(c));
 
-    console.log(`${lf} (${lfNames.length} cols) → ${pf} (${pfNames.length} cols)`);
+    console.log(`${lf} (${lfNames.length} cols) â†’ ${pf} (${pfNames.length} cols)`);
     if (onlyInLF.length) console.log(`  Solo en LF: ${onlyInLF.join(', ')}`);
     if (onlyInPF.length) console.log(`  Solo en PF: ${onlyInPF.join(', ')}`);
-    if (!onlyInLF.length && !onlyInPF.length) console.log(`  ✅ Columnas idénticas`);
+    if (!onlyInLF.length && !onlyInPF.length) console.log(`  âœ… Columnas idÃ©nticas`);
 
     // Verificar que el PF funciona en vista
     console.log(`  Probando CREATE VIEW con ${pf}...`);
@@ -43,10 +44,10 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
     } catch(_) {}
     try {
       await conn.query(`CREATE VIEW JAVIER.TEST_PF AS SELECT ${pfNames[0]} FROM DSEDAC.${pf}`);
-      console.log(`  ✅ ${pf} funciona en CREATE VIEW`);
+      console.log(`  âœ… ${pf} funciona en CREATE VIEW`);
       await conn.query('DROP VIEW JAVIER.TEST_PF');
     } catch(e) {
-      console.log(`  ❌ ${pf}: ${e.message.substring(0,100)}`);
+      console.log(`  âŒ ${pf}: ${e.message.substring(0,100)}`);
     }
     console.log();
   }

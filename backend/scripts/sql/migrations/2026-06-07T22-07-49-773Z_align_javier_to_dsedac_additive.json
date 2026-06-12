@@ -1,0 +1,79 @@
+{
+  "ts": "2026-06-07T22:07:49.774Z",
+  "appSchema": "JAVIER",
+  "erpSchema": "DSEDAC",
+  "apply": true,
+  "statementsCount": 2,
+  "details": [
+    {
+      "feature": "PEDIDOS_COMERCIAL_CAB",
+      "source": "DSEDAC.CPC",
+      "target": "JAVIER.PEDIDOS_CAB",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": [],
+      "altered": []
+    },
+    {
+      "feature": "PEDIDOS_COMERCIAL_LIN",
+      "source": "DSEDAC.LPC",
+      "target": "JAVIER.PEDIDOS_LIN",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": [],
+      "altered": []
+    },
+    {
+      "feature": "COBROS_COMERCIAL",
+      "source": "DSEDAC.CRC",
+      "target": "JAVIER.COBROS",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": [],
+      "altered": []
+    },
+    {
+      "feature": "COBROS_REPARTIDOR",
+      "source": "DSEDAC.CRCA",
+      "target": "JAVIER.REPARTIDOR_COBROS",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": [],
+      "altered": [
+        {
+          "name": "DESCRIPCIONCONCEPTO",
+          "from": "CHAR(30)",
+          "to": "CHAR(40)"
+        }
+      ]
+    },
+    {
+      "feature": "RUTERO_DELIVERY_STATUS",
+      "source": "DSEDAC.CPC",
+      "target": "JAVIER.DELIVERY_STATUS",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": [
+        {
+          "name": "CODIGOCONDUCTOR",
+          "type": "CHAR(10)",
+          "nullable": "N"
+        }
+      ],
+      "altered": []
+    }
+  ],
+  "notes": [
+    "COBROS_COMERCIAL: skipped ID by rule"
+  ],
+  "applied": [
+    {
+      "statement": "ALTER TABLE JAVIER.REPARTIDOR_COBROS ALTER COLUMN DESCRIPCIONCONCEPTO SET DATA TYPE CHAR(40)",
+      "status": "OK"
+    },
+    {
+      "statement": "ALTER TABLE JAVIER.DELIVERY_STATUS ADD COLUMN CODIGOCONDUCTOR CHAR(10)",
+      "status": "OK"
+    }
+  ]
+}

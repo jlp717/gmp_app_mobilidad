@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/models/user_model.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
@@ -254,7 +255,11 @@ class _MainShellState extends ConsumerState<MainShell> {
     setState(() => _isLoadingRepartidores = true);
     try {
       debugPrint('[MainShell] _fetchRepartidores: calling API...');
-      final res = await ApiClient.getList('/auth/repartidores');
+      final res = await ApiClient.getList(
+        '/auth/repartidores',
+        cacheKey: 'auth:repartidores',
+        cacheTTL: CacheService.longTTL,
+      );
       debugPrint(
         '[MainShell] _fetchRepartidores: got ${res.length} items, type=${res.runtimeType}',
       );

@@ -1,0 +1,5 @@
+-- PILAR 2 B1-B3 closure manifest (no DDL to execute)
+-- Generated: 2026-06-11T23:26:07.475Z
+-- B1: column structure aligned; NOT NULL cutover DDL in backend/tmp/db-exploration/pilar2-pending-ddl-2026-06-11.sql
+-- B2: no narrowing ALTER on JAVIER; use assertMoneyFitsErpNumeric10_2 at runtime for DSEDAC writes
+-- B3: COBROS.ID semantic mismatch accepted — see utils/db2-schemas.js ACCEPTED_SEMANTIC_TYPE_MISMATCHES

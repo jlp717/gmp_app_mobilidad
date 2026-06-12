@@ -14,8 +14,10 @@ const { loadLaclaeCache } = require('./laclae');
 const logger = require('../middleware/logger');
 const { getCurrentDate, LACLAE_SALES_FILTER, MIN_YEAR } = require('../utils/common');
 const { cachedQuery } = require('./query-optimizer');
-const { query } = require('../config/db');
+const { query, queryWithParams } = require('../config/db');
 const { TTL } = require('./redis-cache');
+
+const DASHBOARD_CACHE_VERSION = 'v20260602-b-sales-all';
 
 /**
  * Pre-warm dashboard queries that ALL users will need on first load.
@@ -70,7 +72,7 @@ async function warmUpDashboardQueries() {
                    COUNT(DISTINCT L.LCNRAB) as totalOrders,
                    COUNT(DISTINCT L.LCCDCL) as uniqueClients
             FROM DSED.LACLAE L
-            WHERE ${LACLAE_SALES_FILTER} AND L.LCAADC IN (${year}, ${year - 1})
+            WHERE ${LACLAE_SALES_FILTER} AND L.LCAADC IN (${year}, ${year - 1}, ${year - 2})
             GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC, L.LCMMDC
             FETCH FIRST 36 ROWS ONLY
         `;
@@ -97,14 +99,15 @@ async function warmUpDashboardQueries() {
         // NOTE: cache keys must match what the dashboard routes generate
         // Dashboard metrics uses: `dashboard:metrics:${year}:${month}:${vendedorCodes}`
         // When vendedorCodes is ALL → vendedorFilter is empty, so no codes in key
-        const baseKey = `dashboard:metrics:${year}:${month}:`;
+        const baseKey =
+            `dashboard:metrics:${DASHBOARD_CACHE_VERSION}:${year}:${month}:ALL`;
 
         // Execute ALL in parallel — biggest speedup for first user
         const results = await Promise.allSettled([
-            cachedQuery(query, currentMetricsSQL, `${baseKey}ALL:curr`, allVendorTTL),
-            cachedQuery(query, prevMetricsSQL, `${baseKey}ALL:prev`, prevTTL),
-            cachedQuery(query, todaySQL, `${baseKey}ALL:today`, todayTTL),
-            cachedQuery(query, evolutionSQL, `dashboard:evolution:default:month:false:ALL:monthly`, allVendorTTL),
+            cachedQuery(query, currentMetricsSQL, `${baseKey}:curr`, allVendorTTL),
+            cachedQuery(query, prevMetricsSQL, `${baseKey}:prev`, prevTTL),
+            cachedQuery(query, todaySQL, `${baseKey}:today`, todayTTL),
+            cachedQuery(query, evolutionSQL, `dashboard:evolution:${DASHBOARD_CACHE_VERSION}:default:month:false:ALL:monthly`, allVendorTTL),
             cachedQuery(query, recentSalesSQL, `dashboard:recent_sales:ALL:20`, allVendorTTL),
         ]);
 
@@ -251,23 +254,23 @@ async function preloadCache(port = 3000) {
 
 async function warmUpEvolutionAll() {
     try {
-        const { query } = require('../config/db');
-        const { cachedQuery } = require('./query-optimizer');
-        const logger = require('../middleware/logger');
         const now = new Date();
         const year = now.getFullYear();
         const month = now.getMonth() + 1;
-        const startYear = year - 2;
+        const startPeriod = new Date(year, month - 24, 1);
+        const startYear = startPeriod.getFullYear();
+        const startMonth = startPeriod.getMonth() + 1;
 
         const evolutionSQL = `
             SELECT L.LCAADC AS ANO, L.LCMMDC AS MES,
                    COUNT(DISTINCT L.LCCDCL) AS NUM_CLIENTES,
                    COUNT(*) AS NUM_LINEAS,
                    SUM(L.LCIMVT) AS TOTAL_VENTAS,
-                   SUM(L.LCIMCO) AS TOTAL_COSTO,
-                   SUM(L.LCIMVT - L.LCIMCO) AS TOTAL_MARGEN
+                   SUM(L.LCIMCT) AS TOTAL_COSTO,
+                   SUM(L.LCIMVT - L.LCIMCT) AS TOTAL_MARGEN
             FROM DSED.LACLAE L
-            WHERE L.LCAADC >= ? AND L.TPDC = 'LAC' AND L.LCTPVT IN ('CC', 'VC')
+            WHERE (L.LCAADC > ? OR (L.LCAADC = ? AND L.LCMMDC >= ?))
+              AND L.TPDC = 'LAC' AND L.LCTPVT IN ('CC', 'VC')
               AND L.LCCLLN IN ('AB', 'VT') AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
             GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC, L.LCMMDC
         `;
@@ -275,10 +278,15 @@ async function warmUpEvolutionAll() {
         const cacheKey = `evolution:monthly:ALL::24`;
         const start = Date.now();
         await cachedQuery(
-            (sql) => query(sql, [startYear]),
+            (sql, params) => queryWithParams(sql, params, false),
             evolutionSQL,
-            cacheKey,
-            1800 // 30 min TTL
+            {
+                cacheKey,
+                ttl: 1800, // 30 min TTL
+                params: { startYear, startMonth },
+                queryType: 'evolution',
+            },
+            [startYear, startYear, startMonth]
         );
         logger.info(`🔥 Evolution ALL warmed in ${Date.now() - start}ms (30min TTL)`);
     } catch (e) {
@@ -286,4 +294,4 @@ async function warmUpEvolutionAll() {
     }
 }
 
-module.exports = { preloadCache };
+module.exports = { preloadCache, _internal: { warmUpEvolutionAll } };

@@ -15,8 +15,18 @@
  */
 
 const logger = require('../middleware/logger');
+const { db2Schema, db2Identifier } = require('../utils/db2-identifiers');
 
-const APP_SCHEMA = process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER';
+const APP_SCHEMA = db2Schema(process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER', 'PEDIDOS_CONFIRMATION_SCHEMA');
+const BOLSA_SCHEMA = 'JAVIER';
+const FIXED_TABLE_SCHEMAS = Object.freeze({
+  BOLSA_COMERCIAL: BOLSA_SCHEMA,
+  MOVIMIENTOS_BOLSA: BOLSA_SCHEMA,
+});
+
+function schemaForTable(tableName) {
+  return FIXED_TABLE_SCHEMAS[tableName] || APP_SCHEMA;
+}
 
 // ─── TABLE DDL (app-specific only) ──────────────────────────────────
 
@@ -296,7 +306,7 @@ const TABLE_DDL = {
       MES NUMERIC(2) NOT NULL,
       LIMITE_PCT DECIMAL(5,2) DEFAULT 3.00,
       LIMITE_IMPORTE DECIMAL(11,2) DEFAULT 0,
-      SALDO_DISPONIBLE DECIMAL(11,2) DEFAULT 0,
+      SALDO_DISPONIBLE DECIMAL(11,2) DEFAULT 300.00,
       CONSUMIDO DECIMAL(11,2) DEFAULT 0,
       ACUMULADO DECIMAL(11,2) DEFAULT 0,
       CREATED_AT TIMESTAMP DEFAULT CURRENT TIMESTAMP,
@@ -308,13 +318,20 @@ const TABLE_DDL = {
     CREATE TABLE JAVIER.MOVIMIENTOS_BOLSA (
       ID INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
       BOLSA_ID INTEGER NOT NULL,
+      CODIGOVENDEDOR VARCHAR(10),
       PEDIDO_ID INTEGER,
+      LINEA_ID INTEGER,
       TIPO VARCHAR(20) NOT NULL,
       IMPORTE DECIMAL(11,2) NOT NULL,
       SALDO_ANTERIOR DECIMAL(11,2),
       SALDO_POSTERIOR DECIMAL(11,2),
       CODIGO_ARTICULO VARCHAR(20),
       DESCRIPCION VARCHAR(200),
+      PRECIO_MINIMO_CONGELADO DECIMAL(9,4),
+      PRECIO_VENTA DECIMAL(9,4),
+      CANTIDAD DECIMAL(12,5),
+      UNIDAD_MEDIDA VARCHAR(12),
+      IDEMPOTENCY_KEY VARCHAR(128),
       CREATED_AT TIMESTAMP DEFAULT CURRENT TIMESTAMP
     )`,
 
@@ -420,6 +437,7 @@ const INDEXES = [
   `CREATE INDEX JAVIER.IDX_BOLSA_VND ON JAVIER.BOLSA_COMERCIAL (CODIGOVENDEDOR, EJERCICIO)`,
   `CREATE INDEX JAVIER.IDX_MOV_BOLSA ON JAVIER.MOVIMIENTOS_BOLSA (BOLSA_ID)`,
   `CREATE INDEX JAVIER.IDX_MOV_PED ON JAVIER.MOVIMIENTOS_BOLSA (PEDIDO_ID)`,
+  `CREATE UNIQUE INDEX JAVIER.UQ_MOV_BOLSA_IDEMP ON JAVIER.MOVIMIENTOS_BOLSA (IDEMPOTENCY_KEY)`,
   `CREATE INDEX ${APP_SCHEMA}.IDX_CS_CLI ON ${APP_SCHEMA}.CLIENT_SIGNERS (CODIGOCLIENTE)`,
   `CREATE INDEX ${APP_SCHEMA}.IDX_CL_REP ON ${APP_SCHEMA}.CUENTAS_LIQUIDACION (CODIGO_REPARTIDOR)`,
   `CREATE INDEX ${APP_SCHEMA}.IDX_RCA_TOKEN ON ${APP_SCHEMA}.REPARTIDOR_COBROS_AUDIT (IDEMPOTENCY_TOKEN_PREVIEW)`,
@@ -430,48 +448,82 @@ const INDEXES = [
 
 async function tableExists(queryFn, schema, tableName) {
   try {
-    await queryFn(`SELECT 1 FROM ${schema}.${tableName} FETCH FIRST 1 ROW ONLY`);
-    return true;
+    const safeSchema = db2Schema(schema, 'tableExists schema');
+    const safeTable = db2Identifier(tableName, 'tableExists table');
+    const rows = await queryFn(
+      'SELECT TABLE_NAME FROM QSYS2.SYSTABLES ' +
+      'WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? FETCH FIRST 1 ROW ONLY',
+      [safeSchema, safeTable]
+    );
+    return Array.isArray(rows) && rows.length > 0;
   } catch (_) {
     return false;
   }
 }
 
 async function createIfNotExists(queryFn, tableName, ddl) {
-  if (await tableExists(queryFn, APP_SCHEMA, tableName)) {
-    return { table: `${APP_SCHEMA}.${tableName}`, status: 'EXISTS' };
+  const schema = schemaForTable(tableName);
+  if (await tableExists(queryFn, schema, tableName)) {
+    return { table: `${schema}.${tableName}`, status: 'EXISTS' };
   }
   try {
     await queryFn(ddl);
-    logger.info(`[INIT-TABLES] Created ${APP_SCHEMA}.${tableName}`);
-    return { table: `${APP_SCHEMA}.${tableName}`, status: 'CREATED' };
+    logger.info(`[INIT-TABLES] Created ${schema}.${tableName}`);
+    return { table: `${schema}.${tableName}`, status: 'CREATED' };
   } catch (err) {
     const state = (err.odbcErrors || []).map(e => e.state).join(',');
     if (state.includes('42S01')) {
-      return { table: `${APP_SCHEMA}.${tableName}`, status: 'EXISTS' };
+      return { table: `${schema}.${tableName}`, status: 'EXISTS' };
     }
-    logger.error(`[INIT-TABLES] Failed ${APP_SCHEMA}.${tableName}: ${err.message}`);
-    return { table: `${APP_SCHEMA}.${tableName}`, status: 'ERROR', error: err.message };
+    logger.error(`[INIT-TABLES] Failed ${schema}.${tableName}: ${err.message}`);
+    return { table: `${schema}.${tableName}`, status: 'ERROR', error: err.message };
   }
 }
 
-async function ensureColumn(queryFn, table, column, definition) {
+async function ensureColumnInSchema(queryFn, schema, table, column, definition) {
   try {
     const check = await queryFn(
       `SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS2
        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?
        FETCH FIRST 1 ROW ONLY`,
-      [APP_SCHEMA, table, column]
+      [schema, table, column]
     );
     if (check && check.length > 0) return false;
   } catch (_) { /* try ALTER anyway */ }
   try {
-    await queryFn(`ALTER TABLE ${APP_SCHEMA}.${table} ADD COLUMN ${column} ${definition}`);
-    logger.info(`[INIT-TABLES] Added column ${column} to ${APP_SCHEMA}.${table}`);
+    await queryFn(`ALTER TABLE ${schema}.${table} ADD COLUMN ${column} ${definition}`);
+    logger.info(`[INIT-TABLES] Added column ${column} to ${schema}.${table}`);
     return true;
   } catch (_) {
     return false;
   }
+}
+
+async function ensureColumn(queryFn, table, column, definition) {
+  return ensureColumnInSchema(queryFn, APP_SCHEMA, table, column, definition);
+}
+
+async function migrateBolsaIfNeeded(queryFn) {
+  const bolsaExists = await tableExists(queryFn, BOLSA_SCHEMA, 'BOLSA_COMERCIAL');
+  if (bolsaExists) {
+    await ensureColumnInSchema(queryFn, BOLSA_SCHEMA, 'BOLSA_COMERCIAL', 'LIMITE_IMPORTE', 'DECIMAL(11,2) DEFAULT 0');
+    await ensureColumnInSchema(queryFn, BOLSA_SCHEMA, 'BOLSA_COMERCIAL', 'CONSUMIDO', 'DECIMAL(11,2) DEFAULT 0');
+    await ensureColumnInSchema(queryFn, BOLSA_SCHEMA, 'BOLSA_COMERCIAL', 'ACUMULADO', 'DECIMAL(11,2) DEFAULT 0');
+    await ensureColumnInSchema(queryFn, BOLSA_SCHEMA, 'BOLSA_COMERCIAL', 'UPDATED_AT', 'TIMESTAMP DEFAULT CURRENT TIMESTAMP');
+  }
+
+  const movementsExists = await tableExists(queryFn, BOLSA_SCHEMA, 'MOVIMIENTOS_BOLSA');
+  if (movementsExists) {
+    await ensureColumnInSchema(queryFn, BOLSA_SCHEMA, 'MOVIMIENTOS_BOLSA', 'CODIGOVENDEDOR', 'VARCHAR(10)');
+    await ensureColumnInSchema(queryFn, BOLSA_SCHEMA, 'MOVIMIENTOS_BOLSA', 'LINEA_ID', 'INTEGER');
+    await ensureColumnInSchema(queryFn, BOLSA_SCHEMA, 'MOVIMIENTOS_BOLSA', 'PRECIO_MINIMO_CONGELADO', 'DECIMAL(9,4)');
+    await ensureColumnInSchema(queryFn, BOLSA_SCHEMA, 'MOVIMIENTOS_BOLSA', 'PRECIO_VENTA', 'DECIMAL(9,4)');
+    await ensureColumnInSchema(queryFn, BOLSA_SCHEMA, 'MOVIMIENTOS_BOLSA', 'CANTIDAD', 'DECIMAL(12,5)');
+    await ensureColumnInSchema(queryFn, BOLSA_SCHEMA, 'MOVIMIENTOS_BOLSA', 'UNIDAD_MEDIDA', 'VARCHAR(12)');
+    await ensureColumnInSchema(queryFn, BOLSA_SCHEMA, 'MOVIMIENTOS_BOLSA', 'IDEMPOTENCY_KEY', 'VARCHAR(128)');
+  }
+
+  return 'OK';
 }
 
 async function migrateCobrosIfNeeded(queryFn) {
@@ -502,11 +554,22 @@ async function initAllTables(queryFn) {
   // Migrate COBROS first (preserve data)
   const cobrosStatus = await migrateCobrosIfNeeded(queryFn);
   results.push({ table: `${APP_SCHEMA}.COBROS`, migration: cobrosStatus });
+  const bolsaStatus = await migrateBolsaIfNeeded(queryFn);
+  results.push({ table: `${BOLSA_SCHEMA}.BOLSA_*`, migration: bolsaStatus });
 
-  // Create all tables
-  for (const [tableName, ddl] of Object.entries(TABLE_DDL)) {
-    results.push(await createIfNotExists(queryFn, tableName, ddl));
-  }
+  // Create all tables. Keep serial order for IBM i DDL safety; this helper runs only during migrations/startup.
+  const tableResults = await Object.entries(TABLE_DDL).reduce(
+    function chain(previous, entry) {
+      return previous.then(async function appendCreatedTable(acc) {
+        const tableName = entry[0];
+        const ddl = entry[1];
+        acc.push(await createIfNotExists(queryFn, tableName, ddl));
+        return acc;
+      });
+    },
+    Promise.resolve([])
+  );
+  results.push(...tableResults);
 
   // Ensure backward-compat columns on existing tables
   await ensureColumn(queryFn, 'PEDIDOS_CAB', 'DESCUENTO_GLOBAL', 'DECIMAL(5,2) DEFAULT 0');

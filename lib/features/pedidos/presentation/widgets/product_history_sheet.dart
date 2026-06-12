@@ -11,6 +11,7 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 
 class ProductHistorySheet extends StatefulWidget {
   const ProductHistorySheet({
@@ -127,12 +128,18 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
       final resp = await ApiClient.get(
         '/pedidos/product-history/'
         '${Uri.encodeComponent(productCode)}/${Uri.encodeComponent(clientCode)}',
+        cacheKey: 'pedidos:product-history:$productCode:$clientCode',
+        cacheTTL: const Duration(minutes: 10),
       );
       final yearsRaw = resp['years'] as Map<String, dynamic>? ?? {};
       final years = <String, _YearData>{};
       for (final entry in yearsRaw.entries) {
         years[entry.key] =
             _YearData.fromJson(entry.value as Map<String, dynamic>);
+      }
+      final currentYear = DateTime.now().year;
+      for (var year = currentYear; year >= currentYear - 2; year--) {
+        years.putIfAbsent('$year', _YearData.empty);
       }
       final gt = resp['grandTotal'] as Map<String, dynamic>? ?? {};
       final sortedKeys = years.keys.toList()..sort((a, b) => b.compareTo(a));
@@ -150,6 +157,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
         }
       }
 
+      if (!mounted) return;
       setState(() {
         _years = years;
         _grandTotal = _GrandTotal.fromJson(gt);
@@ -159,6 +167,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -166,8 +175,9 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     }
   }
 
+  // Formato es_ES (1.234,56 €) en lugar de toStringAsFixed con punto.
   String _fmtEur(double val, {int decimals = 2}) =>
-      '${val.toStringAsFixed(decimals)}\u20AC';
+      PedidosFormatters.money(val, decimals: decimals);
 
   String _fmtNum(double val, {int decimals = 0}) =>
       val.toStringAsFixed(decimals);
@@ -463,7 +473,9 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
 
     final items = [
       _KpiItem('Ventas', _fmtEur(t.sales), AppTheme.neonGreen),
-      _KpiItem('Coste', _fmtEur(t.cost), Colors.orange),
+      // Req #2: coste solo visible para roles con margen visible.
+      if (widget.isMarginVisible)
+        _KpiItem('Coste', _fmtEur(t.cost), Colors.orange),
       if (widget.isMarginVisible)
         _KpiItem(
           'Margen',
@@ -611,6 +623,66 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
   }
 
   // ── Bar chart ──
+  _MonthData _monthData(_YearData yearData, int month) {
+    return yearData.months['$month'] ?? _MonthData();
+  }
+
+  Color _comparisonColor({
+    required double current,
+    required double previous,
+  }) {
+    if (current > 0 && previous <= 0) return AppTheme.neonBlue;
+    if (current > previous) return AppTheme.neonGreen;
+    if (current < previous) return AppTheme.error;
+    return Colors.white24;
+  }
+
+  Color _monthComparisonColor(int month, _YearData yearData) {
+    final selected = int.tryParse(_selectedYear ?? '');
+    final previousYear = selected == null ? null : _years['${selected - 1}'];
+    final current = _monthData(yearData, month).sales;
+    final previous =
+        previousYear == null ? 0.0 : _monthData(previousYear, month).sales;
+    return _comparisonColor(current: current, previous: previous);
+  }
+
+  Color _yearComparisonColor(String year, _YearData yearData) {
+    final selected = int.tryParse(year);
+    final previousYear = selected == null ? null : _years['${selected - 1}'];
+    return _comparisonColor(
+      current: yearData.totals.sales,
+      previous: previousYear?.totals.sales ?? 0,
+    );
+  }
+
+  Widget _comparisonCell(
+    String value,
+    Color color, {
+    Color? textColor,
+    FontWeight fontWeight = FontWeight.w500,
+  }) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 54),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.72)),
+      ),
+      alignment: Alignment.centerRight,
+      child: Text(
+        value,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          color: textColor ?? Colors.white70,
+          fontSize: 10,
+          fontWeight: fontWeight,
+        ),
+      ),
+    );
+  }
+
   Widget _buildBarChart() {
     if (_selectedYear == null) return const SizedBox.shrink();
 
@@ -854,7 +926,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                     spots.add(FlSpot(m.toDouble() - 1, val));
                   }
                 }
-                final isLatest = entry.key == sortedYears.length - 1;
+                final isLatest = entry.key == 0;
                 return LineChartBarData(
                   spots: spots,
                   isCurved: true,
@@ -883,29 +955,7 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     }
 
     final yearData = _years[_selectedYear!]!;
-    final activeMonths = <int>[];
-    for (var m = 1; m <= 12; m++) {
-      final d = yearData.months['$m'];
-      if (d != null && (d.sales > 0 || d.envases > 0 || d.units > 0)) {
-        activeMonths.add(m);
-      }
-    }
-
-    if (activeMonths.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppTheme.darkCard,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: const Center(
-          child: Text(
-            'Sin datos para este ejercicio',
-            style: TextStyle(color: Colors.white38, fontSize: 13),
-          ),
-        ),
-      );
-    }
+    final visibleMonths = List<int>.generate(12, (index) => index + 1);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -957,8 +1007,9 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                 DataColumn(label: Text('Lineas'), numeric: true),
               ],
               rows: [
-                ...activeMonths.map((m) {
-                  final d = yearData.months['$m']!;
+                ...visibleMonths.map((m) {
+                  final d = _monthData(yearData, m);
+                  final comparisonColor = _monthComparisonColor(m, yearData);
                   final margin =
                       d.sales > 0 ? ((d.sales - d.cost) / d.sales * 100) : 0.0;
                   final marginColor = margin > 15
@@ -978,18 +1029,26 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                           ),
                         ),
                       ),
-                      DataCell(Text(_fmtNum(d.envases))),
-                      DataCell(Text(_fmtNum(d.units))),
                       DataCell(
-                        Text(
+                        _comparisonCell(_fmtNum(d.envases), comparisonColor),
+                      ),
+                      DataCell(
+                        _comparisonCell(_fmtNum(d.units), comparisonColor),
+                      ),
+                      DataCell(
+                        _comparisonCell(
                           _fmtEur(d.sales),
-                          style: const TextStyle(
-                            color: AppTheme.neonGreen,
-                            fontSize: 10,
-                          ),
+                          comparisonColor,
+                          textColor: AppTheme.neonGreen,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                      DataCell(Text(_fmtEur(d.cost))),
+                      DataCell(
+                        _comparisonCell(
+                          widget.isMarginVisible ? _fmtEur(d.cost) : '—',
+                          comparisonColor,
+                        ),
+                      ),
                       DataCell(
                         Text(
                           widget.isMarginVisible ? _fmtPct(margin) : '—',
@@ -1002,30 +1061,35 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                         ),
                       ),
                       DataCell(
-                        Text(
+                        _comparisonCell(
                           d.avgPrice > 0
                               ? _fmtEur(d.avgPrice, decimals: 3)
                               : '-',
+                          comparisonColor,
                         ),
                       ),
                       DataCell(
-                        Text(
+                        _comparisonCell(
                           d.avgTariff > 0
                               ? _fmtEur(d.avgTariff, decimals: 3)
                               : '-',
+                          comparisonColor,
                         ),
                       ),
                       DataCell(
-                        Text(
+                        _comparisonCell(
                           d.avgDiscount != null ? _fmtPct(d.avgDiscount!) : '-',
+                          comparisonColor,
                         ),
                       ),
-                      DataCell(Text('${d.lineCount}')),
+                      DataCell(
+                        _comparisonCell('${d.lineCount}', comparisonColor),
+                      ),
                     ],
                   );
                 }),
                 // Totals row
-                _totalRow(yearData),
+                _totalRow(_selectedYear!, yearData),
               ],
             ),
           ),
@@ -1034,9 +1098,10 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     );
   }
 
-  DataRow _totalRow(_YearData yearData) {
+  DataRow _totalRow(String year, _YearData yearData) {
     final t = yearData.totals;
     final margin = t.sales > 0 ? ((t.sales - t.cost) / t.sales * 100) : 0.0;
+    final comparisonColor = _yearComparisonColor(year, yearData);
     const s = TextStyle(
       color: AppTheme.neonGreen,
       fontWeight: FontWeight.bold,
@@ -1045,20 +1110,38 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
     return DataRow(
       cells: [
         const DataCell(Text('TOTAL', style: s)),
-        DataCell(Text(_fmtNum(t.envases), style: s)),
-        DataCell(Text(_fmtNum(t.units), style: s)),
-        DataCell(Text(_fmtEur(t.sales), style: s)),
-        DataCell(Text(_fmtEur(t.cost), style: s)),
-        DataCell(Text(_fmtPct(margin), style: s)),
+        DataCell(_comparisonCell(_fmtNum(t.envases), comparisonColor)),
+        DataCell(_comparisonCell(_fmtNum(t.units), comparisonColor)),
         DataCell(
-          Text(
+          _comparisonCell(
+            _fmtEur(t.sales),
+            comparisonColor,
+            textColor: AppTheme.neonGreen,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        DataCell(
+          _comparisonCell(
+            widget.isMarginVisible ? _fmtEur(t.cost) : '—',
+            comparisonColor,
+          ),
+        ),
+        DataCell(
+          _comparisonCell(
+            widget.isMarginVisible ? _fmtPct(margin) : '—',
+            comparisonColor,
+            textColor: AppTheme.neonGreen,
+          ),
+        ),
+        DataCell(
+          _comparisonCell(
             t.avgPrice > 0 ? _fmtEur(t.avgPrice, decimals: 3) : '-',
-            style: s,
+            comparisonColor,
           ),
         ),
         const DataCell(Text('-', style: s)),
         const DataCell(Text('-', style: s)),
-        DataCell(Text('${t.lineCount}', style: s)),
+        DataCell(_comparisonCell('${t.lineCount}', comparisonColor)),
       ],
     );
   }
@@ -1158,13 +1241,17 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
                         ),
                       ),
                     ),
-                    DataCell(Text(_fmtEur(t.cost))),
+                    DataCell(
+                      Text(widget.isMarginVisible ? _fmtEur(t.cost) : '—'),
+                    ),
                     DataCell(
                       Text(
                         widget.isMarginVisible ? _fmtPct(margin) : '—',
                         style: TextStyle(
                           color: widget.isMarginVisible
-                              ? (margin > 15 ? AppTheme.neonGreen : AppTheme.error)
+                              ? (margin > 15
+                                  ? AppTheme.neonGreen
+                                  : AppTheme.error)
                               : Colors.white24,
                           fontSize: 11,
                         ),
@@ -1362,11 +1449,21 @@ class _YearTotals {
 class _YearData {
   _YearData({required this.months, required this.totals});
 
+  factory _YearData.empty() => _YearData(
+        months: {
+          for (var month = 1; month <= 12; month++) '$month': _MonthData(),
+        },
+        totals: _YearTotals(),
+      );
+
   factory _YearData.fromJson(Map<String, dynamic> j) {
     final monthsRaw = j['months'] as Map<String, dynamic>? ?? {};
     final months = <String, _MonthData>{};
     for (final e in monthsRaw.entries) {
       months[e.key] = _MonthData.fromJson(e.value as Map<String, dynamic>);
+    }
+    for (var month = 1; month <= 12; month++) {
+      months.putIfAbsent('$month', _MonthData.new);
     }
     return _YearData(
       months: months,

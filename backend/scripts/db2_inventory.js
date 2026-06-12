@@ -1,6 +1,7 @@
 const odbc = require('odbc');
+const db2ConnectionString = require('./db2-connection');
 
-const DB_CONFIG = `DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;CMPTDM=1;CPOOLMAX=5;CPOOLMIN=1;CPTOUT=60;COMMTIMEOUT=90;DBQ=GMP;`;
+const DB_CONFIG = db2ConnectionString({ extras: 'NAM=1;CCSID=1208;CMPTDM=1;CPOOLMAX=5;CPOOLMIN=1;CPTOUT=60;COMMTIMEOUT=90;DBQ=GMP' });
 
 async function query(sql) {
   let pool = null;
@@ -161,14 +162,14 @@ async function main() {
   }
 
   if (step === '7') {
-    console.log('=== STEP 7: Structural overlap DSEDAC ∩ JAVIER ===');
+    console.log('=== STEP 7: Structural overlap DSEDAC âˆ© JAVIER ===');
     const overlap1 = await query(`
       SELECT A.TABLE_NAME AS TBL FROM QSYS2.SYSTABLES A
       INNER JOIN QSYS2.SYSTABLES B ON A.TABLE_NAME = B.TABLE_NAME
       WHERE A.TABLE_SCHEMA = 'DSEDAC' AND B.TABLE_SCHEMA = 'JAVIER'
       ORDER BY A.TABLE_NAME
     `);
-    console.log('DSEDAC ∩ JAVIER:', overlap1.map(r=>r.TBL).join(', '));
+    console.log('DSEDAC âˆ© JAVIER:', overlap1.map(r=>r.TBL).join(', '));
     
     const overlap2 = await query(`
       SELECT A.TABLE_NAME AS TBL FROM QSYS2.SYSTABLES A
@@ -176,7 +177,7 @@ async function main() {
       WHERE A.TABLE_SCHEMA = 'DSED' AND B.TABLE_SCHEMA = 'DSEDAC'
       ORDER BY A.TABLE_NAME
     `);
-    console.log('DSED ∩ DSEDAC:', overlap2.map(r=>r.TBL).join(', '));
+    console.log('DSED âˆ© DSEDAC:', overlap2.map(r=>r.TBL).join(', '));
 
     // Column-level diff for overlapping tables
     for (const row of overlap1.slice(0, 8)) {

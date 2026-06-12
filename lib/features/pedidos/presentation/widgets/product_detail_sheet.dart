@@ -19,9 +19,10 @@ import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/product_
 import 'package:path_provider/path_provider.dart';
 
 class ProductDetailSheet extends StatefulWidget {
-
   const ProductDetailSheet({
-    required this.productCode, required this.productName, super.key,
+    required this.productCode,
+    required this.productName,
+    super.key,
     this.clientCode,
     this.clientName,
     this.isMarginVisible = true,
@@ -88,11 +89,13 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         widget.productCode,
         clientCode: widget.clientCode,
       );
+      if (!mounted) return;
       setState(() {
         _detail = detail;
         _loading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _loading = false;
@@ -108,6 +111,9 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
 
   Future<void> _openFichaTecnica(BuildContext ctx) async {
     final navigator = Navigator.of(ctx);
+    // Capturar el messenger ANTES de los await: usar ctx tras un await con
+    // el sheet cerrado provocaba un lookup sobre un contexto desmontado.
+    final messenger = ScaffoldMessenger.of(ctx);
     final code = widget.productCode.trim();
     final url =
         '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(code)}/ficha';
@@ -145,24 +151,26 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       if (navigator.canPop()) navigator.pop();
 
       if (!File(filePath).existsSync()) {
-        ScaffoldMessenger.of(ctx).showSnackBar(
+        messenger.showSnackBar(
           const SnackBar(content: Text('No se encontró la ficha técnica')),
         );
         return;
       }
 
-      navigator.push(MaterialPageRoute<void>(
-        builder: (_) => _PdfViewerPage(
-          filePath: filePath,
-          title: 'Ficha Técnica - $code',
+      navigator.push(
+        MaterialPageRoute<void>(
+          builder: (_) => _PdfViewerPage(
+            filePath: filePath,
+            title: 'Ficha Técnica - $code',
+          ),
         ),
-      ),);
+      );
     } catch (e) {
       if (navigator.canPop()) navigator.pop();
       final msg = e.toString().contains('404')
           ? 'No hay ficha técnica para este producto'
           : 'Error al descargar: $e';
-      ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text(msg)));
+      messenger.showSnackBar(SnackBar(content: Text(msg)));
     }
   }
 
@@ -304,22 +312,6 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
 
   // ── Section 1: Product Data ──
   Widget _buildProductData(Product p) {
-    // IVA type label
-    String ivaLabel(String code) {
-      switch (code) {
-        case '0':
-          return 'Exento';
-        case '1':
-          return 'General (21%)';
-        case '2':
-          return 'Reducido (10%)';
-        case '3':
-          return 'Super Reducido (4%)';
-        default:
-          return 'Tipo $code';
-      }
-    }
-
     // Build family display: "code - description" if name available
     final familyDisplay =
         p.familyName.isNotEmpty ? '${p.family} - ${p.familyName}' : p.family;
@@ -347,7 +339,13 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
         _DataRow('Uds. Fraccion (Bandeja)', p.unitsFraction.toStringAsFixed(0)),
       if (p.unitsRetractil > 0)
         _DataRow(
-            'Uds. Retractil (Estuche)', p.unitsRetractil.toStringAsFixed(0),),
+          'Uds. Retractil (Estuche)',
+          p.unitsRetractil.toStringAsFixed(0),
+        ),
+      _DataRow('Stock envases', p.stockEnvases.toStringAsFixed(0)),
+      _DataRow('Stock unidades', p.stockUnidades.toStringAsFixed(0)),
+      if (p.stockEnvases > 0 || p.stockUnidades > 0)
+        _DataRow('Stock total', p.stockDisplay),
       if (p.presentacion.isNotEmpty) _DataRow('Presentacion', p.presentacion),
       if (p.formato.isNotEmpty) _DataRow('Formato', p.formato),
       if (p.calibre.isNotEmpty) _DataRow('Calibre', p.calibre),
@@ -360,15 +358,37 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       if (p.volumen > 0) _DataRow('Volumen', p.volumen.toStringAsFixed(3)),
       if (p.grados.isNotEmpty) _DataRow('Grados', p.grados),
       // Flags
-      _DataRow('IVA', ivaLabel(p.codigoIva)),
+      _DataRow('IVA', ivaLabelFromCode(p.codigoIva)),
       if (p.productoPesado) const _DataRow('Producto Pesado', 'Si'),
       if (p.trazable) const _DataRow('Trazable', 'Si'),
+      if (p.precioTarifa1 > 0)
+        _DataRow(
+          'Tarifa base',
+          PedidosFormatters.money(p.precioTarifa1, decimals: 3),
+        ),
+      if (p.precioCliente > 0)
+        _DataRow(
+          'Precio cliente',
+          PedidosFormatters.money(p.precioCliente, decimals: 3),
+        ),
+      if (widget.isMarginVisible && p.precioMinimo > 0)
+        _DataRow(
+          'Precio minimo caja',
+          PedidosFormatters.money(p.precioMinimo, decimals: 3),
+        ),
+      if (widget.isMarginVisible && p.precioCosto > 0)
+        _DataRow(
+          'Coste caja',
+          PedidosFormatters.money(p.precioCosto, decimals: 3),
+        ),
       // Dates
       if (p.fechaAlta != null && p.fechaAlta!.isNotEmpty)
         _DataRow('Fecha Alta', p.fechaAlta!),
       if (p.isDiscontinued)
-        _DataRow('Fecha Baja',
-            '${p.mesBaja.toString().padLeft(2, '0')}/${p.anoBaja}',),
+        _DataRow(
+          'Fecha Baja',
+          '${p.mesBaja.toString().padLeft(2, '0')}/${p.anoBaja}',
+        ),
       // Observations
       if (p.observacion1.isNotEmpty) _DataRow('Obs. 1', p.observacion1),
       if (p.observacion2.isNotEmpty) _DataRow('Obs. 2', p.observacion2),
@@ -752,7 +772,6 @@ class _DataRow {
 }
 
 class _PdfViewerPage extends StatelessWidget {
-
   const _PdfViewerPage({required this.filePath, required this.title});
   final String filePath;
   final String title;

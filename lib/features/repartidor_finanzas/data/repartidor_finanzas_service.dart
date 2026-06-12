@@ -497,6 +497,9 @@ class RepartidorFinanzasService {
         'terminal': terminal.toString(),
         'numero': numero.toString(),
       },
+      cacheKey:
+          '${_prefix}_signature_${ejercicio}_${serie}_${terminal}_$numero',
+      cacheTTL: const Duration(hours: 6),
     );
 
     if (response['hasSignature'] != true && response['signature'] == null) {

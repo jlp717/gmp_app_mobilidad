@@ -10,18 +10,23 @@ const { cachedQuery } = require('../services/query-optimizer');
 const { TTL, invalidateCache: invalidateCachePattern } = require('../services/redis-cache');
 const logger = require('../middleware/logger');
 const { v4: uuidv4 } = require('uuid');
+const { db2QualifiedTable, db2InsertSql } = require('../utils/db2-identifiers');
+const { getDb2WriteSchema } = require('../utils/db2-schemas');
 
-// Schema dinamico: JAVIER en dev, DSEDAC en produccion (ver PEDIDOS_CONFIRMATION_SCHEMA en .env).
-const APP_SCHEMA = String(process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER').trim().toUpperCase();
+const APP_SCHEMA = getDb2WriteSchema();
+const COBROS_TABLE = db2QualifiedTable(APP_SCHEMA, 'COBROS');
 
 // Req: invalidate cobros cache for a client after a mutation. Best-effort, no throw.
+// Las claves reales de cachedQuery viven bajo "gmp:query:query:<cacheKey>:vendor:..."
+// (namespace Redis "query" + prefijo "query" del CacheKeyGenerator), por eso el
+// patrón debe incluir "query:query:" para que la invalidación encuentre las claves.
 async function invalidateCobrosCache(codigoCliente) {
     try {
         const cli = String(codigoCliente || '').trim();
         if (!cli) return;
         await Promise.all([
-            invalidateCachePattern(`cobros:pendientes:cvc:${cli}`),
-            invalidateCachePattern('cobros:pending-summary:*'),
+            invalidateCachePattern(`query:query:cobros:pendientes:cvc:${cli}:*`),
+            invalidateCachePattern('query:query:cobros:pending-summary:*'),
         ]);
     } catch (err) {
         logger.warn(`[COBROS] Cache invalidation skipped: ${err.message}`);
@@ -50,6 +55,148 @@ function sanitizeCode(val) {
     return String(val).trim();
 }
 
+function toCents(value) {
+    return Math.round((Number(value) || 0) * 100);
+}
+
+function normalizeNumericCode(value) {
+    const raw = sanitizeCode(value);
+    if (!/^\d+$/.test(raw)) return null;
+    return raw.replace(/^0+/, '') || '0';
+}
+
+function codesMatch(left, right) {
+    const leftCode = sanitizeCode(left);
+    const rightCode = sanitizeCode(right);
+    if (leftCode === rightCode) return true;
+    if (leftCode.toUpperCase() === rightCode.toUpperCase()) return true;
+    const leftNumeric = normalizeNumericCode(leftCode);
+    const rightNumeric = normalizeNumericCode(rightCode);
+    return leftNumeric !== null && rightNumeric !== null && leftNumeric === rightNumeric;
+}
+
+function isColumnNotFound(err) {
+    const msg = String(err?.message || '').toLowerCase();
+    const codes = (err?.odbcErrors || []).map(e => e.code);
+    const states = (err?.odbcErrors || []).map(e => e.state);
+    return codes.includes(-205) || states.includes('42S22') || msg.includes('sql0205') || msg.includes('column not found');
+}
+
+function currentHhmmss(date = new Date()) {
+    return parseInt(
+        `${String(date.getHours()).padStart(2, '0')}${String(date.getMinutes()).padStart(2, '0')}${String(date.getSeconds()).padStart(2, '0')}`,
+        10,
+    );
+}
+
+function buildCobroInsert({
+    id,
+    codigoCliente,
+    referencia,
+    importe,
+    formaPago,
+    tipoVenta,
+    tipoModo,
+    tipoUsuario,
+    codigoUsuario,
+    observaciones,
+    includeErpColumns,
+}) {
+    const columns = [
+        'ID', 'CODIGO_CLIENTE', 'REFERENCIA', 'IMPORTE', 'FORMA_PAGO',
+        'TIPO_VENTA', 'TIPO_MODO', 'TIPO_USUARIO', 'CODIGO_USUARIO',
+        'OBSERVACIONES', 'IDEMPOTENCY_TOKEN',
+    ];
+    const params = [
+        id, codigoCliente, referencia, importe,
+        formaPago, tipoVenta, tipoModo,
+        tipoUsuario, codigoUsuario, observaciones,
+        id,
+    ];
+
+    if (includeErpColumns) {
+        const now = new Date();
+        columns.push(
+            'SUBEMPRESARECIBO', 'EJERCICIORECIBO', 'SERIERECIBO', 'TERMINALRECIBO',
+            'CODIGOCLIENTEFACTURA', 'CODIGOVENDEDOR', 'TIPORECIBO',
+            'DIADOCUMENTO', 'MESDOCUMENTO', 'ANODOCUMENTO', 'HORADOCUMENTO',
+            'IMPORTECOBRADO', 'IDMARCALIQUIDACION',
+        );
+        params.push(
+            String(process.env.PEDIDOS_SYSTEM_SUBEMPRESA || 'GMP').substring(0, 3),
+            now.getFullYear(),
+            String(process.env.PEDIDOS_SYSTEM_SERIE || 'R').substring(0, 1),
+            parseInt(process.env.PEDIDOS_SYSTEM_TERMINAL || '10', 10),
+            String(codigoCliente || '').padEnd(10).slice(0, 10),
+            String(codigoUsuario || '').padEnd(2).slice(0, 2),
+            'C',
+            now.getDate(),
+            now.getMonth() + 1,
+            now.getFullYear(),
+            currentHhmmss(now),
+            importe,
+            String(id).slice(0, 30),
+        );
+    }
+
+    return {
+        sql: db2InsertSql(COBROS_TABLE, columns),
+        params,
+    };
+}
+
+function normalizeCodeList(value) {
+    const values = Array.isArray(value) ? value : sanitizeCode(value).split(',');
+    return values
+        .map((code) => sanitizeCode(code))
+        .filter((code) => code && code.toUpperCase() !== 'ALL');
+}
+
+function getCobrosContext(req) {
+    const user = req.user || {};
+    const role = user.role || user.userRole || 'COMERCIAL';
+    return {
+        userId: user.code || user.codigo || user.codigoVendedor || user.userId || user.id,
+        userRole: role,
+        isJefeVentas: user.isJefeVentas === true || role === 'JEFE_VENTAS' || role === 'ADMIN',
+        vendorCodes: user.vendorCodes || user.vendedorCodes || [],
+        clientCodes: user.clientCodes || user.clienteCodes || [],
+    };
+}
+
+function forbiddenVendor(res, message) {
+    return res.status(403).json({
+        success: false,
+        code: 'FORBIDDEN_VENDOR',
+        error: message,
+    });
+}
+
+function authorizeCobrosClientScope(req, codigoCliente, action = 'consultar') {
+    const context = getCobrosContext(req);
+    if (context.isJefeVentas) return { ok: true };
+
+    const user = req.user || {};
+    const hasClientScope = Object.prototype.hasOwnProperty.call(user, 'clientCodes')
+        || Object.prototype.hasOwnProperty.call(user, 'clienteCodes');
+    if (!hasClientScope) return { ok: true };
+
+    const allowedClientCodes = normalizeCodeList(context.clientCodes);
+    if (allowedClientCodes.some((clientCode) => codesMatch(clientCode, codigoCliente))) {
+        return { ok: true };
+    }
+
+    return {
+        ok: false,
+        status: 403,
+        body: {
+            success: false,
+            code: 'FORBIDDEN_CLIENT_VENDOR',
+            error: 'No autorizado para ' + action + ' este cliente',
+        },
+    };
+}
+
 // Req #15: Calcula estado VENCIDO/PENDIENTE/AL_DIA a partir de fecha vencimiento.
 function computeEstadoVencimiento(fechaVencimientoIso, fechaDocumentoIso) {
     if (!fechaVencimientoIso) return 'PENDIENTE';
@@ -69,29 +216,39 @@ function computeEstadoVencimiento(fechaVencimientoIso, fechaDocumentoIso) {
 router.get('/:codigoCliente/pendientes', async (req, res) => {
     try {
         const codigoCliente = sanitizeCode(req.params.codigoCliente);
+        const clientScope = authorizeCobrosClientScope(req, codigoCliente, 'consultar cobros');
+        if (!clientScope.ok) {
+            return res.status(clientScope.status).json(clientScope.body);
+        }
         logger.info(`[COBROS] Obteniendo pendientes para cliente: ${codigoCliente}`);
 
-        // Req #15: Read real debt from DSEDAC.CVC (ERP unpaid invoices)
-        // CVC = Cabeceras Vencimientos Cobros (real document-level debt from ERP)
+        // Req #15: Read real debt from DSEDAC.CVC (ERP unpaid invoices).
+        // DB2 metadata verified: the active CVC layout uses long business names,
+        // not legacy CV* aliases. Do not fall back to app orders unless CVC itself
+        // is unavailable in an old environment.
         const sql = `
             SELECT
-                TRIM(C.CVCDRF) AS SERIE_DOCUMENTO,
-                C.CVNUDC AS NUMERO_DOCUMENTO,
-                C.CVXDDC AS XDE,
-                TRIM(C.CVCDCL) AS CODIGO_CLIENTE,
-                C.CVIMVT AS IMPORTE_TOTAL,
-                C.CVIMCO AS IMPORTE_COBRADO,
-                (C.CVIMVT - C.CVIMCO) AS IMPORTE_PENDIENTE,
-                C.CVAADC AS ANO_DOCUMENTO,
-                C.CVMMDC AS MES_DOCUMENTO,
-                C.CVDDDC AS DIA_DOCUMENTO,
-                C.CVFCVC AS FECHA_VENCIMIENTO,
-                TRIM(C.CVSEEM) AS SUBEMPRESA,
-                TRIM(C.CVCDTD) AS TIPO_DOCUMENTO
+                TRIM(C.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
+                C.NUMERODOCUMENTO AS NUMERO_DOCUMENTO,
+                C.XDEDOCUMENTO AS XDE,
+                TRIM(C.CODIGOCLIENTEALBARAN) AS CODIGO_CLIENTE,
+                C.IMPORTEVENCIMIENTO AS IMPORTE_TOTAL,
+                C.IMPORTECANCELADO AS IMPORTE_COBRADO,
+                C.IMPORTEPENDIENTE AS IMPORTE_PENDIENTE,
+                C.ANOEMISION AS ANO_DOCUMENTO,
+                C.MESEMISION AS MES_DOCUMENTO,
+                C.DIAEMISION AS DIA_DOCUMENTO,
+                C.ANOVENCIMIENTO AS ANO_VENCIMIENTO,
+                C.MESVENCIMIENTO AS MES_VENCIMIENTO,
+                C.DIAVENCIMIENTO AS DIA_VENCIMIENTO,
+                TRIM(C.SUBEMPRESADOCUMENTO) AS SUBEMPRESA,
+                TRIM(C.TIPODOCUMENTO) AS TIPO_DOCUMENTO,
+                TRIM(C.CODIGOFORMAPAGO) AS FORMA_PAGO
             FROM DSEDAC.CVC C
-            WHERE TRIM(C.CVCDCL) = ?
-              AND (C.CVIMVT - C.CVIMCO) > 0.01
-            ORDER BY C.CVFCVC ASC
+            WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
+              AND C.IMPORTEPENDIENTE > 0.01
+              AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')
+            ORDER BY C.ANOVENCIMIENTO ASC, C.MESVENCIMIENTO ASC, C.DIAVENCIMIENTO ASC
             FETCH FIRST 100 ROWS ONLY`;
 
         const cacheKey = `cobros:pendientes:cvc:${codigoCliente}`;
@@ -120,6 +277,15 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         }
 
         const format2 = (n) => String(n).padStart(2, '0');
+        const toIsoDate = (year, month, day) => {
+            const y = parseInt(year, 10);
+            const m = parseInt(month, 10);
+            const d = parseInt(day, 10);
+            if (!Number.isFinite(y) || y <= 0 || !Number.isFinite(m) || m <= 0 || !Number.isFinite(d) || d <= 0) {
+                return null;
+            }
+            return `${y}-${format2(m)}-${format2(d)}T00:00:00.000Z`;
+        };
 
         // H4: post-process app-side cobros (REPARTIDOR_COBROS + COBROS comerciales)
         // todavia no propagados al ERP, indexados por "SERIE-NUMERO" del documento.
@@ -165,14 +331,12 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         const cobros = (resultado || []).map(row => {
             // CVC format
             if (row.IMPORTE_PENDIENTE !== undefined) {
-                const dia = format2(row.DIA_DOCUMENTO || 1);
-                const mm = format2(row.MES_DOCUMENTO || 1);
-                const ano = row.ANO_DOCUMENTO || 2024;
                 const serie = (row.SERIE_DOCUMENTO || '').trim();
                 const numero = row.NUMERO_DOCUMENTO || 0;
                 const tipoDoc = (row.TIPO_DOCUMENTO || 'FAC').trim();
-                const fechaDoc = `${ano}-${mm}-${dia}T00:00:00.000Z`;
-                const estado = computeEstadoVencimiento(row.FECHA_VENCIMIENTO, fechaDoc);
+                const fechaDoc = toIsoDate(row.ANO_DOCUMENTO, row.MES_DOCUMENTO, row.DIA_DOCUMENTO);
+                const fechaVencimiento = toIsoDate(row.ANO_VENCIMIENTO, row.MES_VENCIMIENTO, row.DIA_VENCIMIENTO);
+                const estado = computeEstadoVencimiento(fechaVencimiento, fechaDoc);
                 // H4: descuenta cobros app-side aun no propagados al ERP.
                 const docKey = `${serie}-${numero}`;
                 const appPaid = appCobrosByDoc.get(docKey) || 0;
@@ -185,7 +349,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                     tipo: tipoDoc === 'CAC' ? 'albaran' : 'factura',
                     referencia: docKey,
                     fecha: fechaDoc,
-                    fechaVencimiento: row.FECHA_VENCIMIENTO || null,
+                    fechaVencimiento,
                     importeTotal: parseFloat(row.IMPORTE_TOTAL) || 0,
                     importePendiente: importePendienteAjustado,
                     importeCobrado: importeCobradoAjustado,
@@ -240,6 +404,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
             cobros,
             resumen: {
                 totalPendiente: total,
+                total,
                 totalVencido,
                 numDocumentos: cobros.length,
                 numVencidos,
@@ -259,18 +424,23 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
 router.get('/:codigoCliente/estado', async (req, res) => {
     try {
         const codigoCliente = sanitizeCode(req.params.codigoCliente);
+        const clientScope = authorizeCobrosClientScope(req, codigoCliente, 'consultar estado de cliente');
+        if (!clientScope.ok) {
+            return res.status(clientScope.status).json(clientScope.body);
+        }
         let totalPendiente = 0;
         let numPedidos = 0;
 
         // Req #15: Read real debt from CVC
         try {
             const rows = await queryWithParams(`
-                SELECT COALESCE(SUM(C.CVIMVT - C.CVIMCO), 0) AS TOTAL_PENDIENTE,
+                SELECT COALESCE(SUM(C.IMPORTEPENDIENTE), 0) AS TOTAL_PENDIENTE,
                        COUNT(*) AS NUM_DOCS
                 FROM DSEDAC.CVC C
-                WHERE TRIM(C.CVCDCL) = ?
-                  AND (C.CVIMVT - C.CVIMCO) > 0.01
-            `, [codigoCliente], []);
+                WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
+                  AND C.IMPORTEPENDIENTE > 0.01
+                  AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')
+            `, [codigoCliente], false);
             totalPendiente = parseFloat(rows?.[0]?.TOTAL_PENDIENTE) || 0;
             numPedidos = parseInt(rows?.[0]?.NUM_DOCS) || 0;
         } catch (cvcErr) {
@@ -283,12 +453,36 @@ router.get('/:codigoCliente/estado', async (req, res) => {
                     WHERE TRIM(PC.CODIGOCLIENTE) = ?
                       AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
                       AND PC.IMPORTETOTAL > 0
-                `, [codigoCliente], []);
+                `, [codigoCliente], false);
                 totalPendiente = parseFloat(rows?.[0]?.TOTAL_PENDIENTE) || 0;
                 numPedidos = parseInt(rows?.[0]?.NUM_PEDIDOS) || 0;
             } catch (e) {
                 logger.warn('[COBROS] Error calculando estado: ' + e.message);
             }
+        }
+
+        // Align client state with /pendientes and /pending-summary by subtracting
+        // app-side collections that may not have propagated to ERP yet.
+        try {
+            const appRows = await queryWithParams(`
+                SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL_APP
+                  FROM ${APP_SCHEMA}.COBROS
+                 WHERE TRIM(CODIGO_CLIENTE) = ?
+            `, [codigoCliente], false);
+            const repRows = await queryWithParams(`
+                SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
+                  FROM ${APP_SCHEMA}.REPARTIDOR_COBROS
+                 WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
+            `, [codigoCliente], false);
+            const totalApp = parseFloat(appRows?.[0]?.TOTAL_APP) || 0;
+            const totalRep = parseFloat(repRows?.[0]?.TOTAL_REP) || 0;
+            totalPendiente = Math.max(0, totalPendiente - totalApp - totalRep);
+            if (totalPendiente <= 0.01) {
+                totalPendiente = 0;
+                numPedidos = 0;
+            }
+        } catch (adjustErr) {
+            logger.warn('[COBROS] Error ajustando estado con cobros app-side: ' + adjustErr.message);
         }
 
         // Get credit limit from CLI
@@ -307,7 +501,7 @@ router.get('/:codigoCliente/estado', async (req, res) => {
             estadoCliente: {
                 codigo: codigoCliente,
                 nombre: '',
-                limiteCredito: 0,
+                limiteCredito,
                 totalPendiente,
                 diasMora: 0,
                 estado: totalPendiente > 0 ? 'EN_ROJO' : 'ACTIVO',
@@ -344,6 +538,10 @@ function normalizeIdempotencyToken(rawToken) {
 router.post('/:codigoCliente/registrar', registrarCobroLimiter, async (req, res) => {
     try {
         const codigoCliente = sanitizeCode(req.params.codigoCliente);
+        const clientScope = authorizeCobrosClientScope(req, codigoCliente, 'registrar cobros');
+        if (!clientScope.ok) {
+            return res.status(clientScope.status).json(clientScope.body);
+        }
         const {
             referencia, importe, formaPago, observaciones,
             tipoVenta, tipoModo, tipoUsuario, codigoUsuario,
@@ -367,7 +565,8 @@ router.post('/:codigoCliente/registrar', registrarCobroLimiter, async (req, res)
         const tipoVentaTrim = (tipoVenta || 'CC').trim();
         const tipoModoTrim = (tipoModo || 'NORMAL').trim();
         const tipoUsuarioTrim = (tipoUsuario || 'COMERCIAL').trim();
-        const codigoUsuarioTrim = String(codigoUsuario || '').trim();
+        const authenticatedUserCode = sanitizeCode(getCobrosContext(req).userId);
+        const codigoUsuarioTrim = authenticatedUserCode || String(codigoUsuario || '').trim();
         const obsTrim = String(observaciones || '').substring(0, 500);
 
         if (!codigoCliente || !referenciaTrim || importeNum <= 0) {
@@ -435,19 +634,39 @@ router.post('/:codigoCliente/registrar', registrarCobroLimiter, async (req, res)
         }
 
         try {
-            await queryWithParams(
-                `INSERT INTO ${APP_SCHEMA}.COBROS (
-                    ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO,
-                    TIPO_VENTA, TIPO_MODO, TIPO_USUARIO, CODIGO_USUARIO,
-                    OBSERVACIONES, IDEMPOTENCY_TOKEN
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                    id, codigoCliente, referenciaTrim, importeNum,
-                    formaPagoTrim, tipoVentaTrim, tipoModoTrim,
-                    tipoUsuarioTrim, codigoUsuarioTrim, obsTrim,
+            let insert = buildCobroInsert({
+                id,
+                codigoCliente,
+                referencia: referenciaTrim,
+                importe: importeNum,
+                formaPago: formaPagoTrim,
+                tipoVenta: tipoVentaTrim,
+                tipoModo: tipoModoTrim,
+                tipoUsuario: tipoUsuarioTrim,
+                codigoUsuario: codigoUsuarioTrim,
+                observaciones: obsTrim,
+                includeErpColumns: true,
+            });
+            try {
+                await queryWithParams(insert.sql, insert.params, false);
+            } catch (erpInsertErr) {
+                if (!isColumnNotFound(erpInsertErr)) throw erpInsertErr;
+                logger.warn(`[COBROS] ERP-compatible columns missing in ${APP_SCHEMA}.COBROS, using legacy insert`);
+                insert = buildCobroInsert({
                     id,
-                ], false
-            );
+                    codigoCliente,
+                    referencia: referenciaTrim,
+                    importe: importeNum,
+                    formaPago: formaPagoTrim,
+                    tipoVenta: tipoVentaTrim,
+                    tipoModo: tipoModoTrim,
+                    tipoUsuario: tipoUsuarioTrim,
+                    codigoUsuario: codigoUsuarioTrim,
+                    observaciones: obsTrim,
+                    includeErpColumns: false,
+                });
+                await queryWithParams(insert.sql, insert.params, false);
+            }
         } catch (insertErr) {
             // Si hubo race entre el SELECT y el INSERT, vuelve a intentar el
             // replay-check antes de fallar (PK colision sobre ID).
@@ -480,7 +699,7 @@ router.post('/:codigoCliente/registrar', registrarCobroLimiter, async (req, res)
  * Supports single vendor, multiple vendors (comma-separated), or ALL
  *
  * Source: DSEDAC.CVC (ERP vencimientos reales — deuda comercial del cliente).
- * FIX 2026-05-16: Enriquece cada entrada con NOMBREALTERNATIVO y DESCRIPCIONCLIENTE
+ * FIX 2026-05-16: Enriquece cada entrada con NOMBREALTERNATIVO y NOMBRECLIENTE
  * de DSEDAC.CLI para que el frontend no tenga que mostrar "Cliente XXX".
  */
 router.get('/pending-summary/:vendedorCode', async (req, res) => {
@@ -488,79 +707,193 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
         const vendedorCodeParam = req.params.vendedorCode;
         logger.info(`[COBROS] Pending summary for vendor: ${vendedorCodeParam}`);
 
-        // Parse vendor codes - support single, multiple (comma-separated), or ALL
-        const isAll = vendedorCodeParam.toUpperCase() === 'ALL';
-        const vendorCodes = isAll 
-            ? [] 
-            : vendedorCodeParam.split(',').map(v => v.trim()).filter(v => v.length > 0);
-        
-                // For many vendor codes, embed directly in SQL to avoid ODBC parameter limit (CWB0111)
-        // IBM i ODBC driver has issues with 90+ parameters in IN clause
-        const MAX_PARAMS = 50;
-        const useParamBinding = vendorCodes.length <= MAX_PARAMS;
-        
-        let vendorClauseJoin = '';
-        let vendorParams = [];
-        
-        if (!isAll) {
-            if (useParamBinding) {
-                const placeholders = vendorCodes.map(() => '?').join(',');
-                vendorClauseJoin = ` AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${placeholders})`;
-                vendorParams = vendorCodes;
-            } else {
-                // For >50 vendor codes, embed safely (codes are 2-char alphanumeric)
-                const safeCodes = vendorCodes
-                    .filter(v => /^[a-zA-Z0-9]{1,10}$/.test(v))
-                    .map(v => `'${v.replace(/'/g, "''")}'`)
-                    .join(',');
-                vendorClauseJoin = ` AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${safeCodes})`;
+        const requested = sanitizeCode(vendedorCodeParam);
+        const context = getCobrosContext(req);
+        const manager = context.isJefeVentas === true;
+        const userCode = sanitizeCode(context.userId);
+        const isAll = requested.toUpperCase() === 'ALL';
+        const requestedLimit = parseInt(req.query.limit, 10);
+        const pendingSummaryLimit = Number.isFinite(requestedLimit)
+            ? Math.min(Math.max(requestedLimit, 1), 100)
+            : 100;
+        const requestedPage = parseInt(req.query.page, 10);
+        const pendingSummaryPage = Number.isFinite(requestedPage)
+            ? Math.max(requestedPage, 1)
+            : 1;
+        const visibleVendorCodes = normalizeCodeList(context.vendorCodes);
+        let selectedVendorCodes = isAll
+            ? (manager ? visibleVendorCodes : [])
+            : normalizeCodeList(requested);
+
+        if (!manager && isAll) {
+            return forbiddenVendor(res, 'COMERCIAL no puede consultar ALL');
+        }
+        if (!manager && selectedVendorCodes.some((code) => !codesMatch(code, userCode))) {
+            return forbiddenVendor(res, 'COMERCIAL solo puede consultar su vendedor');
+        }
+        if (manager && visibleVendorCodes.length > 0) {
+            if (isAll) {
+                selectedVendorCodes = visibleVendorCodes;
+            } else if (selectedVendorCodes.some((code) => !visibleVendorCodes.some((visible) => codesMatch(code, visible)))) {
+                return forbiddenVendor(res, 'JEFE_VENTAS no puede consultar vendedores fuera de su alcance');
             }
         }
 
-        // FIX 2026-05-16: LEFT JOIN con CLI para incluir nombres reales de clientes
-        // FIX 2026-05-18: vendor filter moved to JOIN ON (was in WHERE → INNER JOIN encubierta)
-        // Clients without CLP record were excluded despite having real debt in CVC.
+        // IBM i ODBC has a practical parameter limit. Above 50 vendor codes,
+        // embed only sanitized alphanumeric codes.
+        const MAX_PARAMS = 50;
+        let vendorClause = '';
+        let vendorParams = [];
+        if (selectedVendorCodes.length > 0) {
+            if (selectedVendorCodes.length <= MAX_PARAMS) {
+                vendorClause = `
+              AND EXISTS (
+                SELECT 1
+                  FROM DSEDAC.CLP CLP
+                 WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+                   AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${selectedVendorCodes.map(() => '?').join(',')})
+              )`;
+                vendorParams = selectedVendorCodes;
+            } else {
+                const safeCodes = selectedVendorCodes
+                    .filter(v => /^[A-Za-z0-9]{1,10}$/.test(v))
+                    .map(v => `'${v.replace(/'/g, "''")}'`)
+                    .join(',');
+                if (safeCodes) {
+                    vendorClause = `
+              AND EXISTS (
+                SELECT 1
+                  FROM DSEDAC.CLP CLP
+                 WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+                   AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${safeCodes})
+              )`;
+                }
+            }
+        }
+
+        // B7: unscoped global summaries include ~1.143 CVC rows with empty client
+        // (mostly serie O, ~7.36M€ ERP noise). Exclude when no vendor semi-join filter.
+        const emptyClientFilter = selectedVendorCodes.length === 0
+            ? "AND TRIM(CVC.CODIGOCLIENTEALBARAN) <> ''"
+            : '';
+
+        // Keep the legacy route aligned with the DDD repository: CVC is the source
+        // of real debt, CLP is only a semi-join scope filter, and app-side cobros
+        // are subtracted before reporting client state.
         const sql = `
           SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
+                 TRIM(CVC.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
+                 CVC.NUMERODOCUMENTO AS NUMERO_DOCUMENTO,
                  SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
-                 COUNT(*) AS NUM_DOCS,
                  SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
-                     < (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
+                     <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
                      THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO,
-                 TRIM(CLI.NOMBREALTERNATIVO) AS NOMBRE_ALT,
-                 TRIM(CLI.DESCRIPCIONCLIENTE) AS NOMBRE_CLI
+                 TRIM(MIN(CLI.NOMBREALTERNATIVO)) AS NOMBRE_ALT,
+                 TRIM(MIN(CLI.NOMBRECLIENTE)) AS NOMBRE_CLI
             FROM DSEDAC.CVC CVC
-            LEFT JOIN DSEDAC.CLP CLP ON TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)${vendorClauseJoin}
             LEFT JOIN DSEDAC.CLI CLI ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
             WHERE CVC.IMPORTEPENDIENTE <> 0
               AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
-            GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CLI.NOMBREALTERNATIVO), TRIM(CLI.DESCRIPCIONCLIENTE)
-            ORDER BY TOTAL_PENDIENTE DESC
+              ${emptyClientFilter}
+              ${vendorClause}
+            GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CVC.SERIEDOCUMENTO), CVC.NUMERODOCUMENTO
+            ORDER BY TOTAL_PENDIENTE DESC, CLIENTE ASC, SERIE_DOCUMENTO ASC, NUMERO_DOCUMENTO ASC
+            FETCH FIRST ${pendingSummaryLimit} ROWS ONLY
         `;
 
-        const cacheKeyVendedor = `cobros:pending-summary:${vendedorCodeParam}`;
+        const cacheKeyVendedor = `cobros:pending-summary:${vendedorCodeParam}:${context.userRole}:${context.userId}:${selectedVendorCodes.join(',')}:limit:${pendingSummaryLimit}:page:${pendingSummaryPage}`;
         const queryFn = vendorParams.length > 0
             ? () => queryWithParams(sql, vendorParams)
             : () => query(sql, false);
         const rows = await cachedQuery(queryFn, sql, cacheKeyVendedor, TTL.SHORT);
+
+        const appAdjustments = new Map();
+        const addAdjustment = (clientCode, docKey, amount) => {
+            const code = sanitizeCode(clientCode);
+            const doc = sanitizeCode(docKey);
+            if (!code || !doc) return;
+            const key = `${code}|${doc}`;
+            appAdjustments.set(key, (appAdjustments.get(key) || 0) + (parseFloat(amount) || 0));
+        };
+
+        if ((rows || []).length > 0) {
+            try {
+                const comercialSql = `
+                  SELECT TRIM(C.CODIGO_CLIENTE) AS CLIENTE,
+                         TRIM(C.REFERENCIA) AS REF,
+                         COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP
+                    FROM ${APP_SCHEMA}.COBROS C
+                   WHERE EXISTS (
+                     SELECT 1
+                       FROM DSEDAC.CVC CVC
+                      WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGO_CLIENTE)
+                        AND CVC.IMPORTEPENDIENTE <> 0
+                        AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+                        ${emptyClientFilter}
+                        ${vendorClause}
+                   )
+                   GROUP BY TRIM(C.CODIGO_CLIENTE), TRIM(C.REFERENCIA)`;
+                const appRows = await queryWithParams(comercialSql, vendorParams, []);
+                for (const row of appRows || []) {
+                    const reference = sanitizeCode(row.REF);
+                    const match = reference.match(/([^:]+-\d+)$/);
+                    addAdjustment(row.CLIENTE, match ? match[1] : reference, row.TOTAL_APP);
+                }
+            } catch (error) {
+                logger.warn(`[COBROS] App-side COBROS summary subtract skipped: ${error.message}`);
+            }
+
+            try {
+                const repartidorSql = `
+                  SELECT TRIM(R.CODIGOCLIENTEALBARAN) AS CLIENTE,
+                         TRIM(R.SERIEDOCUMENTO) || '-' || TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) AS DOC_KEY,
+                         COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
+                    FROM ${APP_SCHEMA}.REPARTIDOR_COBROS R
+                   WHERE EXISTS (
+                     SELECT 1
+                       FROM DSEDAC.CVC CVC
+                      WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(R.CODIGOCLIENTEALBARAN)
+                        AND CVC.IMPORTEPENDIENTE <> 0
+                        AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+                        ${emptyClientFilter}
+                        ${vendorClause}
+                   )
+                   GROUP BY TRIM(R.CODIGOCLIENTEALBARAN), TRIM(R.SERIEDOCUMENTO), TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20)))`;
+                const repRows = await queryWithParams(repartidorSql, vendorParams, []);
+                for (const row of repRows || []) addAdjustment(row.CLIENTE, row.DOC_KEY, row.TOTAL_REP);
+            } catch (error) {
+                logger.warn(`[COBROS] App-side REPARTIDOR_COBROS summary subtract skipped: ${error.message}`);
+            }
+        }
 
         const summary = {};
         let grandTotal = 0;
         let grandTotalVencido = 0;
         (rows || []).forEach(r => {
             const code = (r.CLIENTE || '').trim();
-            const total = parseFloat(r.TOTAL_PENDIENTE) || 0;
-            const vencido = parseFloat(r.TOTAL_VENCIDO) || 0;
-            const count = parseInt(r.NUM_DOCS) || 0;
-            // Estado por cliente: VENCIDO si tiene cualquier vencido, PENDIENTE si pending>0 sin vencidos, AL_DIA si total=0
-            const estado = vencido > 0 ? 'VENCIDO' : (total > 0 ? 'PENDIENTE' : 'AL_DIA');
+            const docKey = `${sanitizeCode(r.SERIE_DOCUMENTO)}-${r.NUMERO_DOCUMENTO}`;
+            const appPaid = appAdjustments.get(`${code}|${docKey}`) || 0;
+            const rawTotal = parseFloat(r.TOTAL_PENDIENTE) || 0;
+            const rawVencido = parseFloat(r.TOTAL_VENCIDO) || 0;
+            const total = Math.max(0, rawTotal - appPaid);
+            if (toCents(total) <= 0) return;
+            const vencido = rawVencido > 0 ? Math.min(total, Math.max(0, rawVencido - appPaid)) : 0;
             // FIX 2026-05-16: incluir nombres del ERP para que el frontend no muestre "Cliente XXX"
             const nombreAlt = (r.NOMBRE_ALT || '').trim();
             const nombreCli = (r.NOMBRE_CLI || '').trim();
-            summary[code] = {
-                total, vencido, count, estado,
-                nombre: nombreAlt || nombreCli || null,
-            };
+            if (!summary[code]) {
+                summary[code] = {
+                    total: 0,
+                    vencido: 0,
+                    count: 0,
+                    estado: 'AL_DIA',
+                    nombre: nombreAlt || nombreCli || null,
+                };
+            }
+            summary[code].total += total;
+            summary[code].vencido += vencido;
+            summary[code].count += 1;
+            summary[code].estado = summary[code].vencido > 0 ? 'VENCIDO' : 'PENDIENTE';
             grandTotal += total;
             grandTotalVencido += vencido;
         });

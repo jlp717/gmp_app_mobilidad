@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 const odbc = require('odbc');
+const db2ConnectionString = require('./db2-connection');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
-const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
+const CONN = db2ConnectionString();
 
 (async () => {
   const pool = await odbc.pool(CONN);
@@ -22,17 +23,17 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
     if (r.length > 0) {
       const row = r[0];
       const type = row.TABLE_TYPE === 'L' ? 'LOGICAL FILE' : row.TABLE_TYPE === 'T' ? 'TABLE (PF)' : row.TABLE_TYPE;
-      console.log(`${t.padEnd(8)} → ${type.padEnd(16)} | ${row.TABLE_TEXT || ''}`);
+      console.log(`${t.padEnd(8)} â†’ ${type.padEnd(16)} | ${row.TABLE_TEXT || ''}`);
       if (row.TABLE_TYPE === 'L' && row.BASE_TABLE_NAME) {
-        console.log(`           └─ PF base: ${row.BASE_TABLE_SCHEMA}.${row.BASE_TABLE_NAME}`);
+        console.log(`           â””â”€ PF base: ${row.BASE_TABLE_SCHEMA}.${row.BASE_TABLE_NAME}`);
       }
     } else {
-      console.log(`${t.padEnd(8)} → NO ENCONTRADO`);
+      console.log(`${t.padEnd(8)} â†’ NO ENCONTRADO`);
     }
   }
 
-  // Buscar archivos físicos que puedan ser la base de CLIL1
-  console.log('\n=== ARCHIVOS FÍSICOS con patrón CLI ===');
+  // Buscar archivos fÃ­sicos que puedan ser la base de CLIL1
+  console.log('\n=== ARCHIVOS FÃSICOS con patrÃ³n CLI ===');
   const cliPF = await conn.query(`
     SELECT TABLE_NAME, TABLE_TYPE, TABLE_TEXT
     FROM QSYS2.SYSTABLES
@@ -42,11 +43,11 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
     ORDER BY TABLE_NAME
   `);
   for (const row of cliPF) {
-    console.log(`  ${row.TABLE_NAME.padEnd(15)} → ${row.TABLE_TEXT || ''}`);
+    console.log(`  ${row.TABLE_NAME.padEnd(15)} â†’ ${row.TABLE_TEXT || ''}`);
   }
 
   // Buscar PF para VDD
-  console.log('\n=== Archivos FÍSICOS con patrón VDD ===');
+  console.log('\n=== Archivos FÃSICOS con patrÃ³n VDD ===');
   const vddPF = await conn.query(`
     SELECT TABLE_NAME, TABLE_TYPE, TABLE_TEXT
     FROM QSYS2.SYSTABLES
@@ -56,11 +57,11 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
     ORDER BY TABLE_NAME
   `);
   for (const row of vddPF) {
-    console.log(`  ${row.TABLE_NAME.padEnd(15)} → ${row.TABLE_TEXT || ''}`);
+    console.log(`  ${row.TABLE_NAME.padEnd(15)} â†’ ${row.TABLE_TEXT || ''}`);
   }
 
   // Buscar PF para CLC
-  console.log('\n=== Archivos FÍSICOS con patrón CLC ===');
+  console.log('\n=== Archivos FÃSICOS con patrÃ³n CLC ===');
   const clcPF = await conn.query(`
     SELECT TABLE_NAME, TABLE_TYPE, TABLE_TEXT
     FROM QSYS2.SYSTABLES
@@ -70,11 +71,11 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
     ORDER BY TABLE_NAME
   `);
   for (const row of clcPF) {
-    console.log(`  ${row.TABLE_NAME.padEnd(15)} → ${row.TABLE_TEXT || ''}`);
+    console.log(`  ${row.TABLE_NAME.padEnd(15)} â†’ ${row.TABLE_TEXT || ''}`);
   }
 
   // Buscar PF para CVC
-  console.log('\n=== Archivos FÍSICOS con patrón CVC ===');
+  console.log('\n=== Archivos FÃSICOS con patrÃ³n CVC ===');
   const cvcPF = await conn.query(`
     SELECT TABLE_NAME, TABLE_TYPE, TABLE_TEXT
     FROM QSYS2.SYSTABLES
@@ -84,11 +85,11 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
     ORDER BY TABLE_NAME
   `);
   for (const row of cvcPF) {
-    console.log(`  ${row.TABLE_NAME.padEnd(15)} → ${row.TABLE_TEXT || ''}`);
+    console.log(`  ${row.TABLE_NAME.padEnd(15)} â†’ ${row.TABLE_TEXT || ''}`);
   }
 
   // Buscar PF para CRU
-  console.log('\n=== Archivos FÍSICOS con patrón CRU ===');
+  console.log('\n=== Archivos FÃSICOS con patrÃ³n CRU ===');
   const cruPF = await conn.query(`
     SELECT TABLE_NAME, TABLE_TYPE, TABLE_TEXT
     FROM QSYS2.SYSTABLES
@@ -98,11 +99,11 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
     ORDER BY TABLE_NAME
   `);
   for (const row of cruPF) {
-    console.log(`  ${row.TABLE_NAME.padEnd(15)} → ${row.TABLE_TEXT || ''}`);
+    console.log(`  ${row.TABLE_NAME.padEnd(15)} â†’ ${row.TABLE_TEXT || ''}`);
   }
 
   // Buscar PF para CLX
-  console.log('\n=== Archivos FÍSICOS con patrón CLX ===');
+  console.log('\n=== Archivos FÃSICOS con patrÃ³n CLX ===');
   const clxPF = await conn.query(`
     SELECT TABLE_NAME, TABLE_TYPE, TABLE_TEXT
     FROM QSYS2.SYSTABLES
@@ -112,7 +113,7 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
     ORDER BY TABLE_NAME
   `);
   for (const row of clxPF) {
-    console.log(`  ${row.TABLE_NAME.padEnd(15)} → ${row.TABLE_TEXT || ''}`);
+    console.log(`  ${row.TABLE_NAME.padEnd(15)} â†’ ${row.TABLE_TEXT || ''}`);
   }
 
   await conn.close();

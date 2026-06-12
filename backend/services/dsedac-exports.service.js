@@ -34,6 +34,7 @@ const logger = require('../middleware/logger');
 
 const ERP_SCHEMA = String(process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER').trim().toUpperCase();
 const EXPORTS_ENABLED = String(process.env.PEDIDOS_EXPORT_TO_SYSTEM || 'false').toLowerCase() === 'true';
+const EXPORTS_APPROVED = String(process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED || 'false').toLowerCase() === 'true';
 
 // Mapeo importes JAVIER -> CODIGOCONCEPTO de DSEDAC.CLV.
 // Los codigos son tentativos y se sobreescriben si CLV usa otros. Confirma
@@ -48,7 +49,7 @@ const CLV_CONCEPT_MAP = [
 ];
 
 function isEnabled() {
-  return EXPORTS_ENABLED && ERP_SCHEMA === 'DSEDAC';
+  return EXPORTS_ENABLED && EXPORTS_APPROVED && ERP_SCHEMA === 'DSEDAC';
 }
 
 function logSkip(tag, reason) {
@@ -66,7 +67,7 @@ function logSkip(tag, reason) {
  */
 async function exportCobroToSystem(cobroRow) {
   if (!isEnabled()) {
-    logSkip('exportCobroToSystem', 'PEDIDOS_EXPORT_TO_SYSTEM=false o schema!=DSEDAC');
+    logSkip('exportCobroToSystem', 'export disabled, approval missing, or schema!=DSEDAC');
     return { exported: false, reason: 'disabled' };
   }
   if (!cobroRow || !cobroRow.IDEMPOTENCY_TOKEN) {
@@ -133,7 +134,7 @@ async function exportCobroToSystem(cobroRow) {
 
 async function exportLiquidacionToSystem(liquidacionRow) {
   if (!isEnabled()) {
-    logSkip('exportLiquidacionToSystem', 'PEDIDOS_EXPORT_TO_SYSTEM=false o schema!=DSEDAC');
+    logSkip('exportLiquidacionToSystem', 'export disabled, approval missing, or schema!=DSEDAC');
     return { exported: false, reason: 'disabled' };
   }
   if (!liquidacionRow || !liquidacionRow.IDEMPOTENCY_TOKEN) {
@@ -207,7 +208,7 @@ async function exportLiquidacionToSystem(liquidacionRow) {
 
 async function exportEntregaToSystem(entregaHeader, entregaLineas = []) {
   if (!isEnabled()) {
-    logSkip('exportEntregaToSystem', 'PEDIDOS_EXPORT_TO_SYSTEM=false o schema!=DSEDAC');
+    logSkip('exportEntregaToSystem', 'export disabled, approval missing, or schema!=DSEDAC');
     return { exported: false, reason: 'disabled' };
   }
   if (!entregaHeader || !entregaHeader.IDEMPOTENCY_TOKEN) {

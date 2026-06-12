@@ -1,7 +1,8 @@
 const odbc = require('odbc');
+const db2ConnectionString = require('./db2-connection');
 
 (async () => {
-  const pool = await odbc.pool('DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208');
+  const pool = await odbc.pool(db2ConnectionString());
   const conn = await pool.connect();
 
   const checks = [

@@ -80,7 +80,13 @@ enum EstadoCobro {
   static EstadoCobro fromString(String? value) {
     final v = (value ?? '').trim().toUpperCase();
     if (v == 'VENCIDO') return EstadoCobro.vencido;
-    if (v == 'AL_DIA' || v == 'ALDIA') return EstadoCobro.alDia;
+    if (v == 'AL_DIA' ||
+        v == 'ALDIA' ||
+        v == 'COBRADO' ||
+        v == 'PAGADO' ||
+        v == 'REGISTRADO') {
+      return EstadoCobro.alDia;
+    }
     return EstadoCobro.pendiente;
   }
 
@@ -109,7 +115,6 @@ enum EstadoCobro {
 
 /// Cobro pendiente de un cliente
 class CobroPendiente {
-
   CobroPendiente({
     required this.id,
     required this.referencia,
@@ -123,6 +128,7 @@ class CobroPendiente {
     this.estado = EstadoCobro.pendiente,
     this.importeCobrado = 0,
     this.docKey,
+    this.descripcion = '',
   });
 
   factory CobroPendiente.fromJson(Map<String, dynamic> json) {
@@ -140,7 +146,8 @@ class CobroPendiente {
     } else if (parsedVenc != null) {
       // Vencido si fecha venc <= hoy.
       final today = DateTime.now();
-      final dueOnly = DateTime(parsedVenc.year, parsedVenc.month, parsedVenc.day);
+      final dueOnly =
+          DateTime(parsedVenc.year, parsedVenc.month, parsedVenc.day);
       final todayOnly = DateTime(today.year, today.month, today.day);
       estadoCalc = !dueOnly.isAfter(todayOnly)
           ? EstadoCobro.vencido
@@ -168,6 +175,8 @@ class CobroPendiente {
       docKey: json['docKey'] is Map
           ? Map<String, dynamic>.from(json['docKey'] as Map)
           : null,
+      descripcion:
+          (json['descripcion'] ?? json['concepto'] ?? '').toString().trim(),
     );
   }
   final String id;
@@ -182,8 +191,11 @@ class CobroPendiente {
   final bool esCTR;
   final EstadoCobro estado;
   final Map<String, dynamic>? docKey;
+  final String descripcion;
 
   bool get isVencido => estado == EstadoCobro.vencido;
+  String get conceptoVisible =>
+      descripcion.isNotEmpty ? descripcion : '${tipo.label} $referencia';
   int get diasMora {
     if (fechaVencimiento == null || !isVencido) return 0;
     return DateTime.now().difference(fechaVencimiento!).inDays;
@@ -207,7 +219,6 @@ class CobroPendiente {
 
 /// Item de un albarán para entrega
 class EntregaItem {
-
   EntregaItem({
     required this.itemId,
     required this.codigoArticulo,
@@ -241,7 +252,6 @@ class EntregaItem {
 
 /// Albarán pendiente de entrega
 class Albaran {
-
   Albaran({
     required this.id,
     required this.numeroAlbaran,
@@ -300,11 +310,12 @@ class Albaran {
       if (date.contains('/')) {
         final parts = date.split('/');
         if (parts.length == 3) {
-          return DateTime(
-            int.parse(parts[2]),
-            int.parse(parts[1]),
-            int.parse(parts[0]),
-          );
+          final day = int.tryParse(parts[0]);
+          final month = int.tryParse(parts[1]);
+          final year = int.tryParse(parts[2]);
+          if (day != null && month != null && year != null) {
+            return DateTime(year, month, day);
+          }
         }
       }
       return DateTime.tryParse(date) ?? DateTime.now();
@@ -322,7 +333,6 @@ class Albaran {
 
 /// Estado del cliente (moroso, activo, etc)
 class EstadoCliente {
-
   EstadoCliente({
     required this.codigo,
     required this.nombre,
@@ -372,7 +382,6 @@ class EstadoCliente {
 
 /// Resumen de cobros de un cliente
 class ResumenCobros {
-
   ResumenCobros({
     this.totalPendiente = 0,
     this.numFacturas = 0,

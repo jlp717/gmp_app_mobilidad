@@ -1,7 +1,9 @@
 import odbc from 'odbc';
+declare const require: (path: string) => any;
+const db2ConnectionString = require('./db2-connection');
 
 async function explorarTablas() {
-  const conn = await odbc.connect('DSN=GMP;UID=JAVIER;PWD=JAVIER');
+  const conn = await odbc.connect(db2ConnectionString({ extras: '' }));
   
   console.log('=== Tablas de ventas, pedidos y facturas ===\n');
   

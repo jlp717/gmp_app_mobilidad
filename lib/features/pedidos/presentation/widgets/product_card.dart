@@ -43,9 +43,9 @@ class _ProductCardState extends State<ProductCard> {
   bool _showIva = false;
   bool _showClientePrice = true;
 
-  static const double ivaRate = 0.21;
+  double _ivaRateForProduct() => ivaRateFromCode(widget.product.codigoIva);
 
-  double _priceWithIva(double price) => price * (1 + ivaRate);
+  double _priceWithIva(double price) => price * (1 + _ivaRateForProduct());
 
   String _formatPrice(double price, {int decimals = 3}) {
     final displayPrice = _showIva ? _priceWithIva(price) : price;

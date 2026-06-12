@@ -8,6 +8,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
+import 'package:intl/intl.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
@@ -16,6 +17,12 @@ import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_models.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/presentation/widgets/bolsa_monthly_chart.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/providers/bolsa_provider.dart';
+
+/// Formato de moneda con localización española (1.234,56 €).
+final NumberFormat _bolsaMoneyFormat =
+    NumberFormat.currency(locale: 'es_ES', symbol: '€');
+
+String _bolsaMoney(double value) => _bolsaMoneyFormat.format(value);
 
 class BolsaPage extends ConsumerStatefulWidget {
   const BolsaPage({super.key});
@@ -36,12 +43,19 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
   void _loadIfNeeded() {
     if (!mounted) return;
     final vendor = _resolveVendor();
-    if (vendor != null &&
-        vendor.isNotEmpty &&
-        vendor != _lastLoadedVendor &&
-        vendor.toUpperCase() != 'ALL') {
-      _lastLoadedVendor = vendor;
-      ref.read(bolsaProvider).load(vendor);
+    final normalized = vendor?.trim();
+    if (normalized == null ||
+        normalized.isEmpty ||
+        normalized.toUpperCase() == 'ALL') {
+      if (_lastLoadedVendor != null) {
+        _lastLoadedVendor = null;
+        ref.read(bolsaProvider).load(normalized ?? '');
+      }
+      return;
+    }
+    if (normalized != _lastLoadedVendor) {
+      _lastLoadedVendor = normalized;
+      ref.read(bolsaProvider).load(normalized);
     }
   }
 
@@ -117,8 +131,18 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
       return _EmptyVendorView();
     }
     final months = const [
-      'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-      'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
+      'Ene',
+      'Feb',
+      'Mar',
+      'Abr',
+      'May',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dic',
     ];
     final filtered = provider.filteredMovements;
     return ListView(
@@ -143,8 +167,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
                 'Movimientos',
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize:
-                      Responsive.fontSize(context, small: 14, large: 16),
+                  fontSize: Responsive.fontSize(context, small: 14, large: 16),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -320,8 +343,11 @@ class _BolsaSummaryCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.account_balance_wallet,
-                  color: AppTheme.neonBlue, size: 22,),
+              const Icon(
+                Icons.account_balance_wallet,
+                color: AppTheme.neonBlue,
+                size: 22,
+              ),
               const SizedBox(width: 8),
               Text(
                 'Saldo disponible · $monthLabel ${status.ejercicio}',
@@ -335,7 +361,7 @@ class _BolsaSummaryCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            '${status.saldoDisponible.toStringAsFixed(2)} €',
+            _bolsaMoney(status.saldoDisponible),
             style: TextStyle(
               color: status.isDeficit
                   ? AppTheme.error
@@ -352,7 +378,7 @@ class _BolsaSummaryCard extends StatelessWidget {
               Expanded(
                 child: _MetricBox(
                   label: 'Acumulado',
-                  value: '${status.acumulado.toStringAsFixed(2)} €',
+                  value: _bolsaMoney(status.acumulado),
                   color: AppTheme.neonGreen,
                   icon: Icons.trending_up,
                 ),
@@ -361,7 +387,7 @@ class _BolsaSummaryCard extends StatelessWidget {
               Expanded(
                 child: _MetricBox(
                   label: 'Consumido',
-                  value: '${status.consumido.toStringAsFixed(2)} €',
+                  value: _bolsaMoney(status.consumido),
                   color: AppTheme.warning,
                   icon: Icons.trending_down,
                 ),
@@ -370,7 +396,8 @@ class _BolsaSummaryCard extends StatelessWidget {
               Expanded(
                 child: _MetricBox(
                   label: 'Límite',
-                  value: '${status.limitePct.toStringAsFixed(1)}%',
+                  value:
+                      '${status.limitePct.toStringAsFixed(1).replaceAll('.', ',')}%',
                   color: AppTheme.neonBlue,
                   icon: Icons.percent,
                 ),
@@ -445,7 +472,7 @@ class _ProgressBar extends StatelessWidget {
         Padding(
           padding: const EdgeInsets.only(left: 4, bottom: 6),
           child: Text(
-            'Consumo del periodo: ${status.porcentajeConsumido.toStringAsFixed(1)}%',
+            'Consumo del periodo: ${status.porcentajeConsumido.toStringAsFixed(1).replaceAll('.', ',')}%',
             style: const TextStyle(color: Colors.white70, fontSize: 12),
           ),
         ),
@@ -530,7 +557,8 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
             ],
           ),
           labelStyle: TextStyle(
-            color: selected ? Colors.white : Colors.white.withValues(alpha: 0.75),
+            color:
+                selected ? Colors.white : Colors.white.withValues(alpha: 0.75),
           ),
         ),
       );
@@ -544,10 +572,16 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
             scrollDirection: Axis.horizontal,
             children: [
               chip('Todos', null, Icons.list_alt),
-              chip('Acumulación', BolsaMovimientoTipo.acumulacion,
-                  Icons.trending_up,),
-              chip('Consumo', BolsaMovimientoTipo.consumo,
-                  Icons.trending_down,),
+              chip(
+                'Acumulación',
+                BolsaMovimientoTipo.acumulacion,
+                Icons.trending_up,
+              ),
+              chip(
+                'Consumo',
+                BolsaMovimientoTipo.consumo,
+                Icons.trending_down,
+              ),
               chip('Ajustes', BolsaMovimientoTipo.ajuste, Icons.tune),
             ],
           ),
@@ -559,7 +593,8 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
           style: const TextStyle(color: Colors.white, fontSize: 13),
           decoration: InputDecoration(
             isDense: true,
-            prefixIcon: const Icon(Icons.search, size: 18, color: Colors.white54),
+            prefixIcon:
+                const Icon(Icons.search, size: 18, color: Colors.white54),
             suffixIcon: _searchCtrl.text.isEmpty
                 ? null
                 : IconButton(
@@ -618,6 +653,10 @@ class _MovimientoTile extends StatelessWidget {
         ? '${movimiento.fecha!.day.toString().padLeft(2, '0')}/'
             '${movimiento.fecha!.month.toString().padLeft(2, '0')}'
         : '--';
+    final extraDetail = _extraDetailText();
+    final signedAmount =
+        "${isCredit ? '+' : '-'}${_formatMoney(movimiento.importe)}";
+
     return Card(
       color: AppTheme.darkSurface,
       margin: const EdgeInsets.only(bottom: 8),
@@ -626,6 +665,7 @@ class _MovimientoTile extends StatelessWidget {
         side: BorderSide(color: color.withValues(alpha: 0.2), width: 0.5),
       ),
       child: ListTile(
+        isThreeLine: extraDetail != null || movimiento.descripcion.isNotEmpty,
         leading: Icon(icon, color: color),
         title: Text(
           movimiento.tipo.label,
@@ -646,11 +686,25 @@ class _MovimientoTile extends StatelessWidget {
               Text(
                 movimiento.descripcion,
                 style: const TextStyle(color: Colors.white54, fontSize: 11),
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
+            if (extraDetail != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                extraDetail,
+                style: TextStyle(
+                  color: color.withValues(alpha: 0.78),
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                ),
+                maxLines: 4,
+                overflow: TextOverflow.visible,
+              ),
+            ],
+            const SizedBox(height: 2),
             Text(
-              'Saldo: ${movimiento.saldoPosterior.toStringAsFixed(2)} €',
+              'Saldo: ${_formatMoney(movimiento.saldoAnterior)} -> ${_formatMoney(movimiento.saldoPosterior)}',
               style: const TextStyle(color: Colors.white38, fontSize: 11),
             ),
           ],
@@ -660,7 +714,7 @@ class _MovimientoTile extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
-              '${isCredit ? '+' : '-'}${movimiento.importe.toStringAsFixed(2)} €',
+              signedAmount,
               style: TextStyle(
                 color: color,
                 fontWeight: FontWeight.bold,
@@ -676,6 +730,54 @@ class _MovimientoTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String? _extraDetailText() {
+    final details = <String>[
+      if (movimiento.pedidoId != null) 'Pedido ${movimiento.pedidoId}',
+      if (movimiento.lineId != null) 'Línea ${movimiento.lineId}',
+      if (movimiento.cantidad != null) 'Cant. ${_formatQuantityWithUnit()}',
+      if (movimiento.precioMinimoCongelado != null)
+        'Mín. ${_formatMoney(movimiento.precioMinimoCongelado!)}',
+      if (movimiento.precioVenta != null)
+        'Venta ${_formatMoney(movimiento.precioVenta!)}',
+      if (movimiento.precioMinimoCongelado != null &&
+          movimiento.precioVenta != null &&
+          movimiento.cantidad != null)
+        _formatCalculation(),
+      if (movimiento.idempotencyKey != null)
+        'Ref. ${_shortTrace(movimiento.idempotencyKey!)}',
+    ];
+    if (details.isEmpty) return null;
+    return details.join(' · ');
+  }
+
+  String _formatCalculation() {
+    final delta =
+        (movimiento.precioVenta! - movimiento.precioMinimoCongelado!).abs();
+    final direction =
+        movimiento.tipo == BolsaMovimientoTipo.acumulacion ? 'margen' : 'uso';
+    return '$direction ${_formatMoney(delta)} x ${_formatQuantityWithUnit()} = ${_formatMoney(movimiento.importe)}';
+  }
+
+  String _formatQuantityWithUnit() {
+    final quantity = _formatQuantity(movimiento.cantidad!);
+    final unit = movimiento.unidadMedida?.trim();
+    if (unit == null || unit.isEmpty) return quantity;
+    return '$quantity $unit';
+  }
+
+  String _formatQuantity(double value) {
+    if (value == value.roundToDouble()) return value.toStringAsFixed(0);
+    return value.toStringAsFixed(2);
+  }
+
+  String _formatMoney(double value) => _bolsaMoney(value);
+
+  String _shortTrace(String value) {
+    final trimmed = value.trim();
+    if (trimmed.length <= 12) return trimmed;
+    return '${trimmed.substring(0, 12)}…';
   }
 }
 
@@ -721,8 +823,11 @@ class _EmptyVendorView extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.account_balance_wallet_outlined,
-                size: 64, color: Colors.white24,),
+            Icon(
+              Icons.account_balance_wallet_outlined,
+              size: 64,
+              color: Colors.white24,
+            ),
             SizedBox(height: 16),
             Text(
               'Selecciona un vendedor en el filtro superior para ver su bolsa',

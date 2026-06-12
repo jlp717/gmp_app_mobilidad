@@ -715,12 +715,16 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     final effectivePrice = hasDiscount
         ? line.precioVenta * (1 - provider.globalDiscountPct / 100)
         : line.precioVenta;
-    final qty = line.cantidadEnvases > 0
-        ? '${PedidosFormatters.number(line.cantidadEnvases)} ${line.unidadMedida.toLowerCase()}'
-        : '${PedidosFormatters.number(line.cantidadUnidades, decimals: 2)} ${line.unidadMedida.toLowerCase()}';
+    final qty = _formatPreviewQuantity(line);
     final lineTotal = hasDiscount
         ? line.importeVenta * (1 - provider.globalDiscountPct / 100)
         : line.importeVenta;
+    final bolsaDelta = line.precioMinimo > 0
+        ? double.parse(
+            ((effectivePrice - line.precioMinimo) * line.billingQuantity)
+                .toStringAsFixed(2),
+          )
+        : 0.0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -771,6 +775,19 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
                   style: const TextStyle(
                       color: AppTheme.textSecondary, fontSize: 11),
                 ),
+                if (bolsaDelta != 0) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'Bolsa ${bolsaDelta > 0 ? '+' : '-'}${PedidosFormatters.money(bolsaDelta.abs())}',
+                    style: TextStyle(
+                      color: bolsaDelta > 0
+                          ? AppTheme.neonGreen
+                          : AppTheme.warning,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -783,6 +800,24 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         ],
       ),
     );
+  }
+
+  String _formatPreviewQuantity(OrderLine line) {
+    final unit = line.unidadMedida.trim().toUpperCase();
+    final label = Product.unitLabel(unit);
+    if (unit == 'KILOGRAMOS') {
+      return '${PedidosFormatters.number(line.cantidadUnidades, decimals: 2)} kg';
+    }
+    if (unit == 'LITROS') {
+      return '${PedidosFormatters.number(line.cantidadUnidades, decimals: 2)} L';
+    }
+    if (unit == 'CAJAS' || unit.isEmpty) {
+      if (line.cantidadEnvases > 0) {
+        return '${PedidosFormatters.number(line.cantidadEnvases)} cajas';
+      }
+      return '${PedidosFormatters.number(line.cantidadUnidades, decimals: 2)} uds';
+    }
+    return '${PedidosFormatters.number(line.cantidadUnidades, decimals: 2)} $label';
   }
 
   Widget _buildTotalsCard(
@@ -832,6 +867,13 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           // IVA
           const SizedBox(height: 4),
           _buildTotalRow('IVA', PedidosFormatters.money(provider.totalIva)),
+
+          if (provider.estimatedBolsaImpact.hasImpact) ...[
+            const SizedBox(height: 8),
+            const Divider(color: AppTheme.borderColor, height: 1),
+            const SizedBox(height: 8),
+            _buildBolsaPreviewRows(provider),
+          ],
 
           const SizedBox(height: 8),
           const Divider(color: AppTheme.borderColor, height: 1),
@@ -900,6 +942,34 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildBolsaPreviewRows(PedidosProvider provider) {
+    final impact = provider.estimatedBolsaImpact;
+    return Column(
+      children: [
+        if (impact.acumulacion > 0)
+          _buildTotalRow(
+            'Bolsa generada',
+            '+${PedidosFormatters.money(impact.acumulacion)}',
+            valueColor: AppTheme.neonGreen,
+          ),
+        if (impact.consumo > 0) ...[
+          if (impact.acumulacion > 0) const SizedBox(height: 4),
+          _buildTotalRow(
+            'Bolsa usada',
+            '-${PedidosFormatters.money(impact.consumo)}',
+            valueColor: AppTheme.warning,
+          ),
+        ],
+        const SizedBox(height: 4),
+        _buildTotalRow(
+          'Impacto neto bolsa',
+          '${impact.neto >= 0 ? '+' : ''}${PedidosFormatters.money(impact.neto)}',
+          valueColor: impact.neto >= 0 ? AppTheme.neonGreen : AppTheme.warning,
+        ),
+      ],
     );
   }
 
@@ -1375,10 +1445,12 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         routeCode: _deliveryOptions?.routeCode,
       );
       if (!mounted) return;
-      if (result != null) {
+      final resultMap = result is Map<String, dynamic> ? result : null;
+      final isRealSuccess =
+          resultMap != null && isConfirmedOrderResultForProvider(resultMap);
+      if (isRealSuccess) {
         HapticFeedback.mediumImpact();
-        final number =
-            result is Map ? result['numeroPedido']?.toString() : null;
+        final number = resultMap['numeroPedido']?.toString();
         setState(() {
           _isConfirming = false;
           _confirmSucceeded = true;
@@ -1389,6 +1461,19 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
         await Future<void>.delayed(const Duration(seconds: 2));
         if (!mounted) return;
         Navigator.of(context).pop(result);
+      } else if (resultMap != null) {
+        // Resultado bloqueado por stock o no confirmado: NO mostrar éxito
+        // ni cerrar el diálogo (el flujo de alternativas se abre encima).
+        final status = orderConfirmationStatusForProvider(resultMap);
+        final message = resultMap['message']?.toString().trim();
+        setState(() {
+          _isConfirming = false;
+          _confirmSucceeded = false;
+          _confirmStatusMessage = (message != null && message.isNotEmpty)
+              ? _cleanError(message)
+              : 'Pedido no confirmado. Estado: '
+                  '${status.isEmpty ? 'DESCONOCIDO' : status}';
+        });
       } else {
         final providerError = widget.provider.error;
         setState(() {

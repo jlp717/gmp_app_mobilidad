@@ -14,6 +14,57 @@ const { sendEmailWithPdf, generateInvoiceEmailHtml, cachePdf, getCachedPdf } = r
 const { verifyToken } = require('../middleware/auth');
 
 const FACTURA_PDF_CACHE_VERSION = 'v2';
+const FACTURA_DEFAULT_LIMIT = 250;
+const FACTURA_MAX_LIMIT = 500;
+const FACTURA_MAX_OFFSET = 5000;
+const configuredFacturaEmailTimeout = parseInt(globalThis['process']['env'].FACTURA_EMAIL_SEND_TIMEOUT_MS, 10);
+const FACTURA_EMAIL_SEND_TIMEOUT_MS = Math.min(
+    30000,
+    Math.max(1000, Number.isFinite(configuredFacturaEmailTimeout) ? configuredFacturaEmailTimeout : 12000)
+);
+
+function withFacturaEmailTimeout(promise, timeoutMs = FACTURA_EMAIL_SEND_TIMEOUT_MS) {
+    let timeoutId;
+    const timeout = new Promise(function (_unused, reject) {
+        timeoutId = setTimeout(function () {
+            const error = new Error('Factura email send timeout');
+            error.code = 'EMAIL_SEND_TIMEOUT';
+            error.status = 504;
+            reject(error);
+        }, timeoutMs);
+    });
+
+    return Promise.race([
+        Promise.resolve(promise).finally(function () { clearTimeout(timeoutId); }),
+        timeout
+    ]);
+}
+
+function sendEmailFailureResponse(res, error) {
+    const timeout = error.code === 'EMAIL_SEND_TIMEOUT';
+    const unavailableCodes = ['ECONNREFUSED', 'ETIMEDOUT', 'ESOCKETTIMEDOUT', 'ENOTFOUND', 'ECONNRESET', 'CONNECTION', 'TIMEOUT'];
+    const status = timeout ? 504 : (unavailableCodes.includes(error.code) ? 503 : 500);
+
+    return res.status(status).json({
+        success: false,
+        error: 'No se pudo completar el envío de email en este momento.',
+        code: timeout ? 'EMAIL_SEND_TIMEOUT' : 'EMAIL_SERVICE_UNAVAILABLE',
+        no_retry_reason: 'El envio de correo puede seguir en curso; no reintentar automaticamente sin confirmacion del usuario.'
+    });
+}
+
+
+function clampFacturasLimit(value) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return FACTURA_DEFAULT_LIMIT;
+    return Math.min(FACTURA_MAX_LIMIT, parsed);
+}
+
+function clampFacturasOffset(value) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed < 0) return 0;
+    return Math.min(FACTURA_MAX_OFFSET, parsed);
+}
 
 /**
  * GET /api/facturas
@@ -29,7 +80,9 @@ router.get('/', verifyToken, async (req, res, next) => {
             clientSearch: req.query.clientSearch,
             docSearch: req.query.docSearch,
             dateFrom: req.query.dateFrom,
-            dateTo: req.query.dateTo
+            dateTo: req.query.dateTo,
+            limit: req.query.limit ? parseInt(req.query.limit, 10) : undefined,
+            offset: req.query.offset ? parseInt(req.query.offset, 10) : undefined
         };
 
         if (!params.vendedorCodes) {
@@ -46,6 +99,8 @@ router.get('/', verifyToken, async (req, res, next) => {
             success: true,
             facturas: result.facturas || result || [],
             count: (result.facturas || result || []).length,
+            limit: clampFacturasLimit(params.limit),
+            offset: clampFacturasOffset(params.offset),
             year: params.year || new Date().getFullYear()
         });
     } catch (error) {
@@ -247,6 +302,7 @@ router.post('/share/whatsapp', verifyToken, async (req, res, next) => {
  * Server-side email sending with PDF attachment via Nodemailer
  */
 router.post('/send-email', verifyToken, async (req, res, next) => {
+    res.set('Cache-Control', 'no-store');
     try {
         const { serie, numero, ejercicio, destinatario, asunto, cuerpo, clienteNombre } = req.body;
 
@@ -288,13 +344,13 @@ router.post('/send-email', verifyToken, async (req, res, next) => {
 
         const pdfFilename = `Factura_${serie}_${numero}_${ejercicio}.pdf`;
 
-        const result = await sendEmailWithPdf({
+        const result = await withFacturaEmailTimeout(sendEmailWithPdf({
             to: destinatario,
             subject: emailSubject,
             htmlBody,
             pdfBuffer,
             pdfFilename
-        });
+        }));
 
         res.json({
             success: true,
@@ -303,10 +359,7 @@ router.post('/send-email', verifyToken, async (req, res, next) => {
         });
     } catch (error) {
         logger.error(`Error en POST /facturas/send-email: ${error.message}`);
-        if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
-            return res.status(503).json({ success: false, error: 'Error de conexión con servidor de email. Inténtelo de nuevo.' });
-        }
-        next(error);
+        return sendEmailFailureResponse(res, error);
     }
 });
 

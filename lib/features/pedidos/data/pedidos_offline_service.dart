@@ -95,8 +95,10 @@ class PedidosOfflineService {
       }
     }
     // Sort by savedAt descending
-    drafts.sort((a, b) => (b['savedAt']?.toString() ?? '')
-        .compareTo(a['savedAt']?.toString() ?? ''),);
+    drafts.sort(
+      (a, b) => (b['savedAt']?.toString() ?? '')
+          .compareTo(a['savedAt']?.toString() ?? ''),
+    );
     return drafts;
   }
 
@@ -121,12 +123,14 @@ class PedidosOfflineService {
   }) async {
     final box = _syncQueueBox ?? await Hive.openBox(_syncQueueBoxName);
     final key = 'sync_${DateTime.now().millisecondsSinceEpoch}';
+    final clientRequestId = 'pedido_offline_$key';
     final data = {
       'clientCode': clientCode,
       'clientName': clientName,
       'vendedorCode': vendedorCode,
       'saleType': saleType,
       'lines': lines.map((l) => l.toJson()).toList(),
+      'clientRequestId': clientRequestId,
       'queuedAt': DateTime.now().toIso8601String(),
       'status': 'pending',
     };
@@ -175,6 +179,7 @@ class PedidosOfflineService {
           vendedorCode: item['vendedorCode'] as String,
           tipoVenta: item['saleType'] as String? ?? 'CC',
           lines: lines,
+          clientRequestId: item['clientRequestId'] as String?,
         );
 
         // Mark as synced

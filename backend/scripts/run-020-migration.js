@@ -15,8 +15,8 @@
  *
  * Env vars:
  *   ODBC_DSN            = GMP (default)
- *   ODBC_UID            = JAVIER (default)
- *   ODBC_PWD            = JAVIER (default)
+ *   ODBC_UID            = required
+ *   ODBC_PWD            = required
  *   ERP_FINANCE_SCHEMA  = JAVIER (default, used only in verification SQL
  *                         substitution and logging)
  */
@@ -28,9 +28,17 @@ const path = require('path');
 // ── Config ──────────────────────────────────────────────────────────────────
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 
+function requireEnv(name) {
+  const value = process['env'][name];
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error('Missing required environment variable ' + name);
+  }
+  return value;
+}
+
 const DB_DSN  = process.env.ODBC_DSN || 'GMP';
-const DB_UID  = process.env.ODBC_UID || 'JAVIER';
-const DB_PWD  = process.env.ODBC_PWD || 'JAVIER';
+const DB_UID  = requireEnv('ODBC_UID');
+const DB_PWD  = requireEnv('ODBC_PWD');
 const SCHEMA  = process.env.ERP_FINANCE_SCHEMA || 'JAVIER';
 
 const CONNECTION_STRING = [
@@ -163,7 +171,7 @@ async function runVerification(conn) {
 // ── Main ────────────────────────────────────────────────────────────────────
 async function main() {
   console.log('=== 020 Migration Runner ===');
-  console.log(`DSN: ${DB_DSN}  UID: ${DB_UID}  Schema: ${SCHEMA}`);
+  console.log(`DSN: ${DB_DSN}  Schema: ${SCHEMA}`);
   console.log(`SQL file:  ${SQL_FILE}`);
   console.log(`Verify:    ${VERIFY_FILE}\n`);
 

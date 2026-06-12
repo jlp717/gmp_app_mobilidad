@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 const odbc = require('odbc');
+const db2ConnectionString = require('./db2-connection');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
-const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
+const CONN = db2ConnectionString();
 
 (async () => {
   const pool = await odbc.pool(CONN);
@@ -22,8 +23,8 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
 
   const r = cvcRow[0];
 
-  // Try joining on associated document → CPC albaran fields
-  console.log('\n=== Try 1: CVC associated doc → CPC albaran ===');
+  // Try joining on associated document â†’ CPC albaran fields
+  console.log('\n=== Try 1: CVC associated doc â†’ CPC albaran ===');
   try {
     const t1 = await conn.query(`
       SELECT CPC.DIADOCUMENTO, CPC.MESDOCUMENTO, CPC.ANODOCUMENTO,
@@ -39,14 +40,14 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
     `, [r.SUBEMPRESADOCUMENTOASOCIADO, r.EJERCICIODOCUMENTOASOCIADO, r.SERIEDOCUMENTOASOCIADO,
          r.TERMINALDOCUMENTOASOCIADO, r.NUMERODOCUMENTOASOCIADO]);
     if (t1.length > 0) {
-      console.log('✅ Match found:', JSON.stringify(t1[0], null, 2));
+      console.log('âœ… Match found:', JSON.stringify(t1[0], null, 2));
     } else {
-      console.log('❌ No match on associated doc → albaran');
+      console.log('âŒ No match on associated doc â†’ albaran');
     }
   } catch(e) { console.log('Error:', e.message.substring(0,150)); }
 
-  // Try 2: CVC document → CPC order prep
-  console.log('\n=== Try 2: CVC doc → CPC order prep ===');
+  // Try 2: CVC document â†’ CPC order prep
+  console.log('\n=== Try 2: CVC doc â†’ CPC order prep ===');
   try {
     const t2 = await conn.query(`
       SELECT CPC.DIADOCUMENTO, CPC.MESDOCUMENTO, CPC.ANODOCUMENTO,
@@ -58,9 +59,9 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
       FETCH FIRST 3 ROWS ONLY
     `, [r.SUBEMPRESADOCUMENTO, r.EJERCICIODOCUMENTO, r.NUMERODOCUMENTO]);
     if (t2.length > 0) {
-      console.log('✅ Match found:', JSON.stringify(t2[0], null, 2));
+      console.log('âœ… Match found:', JSON.stringify(t2[0], null, 2));
     } else {
-      console.log('❌ No match on doc → order prep');
+      console.log('âŒ No match on doc â†’ order prep');
     }
   } catch(e) { console.log('Error:', e.message.substring(0,150)); }
 
@@ -76,14 +77,14 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
       FETCH FIRST 3 ROWS ONLY
     `, [r.CODIGOCLIENTEALBARAN]);
     if (t3.length > 0) {
-      console.log('✅ Found for client:', JSON.stringify(t3, null, 2));
+      console.log('âœ… Found for client:', JSON.stringify(t3, null, 2));
     } else {
-      console.log('❌ No CPC for this client');
+      console.log('âŒ No CPC for this client');
     }
   } catch(e) { console.log('Error:', e.message.substring(0,150)); }
 
-  // Try 4: CVC document key → CPC via SUBEMPRESA/SERIE/TERMINAL/NUMERO matching different combos
-  console.log('\n=== Try 4: CVC doc → CPC (various key combos) ===');
+  // Try 4: CVC document key â†’ CPC via SUBEMPRESA/SERIE/TERMINAL/NUMERO matching different combos
+  console.log('\n=== Try 4: CVC doc â†’ CPC (various key combos) ===');
   // CVC has: SUBEMPRESADOCUMENTO, EJERCICIODOCUMENTO, SERIEDOCUMENTO, TERMINALDOCUMENTO, NUMERODOCUMENTO
   // CPC has: SUBEMPRESA, EJERCICIOORDENPREPARACION, NUMEROORDENPREPARACION (no SERIE/TERMINAL for order prep)
   // But CPC also has: SUBEMPRESAALBARAN, EJERCICIOALBARAN, SERIEALBARAN, TERMINALALBARAN, NUMEROALBARAN
@@ -94,7 +95,7 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
   console.log(`CVC NUMERODOCUMENTO: ${r.NUMERODOCUMENTO}`);
   console.log(`CVC associated doc: ${r.SUBEMPRESADOCUMENTOASOCIADO}/${r.EJERCICIODOCUMENTOASOCIADO}/${r.SERIEDOCUMENTOASOCIADO}/${r.TERMINALDOCUMENTOASOCIADO}/${r.NUMERODOCUMENTOASOCIADO}`);
 
-  // Try: CVC associated doc → CPC albaran
+  // Try: CVC associated doc â†’ CPC albaran
   if (r.SUBEMPRESADOCUMENTOASOCIADO && r.NUMERODOCUMENTOASOCIADO) {
     try {
       const t4 = await conn.query(`
@@ -104,9 +105,9 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
         FETCH FIRST 3 ROWS ONLY
       `, [r.SUBEMPRESADOCUMENTOASOCIADO, r.SERIEDOCUMENTOASOCIADO, r.NUMERODOCUMENTOASOCIADO]);
       if (t4.length > 0) {
-        console.log('✅ Match via albaran key:', JSON.stringify(t4[0], null, 2));
+        console.log('âœ… Match via albaran key:', JSON.stringify(t4[0], null, 2));
       } else {
-        console.log('❌ No match');
+        console.log('âŒ No match');
       }
     } catch(e) { console.log('Error:', e.message.substring(0,150)); }
   }

@@ -1,21 +1,22 @@
 #!/usr/bin/env node
 const odbc = require('odbc');
+const db2ConnectionString = require('./db2-connection');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
-const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
+const CONN = db2ConnectionString();
 
 (async () => {
   const pool = await odbc.pool(CONN);
   const conn = await pool.connect();
 
-  console.log('=== DIAGNÓSTICO DDL ===\n');
+  console.log('=== DIAGNÃ“STICO DDL ===\n');
 
   // Test 1: SELECT funciona?
   try {
     const r = await conn.query('SELECT COUNT(*) AS C FROM DSEDAC.CLIL1');
-    console.log(`✅ SELECT: ${r[0].C} filas`);
+    console.log(`âœ… SELECT: ${r[0].C} filas`);
   } catch(e) {
-    console.log(`❌ SELECT: ${e.message.substring(0,100)}`);
+    console.log(`âŒ SELECT: ${e.message.substring(0,100)}`);
   }
 
   // Test 2: Current schema
@@ -40,11 +41,11 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
   } catch(_) {}
   try {
     await conn.query('CREATE TABLE JAVIER.TEST_DDL (ID INTEGER, NAME VARCHAR(50))');
-    console.log('✅ CREATE TABLE: OK');
+    console.log('âœ… CREATE TABLE: OK');
     await conn.query('DROP TABLE JAVIER.TEST_DDL');
   } catch(e) {
     const odbcE = (e.odbcErrors || [])[0] || {};
-    console.log(`❌ CREATE TABLE: ${e.message.substring(0,150)}`);
+    console.log(`âŒ CREATE TABLE: ${e.message.substring(0,150)}`);
   }
 
   // Test 5: CREATE VIEW sin schema (default schema)
@@ -53,13 +54,13 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
   } catch(_) {}
   try {
     await conn.query('CREATE VIEW TEST_DDL_V AS SELECT CODIGOCLIENTE FROM DSEDAC.CLIL1');
-    console.log('✅ CREATE VIEW (default schema): OK');
+    console.log('âœ… CREATE VIEW (default schema): OK');
     const r = await conn.query('SELECT * FROM TEST_DDL_V FETCH FIRST 1 ROW ONLY');
     console.log(`   View data: ${JSON.stringify(r[0])}`);
     await conn.query('DROP VIEW TEST_DDL_V');
   } catch(e) {
     const odbcE = (e.odbcErrors || [])[0] || {};
-    console.log(`❌ CREATE VIEW (default schema): ${e.message.substring(0,200)}`);
+    console.log(`âŒ CREATE VIEW (default schema): ${e.message.substring(0,200)}`);
   }
 
   // Test 6: CREATE VIEW con JAVIER schema
@@ -68,11 +69,11 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
   } catch(_) {}
   try {
     await conn.query('CREATE VIEW JAVIER.TEST_DDL_V AS SELECT CODIGOCLIENTE FROM DSEDAC.CLIL1');
-    console.log('✅ CREATE VIEW JAVIER: OK');
+    console.log('âœ… CREATE VIEW JAVIER: OK');
     await conn.query('DROP VIEW JAVIER.TEST_DDL_V');
   } catch(e) {
     const odbcE = (e.odbcErrors || [])[0] || {};
-    console.log(`❌ CREATE VIEW JAVIER: ${e.message.substring(0,200)}`);
+    console.log(`âŒ CREATE VIEW JAVIER: ${e.message.substring(0,200)}`);
   }
 
   // Test 7: Usando QCMDEXC
@@ -83,9 +84,9 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
     const sql = "CREATE VIEW JAVIER.TEST_QCMD_V AS SELECT CODIGOCLIENTE FROM DSEDAC.CLIL1";
     // Try with longer string
     await conn.query(`CALL QSYS.QCMDEXC('RUNSQLSTM SRCSTMF(''CREATE VIEW JAVIER.TEST_QCMD_V AS SELECT CODIGOCLIENTE FROM DSEDAC.CLIL1'')', 0000000099.00000)`);
-    console.log('✅ QCMDEXC attempt');
+    console.log('âœ… QCMDEXC attempt');
   } catch(e) {
-    console.log(`❌ QCMDEXC: ${e.message.substring(0,200)}`);
+    console.log(`âŒ QCMDEXC: ${e.message.substring(0,200)}`);
   }
 
   // Test 8: Check special authorities

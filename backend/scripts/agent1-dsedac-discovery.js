@@ -1,8 +1,9 @@
 const odbc = require('odbc');
+const db2ConnectionString = require('./db2-connection');
 const fs = require('fs');
 const path = require('path');
 
-const DB_CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208';
+const DB_CONN = db2ConnectionString();
 
 const JAVIER_TABLES = [
   'REPARTIDOR_COBROS', 'REPARTIDOR_LIQUIDACION_OPS', 'REPARTIDOR_FINANCIAL_BALANCES',

@@ -10,6 +10,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class MisPedidosYoYBar extends StatefulWidget {
@@ -56,12 +57,15 @@ class _MisPedidosYoYBarState extends State<MisPedidosYoYBar> {
           'vendedorCode': widget.vendedorCodes,
           'limit': '1', // no necesitamos las líneas
         },
+        cacheKey: 'pedidos:yoy:${widget.vendedorCodes}:$fromIso:$toIso:summary',
+        cacheTTL: CacheService.shortTTL,
       );
       if (mounted && response['success'] == true) {
         setState(() => _summary = response['summary'] as Map<String, dynamic>?);
       }
-    } catch (_) {
-      // Silencioso
+    } catch (e) {
+      // Sin datos la barra se oculta, pero el error queda registrado.
+      debugPrint('[MisPedidosYoYBar] load error: $e');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -70,9 +74,9 @@ class _MisPedidosYoYBarState extends State<MisPedidosYoYBar> {
   String _fmtMoney(num? v) {
     final value = (v ?? 0).toDouble();
     return '${value.toStringAsFixed(0).replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]}.',
-    )}€';
+          RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]}.',
+        )}€';
   }
 
   String _fmtPct(num? v) {
@@ -114,8 +118,18 @@ class _MisPedidosYoYBarState extends State<MisPedidosYoYBar> {
         : (variation >= 0 ? AppTheme.neonGreen : Colors.redAccent);
     final now = DateTime.now();
     final monthLabel = [
-      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+      'enero',
+      'febrero',
+      'marzo',
+      'abril',
+      'mayo',
+      'junio',
+      'julio',
+      'agosto',
+      'septiembre',
+      'octubre',
+      'noviembre',
+      'diciembre',
     ][now.month - 1];
 
     return Container(
@@ -138,7 +152,9 @@ class _MisPedidosYoYBarState extends State<MisPedidosYoYBar> {
           Icon(
             variation != null && variation >= 0
                 ? Icons.trending_up
-                : (variation != null ? Icons.trending_down : Icons.compare_arrows),
+                : (variation != null
+                    ? Icons.trending_down
+                    : Icons.compare_arrows),
             color: color,
             size: 22,
           ),

@@ -13,9 +13,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 /// Client Detail Page - Shows comprehensive client information from DB2
 class ClientDetailPage extends StatefulWidget {
-
   const ClientDetailPage({
-    required this.clientCode, required this.vendedorCodes, super.key,
+    required this.clientCode,
+    required this.vendedorCodes,
+    super.key,
   });
   final String clientCode;
   final String vendedorCodes;
@@ -24,17 +25,20 @@ class ClientDetailPage extends StatefulWidget {
   State<ClientDetailPage> createState() => _ClientDetailPageState();
 }
 
-class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerProviderStateMixin {
+class _ClientDetailPageState extends State<ClientDetailPage>
+    with SingleTickerProviderStateMixin {
   Map<String, dynamic>? _clientData;
   Map<String, dynamic>? _salesSummary;
   bool _isLoading = true;
   String? _error;
   late TabController _tabController;
+  late Future<List<Map<String, dynamic>>> _salesHistoryFuture;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
+    _salesHistoryFuture = _loadSalesHistory();
     _loadClientDetail();
     _loadSalesSummary();
   }
@@ -56,11 +60,13 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
         clientCode: widget.clientCode,
         vendedorCodes: widget.vendedorCodes,
       );
+      if (!mounted) return;
       setState(() {
         _clientData = response;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _error = e.toString();
         _isLoading = false;
@@ -68,16 +74,27 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     }
   }
 
+  Future<void> _refreshClientData() async {
+    setState(() {
+      _salesHistoryFuture = _loadSalesHistory();
+    });
+    await Future.wait([
+      _loadClientDetail(),
+      _loadSalesSummary(),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text((_clientData?['client']?['name'] as String?) ?? 'Detalle Cliente'),
+        title: Text(
+            (_clientData?['client']?['name'] as String?) ?? 'Detalle Cliente'),
         backgroundColor: AppTheme.surfaceColor,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadClientDetail,
+            onPressed: _refreshClientData,
           ),
         ],
       ),
@@ -110,16 +127,21 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     }
 
     if (_clientData == null) {
-      return const Center(child: Text('No se encontr³ informaci³n del cliente'));
+      return const Center(
+          child: Text('No se encontr³ informaci³n del cliente'));
     }
 
     final client = _clientData!['client'] as Map<String, dynamic>? ?? {};
     final summary = _clientData!['summary'] as Map<String, dynamic>? ?? {};
     final payments = _clientData!['payments'] as Map<String, dynamic>? ?? {};
     final rawMonthlyTrend = _clientData!['monthlyTrend'] ?? [];
-    final monthlyTrend = (rawMonthlyTrend as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+    final monthlyTrend = (rawMonthlyTrend as List)
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
     final rawTopProducts = _clientData!['topProducts'] ?? [];
-    final topProducts = (rawTopProducts as List).map((item) => Map<String, dynamic>.from(item as Map)).toList();
+    final topProducts = (rawTopProducts as List)
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
 
     return Column(
       children: [
@@ -144,7 +166,7 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
             ],
           ),
         ),
-        
+
         // Tab Content
         Expanded(
           child: TabBarView(
@@ -160,7 +182,8 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     );
   }
 
-  Widget _buildClientHeader(Map<String, dynamic> client, Map<String, dynamic> summary, Map<String, dynamic> payments) {
+  Widget _buildClientHeader(Map<String, dynamic> client,
+      Map<String, dynamic> summary, Map<String, dynamic> payments) {
     final name = (client['name'] as String?) ?? 'Sin nombre';
     final code = (client['code'] as String?) ?? '';
     final address = (client['address'] as String?) ?? '';
@@ -168,10 +191,15 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     final phone = (client['phone'] as String?) ?? '';
     final nif = (client['nif'] as String?) ?? '';
     final editableNotes = client['editableNotes'] as Map<String, dynamic>?;
-    final phones = (client['phones'] as List?)?.map((p) => Map<String, dynamic>.from(p as Map)).toList() ?? [];
+    final phones = (client['phones'] as List?)
+            ?.map((p) => Map<String, dynamic>.from(p as Map))
+            .toList() ??
+        [];
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 16), vertical: Responsive.padding(context, small: 6, large: 8)),
+      padding: EdgeInsets.symmetric(
+          horizontal: Responsive.padding(context, small: 12, large: 16),
+          vertical: Responsive.padding(context, small: 6, large: 8)),
       color: AppTheme.surfaceColor,
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -179,7 +207,9 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
           // Editable Notes Banner (if exists)
           // Editable Notes Banner (if exists and not compact landscape)
           if (!Responsive.isLandscapeCompact(context)) ...[
-            if (editableNotes != null && editableNotes['text'] != null && (editableNotes['text'] as String).isNotEmpty) ...[
+            if (editableNotes != null &&
+                editableNotes['text'] != null &&
+                (editableNotes['text'] as String).isNotEmpty) ...[
               Container(
                 width: double.infinity,
                 margin: const EdgeInsets.only(bottom: 8),
@@ -187,11 +217,13 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                 decoration: BoxDecoration(
                   color: AppTheme.warning.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.warning.withValues(alpha: 0.5)),
+                  border: Border.all(
+                      color: AppTheme.warning.withValues(alpha: 0.5)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 20),
+                    const Icon(Icons.warning_amber_rounded,
+                        color: AppTheme.warning, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Column(
@@ -199,23 +231,29 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                         children: [
                           Text(
                             editableNotes['text'] as String,
-                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500),
                             maxLines: 3,
                             overflow: TextOverflow.ellipsis,
                           ),
                           const SizedBox(height: 2),
                           Text(
                             'Por: ${editableNotes['modifiedBy'] ?? 'Desconocido'}',
-                            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10),
+                            style: const TextStyle(
+                                color: AppTheme.textSecondary, fontSize: 10),
                           ),
                         ],
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.edit, size: 18, color: AppTheme.warning),
+                      icon: const Icon(Icons.edit,
+                          size: 18, color: AppTheme.warning),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
-                      onPressed: () => _showEditNotesDialog(code, editableNotes['text'] as String?),
+                      onPressed: () => _showEditNotesDialog(
+                          code, editableNotes['text'] as String?),
                     ),
                   ],
                 ),
@@ -227,25 +265,29 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                 child: Container(
                   width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: AppTheme.neonBlue.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+                    border: Border.all(
+                        color: AppTheme.neonBlue.withValues(alpha: 0.3)),
                   ),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.note_add, size: 16, color: AppTheme.neonBlue),
                       SizedBox(width: 6),
-                      Text('A±adir observaciones', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
+                      Text('A±adir observaciones',
+                          style: TextStyle(
+                              color: AppTheme.neonBlue, fontSize: 12)),
                     ],
                   ),
                 ),
               ),
             ],
           ],
-          
+
           Row(
             children: [
               CircleAvatar(
@@ -253,7 +295,11 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                 backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.2),
                 child: Text(
                   name.isNotEmpty ? name[0].toUpperCase() : 'C',
-                  style: TextStyle(color: AppTheme.neonGreen, fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                      color: AppTheme.neonGreen,
+                      fontSize:
+                          Responsive.fontSize(context, small: 14, large: 18),
+                      fontWeight: FontWeight.bold),
                 ),
               ),
               const SizedBox(width: 12),
@@ -262,26 +308,33 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      name, 
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                      maxLines: 1, 
+                      name,
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 16),
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
                     if (!Responsive.isLandscapeCompact(context))
                       Text(
-                        'C³d: $code ${nif.isNotEmpty ? '  NIF: $nif' : ''}', 
-                        style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                        'C³d: $code ${nif.isNotEmpty ? '  NIF: $nif' : ''}',
+                        style: const TextStyle(
+                            fontSize: 12, color: AppTheme.textSecondary),
                       )
                     else
-                      Text('C³d: $code', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                      Text('C³d: $code',
+                          style: const TextStyle(
+                              fontSize: 11, color: AppTheme.textSecondary)),
                   ],
                 ),
               ),
               // WhatsApp Button
               if (phones.isNotEmpty)
                 IconButton(
-                  icon: Icon(Icons.chat, size: Responsive.iconSize(context, phone: 18, desktop: 20), color: const Color(0xFF25D366)), // WhatsApp green
+                  icon: Icon(Icons.chat,
+                      size:
+                          Responsive.iconSize(context, phone: 18, desktop: 20),
+                      color: const Color(0xFF25D366)), // WhatsApp green
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _showWhatsAppDialog(phones),
@@ -290,14 +343,18 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
               const SizedBox(width: 8),
               if (phone.isNotEmpty)
                 IconButton(
-                  icon: Icon(Icons.phone, size: Responsive.iconSize(context, phone: 18, desktop: 20), color: AppTheme.success),
+                  icon: Icon(Icons.phone,
+                      size:
+                          Responsive.iconSize(context, phone: 18, desktop: 20),
+                      color: AppTheme.success),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                   onPressed: () => _launchPhone(phone),
                 ),
             ],
           ),
-          if (!Responsive.isLandscapeCompact(context) && (address.isNotEmpty || city.isNotEmpty)) ...[
+          if (!Responsive.isLandscapeCompact(context) &&
+              (address.isNotEmpty || city.isNotEmpty)) ...[
             const SizedBox(height: 4),
             Row(
               children: [
@@ -305,8 +362,9 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                 Expanded(
                   child: Text(
                     [address, city].where((s) => s.isNotEmpty).join(', '),
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-                    maxLines: 1, 
+                    style: const TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 12),
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -326,14 +384,16 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     final routeDesc = (client['routeDescription'] as String?) ?? '';
     final visitDays = (client['visitDaysShort'] as String?) ?? '';
     final deliveryDays = (client['deliveryDaysShort'] as String?) ?? '';
-    
+
     if (route.isEmpty && visitDays.isEmpty && deliveryDays.isEmpty) {
       return const SizedBox.shrink();
     }
-    
+
     return Row(
       children: [
-        SizedBox(width: Responsive.value(context, phone: 44, desktop: 52)), // Align with avatar
+        SizedBox(
+            width: Responsive.value(context,
+                phone: 44, desktop: 52)), // Align with avatar
         // Route Badge
         if (route.isNotEmpty) ...[
           Container(
@@ -349,7 +409,10 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                 const SizedBox(width: 4),
                 Text(
                   routeDesc.isNotEmpty ? routeDesc : 'Ruta $route',
-                  style: const TextStyle(fontSize: 11, color: AppTheme.neonPurple, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.neonPurple,
+                      fontWeight: FontWeight.w500),
                 ),
               ],
             ),
@@ -367,11 +430,15 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.calendar_today, size: 12, color: AppTheme.neonBlue),
+                const Icon(Icons.calendar_today,
+                    size: 12, color: AppTheme.neonBlue),
                 const SizedBox(width: 4),
                 Text(
                   'Visita: $visitDays',
-                  style: const TextStyle(fontSize: 11, color: AppTheme.neonBlue, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.neonBlue,
+                      fontWeight: FontWeight.w500),
                 ),
               ],
             ),
@@ -389,11 +456,15 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.local_shipping, size: 12, color: AppTheme.neonGreen),
+                const Icon(Icons.local_shipping,
+                    size: 12, color: AppTheme.neonGreen),
                 const SizedBox(width: 4),
                 Text(
                   'Reparto: $deliveryDays',
-                  style: const TextStyle(fontSize: 11, color: AppTheme.neonGreen, fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                      fontSize: 11,
+                      color: AppTheme.neonGreen,
+                      fontWeight: FontWeight.w500),
                 ),
               ],
             ),
@@ -433,11 +504,13 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                   notes: controller.text,
                   vendorCode: widget.vendedorCodes,
                 );
-                _loadClientDetail(); // Refresh
+                _refreshClientData();
               } catch (e) {
                 if (mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Error guardando: $e'), backgroundColor: AppTheme.error),
+                    SnackBar(
+                        content: Text('Error guardando: $e'),
+                        backgroundColor: AppTheme.error),
                   );
                 }
               }
@@ -462,19 +535,24 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Enviar WhatsApp', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            const Text('Enviar WhatsApp',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
             const SizedBox(height: 8),
-            const Text('Selecciona el nºmero:', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+            const Text('Selecciona el nºmero:',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
             const SizedBox(height: 12),
-            ...phones.map((p) => ListTile(
-              leading: const Icon(Icons.phone_android, color: Color(0xFF25D366)),
-              title: Text((p['number'] as String?) ?? ''),
-              subtitle: Text((p['type'] as String?) ?? 'Tel©fono'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _openWhatsApp((p['number'] as String?) ?? '');
-              },
-            ),),
+            ...phones.map(
+              (p) => ListTile(
+                leading:
+                    const Icon(Icons.phone_android, color: Color(0xFF25D366)),
+                title: Text((p['number'] as String?) ?? ''),
+                subtitle: Text((p['type'] as String?) ?? 'Tel©fono'),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _openWhatsApp((p['number'] as String?) ?? '');
+                },
+              ),
+            ),
             const SizedBox(height: 8),
           ],
         ),
@@ -491,21 +569,20 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     if (cleanPhone.startsWith('+')) {
       cleanPhone = cleanPhone.substring(1);
     }
-    
+
     // Build personalized message
-    final message = Uri.encodeComponent(
-      'Hola, soy tu comercial de Mari Pepa. '
-      'Me gustar­a saber c³mo va todo y recordarte que ma±ana es d­a de visita. '
-      '¿Est¡ todo en orden? ¿Necesitas algo en particular?'
-    );
-    
+    final message = Uri.encodeComponent('Hola, soy tu comercial de Mari Pepa. '
+        'Me gustar­a saber c³mo va todo y recordarte que ma±ana es d­a de visita. '
+        '¿Est¡ todo en orden? ¿Necesitas algo en particular?');
+
     final uri = Uri.parse('https://wa.me/$cleanPhone?text=$message');
     if (await canLaunchUrl(uri)) {
       await launchUrl(uri, mode: LaunchMode.externalApplication);
     }
   }
 
-  Widget _buildSummaryTab(Map<String, dynamic> summary, Map<String, dynamic> payments, List<Map<String, dynamic>> monthlyTrend) {
+  Widget _buildSummaryTab(Map<String, dynamic> summary,
+      Map<String, dynamic> payments, List<Map<String, dynamic>> monthlyTrend) {
     final totalSales = (summary['totalSales'] as num?)?.toDouble() ?? 0;
     final totalMargin = (summary['totalMargin'] as num?)?.toDouble() ?? 0;
     final marginPercent = (summary['marginPercent'] as num?)?.toDouble() ?? 0;
@@ -518,42 +595,50 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     final pendingCount = (payments['pendingCount'] as num?)?.toInt() ?? 0;
 
     return SingleChildScrollView(
-      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
+      padding:
+          EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Summary Cards Row
           Row(
             children: [
-              Expanded(child: _SummaryCard(
-                title: 'Ventas Totales',
-                value: CurrencyFormatter.formatWhole(totalSales),
-                icon: Icons.euro,
-                color: AppTheme.neonBlue,
-              ),),
+              Expanded(
+                child: _SummaryCard(
+                  title: 'Ventas Totales',
+                  value: CurrencyFormatter.formatWhole(totalSales),
+                  icon: Icons.euro,
+                  color: AppTheme.neonBlue,
+                ),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: _SummaryCard(
-                title: 'Margen',
-                value: '${marginPercent.toStringAsFixed(1)}%',
-                subtitle: CurrencyFormatter.formatWhole(totalMargin),
-                icon: Icons.trending_up,
-                color: AppTheme.success,
-              ),),
+              Expanded(
+                child: _SummaryCard(
+                  title: 'Margen',
+                  value: '${marginPercent.toStringAsFixed(1)}%',
+                  subtitle: CurrencyFormatter.formatWhole(totalMargin),
+                  icon: Icons.trending_up,
+                  color: AppTheme.success,
+                ),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: _SummaryCard(
-                title: 'Pedidos',
-                value: '$numOrders',
-                subtitle: '$totalBoxes cajas',
-                icon: Icons.shopping_cart,
-                color: AppTheme.neonGreen,
-              ),),
+              Expanded(
+                child: _SummaryCard(
+                  title: 'Pedidos',
+                  value: '$numOrders',
+                  subtitle: '$totalBoxes cajas',
+                  icon: Icons.shopping_cart,
+                  color: AppTheme.neonGreen,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 16),
 
           // Payment Status
           Container(
-            padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
+            padding: EdgeInsets.all(
+                Responsive.padding(context, small: 12, large: 16)),
             decoration: AppTheme.glassMorphism(),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -561,10 +646,21 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('Estado de Pagos', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
-                    Icon(pendingCount > 0 ? Icons.warning_amber : Icons.check_circle, 
-                         color: pendingCount > 0 ? AppTheme.warning : AppTheme.success,
-                         size: Responsive.iconSize(context, phone: 20, desktop: 24),),
+                    Text('Estado de Pagos',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(fontWeight: FontWeight.bold)),
+                    Icon(
+                      pendingCount > 0
+                          ? Icons.warning_amber
+                          : Icons.check_circle,
+                      color: pendingCount > 0
+                          ? AppTheme.warning
+                          : AppTheme.success,
+                      size:
+                          Responsive.iconSize(context, phone: 20, desktop: 24),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -574,18 +670,35 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('Pagado', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                          Text(CurrencyFormatter.formatWhole(paid), style: const TextStyle(color: AppTheme.success, fontWeight: FontWeight.bold, fontSize: 18)),
+                          const Text('Pagado',
+                              style: TextStyle(
+                                  color: AppTheme.textSecondary, fontSize: 12)),
+                          Text(CurrencyFormatter.formatWhole(paid),
+                              style: const TextStyle(
+                                  color: AppTheme.success,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18)),
                         ],
                       ),
                     ),
-                    Container(width: 1, height: 40, color: AppTheme.textSecondary.withValues(alpha: 0.3)),
+                    Container(
+                        width: 1,
+                        height: 40,
+                        color: AppTheme.textSecondary.withValues(alpha: 0.3)),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Text('Pendiente ($pendingCount)', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
-                          Text(CurrencyFormatter.formatWhole(pending), style: TextStyle(color: pending > 0 ? AppTheme.warning : AppTheme.textSecondary, fontWeight: FontWeight.bold, fontSize: 18)),
+                          Text('Pendiente ($pendingCount)',
+                              style: const TextStyle(
+                                  color: AppTheme.textSecondary, fontSize: 12)),
+                          Text(CurrencyFormatter.formatWhole(pending),
+                              style: TextStyle(
+                                  color: pending > 0
+                                      ? AppTheme.warning
+                                      : AppTheme.textSecondary,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18)),
                         ],
                       ),
                     ),
@@ -598,11 +711,16 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
 
           // Monthly Trend Chart
           if (monthlyTrend.isNotEmpty) ...[
-            Text('Evoluci³n Ventas (12 meses)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            Text('Evoluci³n Ventas (12 meses)',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Container(
               height: Responsive.value(context, phone: 150, desktop: 200),
-              padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
+              padding: EdgeInsets.all(
+                  Responsive.padding(context, small: 12, large: 16)),
               decoration: AppTheme.glassMorphism(),
               child: _buildTrendChart(monthlyTrend),
             ),
@@ -615,9 +733,12 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
   Widget _buildTrendChart(List<Map<String, dynamic>> data) {
     if (data.isEmpty) return const SizedBox.shrink();
 
-    final maxSales = data.map((e) => (e['sales'] as num?)?.toDouble() ?? 0).reduce((a, b) => a > b ? a : b);
+    final maxSales = data
+        .map((e) => (e['sales'] as num?)?.toDouble() ?? 0)
+        .reduce((a, b) => a > b ? a : b);
     final spots = data.asMap().entries.map((entry) {
-      return FlSpot(entry.key.toDouble(), (entry.value['sales'] as num?)?.toDouble() ?? 0);
+      return FlSpot(entry.key.toDouble(),
+          (entry.value['sales'] as num?)?.toDouble() ?? 0);
     }).toList();
 
     return LineChart(
@@ -633,9 +754,12 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
               interval: 2,
               getTitlesWidget: (value, meta) {
                 final idx = value.toInt();
-                if (idx < 0 || idx >= data.length) return const SizedBox.shrink();
+                if (idx < 0 || idx >= data.length)
+                  return const SizedBox.shrink();
                 final period = data[idx]['period'] as String? ?? '';
-                return Text(period.length >= 7 ? period.substring(5) : period, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary));
+                return Text(period.length >= 7 ? period.substring(5) : period,
+                    style: const TextStyle(
+                        fontSize: 10, color: AppTheme.textSecondary));
               },
             ),
           ),
@@ -649,7 +773,10 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
-                colors: [AppTheme.neonBlue.withValues(alpha: 0.3), AppTheme.neonBlue.withValues(alpha: 0)],
+                colors: [
+                  AppTheme.neonBlue.withValues(alpha: 0.3),
+                  AppTheme.neonBlue.withValues(alpha: 0)
+                ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -666,7 +793,8 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     }
 
     return ListView.builder(
-      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
+      padding:
+          EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       itemCount: topProducts.length,
       itemBuilder: (context, index) {
         final product = topProducts[index];
@@ -688,12 +816,24 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Center(
-                child: Text('${index + 1}', style: const TextStyle(color: AppTheme.neonPurple, fontWeight: FontWeight.bold, fontSize: 16)),
+                child: Text('${index + 1}',
+                    style: const TextStyle(
+                        color: AppTheme.neonPurple,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16)),
               ),
             ),
-            title: Text(name, maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14)),
-            subtitle: Text('C³d: $code  $timesOrdered ped.  $totalBoxes cj', style: const TextStyle(fontSize: 11)),
-            trailing: Text(CurrencyFormatter.formatWhole(totalSales), style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen, fontSize: 13)),
+            title: Text(name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 14)),
+            subtitle: Text('C³d: $code  $timesOrdered ped.  $totalBoxes cj',
+                style: const TextStyle(fontSize: 11)),
+            trailing: Text(CurrencyFormatter.formatWhole(totalSales),
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.neonGreen,
+                    fontSize: 13)),
           ),
         );
       },
@@ -704,7 +844,8 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
     return Column(
       children: [
         if (_salesSummary != null)
-           SalesSummaryHeader(summary: _salesSummary!, showMargin: false, isJefeVentas: false),
+          SalesSummaryHeader(
+              summary: _salesSummary!, showMargin: false, isJefeVentas: false),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
@@ -728,12 +869,13 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
         ),
         Expanded(
           child: FutureBuilder(
-            future: _loadSalesHistory(),
+            future: _salesHistoryFuture,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Padding(
                   padding: EdgeInsets.all(20),
-                  child: Center(child: ModernLoading(message: 'Cargando historial...')),
+                  child: Center(
+                      child: ModernLoading(message: 'Cargando historial...')),
                 );
               }
 
@@ -748,7 +890,8 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                 itemBuilder: (context, index) {
                   final sale = history[index];
                   final date = (sale['date'] as String?) ?? '';
-                  final productName = (sale['productName'] as String?) ?? 'Producto';
+                  final productName =
+                      (sale['productName'] as String?) ?? 'Producto';
                   final amount = (sale['amount'] as num?)?.toDouble() ?? 0;
                   final boxes = sale['boxes'] ?? 0;
 
@@ -757,10 +900,12 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                     color: AppTheme.surfaceColor,
                     child: ListTile(
                       dense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                      contentPadding:
+                          const EdgeInsets.symmetric(horizontal: 12),
                       leading: Text(
                         date.length >= 10 ? date.substring(5) : date,
-                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                        style: const TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 12),
                       ),
                       title: Text(
                         productName,
@@ -771,9 +916,13 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('$boxes cj', style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+                          Text('$boxes cj',
+                              style: const TextStyle(
+                                  color: AppTheme.textSecondary, fontSize: 11)),
                           const SizedBox(width: 8),
-                          Text(CurrencyFormatter.formatWhole(amount), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                          Text(CurrencyFormatter.formatWhole(amount),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold, fontSize: 13)),
                         ],
                       ),
                     ),
@@ -800,20 +949,20 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
   }
 
   Future<void> _loadSalesSummary() async {
-      try {
-        // Defaults to This Year if no dates provided, matching the History Page logic
-        final response = await ClientsService.getSalesSummary(
-          clientCode: widget.clientCode,
-          vendedorCodes: widget.vendedorCodes,
-        );
-        if (mounted) {
-           setState(() {
-             _salesSummary = response;
-           });
-        }
-      } catch (e) {
-         debugPrint('Error loading sales summary: $e');
+    try {
+      // Defaults to This Year if no dates provided, matching the History Page logic
+      final response = await ClientsService.getSalesSummary(
+        clientCode: widget.clientCode,
+        vendedorCodes: widget.vendedorCodes,
+      );
+      if (mounted) {
+        setState(() {
+          _salesSummary = response;
+        });
       }
+    } catch (e) {
+      debugPrint('Error loading sales summary: $e');
+    }
   }
 
   Future<void> _launchPhone(String phone) async {
@@ -822,15 +971,15 @@ class _ClientDetailPageState extends State<ClientDetailPage> with SingleTickerPr
       await launchUrl(uri);
     }
   }
-
 }
 
 class _SummaryCard extends StatelessWidget {
-
   const _SummaryCard({
     required this.title,
     required this.value,
-    required this.icon, required this.color, this.subtitle,
+    required this.icon,
+    required this.color,
+    this.subtitle,
   });
   final String title;
   final String value;
@@ -849,14 +998,20 @@ class _SummaryCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+              Text(title,
+                  style: const TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 11)),
               Icon(icon, color: color, size: 16),
             ],
           ),
           const SizedBox(height: 6),
-          Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(value,
+              style: TextStyle(
+                  color: color, fontWeight: FontWeight.bold, fontSize: 15)),
           if (subtitle != null)
-            Text(subtitle!, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+            Text(subtitle!,
+                style: const TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 10)),
         ],
       ),
     );

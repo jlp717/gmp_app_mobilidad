@@ -65,10 +65,19 @@ const METADATA_COLS = [
   { name: 'PANTALLA_ORIGEN',   def: 'VARCHAR(20)' },
 ];
 
+
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(name + " environment variable is required");
+  }
+  return value;
+}
+
 function connectionString() {
   const dsn = process.env.ODBC_DSN || 'GMP';
-  const uid = process.env.ODBC_UID || 'JAVIER';
-  const pwd = process.env.ODBC_PWD || 'JAVIER';
+  const uid = requireEnv('ODBC_UID');
+  const pwd = requireEnv('ODBC_PWD');
   return [
     `DSN=${dsn}`, `UID=${uid}`, `PWD=${pwd}`,
     'NAM=1', 'CCSID=1208', 'CMPTDM=1',

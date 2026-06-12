@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 const odbc = require('odbc');
+const db2ConnectionString = require('./db2-connection');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
-const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
+const CONN = db2ConnectionString();
 
 (async () => {
   const pool = await odbc.pool(CONN);
   const conn = await pool.connect();
-  console.log('✅ Conectado\n');
+  console.log('âœ… Conectado\n');
 
-  // 1. Check CVC → CPC join match rate
-  console.log('=== CVC → CPC JOIN match rate ===\n');
+  // 1. Check CVC â†’ CPC join match rate
+  console.log('=== CVC â†’ CPC JOIN match rate ===\n');
   const matchRate = await conn.query(`
     SELECT 
       COUNT(*) AS total_cvc,
@@ -57,7 +58,7 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
   }
 
   // 3. Check if CPC has data for a matched row
-  console.log('\n=== Sample matched CVC→CPC row ===\n');
+  console.log('\n=== Sample matched CVCâ†’CPC row ===\n');
   const sample = await conn.query(`
     SELECT 
       CVC.TIPODOCUMENTO, CVC.SUBEMPRESADOCUMENTO, CVC.EJERCICIODOCUMENTO, CVC.SERIEDOCUMENTO, CVC.NUMERODOCUMENTO,
@@ -113,7 +114,7 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
     FROM DSEDAC.CPC
   `);
   console.log(`Total CPC rows: ${cpcStats[0].TOTAL_CPC}`);
-  console.log(`Unique albarán keys: ${cpcStats[0].UNIQUE_ALBARAN_KEYS}`);
+  console.log(`Unique albarÃ¡n keys: ${cpcStats[0].UNIQUE_ALBARAN_KEYS}`);
 
   await conn.close();
   await pool.close();

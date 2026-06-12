@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class OrderTheme {
-
   const OrderTheme({
     required this.primary,
     required this.gradient,
@@ -27,6 +26,18 @@ class OrderStatusConfig {
       gradient: [Color(0xFF1E293B), Color(0xFF2D1B00)],
       icon: Icons.edit_note,
       label: 'Borrador',
+    ),
+    'PENDIENTE_APROBACION': OrderTheme(
+      primary: Color(0xFFFACC15),
+      gradient: [Color(0xFF1E293B), Color(0xFF332A05)],
+      icon: Icons.pending_actions,
+      label: 'Pendiente aprobacion',
+    ),
+    'CONFIRMANDO': OrderTheme(
+      primary: Color(0xFF38BDF8),
+      gradient: [Color(0xFF1E293B), Color(0xFF082F49)],
+      icon: Icons.sync,
+      label: 'Confirmando',
     ),
     'CONFIRMADO': OrderTheme(
       primary: Color(0xFF3B82F6),
@@ -70,9 +81,9 @@ class OrderStatusConfig {
 }
 
 class OrderStatusBadge extends StatelessWidget {
-
   const OrderStatusBadge({
-    required this.estado, super.key,
+    required this.estado,
+    super.key,
     this.fontSize = 11,
     this.showIcon = true,
   });
@@ -107,7 +118,9 @@ class OrderStatusBadge extends StatelessWidget {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                      color: theme.primary.withValues(alpha: 0.6), blurRadius: 4,),
+                    color: theme.primary.withValues(alpha: 0.6),
+                    blurRadius: 4,
+                  ),
                 ],
               ),
             ),

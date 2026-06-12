@@ -7,7 +7,7 @@
  * Reads from DSEDAC.LACLAE (ERP invoice lines) for real historical data.
  */
 
-const { queryWithParams, query } = require('../config/db');
+const { queryWithParams } = require('../config/db');
 const { cachedQuery } = require('./query-optimizer');
 const { redisCache, TTL } = require('./redis-cache');
 const logger = require('../middleware/logger');
@@ -23,9 +23,12 @@ async function getSalesEvolution({ vendedorCodes, clientCode, months = 24 }) {
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1;
 
-    // Calculate start period
-    const startYear = currentYear - Math.ceil(months / 12);
-    const params = [startYear];
+    // Calculate exact month window. "24 months" means current month plus the
+    // previous 23, not every row since January two years ago.
+    const startPeriod = new Date(currentYear, currentMonth - months, 1);
+    const startYear = startPeriod.getFullYear();
+    const startMonth = startPeriod.getMonth() + 1;
+    const params = [startYear, startYear, startMonth];
     let vendorFilter = '';
 
     if (!isAll) {
@@ -52,10 +55,10 @@ async function getSalesEvolution({ vendedorCodes, clientCode, months = 24 }) {
             COUNT(DISTINCT L.LCCDCL) AS NUM_CLIENTES,
             COUNT(*) AS NUM_LINEAS,
             SUM(L.LCIMVT) AS TOTAL_VENTAS,
-            SUM(L.LCIMCO) AS TOTAL_COSTO,
-            SUM(L.LCIMVT - L.LCIMCO) AS TOTAL_MARGEN
+            SUM(L.LCIMCT) AS TOTAL_COSTO,
+            SUM(L.LCIMVT - L.LCIMCT) AS TOTAL_MARGEN
         FROM DSED.LACLAE L
-        WHERE L.LCAADC >= ?
+        WHERE (L.LCAADC > ? OR (L.LCAADC = ? AND L.LCMMDC >= ?))
           AND ${LACLAE_SALES_FILTER}
           ${vendorFilter}
           ${clientFilter}

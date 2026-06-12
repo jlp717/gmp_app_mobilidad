@@ -39,8 +39,47 @@ const {
     getCachedFi5Names,
     isCacheReady: isMetadataCacheReady
 } = require('../services/metadataCache');
+const { CircuitBreaker } = require('../services/circuit-breaker');
 
 const OBJECTIVES_CACHE_VERSION = 'v20260603-june-rebalance';
+const objectivesByClientBreaker = new CircuitBreaker({
+    name: 'objectives-by-client',
+    failureThreshold: 2,
+    successThreshold: 1,
+    timeout: 20000
+});
+const BY_CLIENT_DEFAULT_LIMIT = 100;
+const BY_CLIENT_MAX_LIMIT = 250;
+const BY_CLIENT_MAX_CLIENT_CODE_IN_PARAMS = 200;
+const BY_CLIENT_CODE_BATCH_SIZE = 40;
+const BY_CLIENT_BATCH_CONCURRENCY = 2;
+
+function clampByClientLimit(value) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) return BY_CLIENT_DEFAULT_LIMIT;
+    return Math.min(BY_CLIENT_MAX_LIMIT, parsed);
+}
+
+function chunkArray(values, size) {
+    const chunks = [];
+    for (let i = 0; i < values.length; i += size) {
+        chunks.push(values.slice(i, i + size));
+    }
+    return chunks;
+}
+
+async function mapChunksWithConcurrency(chunks, concurrency, mapper) {
+    const results = new Array(chunks.length);
+    let next = 0;
+    const workers = Array.from({ length: Math.min(concurrency, chunks.length) }, async () => {
+        while (next < chunks.length) {
+            const index = next++;
+            results[index] = await mapper(chunks[index], index);
+        }
+    });
+    await Promise.all(workers);
+    return results;
+}
 
 // =============================================================================
 // INHERITED OBJECTIVES LOGIC
@@ -2264,7 +2303,7 @@ router.get('/matrix', verifyToken, async (req, res) => {
 // =============================================================================
 // POPULATIONS (For dropdown filters)
 // =============================================================================
-router.get('/populations', async (req, res) => {
+router.get('/populations', verifyToken, async (req, res) => {
     try {
         const rows = await query(`
             SELECT DISTINCT TRIM(POBLACION) as CITY 
@@ -2283,7 +2322,36 @@ router.get('/populations', async (req, res) => {
 // =============================================================================
 // OBJECTIVES BY CLIENT
 // =============================================================================
-router.get('/by-client', async (req, res) => {
+router.get('/by-client', verifyToken, async (req, res, next) => {
+    try {
+        await objectivesByClientBreaker.execute(
+            () => handleByClientRequest(req, res),
+            async () => {
+                if (res.headersSent) return null;
+                const effectiveVendorCodes = scopeVendorCodesForUser(req.user?.code, req.query.vendedorCodes);
+                const rowsLimit = clampByClientLimit(req.query.limit);
+                const hasFilters = req.query.city || req.query.code || req.query.nif || req.query.name;
+                const cacheKey = `obj:byclient:${OBJECTIVES_CACHE_VERSION}:${effectiveVendorCodes || 'ALL'}:${req.query.years || 'default'}:${req.query.months || 'all'}:${rowsLimit}`;
+                const cachedResult = !hasFilters ? await redisCache.get('route', cacheKey) : null;
+                if (cachedResult) {
+                    return res.json({ ...cachedResult, stale: true, warning: 'Objetivos por cliente servidos desde cache por timeout DB2' });
+                }
+                return res.status(503).json({
+                    success: false,
+                    error: 'Objetivos por cliente no disponibles dentro del timeout seguro',
+                    clients: [],
+                    count: 0,
+                    limit: rowsLimit,
+                });
+            }
+        );
+    } catch (error) {
+        if (res.headersSent) return;
+        next(error);
+    }
+});
+
+async function handleByClientRequest(req, res) {
     try {
         const { vendedorCodes, years, months, city, code, nif, name, limit } = req.query;
         const effectiveVendorCodes = scopeVendorCodesForUser(req.user?.code, vendedorCodes);
@@ -2291,26 +2359,20 @@ router.get('/by-client', async (req, res) => {
 
         // PERF: Route-level cache for by-client (only when no search filters)
         const hasFilters = city || code || nif || name;
-        const cacheKey = `obj:byclient:${OBJECTIVES_CACHE_VERSION}:${effectiveVendorCodes || 'ALL'}:${years || 'default'}:${months || 'all'}:${limit || '1000'}`;
+        const rowsLimit = clampByClientLimit(limit);
+        const cacheKey = `obj:byclient:${OBJECTIVES_CACHE_VERSION}:${effectiveVendorCodes || 'ALL'}:${years || 'default'}:${months || 'all'}:${rowsLimit}`;
         if (!hasFilters) {
             const cachedResult = await redisCache.get('route', cacheKey);
             if (cachedResult) {
                 logger.info(`[OBJECTIVES] ⚡ Cache HIT for by-client (${cacheKey})`);
-                return res.json(cachedResult);
+                if (!res.headersSent) return res.json(cachedResult);
+                return;
             }
         }
 
         // Parse years and months - default to full year
         const yearsArray = years ? years.split(',').map(y => parseInt(y.trim())).filter(y => y >= MIN_YEAR) : [now.getFullYear()];
         const monthsArray = months ? months.split(',').map(m => parseInt(m.trim())).filter(m => m >= 1 && m <= 12) : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
-        const rowsLimit = limit ? parseInt(limit) : 1000;
-
-        const yearsFilter = yearsArray.join(',');
-        const monthsFilter = monthsArray.join(',');
-
-        // Use LACLAE with R1_T8CDVD (route vendor) for consistency with client list and rutero
-        const vendedorFilter = buildColumnaVendedorFilter(effectiveVendorCodes, yearsArray, 'L');
-
         let extraFilters = '';
         const extraFilterParams = [];
         if (city && city.trim()) {
@@ -2341,7 +2403,14 @@ router.get('/by-client', async (req, res) => {
         let totalClientsCount = 0;
         let currentRows = [];
 
-        if (cachedClientCodes && cachedClientCodes.length > 0) {
+        const cachedClientCodeCount = Array.isArray(cachedClientCodes) ? cachedClientCodes.length : 0;
+        const canUseClientCodeSet = cachedClientCodeCount > 0 && cachedClientCodeCount <= BY_CLIENT_MAX_CLIENT_CODE_IN_PARAMS;
+
+        if (cachedClientCodeCount > BY_CLIENT_MAX_CLIENT_CODE_IN_PARAMS) {
+            logger.warn(`[OBJECTIVES] by-client cache scope has ${cachedClientCodeCount} clients; using vendor-filter SQL instead of giant IN clause`);
+        }
+
+        if (canUseClientCodeSet) {
             const safeClientCodes = cachedClientCodes.map(c => sanitizeForSQL(c));
 
             // Query 0: Count clients from cache (filtered by extra filters if any)
@@ -2486,7 +2555,9 @@ router.get('/by-client', async (req, res) => {
                 ORDER BY SALES DESC
                 FETCH FIRST ? ROWS ONLY
             `, [...yearsArray, ...monthsArray, ...extraFilterParams, rowsLimit]);
-            totalClientsCount = currentRows.length;
+            totalClientsCount = cachedClientCodeCount && !extraFilters
+                ? cachedClientCodeCount
+                : currentRows.length;
         }
 
         // Query 2: Get previous year data for same period (for objective calculation)
@@ -2510,24 +2581,49 @@ router.get('/by-client', async (req, res) => {
             const currentMonth = now.getMonth() + 1;
             const currentYear = now.getFullYear();
 
-            const [prevRows, confRows, fixedRows] = await Promise.all([
-                queryWithParams(`
-                    SELECT 
+            const codeChunks = chunkArray(retrievedCodesParams, BY_CLIENT_CODE_BATCH_SIZE);
+            const prevRowsPromise = mapChunksWithConcurrency(
+                codeChunks,
+                BY_CLIENT_BATCH_CONCURRENCY,
+                (chunk) => queryWithParams(`
+                    SELECT
                         L.LCCDCL as CODE,
                         SUM(L.LCIMVT) as PREV_SALES
                     FROM DSED.LACLAE L
                     WHERE L.LCAADC = ?
                       AND L.LCMMDC IN (${monthsArray.map(() => '?').join(',')})
                       AND ${LACLAE_SALES_FILTER}
-                      AND L.LCCDCL IN (${retrievedCodesParams.map(() => '?').join(',')})
+                      AND L.LCCDCL IN (${chunk.map(() => '?').join(',')})
                     GROUP BY L.LCCDCL
-                `, [prevYear, ...monthsArray, ...retrievedCodesParams]),
-                queryWithParams(`
-                    SELECT CODIGOCLIENTE, TARGET_PERCENTAGE 
-                    FROM JAVIER.OBJ_CONFIG 
-                    WHERE CODIGOCLIENTE IN (${retrievedCodesParams.map(() => '?').join(',')}, '*') 
-                       OR CODIGOCLIENTE = '*'
-                `, [...retrievedCodesParams]).catch(err => { logger.warn(`Could not load objective config: ${err.message}`); return []; }),
+                `, [prevYear, ...monthsArray, ...chunk], false)
+            ).then(results => results.flat());
+
+            const confRowsPromise = (async () => {
+                try {
+                    const chunkRows = await mapChunksWithConcurrency(
+                        codeChunks,
+                        BY_CLIENT_BATCH_CONCURRENCY,
+                        (chunk) => queryWithParams(`
+                            SELECT CODIGOCLIENTE, TARGET_PERCENTAGE
+                            FROM JAVIER.OBJ_CONFIG
+                            WHERE CODIGOCLIENTE IN (${chunk.map(() => '?').join(',')})
+                        `, chunk, false)
+                    );
+                    const globalRows = await queryWithParams(`
+                        SELECT CODIGOCLIENTE, TARGET_PERCENTAGE
+                        FROM JAVIER.OBJ_CONFIG
+                        WHERE CODIGOCLIENTE = '*'
+                    `, [], false);
+                    return [...chunkRows.flat(), ...globalRows];
+                } catch (err) {
+                    logger.warn(`Could not load objective config: ${err.message}`);
+                    return [];
+                }
+            })();
+
+            const [prevRows, confRows, fixedRows] = await Promise.all([
+                prevRowsPromise,
+                confRowsPromise,
                 shouldLoadFixedTargets
                     ? queryWithParams(`
                         SELECT CODIGOVENDEDOR, IMPORTE_OBJETIVO, IMPORTE_BASE_COMISION, PORCENTAJE_MEJORA
@@ -2654,12 +2750,16 @@ router.get('/by-client', async (req, res) => {
             logger.info(`[OBJECTIVES] 💾 Cached by-client (${cacheKey})`);
         }
 
-        res.json(responseData);
+        if (!res.headersSent) {
+            res.json(responseData);
+        }
 
     } catch (error) {
         logger.error(`Objectives by-client error: ${error.message}`);
-        handleRouteError(error, res, 'Error obteniendo objetivos por cliente', 500);
+        if (!res.headersSent) {
+            handleRouteError(error, res, 'Error obteniendo objetivos por cliente', 500);
+        }
     }
-});
+}
 
 module.exports = router;

@@ -1,7 +1,9 @@
 import odbc from 'odbc';
+declare const require: (path: string) => any;
+const db2ConnectionString = require('./db2-connection');
 
 async function main() {
-  const conn = await odbc.connect('DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;');
+  const conn = await odbc.connect(db2ConnectionString({ extras: 'NAM=1' }));
   
   // 1. Ver estructura de APPUSUARIOS
   console.log('=== ESTRUCTURA DE APPUSUARIOS ===');

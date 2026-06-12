@@ -28,7 +28,7 @@ const { performanceCache } = require('../../core/infrastructure/cache/performanc
 const { cachedQuery } = require('../../../services/query-optimizer');
 const { query, queryWithParams } = require('../../../config/db');
 const { TTL: RedisTTL } = require('../../../services/redis-cache');
-const { buildVendedorFilterLACLAE, sanitizeForSQL, MIN_YEAR, getVendorVisibilityScope } = require('../../../utils/common');
+const { buildVendedorFilterLACLAE, sanitizeForSQL, MIN_YEAR, getVendorVisibilityScope, getVendorColumnExpr } = require('../../../utils/common');
 const { getClientCodesFromCache } = require('../../../services/laclae');
 
 // TTL constants (milliseconds)
@@ -88,6 +88,17 @@ async function withCache(cache, key, ttlMs, fetchFn, res, req) {
   return res.json(result);
 }
 
+// Invalidación de los listados/stats de pedidos en la ResponseCache de los
+// adaptadores DDD tras cualquier mutación de pedidos (crear/editar líneas/
+// cancelar/eliminar). Se invalida por prefijo (todos los usuarios) porque un
+// JEFE_VENTAS puede mutar pedidos de otros vendedores.
+function invalidateOrderListCaches(cache) {
+  cache.invalidatePattern('ddd:orders-list:');
+  cache.invalidatePattern('ddd:history:');
+  cache.invalidatePattern('ddd:stats:');
+  cache.invalidatePattern('ddd:orders-stats:');
+}
+
 function normalizeOrderResponse(result) {
   const order = result || {};
   const header = order.header || order;
@@ -125,6 +136,228 @@ function canAccessVendedorCodes(req, vendedorCodes) {
   if (!requested || requested.toUpperCase() === 'ALL') return false;
   return requested.split(',').map((code) => code.trim()).filter(Boolean)
     .every((code) => salesCodesMatch(code, userCode));
+}
+
+function normalizePedidoCode(value) {
+  return String(value || '').trim();
+}
+
+function normalizePedidoCodeList(value) {
+  return String(value || '')
+    .split(',')
+    .map((code) => normalizePedidoCode(code))
+    .filter((code) => /^[a-zA-Z0-9]{1,10}$/.test(code));
+}
+
+function getPedidoUserContext(req) {
+  const user = req.user || {};
+  return {
+    code: normalizePedidoCode(user.code || user.codigo || user.codigoVendedor || user.vendedorCode || user.userId || user.id),
+    isManager: isPrivilegedSalesUser(req),
+    visibleVendorCodes: Array.isArray(user.vendorCodes || user.vendedorCodes)
+      ? (user.vendorCodes || user.vendedorCodes).map(normalizePedidoCode).filter(Boolean)
+      : [],
+  };
+}
+
+function resolvePedidoVendorScope(req, requestedVendorCodes) {
+  const context = getPedidoUserContext(req);
+  const requestedRaw = normalizePedidoCode(requestedVendorCodes || 'ALL');
+  const requestedAll = !requestedRaw || requestedRaw.toUpperCase() === 'ALL';
+  let codes = requestedAll ? [] : normalizePedidoCodeList(requestedRaw);
+
+  if (!context.isManager) {
+    if (!context.code) return { ok: false, error: 'Usuario comercial sin vendedor asignado' };
+    if (requestedAll) {
+      codes = [context.code];
+    } else if (codes.some((code) => !salesCodesMatch(code, context.code))) {
+      return { ok: false, error: 'COMERCIAL solo puede operar su vendedor' };
+    }
+  } else if (context.visibleVendorCodes.length > 0) {
+    if (requestedAll) {
+      codes = context.visibleVendorCodes;
+    } else if (codes.some((code) => !context.visibleVendorCodes.some((visible) => salesCodesMatch(code, visible)))) {
+      return { ok: false, error: 'JEFE_VENTAS no puede operar vendedores fuera de su alcance' };
+    }
+  }
+
+  return { ok: true, codes: [...new Set(codes)] };
+}
+
+function dddForbiddenBody(code, error) {
+  return { success: false, code, error };
+}
+
+function authorizePedidoVendorCode(req, vendedorCode, action = 'operar') {
+  const context = getPedidoUserContext(req);
+  const vendor = normalizePedidoCode(vendedorCode);
+  if (!vendor) return { ok: false, status: 400, body: dddForbiddenBody('INVALID_VENDOR', 'vendedorCode invalido') };
+  if (context.isManager) {
+    if (context.visibleVendorCodes.length === 0 || context.visibleVendorCodes.some((code) => salesCodesMatch(code, vendor))) {
+      return { ok: true, vendedorCode: vendor };
+    }
+    return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_VENDOR', `JEFE_VENTAS no puede ${action} vendedores fuera de su alcance`) };
+  }
+  if (context.code && salesCodesMatch(context.code, vendor)) return { ok: true, vendedorCode: vendor };
+  return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_VENDOR', `COMERCIAL solo puede ${action} su vendedor`) };
+}
+
+function buildClientVendorParamFilter(vendorCodes, clientAlias = 'CLI') {
+  if (!Array.isArray(vendorCodes) || vendorCodes.length === 0) {
+    return { clause: '', params: [] };
+  }
+  return {
+    clause: `
+      AND EXISTS (
+        SELECT 1
+          FROM DSEDAC.CLP CLP
+         WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(${clientAlias}.CODIGOCLIENTE)
+           AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${vendorCodes.map(() => '?').join(',')})
+      )`,
+    params: vendorCodes,
+  };
+}
+
+function buildLaclaeVendorParamFilter(vendorCodes, alias = "L") {
+  if (!Array.isArray(vendorCodes) || vendorCodes.length === 0) {
+    return { clause: "", params: [] };
+  }
+  const vendorColumn = getVendorColumnExpr(alias);
+  return {
+    clause: "AND TRIM(" + vendorColumn + ") IN (" + vendorCodes.map(() => "?").join(",") + ")",
+    params: vendorCodes,
+  };
+}
+
+
+async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action = 'operar') {
+  const client = normalizePedidoCode(clientCode);
+  if (!client) return { ok: false, status: 400, body: dddForbiddenBody('INVALID_CLIENT', 'clientCode invalido') };
+  const vendorScope = resolvePedidoVendorScope(req, vendedorCodes);
+  if (!vendorScope.ok) return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error) };
+
+  const clientVendorFilter = buildClientVendorParamFilter(vendorScope.codes, 'CLI');
+  const rows = await queryWithParams(
+    `SELECT 1
+       FROM DSEDAC.CLI CLI
+      WHERE TRIM(CLI.CODIGOCLIENTE) = ?
+        ${clientVendorFilter.clause}
+      FETCH FIRST 1 ROW ONLY`,
+    [client, ...clientVendorFilter.params],
+  );
+  if (!rows || rows.length === 0) {
+    return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_CLIENT_VENDOR', `No autorizado para ${action} este cliente con ese vendedor`) };
+  }
+  return { ok: true, clientCode: client, vendorCodes: vendorScope.codes };
+}
+
+async function authorizePedidoMutation(req, orderId, action = 'mutar') {
+  const id = parseInt(orderId, 10);
+  if (!Number.isFinite(id)) return { ok: false, status: 400, body: dddForbiddenBody('INVALID_ORDER', 'orderId invalido') };
+
+  const pedidosService = require('../../../services/pedidos.service');
+  const ownership = await pedidosService.getOrderVendorForAuth(id);
+  if (!ownership) {
+    return { ok: false, status: 404, body: dddForbiddenBody('ORDER_NOT_FOUND', 'Pedido no encontrado') };
+  }
+
+  const context = getPedidoUserContext(req);
+  const orderVendor = normalizePedidoCode(ownership.vendedorCode);
+  if (context.isManager) {
+    if (context.visibleVendorCodes.length === 0 || context.visibleVendorCodes.some((code) => salesCodesMatch(code, orderVendor))) {
+      return { ok: true, ownership };
+    }
+    return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_VENDOR', `JEFE_VENTAS no puede ${action} pedidos fuera de su alcance`) };
+  }
+  if (context.code && salesCodesMatch(context.code, orderVendor)) {
+    return { ok: true, ownership };
+  }
+  return { ok: false, status: 403, body: dddForbiddenBody('FORBIDDEN_VENDOR', `COMERCIAL solo puede ${action} pedidos de su vendedor`) };
+}
+
+function authorizedVendorCodesOrOriginal(access, original) {
+  const codes = Array.isArray(access?.vendorCodes) ? access.vendorCodes.filter(Boolean) : [];
+  return codes.length > 0 ? codes.join(',') : (original || 'ALL');
+}
+
+function canSeePedidoMargin(user) {
+  const role = String(user?.role || '').toUpperCase();
+  const code = String(user?.code || user?.id || '').trim().replace(/^0+/, '');
+  return role === 'JEFE_VENTAS' || role === 'ADMIN' || user?.isJefeVentas === true || code === '80';
+}
+
+function buildCacheSecurityScope(req, { includeMargin = false } = {}) {
+  const user = req?.user || {};
+  const role = String(user.role || user.userRole || user.tipo || 'COMERCIAL').trim().toUpperCase();
+  const userId = normalizePedidoCode(user.code || user.codigo || user.codigoVendedor || user.vendedorCode || user.userId || user.id || 'anonymous');
+  const visible = user.vendorCodes || user.vendedorCodes || [];
+  const visibleScope = Array.isArray(visible) ? visible.map(normalizePedidoCode).filter(Boolean).sort().join(',') : normalizePedidoCode(visible);
+  const marginScope = includeMargin ? `:canSeeMargin=${canSeePedidoMargin(user) ? '1' : '0'}` : '';
+  return `scope:v2:role=${role}:user=${userId || 'anonymous'}:visible=${visibleScope || 'self'}${marginScope}`;
+}
+
+function stripMarginFromOrder(order, user) {
+  if (canSeePedidoMargin(user) || !order) return order;
+  const clean = JSON.parse(JSON.stringify(order));
+  delete clean.costo;
+  delete clean.margen;
+  delete clean.importeCosto;
+  delete clean.importeMargen;
+  delete clean.totalCosto;
+  delete clean.totalMargen;
+  delete clean.porcentajeMargen;
+  if (clean.header) {
+    delete clean.header.costo;
+    delete clean.header.margen;
+    delete clean.header.importeCosto;
+    delete clean.header.importeMargen;
+    delete clean.header.totalCosto;
+    delete clean.header.totalMargen;
+    delete clean.header.porcentajeMargen;
+  }
+  if (Array.isArray(clean.lines)) {
+    clean.lines = clean.lines.map((line) => {
+      const safeLine = { ...line };
+      delete safeLine.precioCosto;
+      delete safeLine.importeCosto;
+      delete safeLine.importeMargen;
+      delete safeLine.porcentajeMargen;
+      return safeLine;
+    });
+  }
+  return clean;
+}
+
+function stripMarginFromProduct(product, user) {
+  if (canSeePedidoMargin(user) || !product) return product;
+  const clean = { ...product };
+  delete clean.precioCosto;
+  delete clean.precioMinimo;
+  delete clean.costo;
+  delete clean.margen;
+  delete clean.importeCosto;
+  delete clean.importeMargen;
+  delete clean.porcentajeMargen;
+  return clean;
+}
+
+function stripMarginFromProductHistory(payload, user) {
+  if (canSeePedidoMargin(user) || !payload) return payload;
+  const clean = JSON.parse(JSON.stringify(payload));
+  for (const year of Object.values(clean.years || {})) {
+    delete year.totals?.cost;
+    delete year.totals?.margin;
+    delete year.totals?.marginPct;
+    for (const month of Object.values(year.months || {})) {
+      delete month.cost;
+      delete month.margin;
+      delete month.marginPct;
+    }
+  }
+  delete clean.grandTotal?.cost;
+  delete clean.grandTotal?.margin;
+  delete clean.grandTotal?.marginPct;
+  return clean;
 }
 
 // =============================================================================
@@ -250,12 +483,17 @@ function createPedidosRoutes() {
       const { vendedorCodes, clientCode, family, marca, prefamily, search, limit, offset } = req.query;
       if (!vendedorCodes) return res.status(400).json({ success: false, error: 'vendedorCodes is required' });
       if (!clientCode) return res.status(400).json({ success: false, error: 'clientCode is required' });
+      const clientAccess = await authorizePedidoClientScope(req, clientCode, vendedorCodes, 'consultar catalogo para');
+      if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
+      const scopedVendedorCodes = authorizedVendorCodesOrOriginal(clientAccess, vendedorCodes);
+      const scopedClientCode = clientAccess.clientCode;
+      const cacheSecurityScope = buildCacheSecurityScope(req, { includeMargin: true });
 
-      const cacheKey = `ddd:products:${vendedorCodes}:${clientCode}:${family || ''}:${marca || ''}:${prefamily || ''}:${search || ''}:${limit || 50}:${offset || 0}`;
+      const cacheKey = `ddd:products:${cacheSecurityScope}:${scopedVendedorCodes}:${scopedClientCode}:${family || ''}:${marca || ''}:${prefamily || ''}:${search || ''}:${limit || 50}:${offset || 0}`;
       await withCache(cache, cacheKey, TTL_MS.PRODUCT_CATALOG, async () => {
         const result = await repo.searchProducts({
-          vendedorCodes,
-          clientCode: String(clientCode).trim(),
+          vendedorCodes: scopedVendedorCodes,
+          clientCode: scopedClientCode,
           family: family ? String(family).trim() : undefined,
           marca: marca ? String(marca).trim() : undefined,
           prefamily: prefamily ? String(prefamily).trim() : undefined,
@@ -263,10 +501,30 @@ function createPedidosRoutes() {
           limit: parseInt(limit) || 50,
           offset: parseInt(offset) || 0
         });
-        return { success: true, products: result.products, count: result.count };
+        return {
+          success: true,
+          products: (result.products || []).map((product) => stripMarginFromProduct(product, req.user)),
+          count: result.count,
+        };
       }, res, req);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /products: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  router.post("/products/stock-batch", async (req, res) => {
+    try {
+      const rawCodes = Array.isArray(req.body?.codes) ? req.body.codes : [];
+      const codes = [...new Set(rawCodes.map((code) => String(code || "").trim()).filter(Boolean))].slice(0, 200);
+      const almacen = Number.parseInt(req.body?.almacen, 10) || 1;
+      if (codes.length === 0) return res.status(400).json({ success: false, error: "codes array is required" });
+      const pedidosService = require("../../../services/pedidos.service");
+      const stockMap = await pedidosService.getStockBatch(codes, almacen);
+      const stock = stockMap instanceof Map ? Object.fromEntries(stockMap.entries()) : (stockMap || {});
+      res.json({ success: true, stock });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in POST /products/stock-batch: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
     }
   });
@@ -276,17 +534,30 @@ function createPedidosRoutes() {
       const { code } = req.params;
       const { clientCode, vendedorCodes } = req.query;
       if (!code) return res.status(400).json({ success: false, error: 'Product code required' });
+      let scopedClientCode = clientCode ? String(clientCode).trim() : undefined;
+      let scopedVendedorCodes = vendedorCodes || 'ALL';
+      if (scopedClientCode) {
+        const clientAccess = await authorizePedidoClientScope(req, scopedClientCode, vendedorCodes, 'consultar producto para');
+        if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
+        scopedClientCode = clientAccess.clientCode;
+        scopedVendedorCodes = authorizedVendorCodesOrOriginal(clientAccess, vendedorCodes);
+      } else {
+        const vendorScope = resolvePedidoVendorScope(req, vendedorCodes || 'ALL');
+        if (!vendorScope.ok) return res.status(403).json(dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error));
+        scopedVendedorCodes = vendorScope.codes.length > 0 ? vendorScope.codes.join(',') : (vendedorCodes || 'ALL');
+      }
 
-      const cacheKey = `ddd:product:${code}:${clientCode || ''}:${vendedorCodes || 'ALL'}`;
+      const cacheSecurityScope = buildCacheSecurityScope(req, { includeMargin: true });
+      const cacheKey = `ddd:product:${cacheSecurityScope}:${code}:${scopedClientCode || ''}:${scopedVendedorCodes}`;
       await withCache(cache, cacheKey, TTL_MS.PRODUCT_DETAIL, async () => {
         const product = await repo.getProductDetail({
           code: String(code).trim(),
-          clientCode: clientCode ? String(clientCode).trim() : undefined,
-          vendedorCodes: vendedorCodes || 'ALL'
+          clientCode: scopedClientCode,
+          vendedorCodes: scopedVendedorCodes
         });
         if (!product) return { success: false, error: 'Product not found' };
-        return { success: true, product };
-      }, res);
+        return { success: true, product: stripMarginFromProduct(product, req.user) };
+      }, res, req);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /products/:code: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
@@ -300,12 +571,15 @@ function createPedidosRoutes() {
 
       const trimmedClient = String(clientCode).trim();
       if (!trimmedClient) return res.status(400).json({ success: false, error: 'clientCode cannot be empty' });
+      const clientAccess = await authorizePedidoClientScope(req, trimmedClient, vendedorCodes, 'consultar promociones para');
+      if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
+      const scopedVendedorCodes = authorizedVendorCodesOrOriginal(clientAccess, vendedorCodes);
 
-      const cacheKey = `ddd:promotions:${trimmedClient}:${vendedorCodes || 'ALL'}`;
+      const cacheKey = `ddd:promotions:${clientAccess.clientCode}:${scopedVendedorCodes}`;
       await withCache(cache, cacheKey, TTL_MS.PROMOTIONS, async () => {
         const result = await repo.getPromotions({
-          clientCode: trimmedClient,
-          vendedorCodes: vendedorCodes || 'ALL'
+          clientCode: clientAccess.clientCode,
+          vendedorCodes: scopedVendedorCodes
         });
         // result is an array of promotion objects from legacy service
         const promotions = Array.isArray(result) ? result : [];
@@ -340,8 +614,11 @@ function createPedidosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      // Use vendedorCodes from query if privileged user, otherwise own code
-      const vendedorCodes = req.query.vendedorCodes || userId;
+      // AppSec: valida el alcance de vendedor. COMERCIAL solo puede consultar
+      // sus propias estadísticas; JEFE_VENTAS queda acotado a su visibilidad.
+      const vendorScope = resolvePedidoVendorScope(req, req.query.vendedorCodes || userId);
+      if (!vendorScope.ok) return res.status(403).json(dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error));
+      const vendedorCodes = vendorScope.codes.length > 0 ? vendorScope.codes.join(',') : 'ALL';
       const dateFrom = req.query.dateFrom ? String(req.query.dateFrom).trim() : undefined;
       const dateTo = req.query.dateTo ? String(req.query.dateTo).trim() : undefined;
 
@@ -381,19 +658,11 @@ function createPedidosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const { clientCode, lines, observations } = req.body;
-      if (!clientCode || !lines || !Array.isArray(lines) || lines.length === 0) {
-        return res.status(400).json({ success: false, error: 'clientCode and lines required' });
-      }
-
-      const result = await repo.confirmOrder({ userId, clientCode, lines, observations });
-
-      // Invalidate related caches
-      cache.invalidatePattern(`ddd:products:`);
-      cache.invalidatePattern(`ddd:history:${userId}`);
-      cache.invalidatePattern(`ddd:stats:${userId}`);
-
-      res.json({ success: true, order: result });
+      return res.status(410).json({
+        success: false,
+        code: 'DIRECT_CONFIRM_DISABLED',
+        error: 'Use POST /pedidos/create followed by PUT /pedidos/:id/confirm so stock, ownership and bolsa validations run.',
+      });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in POST /confirm: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
@@ -408,8 +677,15 @@ function createPedidosRoutes() {
   router.get('/client-balance/:clientCode', async (req, res) => {
     try {
       const clientCode = String(req.params.clientCode).trim();
+      const clientAccess = await authorizePedidoClientScope(
+        req,
+        clientCode,
+        req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+        'consultar saldo de',
+      );
+      if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
       const pedidosService = require('../../../services/pedidos.service');
-      const balance = await pedidosService.getClientBalance(clientCode);
+      const balance = await pedidosService.getClientBalance(clientAccess.clientCode);
       res.json({ success: true, balance });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /client-balance: ${error.message}`);
@@ -425,8 +701,11 @@ function createPedidosRoutes() {
       if (!vendedorCode) {
         return res.status(400).json({ success: false, error: 'vendedorCode is required' });
       }
+      const clientAccess = await authorizePedidoClientScope(req, clientCode, vendedorCode, 'consultar recomendaciones para');
+      if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
       const pedidosService = require('../../../services/pedidos.service');
-      const recommendations = await pedidosService.getRecommendations(clientCode, vendedorCode);
+      const scopedVendedor = authorizedVendorCodesOrOriginal(clientAccess, vendedorCode);
+      const recommendations = await pedidosService.getRecommendations(clientAccess.clientCode, scopedVendedor);
       res.json({ success: true, clientHistory: recommendations.clientHistory, similarClients: recommendations.similarClients });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /recommendations: ${error.message}`);
@@ -440,8 +719,10 @@ function createPedidosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      // Use vendedorCodes from query if privileged user, otherwise own code
-      const vendedorCodes = req.query.vendedorCodes || userId;
+      // AppSec: mismo control de alcance que GET /stats.
+      const vendorScope = resolvePedidoVendorScope(req, req.query.vendedorCodes || userId);
+      if (!vendorScope.ok) return res.status(403).json(dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error));
+      const vendedorCodes = vendorScope.codes.length > 0 ? vendorScope.codes.join(',') : 'ALL';
       const dateFrom = req.query.dateFrom ? String(req.query.dateFrom).trim() : undefined;
       const dateTo = req.query.dateTo ? String(req.query.dateTo).trim() : undefined;
 
@@ -498,9 +779,19 @@ function createPedidosRoutes() {
   router.get('/client-prices/:clientCode', async (req, res) => {
     try {
       const { clientCode } = req.params;
+      const clientAccess = await authorizePedidoClientScope(
+        req,
+        clientCode,
+        req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+        'consultar precios de',
+      );
+      if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
       const pedidosService = require('../../../services/pedidos.service');
-      const prices = await pedidosService.getClientPricing(String(clientCode).trim());
-      res.json({ success: true, prices });
+      const prices = await pedidosService.getClientPricing(clientAccess.clientCode);
+      const safePrices = Array.isArray(prices)
+        ? prices.map((price) => stripMarginFromProduct(price, req.user))
+        : prices;
+      res.json({ success: true, prices: safePrices });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /client-prices: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
@@ -516,6 +807,18 @@ function createPedidosRoutes() {
       }
       const clientCode = String(req.query.clientCode || '').trim();
       const vendedorCode = String(req.query.vendedorCode || '').trim();
+      let scopedVendorCodes = vendedorCode ? [vendedorCode] : [];
+      if (clientCode) {
+        const clientAccess = await authorizePedidoClientScope(req, clientCode, vendedorCode || 'ALL', 'consultar comparativa para');
+        if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
+        scopedVendorCodes = clientAccess.vendorCodes.length > 0
+          ? clientAccess.vendorCodes
+          : (vendedorCode ? [vendedorCode] : []);
+      } else {
+        const vendorScope = resolvePedidoVendorScope(req, vendedorCode || 'ALL');
+        if (!vendorScope.ok) return res.status(403).json(dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error));
+        scopedVendorCodes = vendorScope.codes.length > 0 ? vendorScope.codes : scopedVendorCodes;
+      }
       const now = new Date();
       const currentYear = now.getFullYear();
       const previousYear = currentYear - 1;
@@ -524,7 +827,10 @@ function createPedidosRoutes() {
                      `L.LCCLLN IN ('VT','AB')`, `L.LCSRAB NOT IN ('N','Z','G','D')`];
       const params = [productCode];
       if (clientCode) { where.push('TRIM(L.LCCDCL) = ?'); params.push(clientCode); }
-      if (vendedorCode && vendedorCode.toUpperCase() !== 'ALL') { where.push('TRIM(L.LCCDVD) = ?'); params.push(vendedorCode); }
+      if (scopedVendorCodes.length > 0) {
+        where.push(`TRIM(L.LCCDVD) IN (${scopedVendorCodes.map(() => '?').join(',')})`);
+        params.push(...scopedVendorCodes);
+      }
       const whereSql = where.join(' AND ');
 
       const { queryWithParams } = require('../../../config/db');
@@ -581,7 +887,7 @@ function createPedidosRoutes() {
       res.json({
         success: true, code: productCode,
         name: (nameRows?.[0]?.NAME || '').trim(),
-        filters: { clientCode: clientCode || null, vendedorCode: vendedorCode || null },
+        filters: { clientCode: clientCode || null, vendedorCode: scopedVendorCodes.join(',') || null },
         currentYear:  { year: currentYear, total: totalEnvCur, totalImporte: totalImpCur, monthly: monthlyCurrent },
         previousYear: { year: previousYear, total: totalEnvPrev, totalImporte: totalImpPrev, monthly: monthlyPrevious },
         variation: {
@@ -602,10 +908,12 @@ function createPedidosRoutes() {
   router.get('/similar-products/:code', async (req, res) => {
     try {
       const { code } = req.params;
+      const vendorScope = resolvePedidoVendorScope(req, req.query.vendedorCodes || req.query.vendedorCode || 'ALL');
+      if (!vendorScope.ok) return res.status(403).json(dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error));
       const pedidosService = require('../../../services/pedidos.service');
       const similar = await pedidosService.getSimilarProducts(String(code).trim());
       // Flutter expects 'alternatives' key
-      res.json({ success: true, alternatives: similar });
+      res.json({ success: true, alternatives: (similar || []).map((product) => stripMarginFromProduct(product, req.user)) });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /similar-products: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
@@ -620,11 +928,18 @@ function createPedidosRoutes() {
       if (!searchTerm || searchTerm.length < 2) {
         return res.json({ success: true, products: [] });
       }
+      if (clientCode) {
+        const clientAccess = await authorizePedidoClientScope(req, clientCode, vendedorCodes || 'ALL', 'buscar productos para');
+        if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
+      } else {
+        const vendorScope = resolvePedidoVendorScope(req, vendedorCodes || 'ALL');
+        if (!vendorScope.ok) return res.status(403).json(dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error));
+      }
 
       const pedidosService = require('../../../services/pedidos.service');
       const results = await pedidosService.searchProductsWithStock(searchTerm, parseInt(limit) || 20);
       // Flutter expects 'products' key
-      res.json({ success: true, products: results });
+      res.json({ success: true, products: (results || []).map((product) => stripMarginFromProduct(product, req.user)) });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /search-products: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
@@ -635,6 +950,14 @@ function createPedidosRoutes() {
   router.get('/product-history/:productCode/:clientCode', async (req, res) => {
     try {
       const { productCode, clientCode } = req.params;
+      const clientAccess = await authorizePedidoClientScope(
+        req,
+        clientCode,
+        req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+        'consultar historico de producto para',
+      );
+      if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
+      const scopedClientCode = clientAccess.clientCode;
 
       // Query LACLAE for purchase history of this product by this client (3 years)
       const { queryWithParams } = require('../../../config/db');
@@ -657,7 +980,7 @@ function createPedidosRoutes() {
         ORDER BY L.LCAADC DESC, L.LCMMDC DESC
       `;
 
-      const rows = await queryWithParams(sql, [clientCode, productCode, currentYear - 2], false);
+      const rows = await queryWithParams(sql, [scopedClientCode, productCode, currentYear - 2], false);
 
       // Group by year for Flutter's expected format
       const years = {};
@@ -708,7 +1031,7 @@ function createPedidosRoutes() {
         };
       }
 
-      res.json({
+      res.json(stripMarginFromProductHistory({
         success: true,
         years,
         grandTotal: {
@@ -720,7 +1043,7 @@ function createPedidosRoutes() {
           envases: 0,
           cajas: 0,
         },
-      });
+      }, req.user));
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /product-history: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
@@ -732,7 +1055,9 @@ function createPedidosRoutes() {
     try {
       const { vendedorCodes } = req.query;
       const pedidosService = require('../../../services/pedidos.service');
-      const vc = vendedorCodes ? String(vendedorCodes).trim() : 'ALL';
+      const vendorScope = resolvePedidoVendorScope(req, vendedorCodes || 'ALL');
+      if (!vendorScope.ok) return res.status(403).json(dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error));
+      const vc = vendorScope.codes.length > 0 ? vendorScope.codes.join(',') : (vendedorCodes ? String(vendedorCodes).trim() : 'ALL');
       const analytics = await pedidosService.getOrderAnalytics(vc);
       res.json({ success: true, analytics });
     } catch (error) {
@@ -761,8 +1086,10 @@ function createPedidosRoutes() {
   router.get('/draft-status/:vendedorCode', async (req, res) => {
     try {
       const code = String(req.params.vendedorCode || '').trim();
+      const vendorAccess = authorizePedidoVendorCode(req, code, 'consultar borradores de');
+      if (!vendorAccess.ok) return res.status(vendorAccess.status).json(vendorAccess.body);
       const pedidosService = require('../../../services/pedidos.service');
-      const result = await pedidosService.checkDraftAccumulation(code);
+      const result = await pedidosService.checkDraftAccumulation(vendorAccess.vendedorCode);
       res.json({ success: true, ...result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /draft-status: ${error.message}`);
@@ -800,7 +1127,18 @@ function createPedidosRoutes() {
       const toYmd = to.getFullYear() * 10000 + (to.getMonth() + 1) * 100 + to.getDate();
 
       let vendor = String(req.query.vendedorCode || '').trim();
-      if (!userIsJefe && userVendor) vendor = userVendor;
+      if (!userIsJefe) {
+        // Igual que la ruta legacy: un comercial sin código autenticado no
+        // puede consultar el histórico global de ningún vendedor.
+        if (!userVendor) {
+          return res.status(403).json({
+            success: false,
+            code: 'FORBIDDEN_VENDOR',
+            error: 'COMERCIAL sin vendedor autenticado',
+          });
+        }
+        vendor = userVendor;
+      }
       const isAllVendor = !vendor || vendor.toUpperCase() === 'ALL';
       const clientCode = String(req.query.clientCode || '').trim();
       const productCode = String(req.query.productCode || '').trim();
@@ -886,11 +1224,13 @@ function createPedidosRoutes() {
         FROM DSED.LACLAE L WHERE ${whereSql}
         GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC DESC, L.LCMMDC`;
 
+      const lastYearTotalSql = "SELECT COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_LAST_YEAR FROM DSED.LACLAE L WHERE DECIMAL(TRIM(CHAR(L.LCAADC)) CONCAT RIGHT('00' CONCAT TRIM(CHAR(L.LCMMDC)), 2) CONCAT RIGHT('00' CONCAT TRIM(CHAR(L.LCDDDC)), 2), 8, 0) BETWEEN ? AND ? AND L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('VT','AB') AND L.LCSRAB NOT IN ('N','Z','G','D')";
+
       const [detail, summary, topProducts, lastYear, monthlyByYear] = await Promise.all([
         queryWithParams(detailSql, params, false),
         queryWithParams(summarySql, params, false),
         queryWithParams(topProductosSql, params, false),
-        queryWithParams(`SELECT COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_LAST_YEAR FROM DSED.LACLAE L WHERE (L.LCAADC * 10000 + L.LCMMDC * 100 + L.LCDDDC) BETWEEN ? AND ? AND L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('VT','AB') AND L.LCSRAB NOT IN ('N','Z','G','D')`, [lastYearFrom, lastYearTo], false),
+        queryWithParams(lastYearTotalSql, [lastYearFrom, lastYearTo], false),
         queryWithParams(monthlyByYearSql, params, false),
       ]);
 
@@ -915,7 +1255,9 @@ function createPedidosRoutes() {
     } catch (error) {
       const odbc0 = error.odbcErrors && error.odbcErrors[0];
       const odbcMsg = odbc0 ? `${odbc0.state} (${odbc0.code}): ${odbc0.message}` : '';
-      logger.error(`[DDD-PEDIDOS] purchase-history-global ERROR: ${error.message}\n  ODBC: ${odbcMsg}\n  STACK: ${error.stack || ''}`);
+      logger.error(`[DDD-PEDIDOS] purchase-history-global ERROR: ${error.message}
+  ODBC: ${odbcMsg}
+  STACK: ${error.stack || ''}`);
       res.status(500).json({ success: false, error: 'Error obteniendo historico global', detail: process.env.NODE_ENV !== 'production' ? error.message : undefined, odbc: process.env.NODE_ENV !== 'production' ? odbcMsg : undefined });
     }
   });
@@ -995,14 +1337,56 @@ function createPedidosRoutes() {
     }
   });
 
+  // GET /api/pedidos/available-vehicles
+  // Flutter calls this while confirming an order with manual truck assignment.
+  router.get('/available-vehicles', async (req, res) => {
+    try {
+      const pedidosService = require('../../../services/pedidos.service');
+      const vehicles = await pedidosService.getAvailableVehicles();
+      res.json({ success: true, vehicles });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /available-vehicles: ${error.message}`);
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  router.get("/client-evolution/:clientCode", async (req, res) => {
+    try {
+      const clientCode = String(req.params.clientCode || "").trim();
+      const vendedorCodes = req.query.vendedorCodes || req.query.vendorCodes || "ALL";
+      if (!clientCode) return res.status(400).json({ success: false, error: "clientCode requerido" });
+      const vendorScope = resolvePedidoVendorScope(req, vendedorCodes);
+      if (!vendorScope.ok) return res.status(403).json({ success: false, error: vendorScope.error });
+      const clientVendorFilter = buildClientVendorParamFilter(vendorScope.codes, "CLI");
+      const laclaeVendorFilter = buildLaclaeVendorParamFilter(vendorScope.codes, "L");
+      const clientCheckSql = ['SELECT 1 FROM DSEDAC.CLI CLI WHERE TRIM(CLI.CODIGOCLIENTE) = ?', clientVendorFilter.clause, 'FETCH FIRST 1 ROWS ONLY'].join(' ');
+      const clientCheck = await queryWithParams(clientCheckSql, [clientCode, ...clientVendorFilter.params]);
+      if (!clientCheck || clientCheck.length === 0) return res.status(403).json({ success: false, error: "No tienes acceso a este cliente", message: "Cliente no encontrado o no tienes permiso para verlo" });
+      const currentYear = new Date().getFullYear();
+      const startYear = currentYear - 2;
+      const monthlyDataSql = ['SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, SUM(L.LCIMVT) AS SALES, SUM(L.LCCTUD) AS UNITS FROM DSED.LACLAE L WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)', laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC ASC, L.LCMMDC ASC'].join(' ');
+      const monthlyData = await queryWithParams(monthlyDataSql, [clientCode, startYear, "CC", "VC", "AB", "VT", ...laclaeVendorFilter.params]);
+      const topProductsDataSql = ['SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME, SUM(L.LCIMVT) AS TOTAL_SALES, SUM(L.LCCTUD) AS TOTAL_UNITS FROM DSED.LACLAE L LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)', laclaeVendorFilter.clause, 'GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY TOTAL_SALES DESC FETCH FIRST 20 ROWS ONLY'].join(' ');
+      const topProductsData = await queryWithParams(topProductsDataSql, [clientCode, currentYear - 1, "CC", "VC", "AB", "VT", ...laclaeVendorFilter.params]);
+      const returnsDataSql = ['SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME, SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT FROM DSED.LACLAE L LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ? AND (L.LCSRAB = ? OR L.LCTPVT = ?)', laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC FETCH FIRST 50 ROWS ONLY'].join(' ');
+      const returnsData = await queryWithParams(returnsDataSql, [clientCode, startYear, "D", "DV", ...laclaeVendorFilter.params]);
+      res.json({ success: true, years: [startYear, startYear + 1, currentYear], monthlySales: monthlyData.map((r) => ({ year: r.YEAR, month: r.MONTH, sales: parseFloat(r.SALES), units: parseFloat(r.UNITS) })), topProducts: topProductsData.map((r) => ({ code: r.CODE, name: r.NAME, totalSales: parseFloat(r.TOTAL_SALES), totalUnits: parseFloat(r.TOTAL_UNITS) })), returns: returnsData.map((r) => ({ year: r.YEAR, month: r.MONTH, productCode: r.PRODUCT_CODE, productName: r.PRODUCT_NAME, units: parseFloat(r.UNITS), amount: parseFloat(r.AMOUNT) })) });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in GET /client-evolution/:clientCode: ${error.message}`);
+      res.status(500).json({ success: false, error: "Error getting client evolution" });
+    }
+  });
+
   // GET /api/pedidos/:id  - SOLO numerico para no capturar rutas como
   // /purchase-history-global, /draft-status/:vendedorCode, etc.
   router.get('/:id([0-9]+)', async (req, res) => {
     try {
       const { id } = req.params;
+      const ownership = await authorizePedidoMutation(req, id, 'consultar');
+      if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
       const order = await repo.getOrderById(id);
       if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
-      res.json({ success: true, order });
+      res.json({ success: true, order: stripMarginFromOrder(order, req.user) });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /:id: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
@@ -1027,17 +1411,24 @@ function createPedidosRoutes() {
         return res.status(400).json({ success: false, error: 'clientCode and lines are required' });
       }
 
+      const vendorAccess = authorizePedidoVendorCode(req, actualVendedor, 'crear pedidos para');
+      if (!vendorAccess.ok) return res.status(vendorAccess.status).json(vendorAccess.body);
+      const clientAccess = await authorizePedidoClientScope(req, clientCode, vendorAccess.vendedorCode, 'crear pedidos para');
+      if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
+
       const pedidosService = require('../../../services/pedidos.service');
+      const idempotencyKey = pedidosService.extractIdempotencyKeyFromRequest(req);
       const result = await pedidosService.createOrder({
-        clientCode: String(clientCode).trim(),
+        clientCode: clientAccess.clientCode,
         clientName: clientName ? String(clientName).trim() : '',
-        vendedorCode: String(actualVendedor).trim(),
+        vendedorCode: vendorAccess.vendedorCode,
         tipoventa: tipoventa || 'CC',
         almacen: parseInt(almacen) || 1,
         tarifa: parseInt(tarifa) || 1,
         observaciones: observations || observaciones || '',
         lines: lines,
-        origen: 'A'
+        origen: 'A',
+        idempotencyKey,
       });
 
       // Invalidate related caches
@@ -1047,8 +1438,17 @@ function createPedidosRoutes() {
       cache.invalidatePattern(`ddd:stats:${userId}`);
 
       const normalized = normalizeOrderResponse(result);
+      if (result.idempotent) {
+        return res.status(200).json({ success: true, idempotent: true, ...normalized });
+      }
       res.status(201).json({ success: true, ...normalized });
     } catch (error) {
+      if (error.code === 'INVALID_IDEMPOTENCY_KEY') {
+        return res.status(400).json({ success: false, code: error.code, error: error.message });
+      }
+      if (error.code === 'IDEMPOTENCY_CONFLICT') {
+        return res.status(409).json({ success: false, code: error.code, error: error.message });
+      }
       logger.error(`[DDD-PEDIDOS] Error in POST /create: ${error.message}`);
       res.status(500).json({ success: false, error: error.message });
     }
@@ -1062,8 +1462,14 @@ function createPedidosRoutes() {
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
       const { saleType, forceConfirm, deliveryDate, vehicleCode, driverCode, routeCode } = req.body || {};
+      if (!saleType || !['CC', 'VC', 'NV'].includes(String(saleType).trim())) {
+        return res.status(400).json({ success: false, error: 'saleType must be CC, VC, or NV', code: 'INVALID_SALE_TYPE' });
+      }
+      const ownership = await authorizePedidoMutation(req, id, 'confirmar');
+      if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
+
       const pedidosService = require('../../../services/pedidos.service');
-      const result = await pedidosService.confirmOrder(parseInt(id), saleType, {
+      const result = await pedidosService.confirmOrder(parseInt(id), String(saleType).trim(), {
         forceConfirm: !!forceConfirm,
         userId,
         deliveryDate: deliveryDate ? String(deliveryDate).trim() : undefined,
@@ -1073,7 +1479,27 @@ function createPedidosRoutes() {
       });
 
       if (result && result.blocked) {
-        return res.status(409).json({ success: false, ...result });
+        const blockedCode = result.code || result.reason || (
+          result.deficit !== undefined || result.saldoBolsa !== undefined
+            ? 'BOLSA_INSUFICIENTE'
+            : 'STOCK_INSUFICIENTE'
+        );
+        const payload = {
+          success: false,
+          blocked: true,
+          reason: result.reason,
+          code: blockedCode,
+          message: result.message,
+        };
+        if (blockedCode === 'BOLSA_INSUFICIENTE') {
+          if (result.deficit !== undefined) payload.deficit = result.deficit;
+          if (result.saldoBolsa !== undefined) payload.saldoBolsa = result.saldoBolsa;
+          if (result.warnings !== undefined) payload.warnings = result.warnings;
+        } else {
+          if (result.stockWarnings !== undefined) payload.stockWarnings = result.stockWarnings;
+          if (result.alternatives !== undefined) payload.alternatives = result.alternatives;
+        }
+        return res.status(409).json(payload);
       }
 
       // Invalidate related caches
@@ -1097,8 +1523,11 @@ function createPedidosRoutes() {
   router.put('/:id/lines', async (req, res) => {
     try {
       const { id } = req.params;
+      const ownership = await authorizePedidoMutation(req, id, 'modificar lineas de');
+      if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
       const pedidosService = require('../../../services/pedidos.service');
       const result = await pedidosService.addOrderLine(parseInt(id), req.body);
+      invalidateOrderListCaches(cache);
       res.json({ success: true, line: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/lines: ${error.message}`);
@@ -1110,8 +1539,12 @@ function createPedidosRoutes() {
   router.put('/:id/lines/:lineId', async (req, res) => {
     try {
       const { id, lineId } = req.params;
+      const ownership = await authorizePedidoMutation(req, id, 'modificar lineas de');
+      if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
       const pedidosService = require('../../../services/pedidos.service');
-      const result = await pedidosService.updateOrderLine(parseInt(id), parseInt(lineId), req.body);
+      // Contrato del servicio: updateOrderLine(lineId, payload).
+      const result = await pedidosService.updateOrderLine(parseInt(lineId), req.body);
+      invalidateOrderListCaches(cache);
       res.json({ success: true, line: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/lines/:lineId: ${error.message}`);
@@ -1123,12 +1556,34 @@ function createPedidosRoutes() {
   router.put('/:id/lines/:lineId/delete', async (req, res) => {
     try {
       const { id, lineId } = req.params;
+      const ownership = await authorizePedidoMutation(req, id, 'eliminar lineas de');
+      if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
       const pedidosService = require('../../../services/pedidos.service');
-      const result = await pedidosService.deleteOrderLine(parseInt(id), parseInt(lineId));
+      // Contrato del servicio: deleteOrderLine(lineId, pedidoId).
+      const result = await pedidosService.deleteOrderLine(parseInt(lineId), parseInt(id));
+      invalidateOrderListCaches(cache);
       res.json({ success: true, line: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/lines/:lineId/delete: ${error.message}`);
       res.status(error.code === 'ORDER_NOT_EDITABLE' ? 409 : 500).json({ success: false, error: error.message, code: error.code });
+    }
+  });
+
+  router.delete("/:id/lines/:lineId", async (req, res) => {
+    try {
+      const id = Number.parseInt(req.params.id, 10);
+      const lineId = Number.parseInt(req.params.lineId, 10);
+      if (!Number.isFinite(id) || !Number.isFinite(lineId)) return res.status(400).json({ success: false, error: "Invalid order or line id" });
+      const ownership = await authorizePedidoMutation(req, id, "eliminar lineas de");
+      if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
+      const pedidosService = require("../../../services/pedidos.service");
+      const result = await pedidosService.deleteOrderLine(lineId, id);
+      invalidateOrderListCaches(cache);
+      res.json({ success: true, line: result });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in DELETE /:id/lines/:lineId: ${error.message}`);
+      const status = error.code === "ORDER_NOT_EDITABLE" ? 409 : error.code === "ORDER_NOT_FOUND" ? 404 : 500;
+      res.status(status).json({ success: false, error: error.message, code: error.code });
     }
   });
 
@@ -1139,8 +1594,11 @@ function createPedidosRoutes() {
       const { estado, status, userId } = req.body;
       const nextEstado = estado || status;
       if (!nextEstado) return res.status(400).json({ success: false, error: 'estado required' });
+      const ownership = await authorizePedidoMutation(req, id, 'cambiar estado de');
+      if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
 
       const result = await repo.updateOrderStatus({ orderId: id, estado: nextEstado, userId: userId || req.user?.code });
+      invalidateOrderListCaches(cache);
       const normalized = normalizeOrderResponse(result);
       res.json({ success: true, ...normalized });
     } catch (error) {
@@ -1161,8 +1619,11 @@ function createPedidosRoutes() {
       if (isNaN(numericId)) {
         return res.status(400).json({ success: false, error: 'Invalid order ID' });
       }
+      const ownership = await authorizePedidoMutation(req, numericId, 'anular');
+      if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
       const pedidosService = require('../../../services/pedidos.service');
       const result = await pedidosService.cancelOrder(numericId, { userId: req.user?.code });
+      invalidateOrderListCaches(cache);
       res.json({ success: true, order: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/cancel: ${error.message}`);
@@ -1177,9 +1638,11 @@ function createPedidosRoutes() {
   router.get('/:id/clone', async (req, res) => {
     try {
       const { id } = req.params;
+      const ownership = await authorizePedidoMutation(req, id, 'clonar');
+      if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
       const pedidosService = require('../../../services/pedidos.service');
       const order = await pedidosService.cloneOrder(parseInt(id));
-      res.json({ success: true, order });
+      res.json({ success: true, order: stripMarginFromOrder(order, req.user) });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /:id/clone: ${error.message}`);
       res.status(error.message.includes('not found') ? 404 : 500).json({ success: false, error: error.message });
@@ -1190,6 +1653,8 @@ function createPedidosRoutes() {
   router.get('/:id/albaran', async (req, res) => {
     try {
       const { id } = req.params;
+      const ownership = await authorizePedidoMutation(req, id, 'consultar albaran de');
+      if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
       const pedidosService = require('../../../services/pedidos.service');
       const albaranes = await pedidosService.getOrderAlbaran(parseInt(id));
       res.json({ success: true, albaranes });
@@ -1203,6 +1668,8 @@ function createPedidosRoutes() {
   router.get('/:id/pdf', async (req, res) => {
     try {
       const { id } = req.params;
+      const ownership = await authorizePedidoMutation(req, id, 'generar PDF de');
+      if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
       const pedidosService = require('../../../services/pedidos.service');
       const pdf = await pedidosService.generateOrderPdf(parseInt(id));
       res.json({ success: true, pdf });
@@ -1218,8 +1685,11 @@ function createPedidosRoutes() {
       const { id } = req.params;
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
+      const ownership = await authorizePedidoMutation(req, id, 'eliminar');
+      if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
 
       const result = await repo.deleteOrder({ orderId: id, userId });
+      invalidateOrderListCaches(cache);
       res.json({ success: true, order: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in DELETE /:id: ${error.message}`);
@@ -1280,10 +1750,16 @@ function createCobrosRoutes() {
       const cacheKey = `ddd:cobros:pendientes:${codigoCliente}:${cobrosCacheScope(req)}`;
       await withCache(cache, cacheKey, TTL_MS.PENDIENTES, async () => {
         const pendientes = await repo.getPendientes(String(codigoCliente).trim(), cobrosContext(req));
+        const resumen = pendientes.resumen || { totalPendiente: 0 };
+        const totalPendiente = parseFloat(resumen.totalPendiente) || 0;
         return {
           success: true,
           cobros: pendientes.cobros || [],
-          resumen: pendientes.resumen || { totalPendiente: 0 },
+          resumen: {
+            ...resumen,
+            totalPendiente,
+            total: resumen.total ?? totalPendiente,
+          },
           pendientes
         };
       }, res);
@@ -1298,23 +1774,33 @@ function createCobrosRoutes() {
       const { codigoCliente } = req.params;
       if (!codigoCliente) return res.status(400).json({ success: false, error: 'codigoCliente required' });
 
-      const pendientes = await repo.getPendientes(String(codigoCliente).trim(), cobrosContext(req));
-      const totalPendiente = parseFloat(pendientes?.resumen?.totalPendiente) || 0;
-      res.json({
-        success: true,
-        estadoCliente: {
-          codigo: String(codigoCliente).trim(),
-          nombre: '',
-          limiteCredito: 0,
-          totalPendiente,
-          diasMora: 0,
-          estado: totalPendiente > 0 ? 'EN_ROJO' : 'ACTIVO',
-          motivo: totalPendiente > 0 ? 'Tiene cobros pendientes' : null
-        }
-      });
+      // Misma caché corta que /pendientes: la consulta CVC por cliente es la
+      // misma y en frío puede tardar decenas de segundos (scan con TRIM()).
+      // Sin caché, cada /estado repetía esa query completa.
+      const cacheKey = `ddd:cobros:estado:${String(codigoCliente).trim()}:${cobrosCacheScope(req)}`;
+      await withCache(cache, cacheKey, TTL_MS.PENDIENTES, async () => {
+        const pendientes = await repo.getPendientes(String(codigoCliente).trim(), cobrosContext(req));
+        const totalPendiente = parseFloat(pendientes?.resumen?.totalPendiente) || 0;
+        return {
+          success: true,
+          estadoCliente: {
+            codigo: String(codigoCliente).trim(),
+            nombre: '',
+            limiteCredito: 0,
+            totalPendiente,
+            diasMora: 0,
+            estado: totalPendiente > 0 ? 'EN_ROJO' : 'ACTIVO',
+            motivo: totalPendiente > 0 ? 'Tiene cobros pendientes' : null
+          }
+        };
+      }, res);
     } catch (error) {
       logger.error(`[DDD-COBROS] Error in GET /estado: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      res.status(500).json({
+        success: false,
+        error: 'Error obteniendo estado de cobros',
+        code: 'COBROS_ESTADO_ERROR',
+      });
     }
   });
 
@@ -1344,7 +1830,9 @@ function createCobrosRoutes() {
       });
 
       cache.invalidatePattern(`ddd:cobros:pendientes:${codigoCliente}:`);
+      cache.invalidatePattern(`ddd:cobros:estado:${codigoCliente}:`);
       cache.invalidatePattern(`ddd:cobros:historico:${codigoCliente}:`);
+      cache.invalidatePattern('ddd:cobros:pending-summary:');
 
       res.json({ success: true, mensaje: 'Cobro registrado correctamente', payment: result });
     } catch (error) {
@@ -1379,7 +1867,9 @@ function createCobrosRoutes() {
 
       // Invalidate cobros caches
       cache.invalidatePattern(`ddd:cobros:pendientes:${clientCode}:`);
+      cache.invalidatePattern(`ddd:cobros:estado:${clientCode}:`);
       cache.invalidatePattern(`ddd:cobros:historico:${clientCode}:`);
+      cache.invalidatePattern('ddd:cobros:pending-summary:');
 
       res.json({ success: true, payment: result });
     } catch (error) {
@@ -1394,8 +1884,11 @@ function createCobrosRoutes() {
     try {
       const vendedorCodeParam = req.params.vendedorCode;
       logger.info(`[COBROS] Pending summary for vendor: ${vendedorCodeParam}`);
-      const result = await repo.getPendingSummary(vendedorCodeParam, cobrosContext(req));
-      res.json({ success: true, ...result });
+      const cacheKey = `ddd:cobros:pending-summary:${String(vendedorCodeParam || '').trim()}:${cobrosCacheScope(req)}`;
+      await withCache(cache, cacheKey, TTL_MS.PENDIENTES, async () => {
+        const result = await repo.getPendingSummary(vendedorCodeParam, cobrosContext(req));
+        return { success: true, ...result };
+      }, res);
     } catch (error) {
       logger.error(`[COBROS] Error pending-summary: ${error.message}`);
       sendCobrosError(res, error);
@@ -1406,13 +1899,22 @@ function createCobrosRoutes() {
     try {
       const { codigoCliente } = req.params;
       const { limit, offset } = req.query;
+      const safeLimit = Math.max(1, Math.min(100, parseInt(limit) || 20));
+      const safeOffset = Math.max(0, parseInt(offset) || 0);
+      const clientAccess = await authorizePedidoClientScope(
+        req,
+        codigoCliente,
+        req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+        'consultar historico de cobros de',
+      );
+      if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
 
-      const cacheKey = `ddd:cobros:historico:${codigoCliente}:${cobrosCacheScope(req)}:${limit || 20}:${offset || 0}`;
+      const cacheKey = `ddd:cobros:historico:${clientAccess.clientCode}:${cobrosCacheScope(req)}:${safeLimit}:${safeOffset}`;
       await withCache(cache, cacheKey, TTL_MS.COBROS_HISTORICO, async () => {
         const historico = await repo.getHistorico({
-          clientCode: String(codigoCliente).trim(),
-          limit: parseInt(limit) || 20,
-          offset: parseInt(offset) || 0
+          clientCode: clientAccess.clientCode,
+          limit: safeLimit,
+          offset: safeOffset
         });
         return { success: true, historico };
       }, res);

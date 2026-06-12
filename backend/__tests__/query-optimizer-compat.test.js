@@ -23,6 +23,7 @@ jest.mock('../services/redis-cache', () => ({
 
 describe('cachedQuery backward compatibility', () => {
   let cachedQuery;
+  let invalidateOnMutation;
 
   beforeEach(() => {
     jest.resetModules();
@@ -30,7 +31,7 @@ describe('cachedQuery backward compatibility', () => {
     mockSet.mockReset();
     mockGet.mockResolvedValue(null);
     mockSet.mockResolvedValue(undefined);
-    ({ cachedQuery } = require('../services/query-optimizer'));
+    ({ cachedQuery, invalidateOnMutation } = require('../services/query-optimizer'));
   });
 
   test('supports legacy positional signature with query()', async () => {
@@ -110,5 +111,45 @@ describe('cachedQuery backward compatibility', () => {
       'query',
       expect.stringContaining('vendedores:active:2026:comercial'),
     );
+  });
+
+  test('cached pedidos query key is covered by pedidos mutation invalidation pattern', async () => {
+    const { redisCache } = require('../services/redis-cache');
+    const query = jest.fn().mockResolvedValue([{ ID: 'P-1' }]);
+
+    await cachedQuery(
+      query,
+      'SELECT * FROM PEDIDOS_CAB',
+      'pedidos:products_v2:C001::::0:20',
+      60,
+    );
+
+    await invalidateOnMutation('PEDIDOS', 'P-1');
+
+    const cachedKey = `gmp:query:${mockSet.mock.calls[0][1]}`;
+    const invalidationPattern = `gmp:${redisCache.invalidatePattern.mock.calls[0][0]}`;
+
+    expect(cachedKey).toBe('gmp:query:query:pedidos:products_v2:C001::::0:20:vendor:ALL');
+    expect(invalidationPattern).toBe('gmp:query:query:pedidos:*');
+    expect(cachedKey.startsWith(invalidationPattern.replace('*', ''))).toBe(true);
+  });
+
+  test('invalidatePattern clears fresh and stale L1 entries for query-domain keys', async () => {
+    jest.resetModules();
+    jest.unmock('../services/redis-cache');
+
+    const { redisCache } = require('../services/redis-cache');
+    const freshKey = 'query:pedidos:red:fresh';
+    const staleKey = 'query:pedidos:red:stale';
+
+    await redisCache.set('query', freshKey, [{ version: 'fresh' }], 60);
+    await redisCache.set('query', staleKey, [{ version: 'stale' }], -1);
+
+    expect(await redisCache.get('query', staleKey)).toEqual([{ version: 'stale' }]);
+
+    await redisCache.invalidatePattern('query:query:pedidos:*');
+
+    expect(await redisCache.get('query', freshKey)).toBeNull();
+    expect(await redisCache.get('query', staleKey)).toBeNull();
   });
 });

@@ -41,7 +41,6 @@ class OrderDetailSheet {
 }
 
 class _OrderDetailBody extends ConsumerStatefulWidget {
-
   const _OrderDetailBody({
     required this.orderId,
     required this.scrollController,
@@ -89,6 +88,50 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     }
   }
 
+  bool _lineUsesBoxes(OrderLine line) {
+    final unit = line.unidadMedida.trim().toUpperCase();
+    return unit.isEmpty || unit == 'CAJAS';
+  }
+
+  List<Widget> _buildQuantityChips(OrderLine line) {
+    final unit = line.unidadMedida.trim().toUpperCase();
+    final unitLabel = Product.unitLabel(unit);
+    if (unit == 'KILOGRAMOS' || unit == 'LITROS') {
+      return [
+        _buildChip(
+          '${PedidosFormatters.number(line.cantidadUnidades, decimals: 2)} $unitLabel',
+          Icons.scale_outlined,
+        ),
+      ];
+    }
+    if (_lineUsesBoxes(line)) {
+      final chips = <Widget>[
+        _buildChip(
+          '${PedidosFormatters.number(line.cantidadEnvases)} ${Product.unitLabel('CAJAS')}',
+          Icons.all_inbox_outlined,
+        ),
+      ];
+      final expectedUnits = line.cantidadEnvases * line.unidadesCaja;
+      final hasLooseUnits = line.cantidadUnidades > 0 &&
+          (line.cantidadUnidades - expectedUnits).abs() > 0.0001;
+      if (hasLooseUnits) {
+        chips.add(
+          _buildChip(
+            '${PedidosFormatters.number(line.cantidadUnidades)} ${Product.unitLabel('UNIDADES')}',
+            Icons.widgets_outlined,
+          ),
+        );
+      }
+      return chips;
+    }
+    return [
+      _buildChip(
+        '${PedidosFormatters.number(line.cantidadUnidades, decimals: 2)} $unitLabel',
+        Icons.widgets_outlined,
+      ),
+    ];
+  }
+
   Future<void> _cancelOrder() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -113,8 +156,10 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Si, anular',
-                style: TextStyle(color: AppTheme.error),),
+            child: const Text(
+              'Si, anular',
+              style: TextStyle(color: AppTheme.error),
+            ),
           ),
         ],
       ),
@@ -124,7 +169,9 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
 
     setState(() => _isCancelling = true);
     try {
-      await ref.read(pedidosProvider.notifier).cancelExistingOrder(widget.orderId);
+      await ref
+          .read(pedidosProvider.notifier)
+          .cancelExistingOrder(widget.orderId);
       if (mounted) Navigator.pop(context, 'cancelled');
     } catch (e) {
       if (mounted) {
@@ -147,7 +194,8 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
-            Icon(Icons.check_circle_outline, color: AppTheme.neonGreen, size: 22),
+            Icon(Icons.check_circle_outline,
+                color: AppTheme.neonGreen, size: 22),
             SizedBox(width: 8),
             Text('Confirmar pedido', style: TextStyle(color: Colors.white)),
           ],
@@ -159,7 +207,8 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+            child:
+                const Text('Cancelar', style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -177,7 +226,9 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
 
     setState(() => _isConfirming = true);
     try {
-      await ref.read(pedidosProvider.notifier).confirmExistingOrder(widget.orderId, header.tipoVenta);
+      await ref
+          .read(pedidosProvider.notifier)
+          .confirmExistingOrder(widget.orderId, header.tipoVenta);
       if (mounted) Navigator.pop(context, 'confirmed');
     } catch (e) {
       if (mounted) {
@@ -193,7 +244,8 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Center(
-          child: CircularProgressIndicator(color: AppTheme.neonBlue),);
+        child: CircularProgressIndicator(color: AppTheme.neonBlue),
+      );
     }
 
     if (_error != null) {
@@ -203,17 +255,21 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           children: [
             const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
             const SizedBox(height: 12),
-            Text('Error al cargar pedido',
-                style: TextStyle(
-                    color: Colors.white,
-                    fontSize:
-                        Responsive.fontSize(context, small: 14, large: 16),),),
+            Text(
+              'Error al cargar pedido',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: Responsive.fontSize(context, small: 14, large: 16),
+              ),
+            ),
             const SizedBox(height: 8),
             TextButton.icon(
               onPressed: _loadDetail,
               icon: const Icon(Icons.refresh, color: AppTheme.neonBlue),
-              label: const Text('Reintentar',
-                  style: TextStyle(color: AppTheme.neonBlue),),
+              label: const Text(
+                'Reintentar',
+                style: TextStyle(color: AppTheme.neonBlue),
+              ),
             ),
           ],
         ),
@@ -233,7 +289,9 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             width: 40,
             height: 4,
             decoration: BoxDecoration(
-                color: Colors.white24, borderRadius: BorderRadius.circular(2),),
+              color: Colors.white24,
+              borderRadius: BorderRadius.circular(2),
+            ),
           ),
         ),
         // Header
@@ -243,8 +301,11 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
         Expanded(
           child: detail.lines.isEmpty
               ? const Center(
-                  child: Text('Sin lineas',
-                      style: TextStyle(color: Colors.white38),),)
+                  child: Text(
+                    'Sin lineas',
+                    style: TextStyle(color: Colors.white38),
+                  ),
+                )
               : ListView.builder(
                   controller: widget.scrollController,
                   padding:
@@ -259,7 +320,9 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                 ),
         ),
         // Actions
-        if (header.estado == 'BORRADOR' || header.estado == 'CONFIRMADO')
+        if (header.estado == 'BORRADOR' ||
+            header.estado == 'PENDIENTE_APROBACION' ||
+            header.estado == 'CONFIRMADO')
           _buildActions(header),
       ],
     );
@@ -293,30 +356,40 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                 child: Text(
                   header.estado,
                   style: TextStyle(
-                      color: statusColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,),
+                    color: statusColor,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 8),
-          _buildInfoRow(Icons.storefront_outlined,
-              '${header.clienteName} (${header.clienteCode})',),
+          _buildInfoRow(
+            Icons.storefront_outlined,
+            '${header.clienteName} (${header.clienteCode})',
+          ),
           const SizedBox(height: 4),
           Row(
             children: [
               Expanded(
-                  child: _buildInfoRow(
-                      Icons.calendar_today_outlined, header.fecha,),),
+                child: _buildInfoRow(
+                  Icons.calendar_today_outlined,
+                  header.fecha,
+                ),
+              ),
               _buildInfoRow(
-                  Icons.sell_outlined, _saleTypeLabel(header.tipoVenta),),
+                Icons.sell_outlined,
+                _saleTypeLabel(header.tipoVenta),
+              ),
             ],
           ),
           if (header.vendedorCode.isNotEmpty) ...[
             const SizedBox(height: 4),
             _buildInfoRow(
-                Icons.badge_outlined, 'Vendedor: ${header.vendedorCode}',),
+              Icons.badge_outlined,
+              'Vendedor: ${header.vendedorCode}',
+            ),
           ],
         ],
       ),
@@ -333,8 +406,9 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           child: Text(
             text,
             style: TextStyle(
-                color: Colors.white70,
-                fontSize: Responsive.fontSize(context, small: 12, large: 14),),
+              color: Colors.white70,
+              fontSize: Responsive.fontSize(context, small: 12, large: 14),
+            ),
             overflow: TextOverflow.ellipsis,
           ),
         ),
@@ -374,9 +448,10 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                     child: Text(
                       '$number',
                       style: const TextStyle(
-                          color: AppTheme.neonBlue,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,),
+                        color: AppTheme.neonBlue,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ),
                 ),
@@ -399,20 +474,28 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             Text(
               line.codigoArticulo,
               style: TextStyle(
-                  color: Colors.white54,
-                  fontSize: Responsive.fontSize(context, small: 11, large: 12),),
+                color: Colors.white54,
+                fontSize: Responsive.fontSize(context, small: 11, large: 12),
+              ),
             ),
             const SizedBox(height: 8),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildChip('${line.cantidadEnvases.toStringAsFixed(0)} c',
-                    Icons.all_inbox_outlined,),
-                const SizedBox(width: 6),
-                _buildChip('${line.cantidadUnidades.toStringAsFixed(0)} u',
-                    Icons.widgets_outlined,),
-                const SizedBox(width: 6),
-                _buildChip(line.unidadMedida, Icons.straighten),
-                const Spacer(),
+                Expanded(
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      ..._buildQuantityChips(line),
+                      _buildChip(
+                        Product.unitLabel(line.unidadMedida),
+                        Icons.straighten,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
@@ -467,8 +550,60 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                 ],
               ],
             ),
+            if (line.bolsaImpact.hasImpact) ...[
+              const SizedBox(height: 8),
+              _buildLineBolsaImpact(line),
+            ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildLineBolsaImpact(OrderLine line) {
+    final impact = line.bolsaImpact;
+    final color = impact.neto >= 0 ? AppTheme.neonGreen : AppTheme.warning;
+    final label = impact.consumo > 0 && impact.acumulacion == 0
+        ? 'Bolsa usada'
+        : impact.acumulacion > 0 && impact.consumo == 0
+            ? 'Bolsa generada'
+            : 'Bolsa';
+    final value = impact.consumo > 0 && impact.acumulacion == 0
+        ? '-${PedidosFormatters.money(impact.consumo)}'
+        : impact.acumulacion > 0 && impact.consumo == 0
+            ? '+${PedidosFormatters.money(impact.acumulacion)}'
+            : '${impact.neto >= 0 ? '+' : ''}${PedidosFormatters.money(impact.neto)}';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.account_balance_wallet_outlined, color: color, size: 15),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white70,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -485,8 +620,10 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
         children: [
           Icon(icon, color: Colors.white54, size: 12),
           const SizedBox(width: 3),
-          Text(label,
-              style: const TextStyle(color: Colors.white54, fontSize: 11),),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white54, fontSize: 11),
+          ),
         ],
       ),
     );
@@ -529,11 +666,20 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildTotalItem(
-                  'Lineas', '${detail.lines.length}', AppTheme.neonBlue,),
+                'Lineas',
+                '${detail.lines.length}',
+                AppTheme.neonBlue,
+              ),
               _buildTotalItem(
-                  'Cajas', totalEnvases.toStringAsFixed(0), Colors.white70,),
+                'Cajas',
+                totalEnvases.toStringAsFixed(0),
+                Colors.white70,
+              ),
               _buildTotalItem(
-                  'Uds', totalUnidades.toStringAsFixed(0), Colors.white70,),
+                'Uds',
+                totalUnidades.toStringAsFixed(0),
+                Colors.white70,
+              ),
             ],
           ),
           const SizedBox(height: 10),
@@ -542,8 +688,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           // Req #2: Margen/% margen solo visibles para JEFE_VENTAS/ADMIN.
           Consumer(
             builder: (ctx, ref, _) {
-              final showMargin =
-                  ref.watch(pedidosProvider).isMarginVisible;
+              final showMargin = ref.watch(pedidosProvider).isMarginVisible;
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
@@ -574,8 +719,39 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
               );
             },
           ),
+          if (detail.bolsaSummary.hasImpact) ...[
+            const SizedBox(height: 10),
+            const Divider(color: AppTheme.borderColor),
+            const SizedBox(height: 10),
+            _buildOrderBolsaSummary(detail.bolsaSummary),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _buildOrderBolsaSummary(OrderBolsaImpact impact) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceAround,
+      children: [
+        if (impact.acumulacion > 0)
+          _buildTotalItem(
+            'Bolsa +',
+            PedidosFormatters.money(impact.acumulacion),
+            AppTheme.neonGreen,
+          ),
+        if (impact.consumo > 0)
+          _buildTotalItem(
+            'Bolsa -',
+            PedidosFormatters.money(impact.consumo),
+            AppTheme.warning,
+          ),
+        _buildTotalItem(
+          'Bolsa neta',
+          '${impact.neto >= 0 ? '+' : ''}${PedidosFormatters.money(impact.neto)}',
+          impact.neto >= 0 ? AppTheme.neonGreen : AppTheme.warning,
+        ),
+      ],
     );
   }
 
@@ -583,13 +759,18 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label,
-            style: const TextStyle(color: Colors.white54, fontSize: 11),),
+        Text(
+          label,
+          style: const TextStyle(color: Colors.white54, fontSize: 11),
+        ),
         const SizedBox(height: 2),
         Text(
           value,
           style: TextStyle(
-              color: color, fontWeight: FontWeight.bold, fontSize: 16,),
+            color: color,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
         ),
       ],
     );
@@ -611,8 +792,10 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                 ? null
                 : () async {
                     HapticFeedback.lightImpact();
-                    final canSeeMargin = ref.watch(pedidosProvider.select((p) => p.isMarginVisible));
-                    await OrderPdfGenerator.generateAndShare(context, _detail!, isMarginVisible: canSeeMargin);
+                    final canSeeMargin = ref.watch(
+                        pedidosProvider.select((p) => p.isMarginVisible));
+                    await OrderPdfGenerator.generateAndShare(context, _detail!,
+                        isMarginVisible: canSeeMargin);
                   },
             icon: const Icon(Icons.picture_as_pdf),
             color: AppTheme.neonGreen,
@@ -630,7 +813,8 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           ),
           const Spacer(),
           // Confirm button
-          if (header.estado == 'BORRADOR') ...[
+          if (header.estado == 'BORRADOR' ||
+              header.estado == 'PENDIENTE_APROBACION') ...[
             Expanded(
               child: ElevatedButton.icon(
                 onPressed: _isConfirming ? null : _confirmOrder,
@@ -639,14 +823,18 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white,),)
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
                     : const Icon(Icons.check_circle_outline),
                 label: Text(_isConfirming ? 'Confirmando...' : 'Confirmar'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.neonGreen,
                   foregroundColor: Colors.black,
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                   elevation: 0,
                 ),
@@ -664,14 +852,18 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: AppTheme.error,),)
+                          strokeWidth: 2,
+                          color: AppTheme.error,
+                        ),
+                      )
                     : const Icon(Icons.cancel_outlined),
                 label: Text(_isCancelling ? 'Anulando...' : 'Anular'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppTheme.error,
                   side: const BorderSide(color: AppTheme.error),
                   shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   padding: const EdgeInsets.symmetric(vertical: 12),
                 ),
               ),
@@ -685,6 +877,10 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     switch (status) {
       case 'BORRADOR':
         return Colors.orange;
+      case 'PENDIENTE_APROBACION':
+        return Colors.amber;
+      case 'CONFIRMANDO':
+        return AppTheme.neonBlue;
       case 'CONFIRMADO':
         return AppTheme.neonBlue;
       case 'ENVIADO':

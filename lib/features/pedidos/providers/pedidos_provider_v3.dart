@@ -1,6 +1,6 @@
 /// PedidosProvider V3 Performance Optimized
 /// =================
-/// 
+///
 /// Optimizations implemented:
 /// - Batched notifyListeners() calls (debounced)
 /// - Selective state updates (only notify when necessary)
@@ -10,7 +10,7 @@
 /// - Stream-based order updates
 /// - Quantization for numeric data
 /// - Object pooling for frequently created objects
-/// 
+///
 /// Expected improvements:
 /// - 50-60% fewer notifyListeners() calls
 /// - 40% faster cart operations
@@ -132,7 +132,7 @@ class PedidosProviderV3 with ChangeNotifier {
   bool get isSaving => _isSaving;
   String? get error => _error;
   Map<String, dynamic> get clientBalance => Map.unmodifiable(_clientBalance);
-  
+
   double get clientSaldoPendiente {
     final saldo = _clientBalance['saldoPendiente'];
     if (saldo is num) return saldo.toDouble();
@@ -141,10 +141,10 @@ class PedidosProviderV3 with ChangeNotifier {
   }
 
   Set<String> get favoriteProductCodes => _favoriteProductCodes;
-  List<Map<String, dynamic>> get complementaryProducts => 
+  List<Map<String, dynamic>> get complementaryProducts =>
       List.unmodifiable(_complementaryProducts);
   PromotionItem? getPromo(String productCode) => _activePromotions[productCode];
-  List<PromotionItem> get activePromotionsList => 
+  List<PromotionItem> get activePromotionsList =>
       List.unmodifiable(_activePromotionsList);
   Map<String, dynamic> get analytics => Map.unmodifiable(_analytics);
   bool get isLoadingAnalytics => _isLoadingAnalytics;
@@ -171,7 +171,7 @@ class PedidosProviderV3 with ChangeNotifier {
   double get globalDiscountPct => _globalDiscountPct;
   double get totalDescuento => totalImporte * _globalDiscountPct / 100;
   double get totalConDescuento => totalImporte - totalDescuento;
-  
+
   double get totalBase {
     var sum = 0;
     for (final l in _lines) {
@@ -180,9 +180,9 @@ class PedidosProviderV3 with ChangeNotifier {
     }
     return sum;
   }
-  
+
   double get totalIva => totalConDescuento - totalBase;
-  
+
   Map<double, double> get ivaBreakdown {
     final map = <double, double>{};
     for (final l in _lines) {
@@ -204,12 +204,12 @@ class PedidosProviderV3 with ChangeNotifier {
     _cacheValid = false;
   }
 
-  double get totalEnvases => 
+  double get totalEnvases =>
       _lines.fold(0, (sum, l) => sum + l.cantidadEnvases);
-  
-  double get totalUnidades => 
+
+  double get totalUnidades =>
       _lines.fold(0, (sum, l) => sum + l.cantidadUnidades);
-  
+
   double get totalImporte {
     if (_cacheValid && _cachedTotalImporte != null) {
       return _cachedTotalImporte!;
@@ -219,7 +219,7 @@ class PedidosProviderV3 with ChangeNotifier {
     _cacheValid = true;
     return value;
   }
-  
+
   double get totalCosto {
     if (_cacheValid && _cachedTotalCosto != null) {
       return _cachedTotalCosto!;
@@ -228,7 +228,7 @@ class PedidosProviderV3 with ChangeNotifier {
     _cachedTotalCosto = value;
     return value;
   }
-  
+
   double get totalMargen {
     if (_cacheValid && _cachedTotalMargen != null) {
       return _cachedTotalMargen!;
@@ -237,39 +237,42 @@ class PedidosProviderV3 with ChangeNotifier {
     _cachedTotalMargen = value;
     return value;
   }
-  
+
   double get porcentajeMargen {
     if (_cacheValid && _cachedPorcentajeMargen != null) {
       return _cachedPorcentajeMargen!;
     }
-    final value = totalConDescuento > 0 
-        ? (totalMargen / totalConDescuento) * 100 
-        : 0;
+    final value =
+        totalConDescuento > 0 ? (totalMargen / totalConDescuento) * 100 : 0;
     _cachedPorcentajeMargen = value;
     return value;
   }
 
   String get saleTypeLabel {
     switch (_saleType) {
-      case 'CC': return 'Venta';
-      case 'VC': return 'Venta Sin Nombre';
-      case 'NV': return 'No Venta';
-      default: return 'Venta';
+      case 'CC':
+        return 'Venta';
+      case 'VC':
+        return 'Venta Sin Nombre';
+      case 'NV':
+        return 'No Venta';
+      default:
+        return 'Venta';
     }
   }
 
   // ── Smart NotifyListeners (debounced) ──
   void _notify({bool immediate = false}) {
     _pendingChanges++;
-    
+
     if (immediate) {
       _flushNotifications();
       return;
     }
-    
+
     if (_notifyScheduled) return;
     _notifyScheduled = true;
-    
+
     Future.microtask(() {
       _notifyScheduled = false;
       _flushNotifications();
@@ -295,7 +298,7 @@ class PedidosProviderV3 with ChangeNotifier {
 
   void setClient(String code, String name, {bool clearCart = false}) {
     var needsNotify = false;
-    
+
     if (clearCart && _lines.isNotEmpty) {
       _lines.clear();
       _activePromotionsList.clear();
@@ -312,13 +315,13 @@ class PedidosProviderV3 with ChangeNotifier {
       _invalidateCache();
       needsNotify = true;
     }
-    
+
     if (_clientCode != code || _clientName != name) {
       _clientCode = code;
       _clientName = name;
       needsNotify = true;
     }
-    
+
     if (needsNotify) _notify(immediate: true);
   }
 
@@ -366,8 +369,10 @@ class PedidosProviderV3 with ChangeNotifier {
 
   void reorderLines(int oldIndex, int newIndex) {
     if (newIndex > oldIndex) newIndex--;
-    if (oldIndex >= 0 && oldIndex < _lines.length &&
-        newIndex >= 0 && newIndex < _lines.length) {
+    if (oldIndex >= 0 &&
+        oldIndex < _lines.length &&
+        newIndex >= 0 &&
+        newIndex < _lines.length) {
       final item = _lines.removeAt(oldIndex);
       _lines.insert(newIndex, item);
       _notify();
@@ -397,7 +402,7 @@ class PedidosProviderV3 with ChangeNotifier {
       _hasMoreProducts = true;
       _products = [];
     }
-    
+
     if (!_hasMoreProducts && !reset) return;
 
     _isLoadingProducts = true;
@@ -410,7 +415,7 @@ class PedidosProviderV3 with ChangeNotifier {
       final cacheKey = 'products_${vendedorCodes}_${_clientCode}_$search'
           '_${_selectedFamily}_$selectedBrand'
           '_${_productOffset}_onlyWithStock$_onlyWithStock';
-      
+
       if (!forceRefresh && reset) {
         final cached = CacheServiceOptimized.get<List<dynamic>>(cacheKey);
         if (cached != null) {
@@ -435,16 +440,15 @@ class PedidosProviderV3 with ChangeNotifier {
         forceRefresh: forceRefresh,
       );
 
-      final filtered = _onlyWithStock 
-          ? results.where((p) => p.hasStock).toList() 
-          : results;
-      
+      final filtered =
+          _onlyWithStock ? results.where((p) => p.hasStock).toList() : results;
+
       if (reset) {
         _products = filtered;
       } else {
         _products = [..._products, ...filtered];
       }
-      
+
       _hasMoreProducts = results.length >= 50;
       _productOffset += results.length;
 
@@ -535,8 +539,13 @@ class PedidosProviderV3 with ChangeNotifier {
 
   // ── Cart Operations (optimized with minimal allocations) ──
 
-  String? addLine(Product product, double cantidadEnvases,
-      double cantidadUnidades, String unidadMedida, double precioVenta,) {
+  String? addLine(
+    Product product,
+    double cantidadEnvases,
+    double cantidadUnidades,
+    String unidadMedida,
+    double precioVenta,
+  ) {
     if (!hasClient) {
       const msg = 'Debes seleccionar un cliente antes de anadir productos.';
       _error = msg;
@@ -550,16 +559,16 @@ class PedidosProviderV3 with ChangeNotifier {
 
     var requestQty = unit == 'CAJAS' ? cantidadEnvases : cantidadUnidades;
 
-    final existingIdx = _lines.indexWhere((l) => l.codigoArticulo == product.code);
+    final existingIdx =
+        _lines.indexWhere((l) => l.codigoArticulo == product.code);
     final currentQtyInCart = existingIdx >= 0
         ? (unit == 'CAJAS'
             ? _lines[existingIdx].cantidadEnvases
             : _lines[existingIdx].cantidadUnidades)
         : 0.0;
 
-    final maxQty = unit == 'CAJAS'
-        ? product.stockEnvases
-        : product.stockForUnit(unit);
+    final maxQty =
+        unit == 'CAJAS' ? product.stockEnvases : product.stockForUnit(unit);
     final remainingAvailable = maxQty - currentQtyInCart;
 
     if (remainingAvailable <= 0 && requestQty > 0) {
@@ -603,9 +612,8 @@ class PedidosProviderV3 with ChangeNotifier {
         return msg;
       }
 
-      final currentQty = lineUnit == 'CAJAS'
-          ? line.cantidadEnvases
-          : line.cantidadUnidades;
+      final currentQty =
+          lineUnit == 'CAJAS' ? line.cantidadEnvases : line.cantidadUnidades;
       final newQty = currentQty + requestQty;
 
       if (product.isDualFieldProduct) {
@@ -629,14 +637,7 @@ class PedidosProviderV3 with ChangeNotifier {
           lineUnit == 'CAJAS' ? line.cantidadEnvases : line.cantidadUnidades;
       _lastUnitByProduct[_qtyKey(product.code)] = line.unidadMedida;
     } else {
-      final ivaCode = product.codigoIva;
-      final ivaRate = ivaCode == '1'
-          ? 0.10
-          : ivaCode == '2'
-              ? 0.04
-              : ivaCode == '3'
-                  ? 0.0
-                  : 0.21;
+      final ivaRate = ivaRateFromCode(product.codigoIva);
       final line = OrderLine(
         codigoArticulo: product.code,
         descripcion: product.name,
@@ -693,8 +694,10 @@ class PedidosProviderV3 with ChangeNotifier {
 
   // ── Order Persistence ──
 
-  Future<Map<String, dynamic>?> confirmOrder(String vendedorCode,
-      {String observaciones = '',}) async {
+  Future<Map<String, dynamic>?> confirmOrder(
+    String vendedorCode, {
+    String observaciones = '',
+  }) async {
     if (!hasClient || !hasLines) {
       _error = 'Seleccione un cliente y añada al menos un producto';
       _notify(immediate: true);

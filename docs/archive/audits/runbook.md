@@ -21,8 +21,8 @@
 ```bash
 # Variables de entorno (o defaults)
 export ODBC_DSN=GMP
-export ODBC_UID=JAVIER
-export ODBC_PWD=JAVIER
+export ODBC_UID=<db2_user>
+export ODBC_PWD=<db2_password>
 ```
 
 ## Paso 1: Scan de anomalías (solo lectura)

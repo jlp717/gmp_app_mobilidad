@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 const odbc = require('odbc');
+const db2ConnectionString = require('./db2-connection');
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
-const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
+const CONN = db2ConnectionString();
 
 (async () => {
   const pool = await odbc.pool(CONN);
@@ -39,10 +40,10 @@ const CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;';
     try { await conn.query('DROP VIEW JAVIER.TEST_VISTA'); } catch (_) {}
     try {
       await conn.query(t.sql);
-      console.log(`✅ ${t.name}`);
+      console.log(`âœ… ${t.name}`);
     } catch (e) {
       const odbc = (e.odbcErrors || [])[0] || {};
-      console.log(`❌ ${t.name}: ${e.message.substring(0,200)}`);
+      console.log(`âŒ ${t.name}: ${e.message.substring(0,200)}`);
     }
   }
 

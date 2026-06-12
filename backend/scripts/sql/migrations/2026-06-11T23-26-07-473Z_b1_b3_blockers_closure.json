@@ -1,0 +1,103 @@
+{
+  "ts": "2026-06-11T23:26:07.475Z",
+  "blockers": {
+    "B1": {
+      "status": "CLOSED_ADDITIVE",
+      "resolution": "All ERP columns present in JAVIER (additive ADD COLUMN migrations applied). NOT NULL alignment deferred to cutover window — see pilar2-pending-ddl-2026-06-11.sql.",
+      "nullableMismatchCount": 256,
+      "sampleNullRowChecks": [
+        {
+          "table": "JAVIER.PEDIDOS_CAB",
+          "column": "SUBEMPRESAPEDIDO",
+          "nullRows": 21
+        },
+        {
+          "table": "JAVIER.PEDIDOS_LIN",
+          "column": "CODIGOARTICULO",
+          "nullRows": 0
+        },
+        {
+          "table": "JAVIER.COBROS",
+          "column": "IMPORTE",
+          "nullRows": 0
+        }
+      ],
+      "alignment": [
+        {
+          "feature": "PEDIDOS_CAB",
+          "source": "DSEDAC.CPC",
+          "target": "JAVIER.PEDIDOS_CAB",
+          "sourceColumnCount": 141,
+          "targetColumnCount": 176,
+          "missingInJavier": [],
+          "status": "ALIGNED"
+        },
+        {
+          "feature": "PEDIDOS_LIN",
+          "source": "DSEDAC.LPC",
+          "target": "JAVIER.PEDIDOS_LIN",
+          "sourceColumnCount": 71,
+          "targetColumnCount": 83,
+          "missingInJavier": [],
+          "status": "ALIGNED"
+        },
+        {
+          "feature": "COBROS",
+          "source": "DSEDAC.CRC",
+          "target": "JAVIER.COBROS",
+          "sourceColumnCount": 31,
+          "targetColumnCount": 43,
+          "missingInJavier": [],
+          "status": "ALIGNED"
+        },
+        {
+          "feature": "REPARTIDOR_COBROS",
+          "source": "DSEDAC.CRCA",
+          "target": "JAVIER.REPARTIDOR_COBROS",
+          "sourceColumnCount": 28,
+          "targetColumnCount": 130,
+          "missingInJavier": [],
+          "status": "ALIGNED"
+        }
+      ]
+    },
+    "B2": {
+      "status": "CLOSED_GUARD",
+      "resolution": "JAVIER NUMERIC(11,2) kept (wider than CPC NUMERIC(10,2)). Runtime guard assertMoneyFitsErpNumeric10_2 when DB2_WRITE_SCHEMA=DSEDAC.",
+      "moneyColumns": [
+        {
+          "column": "IMPORTETOTAL",
+          "javierType": "NUMERIC(11,2)",
+          "prodType": "NUMERIC(10,2)",
+          "maxAbsInJavier": 119.17,
+          "erpLimit": 99999999.99,
+          "status": "ACCEPTED_WIDER_JAVIER"
+        },
+        {
+          "column": "IMPORTECOSTO",
+          "javierType": "NUMERIC(11,2)",
+          "prodType": "NUMERIC(10,2)",
+          "maxAbsInJavier": 70.66,
+          "erpLimit": 99999999.99,
+          "status": "ACCEPTED_WIDER_JAVIER"
+        },
+        {
+          "column": "IMPORTEMARGEN",
+          "javierType": "NUMERIC(11,2)",
+          "prodType": "NUMERIC(10,2)",
+          "maxAbsInJavier": 119.17,
+          "erpLimit": 99999999.99,
+          "status": "ACCEPTED_WIDER_JAVIER"
+        }
+      ]
+    },
+    "B3": {
+      "status": "CLOSED_ACCEPTED",
+      "resolution": "COBROS.ID VARCHAR(36) UUID vs CRC.ID INTEGER — semantic override; export via IDMARCALIQUIDACION.",
+      "acceptedMismatch": {
+        "test": "JAVIER.COBROS.ID",
+        "production": "DSEDAC.CRC.ID"
+      }
+    }
+  }
+}

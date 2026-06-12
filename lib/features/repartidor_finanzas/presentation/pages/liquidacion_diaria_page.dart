@@ -15,10 +15,12 @@ import 'package:sentry_flutter/sentry_flutter.dart';
 class RepartidorLiquidacionDiariaPage extends ConsumerStatefulWidget {
   const RepartidorLiquidacionDiariaPage({
     required this.repartidorId,
+    this.showMonthlySummary = true,
     super.key,
   });
 
   final String repartidorId;
+  final bool showMonthlySummary;
 
   @override
   ConsumerState<RepartidorLiquidacionDiariaPage> createState() =>
@@ -77,7 +79,8 @@ class _RepartidorLiquidacionDiariaPageState
       backgroundColor: AppColors.darkBase,
       body: asyncSummary.when(
         data: _buildForm,
-        loading: () => const Center(child: CircularProgressIndicator(color: AppColors.neonBlue)),
+        loading: () => const Center(
+            child: CircularProgressIndicator(color: AppColors.neonBlue)),
         error: (error, stackTrace) {
           Sentry.captureException(error, stackTrace: stackTrace);
           return _ErrorState(
@@ -102,7 +105,7 @@ class _RepartidorLiquidacionDiariaPageState
         ),
         // Resumen acumulado del mes: cobrado / liquidado / pendiente.
         // Da contexto al repartidor antes de cerrar el dia.
-        if (!isAggregate)
+        if (!isAggregate && widget.showMonthlySummary)
           RepartidorMonthlySummaryBar(repartidorId: widget.repartidorId),
         Expanded(
           child: Form(
@@ -141,7 +144,8 @@ class _RepartidorLiquidacionDiariaPageState
                     color: AppColors.warning,
                   ),
                   const SizedBox(height: 20),
-                  _SectionTitle(icon: Icons.account_balance_wallet, label: 'BALANCE'),
+                  _SectionTitle(
+                      icon: Icons.account_balance_wallet, label: 'BALANCE'),
                   _BalanceCard(
                     label: 'Saldo actual',
                     value: summary.saldoActual,
@@ -359,7 +363,8 @@ class _ModernHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + 12, 16, 16),
+      padding: EdgeInsets.fromLTRB(
+          16, MediaQuery.of(context).padding.top + 12, 16, 16),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -375,7 +380,8 @@ class _ModernHeader extends StatelessWidget {
               color: AppColors.neonBlue.withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: const Icon(Icons.account_balance_wallet, color: AppColors.neonBlue, size: 24),
+            child: const Icon(Icons.account_balance_wallet,
+                color: AppColors.neonBlue, size: 24),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -392,7 +398,8 @@ class _ModernHeader extends StatelessWidget {
                 ),
                 Text(
                   DateFormat('EEEE, d MMMM yyyy', 'es_ES').format(date),
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                  style: const TextStyle(
+                      color: AppColors.textSecondary, fontSize: 12),
                 ),
               ],
             ),
@@ -599,8 +606,11 @@ class _MoneyInputLine extends StatelessWidget {
             child: TextFormField(
               controller: controller,
               autofocus: autofocus,
-              keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              inputFormatters: [FilteringTextInputFormatter.allow(RegExp('[0-9,.]'))],
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp('[0-9,.]'))
+              ],
               validator: _RepartidorLiquidacionDiariaPageState._validateAmount,
               textAlign: TextAlign.right,
               style: const TextStyle(
@@ -610,10 +620,12 @@ class _MoneyInputLine extends StatelessWidget {
               ),
               decoration: const InputDecoration(
                 isDense: true,
-                contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                contentPadding:
+                    EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                 border: InputBorder.none,
                 hintText: '0,00',
-                hintStyle: TextStyle(color: AppColors.textSecondary, fontSize: 14),
+                hintStyle:
+                    TextStyle(color: AppColors.textSecondary, fontSize: 14),
               ),
             ),
           ),
@@ -636,8 +648,10 @@ class _CobrosPreview extends ConsumerWidget {
   });
 
   final List<RepartidorCobroDia> cobros;
+
   /// Repartidor activo. Necesario para autorizar la anulación.
   final String? repartidorId;
+
   /// Callback opcional para refrescar la pantalla tras una anulación.
   final VoidCallback? onReversed;
 
@@ -877,8 +891,7 @@ class _CobrosPreview extends ConsumerWidget {
       decoration: BoxDecoration(
         color: AppColors.darkSurface,
         borderRadius: BorderRadius.circular(12),
-        border:
-            Border.all(color: AppColors.borderColor.withValues(alpha: 0.3)),
+        border: Border.all(color: AppColors.borderColor.withValues(alpha: 0.3)),
       ),
       child: Column(
         children: [
@@ -1018,10 +1031,12 @@ class _ModernSaveBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.fromLTRB(16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
+      padding: EdgeInsets.fromLTRB(
+          16, 12, 16, MediaQuery.of(context).padding.bottom + 12),
       decoration: const BoxDecoration(
         color: AppColors.darkSurface,
-        border: Border(top: BorderSide(color: AppColors.borderColor, width: 0.5)),
+        border:
+            Border(top: BorderSide(color: AppColors.borderColor, width: 0.5)),
       ),
       child: SizedBox(
         width: double.infinity,
@@ -1031,14 +1046,16 @@ class _ModernSaveBar extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.neonGreen,
             foregroundColor: AppColors.darkBase,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             elevation: 0,
           ),
           child: isSaving
               ? const SizedBox(
                   width: 22,
                   height: 22,
-                  child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.darkBase),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2.5, color: AppColors.darkBase),
                 )
               : const Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -1048,7 +1065,8 @@ class _ModernSaveBar extends StatelessWidget {
                     Text(
                       // Req #16: cierre explícito de la jornada del repartidor.
                       'Cerrar día y grabar liquidación',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                   ],
                 ),
@@ -1068,7 +1086,8 @@ class _SelectSingleRepartidor extends StatelessWidget {
       body: Center(
         child: Text(
           'Selecciona un repartidor para liquidar',
-          style: TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+          style: TextStyle(
+              color: AppColors.textSecondary, fontWeight: FontWeight.w600),
         ),
       ),
     );

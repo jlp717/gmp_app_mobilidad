@@ -11,6 +11,7 @@ import 'package:gmp_app_mobilidad/core/widgets/global_vendor_selector.dart';
 import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
 import 'package:gmp_app_mobilidad/features/cobros/presentation/pages/cobro_detail_screen.dart';
 import 'package:gmp_app_mobilidad/features/cobros/providers/cobros_provider.dart';
+import 'package:intl/intl.dart';
 
 class CobrosPage extends ConsumerStatefulWidget {
   const CobrosPage({
@@ -28,6 +29,8 @@ class CobrosPage extends ConsumerStatefulWidget {
 }
 
 class _CobrosPageState extends ConsumerState<CobrosPage> {
+  static final NumberFormat _moneyFormat =
+      NumberFormat.currency(locale: 'es_ES', symbol: '€');
   List<Map<String, dynamic>> _foundClients = [];
   bool _isSearchingClients = false;
   final TextEditingController _searchController = TextEditingController();
@@ -40,6 +43,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   bool _isInitialized = false;
   ProviderSubscription<String?>? _vendorSubscription;
   int _clientLoadGeneration = 0;
+  int _summaryLoadGeneration = 0;
   bool _isLoadingSummary = true;
   String? _loadError;
 
@@ -80,12 +84,15 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         ref.listenManual<String?>(selectedVendorProvider, (previous, next) {
       if (_isInitialized && previous != next) {
         _loadClients();
-        _loadPendingSummary();
+        _loadPendingSummary(forceRefresh: true);
       }
     });
   }
 
-  Future<void> _loadClients([String query = '']) async {
+  Future<void> _loadClients([
+    String query = '',
+    bool forceRefresh = false,
+  ]) async {
     if (!mounted) return;
     final generation = ++_clientLoadGeneration;
     setState(() => _isSearchingClients = true);
@@ -94,6 +101,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
       final response = await ClientsService.getClientsList(
         vendedorCodes: queryCode,
         search: query.isEmpty ? null : query,
+        forceRefresh: forceRefresh,
       );
       final results = (response as List<dynamic>).cast<Map<String, dynamic>>();
       if (mounted && generation == _clientLoadGeneration) {
@@ -113,7 +121,9 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     }
   }
 
-  Future<void> _loadPendingSummary() async {
+  Future<void> _loadPendingSummary({bool forceRefresh = false}) async {
+    if (!mounted) return;
+    final generation = ++_summaryLoadGeneration;
     setState(() {
       _isLoadingSummary = true;
       _loadError = null;
@@ -134,24 +144,50 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             .where((c) => c.isNotEmpty)
             .toList();
         if (codes.length == 1) {
-          await _provider.cargarPendingSummary(codes.first);
+          await _provider.cargarPendingSummary(
+            codes.first,
+            forceRefresh: forceRefresh,
+          );
         } else {
-          await _provider.cargarPendingSummary(null, vendedorCodes: codes);
+          await _provider.cargarPendingSummary(
+            null,
+            vendedorCodes: codes,
+            forceRefresh: forceRefresh,
+          );
         }
       } else if (selectedVendor != null && selectedVendor.isNotEmpty) {
-        await _provider.cargarPendingSummary(selectedVendor);
+        await _provider.cargarPendingSummary(
+          selectedVendor,
+          forceRefresh: forceRefresh,
+        );
       } else if (allVendorCodes.isNotEmpty) {
-        await _provider.cargarPendingSummary(null,
-            vendedorCodes: allVendorCodes);
+        await _provider.cargarPendingSummary(
+          null,
+          vendedorCodes: allVendorCodes,
+          forceRefresh: forceRefresh,
+        );
       } else {
-        await _provider.cargarPendingSummary(null);
+        await _provider.cargarPendingSummary(
+          null,
+          forceRefresh: forceRefresh,
+        );
+      }
+      // El provider captura sus propios errores y los expone en `error`.
+      // Sin esto, un fallo del API mostraba la pantalla con totales a 0
+      // como si fueran datos reales (fallo silencioso).
+      final providerError = _provider.error;
+      if (mounted &&
+          generation == _summaryLoadGeneration &&
+          providerError != null &&
+          _provider.pendingSummary.isEmpty) {
+        setState(() => _loadError = providerError);
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && generation == _summaryLoadGeneration) {
         setState(() => _loadError = 'Error cargando resumen: $e');
       }
     } finally {
-      if (mounted) {
+      if (mounted && generation == _summaryLoadGeneration) {
         setState(() => _isLoadingSummary = false);
       }
     }
@@ -164,8 +200,10 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   }
 
   Future<void> _onRefresh() async {
-    _loadClients(_searchController.text);
-    await _loadPendingSummary();
+    await Future.wait([
+      _loadClients(_searchController.text, true),
+      _loadPendingSummary(forceRefresh: true),
+    ]);
   }
 
   @override
@@ -323,13 +361,9 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   /// numero de clientes con deuda. De un vistazo el comercial/jefe ve el
   /// estado global de cobros antes de entrar en el detalle por cliente.
   Widget _buildSummaryCard(CobrosProvider cobros) {
-    final fmtMoney = (num v) {
-      final s = v.toStringAsFixed(2).replaceAllMapped(
-            RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-            (m) => '${m[1]}.',
-          );
-      return '$s€';
-    };
+    // Formato es_ES: el formateo manual anterior producía "1.234.56€"
+    // (punto como separador decimal Y de miles a la vez).
+    String fmtMoney(num v) => _moneyFormat.format(v);
     final tienePendiente = cobros.grandTotal > 0;
     final tieneVencido = cobros.grandTotalVencido > 0;
 
@@ -657,7 +691,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
             if (hasDebt && !isFiltering) ...[
               const SizedBox(height: 12),
               Text(
-                'Pendiente total: ${cobros.grandTotal.toStringAsFixed(2)} €',
+                'Pendiente total: ${_moneyFormat.format(cobros.grandTotal)}',
                 style: TextStyle(
                   fontSize: 14,
                   color: AppTheme.warning,
@@ -695,6 +729,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     final vencido = _provider.vencidoForClient(code);
     final estado = _provider.estadoForClient(code);
     final hasSummary = _provider.hasPendingSummaryForClient(code);
+    final summaryEntry = _provider.pendingSummary[code.trim()];
+    final docCount = (summaryEntry?['count'] as num?)?.toInt() ?? 0;
     final fromErpDebt = client['fromErpDebt'] == true;
 
     // Nombre: usar el que viene del backend (NOMBREALTERNATIVO > DESCRIPCIONCLIENTE)
@@ -790,6 +826,22 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                         color: AppTheme.textSecondary,
                       ),
                     ),
+                    if (hasSummary) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        docCount > 0
+                            ? '$docCount documento${docCount == 1 ? '' : 's'} pendiente${docCount == 1 ? '' : 's'}'
+                            : 'Sin documentos pendientes',
+                        style: TextStyle(
+                          fontSize: Responsive.fontSize(context,
+                              small: 10, large: 12),
+                          color: pending > 0
+                              ? badgeColor.withValues(alpha: 0.9)
+                              : AppTheme.success.withValues(alpha: 0.8),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                     // Badge "Deuda ERP" para clientes que no son del comercial
                     if (fromErpDebt) ...[
                       const SizedBox(height: 2),
@@ -832,7 +884,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                         ),
                       ),
                       child: Text(
-                        '${pending.toStringAsFixed(2)} €',
+                        _moneyFormat.format(pending),
                         style: TextStyle(
                           color: badgeColor,
                           fontWeight: FontWeight.bold,
@@ -847,7 +899,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                     if (vencido > 0) ...[
                       const SizedBox(height: 4),
                       Text(
-                        'Vencido: ${vencido.toStringAsFixed(2)} €',
+                        'Vencido: ${_moneyFormat.format(vencido)}',
                         style: TextStyle(
                           color: AppTheme.error,
                           fontSize: 10,

@@ -13,8 +13,16 @@ const odbc = require('odbc');
 const fs = require('fs');
 const path = require('path');
 
+function requireEnv(name) {
+  const value = process['env'][name];
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error('Missing required environment variable ' + name);
+  }
+  return value;
+}
+
 // Reuse connection config from project
-const DB_CONFIG = `DSN=${process.env.ODBC_DSN || 'GMP'};UID=${process.env.ODBC_UID || 'JAVIER'};PWD=${process.env.ODBC_PWD || 'JAVIER'};NAM=1;CCSID=1208;`;
+const DB_CONFIG = `DSN=${process.env.ODBC_DSN || 'GMP'};UID=${requireEnv('ODBC_UID')};PWD=${requireEnv('ODBC_PWD')};NAM=1;CCSID=1208;`;
 
 // Parse CLI args
 const args = process.argv.slice(2);

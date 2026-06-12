@@ -33,6 +33,8 @@ Hard rules:
 - DB2 DSN is GMP; primary schemas are JAVIER and DSEDAC.
 - DB2/AS400 server is 192.168.1.22.
 - Backend/application server is 192.168.1.230; backend path is /opt/gmp-api; PM2 production port is 3335. Health checks must call `/api/health` with `User-Agent: GMP-SRE-HealthCheck/1.0`.
+- Runtime health source is .opencode/config/runtime-health.yaml. The old 3197 backend port was verified not listening on 2026-06-07; do not use it for readiness decisions unless SRE verifies a later change.
+- Remote Granja canonical path is `/var/www/mari-pepa`; `/var/www/granjamaripepa` was verified missing and must not be assumed.
 - Image server is 192.168.1.191.
 - Granja also uses DB2/AS400. Do not introduce PostgreSQL or Supabase into agent plans for these projects.
 
@@ -40,13 +42,24 @@ Hard rules:
 
 - Default V4 entry point is chief-engineer-assistant for Javier-facing requests, especially mobile or Telegram sessions.
 - Layer 1 agents: chief-engineer-assistant, product-ux, Architect-Planner, sre-engineer, appsec-engineer, qa-automation-lead, code-autopilot, tech-radar-agent.
+- Team Curator is the weekly team-health auditor: agent roster, route eval, flow policy, models, metrics, repeated errors, tech radar and Telegram summary.
+- Pillar experts include DB2-Query-Optimizer, Redis-Cache-Specialist, Runtime-Log-Diagnostician, Flutter-Architecture-Specialist, Flutter-Performance-Specialist, API-Contract-Specialist, Visual-Design-Specialist, Technical-Verifier, plus backend, DB2, Flutter, QA and reviewer specialists.
 - Layer 2 remains the specialist team in .opencode/agents; direct specialist routing requires explicit @agent mention.
 - Before design or implementation, Layer 1 must run rag-query against codebase plus user_corrections/lessons/anti_patterns.
 - Tier 2 and Tier 3 work goes to staging first. Production requires QA pass, AppSec pass, SRE health check, and Javier saying "adelante".
 - SRE owns production health for 192.168.1.230:3335/api/health and mari-pepa.com; failed post-deploy health at 60 seconds triggers rollback.
 - Repeated errors are tracked by same-error-detector; the second matching error in 30 days triggers a retrospective.
+- Explicit corrections from Javier are captured by `correction-capture` and `user-correction-capture`; phrases like "aprende esto", "te corrijo", "no vuelvas a", "recuerda que", "prefiero que" or `/teach` must be stored before continuing and override generic memory.
 - OpenCode Web must never listen on the network without `OPENCODE_SERVER_PASSWORD`; the GMP launcher auto-creates it in `%USERPROFILE%\.config\opencode\.env` if missing.
 - Production mutation requires the `production-approval-gate` token; Javier's word `adelante` is necessary but not sufficient unless staging, QA, AppSec and SRE gates are already green.
+- Task classification source: .opencode/config/task-classification.yaml. T1/T2/T3 controls workflow, R0-R4 controls risk, A/B/C controls model quality, A0-A4 controls autonomy, and V0-V4 controls verification.
+- Model routing source: .opencode/config/model-routing.yaml. OpenAI handles critical reasoning and reliable code work while Cursor exposes no models; Cursor ACP is allowed for code/test implementation with non-GPT models only after a successful probe; OpenCode Go handles low-risk/research/metrics work. OpenCode Zen is manual-only.
+- State machine source: .opencode/config/workflow-state-machine.yaml. Persisted state and gates override agent intuition.
+- Natural-language decision tree source: .opencode/config/orchestrator-decision-tree.yaml. Javier talks to the Chief in natural language; slash commands are internal equivalents, not required user behavior.
+- Subagent communication source: `handoff-ledger` and .opencode/state/handoffs/. Tier 2/Tier 3 delegation must record context_packet before handoff and specialist_output after return.
+- Readiness source: .opencode/state/readiness-latest.json. Cursor can only become an automatic primary model when readiness reports Cursor `AVAILABLE`; otherwise it stays fallback/manual.
+- Runtime-health source: .opencode/config/runtime-health.yaml. GMP backend readiness must be checked over SSH on 192.168.1.230 with localhost:3335/api/health, not by direct PC TCP probes alone.
+- Production discovery/log reading is R3 unless it mutates production; DB2 DDL/DML, deploy, rollback, secret rotation, or pm2 mutation is R4.
 - GitHub environment gates are active: `production` requires Javier review and only allows `main`; `staging` allows `main`, `develop`, `test`, `pre`, `feat/*`, and `fix/*`.
 
 ## Elite Code Quality Bar
@@ -58,12 +71,25 @@ Hard rules:
 - Code duplication found by RAG or `rg` must be reused/refactored or rejected with evidence.
 - Reviewers must reject clever fragile code: prefer simple invariants, small functions, clear names, and tests around edge cases.
 - Before closing Tier 2/3, run or require `elite-quality-gate`; any BLOCK finding for N+1, unsafe SQL, or async-loop patterns prevents delivery.
+- External mutations and production deploys require an `idempotency_key` or a documented `no_retry_reason`; retries without one are BLOCK.
+- Before trusting the team configuration, run or require `agent-roster-audit`; BLOCK findings mean the roster is not ready.
+- Before trusting model routing, run or require `model-assignment-audit`; BLOCK findings mean an agent is inheriting, using forbidden Zen automation, using GPT through Cursor, or disagreeing with fallback-models.
+- Before trusting workflow state, run or require `workflow-state-audit`; BLOCK findings mean approval, transition, or production gates are incomplete.
+- Before executing a Tier 2/3 route, run or require `flow-policy-check`; BLOCK findings mean the route is unsafe or incomplete.
+- Before accepting subagent output in Tier 2/3, run or require `handoff-ledger`; BLOCK output means missing evidence or invalid specialist contract.
+- Before starting high-risk mobile work, run or require `readiness-smoke`; BLOCK findings mean MCPs, skills, tools, commands or providers are not ready.
 
 ## References
 
 - Project agent rules: .opencode/AGENTS.md
 - Deterministic rules: .opencode/rules.json
 - Project memory: .opencode/memory/
+- Handoff contract: .opencode/config/handoff-contract.yaml
+- Natural language decision tree: .opencode/config/orchestrator-decision-tree.yaml
+- Task classification: .opencode/config/task-classification.yaml
+- Model routing: .opencode/config/model-routing.yaml
+- Workflow state machine: .opencode/config/workflow-state-machine.yaml
+- Runtime health: .opencode/config/runtime-health.yaml
 - Lessons learned: .agent/nhallucinate/lessons-learned.md
 - Beads docs: CLAUDE.md section "Beads Issue Tracker"
 

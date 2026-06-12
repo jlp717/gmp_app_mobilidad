@@ -479,9 +479,15 @@ class QueryOptimizer {
 
     /**
      * Invalidate cache by prefix (for data mutations)
+     *
+     * Las claves generadas por cachedQuery() se guardan con namespace Redis
+     * "query" (redisCache._generateKey) y ademas el CacheKeyGenerator antepone
+     * su propio prefijo "query" al cacheKey legacy: la clave real es
+     * "gmp:query:query:<prefix>:...". Sin el doble "query:" el patron no
+     * coincidia con ninguna clave y la invalidacion era un no-op silencioso.
      */
     async invalidateByPrefix(prefix) {
-        const pattern = `${prefix}:*`;
+        const pattern = `query:query:${prefix}:*`;
         await redisCache.invalidatePattern(pattern);
         cacheMetrics.recordInvalidation();
         logger.info(`[QueryOptimizer] 🗑️ Invalidated cache prefix: ${prefix}`);

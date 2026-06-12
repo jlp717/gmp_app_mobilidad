@@ -4,9 +4,13 @@
 /// Manages cart (current order), product catalog, and order history
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_order_api.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
@@ -60,10 +64,14 @@ class PedidosProvider with ChangeNotifier {
   // Req #9: PedidosOrderApi inyectable para testabilidad. Por defecto usa la
   // implementación basada en PedidosService (estática) para mantener
   // backwards-compat con el resto del provider.
-  PedidosProvider({PedidosOrderApi? orderApi})
-      : _orderApi = orderApi ?? const PedidosServiceOrderApi();
+  PedidosProvider({
+    PedidosOrderApi? orderApi,
+    bool refreshAfterConfirm = true,
+  })  : _orderApi = orderApi ?? const PedidosServiceOrderApi(),
+        _refreshAfterConfirm = refreshAfterConfirm;
 
   final PedidosOrderApi _orderApi;
+  final bool _refreshAfterConfirm;
 
   // ── Cart State (current order being built) ──
   final List<OrderLine> _lines = [];
@@ -81,12 +89,14 @@ class PedidosProvider with ChangeNotifier {
   List<String> _brands = [];
   int _productOffset = 0;
   bool _hasMoreProducts = true;
+  int _productsLoadGeneration = 0;
 
   // ── Orders List State ──
   List<OrderSummary> _orders = [];
   bool _isLoadingOrders = false;
   String? _orderStatusFilter;
   String _vendedorCodes = 'ALL';
+  int _ordersLoadGeneration = 0;
 
   // ── Order Stats ──
   OrderStats? _orderStats;
@@ -274,7 +284,11 @@ class PedidosProvider with ChangeNotifier {
     final code = vendedorCode.trim();
     if (code.isEmpty) return;
     try {
-      final raw = await ApiClient.get('/pedidos/draft-status/$code');
+      final raw = await ApiClient.get(
+        '/pedidos/draft-status/$code',
+        cacheKey: 'pedidos:draft-status:$code',
+        cacheTTL: CacheService.realtimeTTL,
+      );
       final data = raw is Map<String, dynamic> ? raw : <String, dynamic>{};
       final warning = data['warning'] == true;
       final count = (data['count'] ?? 0) is num
@@ -389,6 +403,29 @@ class PedidosProvider with ChangeNotifier {
   double get totalUnidades =>
       _lines.fold(0.0, (sum, l) => sum + l.cantidadUnidades);
 
+  OrderBolsaImpact get estimatedBolsaImpact {
+    final lines = _buildLinesForSubmit();
+    var acumulacion = 0.0;
+    var consumo = 0.0;
+    var count = 0;
+    for (final line in lines) {
+      final impact = line.estimatedBolsaImpact;
+      if (!impact.hasImpact) continue;
+      acumulacion += impact.acumulacion;
+      consumo += impact.consumo;
+      count++;
+    }
+    acumulacion = double.parse(acumulacion.toStringAsFixed(2));
+    consumo = double.parse(consumo.toStringAsFixed(2));
+    return OrderBolsaImpact(
+      acumulacion: acumulacion,
+      consumo: consumo,
+      neto: double.parse((acumulacion - consumo).toStringAsFixed(2)),
+      movementCount: count,
+      hasImpact: count > 0,
+    );
+  }
+
   Map<int, double> get ivaBreakdown {
     final breakdown = <int, double>{};
     for (final line in _lines) {
@@ -489,19 +526,33 @@ class PedidosProvider with ChangeNotifier {
     _isLoadingProducts = true;
     _productSearch = search;
     _error = null;
+    final generation = ++_productsLoadGeneration;
+    final requestClientCode = _clientCode;
+    final requestOffset = _productOffset;
+    final requestFamily = _selectedFamily;
+    final requestBrand = _selectedBrand;
+    final requestPrefamily = _selectedPrefamily;
     notifyListeners();
 
     try {
       final results = await PedidosService.getProducts(
         vendedorCodes: vendedorCodes,
         search: search,
-        clientCode: _clientCode,
-        family: _selectedFamily,
-        marca: _selectedBrand,
-        prefamily: _selectedPrefamily,
-        offset: _productOffset,
+        clientCode: requestClientCode,
+        family: requestFamily,
+        marca: requestBrand,
+        prefamily: requestPrefamily,
+        offset: requestOffset,
         forceRefresh: forceRefresh,
       );
+
+      if (generation != _productsLoadGeneration ||
+          requestClientCode != _clientCode ||
+          requestFamily != _selectedFamily ||
+          requestBrand != _selectedBrand ||
+          requestPrefamily != _selectedPrefamily) {
+        return;
+      }
 
       final filtered =
           _onlyWithStock ? results.where((p) => p.hasStock).toList() : results;
@@ -511,12 +562,16 @@ class PedidosProvider with ChangeNotifier {
         _products = [..._products, ...filtered];
       }
       _hasMoreProducts = results.length >= 50;
-      _productOffset += results.length;
+      _productOffset = requestOffset + results.length;
     } catch (e) {
-      _error = e.toString();
+      if (generation == _productsLoadGeneration) {
+        _error = e.toString();
+      }
     } finally {
-      _isLoadingProducts = false;
-      notifyListeners();
+      if (generation == _productsLoadGeneration) {
+        _isLoadingProducts = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -568,30 +623,22 @@ class PedidosProvider with ChangeNotifier {
 
   // ── Stock Refresh ──
 
+  void _applyStockToProduct(String productCode, Map<String, double> stock) {
+    final idx = _products.indexWhere((p) => p.code == productCode);
+    if (idx < 0) return;
+
+    final product = _products[idx];
+    _products[idx] = product.copyWithStock(
+      stockEnvases: stock['envases'] ?? product.stockEnvases,
+      stockUnidades: stock['unidades'] ?? product.stockUnidades,
+    );
+  }
+
   Future<void> refreshStock(String productCode) async {
     try {
       final stock = await PedidosService.getStock(productCode);
-      final idx = _products.indexWhere((p) => p.code == productCode);
-      if (idx >= 0) {
-        final p = _products[idx];
-        _products[idx] = Product(
-          code: p.code,
-          name: p.name,
-          brand: p.brand,
-          family: p.family,
-          unitsPerBox: p.unitsPerBox,
-          unitsFraction: p.unitsFraction,
-          unitsRetractil: p.unitsRetractil,
-          unitMeasure: p.unitMeasure,
-          weight: p.weight,
-          stockEnvases: stock['envases'] ?? p.stockEnvases,
-          stockUnidades: stock['unidades'] ?? p.stockUnidades,
-          precioTarifa1: p.precioTarifa1,
-          precioMinimo: p.precioMinimo,
-          precioCliente: p.precioCliente,
-        );
-        notifyListeners();
-      }
+      _applyStockToProduct(productCode, stock);
+      notifyListeners();
     } catch (e) {
       debugPrint('[PedidosProvider] refreshStock error: $e');
     }
@@ -692,20 +739,19 @@ class PedidosProvider with ChangeNotifier {
           line.cantidadUnidades = newQty;
         }
       }
+      line.unidadesCaja = product.quantityPerBoxForUnit(unit);
+      line.unidadesFraccion = product.unitsFraction;
       line.precioVenta = precioVenta;
+      line.precioCosto = product.costForUnit(unit);
+      line.precioTarifa = product.precioTarifa1;
+      line.precioTarifaCliente = product.precioCliente;
+      line.precioMinimo = product.minimumPriceForUnit(unit);
       line.recalculate();
       _lastQtyByProduct[_qtyKey(product.code)] =
           lineUnit == 'CAJAS' ? line.cantidadEnvases : line.cantidadUnidades;
       _lastUnitByProduct[_qtyKey(product.code)] = line.unidadMedida;
     } else {
-      final ivaCode = product.codigoIva;
-      final ivaRate = ivaCode == '1'
-          ? 0.10
-          : ivaCode == '2'
-              ? 0.04
-              : ivaCode == '3'
-                  ? 0.0
-                  : 0.21;
+      final ivaRate = ivaRateFromCode(product.codigoIva);
       final line = OrderLine(
         codigoArticulo: product.code,
         descripcion: product.name,
@@ -719,14 +765,10 @@ class PedidosProvider with ChangeNotifier {
         unidadesCaja: product.quantityPerBoxForUnit(unit),
         unidadesFraccion: product.unitsFraction,
         precioVenta: precioVenta,
-        precioCosto: product.precioCosto > 0
-            ? product.precioCosto
-            : (product.precioMinimo > 0
-                ? product.precioMinimo * 0.7
-                : product.precioTarifa1 * 0.7),
+        precioCosto: product.costForUnit(unit),
         precioTarifa: product.precioTarifa1,
         precioTarifaCliente: product.precioCliente,
-        precioMinimo: product.precioMinimo,
+        precioMinimo: product.minimumPriceForUnit(unit),
         ivaRate: ivaRate,
       );
       line.recalculate();
@@ -735,6 +777,7 @@ class PedidosProvider with ChangeNotifier {
       _lastUnitByProduct[_qtyKey(product.code)] = unit;
     }
 
+    _syncGiftPromotionLines(product.code, product: product);
     _error = null;
     _isDirty = true;
     _invalidateCache();
@@ -806,11 +849,22 @@ class PedidosProvider with ChangeNotifier {
       }
     }
 
+    final shouldSyncGifts =
+        !line.isAutoGift && line.tipoLinea.trim().toUpperCase() != 'G';
     if (precioVenta != null) line.precioVenta = precioVenta;
     if (pIdx >= 0) {
-      line.unidadesCaja = _products[pIdx].quantityPerBoxForUnit(nextUnit);
+      final productForUnit = _products[pIdx];
+      line.unidadesCaja = productForUnit.quantityPerBoxForUnit(nextUnit);
+      line.precioCosto = productForUnit.costForUnit(nextUnit);
+      line.precioMinimo = productForUnit.minimumPriceForUnit(nextUnit);
     }
     line.recalculate();
+    if (shouldSyncGifts) {
+      _syncGiftPromotionLines(
+        line.codigoArticulo,
+        product: pIdx >= 0 ? _products[pIdx] : null,
+      );
+    }
     _lastQtyByProduct[_qtyKey(line.codigoArticulo)] = nextQty;
     _lastUnitByProduct[_qtyKey(line.codigoArticulo, _clientCode)] =
         line.unidadMedida;
@@ -822,7 +876,13 @@ class PedidosProvider with ChangeNotifier {
 
   void removeLine(int index) {
     if (index < 0 || index >= _lines.length) return;
-    _lines.removeAt(index);
+    final removed = _lines.removeAt(index);
+    if (!removed.isAutoGift && removed.tipoLinea.trim().toUpperCase() != 'G') {
+      _syncGiftPromotionLines(
+        removed.codigoArticulo,
+        product: _productByCode(removed.codigoArticulo),
+      );
+    }
     if (_lines.isEmpty) {
       _globalDiscountPct = 0;
       _complementaryProducts = [];
@@ -896,10 +956,133 @@ class PedidosProvider with ChangeNotifier {
         precioTarifaCliente: line.precioTarifaCliente,
         precioMinimo: line.precioMinimo,
         ivaRate: line.ivaRate,
+        claseLinea: line.claseLinea,
+        tipoLinea: line.tipoLinea,
+        promotionCode: line.promotionCode,
+        isAutoGift: line.isAutoGift,
       );
       copy.recalculate();
       return copy;
     }).toList();
+  }
+
+  String _promotionProductCode(PromotionItem promo) {
+    final productCode = promo.productCode.trim();
+    return productCode.isNotEmpty ? productCode : promo.code.trim();
+  }
+
+  String _promotionKey(PromotionItem promo) {
+    final promoCode = promo.promoCode.trim();
+    return promoCode.isNotEmpty ? promoCode : promo.code.trim();
+  }
+
+  bool _isManualSaleLine(OrderLine line, String productCode) {
+    return line.codigoArticulo == productCode &&
+        !line.isAutoGift &&
+        line.tipoLinea.trim().toUpperCase() != 'G';
+  }
+
+  Product? _productByCode(String productCode) {
+    for (final product in _products) {
+      if (product.code == productCode) return product;
+    }
+    return null;
+  }
+
+  OrderLine? _firstManualSaleLine(String productCode) {
+    for (final line in _lines) {
+      if (_isManualSaleLine(line, productCode)) return line;
+    }
+    return null;
+  }
+
+  double _manualSaleQuantity(String productCode) {
+    var total = 0.0;
+    for (final line in _lines) {
+      if (_isManualSaleLine(line, productCode)) {
+        total += line.billingQuantity;
+      }
+    }
+    return total;
+  }
+
+  void _removeAutoGiftLines(String productCode, {String? promotionCode}) {
+    _lines.removeWhere((line) {
+      if (!line.isAutoGift || line.codigoArticulo != productCode) return false;
+      if (promotionCode == null || promotionCode.isEmpty) return true;
+      return line.promotionCode == promotionCode;
+    });
+  }
+
+  void _syncGiftPromotionLines(String productCode, {Product? product}) {
+    final promo = _activePromotions[productCode];
+    if (promo == null ||
+        !promo.isGift ||
+        promo.minQty <= 0 ||
+        promo.giftQty <= 0) {
+      _removeAutoGiftLines(productCode);
+      return;
+    }
+
+    final promotionCode = _promotionKey(promo);
+    final saleLine = _firstManualSaleLine(productCode);
+    final saleQty = _manualSaleQuantity(productCode);
+    _removeAutoGiftLines(productCode, promotionCode: promotionCode);
+
+    if (saleLine == null || saleQty < promo.minQty) return;
+
+    final multiplier = promo.cumulative ? (saleQty / promo.minQty).floor() : 1;
+    final giftLineCount = (multiplier * promo.giftQty).floor();
+    if (giftLineCount <= 0) return;
+
+    final sourceProduct = product ?? _productByCode(productCode);
+    final unit = saleLine.unidadMedida.trim().isEmpty
+        ? (sourceProduct?.displayUnit ?? 'CAJAS')
+        : saleLine.unidadMedida.trim().toUpperCase();
+    final unitsPerBox = sourceProduct?.quantityPerBoxForUnit(unit) ??
+        (saleLine.unidadesCaja > 0 ? saleLine.unidadesCaja : 1);
+    final cost = sourceProduct?.costForUnit(unit) ?? saleLine.precioCosto;
+    final tariff = sourceProduct?.precioTarifa1 ?? saleLine.precioTarifa;
+    final clientTariff =
+        sourceProduct?.precioCliente ?? saleLine.precioTarifaCliente;
+    final minPrice =
+        sourceProduct?.minimumPriceForUnit(unit) ?? saleLine.precioMinimo;
+    final description = sourceProduct?.name ?? saleLine.descripcion;
+
+    for (var i = 0; i < giftLineCount; i++) {
+      final giftLine = OrderLine(
+        codigoArticulo: productCode,
+        descripcion: '$description (Regalo)',
+        cantidadEnvases: unit == 'CAJAS' ? 1 : 0,
+        cantidadUnidades: unit == 'CAJAS' ? 0 : 1,
+        unidadMedida: unit,
+        unidadesCaja: unitsPerBox,
+        unidadesFraccion:
+            sourceProduct?.unitsFraction ?? saleLine.unidadesFraccion,
+        precioVenta: 0,
+        precioCosto: cost,
+        precioTarifa: tariff,
+        precioTarifaCliente: clientTariff,
+        precioMinimo: minPrice,
+        ivaRate: saleLine.ivaRate,
+        claseLinea: 'SC',
+        tipoLinea: 'G',
+        promotionCode: promotionCode,
+        isAutoGift: true,
+      );
+      giftLine.recalculate();
+      _lines.add(giftLine);
+    }
+  }
+
+  void _syncAllGiftPromotionLines() {
+    final productCodes = <String>{
+      for (final line in _lines) line.codigoArticulo,
+      ..._activePromotions.keys,
+    };
+    for (final code in productCodes) {
+      _syncGiftPromotionLines(code);
+    }
   }
 
   // ── Active Promotions ──
@@ -920,6 +1103,10 @@ class PedidosProvider with ChangeNotifier {
     String? driverCode,
     String? routeCode,
   }) async {
+    if (_isSaving) {
+      return null;
+    }
+
     if (!hasClient || !hasLines) {
       _error = 'Seleccione un cliente y añada al menos un producto';
       notifyListeners();
@@ -994,7 +1181,9 @@ class PedidosProvider with ChangeNotifier {
 
       // Always refresh orders list + stats after any confirmation attempt
       // so "Mis Pedidos" shows the new order immediately.
-      refreshOrdersAndStats();
+      if (_refreshAfterConfirm) {
+        await refreshOrdersAndStats();
+      }
 
       debugPrint(
           '[confirmOrder] SUCCESS: order confirmed, result keys=${result.keys.toList()}');
@@ -1028,10 +1217,11 @@ class PedidosProvider with ChangeNotifier {
     _isLoadingOrders = true;
     _orderStatusFilter = status;
     _error = null;
+    final generation = ++_ordersLoadGeneration;
     notifyListeners();
 
     try {
-      _orders = await PedidosService.getOrders(
+      final orders = await PedidosService.getOrders(
         vendedorCodes: vendedorCodes,
         status: status,
         forceRefresh: forceRefresh,
@@ -1043,25 +1233,33 @@ class PedidosProvider with ChangeNotifier {
         sortBy: sortBy,
         sortOrder: sortOrder,
       );
+      if (generation != _ordersLoadGeneration) return;
+      _orders = orders;
     } catch (e) {
-      _error = e.toString();
+      if (generation == _ordersLoadGeneration) {
+        _error = e.toString();
+      }
     } finally {
-      _isLoadingOrders = false;
-      notifyListeners();
+      if (generation == _ordersLoadGeneration) {
+        _isLoadingOrders = false;
+        notifyListeners();
+      }
     }
   }
 
   /// Refresh stats + orders list after any order state change
   Future<void> refreshOrdersAndStats() async {
-    await loadOrders(
-      vendedorCodes: _vendedorCodes,
-      status: _orderStatusFilter,
-      forceRefresh: true,
-    );
-    await loadOrderStats(
-      vendedorCodes: _vendedorCodes,
-      forceRefresh: true,
-    );
+    await Future.wait([
+      loadOrders(
+        vendedorCodes: _vendedorCodes,
+        status: _orderStatusFilter,
+        forceRefresh: true,
+      ),
+      loadOrderStats(
+        vendedorCodes: _vendedorCodes,
+        forceRefresh: true,
+      ),
+    ]);
   }
 
   Future<void> loadOrderStats({
@@ -1127,8 +1325,7 @@ class PedidosProvider with ChangeNotifier {
       );
       notifyListeners();
     }
-    // Refresh stats + full list in background
-    refreshOrdersAndStats();
+    await refreshOrdersAndStats();
   }
 
   Future<Map<String, dynamic>> confirmExistingOrder(
@@ -1172,13 +1369,12 @@ class PedidosProvider with ChangeNotifier {
       );
       notifyListeners();
     }
-    // Refresh stats + full list in background
-    refreshOrdersAndStats();
+    await refreshOrdersAndStats();
     return result;
   }
 
   Future<void> setOrderPendingApproval(int orderId) async {
-    await PedidosService.updateOrderStatus(orderId, 'PENDIENTE');
+    await PedidosService.updateOrderStatus(orderId, 'PENDIENTE_APROBACION');
 
     final idx = _orders.indexWhere((o) => o.id == orderId);
     if (idx != -1) {
@@ -1190,7 +1386,7 @@ class PedidosProvider with ChangeNotifier {
         clienteName: o.clienteName,
         vendedorCode: o.vendedorCode,
         fecha: o.fecha,
-        estado: 'PENDIENTE',
+        estado: 'PENDIENTE_APROBACION',
         tipoVenta: o.tipoVenta,
         total: o.total,
         margen: o.margen,
@@ -1198,7 +1394,7 @@ class PedidosProvider with ChangeNotifier {
       );
       notifyListeners();
     }
-    refreshOrdersAndStats();
+    await refreshOrdersAndStats();
   }
 
   Future<void> sendOrder(int orderId) async {
@@ -1222,7 +1418,7 @@ class PedidosProvider with ChangeNotifier {
       );
       notifyListeners();
     }
-    refreshOrdersAndStats();
+    await refreshOrdersAndStats();
   }
 
   // ── Recommendations ──
@@ -1331,6 +1527,14 @@ class PedidosProvider with ChangeNotifier {
     } else {
       _favoriteProductCodes.add(productCode);
     }
+    // Persistir en Hive: sin esto los favoritos se perdían al reiniciar
+    // la app (solo vivían en memoria).
+    unawaited(
+      PedidosFavoritesService.toggleFavorite(productCode)
+          .catchError((Object e) {
+        debugPrint('[PedidosProvider] toggleFavorite persist error: $e');
+      }),
+    );
     notifyListeners();
   }
 
@@ -1368,6 +1572,8 @@ class PedidosProvider with ChangeNotifier {
       final response = await ApiClient.get(
         '/pedidos/promotions',
         queryParameters: {'clientCode': _clientCode},
+        cacheKey: 'pedidos:promotions:$_clientCode',
+        cacheTTL: CacheService.defaultTTL,
       );
       final list = response['promotions'] as List? ?? [];
       _activePromotionsList.clear();
@@ -1381,14 +1587,17 @@ class PedidosProvider with ChangeNotifier {
         final promoPriceStr = item.promoPrice.toStringAsFixed(2);
         final key =
             '${item.promoType}|${item.promoCode}|${item.code}|${item.dateFrom}|${item.dateTo}|$minQtyStr|$giftQtyStr|$promoPriceStr';
-        if (item.code.isNotEmpty && seen.add(key)) {
+        final productCode = _promotionProductCode(item);
+        if (productCode.isNotEmpty && seen.add(key)) {
           _activePromotionsList.add(item);
           // Store ALL promotions per product (not just the first one)
-          _activePromotions.putIfAbsent(item.code, () => item);
+          _activePromotions.putIfAbsent(productCode, () => item);
         }
       }
+      _syncAllGiftPromotionLines();
       debugPrint(
           '[PedidosProvider] Loaded ${_activePromotionsList.length} promotions for $_clientCode');
+      _invalidateCache();
       notifyListeners();
     } catch (e, stack) {
       debugPrint('[PedidosProvider] loadPromotions error: $e');
@@ -1445,14 +1654,7 @@ class PedidosProvider with ChangeNotifier {
       final existingIdx =
           _lines.indexWhere((l) => l.codigoArticulo == product.code);
       if (existingIdx < 0) {
-        final ivaCode = product.codigoIva;
-        final ivaRate = ivaCode == '1'
-            ? 0.10
-            : ivaCode == '2'
-                ? 0.04
-                : ivaCode == '3'
-                    ? 0.0
-                    : 0.21;
+        final ivaRate = ivaRateFromCode(product.codigoIva);
         final line = OrderLine(
           codigoArticulo: product.code,
           descripcion: product.name,
@@ -1473,6 +1675,7 @@ class PedidosProvider with ChangeNotifier {
         _lines.add(line);
         _lastQtyByProduct[_qtyKey(product.code)] = defaultQty;
         _lastUnitByProduct[_qtyKey(product.code)] = line.unidadMedida;
+        _syncGiftPromotionLines(product.code, product: product);
       }
     }
     _error = null;
@@ -1484,42 +1687,16 @@ class PedidosProvider with ChangeNotifier {
   Future<void> refreshCartStock() async {
     if (_lines.isEmpty) return;
 
-    final futures = <Future<void>>[];
-    for (var i = 0; i < _lines.length; i++) {
-      futures.add(_refreshSingleLineStock(i));
-    }
-    await Future.wait(futures);
-    notifyListeners();
-  }
-
-  Future<void> _refreshSingleLineStock(int index) async {
     try {
-      final stock = await PedidosService.getStock(_lines[index].codigoArticulo);
-      final pIdx =
-          _products.indexWhere((p) => p.code == _lines[index].codigoArticulo);
-      if (pIdx >= 0) {
-        final p = _products[pIdx];
-        _products[pIdx] = Product(
-          code: p.code,
-          name: p.name,
-          brand: p.brand,
-          family: p.family,
-          unitsPerBox: p.unitsPerBox,
-          unitsFraction: p.unitsFraction,
-          unitsRetractil: p.unitsRetractil,
-          unitMeasure: p.unitMeasure,
-          weight: p.weight,
-          stockEnvases: stock['envases'] ?? p.stockEnvases,
-          stockUnidades: stock['unidades'] ?? p.stockUnidades,
-          precioTarifa1: p.precioTarifa1,
-          precioMinimo: p.precioMinimo,
-          precioCliente: p.precioCliente,
-        );
-      }
-    } catch (e) {
-      debugPrint(
-        '[PedidosProvider] refreshCartStock error for ${_lines[index].codigoArticulo}: $e',
+      final stockByCode = await PedidosService.getStockBatch(
+        _lines.map((line) => line.codigoArticulo),
       );
+      for (final entry in stockByCode.entries) {
+        _applyStockToProduct(entry.key, entry.value);
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('[PedidosProvider] refreshCartStock batch error: $e');
     }
   }
 
@@ -1553,6 +1730,8 @@ class PedidosProvider with ChangeNotifier {
         _activePromotions[productCode] = promo;
       }
     }
+    _syncAllGiftPromotionLines();
+    _invalidateCache();
   }
 
   @override

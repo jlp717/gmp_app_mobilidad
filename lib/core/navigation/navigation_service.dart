@@ -8,7 +8,6 @@ final navigationServiceProvider = Provider<NavigationService>((ref) {
 });
 
 class NavigationService {
-
   NavigationService(this._ref) {
     tabConfig = _buildTabConfig();
   }
@@ -47,7 +46,7 @@ class NavigationService {
         }
       } else if (tab.allowedRoles.contains('JEFE_VENTAS') ||
           tab.allowedRoles.contains('COMERCIAL')) {
-        if (isJebeVentas || showCommissions) {
+        if (isJefeVentas || showCommissions) {
           if (tab.id == 'comisiones' || tab.id != 'comisiones') {
             include = true;
           }
@@ -75,25 +74,34 @@ class NavigationService {
 
     if (isJefe) {
       tabs.addAll(
-          _allTabsDefinition.where((tab) => tab.id == 'panel').toList(),);
+        _allTabsDefinition.where((tab) => tab.id == 'panel').toList(),
+      );
     }
 
-    tabs.addAll(_allTabsDefinition
-        .where((tab) =>
-            tab.allowedRoles.contains('REPARTIDOR') && tab.id != 'panel',)
-        .toList(),);
+    tabs.addAll(
+      _allTabsDefinition
+          .where(
+            (tab) =>
+                tab.allowedRoles.contains('REPARTIDOR') && tab.id != 'panel',
+          )
+          .toList(),
+    );
 
     return tabs;
   }
 
-  List<TabDefinition> getVentasTabs(
-      {required bool isJefe, required bool showCommissions,}) {
+  List<TabDefinition> getVentasTabs({
+    required bool isJefe,
+    required bool showCommissions,
+  }) {
     final tabs = <TabDefinition>[];
 
     final salesTabs = _allTabsDefinition
-        .where((tab) =>
-            tab.allowedRoles.contains('JEFE_VENTAS') ||
-            tab.allowedRoles.contains('COMERCIAL'),)
+        .where(
+          (tab) =>
+              tab.allowedRoles.contains('JEFE_VENTAS') ||
+              tab.allowedRoles.contains('COMERCIAL'),
+        )
         .toList();
 
     for (final tab in salesTabs) {

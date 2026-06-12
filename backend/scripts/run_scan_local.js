@@ -3,10 +3,10 @@
  * Full product asset scan from Windows dev machine.
  *
  * Strategy:
- *   1. DB2  via local ODBC (DSN=GMP) — get all active product codes
- *   2. HTTP direct to Apache 192.168.1.191 — parse directory listings
+ *   1. DB2  via local ODBC (DSN=GMP) â€” get all active product codes
+ *   2. HTTP direct to Apache 192.168.1.191 â€” parse directory listings
  *      Same logic as products.js but executed locally (no rate-limits)
- *   3. API  login check (api.mari-pepa.com) — server health + diagnostics
+ *   3. API  login check (api.mari-pepa.com) â€” server health + diagnostics
  *
  * Usage:
  *   node backend/scripts/run_scan_local.js
@@ -21,13 +21,13 @@ const path  = require('path');
 const fs    = require('fs');
 const odbc  = require('odbc');
 
-// ─────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // CONFIG
-// ─────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const IMAGES_BASE_URL = process.env.PRODUCT_IMAGES_URL
   || 'http://192.168.1.191/movilidad/ImagenesGestorDocumentalNuevo';
 
-const DB_DSN      = 'DSN=GMP;UID=JAVIER;PWD=JAVIER';
+const DB_DSN      = db2ConnectionString({ extras: '' });
 const API_BASE    = 'https://api.mari-pepa.com';
 const VENDOR      = '98';
 const PIN         = '9322';
@@ -38,9 +38,9 @@ const OUTPUT_JSON  = process.argv.includes('--json');
 
 const IMAGE_EXTS = new Set(['png','jpg','jpeg','gif','bmp','webp','tif','tiff','avif']);
 
-// ─────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // HTTP HELPER (raw Node, no proxy)
-// ─────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function httpGet(urlStr, extraHeaders) {
   return new Promise((resolve, reject) => {
     const url = new URL(urlStr);
@@ -90,14 +90,14 @@ function httpPost(urlStr, bodyStr) {
   });
 }
 
-// ─────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // APACHE DIR LISTING PARSER
-// ─────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const dirCache = new Map();
 
 async function listDir(relPath) {
   if (dirCache.has(relPath)) return dirCache.get(relPath);
-  // Build URL — avoid double slash
+  // Build URL â€” avoid double slash
   const base = IMAGES_BASE_URL.replace(/\/$/, '');
   const url  = relPath ? base + '/' + relPath : base + '/';
   try {
@@ -120,10 +120,10 @@ async function listDir(relPath) {
   }
 }
 
-// ─────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // IMAGE / FICHA DETECTION
 // (mirrors products.js logic exactly)
-// ─────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function checkProduct(code) {
   const enc   = encodeURIComponent(code);
   const items = await listDir(enc + '/');
@@ -155,9 +155,9 @@ async function checkProduct(code) {
   return { exists: true, hasImage, hasFicha, subdirs: subdirs.map(s => s.replace(/\/$/, '')) };
 }
 
-// ─────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // CONCURRENCY POOL
-// ─────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function runPool(items, concurrency, fn) {
   const out = new Array(items.length);
   let i = 0;
@@ -166,31 +166,31 @@ async function runPool(items, concurrency, fn) {
   return out;
 }
 
-// ─────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // API HEALTH + DIAGNOSTICS
-// ─────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function apiHealthCheck() {
-  process.stdout.write('► API login (api.mari-pepa.com, DIEGO/9322)... ');
+  process.stdout.write('â–º API login (api.mari-pepa.com, DIEGO/9322)... ');
   try {
     const res = await httpPost(API_BASE + '/api/auth/login', JSON.stringify({ username: VENDOR, password: PIN }));
     if (!res.body || !res.body.token) {
-      console.log('WARN — ' + JSON.stringify(res.body));
+      console.log('WARN â€” ' + JSON.stringify(res.body));
       return;
     }
-    console.log('OK — ' + (res.body.name || '?') + ' (' + (res.body.role || '?') + ')');
+    console.log('OK â€” ' + (res.body.name || '?') + ' (' + (res.body.role || '?') + ')');
     const tok  = res.body.token;
     const diag = await httpGet(API_BASE + '/api/products/diagnostico', { Authorization: 'Bearer ' + tok });
     if (diag.status === 200) {
       const d = JSON.parse(diag.body);
       console.log('   Server mode    : ' + d.accessMode);
-      console.log('   Server filePath: ' + (d.filePath || '(none — HTTP mode)'));
+      console.log('   Server filePath: ' + (d.filePath || '(none â€” HTTP mode)'));
       console.log('   Server httpUrl : ' + d.httpUrl);
       console.log('   Server cache   : ' + d.cacheSize + ' entries');
       if (d.samples) {
         console.log('   Sample probes from server:');
         d.samples.forEach(s => {
-          const img = s.imageFound ? 'img✓' : 'img✗';
-          const fic = s.fichaFound ? 'ficha✓' : 'ficha✗';
+          const img = s.imageFound ? 'imgâœ“' : 'imgâœ—';
+          const fic = s.fichaFound ? 'fichaâœ“' : 'fichaâœ—';
           const fld = s.folderExists ? (s.folderContents || []).length + ' items' : 'NO FOLDER';
           console.log('     [' + s.code + '] ' + img + ' ' + fic + ' folder:' + fld);
         });
@@ -199,14 +199,14 @@ async function apiHealthCheck() {
       console.log('   Diagnostics HTTP ' + diag.status);
     }
   } catch (e) {
-    console.log('WARN — ' + e.message);
+    console.log('WARN â€” ' + e.message);
   }
   console.log();
 }
 
-// ─────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 // MAIN
-// ─────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 async function main() {
   if (!OUTPUT_JSON) {
     console.log('====================================================');
@@ -216,7 +216,7 @@ async function main() {
   }
 
   // 1. DB2
-  process.stdout.write('► DB2: loading active products... ');
+  process.stdout.write('â–º DB2: loading active products... ');
   const cn   = await odbc.connect(DB_DSN);
   const rows = await cn.query(
     "SELECT TRIM(CODIGOARTICULO) AS CODE FROM DSEDAC.ART WHERE ANOBAJA = 0 OR ANOBAJA IS NULL ORDER BY CODIGOARTICULO"
@@ -225,8 +225,8 @@ async function main() {
   const codes = rows.map(r => (r.CODE || '').trim()).filter(Boolean);
   console.log(codes.length + ' active products\n');
 
-  // 2. Probe HTTP — test with known product folder (root listing may be disabled)
-  process.stdout.write('► HTTP image server probe (testing with code 1384)... ');
+  // 2. Probe HTTP â€” test with known product folder (root listing may be disabled)
+  process.stdout.write('â–º HTTP image server probe (testing with code 1384)... ');
   const probe1384 = await listDir('1384/');
   if (!probe1384) {
     // Try an alternate path format
@@ -238,7 +238,7 @@ async function main() {
     }
   }
   const sampleContents = probe1384 || [];
-  console.log('OK — folder 1384 has ' + sampleContents.length + ' items: [' + sampleContents.slice(0,5).join(', ') + ']\n');
+  console.log('OK â€” folder 1384 has ' + sampleContents.length + ' items: [' + sampleContents.slice(0,5).join(', ') + ']\n');
   const sampleFolders = ['1384'];
 
   // 3. API health
@@ -246,7 +246,7 @@ async function main() {
 
   // 4. Detail-explore sample products
   const toExplore = [...new Set([...sampleFolders.slice(0,3), '1384','1965','1415','1353','1866','2450'])];
-  console.log('► Detail exploration of sample products:');
+  console.log('â–º Detail exploration of sample products:');
   for (const code of toExplore) {
     const r   = await checkProduct(code);
     const raw = r.exists ? (await listDir(encodeURIComponent(code) + '/') || []).slice(0,8).join(', ') : '';
@@ -260,7 +260,7 @@ async function main() {
   console.log();
 
   // 5. Full scan
-  if (!OUTPUT_JSON) process.stdout.write('► Scanning all ' + codes.length + ' products (concurrency=' + CONCURRENCY + ')...\n');
+  if (!OUTPUT_JSON) process.stdout.write('â–º Scanning all ' + codes.length + ' products (concurrency=' + CONCURRENCY + ')...\n');
   const scan = { both:[], withImage:[], withFicha:[], neither:[], noFolder:[] };
   let done = 0;
   const t0 = Date.now();
@@ -274,7 +274,7 @@ async function main() {
     else                               scan.neither.push(code);
     done++;
     if (!OUTPUT_JSON && done % 50 === 0) {
-      process.stdout.write('\r   ' + done + '/' + codes.length + ' (' + Math.round(done*100/codes.length) + '%) — ' + ((Date.now()-t0)/1000).toFixed(1) + 's  ');
+      process.stdout.write('\r   ' + done + '/' + codes.length + ' (' + Math.round(done*100/codes.length) + '%) â€” ' + ((Date.now()-t0)/1000).toFixed(1) + 's  ');
     }
   });
 

@@ -8,11 +8,18 @@ import 'package:fl_chart/fl_chart.dart';
 
 class RepartidorEvolutionPage extends StatefulWidget {
   final String repartidorId;
+  final Future<Map<String, dynamic>> Function(String repartidorId)?
+      loadEvolution;
 
-  const RepartidorEvolutionPage({super.key, required this.repartidorId});
+  const RepartidorEvolutionPage({
+    super.key,
+    required this.repartidorId,
+    this.loadEvolution,
+  });
 
   @override
-  State<RepartidorEvolutionPage> createState() => _RepartidorEvolutionPageState();
+  State<RepartidorEvolutionPage> createState() =>
+      _RepartidorEvolutionPageState();
 }
 
 class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
@@ -28,7 +35,8 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
 
   Future<void> _loadData() async {
     try {
-      final data = await RepartidorDataService.getEvolution(widget.repartidorId);
+      final data = await (widget.loadEvolution ??
+          RepartidorDataService.getEvolution)(widget.repartidorId);
       if (mounted) {
         setState(() {
           _data = data;
@@ -63,9 +71,11 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
             children: [
               const Icon(Icons.error_outline, color: AppTheme.error, size: 48),
               const SizedBox(height: 16),
-              Text('Error: $_error', style: const TextStyle(color: AppTheme.textSecondary)),
+              Text('Error: $_error',
+                  style: const TextStyle(color: AppTheme.textSecondary)),
               const SizedBox(height: 16),
-              ElevatedButton(onPressed: _loadData, child: const Text('Reintentar')),
+              ElevatedButton(
+                  onPressed: _loadData, child: const Text('Reintentar')),
             ],
           ),
         ),
@@ -78,7 +88,8 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       body: SingleChildScrollView(
-        padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
+        padding:
+            EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -86,8 +97,9 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
             const SizedBox(height: 24),
             _buildEvolutionChart(evolution),
             const SizedBox(height: 24),
-            Text('Productos Top (Ventas)', 
-                 style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold, color: Colors.white)),
+            Text('Productos Top (Ventas)',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold, color: Colors.white)),
             const SizedBox(height: 12),
             _buildTopProducts(topProducts),
           ],
@@ -98,9 +110,10 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
 
   Widget _buildHeaderSummary(List evolution) {
     double totalYear = 0;
-    
+
     if (evolution.isNotEmpty) {
-      totalYear = evolution.fold(0.0, (sum, item) => sum + (item['totalSales'] ?? 0));
+      totalYear =
+          evolution.fold(0.0, (sum, item) => sum + (item['totalSales'] ?? 0));
     }
 
     return Row(
@@ -117,7 +130,9 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
         Expanded(
           child: _SummaryCard(
             title: 'Tendencia',
-            value: evolution.length > 1 ? '${_calculateGrowth(evolution).toStringAsFixed(1)}%' : '--',
+            value: evolution.length > 1
+                ? '${_calculateGrowth(evolution).toStringAsFixed(1)}%'
+                : '--',
             subtitle: 'vs mes anterior',
             icon: Icons.trending_up,
             color: AppTheme.success,
@@ -130,7 +145,8 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
   double _calculateGrowth(List evolution) {
     if (evolution.length < 2) return 0;
     final current = (evolution.last['totalSales'] as num).toDouble();
-    final prev = (evolution[evolution.length - 2]['totalSales'] as num).toDouble();
+    final prev =
+        (evolution[evolution.length - 2]['totalSales'] as num).toDouble();
     if (prev == 0) return 0;
     return ((current - prev) / prev) * 100;
   }
@@ -139,7 +155,8 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
     if (evolution.isEmpty) return const SizedBox.shrink();
 
     final spots = evolution.asMap().entries.map((entry) {
-      return FlSpot(entry.key.toDouble(), (entry.value['totalSales'] as num).toDouble());
+      return FlSpot(
+          entry.key.toDouble(), (entry.value['totalSales'] as num).toDouble());
     }).toList();
 
     return Container(
@@ -149,7 +166,8 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Evolución Mensual', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          const Text('Evolución Mensual',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 20),
           Expanded(
             child: LineChart(
@@ -164,9 +182,12 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
                       showTitles: true,
                       getTitlesWidget: (value, meta) {
                         int idx = value.toInt();
-                        if (idx < 0 || idx >= evolution.length) return const SizedBox.shrink();
+                        if (idx < 0 || idx >= evolution.length)
+                          return const SizedBox.shrink();
                         final period = evolution[idx]['period'].toString();
-                        return Text(period.substring(5), style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary));
+                        return Text(period.substring(5),
+                            style: const TextStyle(
+                                fontSize: 10, color: AppTheme.textSecondary));
                       },
                     ),
                   ),
@@ -183,7 +204,10 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
                     belowBarData: BarAreaData(
                       show: true,
                       gradient: LinearGradient(
-                        colors: [AppTheme.neonBlue.withValues(alpha: 0.3), AppTheme.neonBlue.withValues(alpha: 0)],
+                        colors: [
+                          AppTheme.neonBlue.withValues(alpha: 0.3),
+                          AppTheme.neonBlue.withValues(alpha: 0)
+                        ],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
                       ),
@@ -203,7 +227,9 @@ class _RepartidorEvolutionPageState extends State<RepartidorEvolutionPage> {
       return Container(
         padding: const EdgeInsets.all(20),
         decoration: AppTheme.glassMorphism(),
-        child: const Center(child: Text('No hay datos de productos', style: TextStyle(color: AppTheme.textSecondary))),
+        child: const Center(
+            child: Text('No hay datos de productos',
+                style: TextStyle(color: AppTheme.textSecondary))),
       );
     }
 
@@ -239,14 +265,20 @@ class _SummaryCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+              Text(title,
+                  style: const TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 12)),
               Icon(icon, color: color, size: 20),
             ],
           ),
           const SizedBox(height: 8),
-          Text(value, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 18)),
+          Text(value,
+              style: TextStyle(
+                  color: color, fontWeight: FontWeight.bold, fontSize: 18)),
           if (subtitle != null)
-            Text(subtitle!, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+            Text(subtitle!,
+                style: const TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 10)),
         ],
       ),
     );
@@ -271,15 +303,21 @@ class _ProductTile extends StatelessWidget {
             color: AppTheme.neonPurple.withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(8),
           ),
-          child: const Icon(Icons.inventory_2, color: AppTheme.neonPurple, size: 20),
+          child: const Icon(Icons.inventory_2,
+              color: AppTheme.neonPurple, size: 20),
         ),
-        title: Text(product['name'] ?? 'Producto', 
-                   maxLines: 1, overflow: TextOverflow.ellipsis,
-                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-        subtitle: Text('Cód: ${product['code']} • ${product['totalUnits']} uds', 
-                       style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
-        trailing: Text(CurrencyFormatter.formatWhole((product['totalSales'] as num).toDouble()),
-                       style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
+        title: Text(product['name'] ?? 'Producto',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+        subtitle: Text('Cód: ${product['code']} • ${product['totalUnits']} uds',
+            style:
+                const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+        trailing: Text(
+            CurrencyFormatter.formatWhole(
+                (product['totalSales'] as num).toDouble()),
+            style: const TextStyle(
+                fontWeight: FontWeight.bold, color: AppTheme.neonGreen)),
       ),
     );
   }

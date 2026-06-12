@@ -22,7 +22,7 @@ void main() {
         isJefeVentas: false,
         showCommissions: false,
       );
-      expect(repartidor.length, 7);
+      expect(repartidor.length, 8);
 
       // Repartidor jefe
       final repartidorJefe = NavigationConfigService.getNavItems(
@@ -31,7 +31,7 @@ void main() {
         isJefeVentas: true,
         showCommissions: false,
       );
-      expect(repartidorJefe.length, 8);
+      expect(repartidorJefe.length, 9);
 
       // Comercial
       final comercial = NavigationConfigService.getNavItems(
@@ -40,7 +40,7 @@ void main() {
         isJefeVentas: false,
         showCommissions: false,
       );
-      expect(comercial.length, 8);
+      expect(comercial.length, 9);
 
       // Jefe Ventas
       final jefe = NavigationConfigService.getNavItems(
@@ -49,7 +49,7 @@ void main() {
         isJefeVentas: true,
         showCommissions: true,
       );
-      expect(jefe.length, 10);
+      expect(jefe.length, 11);
     });
 
     test('NavItem icons are correctly assigned', () {
@@ -177,6 +177,7 @@ void main() {
       expect(labels, contains('Pedidos'));
       expect(labels, contains('Glacius'));
       expect(labels, contains('Cobros'));
+      expect(labels, contains('Bolsa'));
       expect(labels, contains('Chat IA'));
     });
   });

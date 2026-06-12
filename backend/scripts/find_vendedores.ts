@@ -1,7 +1,9 @@
 import odbc from 'odbc';
+declare const require: (path: string) => any;
+const db2ConnectionString = require('./db2-connection');
 
 async function main() {
-  const conn = await odbc.connect('DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;');
+  const conn = await odbc.connect(db2ConnectionString({ extras: 'NAM=1' }));
   
   // Ver todos los vendedores con sus PINs
   console.log('=== VENDEDORES CON PINs ===');
@@ -17,7 +19,7 @@ async function main() {
     FETCH FIRST 50 ROWS ONLY
   `);
   
-  console.log('\nCódigo | Nombre                              | PIN  | NIF');
+  console.log('\nCÃ³digo | Nombre                              | PIN  | NIF');
   console.log('-------|-------------------------------------|------|------------');
   for (const v of vendedores as any[]) {
     const codigo = v.CODIGOVENDEDOR.padEnd(6);
@@ -27,7 +29,7 @@ async function main() {
     console.log(`${codigo} | ${nombre} | ${pin} | ${nif}`);
   }
 
-  // Buscar específicamente BARTOLO
+  // Buscar especÃ­ficamente BARTOLO
   console.log('\n\n=== BARTOLO ===');
   const bartolo = await conn.query(`
     SELECT 

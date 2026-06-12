@@ -68,11 +68,6 @@ class OrderLineTile extends StatelessWidget {
 
     // Explicit sub-unit: BANDEJAS, ESTUCHES, PIEZAS, etc.
     final label = Product.unitLabel(unit);
-    if (line.unidadesCaja > 1 && line.cantidadUnidades > 0) {
-      final pzTotal = line.cantidadUnidades * line.unidadesCaja;
-      return '${PedidosFormatters.number(line.cantidadUnidades)} $label'
-          ' (${PedidosFormatters.number(pzTotal)} pz)';
-    }
     return '${PedidosFormatters.number(line.cantidadUnidades)} $label';
   }
 

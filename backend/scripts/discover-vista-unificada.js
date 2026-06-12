@@ -19,9 +19,18 @@ const path = require('path');
 
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 
+
+function requireEnv(name) {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(name + " environment variable is required");
+  }
+  return value;
+}
+
 const DB_DSN = process.env.ODBC_DSN || 'GMP';
-const DB_UID = process.env.ODBC_UID || 'JAVIER';
-const DB_PWD = process.env.ODBC_PWD || 'JAVIER';
+const DB_UID = requireEnv('ODBC_UID');
+const DB_PWD = requireEnv('ODBC_PWD');
 
 const CONNECTION_STRING = [
   `DSN=${DB_DSN}`,

@@ -49,7 +49,7 @@ void main() {
         ),
       );
 
-      expect(find.byIcon(Icons.sync), findsOneWidget);
+      expect(find.byIcon(Icons.sync_rounded), findsOneWidget);
     });
 
     testWidgets('shows loading indicator when isLoading', (tester) async {
@@ -84,7 +84,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.byIcon(Icons.sync));
+      await tester.tap(find.byIcon(Icons.sync_rounded));
       expect(syncCalled, true);
     });
 
@@ -104,7 +104,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.byType(IconButton));
+      await tester.tap(find.byType(CircularProgressIndicator));
       expect(syncCalled, false);
     });
 

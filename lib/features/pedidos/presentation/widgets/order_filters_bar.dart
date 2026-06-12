@@ -8,9 +8,26 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 class OrderFiltersBar extends StatefulWidget {
-
   const OrderFiltersBar({
-    required this.searchQuery, required this.statusFilter, required this.dateFrom, required this.dateTo, required this.minAmount, required this.maxAmount, required this.sortBy, required this.sortOrder, required this.onSearchChanged, required this.onStatusChanged, required this.onDateFromChanged, required this.onDateToChanged, required this.onMinAmountChanged, required this.onMaxAmountChanged, required this.onSortByChanged, required this.onSortOrderChanged, required this.onApplyAdvanced, required this.onClearAll, super.key,
+    required this.searchQuery,
+    required this.statusFilter,
+    required this.dateFrom,
+    required this.dateTo,
+    required this.minAmount,
+    required this.maxAmount,
+    required this.sortBy,
+    required this.sortOrder,
+    required this.onSearchChanged,
+    required this.onStatusChanged,
+    required this.onDateFromChanged,
+    required this.onDateToChanged,
+    required this.onMinAmountChanged,
+    required this.onMaxAmountChanged,
+    required this.onSortByChanged,
+    required this.onSortOrderChanged,
+    required this.onApplyAdvanced,
+    required this.onClearAll,
+    super.key,
   });
   final String searchQuery;
   final String? statusFilter;
@@ -39,16 +56,46 @@ class OrderFiltersBar extends StatefulWidget {
 class _OrderFiltersBarState extends State<OrderFiltersBar> {
   bool _showAdvanced = false;
   final _searchCtrl = TextEditingController();
+  final _minAmountCtrl = TextEditingController();
+  final _maxAmountCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _searchCtrl.text = widget.searchQuery;
+    _minAmountCtrl.text =
+        widget.minAmount != null ? widget.minAmount!.toStringAsFixed(2) : '';
+    _maxAmountCtrl.text =
+        widget.maxAmount != null ? widget.maxAmount!.toStringAsFixed(2) : '';
+  }
+
+  @override
+  void didUpdateWidget(covariant OrderFiltersBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Sincronizar el texto cuando el padre limpia los filtros desde fuera
+    // ("Limpiar"): antes el TextField conservaba el texto antiguo aunque
+    // el filtro ya estuviera vacío.
+    if (widget.searchQuery != oldWidget.searchQuery &&
+        widget.searchQuery != _searchCtrl.text.trim()) {
+      _searchCtrl.text = widget.searchQuery;
+    }
+    if (widget.minAmount == null &&
+        oldWidget.minAmount != null &&
+        _minAmountCtrl.text.isNotEmpty) {
+      _minAmountCtrl.clear();
+    }
+    if (widget.maxAmount == null &&
+        oldWidget.maxAmount != null &&
+        _maxAmountCtrl.text.isNotEmpty) {
+      _maxAmountCtrl.clear();
+    }
   }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _minAmountCtrl.dispose();
+    _maxAmountCtrl.dispose();
     super.dispose();
   }
 
@@ -71,8 +118,11 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                   const Icon(Icons.search, color: AppTheme.neonBlue, size: 18),
               suffixIcon: widget.searchQuery.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.clear,
-                          color: Colors.white54, size: 16,),
+                      icon: const Icon(
+                        Icons.clear,
+                        color: Colors.white54,
+                        size: 16,
+                      ),
                       onPressed: () {
                         _searchCtrl.clear();
                         widget.onSearchChanged('');
@@ -101,7 +151,10 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                 _statusChip('Borrador', 'BORRADOR', const Color(0xFFF97316)),
                 const SizedBox(width: 6),
                 _statusChip(
-                    'Confirmado', 'CONFIRMADO', const Color(0xFF3B82F6),),
+                  'Confirmado',
+                  'CONFIRMADO',
+                  const Color(0xFF3B82F6),
+                ),
                 const SizedBox(width: 6),
                 _statusChip('Enviado', 'ENVIADO', const Color(0xFF22C55E)),
                 const SizedBox(width: 6),
@@ -205,7 +258,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                       Expanded(
                         child: _amountField(
                           'Importe mín.',
-                          widget.minAmount,
+                          _minAmountCtrl,
                           (v) => widget.onMinAmountChanged(v),
                         ),
                       ),
@@ -213,7 +266,7 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                       Expanded(
                         child: _amountField(
                           'Importe máx.',
-                          widget.maxAmount,
+                          _maxAmountCtrl,
                           (v) => widget.onMaxAmountChanged(v),
                         ),
                       ),
@@ -228,7 +281,9 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                           decoration: InputDecoration(
                             labelText: 'Ordenar por',
                             labelStyle: const TextStyle(
-                                color: Colors.white54, fontSize: 11,),
+                              color: Colors.white54,
+                              fontSize: 11,
+                            ),
                             filled: true,
                             fillColor: AppTheme.darkSurface,
                             border: OutlineInputBorder(
@@ -236,20 +291,32 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                               borderSide: BorderSide.none,
                             ),
                             contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8,),
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
                           ),
                           dropdownColor: AppTheme.darkSurface,
                           style: const TextStyle(
-                              color: Colors.white, fontSize: 12,),
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
                           items: const [
                             DropdownMenuItem(
-                                value: 'fecha', child: Text('Fecha'),),
+                              value: 'fecha',
+                              child: Text('Fecha'),
+                            ),
                             DropdownMenuItem(
-                                value: 'importe', child: Text('Importe'),),
+                              value: 'importe',
+                              child: Text('Importe'),
+                            ),
                             DropdownMenuItem(
-                                value: 'cliente', child: Text('Cliente'),),
+                              value: 'cliente',
+                              child: Text('Cliente'),
+                            ),
                             DropdownMenuItem(
-                                value: 'numero', child: Text('Nº Pedido'),),
+                              value: 'numero',
+                              child: Text('Nº Pedido'),
+                            ),
                           ],
                           onChanged: (v) {
                             if (v != null) widget.onSortByChanged(v);
@@ -263,7 +330,9 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                           decoration: InputDecoration(
                             labelText: 'Orden',
                             labelStyle: const TextStyle(
-                                color: Colors.white54, fontSize: 11,),
+                              color: Colors.white54,
+                              fontSize: 11,
+                            ),
                             filled: true,
                             fillColor: AppTheme.darkSurface,
                             border: OutlineInputBorder(
@@ -271,16 +340,24 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                               borderSide: BorderSide.none,
                             ),
                             contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 8,),
+                              horizontal: 10,
+                              vertical: 8,
+                            ),
                           ),
                           dropdownColor: AppTheme.darkSurface,
                           style: const TextStyle(
-                              color: Colors.white, fontSize: 12,),
+                            color: Colors.white,
+                            fontSize: 12,
+                          ),
                           items: const [
                             DropdownMenuItem(
-                                value: 'DESC', child: Text('Descendente'),),
+                              value: 'DESC',
+                              child: Text('Descendente'),
+                            ),
                             DropdownMenuItem(
-                                value: 'ASC', child: Text('Ascendente'),),
+                              value: 'ASC',
+                              child: Text('Ascendente'),
+                            ),
                           ],
                           onChanged: (v) {
                             if (v != null) widget.onSortOrderChanged(v);
@@ -305,7 +382,9 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                       child: const Text(
                         'Aplicar filtros',
                         style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 13,),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
                       ),
                     ),
                   ),
@@ -359,8 +438,11 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
         ),
         child: Row(
           children: [
-            Icon(Icons.calendar_today,
-                color: AppTheme.neonBlue.withValues(alpha: 0.7), size: 14,),
+            Icon(
+              Icons.calendar_today,
+              color: AppTheme.neonBlue.withValues(alpha: 0.7),
+              size: 14,
+            ),
             const SizedBox(width: 6),
             Expanded(
               child: Text(
@@ -402,10 +484,12 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
   }
 
   Widget _amountField(
-      String label, double? value, ValueChanged<double?> onChanged,) {
-    final ctrl = TextEditingController(
-      text: value != null ? value.toStringAsFixed(2) : '',
-    );
+    String label,
+    TextEditingController ctrl,
+    ValueChanged<double?> onChanged,
+  ) {
+    // Controlador persistente: crear uno nuevo en cada build reseteaba el
+    // texto y el cursor con cada pulsación (no se podía teclear el importe).
     return TextField(
       controller: ctrl,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),

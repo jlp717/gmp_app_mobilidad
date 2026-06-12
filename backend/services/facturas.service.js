@@ -22,6 +22,41 @@ const facturasBreaker = new CircuitBreaker({
 const BATCH_SIZE = 15;
 const FACTURA_CACHE_VERSION = 'v2';
 const TAX_SLOTS = [1, 2, 3, 4, 5];
+const DEFAULT_LIST_LIMIT = 250;
+const MAX_LIST_LIMIT = 500;
+const MAX_LIST_OFFSET = 5000;
+
+function clampPositiveInt(value, defaultValue, maxValue) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed === 0) return defaultValue;
+    return Math.min(maxValue, Math.max(1, parsed));
+}
+
+function clampOffset(value) {
+    const parsed = parseInt(value, 10);
+    if (!Number.isFinite(parsed) || parsed < 0) return 0;
+    return Math.min(MAX_LIST_OFFSET, parsed);
+}
+
+function sortInvoiceRowsDesc(a, b) {
+    const aDate = (parseInt(a.ANO, 10) || 0) * 10000 + (parseInt(a.MES, 10) || 0) * 100 + (parseInt(a.DIA, 10) || 0);
+    const bDate = (parseInt(b.ANO, 10) || 0) * 10000 + (parseInt(b.MES, 10) || 0) * 100 + (parseInt(b.DIA, 10) || 0);
+    if (bDate !== aDate) return bDate - aDate;
+    return (parseInt(b.NUMERO, 10) || 0) - (parseInt(a.NUMERO, 10) || 0);
+}
+
+async function mapWithConcurrency(items, concurrency, mapper) {
+    const results = new Array(items.length);
+    let next = 0;
+    const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+        while (next < items.length) {
+            const index = next++;
+            results[index] = await mapper(items[index], index);
+        }
+    });
+    await Promise.all(workers);
+    return results;
+}
 
 function buildTaxBases(header) {
     return TAX_SLOTS.map(slot => ({
@@ -60,22 +95,27 @@ class FacturasService {
         const cached = await redisCache.get('route', cacheKey);
         if (cached !== null) return cached;
 
-        try {
-            const result = await facturasBreaker.execute(
-                () => this.getFacturasRaw(params),
-                () => ({ facturas: [], error: 'Service temporarily unavailable' })
-            );
-            await redisCache.set('route', cacheKey, result, TTL.SHORT);
-            return result;
-        } catch (e) {
-            const result = await this.getFacturasRaw(params);
+        const result = await facturasBreaker.execute(
+            () => this.getFacturasRaw(params),
+            async () => {
+                const stale = await redisCache.get('route', cacheKey);
+                if (stale !== null) return stale;
+                throw new Error('Facturas DB no disponible dentro del timeout seguro');
+            }
+        );
+
+        if (result) {
             await redisCache.set('route', cacheKey, result, TTL.SHORT);
             return result;
         }
+
+        throw new Error('Facturas DB no devolvio datos');
     }
     
     async getFacturasRaw(params) {
         const { vendedorCodes, year, month, search, clientId, clientSearch, docSearch, dateFrom, dateTo } = params;
+        const rowsLimit = clampPositiveInt(params.limit, DEFAULT_LIST_LIMIT, MAX_LIST_LIMIT);
+        const rowsOffset = clampOffset(params.offset);
 
         if (!vendedorCodes) {
             throw new Error('vendedorCodes is required');
@@ -89,7 +129,7 @@ class FacturasService {
         const dateFromInt = dateFilterApplied ? parseInt(dateFrom.replace(/-/g, '')) : null;
         const dateToInt = dateFilterApplied ? parseInt(dateTo.replace(/-/g, '')) : null;
 
-        function buildSqlForVendors(vendorBatch) {
+        function buildSqlForVendors(vendorBatch, offsetValue = rowsOffset, limitValue = rowsLimit) {
             let sql = `
       SELECT
         TRIM(CFC.SERIEFACTURA) as SERIE,
@@ -166,7 +206,9 @@ class FacturasService {
                 }
             }
 
-            sql += ` ORDER BY CFC.ANODOCUMENTO DESC, CFC.MESDOCUMENTO DESC, CFC.DIADOCUMENTO DESC, CFC.NUMEROFACTURA DESC`;
+            sql += ` ORDER BY CFC.ANODOCUMENTO DESC, CFC.MESDOCUMENTO DESC, CFC.DIADOCUMENTO DESC, CFC.NUMEROFACTURA DESC
+                     OFFSET ? ROWS FETCH NEXT ? ROWS ONLY`;
+            queryParams.push(offsetValue, limitValue);
             return { sql, queryParams };
         }
 
@@ -183,13 +225,16 @@ class FacturasService {
                 for (let i = 0; i < vendors.length; i += BATCH_SIZE) {
                     batches.push(vendors.slice(i, i + BATCH_SIZE));
                 }
-                const batchResults = await Promise.all(
-                    batches.map(batch => {
-                        const { sql, queryParams } = buildSqlForVendors(batch);
+                const batchLimit = rowsOffset + rowsLimit;
+                const batchResults = await mapWithConcurrency(
+                    batches,
+                    2,
+                    async (batch) => {
+                        const { sql, queryParams } = buildSqlForVendors(batch, 0, batchLimit);
                         return queryWithParams(sql, queryParams);
-                    })
+                    }
                 );
-                rows = batchResults.flat();
+                rows = batchResults.flat().sort(sortInvoiceRowsDesc).slice(rowsOffset, rowsOffset + rowsLimit);
             }
 
             const invoiceMap = new Map();

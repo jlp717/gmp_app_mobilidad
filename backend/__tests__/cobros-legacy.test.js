@@ -89,8 +89,39 @@ describe('legacy cobros route hardening', () => {
     const sql = mockCachedQuery.mock.calls[0][1];
     expect(sql).toMatch(/EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+DSEDAC\.CLP\s+CLP/i);
     expect(sql).not.toMatch(/LEFT\s+JOIN\s+DSEDAC\.CLP/i);
+    expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s*<>\s*''/i);
     expect(sql).toMatch(/<=\s*\(YEAR\(CURRENT_DATE\) \* 10000 \+ MONTH\(CURRENT_DATE\) \* 100 \+ DAY\(CURRENT_DATE\)\)/i);
     expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['01', '02']);
+  });
+
+  test('pending-summary SQL is bounded and deterministically ordered for production-sized CVC', async () => {
+    mockQuery.mockResolvedValueOnce([]);
+
+    const res = await request(makeApp({
+      id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true,
+    })).get('/pending-summary/ALL?limit=50&page=1');
+
+    expect(res.status).toBe(200);
+    const sql = mockCachedQuery.mock.calls[0][1];
+    const normalizedSql = sql.replace(/\s+/g, ' ').trim();
+    const orderBy = normalizedSql.match(/ORDER BY (.*?)(?: FETCH FIRST| OFFSET|$)/i)?.[1] || '';
+    expect(orderBy).toMatch(/^TOTAL_PENDIENTE DESC\b/i);
+    expect(orderBy).toMatch(/(?:CLIENTE|CODIGOCLIENTEALBARAN)/i);
+    expect(orderBy).toMatch(/(?:SERIE_DOCUMENTO|SERIEDOCUMENTO)/i);
+    expect(orderBy).toMatch(/(?:NUMERO_DOCUMENTO|NUMERODOCUMENTO)/i);
+    expect(normalizedSql).toMatch(/FETCH FIRST (?:\?|\d+) ROWS ONLY/i);
+  });
+
+  test('pending-summary ALL without vendor scope excludes empty client CVC rows (B7)', async () => {
+    mockQuery.mockResolvedValueOnce([]);
+
+    const res = await request(makeApp({
+      id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true,
+    })).get('/pending-summary/ALL');
+
+    expect(res.status).toBe(200);
+    const sql = mockCachedQuery.mock.calls[0][1];
+    expect(sql).toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s*<>\s*''/i);
   });
 
   test('registrar derives codigoUsuario from authenticated user when present', async () => {
@@ -116,15 +147,23 @@ describe('legacy cobros route hardening', () => {
   test('pending-summary subtracts app-side COBROS from raw CVC totals', async () => {
     // CVC raw: client C001 has 200 pending, 50 overdue
     mockQuery.mockResolvedValueOnce([
-      { CLIENTE: 'C001', TOTAL_PENDIENTE: '200.00', NUM_DOCS: '2', TOTAL_VENCIDO: '50.00', NOMBRE_ALT: 'Cliente Uno', NOMBRE_CLI: 'Cliente Uno SL' },
+      {
+        CLIENTE: 'C001',
+        SERIE_DOCUMENTO: 'M',
+        NUMERO_DOCUMENTO: 1,
+        TOTAL_PENDIENTE: '200.00',
+        TOTAL_VENCIDO: '50.00',
+        NOMBRE_ALT: 'Cliente Uno',
+        NOMBRE_CLI: 'Cliente Uno SL',
+      },
     ]);
-    // App-side COBROS: 80 already paid via app for C001 (SQL aliases to CLIENTE)
+    // App-side COBROS: 80 already paid via app for C001/M-1.
     mockQueryWithParams.mockResolvedValueOnce([
-      { CLIENTE: 'C001', TOTAL_APP: '80.00' },
+      { CLIENTE: 'C001', REF: 'CVC:M-1', TOTAL_APP: '80.00' },
     ]);
-    // App-side REPARTIDOR_COBROS: 30 collected by repartidor for C001 (SQL aliases to CLIENTE)
+    // App-side REPARTIDOR_COBROS: 30 collected by repartidor for C001/M-1.
     mockQueryWithParams.mockResolvedValueOnce([
-      { CLIENTE: 'C001', TOTAL_REP: '30.00' },
+      { CLIENTE: 'C001', DOC_KEY: 'M-1', TOTAL_REP: '30.00' },
     ]);
 
     const res = await request(makeApp({
@@ -145,14 +184,22 @@ describe('legacy cobros route hardening', () => {
   test('pending-summary total does not go below zero after app-side subtraction', async () => {
     // CVC raw: client C002 has 50 pending
     mockQuery.mockResolvedValueOnce([
-      { CLIENTE: 'C002', TOTAL_PENDIENTE: '50.00', NUM_DOCS: '1', TOTAL_VENCIDO: '50.00', NOMBRE_ALT: '', NOMBRE_CLI: 'Cliente Dos' },
+      {
+        CLIENTE: 'C002',
+        SERIE_DOCUMENTO: 'M',
+        NUMERO_DOCUMENTO: 2,
+        TOTAL_PENDIENTE: '50.00',
+        TOTAL_VENCIDO: '50.00',
+        NOMBRE_ALT: '',
+        NOMBRE_CLI: 'Cliente Dos',
+      },
     ]);
     // App-side payments exceed CVC debt: 100 total
     mockQueryWithParams.mockResolvedValueOnce([
-      { CLIENTE: 'C002', TOTAL_APP: '70.00' },
+      { CLIENTE: 'C002', REF: 'CVC:M-2', TOTAL_APP: '70.00' },
     ]);
     mockQueryWithParams.mockResolvedValueOnce([
-      { CLIENTE: 'C002', TOTAL_REP: '30.00' },
+      { CLIENTE: 'C002', DOC_KEY: 'M-2', TOTAL_REP: '30.00' },
     ]);
 
     const res = await request(makeApp({
@@ -161,17 +208,24 @@ describe('legacy cobros route hardening', () => {
 
     expect(res.status).toBe(200);
     const entry = res.body.summary['C002'];
-    expect(entry).toBeDefined();
+    expect(entry).toBeUndefined();
     // 50 - 70 - 30 = -50 → clamped to 0
-    expect(entry.total).toBe(0);
-    expect(entry.vencido).toBe(0);
     expect(res.body.grandTotal).toBe(0);
+    expect(res.body.clientCount).toBe(0);
   });
 
   test('pending-summary handles app-side query failures gracefully', async () => {
     // CVC raw data
     mockQuery.mockResolvedValueOnce([
-      { CLIENTE: 'C003', TOTAL_PENDIENTE: '100.00', NUM_DOCS: '1', TOTAL_VENCIDO: '0.00', NOMBRE_ALT: '', NOMBRE_CLI: 'Cliente Tres' },
+      {
+        CLIENTE: 'C003',
+        SERIE_DOCUMENTO: 'M',
+        NUMERO_DOCUMENTO: 3,
+        TOTAL_PENDIENTE: '100.00',
+        TOTAL_VENCIDO: '0.00',
+        NOMBRE_ALT: '',
+        NOMBRE_CLI: 'Cliente Tres',
+      },
     ]);
     // COBROS query fails
     mockQueryWithParams.mockRejectedValueOnce(new Error('Table not found'));
@@ -187,5 +241,42 @@ describe('legacy cobros route hardening', () => {
     expect(entry).toBeDefined();
     // Should still work with raw CVC data when app-side query fails
     expect(entry.total).toBeCloseTo(100, 1);
+  });
+});
+
+describe('legacy cobros client scope AppSec red tests', function() {
+  test('GET /:codigoCliente/pendientes rejects COMERCIAL outside assigned client scope before DB reads', async function() {
+    const res = await request(makeApp({ id: '01', code: '01', role: 'COMERCIAL', clientCodes: ['C001'] }))
+      .get('/C999/pendientes');
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockCachedQuery).not.toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+
+  test('GET /:codigoCliente/estado rejects COMERCIAL outside assigned client scope before DB reads', async function() {
+    const res = await request(makeApp({ id: '01', code: '01', role: 'COMERCIAL', clientCodes: ['C001'] }))
+      .get('/C999/estado');
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockCachedQuery).not.toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+
+  test('POST /:codigoCliente/registrar rejects COMERCIAL outside assigned client scope before DB writes', async function() {
+    mockQueryWithParams.mockResolvedValue([]);
+
+    const res = await request(makeApp({ id: '01', code: '01', role: 'COMERCIAL', clientCodes: ['C001'] }))
+      .post('/C999/registrar')
+      .send({ referencia: 'M-1', importe: 10, formaPago: 'CONTADO', idempotencyToken: 'legacy-token-scope-001' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockQuery).not.toHaveBeenCalled();
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
   });
 });

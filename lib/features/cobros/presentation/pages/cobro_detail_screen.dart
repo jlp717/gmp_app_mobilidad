@@ -33,25 +33,30 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _provider.cargarCobrosPendientes(widget.codigoCliente);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _provider.cargarCobrosPendientes(
+        widget.codigoCliente,
+        forceRefresh: true,
+      );
     });
   }
 
   CobrosProvider get _provider =>
       ref.read(cobrosProvider(CobrosParams(employeeCode: widget.employeeCode)));
 
+  Map<String, CobroPendiente> _pendientesById(List<CobroPendiente> pendientes) {
+    return {
+      for (final item in pendientes) item.id: item,
+    };
+  }
+
   double _calcularTotalACobrar() {
     var total = 0.0;
+    final pendientesById = _pendientesById(_provider.cobrosPendientes);
     _itemStates.forEach((id, state) {
+      final item = pendientesById[id];
+      if (item == null) return;
       if (state == 'COMPLETO') {
-        final item = _provider.cobrosPendientes.firstWhere(
-          (e) => e.id == id,
-          orElse: () => CobroPendiente(
-            id: id, referencia: id, tipo: TipoCobro.normal,
-            fecha: DateTime.now(), importeTotal: 0, importePendiente: 0,
-          ),
-        );
         total += item.importePendiente;
       } else if (state == 'PARCIAL') {
         total += _partialAmounts[id] ?? 0.0;
@@ -62,23 +67,26 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
 
   /// Valida el importe parcial de un cobro y actualiza errores visuales.
   void _validatePartialAmount(String cobroId, String rawValue) {
-    final cobro = _provider.cobrosPendientes.firstWhere(
-      (e) => e.id == cobroId,
-      orElse: () => CobroPendiente(
-        id: cobroId, referencia: cobroId, tipo: TipoCobro.normal,
-        fecha: DateTime.now(), importeTotal: 0, importePendiente: 0,
-      ),
-    );
+    final cobro = _pendientesById(_provider.cobrosPendientes)[cobroId];
+    if (cobro == null) {
+      _partialErrors[cobroId] = 'Documento no disponible';
+      setState(() {});
+      return;
+    }
     final amount = double.tryParse(rawValue.replaceAll(',', '.'));
     if (amount == null || amount <= 0) {
       _partialErrors[cobroId] = 'Importe invalido';
+      // No almacenar importes inválidos: el total mostrado debe reflejar
+      // solo cantidades válidas.
+      _partialAmounts.remove(cobroId);
     } else if (amount > cobro.importePendiente) {
       _partialErrors[cobroId] =
           'Maximo: ${_currencyFormat.format(cobro.importePendiente)}';
+      _partialAmounts.remove(cobroId);
     } else {
       _partialErrors.remove(cobroId);
+      _partialAmounts[cobroId] = amount;
     }
-    if (amount != null) _partialAmounts[cobroId] = amount;
     setState(() {});
   }
 
@@ -148,6 +156,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     if (confirmed != true || !mounted) return;
 
     var fallos = 0;
+    final pendientesById = _pendientesById(_provider.cobrosPendientes);
 
     setState(() => _isSubmitting = true);
 
@@ -159,17 +168,11 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
 
     for (final entry in _itemStates.entries) {
       if (entry.value == 'NONE') continue;
-      final cobro = _provider.cobrosPendientes.firstWhere(
-        (e) => e.id == entry.key,
-        orElse: () => CobroPendiente(
-          id: entry.key,
-          referencia: entry.key,
-          tipo: TipoCobro.normal,
-          fecha: DateTime.now(),
-          importeTotal: 0,
-          importePendiente: 0,
-        ),
-      );
+      final cobro = pendientesById[entry.key];
+      if (cobro == null) {
+        fallos++;
+        continue;
+      }
       if (cobro.importePendiente <= 0) continue;
 
       final importe = entry.value == 'PARCIAL'
@@ -194,6 +197,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         formaPago: _formaPago,
         tipoVenta: tipoVenta,
         tipoModo: tipoModo,
+        reloadAfter: false,
       );
       if (!success) fallos++;
     }
@@ -203,6 +207,14 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     setState(() => _isSubmitting = false);
 
     if (fallos == 0) {
+      // Limpiar selección tras un cobro exitoso: si quedaran estados
+      // antiguos, un documento parcialmente cobrado seguiría seleccionado
+      // y permitiría un segundo cobro accidental.
+      setState(() {
+        _itemStates.clear();
+        _partialAmounts.clear();
+        _partialErrors.clear();
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -211,7 +223,10 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           backgroundColor: AppTheme.success,
         ),
       );
-      _provider.cargarCobrosPendientes(widget.codigoCliente);
+      await _provider.cargarCobrosPendientes(
+        widget.codigoCliente,
+        forceRefresh: true,
+      );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -263,8 +278,10 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () =>
-                cobros.cargarCobrosPendientes(widget.codigoCliente),
+            onPressed: () => cobros.cargarCobrosPendientes(
+              widget.codigoCliente,
+              forceRefresh: true,
+            ),
             tooltip: 'Actualizar',
           ),
         ],
@@ -272,8 +289,10 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       body: cobros.isLoading && pendientes.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: () =>
-                  cobros.cargarCobrosPendientes(widget.codigoCliente),
+              onRefresh: () => cobros.cargarCobrosPendientes(
+                widget.codigoCliente,
+                forceRefresh: true,
+              ),
               color: AppTheme.neonBlue,
               child: Column(
                 children: [
@@ -288,7 +307,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.error_outline, color: AppTheme.error),
+                          const Icon(Icons.error_outline,
+                              color: AppTheme.error),
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
@@ -326,7 +346,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                             ),
                           ),
                           Container(
-                            width: 1, height: 32,
+                            width: 1,
+                            height: 32,
                             color: Colors.white.withValues(alpha: 0.08),
                           ),
                           Expanded(
@@ -340,7 +361,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                             ),
                           ),
                           Container(
-                            width: 1, height: 32,
+                            width: 1,
+                            height: 32,
                             color: Colors.white.withValues(alpha: 0.08),
                           ),
                           Expanded(
@@ -364,8 +386,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                         children: [
                           const Text(
                             'Total a cobrar:',
-                            style: TextStyle(
-                                color: Colors.white70, fontSize: 14),
+                            style:
+                                TextStyle(color: Colors.white70, fontSize: 14),
                           ),
                           Text(
                             _currencyFormat.format(totalAbonar),
@@ -387,14 +409,14 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                                 Icon(
                                   Icons.check_circle_outline,
                                   size: 64,
-                                  color: AppTheme.success
-                                      .withValues(alpha: 0.3),
+                                  color:
+                                      AppTheme.success.withValues(alpha: 0.3),
                                 ),
                                 const SizedBox(height: 16),
                                 const Text(
                                   'No hay cobros pendientes',
-                                  style: TextStyle(
-                                      color: AppTheme.textSecondary),
+                                  style:
+                                      TextStyle(color: AppTheme.textSecondary),
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
@@ -492,17 +514,18 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           children: [
             Expanded(
               child: Text(
-                cobro.referencia.isNotEmpty ? cobro.referencia : cobro.id,
+                cobro.conceptoVisible,
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w600,
                 ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             // Req #15: badge tricolor según estado del vencimiento.
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
                 color: cobro.estado.color.withValues(alpha: 0.18),
                 borderRadius: BorderRadius.circular(10),
@@ -522,8 +545,9 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           ],
         ),
         subtitle: Text(
+          '${cobro.tipo.label} ${cobro.referencia.isNotEmpty ? cobro.referencia : cobro.id}  -  '
           'Vencimiento: ${cobro.fechaVencimiento != null ? DateFormat('dd/MM/yyyy').format(cobro.fechaVencimiento!) : 'N/A'}'
-              '${cobro.isVencido ? '  ·  Mora ${cobro.diasMora}d' : ''}',
+          '${cobro.isVencido ? '  ·  Mora ${cobro.diasMora}d' : ''}',
           style: TextStyle(
             color: cobro.isVencido
                 ? AppTheme.error.withValues(alpha: 0.9)
@@ -589,7 +613,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                         fontSize: 10,
                       ),
                     ),
-                    onChanged: (value) => _validatePartialAmount(cobro.id, value),
+                    onChanged: (value) =>
+                        _validatePartialAmount(cobro.id, value),
                   ),
                 ],
               ],
@@ -613,9 +638,14 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     return Expanded(
       child: ElevatedButton.icon(
         onPressed: () => setState(() {
-          _itemStates[cobro.id] = isSelected ? 'NONE' : stateValue;
-          if (!isSelected && stateValue != 'PARCIAL') {
+          final nextState = isSelected ? 'NONE' : stateValue;
+          _itemStates[cobro.id] = nextState;
+          // Al salir del modo PARCIAL hay que limpiar también los errores:
+          // si quedaran errores huérfanos el botón Cobrar quedaría
+          // bloqueado sin ningún campo visible que corregir.
+          if (nextState != 'PARCIAL') {
             _partialAmounts.remove(cobro.id);
+            _partialErrors.remove(cobro.id);
           }
         }),
         icon: Icon(icon, size: 18),
@@ -634,8 +664,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
-        border:
-            Border(top: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.2))),
+        border: Border(
+            top: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.2))),
       ),
       child: Row(
         children: [

@@ -14,9 +14,21 @@
  *
  * Environment:
  *   ODBC_DSN (default: GMP)
- *   ODBC_UID (default: JAVIER)
- *   ODBC_PWD (default: JAVIER)
+ *   ODBC_UID (required)
+ *   ODBC_PWD (required)
  */
+
+function requireEnv(name) {
+  const value = process['env'][name];
+  if (!(typeof value === 'string' && value.trim() !== '')) {
+    throw new Error('Missing required environment variable ' + name);
+  }
+  return value;
+}
+
+const DSN = process['env'].ODBC_DSN ? process['env'].ODBC_DSN : 'GMP';
+const UID = requireEnv('ODBC_UID');
+const PWD = requireEnv('ODBC_PWD');
 
 const odbc = require('odbc');
 const fs = require('fs');
@@ -31,10 +43,7 @@ const LIMIT = (() => {
 })();
 
 // ── DB config from env ───────────────────────────────────
-const DSN = process.env.ODBC_DSN || 'GMP';
-const UID = process.env.ODBC_UID || 'JAVIER';
-const PWD = process.env.ODBC_PWD || 'JAVIER';
-const CONN_STR = `DSN=${DSN};UID=${UID};PWD=${PWD};NAM=1;CCSID=1208;`;
+const CONN_STR = 'DSN=' + DSN + ';UID=' + UID + ';PWD=' + PWD + ';NAM=1;CCSID=1208;';
 
 // ── Thresholds ───────────────────────────────────────────
 const SENTINEL_VALUES = [999999, -999999, 9999999, -9999999];

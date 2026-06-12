@@ -15,10 +15,11 @@
  */
 
 const odbc = require('odbc');
+const db2ConnectionString = require('./db2-connection');
 const fs = require('fs');
 const path = require('path');
 
-const DB_CONN = 'DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208';
+const DB_CONN = db2ConnectionString();
 
 // Table pairs: [JAVIER table, DSEDAC equivalent, description]
 const TABLE_PAIRS = [

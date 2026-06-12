@@ -177,11 +177,11 @@ NODE_ENV=production
 
 # Database (ODBC)
 DB_DSN=GMP
-DB_UID=JAVIER
-DB_PWD=JAVIER
+DB_UID=<db2_user>
+DB_PWD=<db2_password>
 
 # Security
-JWT_SECRET=your-secret-key
+JWT_SECRET=replace-with-a-strong-secret
 
 # Rate Limiting
 RATE_LIMIT_WINDOW_MS=900000

@@ -5,10 +5,18 @@ const express = require('express');
 
 const mockPedidosService = {
   getOrders: jest.fn(),
+  getAvailableVehicles: jest.fn(),
+  getStockBatch: jest.fn(),
+  deleteOrderLine: jest.fn(),
   createOrder: jest.fn(),
+  extractIdempotencyKeyFromRequest: jest.fn(() => null),
   confirmOrder: jest.fn(),
   updateOrderStatus: jest.fn(),
   cancelOrder: jest.fn(),
+  cloneOrder: jest.fn(),
+  getOrderAlbaran: jest.fn(),
+  generateOrderPdf: jest.fn(),
+  getOrderVendorForAuth: jest.fn(),
 };
 const mockPedidosRepo = {
   searchProducts: jest.fn(),
@@ -112,6 +120,9 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockCache.get.mockResolvedValue(null);
   mockCache.set.mockResolvedValue(undefined);
+  const db = require('../config/db');
+  db.queryWithParams.mockResolvedValue([{ OK: 1 }]);
+  mockPedidosService.getOrderVendorForAuth.mockResolvedValue({ vendedorCode: '01' });
 });
 
 describe('DDD pedidos route contracts', () => {
@@ -171,6 +182,23 @@ describe('DDD pedidos route contracts', () => {
     expect(mockPedidosService.createOrder).not.toHaveBeenCalled();
   });
 
+  test('POST /create rejects commercial creating order for client outside vendor scope', async () => {
+    const db = require('../config/db');
+    db.queryWithParams.mockResolvedValueOnce([]);
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .post('/create')
+      .send({
+        clientCode: 'C999',
+        vendedorCode: '01',
+        lines: [{ codigoArticulo: 'P001', cantidadEnvases: 1 }],
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockPedidosService.createOrder).not.toHaveBeenCalled();
+  });
+
   test('GET / rejects ALL vendor query for commercial users', async () => {
     const res = await request(makeApp(createPedidosRoutes()))
       .get('/')
@@ -178,6 +206,96 @@ describe('DDD pedidos route contracts', () => {
 
     expect(res.status).toBe(403);
     expect(mockPedidosService.getOrders).not.toHaveBeenCalled();
+  });
+
+  test('GET /products rejects client outside vendor scope', async () => {
+    const db = require('../config/db');
+    db.queryWithParams.mockResolvedValueOnce([]);
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .get('/products')
+      .query({ vendedorCodes: '01', clientCode: 'C999' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockPedidosRepo.searchProducts).not.toHaveBeenCalled();
+  });
+
+  test('GET /products strips cost and minimum price for commercial users', async () => {
+    mockPedidosRepo.searchProducts.mockResolvedValue({
+      products: [{
+        code: 'P001',
+        name: 'Producto',
+        precioVenta: 10,
+        precioCosto: 6,
+        precioMinimo: 8,
+      }],
+      count: 1,
+    });
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .get('/products')
+      .query({ vendedorCodes: '01', clientCode: 'C001' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.products[0].precioVenta).toBe(10);
+    expect(res.body.products[0]).not.toHaveProperty('precioCosto');
+    expect(res.body.products[0]).not.toHaveProperty('precioMinimo');
+  });
+
+  test('GET /:id rejects cross-vendor commercial ownership', async () => {
+    mockPedidosService.getOrderVendorForAuth.mockResolvedValueOnce({ vendedorCode: '99' });
+
+    const res = await request(makeApp(createPedidosRoutes())).get('/22');
+
+    expect(res.status).toBe(403);
+    expect(mockPedidosRepo.getOrderById).not.toHaveBeenCalled();
+  });
+
+  test('GET /:id strips order margin fields for commercial users', async () => {
+    mockPedidosRepo.getOrderById.mockResolvedValue({
+      id: 22,
+      total: 100,
+      costo: 60,
+      margen: 40,
+      header: { id: 22, costo: 60, margen: 40 },
+      lines: [{
+        id: 1,
+        precioVenta: 10,
+        precioCosto: 6,
+        importeCosto: 60,
+        importeMargen: 40,
+        porcentajeMargen: 40,
+      }],
+    });
+
+    const res = await request(makeApp(createPedidosRoutes())).get('/22');
+
+    expect(res.status).toBe(200);
+    expect(res.body.order.total).toBe(100);
+    expect(res.body.order).not.toHaveProperty('costo');
+    expect(res.body.order.header).not.toHaveProperty('margen');
+    expect(res.body.order.lines[0]).not.toHaveProperty('precioCosto');
+    expect(res.body.order.lines[0]).not.toHaveProperty('porcentajeMargen');
+  });
+
+  test('GET /available-vehicles returns vehicles for Flutter truck assignment', async () => {
+    const vehicles = [
+      {
+        code: 'CAM01',
+        matricula: '1234ABC',
+        description: 'Camion uno',
+        driverCode: '01',
+      },
+    ];
+    mockPedidosService.getAvailableVehicles.mockResolvedValue(vehicles);
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .get('/available-vehicles');
+
+    expect(res.status).toBe(200);
+    expect(mockPedidosService.getAvailableVehicles).toHaveBeenCalledTimes(1);
+    expect(res.body).toEqual({ success: true, vehicles });
   });
 
   test('PUT /:id/confirm returns stock blocks as 409 and confirmed header at top level', async () => {
@@ -212,6 +330,52 @@ describe('DDD pedidos route contracts', () => {
     expect(confirmed.status).toBe(200);
     expect(confirmed.body.header.estado).toBe('CONFIRMADO');
   });
+
+  test('PUT /:id/confirm maps BOLSA_INSUFICIENTE blocked response to top-level code', async () => {
+    mockPedidosService.confirmOrder.mockResolvedValueOnce({
+      blocked: true,
+      reason: 'BOLSA_INSUFICIENTE',
+      message: 'Bolsa insuficiente',
+    });
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .put('/22/confirm')
+      .send({ saleType: 'VC' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.blocked).toBe(true);
+    expect(res.body.reason).toBe('BOLSA_INSUFICIENTE');
+    expect(res.body.code).toBe('BOLSA_INSUFICIENTE');
+  });
+
+  test('PUT /:id/confirm rejects invalid saleType and cross-vendor commercial ownership', async () => {
+    const invalidType = await request(makeApp(createPedidosRoutes()))
+      .put('/22/confirm')
+      .send({ saleType: 'BAD' });
+
+    expect(invalidType.status).toBe(400);
+    expect(mockPedidosService.confirmOrder).not.toHaveBeenCalled();
+
+    mockPedidosService.getOrderVendorForAuth.mockResolvedValueOnce({ vendedorCode: '99' });
+    const forbidden = await request(makeApp(createPedidosRoutes()))
+      .put('/22/confirm')
+      .send({ saleType: 'CC' });
+
+    expect(forbidden.status).toBe(403);
+    expect(mockPedidosService.confirmOrder).not.toHaveBeenCalled();
+  });
+
+  test('POST /confirm direct DDD shortcut is disabled', async () => {
+    const res = await request(makeApp(createPedidosRoutes()))
+      .post('/confirm')
+      .send({
+        clientCode: 'C001',
+        lines: [{ productCode: 'P001', quantity: 1 }],
+      });
+
+    expect(res.status).toBe(410);
+    expect(res.body.code).toBe('DIRECT_CONFIRM_DISABLED');
+  });
 });
 
 describe('DDD cobros route contracts', () => {
@@ -230,6 +394,7 @@ describe('DDD cobros route contracts', () => {
     );
     expect(res.body.cobros).toEqual([{ id: 'c1', referencia: 'M-1' }]);
     expect(res.body.resumen.totalPendiente).toBe(42);
+    expect(res.body.resumen.total).toBe(42);
   });
 
   test('GET /:codigoCliente/pendientes cache key includes authenticated commercial scope', async () => {
@@ -245,6 +410,20 @@ describe('DDD cobros route contracts', () => {
 
     expect(mockCache.set.mock.calls[0][0]).toContain('COMERCIAL:01');
     expect(mockCache.set.mock.calls[1][0]).toContain('COMERCIAL:02');
+  });
+
+  test('GET /:codigoCliente/estado hides raw repository errors', async function () {
+    mockCobrosRepo.getPendientes.mockRejectedValue(new Error('SQL0204 internal table missing'));
+
+    const res = await request(makeApp(createCobrosRoutes())).get('/C001/estado');
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({
+      success: false,
+      error: 'Error obteniendo estado de cobros',
+      code: 'COBROS_ESTADO_ERROR',
+    });
+    expect(res.body.error).not.toContain('SQL0204');
   });
 
   test('POST /:codigoCliente/registrar is available for Flutter and registers payment', async () => {
@@ -327,6 +506,17 @@ describe('DDD cobros route contracts', () => {
       'ALL',
       expect.objectContaining({ vendorCodes: ['01', '02'] }),
     );
+  });
+
+  test('GET /:codigoCliente/historico rejects client outside vendor scope', async () => {
+    const db = require('../config/db');
+    db.queryWithParams.mockResolvedValueOnce([]);
+
+    const res = await request(makeApp(createCobrosRoutes())).get('/C999/historico');
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockCobrosRepo.getHistorico).not.toHaveBeenCalled();
   });
 });
 

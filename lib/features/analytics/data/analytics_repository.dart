@@ -1,9 +1,9 @@
 import 'package:equatable/equatable.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 
 /// Data model for analytics information.
 class AnalyticsData extends Equatable {
-
   const AnalyticsData({
     this.totalSales = 0,
     this.totalOrders = 0,
@@ -32,7 +32,11 @@ class AnalyticsData extends Equatable {
 class AnalyticsRepository {
   Future<AnalyticsData> getAnalyticsData() async {
     try {
-      final response = await ApiClient.get('/analytics/summary');
+      final response = await ApiClient.get(
+        '/analytics/summary',
+        cacheKey: 'analytics:summary',
+        cacheTTL: CacheService.shortTTL,
+      );
       return AnalyticsData.fromJson(response);
     } catch (e) {
       return const AnalyticsData();

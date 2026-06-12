@@ -947,21 +947,32 @@ const cobrosTools = {
     async getPendingCobros(conn, clientCode) {
         const rows = await safeQuery(conn, `
             SELECT
-                TRIM(C.CVCDRF) AS SERIE_DOCUMENTO,
-                C.CVNUDC AS NUMERO_DOCUMENTO,
-                C.CVIMVT AS IMPORTE_TOTAL,
-                C.CVIMCO AS IMPORTE_COBRADO,
-                (C.CVIMVT - C.CVIMCO) AS IMPORTE_PENDIENTE,
-                C.CVFCVC AS FECHA_VENCIMIENTO,
-                TRIM(C.CVCDTD) AS TIPO_DOCUMENTO
+                TRIM(C.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
+                C.NUMERODOCUMENTO AS NUMERO_DOCUMENTO,
+                C.IMPORTEVENCIMIENTO AS IMPORTE_TOTAL,
+                C.IMPORTECANCELADO AS IMPORTE_COBRADO,
+                C.IMPORTEPENDIENTE AS IMPORTE_PENDIENTE,
+                C.DIAVENCIMIENTO AS DIA_VENCIMIENTO,
+                C.MESVENCIMIENTO AS MES_VENCIMIENTO,
+                C.ANOVENCIMIENTO AS ANO_VENCIMIENTO,
+                TRIM(C.TIPODOCUMENTO) AS TIPO_DOCUMENTO
             FROM DSEDAC.CVC C
-            WHERE TRIM(C.CVCDCL) = ?
-              AND (C.CVIMVT - C.CVIMCO) > 0.01
-            ORDER BY C.CVFCVC ASC
+            WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
+              AND C.IMPORTEPENDIENTE > 0.01
+              AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')
+            ORDER BY C.ANOVENCIMIENTO ASC, C.MESVENCIMIENTO ASC, C.DIAVENCIMIENTO ASC
             FETCH FIRST 100 ROWS ONLY
         `, [clientCode]);
 
         const totalPending = rows.reduce((sum, r) => sum + (parseFloat(r.IMPORTE_PENDIENTE) || 0), 0);
+        const format2 = (n) => String(n).padStart(2, '0');
+        const dueDate = (r) => {
+            const y = parseInt(r.ANO_VENCIMIENTO, 10);
+            const m = parseInt(r.MES_VENCIMIENTO, 10);
+            const d = parseInt(r.DIA_VENCIMIENTO, 10);
+            if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d) || y <= 0 || m <= 0 || d <= 0) return null;
+            return `${y}-${format2(m)}-${format2(d)}`;
+        };
 
         return {
             clientCode,
@@ -973,7 +984,7 @@ const cobrosTools = {
                 total: parseFloat(r.IMPORTE_TOTAL) || 0,
                 collected: parseFloat(r.IMPORTE_COBRADO) || 0,
                 pending: parseFloat(r.IMPORTE_PENDIENTE) || 0,
-                dueDate: r.FECHA_VENCIMIENTO ? String(r.FECHA_VENCIMIENTO) : null
+                dueDate: dueDate(r)
             }))
         };
     },
@@ -1170,10 +1181,12 @@ const evolutionTools = {
     async getSalesEvolution(conn, userCode, isJefeVentas, months = 24, vendorScope) {
         const currentYear = new Date().getFullYear();
         const currentMonth = new Date().getMonth() + 1;
-        const startYear = currentYear - Math.ceil(months / 12);
+        const startPeriod = new Date(currentYear, currentMonth - months, 1);
+        const startYear = startPeriod.getFullYear();
+        const startMonth = startPeriod.getMonth() + 1;
 
         const vendorFilter = _buildVendorFilter(vendorScope, userCode, 'L.LCCDVD');
-        const params = [startYear, ...vendorFilter.params];
+        const params = [startYear, startYear, startMonth, ...vendorFilter.params];
 
         const rows = await safeQuery(conn, `
             SELECT
@@ -1182,11 +1195,14 @@ const evolutionTools = {
                 COUNT(DISTINCT L.LCCDCL) AS NUM_CLIENTES,
                 COUNT(*) AS NUM_LINEAS,
                 SUM(L.LCIMVT) AS TOTAL_VENTAS,
-                SUM(L.LCIMCO) AS TOTAL_COSTO,
-                SUM(L.LCIMVT - L.LCIMCO) AS TOTAL_MARGEN
+                SUM(L.LCIMCT) AS TOTAL_COSTO,
+                SUM(L.LCIMVT - L.LCIMCT) AS TOTAL_MARGEN
             FROM DSED.LACLAE L
-            WHERE L.LCAADC >= ?
-              AND L.LCIMVT > 0
+            WHERE (L.LCAADC > ? OR (L.LCAADC = ? AND L.LCMMDC >= ?))
+              AND L.TPDC = 'LAC'
+              AND L.LCTPVT IN ('CC', 'VC')
+              AND L.LCCLLN IN ('AB', 'VT')
+              AND L.LCSRAB NOT IN ('N', 'Z', 'G', 'D')
               ${vendorFilter.sql}
             GROUP BY L.LCAADC, L.LCMMDC
             ORDER BY L.LCAADC, L.LCMMDC
@@ -1397,7 +1413,7 @@ const analyticsTools = {
             const rows = await safeQuery(conn, `
                 SELECT 
                     SUM(L.LCIMVT) as SALES,
-                    SUM(L.LCIMVT - L.LCIMCO) as MARGIN,
+                    SUM(L.LCIMVT - L.LCIMCT) as MARGIN,
                     COUNT(DISTINCT L.LCCDCL) as CLIENTS
                 FROM DSED.LACLAE L
                 WHERE L.LCAADC = ?

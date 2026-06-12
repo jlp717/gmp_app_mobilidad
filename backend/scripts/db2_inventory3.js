@@ -1,5 +1,6 @@
 const odbc = require('odbc');
-const DB_CONFIG = `DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208;CMPTDM=1;CPOOLMAX=3;CPOOLMIN=1;CPTOUT=60;COMMTIMEOUT=90;DBQ=GMP;`;
+const db2ConnectionString = require('./db2-connection');
+const DB_CONFIG = db2ConnectionString({ extras: 'NAM=1;CCSID=1208;CMPTDM=1;CPOOLMAX=3;CPOOLMIN=1;CPTOUT=60;COMMTIMEOUT=90;DBQ=GMP' });
 
 async function query(sql) {
   let pool = null, conn = null;

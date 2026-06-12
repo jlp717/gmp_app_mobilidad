@@ -9,6 +9,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class RepartidorMonthlySummaryBar extends StatefulWidget {
@@ -55,6 +56,9 @@ class _RepartidorMonthlySummaryBarState
           'year': now.year.toString(),
           'month': now.month.toString(),
         },
+        cacheKey:
+            'repartidor-finanzas:summary:${widget.repartidorId}:${now.year}:${now.month}',
+        cacheTTL: CacheService.shortTTL,
       );
       if (mounted && response['success'] == true) {
         setState(() => _data = response);
@@ -69,9 +73,9 @@ class _RepartidorMonthlySummaryBarState
   String _fmtMoney(num? v) {
     final value = (v ?? 0).toDouble();
     return '${value.toStringAsFixed(0).replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]}.',
-    )}€';
+          RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]}.',
+        )}€';
   }
 
   @override
@@ -91,12 +95,9 @@ class _RepartidorMonthlySummaryBarState
     // Estructura del response:
     // { success, repartidorId, year, month, summary: {...}, liquidaciones: [...] }
     final summary = data['summary'] as Map<String, dynamic>? ?? {};
-    final totalCobrado =
-        (summary['totalCobrado'] as num?)?.toDouble() ?? 0;
-    final totalLiquidado =
-        (summary['totalLiquidado'] as num?)?.toDouble() ?? 0;
-    final saldoPendiente =
-        (summary['saldoPendiente'] as num?)?.toDouble() ?? 0;
+    final totalCobrado = (summary['totalCobrado'] as num?)?.toDouble() ?? 0;
+    final totalLiquidado = (summary['totalLiquidado'] as num?)?.toDouble() ?? 0;
+    final saldoPendiente = (summary['saldoPendiente'] as num?)?.toDouble() ?? 0;
     final numLiq = (data['liquidaciones'] as List?)?.length ?? 0;
 
     if (totalCobrado == 0 && totalLiquidado == 0 && saldoPendiente == 0) {
@@ -105,8 +106,18 @@ class _RepartidorMonthlySummaryBarState
 
     final now = DateTime.now();
     const meses = [
-      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+      'enero',
+      'febrero',
+      'marzo',
+      'abril',
+      'mayo',
+      'junio',
+      'julio',
+      'agosto',
+      'septiembre',
+      'octubre',
+      'noviembre',
+      'diciembre',
     ];
 
     return Container(
@@ -131,8 +142,11 @@ class _RepartidorMonthlySummaryBarState
         children: [
           Row(
             children: [
-              const Icon(Icons.calendar_month,
-                  color: AppTheme.neonBlue, size: 14,),
+              const Icon(
+                Icons.calendar_month,
+                color: AppTheme.neonBlue,
+                size: 14,
+              ),
               const SizedBox(width: 6),
               Text(
                 'Acumulado de ${meses[now.month - 1]}',
@@ -146,7 +160,9 @@ class _RepartidorMonthlySummaryBarState
               if (numLiq > 0)
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: 6, vertical: 2,),
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: AppTheme.neonBlue.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(4),
@@ -166,19 +182,27 @@ class _RepartidorMonthlySummaryBarState
           Row(
             children: [
               Expanded(
-                child: _kpi('Cobrado', _fmtMoney(totalCobrado),
-                    AppTheme.neonGreen,),
+                child: _kpi(
+                  'Cobrado',
+                  _fmtMoney(totalCobrado),
+                  AppTheme.neonGreen,
+                ),
               ),
               Container(
-                width: 1, height: 28,
+                width: 1,
+                height: 28,
                 color: Colors.white.withValues(alpha: 0.1),
               ),
               Expanded(
-                child: _kpi('Liquidado', _fmtMoney(totalLiquidado),
-                    AppTheme.neonBlue,),
+                child: _kpi(
+                  'Liquidado',
+                  _fmtMoney(totalLiquidado),
+                  AppTheme.neonBlue,
+                ),
               ),
               Container(
-                width: 1, height: 28,
+                width: 1,
+                height: 28,
                 color: Colors.white.withValues(alpha: 0.1),
               ),
               Expanded(

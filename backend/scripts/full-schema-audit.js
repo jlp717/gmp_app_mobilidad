@@ -1,7 +1,8 @@
 const odbc = require('odbc');
+const db2ConnectionString = require('./db2-connection');
 
 (async () => {
-  const pool = await odbc.pool('DSN=GMP;UID=JAVIER;PWD=JAVIER;NAM=1;CCSID=1208');
+  const pool = await odbc.pool(db2ConnectionString());
   const conn = await pool.connect();
 
   try {
@@ -44,7 +45,7 @@ const odbc = require('odbc');
         match = false;
       }
     }
-    if (match) console.log('  LQD: Perfect match ✅');
+    if (match) console.log('  LQD: Perfect match âœ…');
 
     // Check DSEDAC for any table that might be the real COBROS/LIQUIDACION
     console.log('\n=== Searching DSEDAC for cobros/liquidacion equivalents ===');

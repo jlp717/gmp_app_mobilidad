@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/models/estado_entrega.dart';
 
 export '../../../core/models/estado_entrega.dart';
@@ -355,6 +356,7 @@ class EntregasState {
 class EntregasNotifier extends Notifier<EntregasState> {
   Timer? _debounceTimer;
   bool _initialLoadDone = false;
+  int _pendingLoadGeneration = 0;
 
   @override
   EntregasState build() {
@@ -446,38 +448,58 @@ class EntregasNotifier extends Notifier<EntregasState> {
   Future<void> cargarAlbaranesPendientes() async {
     if (state.repartidorId.isEmpty) return;
 
+    final generation = ++_pendingLoadGeneration;
+    final requestState = state;
+    final formattedDate =
+        '${requestState.fechaSeleccionada.year}-${requestState.fechaSeleccionada.month.toString().padLeft(2, '0')}-${requestState.fechaSeleccionada.day.toString().padLeft(2, '0')}';
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final formattedDate =
-          '${state.fechaSeleccionada.year}-${state.fechaSeleccionada.month.toString().padLeft(2, '0')}-${state.fechaSeleccionada.day.toString().padLeft(2, '0')}';
-
       var url =
-          '/entregas/pendientes/${state.repartidorId}?date=$formattedDate';
+          '/entregas/pendientes/${requestState.repartidorId}?date=$formattedDate';
 
-      if (state.searchQuery.isNotEmpty) {
-        url += '&search=${Uri.encodeComponent(state.searchQuery)}';
+      if (requestState.searchQuery.isNotEmpty) {
+        url += '&search=${Uri.encodeComponent(requestState.searchQuery)}';
       }
-      if (state.searchClient.isNotEmpty) {
-        url += '&searchClient=${Uri.encodeComponent(state.searchClient)}';
+      if (requestState.searchClient.isNotEmpty) {
+        url +=
+            '&searchClient=${Uri.encodeComponent(requestState.searchClient)}';
       }
-      if (state.searchAlbaran.isNotEmpty) {
-        url += '&searchAlbaran=${Uri.encodeComponent(state.searchAlbaran)}';
+      if (requestState.searchAlbaran.isNotEmpty) {
+        url +=
+            '&searchAlbaran=${Uri.encodeComponent(requestState.searchAlbaran)}';
       }
-      if (state.sortBy != 'default') {
-        url += '&sortBy=${state.sortBy}';
+      if (requestState.sortBy != 'default') {
+        url += '&sortBy=${requestState.sortBy}';
       }
-      if (state.filterTipoPago.isNotEmpty) {
-        url += '&tipoPago=${state.filterTipoPago}';
+      if (requestState.filterTipoPago.isNotEmpty) {
+        url += '&tipoPago=${requestState.filterTipoPago}';
       }
-      if (state.filterDebeCobrar.isNotEmpty) {
-        url += '&debeCobrar=${state.filterDebeCobrar}';
+      if (requestState.filterDebeCobrar.isNotEmpty) {
+        url += '&debeCobrar=${requestState.filterDebeCobrar}';
       }
-      if (state.filterDocTipo.isNotEmpty) {
-        url += '&docTipo=${state.filterDocTipo}';
+      if (requestState.filterDocTipo.isNotEmpty) {
+        url += '&docTipo=${requestState.filterDocTipo}';
       }
 
-      final response = await ApiClient.get(url);
+      final response = await ApiClient.get(
+        url,
+        cacheKey: [
+          'entregas:pendientes',
+          requestState.repartidorId,
+          formattedDate,
+          requestState.searchQuery,
+          requestState.searchClient,
+          requestState.searchAlbaran,
+          requestState.sortBy,
+          requestState.filterTipoPago,
+          requestState.filterDebeCobrar,
+          requestState.filterDocTipo,
+        ].join(':'),
+        cacheTTL: const Duration(minutes: 2),
+      );
+
+      if (generation != _pendingLoadGeneration) return;
 
       if (response['success'] == true) {
         final lista = response['albaranes'] as List<dynamic>? ?? [];
@@ -503,10 +525,12 @@ class EntregasNotifier extends Notifier<EntregasState> {
         );
       }
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: 'Error de conexión: $e',
-      );
+      if (generation == _pendingLoadGeneration) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Error de conexión: $e',
+        );
+      }
     }
   }
 
@@ -519,6 +543,8 @@ class EntregasNotifier extends Notifier<EntregasState> {
     try {
       final response = await ApiClient.get(
         '/entregas/albaran/$numero/$ejercicio?serie=$serie&terminal=$terminal',
+        cacheKey: 'entregas:albaran:$numero:$ejercicio:$serie:$terminal',
+        cacheTTL: const Duration(minutes: 2),
       );
 
       if (response['success'] == true && response['albaran'] != null) {
@@ -710,6 +736,10 @@ class EntregasNotifier extends Notifier<EntregasState> {
       );
 
       if (response['success'] == true) {
+        await CacheService.invalidateByPrefix(
+          'entregas:pendientes:${state.repartidorId}:',
+        );
+        await CacheService.invalidateByPrefix('entregas:albaran:');
         final idx = state.albaranes.indexWhere((a) => a.id == itemId);
         if (idx != -1) {
           final updated = List<AlbaranEntrega>.from(state.albaranes);

@@ -40,6 +40,14 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     super.dispose();
   }
 
+  bool _lineUsesBoxes(OrderLine line) {
+    final unit = line.unidadMedida.trim().toUpperCase();
+    return unit.isEmpty || unit == 'CAJAS';
+  }
+
+  double _primaryLineQuantity(OrderLine line) =>
+      _lineUsesBoxes(line) ? line.cantidadEnvases : line.cantidadUnidades;
+
   @override
   Widget build(BuildContext context) {
     final provider = ref.watch(pedidosProvider);
@@ -184,7 +192,9 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                         onPressed: () async {
                           provider.clearOrder();
                           await provider.loadPromotions();
-                          Navigator.pop(ctx);
+                          // Guard: si el diálogo se cerró durante el await
+                          // (barrier), un pop extra cerraría la pantalla.
+                          if (ctx.mounted) Navigator.pop(ctx);
                         },
                         child: const Text(
                           'Vaciar',
@@ -230,7 +240,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
             _showEditLineDialog(context, provider, line, i);
           },
           onIncrement: () {
-            final isBoxes = line.cantidadEnvases > 0;
+            final isBoxes = _lineUsesBoxes(line);
             final qty =
                 isBoxes ? line.cantidadEnvases + 1 : line.cantidadUnidades + 1;
             final error = provider.updateLine(
@@ -254,7 +264,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
             }
           },
           onDecrement: () {
-            final isBoxes = line.cantidadEnvases > 0;
+            final isBoxes = _lineUsesBoxes(line);
             final currentQty =
                 isBoxes ? line.cantidadEnvases : line.cantidadUnidades;
             if (currentQty <= 1) return;
@@ -507,6 +517,8 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                 ],
               ),
             ),
+          if (provider.estimatedBolsaImpact.hasImpact)
+            _buildBolsaImpactPreview(context, provider),
           const SizedBox(height: 6),
           // Auto-save indicator
           if (provider.lastAutoSaved != null || provider.isDirty)
@@ -612,6 +624,75 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
     );
   }
 
+  Widget _buildBolsaImpactPreview(
+    BuildContext context,
+    PedidosProvider provider,
+  ) {
+    final impact = provider.estimatedBolsaImpact;
+    final netColor = impact.neto >= 0 ? AppTheme.neonGreen : AppTheme.warning;
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppTheme.darkCard,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: netColor.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.account_balance_wallet_outlined,
+              color: netColor, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Bolsa estimada',
+              style: TextStyle(
+                color: Colors.white70,
+                fontSize: Responsive.fontSize(context, small: 11, large: 12),
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          if (impact.acumulacion > 0)
+            _buildBolsaMiniStat(
+              '+${PedidosFormatters.money(impact.acumulacion)}',
+              AppTheme.neonGreen,
+            ),
+          if (impact.consumo > 0) ...[
+            const SizedBox(width: 8),
+            _buildBolsaMiniStat(
+              '-${PedidosFormatters.money(impact.consumo)}',
+              AppTheme.warning,
+            ),
+          ],
+          const SizedBox(width: 8),
+          _buildBolsaMiniStat(
+            '${impact.neto >= 0 ? '+' : ''}${PedidosFormatters.money(impact.neto)}',
+            netColor,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBolsaMiniStat(String value, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        value,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
   String _formatTime(DateTime dt) {
     final h = dt.hour.toString().padLeft(2, '0');
     final m = dt.minute.toString().padLeft(2, '0');
@@ -629,7 +710,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
           .toStringAsFixed(2)
           .replaceAll(RegExp(r'0+$'), '')
           .replaceAll(RegExp(r'\.$'), '');
-      return '$formatted uds';
+      return '$formatted mixto';
     }
     return '${total.toStringAsFixed(0)} uds';
   }
@@ -657,12 +738,12 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
 
     final qtyController = TextEditingController(
       text: formatQty(
-        line.cantidadEnvases > 0 ? line.cantidadEnvases : line.cantidadUnidades,
+        _primaryLineQuantity(line),
         line.unidadMedida,
       ),
     );
     final cajasController = TextEditingController(
-      text: line.cantidadEnvases > 0
+      text: _lineUsesBoxes(line) && line.cantidadEnvases > 0
           ? formatQty(line.cantidadEnvases, 'CAJAS')
           : '',
     );
@@ -1025,10 +1106,28 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                         height: 46,
                         child: ElevatedButton.icon(
                           onPressed: () {
+                            void showValidation(String msg) {
+                              ScaffoldMessenger.of(ctx).showSnackBar(
+                                SnackBar(
+                                  content: Text(msg),
+                                  backgroundColor: AppTheme.warning,
+                                  duration: const Duration(seconds: 2),
+                                ),
+                              );
+                            }
+
                             final price = double.tryParse(
                                   priceController.text.replaceAll(',', '.'),
                                 ) ??
                                 0;
+                            // Precio negativo nunca es válido; 0 solo para
+                            // líneas Sin Cargo (SC).
+                            final isSinCargo =
+                                line.claseLinea.trim().toUpperCase() == 'SC';
+                            if (price < 0 || (price == 0 && !isSinCargo)) {
+                              showValidation('Precio no válido');
+                              return;
+                            }
 
                             if (isDual) {
                               final c = double.tryParse(
@@ -1040,7 +1139,12 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                                         .replaceAll(',', '.'),
                                   ) ??
                                   0;
-                              if (c <= 0 && u <= 0) return;
+                              if (c <= 0 && u <= 0) {
+                                showValidation(
+                                  'Indica una cantidad mayor que 0',
+                                );
+                                return;
+                              }
                               provider.updateLine(
                                 index,
                                 cantidadEnvases: c,
@@ -1052,8 +1156,13 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                                     qtyController.text.replaceAll(',', '.'),
                                   ) ??
                                   0;
-                              if (qty <= 0) return;
-                              final isBoxes = line.cantidadEnvases > 0;
+                              if (qty <= 0) {
+                                showValidation(
+                                  'Indica una cantidad mayor que 0',
+                                );
+                                return;
+                              }
+                              final isBoxes = _lineUsesBoxes(line);
                               provider.updateLine(
                                 index,
                                 cantidadEnvases: isBoxes ? qty : null,

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
+import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
 import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
@@ -22,6 +23,15 @@ import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/dashbo
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/hierarchy_section.dart'; // New import
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/hierarchy_selector.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/matrix_data_table.dart';
+
+String _cacheKeyFromParams(Map<String, Object?> params) {
+  final keys = params.keys.toList()..sort();
+  return keys
+      .map(
+        (key) => '$key=${Uri.encodeComponent(params[key]?.toString() ?? '')}',
+      )
+      .join('&');
+}
 
 /// Professional Dashboard - Power BI Style for Sales Manager
 /// Multi-select filters: Years, Months, Vendors, Clients
@@ -272,8 +282,13 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
           if (_selectedVendedor != null)
             params['vendedorCodes'] = _selectedVendedor;
 
-          final res = await ApiClient.get('/clients/list',
-              queryParameters: params); // No cache for search or short TTL
+          final res = await ApiClient.get(
+            '/clients/list',
+            queryParameters: params,
+            cacheKey:
+                'dashboard:client-search:${query.trim()}:${_selectedVendedor ?? 'ALL'}',
+            cacheTTL: CacheService.realtimeTTL,
+          );
           final rawList = res['clients'] ?? [];
           return (rawList as List)
               .map((item) => Map<String, dynamic>.from(item as Map))
@@ -353,13 +368,13 @@ class _DashboardContentState extends ConsumerState<DashboardContent>
         ApiClient.get(
           '/dashboard/matrix-data',
           queryParameters: params,
-          cacheKey: 'dash_matrix_${params}_v2',
+          cacheKey: 'dash_matrix_${_cacheKeyFromParams(params)}_v2',
           cacheTTL: const Duration(minutes: 60),
         ),
         ApiClient.get(
           '/dashboard/metrics',
           queryParameters: params,
-          cacheKey: 'dash_metrics_${params.hashCode}',
+          cacheKey: 'dash_metrics_${_cacheKeyFromParams(params)}',
           cacheTTL: const Duration(minutes: 30),
           receiveTimeout: const Duration(seconds: 20),
         ),
@@ -1510,8 +1525,12 @@ class _ProductSearchDialogState extends State<_ProductSearchDialog> {
   Future<void> _searchProducts([String query = '']) async {
     setState(() => _isLoading = true);
     try {
-      final results = await ApiClient.getList('/dashboard/products-search',
-          queryParameters: {'query': query, 'limit': '50'});
+      final results = await ApiClient.getList(
+        '/dashboard/products-search',
+        queryParameters: {'query': query, 'limit': '50'},
+        cacheKey: 'dashboard:products-search:${query.trim()}:50',
+        cacheTTL: CacheService.realtimeTTL,
+      );
       if (mounted) {
         setState(() {
           _searchResults = (results as List)

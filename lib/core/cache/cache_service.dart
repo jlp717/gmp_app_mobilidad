@@ -66,7 +66,8 @@ class CacheService {
       encryptionCipher: encryptionCipher,
     );
     debugPrint(
-      '[CacheService] Initialized with ${_cacheBox?.length ?? 0} cached items (encrypted)',
+      '[CacheService] Initialized with ${_cacheBox?.length ?? 0} '
+      'cached items (encrypted)',
     );
   }
 
@@ -81,6 +82,14 @@ class CacheService {
     if (_cacheBox == null) return null;
 
     final safeKey = _sanitizeKey(key);
+    final memEntry = _memoryCache[safeKey];
+    if (memEntry != null && DateTime.now().isBefore(memEntry.expiry)) {
+      debugPrint('[CacheService] Memory cache HIT for key: $key');
+      return memEntry.value as T?;
+    }
+    if (memEntry != null) {
+      _memoryCache.remove(safeKey);
+    }
 
     final expiryKey = '${safeKey}_expiry';
     final expiryTimestamp = _metadataBox?.get(expiryKey) as int?;
@@ -96,6 +105,15 @@ class CacheService {
     final value = _cacheBox?.get(safeKey);
     if (value != null) {
       debugPrint('[CacheService] Cache HIT for key: $key');
+      // Limitar la vida en memoria al TTL restante de la entrada: sin esto
+      // un dato con realtimeTTL (1 min) podía servirse hasta 5 min desde
+      // la capa en memoria.
+      Duration? remaining;
+      if (expiryTimestamp != null) {
+        remaining = DateTime.fromMillisecondsSinceEpoch(expiryTimestamp)
+            .difference(DateTime.now());
+      }
+      _setMemoryCache(safeKey, value, ttl: remaining);
     }
     return value as T?;
   }
@@ -142,8 +160,10 @@ class CacheService {
     try {
       await _cacheBox?.put(safeKey, value);
       await _metadataBox?.put('${safeKey}_expiry', expiryTimestamp);
+      _setMemoryCache(safeKey, value, ttl: effectiveTTL);
       debugPrint(
-        '[CacheService] Cache SET for key: $key (TTL: ${effectiveTTL.inMinutes}min)',
+        '[CacheService] Cache SET for key: $key '
+        '(TTL: ${effectiveTTL.inMinutes}min)',
       );
     } catch (e) {
       debugPrint('[CacheService] Error setting cache: $e');
@@ -155,6 +175,7 @@ class CacheService {
     final safeKey = _sanitizeKey(key);
     await _cacheBox?.delete(safeKey);
     await _metadataBox?.delete('${safeKey}_expiry');
+    _memoryCache.remove(safeKey);
     debugPrint('[CacheService] Cache INVALIDATED for key: $key');
   }
 
@@ -164,7 +185,8 @@ class CacheService {
     if (_cacheBox == null) return;
 
     // We can only reliably match unhashed keys or keys that are short enough
-    // For hashed keys, we can't easily reverse logic unless we store original keys.
+    // For hashed keys, we can't easily reverse logic unless we store
+    // original keys.
     // For now, this best-effort implementation scans all keys.
 
     final keysToDelete = _cacheBox!.keys
@@ -178,10 +200,16 @@ class CacheService {
     for (final key in keysToDelete) {
       await _cacheBox?.delete(key);
       await _metadataBox?.delete('${key}_expiry');
+      _memoryCache.remove(key.toString());
     }
 
+    _memoryCache.removeWhere(
+      (key, _) => key.startsWith(prefix) || key.startsWith('hashed_$prefix'),
+    );
+
     debugPrint(
-      '[CacheService] Invalidated ${keysToDelete.length} entries with prefix: $prefix',
+      '[CacheService] Invalidated ${keysToDelete.length} entries '
+      'with prefix: $prefix',
     );
   }
 
@@ -189,6 +217,7 @@ class CacheService {
   static Future<void> clearAll() async {
     await _cacheBox?.clear();
     await _metadataBox?.clear();
+    clearMemoryCache();
     debugPrint('[CacheService] All cache cleared');
   }
 
@@ -212,19 +241,19 @@ class CacheService {
   /// Get from memory cache first, then fall back to Hive
   /// Use this for frequently accessed data within a session
   static T? getWithMemory<T>(String key) {
+    final safeKey = _sanitizeKey(key);
     // Check in-memory cache first
-    final memEntry = _memoryCache[key];
+    final memEntry = _memoryCache[safeKey];
     if (memEntry != null && DateTime.now().isBefore(memEntry.expiry)) {
       debugPrint('[CacheService] Memory cache HIT for key: $key');
       return memEntry.value as T?;
     }
+    if (memEntry != null) {
+      _memoryCache.remove(safeKey);
+    }
 
     // Fall back to Hive cache
     final value = get<T>(key);
-    if (value != null) {
-      // Promote to memory cache
-      _setMemoryCache(key, value);
-    }
     return value;
   }
 
@@ -234,12 +263,17 @@ class CacheService {
     T value, {
     Duration? ttl,
   }) async {
-    _setMemoryCache(key, value);
     await set(key, value, ttl: ttl);
   }
 
-  /// Internal: Set value in memory cache with LRU eviction
-  static void _setMemoryCache(String key, dynamic value) {
+  /// Internal: Set value in memory cache with LRU eviction.
+  /// [ttl] caps the in-memory lifetime (never exceeds [_memoryCacheTTL]).
+  static void _setMemoryCache(String key, dynamic value, {Duration? ttl}) {
+    final effective = (ttl == null || ttl > _memoryCacheTTL)
+        ? _memoryCacheTTL
+        : (ttl.isNegative ? Duration.zero : ttl);
+    if (effective == Duration.zero) return;
+
     // Evict oldest entry if at capacity
     if (_memoryCache.length >= _memoryCacheMaxSize) {
       final oldestKey = _memoryCache.entries
@@ -251,7 +285,7 @@ class CacheService {
 
     _memoryCache[key] = _MemoryCacheEntry(
       value: value,
-      expiry: DateTime.now().add(_memoryCacheTTL),
+      expiry: DateTime.now().add(effective),
     );
   }
 
