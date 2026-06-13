@@ -78,6 +78,12 @@ const DEFAULT_CONFIG_2026 = {
         { min: 110.01, max: 999.99, pct: 2.0 }
     ]
 };
+const COMM_CONFIG_SELECT_SQL = [
+    'SELECT IPC_PCT, TIER1_MAX, TIER1_PCT, TIER2_MAX, TIER2_PCT, TIER3_MAX, TIER3_PCT, TIER4_PCT',
+    'FROM JAVIER.COMM_CONFIG',
+    'WHERE YEAR = ?',
+    'FETCH FIRST 1 ROWS ONLY',
+].join(' ');
 const COMMISSIONS_CACHE_VERSION = 'v20260604-final-commission-sources';
 
 /**
@@ -834,7 +840,7 @@ function roundMoney(value) {
 async function loadCommissionConfig(year) {
     try {
         const dbConfig = await queryWithParams(
-            `SELECT * FROM JAVIER.COMM_CONFIG WHERE YEAR = ? FETCH FIRST 1 ROWS ONLY`,
+            COMM_CONFIG_SELECT_SQL,
             [parseInt(year)],
             false,
             false
@@ -1514,7 +1520,7 @@ router.get('/summary', verifyToken, async (req, res) => {
         // A. Load Config
         let config = DEFAULT_CONFIG_2026;
         try {
-            const dbConfig = await queryWithParams(`SELECT * FROM JAVIER.COMM_CONFIG WHERE YEAR = ? FETCH FIRST 1 ROWS ONLY`, [selectedYear], false, false);
+            const dbConfig = await queryWithParams(COMM_CONFIG_SELECT_SQL, [selectedYear], false, false);
             if (dbConfig && dbConfig.length > 0) {
                 // Map DB columns to config object
                 const row = dbConfig[0];
@@ -1898,34 +1904,23 @@ router.get('/summary', verifyToken, async (req, res) => {
 // NEW: Validates observaciones requirement and captures venta_comision snapshot
 // Pagos son solo INSERT – no UPDATE. Snapshot histórico intencional.
 router.post('/pay', verifyToken, async (req, res) => {
-    const { vendedorCode, year, month, quarter, amount, generatedAmount, concept, adminCode, observaciones, objetivoMes, ventaActual, ventasSobreObjetivo } = req.body;
+    const { vendedorCode, year, month, quarter, amount, generatedAmount, concept, observaciones, objetivoMes, ventaActual, ventasSobreObjetivo } = req.body;
 
-    // Security check: Verify that the user has TIPOVENDEDOR = 'ADMIN' or is specifically authorized (code 98 = DIEGO)
-    try {
-        const trimmedAdmin = adminCode ? adminCode.trim() : '';
-        const adminRows = await queryWithParams(`
-            SELECT TIPOVENDEDOR
-            FROM DSEDAC.VDC
-            WHERE TRIM(CODIGOVENDEDOR) = ?
-              AND SUBEMPRESA = 'GMP'
-            FETCH FIRST 1 ROWS ONLY
-        `, [trimmedAdmin.replace(/[^a-zA-Z0-9]/g, '')], false);
+    const actorCode = String(req.user?.code || req.user?.id || '').trim();
+    const actorRole = String(req.user?.role || '').trim().toUpperCase();
+    const normalizedActorCode = actorCode.replace(/^0+/, '') || actorCode;
+    const isAuthorized = req.user?.isJefeVentas === true
+        || actorRole === 'ADMIN'
+        || actorRole === 'JEFE_VENTAS'
+        || normalizedActorCode === '98';
 
-        const adminTipo = (adminRows && adminRows.length > 0)
-            ? (adminRows[0].TIPOVENDEDOR || '').trim()
-            : '';
+    if (!actorCode) {
+        return res.status(401).json({ success: false, error: 'Autenticación requerida.' });
+    }
 
-        // Only ADMIN or specifically authorized user code 98 (DIEGO)
-        const normalizedCode = trimmedAdmin.replace(/^0+/, '') || trimmedAdmin;
-        const isAuthorized = adminTipo === 'ADMIN' || normalizedCode === '98';
-
-        if (!isAuthorized) {
-            logger.warn(`[COMMISSIONS] Unauthorized payment attempt by user: ${adminCode} (tipoVendedor: ${adminTipo})`);
-            return res.status(403).json({ success: false, error: 'No tienes permisos para registrar pagos.' });
-        }
-    } catch (authErr) {
-        logger.error(`[COMMISSIONS] Admin validation DB error: ${authErr.message}`);
-        return res.status(500).json({ success: false, error: 'Error validando permisos de administrador.' });
+    if (!isAuthorized) {
+        logger.warn(`[COMMISSIONS] Unauthorized payment attempt by authenticated user: ${actorCode} (role: ${actorRole || 'unknown'})`);
+        return res.status(403).json({ success: false, error: 'No tienes permisos para registrar pagos.' });
     }
 
     if (!vendedorCode || !year || !amount) {
@@ -2001,7 +1996,7 @@ router.post('/pay', verifyToken, async (req, res) => {
         // Pagos son solo INSERT – no UPDATE. Snapshot histórico intencional.
         const safePayVendor = sanitizeForSQL(vendedorCode.trim());
         const safePayObs = sanitizeForSQL((observaciones || '').substring(0, 1000));
-        const safePayAdmin = sanitizeForSQL((adminCode || 'unknown').substring(0, 50));
+        const safePayAdmin = sanitizeForSQL(actorCode.substring(0, 50));
         await queryWithParams(`
             INSERT INTO JAVIER.COMMISSION_PAYMENTS
             (VENDEDOR_CODIGO, ANIO, MES, VENTAS_REAL, OBJETIVO_MES, VENTAS_SOBRE_OBJETIVO, COMISION_GENERADA, IMPORTE_PAGADO, FECHA_PAGO, OBSERVACIONES, CREADO_POR)
@@ -2020,7 +2015,7 @@ router.post('/pay', verifyToken, async (req, res) => {
             logger.warn(`[COMMISSIONS] Cache invalidation failed: ${cacheErr.message}`);
         }
 
-        logger.info(`[COMMISSIONS] Payment registered for ${vendedorCode}: ${amount}€ (vs ${generatedNum}€ gen, venta: ${ventaComision.toFixed(2)}€) by ${adminCode}${observaciones ? ' [with observaciones]' : ''}`);
+        logger.info(`[COMMISSIONS] Payment registered for ${vendedorCode}: ${amount}€ (vs ${generatedNum}€ gen, venta: ${ventaComision.toFixed(2)}€) by ${actorCode}${observaciones ? ' [with observaciones]' : ''}`);
         res.json({ success: true, message: 'Pago registrado correctamente' });
     } catch (e) {
         logger.error(`[COMMISSIONS] Payment error: ${e.message}`);
@@ -2035,7 +2030,7 @@ router.post('/pay', verifyToken, async (req, res) => {
 async function loadCommissionConfigForPdf(year) {
     try {
         const dbConfig = await queryWithParams(
-            `SELECT * FROM JAVIER.COMM_CONFIG WHERE YEAR = ? FETCH FIRST 1 ROWS ONLY`,
+            COMM_CONFIG_SELECT_SQL,
             [parseInt(year)],
             false,
             false
@@ -2292,7 +2287,7 @@ router.get('/team/:leaderCode', verifyToken, async (req, res) => {
         let config = DEFAULT_CONFIG_2026;
         try {
             const dbConfig = await queryWithParams(
-                `SELECT * FROM JAVIER.COMM_CONFIG WHERE YEAR = ? FETCH FIRST 1 ROWS ONLY`,
+                COMM_CONFIG_SELECT_SQL,
                 [year],
                 false,
                 false,

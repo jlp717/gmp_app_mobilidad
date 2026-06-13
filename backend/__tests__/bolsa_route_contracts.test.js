@@ -4,11 +4,13 @@ const request = require('supertest');
 const express = require('express');
 
 const mockGetOrCreateBolsa = jest.fn();
+const mockGetBolsaStatus = jest.fn();
 const mockGetMovimientos = jest.fn();
 let mockUser = { code: '01', role: 'COMERCIAL' };
 
 jest.mock('../services/bolsa-comercial.service', function() { return {
   getOrCreateBolsa: mockGetOrCreateBolsa,
+  getBolsaStatus: mockGetBolsaStatus,
   getMovimientos: mockGetMovimientos,
   getHistorialMensual: jest.fn(),
   updateBolsaConfig: jest.fn(),
@@ -98,6 +100,7 @@ describe('bolsa route validation contracts', function() {
 
     expect(res.status).toBe(200);
     expect(mockGetMovimientos).toHaveBeenCalledWith('10', 2026, 6, 25);
+    expect(mockGetOrCreateBolsa).not.toHaveBeenCalled();
     expect(res.body).toMatchObject({
       success: true,
       movements: [
@@ -127,25 +130,35 @@ describe('bolsa route validation contracts', function() {
 describe('bolsa route authorization and public errors', function() {
   test('GET /api/bolsa/:vendedorCode/status allows COMERCIAL to access own vendor only', async function() {
     mockUser = { code: '01', role: 'COMERCIAL' };
-    mockGetOrCreateBolsa.mockResolvedValueOnce({ vendedor: '01', saldoDisponible: 300 });
+    mockGetBolsaStatus.mockResolvedValueOnce({ vendedor: '01', saldoDisponible: 300 });
     const own = await request(makeApp()).get('/api/bolsa/01/status');
     const cross = await request(makeApp()).get('/api/bolsa/02/status').set('x-request-id', 'req-cross');
     expect(own.status).toBe(200);
-    expect(mockGetOrCreateBolsa).toHaveBeenCalledWith('01', expect.any(Number), expect.any(Number));
+    expect(mockGetBolsaStatus).toHaveBeenCalledWith('01', expect.any(Number), expect.any(Number));
+    expect(mockGetOrCreateBolsa).not.toHaveBeenCalled();
     expect(cross.status).toBe(403);
     expect(cross.body).toMatchObject({ success: false, code: 'FORBIDDEN_VENDOR', error: 'No autorizado para consultar este vendedor', request_id: 'req-cross' });
-    expect(mockGetOrCreateBolsa).toHaveBeenCalledTimes(1);
+    expect(mockGetBolsaStatus).toHaveBeenCalledTimes(1);
   });
   test('GET /api/bolsa/:vendedorCode/status allows JEFE_VENTAS cross-vendor access', async function() {
     mockUser = { code: '80', role: 'JEFE_VENTAS', isJefeVentas: true };
-    mockGetOrCreateBolsa.mockResolvedValueOnce({ vendedor: '02', saldoDisponible: 300 });
+    mockGetBolsaStatus.mockResolvedValueOnce({ vendedor: '02', saldoDisponible: 300 });
     const res = await request(makeApp()).get('/api/bolsa/02/status');
     expect(res.status).toBe(200);
-    expect(mockGetOrCreateBolsa).toHaveBeenCalledWith('02', expect.any(Number), expect.any(Number));
+    expect(mockGetBolsaStatus).toHaveBeenCalledWith('02', expect.any(Number), expect.any(Number));
+    expect(mockGetOrCreateBolsa).not.toHaveBeenCalled();
+  });
+  test('GET /api/bolsa/:vendedorCode/status rejects JEFE_VENTAS outside visible vendor scope', async function() {
+    mockUser = { code: '80', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: ['01'] };
+    const res = await request(makeApp()).get('/api/bolsa/02/status').set('x-request-id', 'req-manager-scope');
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ success: false, code: 'FORBIDDEN_VENDOR', request_id: 'req-manager-scope' });
+    expect(mockGetBolsaStatus).not.toHaveBeenCalled();
+    expect(mockGetOrCreateBolsa).not.toHaveBeenCalled();
   });
   test('GET /api/bolsa/:vendedorCode/status hides raw DB2 errors behind public code and request_id', async function() {
     mockUser = { code: '01', role: 'COMERCIAL' };
-    mockGetOrCreateBolsa.mockRejectedValueOnce(new Error('SQLSTATE 42S02 ODBC table missing'));
+    mockGetBolsaStatus.mockRejectedValueOnce(new Error('SQLSTATE 42S02 ODBC table missing'));
     const res = await request(makeApp()).get('/api/bolsa/01/status').set('x-request-id', 'req-db2');
     expect(res.status).toBe(500);
     expect(res.body).toMatchObject({ success: false, code: 'BOLSA_INTERNAL_ERROR', error: 'No se pudo procesar la bolsa comercial', request_id: 'req-db2' });

@@ -10,7 +10,6 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 
 class UnitSelectorModal extends StatefulWidget {
-
   const UnitSelectorModal({
     super.key,
     this.initialUnit,
@@ -60,6 +59,7 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
   late String _selectedUnit;
   final TextEditingController _qtyController = TextEditingController();
   late List<String> _units;
+  String? _validationMessage;
 
   @override
   void initState() {
@@ -132,11 +132,13 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     final parts = <String>[];
     if (p.unitsPerBox > 1) {
       parts.add(
-          '1 cj = ${p.unitsPerBox.toStringAsFixed(p.unitsPerBox == p.unitsPerBox.roundToDouble() ? 0 : 1)} uds',);
+        '1 cj = ${p.unitsPerBox.toStringAsFixed(p.unitsPerBox == p.unitsPerBox.roundToDouble() ? 0 : 1)} uds',
+      );
     }
     if (p.unitsRetractil > 0) {
       parts.add(
-          'U/R: ${p.unitsRetractil.toStringAsFixed(p.unitsRetractil == p.unitsRetractil.roundToDouble() ? 0 : 1)}',);
+        'U/R: ${p.unitsRetractil.toStringAsFixed(p.unitsRetractil == p.unitsRetractil.roundToDouble() ? 0 : 1)}',
+      );
     }
     return parts.isEmpty ? null : parts.join('  ·  ');
   }
@@ -216,6 +218,36 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     return v.toStringAsFixed(decimals > 0 ? decimals : 2);
   }
 
+  double _stockValueForUnit(String unit) {
+    final p = widget.product;
+    if (p == null) return double.infinity;
+    final normalized = unit.toUpperCase();
+    return normalized == 'CAJAS' ? p.stockEnvases : p.stockForUnit(normalized);
+  }
+
+  void _acceptSelection() {
+    final qty = double.tryParse(_qtyController.text.replaceAll(',', '.')) ?? 0;
+    final stock = _stockValueForUnit(_selectedUnit);
+
+    if (qty <= 0) {
+      setState(() => _validationMessage = 'Indica una cantidad valida.');
+      return;
+    }
+
+    if (qty > stock) {
+      setState(() {
+        _validationMessage =
+            'Stock insuficiente: disponible ${_fmtNum(stock, decimals: _selectedUnit == 'KILOGRAMOS' || _selectedUnit == 'LITROS' ? 1 : 0)} ${_unitAbbr(_selectedUnit)}.';
+      });
+      return;
+    }
+
+    Navigator.pop(context, {
+      'unit': _selectedUnit,
+      'quantity': qty,
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final equiv = _buildEquivalence();
@@ -234,8 +266,11 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
             // Header
             Row(
               children: [
-                const Icon(Icons.straighten,
-                    color: AppTheme.neonBlue, size: 22,),
+                const Icon(
+                  Icons.straighten,
+                  color: AppTheme.neonBlue,
+                  size: 22,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -278,24 +313,31 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                 decoration: BoxDecoration(
                   color: AppTheme.neonBlue.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.2)),
+                  border: Border.all(
+                      color: AppTheme.neonBlue.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   children: [
                     if (equiv != null)
                       Expanded(
-                        child: Text(equiv,
-                            style: const TextStyle(
-                                color: AppTheme.neonBlue,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w500,),),
+                        child: Text(
+                          equiv,
+                          style: const TextStyle(
+                            color: AppTheme.neonBlue,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                       ),
                     if (netoUr != null)
-                      Text(netoUr,
-                          style: const TextStyle(
-                              color: AppTheme.neonGreen,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,),),
+                      Text(
+                        netoUr,
+                        style: const TextStyle(
+                          color: AppTheme.neonGreen,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -318,11 +360,16 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                       : AppTheme.darkCard,
                   borderRadius: BorderRadius.circular(10),
                   child: InkWell(
-                    onTap: () => setState(() => _selectedUnit = unit),
+                    onTap: () => setState(() {
+                      _selectedUnit = unit;
+                      _validationMessage = null;
+                    }),
                     borderRadius: BorderRadius.circular(10),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10,),
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
@@ -373,7 +420,9 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                           if (stockStr.isNotEmpty)
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2,),
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color:
                                     AppTheme.neonGreen.withValues(alpha: 0.1),
@@ -382,9 +431,10 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                               child: Text(
                                 stockStr,
                                 style: const TextStyle(
-                                    color: AppTheme.neonGreen,
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,),
+                                  color: AppTheme.neonGreen,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                             ),
                           if (priceStr.isNotEmpty) ...[
@@ -392,7 +442,9 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                             Text(
                               priceStr,
                               style: const TextStyle(
-                                  color: Colors.white54, fontSize: 11,),
+                                color: Colors.white54,
+                                fontSize: 11,
+                              ),
                             ),
                           ],
                         ],
@@ -411,9 +463,10 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
               style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,),
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
               textAlign: TextAlign.center,
               autofocus: true,
               decoration: InputDecoration(
@@ -439,6 +492,17 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                     const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
               ),
             ),
+            if (_validationMessage != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _validationMessage!,
+                style: const TextStyle(
+                  color: AppTheme.error,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
 
             // Action buttons
@@ -476,19 +540,15 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
                   child: SizedBox(
                     height: 46,
                     child: ElevatedButton.icon(
-                      onPressed: () {
-                        final qty = double.tryParse(
-                                _qtyController.text.replaceAll(',', '.'),) ??
-                            0;
-                        Navigator.pop(context, {
-                          'unit': _selectedUnit,
-                          'quantity': qty,
-                        });
-                      },
+                      onPressed: _acceptSelection,
                       icon: const Icon(Icons.check, size: 18),
-                      label: const Text('ACEPTAR',
-                          style: TextStyle(
-                              fontSize: 14, fontWeight: FontWeight.bold,),),
+                      label: const Text(
+                        'ACEPTAR',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.neonBlue,
                         foregroundColor: AppTheme.darkBase,

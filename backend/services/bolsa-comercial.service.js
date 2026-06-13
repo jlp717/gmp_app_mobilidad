@@ -11,36 +11,77 @@
 
 const { queryWithParams, getPool, initDb } = require('../config/db');
 const logger = require('../middleware/logger');
-const { getDb2WriteSchema } = require('../utils/db2-schemas');
 
 const MAX_IDEMPOTENCY_LOOKUP_BATCH = 10;
 
-function writeSchema() {
-    return getDb2WriteSchema();
-}
+const BOLSA_SELECT_BY_VENDOR_MONTH_SQL = [
+    'SELECT ID, CODIGOVENDEDOR, EJERCICIO, MES, LIMITE_PCT, LIMITE_IMPORTE,',
+    'SALDO_DISPONIBLE, CONSUMIDO, ACUMULADO',
+    'FROM JAVIER.BOLSA_COMERCIAL',
+    'WHERE TRIM(CODIGOVENDEDOR) = ? AND EJERCICIO = ? AND MES = ?',
+    'FETCH FIRST 1 ROW ONLY',
+].join(' ');
 
-function bolsaTable() {
-    return `${writeSchema()}.BOLSA_COMERCIAL`;
-}
+const BOLSA_INSERT_DEFAULT_SQL = [
+    'INSERT INTO JAVIER.BOLSA_COMERCIAL',
+    '(CODIGOVENDEDOR, EJERCICIO, MES, LIMITE_PCT, LIMITE_IMPORTE,',
+    'SALDO_DISPONIBLE, CONSUMIDO, ACUMULADO, CREATED_AT, UPDATED_AT)',
+    'VALUES (?, ?, ?, 3.0, 0, 300.00, 0, 0, CURRENT TIMESTAMP, CURRENT TIMESTAMP)',
+].join(' ');
 
-function movimientosTable() {
-    return `${writeSchema()}.MOVIMIENTOS_BOLSA`;
-}
+const MOVIMIENTOS_SELECT_BY_BOLSA_SQL = [
+    'SELECT ID, TIPO, IMPORTE, SALDO_ANTERIOR, SALDO_POSTERIOR,',
+    'CODIGO_ARTICULO, DESCRIPCION, PEDIDO_ID, CREATED_AT, LINEA_ID,',
+    'PRECIO_MINIMO_CONGELADO, PRECIO_VENTA, CANTIDAD, UNIDAD_MEDIDA, IDEMPOTENCY_KEY',
+    'FROM JAVIER.MOVIMIENTOS_BOLSA',
+    'WHERE BOLSA_ID = ?',
+    'ORDER BY CREATED_AT DESC, ID DESC',
+    'FETCH FIRST ? ROWS ONLY',
+].join(' ');
+
+const IDEMPOTENCY_KEYS_SELECT_SQL = Object.freeze({
+    1: 'SELECT IDEMPOTENCY_KEY FROM JAVIER.MOVIMIENTOS_BOLSA WHERE IDEMPOTENCY_KEY IN (?)',
+    2: 'SELECT IDEMPOTENCY_KEY FROM JAVIER.MOVIMIENTOS_BOLSA WHERE IDEMPOTENCY_KEY IN (?, ?)',
+    3: 'SELECT IDEMPOTENCY_KEY FROM JAVIER.MOVIMIENTOS_BOLSA WHERE IDEMPOTENCY_KEY IN (?, ?, ?)',
+    4: 'SELECT IDEMPOTENCY_KEY FROM JAVIER.MOVIMIENTOS_BOLSA WHERE IDEMPOTENCY_KEY IN (?, ?, ?, ?)',
+    5: 'SELECT IDEMPOTENCY_KEY FROM JAVIER.MOVIMIENTOS_BOLSA WHERE IDEMPOTENCY_KEY IN (?, ?, ?, ?, ?)',
+    6: 'SELECT IDEMPOTENCY_KEY FROM JAVIER.MOVIMIENTOS_BOLSA WHERE IDEMPOTENCY_KEY IN (?, ?, ?, ?, ?, ?)',
+    7: 'SELECT IDEMPOTENCY_KEY FROM JAVIER.MOVIMIENTOS_BOLSA WHERE IDEMPOTENCY_KEY IN (?, ?, ?, ?, ?, ?, ?)',
+    8: 'SELECT IDEMPOTENCY_KEY FROM JAVIER.MOVIMIENTOS_BOLSA WHERE IDEMPOTENCY_KEY IN (?, ?, ?, ?, ?, ?, ?, ?)',
+    9: 'SELECT IDEMPOTENCY_KEY FROM JAVIER.MOVIMIENTOS_BOLSA WHERE IDEMPOTENCY_KEY IN (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    10: 'SELECT IDEMPOTENCY_KEY FROM JAVIER.MOVIMIENTOS_BOLSA WHERE IDEMPOTENCY_KEY IN (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+});
+
+const LOCK_BOLSA_COMERCIAL_SQL = 'LOCK TABLE JAVIER.BOLSA_COMERCIAL IN EXCLUSIVE MODE';
+const LOCK_MOVIMIENTOS_BOLSA_SQL = 'LOCK TABLE JAVIER.MOVIMIENTOS_BOLSA IN EXCLUSIVE MODE';
+const BOLSA_UPDATE_ACCUMULATE_SQL = 'UPDATE JAVIER.BOLSA_COMERCIAL SET SALDO_DISPONIBLE = ?, ACUMULADO = ACUMULADO + ?, UPDATED_AT = CURRENT TIMESTAMP WHERE ID = ?';
+const BOLSA_UPDATE_CONSUME_SQL = 'UPDATE JAVIER.BOLSA_COMERCIAL SET SALDO_DISPONIBLE = ?, CONSUMIDO = CONSUMIDO + ?, UPDATED_AT = CURRENT TIMESTAMP WHERE ID = ?';
+const MOVIMIENTOS_INSERT_PREFIX = 'INSERT INTO JAVIER.MOVIMIENTOS_BOLSA (BOLSA_ID, CREATED_AT, CODIGOVENDEDOR, PEDIDO_ID, LINEA_ID, TIPO, IMPORTE, SALDO_ANTERIOR, SALDO_POSTERIOR, CODIGO_ARTICULO, DESCRIPCION, PRECIO_MINIMO_CONGELADO, PRECIO_VENTA, CANTIDAD, UNIDAD_MEDIDA, IDEMPOTENCY_KEY) VALUES ';
+const MOVIMIENTOS_INSERT_ROW = '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+const BOLSA_HISTORIAL_MENSUAL_SQL = [
+    'SELECT EJERCICIO, MES, SALDO_DISPONIBLE, CONSUMIDO, ACUMULADO, LIMITE_PCT, LIMITE_IMPORTE',
+    'FROM JAVIER.BOLSA_COMERCIAL',
+    'WHERE TRIM(CODIGOVENDEDOR) = ?',
+    'AND (EJERCICIO > ? OR (EJERCICIO = ? AND MES >= ?))',
+    'ORDER BY EJERCICIO ASC, MES ASC',
+].join(' ');
+const BOLSA_UPDATE_CONFIG_BOTH_SQL = 'UPDATE JAVIER.BOLSA_COMERCIAL SET LIMITE_PCT = ?, LIMITE_IMPORTE = ?, UPDATED_AT = CURRENT TIMESTAMP WHERE ID = ?';
+const BOLSA_UPDATE_CONFIG_PCT_SQL = 'UPDATE JAVIER.BOLSA_COMERCIAL SET LIMITE_PCT = ?, UPDATED_AT = CURRENT TIMESTAMP WHERE ID = ?';
+const BOLSA_UPDATE_CONFIG_AMOUNT_SQL = 'UPDATE JAVIER.BOLSA_COMERCIAL SET LIMITE_IMPORTE = ?, UPDATED_AT = CURRENT TIMESTAMP WHERE ID = ?';
 
 function selectBolsaByVendorMonthSql() {
-    return `SELECT ID, CODIGOVENDEDOR, EJERCICIO, MES, LIMITE_PCT, LIMITE_IMPORTE, SALDO_DISPONIBLE, CONSUMIDO, ACUMULADO FROM ${bolsaTable()} WHERE TRIM(CODIGOVENDEDOR) = ? AND EJERCICIO = ? AND MES = ?`;
+    return BOLSA_SELECT_BY_VENDOR_MONTH_SQL;
 }
 
 function selectMovimientosByBolsaSql() {
-    return `SELECT ID, TIPO, IMPORTE, SALDO_ANTERIOR, SALDO_POSTERIOR, CODIGO_ARTICULO, DESCRIPCION, PEDIDO_ID, CREATED_AT, LINEA_ID, PRECIO_MINIMO_CONGELADO, PRECIO_VENTA, CANTIDAD, UNIDAD_MEDIDA, IDEMPOTENCY_KEY FROM ${movimientosTable()} WHERE BOLSA_ID = ? ORDER BY CREATED_AT DESC FETCH FIRST ? ROWS ONLY`;
+    return MOVIMIENTOS_SELECT_BY_BOLSA_SQL;
 }
 
 function getIdempotencyKeysSql(count) {
     if (!Number.isInteger(count) || count < 1 || count > MAX_IDEMPOTENCY_LOOKUP_BATCH) {
         throw new Error('Invalid idempotency key batch size');
     }
-    const placeholders = Array(count).fill('?').join(', ');
-    return `SELECT IDEMPOTENCY_KEY FROM ${movimientosTable()} WHERE IDEMPOTENCY_KEY IN (${placeholders})`;
+    return IDEMPOTENCY_KEYS_SELECT_SQL[count];
 }
 
 // -- Get or create monthly bolsa ---------------------------------------
@@ -61,8 +102,8 @@ async function withBolsaTransaction(callback) {
             const conn = await pool.connect();
             try {
                 await conn.query('BEGIN WORK');
-                await conn.query(`LOCK TABLE ${bolsaTable()} IN EXCLUSIVE MODE`);
-                await conn.query(`LOCK TABLE ${movimientosTable()} IN EXCLUSIVE MODE`);
+                await conn.query(LOCK_BOLSA_COMERCIAL_SQL);
+                await conn.query(LOCK_MOVIMIENTOS_BOLSA_SQL);
                 const result = await callback((sql, params) => runQuery(conn.query.bind(conn), sql, params));
                 await conn.query('COMMIT');
                 return result;
@@ -102,9 +143,7 @@ async function getOrCreateBolsaWith(queryFn, vendedorCode, year, month) {
         try {
             await runQuery(
                 queryFn,
-                `INSERT INTO ${bolsaTable()} ` +
-                '(CODIGOVENDEDOR, EJERCICIO, MES, LIMITE_PCT, SALDO_DISPONIBLE) ' +
-                'VALUES (?, ?, ?, 3.00, 300.00)',
+                BOLSA_INSERT_DEFAULT_SQL,
                 [code, y, m]
             );
         } catch (insertErr) {
@@ -151,6 +190,48 @@ async function getOrCreateBolsa(vendedorCode, year, month) {
     return getOrCreateBolsaWith(queryWithParams, vendedorCode, year, month);
 }
 
+function defaultBolsaStatus(vendedorCode, year, month) {
+    return {
+        id: null,
+        vendedor: String(vendedorCode || '').trim(),
+        ejercicio: parseInt(year),
+        mes: parseInt(month),
+        limitePct: 3.0,
+        limiteImporte: 0,
+        saldoDisponible: 300.00,
+        consumido: 0,
+        acumulado: 0,
+    };
+}
+
+async function getBolsaStatus(vendedorCode, year, month) {
+    const code = String(vendedorCode || '').trim();
+    const y = parseInt(year);
+    const m = parseInt(month);
+
+    const rows = await queryWithParams(
+        selectBolsaByVendorMonthSql(),
+        [code, y, m]
+    );
+
+    if (!rows || rows.length === 0) {
+        return defaultBolsaStatus(code, y, m);
+    }
+
+    const bolsa = rows[0];
+    return {
+        id: bolsa.ID,
+        vendedor: (bolsa.CODIGOVENDEDOR || '').trim(),
+        ejercicio: parseInt(bolsa.EJERCICIO),
+        mes: parseInt(bolsa.MES),
+        limitePct: parseFloat(bolsa.LIMITE_PCT) || 3.0,
+        limiteImporte: parseFloat(bolsa.LIMITE_IMPORTE) || 0,
+        saldoDisponible: parseFloat(bolsa.SALDO_DISPONIBLE) || 0,
+        consumido: parseFloat(bolsa.CONSUMIDO) || 0,
+        acumulado: parseFloat(bolsa.ACUMULADO) || 0,
+    };
+}
+
 // -- Accumulate margin into bolsa -------------------------------------
 
 async function acumularBolsa(vendedorCode, pedidoId, importeAcumulado, descripcion) {
@@ -168,9 +249,7 @@ async function acumularBolsa(vendedorCode, pedidoId, importeAcumulado, descripci
 
         await runQuery(
             queryFn,
-            `UPDATE ${bolsaTable()} ` +
-            'SET SALDO_DISPONIBLE = ?, ACUMULADO = ACUMULADO + ?, UPDATED_AT = CURRENT TIMESTAMP ' +
-            'WHERE ID = ?',
+            BOLSA_UPDATE_ACCUMULATE_SQL,
             [nuevoSaldo, pendingImporte, bolsa.id]
         );
 
@@ -204,9 +283,7 @@ async function consumirBolsa(vendedorCode, pedidoId, importeConsumo, codigoArtic
 
         await runQuery(
             queryFn,
-            `UPDATE ${bolsaTable()} ` +
-            'SET SALDO_DISPONIBLE = ?, CONSUMIDO = CONSUMIDO + ?, UPDATED_AT = CURRENT TIMESTAMP ' +
-            'WHERE ID = ?',
+            BOLSA_UPDATE_CONSUME_SQL,
             [nuevoSaldo, pendingImporte, bolsa.id]
         );
 
@@ -303,18 +380,13 @@ function sumMovementImporte(movements) {
 }
 
 function insertBolsaMovements(tipo, movements, bolsaId, vendedorCode, pedidoId, saldoInicial, saldoFinal, queryFn = queryWithParams) {
-    const rowSql = "(?, ?, ?, ?, ?, '" + tipo + "', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-    const sql = `INSERT INTO ${movimientosTable()} ` +
-        '(BOLSA_ID, CREATED_AT, CODIGOVENDEDOR, PEDIDO_ID, LINEA_ID, TIPO, IMPORTE, ' +
-        'SALDO_ANTERIOR, SALDO_POSTERIOR, CODIGO_ARTICULO, DESCRIPCION, ' +
-        'PRECIO_MINIMO_CONGELADO, PRECIO_VENTA, CANTIDAD, UNIDAD_MEDIDA, IDEMPOTENCY_KEY) ' +
-        'VALUES ' + movements.map(function () { return rowSql; }).join(', ');
+    const sql = MOVIMIENTOS_INSERT_PREFIX + movements.map(function () { return MOVIMIENTOS_INSERT_ROW; }).join(', ');
     let runningSaldo = toMoney(saldoInicial);
     const params = [];
     for (const movement of movements) {
         const saldoAnterior = runningSaldo;
         runningSaldo = tipo === 'CONSUMO' ? toMoney(runningSaldo - movement.importe) : toMoney(runningSaldo + movement.importe);
-        params.push(bolsaId, movement.timestamp, String(vendedorCode || '').trim(), pedidoId, movement.lineId, movement.importe, saldoAnterior, runningSaldo, movement.codigoArticulo, movement.descripcion, movement.precioMinimoCongelado, movement.precioVenta, movement.cantidad, movement.unidadMedida, movement.idempotencyKey);
+        params.push(bolsaId, movement.timestamp, String(vendedorCode || '').trim(), pedidoId, movement.lineId, tipo, movement.importe, saldoAnterior, runningSaldo, movement.codigoArticulo, movement.descripcion, movement.precioMinimoCongelado, movement.precioVenta, movement.cantidad, movement.unidadMedida, movement.idempotencyKey);
     }
     if (Math.abs(runningSaldo - toMoney(saldoFinal)) > 0.01) throw new Error('Saldo posterior de movimientos ' + tipo + ' no cuadra con bolsa');
     return runQuery(queryFn, sql, params);
@@ -401,7 +473,8 @@ function nullableTrim(value) {
 }
 
 async function getMovimientos(vendedorCode, year, month, limit = 50) {
-    const bolsa = await getOrCreateBolsa(vendedorCode, year, month);
+    const bolsa = await getBolsaStatus(vendedorCode, year, month);
+    if (!bolsa.id) return [];
     const rows = await queryWithParams(
         selectMovimientosByBolsaSql(),
         [bolsa.id, limit]
@@ -440,13 +513,7 @@ async function getHistorialMensual(vendedorCode, months = 12) {
 
     // Filas existentes en BOLSA_COMERCIAL para ese rango
     const rows = await queryWithParams(
-        `SELECT EJERCICIO, MES, SALDO_DISPONIBLE, CONSUMIDO, ACUMULADO,
-                LIMITE_PCT, LIMITE_IMPORTE
-           FROM ${bolsaTable()}
-          WHERE TRIM(CODIGOVENDEDOR) = ?
-            AND ( EJERCICIO > ?
-                  OR (EJERCICIO = ? AND MES >= ?) )
-          ORDER BY EJERCICIO ASC, MES ASC`,
+        BOLSA_HISTORIAL_MENSUAL_SQL,
         [code, cutoffYear, cutoffYear, cutoffMonth]
     );
 
@@ -514,18 +581,17 @@ async function updateBolsaConfig(vendedorCode, year, month, { limitePct, limiteI
 
     if (hasLimitePct && hasLimiteImporte) {
         await queryWithParams(
-            `UPDATE ${bolsaTable()} ` +
-            'SET LIMITE_PCT = ?, LIMITE_IMPORTE = ?, UPDATED_AT = CURRENT TIMESTAMP WHERE ID = ?',
+            BOLSA_UPDATE_CONFIG_BOTH_SQL,
             [parseFloat(limitePct), parseFloat(limiteImporte), bolsa.id]
         );
     } else if (hasLimitePct) {
         await queryWithParams(
-            `UPDATE ${bolsaTable()} SET LIMITE_PCT = ?, UPDATED_AT = CURRENT TIMESTAMP WHERE ID = ?`,
+            BOLSA_UPDATE_CONFIG_PCT_SQL,
             [parseFloat(limitePct), bolsa.id]
         );
     } else {
         await queryWithParams(
-            `UPDATE ${bolsaTable()} SET LIMITE_IMPORTE = ?, UPDATED_AT = CURRENT TIMESTAMP WHERE ID = ?`,
+            BOLSA_UPDATE_CONFIG_AMOUNT_SQL,
             [parseFloat(limiteImporte), bolsa.id]
         );
     }
@@ -535,6 +601,7 @@ async function updateBolsaConfig(vendedorCode, year, month, { limitePct, limiteI
 
 module.exports = {
     getOrCreateBolsa,
+    getBolsaStatus,
     acumularBolsa,
     consumirBolsa,
     validateOrderWithBolsa,

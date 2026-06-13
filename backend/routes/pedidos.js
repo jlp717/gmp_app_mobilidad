@@ -62,6 +62,14 @@ function canSeeMargin(user) {
     const code = (user?.code || '').replace(/^0+/, '');
     return MARGIN_VISIBLE_ROLES.includes(role) || user?.isJefeVentas === true || code === '80';
 }
+
+function canUseServerForceConfirm(req, body = {}) {
+    if (body.forceConfirm !== true) return false;
+    const role = String(req.user?.role || '').toUpperCase();
+    const isAdmin = req.user?.isJefeVentas === true || role === 'JEFE_VENTAS' || role === 'ADMIN';
+    const reason = String(body.forceConfirmReason || body.auditReason || '').trim();
+    return isAdmin && reason.length >= 8;
+}
 function stripMarginFromOrder(order, user) {
     if (canSeeMargin(user)) return order;
     const clean = { ...order };
@@ -797,7 +805,7 @@ router.get('/promotions', async (req, res) => {
         res.json({ success: true, promotions });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /promotions: ${error.message}`);
-        res.status(500).json({ success: false, error: error.message });
+        res.status(500).json({ success: false, error: 'Error obteniendo promociones', code: 'PROMOTIONS_ERROR' });
     }
 });
 
@@ -1442,13 +1450,16 @@ router.put('/:id/confirm', async (req, res) => {
             return res.status(ownership.status).json(ownership.body);
         }
 
-        const { saleType, forceConfirm, deliveryDate, vehicleCode, driverCode, routeCode } = req.body;
+        const { saleType, deliveryDate, vehicleCode, driverCode, routeCode } = req.body;
         if (!saleType || !['CC', 'VC', 'NV'].includes(saleType)) {
             return res.status(400).json({ success: false, error: 'saleType must be CC, VC, or NV' });
         }
 
         const options = {
-            forceConfirm: forceConfirm === true,
+            forceConfirm: canUseServerForceConfirm(req, req.body),
+            forceConfirmReason: String(req.body?.forceConfirmReason || req.body?.auditReason || '').trim(),
+            adminOverride: canUseServerForceConfirm(req, req.body),
+            userRole: req.user?.role || 'COMERCIAL',
             userId: req.user?.code || 'SYSTEM',
             deliveryDate: deliveryDate ? String(deliveryDate).trim() : undefined,
             vehicleCode: vehicleCode ? String(vehicleCode).trim() : undefined,

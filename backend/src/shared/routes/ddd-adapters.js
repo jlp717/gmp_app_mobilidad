@@ -300,6 +300,14 @@ function canSeePedidoMargin(user) {
   return role === 'JEFE_VENTAS' || role === 'ADMIN' || user?.isJefeVentas === true || code === '80';
 }
 
+function canUseServerForceConfirm(req, body = {}) {
+  if (body.forceConfirm !== true) return false;
+  const role = String(req.user?.role || '').toUpperCase();
+  const isAdmin = req.user?.isJefeVentas === true || role === 'JEFE_VENTAS' || role === 'ADMIN';
+  const reason = String(body.forceConfirmReason || body.auditReason || '').trim();
+  return isAdmin && reason.length >= 8;
+}
+
 function buildCacheSecurityScope(req, { includeMargin = false } = {}) {
   const user = req?.user || {};
   const role = String(user.role || user.userRole || user.tipo || 'COMERCIAL').trim().toUpperCase();
@@ -1475,7 +1483,7 @@ function createPedidosRoutes() {
       const userId = req.user?.code || req.user?.id;
       if (!userId) return res.status(401).json({ success: false, error: 'Authentication required' });
 
-      const { saleType, forceConfirm, deliveryDate, vehicleCode, driverCode, routeCode } = req.body || {};
+      const { saleType, deliveryDate, vehicleCode, driverCode, routeCode } = req.body || {};
       if (!saleType || !['CC', 'VC', 'NV'].includes(String(saleType).trim())) {
         return res.status(400).json({ success: false, error: 'saleType must be CC, VC, or NV', code: 'INVALID_SALE_TYPE' });
       }
@@ -1484,7 +1492,10 @@ function createPedidosRoutes() {
 
       const pedidosService = require('../../../services/pedidos.service');
       const result = await pedidosService.confirmOrder(parseInt(id), String(saleType).trim(), {
-        forceConfirm: !!forceConfirm,
+        forceConfirm: canUseServerForceConfirm(req, req.body || {}),
+        forceConfirmReason: String(req.body?.forceConfirmReason || req.body?.auditReason || '').trim(),
+        adminOverride: canUseServerForceConfirm(req, req.body || {}),
+        userRole: req.user?.role || 'COMERCIAL',
         userId,
         deliveryDate: deliveryDate ? String(deliveryDate).trim() : undefined,
         vehicleCode: vehicleCode ? String(vehicleCode).trim() : undefined,
@@ -2157,7 +2168,10 @@ function createClientsRoutes() {
 
   router.get('/', async (req, res) => {
     try {
-      const { vendedorCodes, search, limit = 100, offset = 0 } = req.query;
+      let { vendedorCodes, search, limit = 100, offset = 0 } = req.query;
+      const vendorScope = resolvePedidoVendorScope(req, vendedorCodes || 'ALL');
+      if (!vendorScope.ok) return res.status(403).json(dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error));
+      vendedorCodes = vendorScope.codes.length > 0 ? vendorScope.codes.join(',') : 'ALL';
       const isAllQuery = vendedorCodes === 'ALL' || !vendedorCodes;
       const cacheScope = buildCacheSecurityScope(req, { includeMargin: true });
       const cacheKey = `ddd:clients:v1:${cacheScope}:${vendedorCodes || 'all'}:${search || 'none'}:${limit}:${offset}`;
@@ -2296,6 +2310,8 @@ function createCommissionsRoutes() {
 
       const safeVendedorCode = String(vendedorCode).replace(/[^a-zA-Z0-9]/g, '').substring(0, 10);
       if (!safeVendedorCode) return res.status(400).json({ success: false, error: 'vendedorCode inválido' });
+      const vendorAccess = authorizePedidoVendorCode(req, safeVendedorCode, 'consultar comisiones de');
+      if (!vendorAccess.ok) return res.status(vendorAccess.status).json(vendorAccess.body);
 
       const selectedYear = parseInt(year) || new Date().getFullYear();
       const prevYear = selectedYear - 1;

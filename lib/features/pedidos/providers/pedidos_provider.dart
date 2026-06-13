@@ -651,8 +651,9 @@ class PedidosProvider with ChangeNotifier {
     double cantidadEnvases,
     double cantidadUnidades,
     String unidadMedida,
-    double precioVenta,
-  ) {
+    double precioVenta, {
+    bool allowPartial = false,
+  }) {
     if (!hasClient) {
       const msg = 'Debes seleccionar un cliente antes de anadir productos.';
       _error = msg;
@@ -691,6 +692,15 @@ class PedidosProvider with ChangeNotifier {
     double missingQty = 0;
 
     if (requestQty > remainingAvailable) {
+      if (!allowPartial) {
+        final msg = unit == 'CAJAS'
+            ? 'Stock insuficiente: Solo quedan ${remainingAvailable.toInt()} cajas.'
+            : 'Stock insuficiente: Solo quedan ${remainingAvailable.toStringAsFixed(2)} ${Product.unitLabel(unit)}.';
+        _error = msg;
+        notifyListeners();
+        return msg;
+      }
+
       isPartial = true;
       missingQty = requestQty - remainingAvailable;
       requestQty = remainingAvailable;
@@ -822,6 +832,21 @@ class PedidosProvider with ChangeNotifier {
     final product = pIdx >= 0 ? _products[pIdx] : null;
 
     if (product != null && product.isDualFieldProduct) {
+      final nextEnvases = cantidadEnvases ?? line.cantidadEnvases;
+      final nextUnidades = cantidadUnidades ?? line.cantidadUnidades;
+      final unitsPerBox = product.unitsPerBox > 0 ? product.unitsPerBox : 1;
+      final requestedUnits = nextEnvases * unitsPerBox + nextUnidades;
+      final availableUnits = product.stockForUnit('UNIDADES');
+
+      if (nextEnvases > product.stockEnvases ||
+          requestedUnits > availableUnits) {
+        final msg =
+            'Stock insuficiente: Solo hay ${product.stockEnvases.toInt()} cajas / ${availableUnits.toStringAsFixed(2)} uds.';
+        _error = msg;
+        notifyListeners();
+        return msg;
+      }
+
       if (cantidadEnvases != null) line.cantidadEnvases = cantidadEnvases;
       if (cantidadUnidades != null) line.cantidadUnidades = cantidadUnidades;
     } else {

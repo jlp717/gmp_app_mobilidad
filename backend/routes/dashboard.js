@@ -46,6 +46,60 @@ function hashValues(values) {
     return crypto.createHash('sha1').update(normalized).digest('hex').slice(0, 16);
 }
 
+const DASHBOARD_FAMILY_DISTINCT_SQL = Object.freeze({
+    family1: "SELECT DISTINCT TRIM(FI1) as CODE FROM DSEDAC.ART WHERE FI1 IS NOT NULL AND NOT (TRIM(FI1) = '')",
+    family2: "SELECT DISTINCT TRIM(FI2) as CODE FROM DSEDAC.ART WHERE FI2 IS NOT NULL AND NOT (TRIM(FI2) = '')",
+    family3: "SELECT DISTINCT TRIM(FI3) as CODE FROM DSEDAC.ART WHERE FI3 IS NOT NULL AND NOT (TRIM(FI3) = '')",
+    family4: "SELECT DISTINCT TRIM(FI4) as CODE FROM DSEDAC.ART WHERE FI4 IS NOT NULL AND NOT (TRIM(FI4) = '')",
+    family5: "SELECT DISTINCT TRIM(FI5) as CODE FROM DSEDAC.ART WHERE FI5 IS NOT NULL AND NOT (TRIM(FI5) = '')",
+});
+
+function buildBoundInSql(sqlPrefix, valueCount, sqlSuffix = ')') {
+    const count = Number.parseInt(valueCount, 10);
+    if (!Number.isInteger(count) || count < 1 || count > 2000) {
+        throw new Error('Invalid bounded IN-list size');
+    }
+    return sqlPrefix + Array(count).fill('?').join(',') + sqlSuffix;
+}
+
+function buildFamilyDistinctSql(fiLevel) {
+    const sql = DASHBOARD_FAMILY_DISTINCT_SQL[String(fiLevel || '').toLowerCase()];
+    if (!sql) throw new Error('Invalid family hierarchy level');
+    return sql;
+}
+
+function normalizeVendorCode(value) { return String(value || '').trim(); }
+function dashboardCodesMatch(left, right) {
+    const a = normalizeVendorCode(left);
+    const b = normalizeVendorCode(right);
+    return a === b || (a.replace(/^0+/, '') && a.replace(/^0+/, '') === b.replace(/^0+/, ''));
+}
+function isDashboardManager(user) {
+    const role = String(user?.role || '').trim().toUpperCase();
+    return user?.isJefeVentas === true || role === 'JEFE_VENTAS' || role === 'ADMIN';
+}
+function dashboardVisibleVendorCodes(user) {
+    const values = user?.vendorCodes || user?.vendedorCodes;
+    return Array.isArray(values) ? values.map(normalizeVendorCode).filter(Boolean) : [];
+}
+function resolveDashboardVendedorCodes(req, requested) {
+    const user = req.user || {};
+    const userCode = normalizeVendorCode(user.code || user.id || user.codigoVendedor || user.vendedorCode);
+    const raw = normalizeVendorCode(requested);
+    const requestedAll = !raw || raw.toUpperCase() === 'ALL' || (userCode && dashboardCodesMatch(raw, userCode));
+    if (!isDashboardManager(user)) {
+        if (!userCode) return { ok: false, status: 403, body: { success: false, code: 'FORBIDDEN_VENDOR', error: 'Usuario sin vendedor asignado' } };
+        return { ok: true, vendedorCodes: userCode };
+    }
+    const visible = dashboardVisibleVendorCodes(user);
+    if (requestedAll) return { ok: true, vendedorCodes: visible.length ? visible.join(',') : 'ALL' };
+    const codes = raw.split(',').map(normalizeVendorCode).filter(Boolean);
+    if (visible.length && codes.some(code => !visible.some(v => dashboardCodesMatch(v, code)))) {
+        return { ok: false, status: 403, body: { success: false, code: 'FORBIDDEN_VENDOR', error: 'Vendedor fuera de alcance' } };
+    }
+    return { ok: true, vendedorCodes: codes.join(',') };
+}
+
 function buildVendedorFilterParameterized(vendedorCodes, tableAlias = 'L') {
     if (!vendedorCodes || vendedorCodes === 'ALL') return { filter: '', params: [] };
     const prefix = tableAlias ? `${tableAlias}.` : '';
@@ -98,12 +152,9 @@ router.get('/metrics', verifyToken, async (req, res) => {
         
         let { vendedorCodes, year, month } = req.query;
         
-        // For jefes de ventas, if no specific vendor codes are requested, use 'ALL'
-        // This ensures they see all vendors' data by default
-        if (req.user?.isJefeVentas && (!vendedorCodes || vendedorCodes === req.user?.code)) {
-            vendedorCodes = 'ALL';
-            logger.info(`[DASHBOARD] Jefe de ventas detected, setting vendedorCodes to 'ALL'`);
-        }
+        const scoped = resolveDashboardVendedorCodes(req, vendedorCodes);
+        if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
+        vendedorCodes = scoped.vendedorCodes;
         
         const now = getCurrentDate();
         const currentYear = parseInt(year) || now.getFullYear();
@@ -243,11 +294,9 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
     try {
         let { vendedorCodes, groupBy = 'vendor', year, years, clientCodes, productCodes, familyCodes } = req.query;
         
-        // For jefes de ventas, if no specific vendor codes are requested, use 'ALL'
-        if (req.user?.isJefeVentas && (!vendedorCodes || vendedorCodes === req.user?.code)) {
-            vendedorCodes = 'ALL';
-            logger.info(`[DASHBOARD] Jefe de ventas detected in matrix-data, setting vendedorCodes to 'ALL'`);
-        }
+        const scoped = resolveDashboardVendedorCodes(req, vendedorCodes);
+        if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
+        vendedorCodes = scoped.vendedorCodes;
         
         const cacheKey = `dashboard:matrix:v3:${canonicalQueryKey(req.query, {
             vendedorCodes: vendedorCodes || 'ALL',
@@ -320,7 +369,7 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
         if (familyCodes && familyCodes !== 'ALL') {
             const fCodes = familyCodes.split(',').map(f => f.trim()).filter(f => /^[a-zA-Z0-9]+$/.test(f) && f !== '');
             if (fCodes.length > 0) {
-                const famProductsSql = `SELECT TRIM(CODIGOARTICULO) as CODE FROM DSEDAC.ART WHERE CODIGOFAMILIA IN (${fCodes.map(() => '?').join(',')})`;
+                const famProductsSql = buildBoundInSql('SELECT TRIM(CODIGOARTICULO) as CODE FROM DSEDAC.ART WHERE CODIGOFAMILIA IN (', fCodes.length);
                 const famProducts = await cachedQuery(queryWithParams, famProductsSql, `fam_prods:${fCodes.join(',')}`, TTL.LONG, fCodes);
                 if (famProducts.length > 0) {
                     const pCodes = famProducts.slice(0, 1000).map(p => p.CODE);
@@ -425,12 +474,12 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
         if (hierarchy.includes('vendor')) {
             const vCodes = [...new Set(rawData.map(r => r.ID_1).filter(Boolean))];
             if (vCodes.length) {
-                const placeholders = vCodes.map(() => '?').join(',');
+                const vendorNamesSql = buildBoundInSql('SELECT TRIM(CODIGOVENDEDOR) as CODE, TRIM(NOMBREVENDEDOR) as NAME FROM DSEDAC.VDD WHERE CODIGOVENDEDOR IN (', vCodes.length);
                 nameLookups.push(lookup(
-                    `SELECT TRIM(CODIGOVENDEDOR) as CODE, TRIM(NOMBREVENDEDOR) as NAME FROM DSEDAC.VDD WHERE CODIGOVENDEDOR IN (${placeholders})`,
-                    `names:vendors:${hashValues(vCodes)}`,
+                    vendorNamesSql,
+                    'names:vendors:' + hashValues(vCodes),
                     vCodes
-                ).then(d => ({ type: 'vendor', data: d })));
+                ).then(function (d) { return { type: 'vendor', data: d }; }));
             }
         }
 
@@ -439,12 +488,12 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
             const cCodes = [...new Set(rawData.map(r => r[`ID_${idx}`]).filter(Boolean))];
             if (cCodes.length) {
                 const codesToQuery = cCodes.slice(0, 2000);
-                const placeholders = codesToQuery.map(() => '?').join(',');
+                const clientNamesSql = buildBoundInSql("SELECT TRIM(CODIGOCLIENTE) as CODE, COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), TRIM(NOMBRECLIENTE)) as NAME FROM DSEDAC.CLI WHERE CODIGOCLIENTE IN (", codesToQuery.length);
                 nameLookups.push(lookup(
-                    `SELECT TRIM(CODIGOCLIENTE) as CODE, COALESCE(NULLIF(TRIM(NOMBREALTERNATIVO), ''), TRIM(NOMBRECLIENTE)) as NAME FROM DSEDAC.CLI WHERE CODIGOCLIENTE IN (${placeholders})`,
-                    `names:clients:${hashValues(codesToQuery)}`,
+                    clientNamesSql,
+                    'names:clients:' + hashValues(codesToQuery),
                     codesToQuery
-                ).then(d => ({ type: 'client', data: d })));
+                ).then(function (d) { return { type: 'client', data: d }; }));
             }
         }
 
@@ -471,9 +520,8 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
         const fiLevels = hierarchy.filter(h => h.startsWith('family') && h !== 'family');
         if (fiLevels.length > 0) {
             const fiLookupPromises = fiLevels.map(fiLevel => {
-                const fiCol = fiLevel.toUpperCase(); // FI1, FI2, etc.
-                const sql = `SELECT DISTINCT TRIM(${fiCol}) as CODE FROM DSEDAC.ART WHERE ${fiCol} IS NOT NULL AND TRIM(${fiCol}) <> ''`;
-                return lookup(sql, `names:${fiLevel.toLowerCase()}:distinct`).then(d => ({ type: fiLevel, data: d }));
+                const sql = buildFamilyDistinctSql(fiLevel);
+                return lookup(sql, 'names:' + fiLevel.toLowerCase() + ':distinct').then(function (d) { return { type: fiLevel, data: d }; });
             });
             nameLookups.push(...fiLookupPromises);
         }
@@ -563,11 +611,9 @@ router.get('/sales-evolution', verifyToken, async (req, res) => {
     try {
         let { vendedorCodes, years, granularity = 'month', upToToday = 'false', months = 36 } = req.query;
         
-        // For jefes de ventas, if no specific vendor codes are requested, use 'ALL'
-        if (req.user?.isJefeVentas && (!vendedorCodes || vendedorCodes === req.user?.code)) {
-            vendedorCodes = 'ALL';
-            logger.info(`[DASHBOARD] Jefe de ventas detected in sales-evolution, setting vendedorCodes to 'ALL'`);
-        }
+        const scoped = resolveDashboardVendedorCodes(req, vendedorCodes);
+        if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
+        vendedorCodes = scoped.vendedorCodes;
 
         const now = getCurrentDate();
         const selectedYears = years
@@ -673,11 +719,9 @@ router.get('/recent-sales', verifyToken, async (req, res) => {
         let { vendedorCodes } = req.query;
         const limit = clampInt(req.query.limit, 20, 1, 100);
         
-        // For jefes de ventas, if no specific vendor codes are requested, use 'ALL'
-        if (req.user?.isJefeVentas && (!vendedorCodes || vendedorCodes === req.user?.code)) {
-            vendedorCodes = 'ALL';
-            logger.info(`[DASHBOARD] Jefe de ventas detected in recent-sales, setting vendedorCodes to 'ALL'`);
-        }
+        const scoped = resolveDashboardVendedorCodes(req, vendedorCodes);
+        if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
+        vendedorCodes = scoped.vendedorCodes;
 
         const vendedorResult = buildVendedorFilterParameterized(vendedorCodes, 'L');
         const cacheKey = `dashboard:recent_sales:${vendedorCodes || 'ALL'}:${limit}`;
