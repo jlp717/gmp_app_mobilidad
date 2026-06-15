@@ -9,7 +9,7 @@ import 'package:gmp_app_mobilidad/core/providers/filter_provider.dart';
 import 'package:gmp_app_mobilidad/core/services/navigation_config_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
-import 'package:gmp_app_mobilidad/core/widgets/coming_soon_placeholder.dart';
+import 'package:gmp_app_mobilidad/features/chatbot/presentation/pages/chatbot_page.dart';
 import 'package:gmp_app_mobilidad/core/widgets/lazy_indexed_stack.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/features/clients/presentation/pages/simple_client_list_page.dart';
@@ -1344,13 +1344,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           );
         }
         if (label == 'Chat IA') {
-          return const ComingSoonPlaceholder(
-            title: 'Asistente IA de Reparto',
-            subtitle:
-                'Tu asistente inteligente para\noptimizar rutas y consultar datos.',
-            icon: Icons.smart_toy,
-            accentColor: AppTheme.neonPink,
-          );
+          return ChatbotPage(vendedorCodes: vendedorCodes);
         }
         return const Center(child: Text('Página no encontrada'));
       }
@@ -1397,13 +1391,7 @@ class _MainShellState extends ConsumerState<MainShell> {
           KpiDashboardPage(employeeCode: employeeCode, isJefeVentas: true),
           CobrosPage(employeeCode: employeeCode, isJefeVentas: true),
           const BolsaPage(),
-          const ComingSoonPlaceholder(
-            title: 'Nexus AI – Asistente Comercial',
-            subtitle:
-                'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
-            icon: Icons.smart_toy,
-            accentColor: AppTheme.neonPink,
-          ),
+          ChatbotPage(vendedorCodes: vendedorCodes),
         ],
       );
     }
@@ -1513,13 +1501,7 @@ class _MainShellState extends ConsumerState<MainShell> {
             forceShowVendorSelector: isCommercial80,
           );
         case 'Chat IA':
-          return const ComingSoonPlaceholder(
-            title: 'Nexus AI — Asistente Comercial',
-            subtitle:
-                'Tu asistente inteligente para\nconsultar márgenes, precios, deudas\ny mucho más.',
-            icon: Icons.smart_toy,
-            accentColor: AppTheme.neonPink,
-          );
+          return ChatbotPage(vendedorCodes: effectiveVendorCodes);
         default:
           return const Center(child: Text('Página no encontrada'));
       }

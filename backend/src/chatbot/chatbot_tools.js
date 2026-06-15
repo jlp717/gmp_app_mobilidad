@@ -23,6 +23,10 @@
  */
 
 const logger = require('../../middleware/logger');
+const {
+    buildClientVendorParamFilter,
+    getVendorColumnExpr,
+} = require('../../utils/common');
 
 // ── Safe Query Helper (Parameterized) ────────────────────────────────────────
 
@@ -65,9 +69,9 @@ function buildCodeVariants(code) {
  * 
  * Returns: { sql: string, params: array }
  * 
- * @param {string} [columnName='CODIGOVENDEDOR'] - The column name to filter on
+ * @param {string} [columnName='LCCDVD'] - The column name to filter on
  */
-function _buildVendorFilter(vendorScope, userCode, columnName = 'CODIGOVENDEDOR') {
+function _buildVendorFilter(vendorScope, userCode, columnName = 'LCCDVD') {
     if (!vendorScope || vendorScope.includes('ALL')) {
         return { sql: '', params: [] };
     }
@@ -80,6 +84,38 @@ function _buildVendorFilter(vendorScope, userCode, columnName = 'CODIGOVENDEDOR'
 
     const placeholders = vendorScope.map(() => '?').join(',');
     return { sql: `AND ${col} IN (${placeholders})`, params: [...vendorScope] };
+}
+
+function formatDbDate(year, month, day) {
+    if (!year || !month || !day) return null;
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function buildLaclaeVendorParamFilter(vendorCodes, alias = 'L') {
+    if (!Array.isArray(vendorCodes) || vendorCodes.length === 0) {
+        return { clause: '', params: [] };
+    }
+    const safeCodes = vendorCodes
+        .map((code) => String(code || '').trim())
+        .filter((code) => /^[a-zA-Z0-9]{1,10}$/.test(code));
+    if (safeCodes.length === 0) {
+        return { clause: '', params: [] };
+    }
+    const vendorColumn = getVendorColumnExpr(alias);
+    return {
+        clause: `AND TRIM(${vendorColumn}) IN (${safeCodes.map(() => '?').join(',')})`,
+        params: safeCodes,
+    };
+}
+
+function resolveVendorCodesForScope(vendorScope, userCode, isJefeVentas) {
+    if (isJefeVentas || !vendorScope || vendorScope.includes('ALL')) {
+        return [];
+    }
+    const codes = vendorScope.length ? vendorScope : [userCode];
+    return codes
+        .map((code) => String(code || '').trim())
+        .filter((code) => /^[a-zA-Z0-9]{1,10}$/.test(code));
 }
 
 // ============================================================================
@@ -108,7 +144,7 @@ const dbDiscoveryTools = {
         const searchTerm = `%${query}%`;
         const rows = await safeQuery(conn, `
             SELECT TRIM(CODIGOARTICULO) as CODIGO, TRIM(DESCRIPCIONARTICULO) as NOMBRE,
-                   TRIM(FAMILIA) as FAMILIA
+                   TRIM(CODIGOFAMILIA) as FAMILIA
             FROM DSEDAC.ART
             WHERE TRIM(DESCRIPCIONARTICULO) LIKE ? OR TRIM(CODIGOARTICULO) LIKE ?
             ORDER BY DESCRIPCIONARTICULO
@@ -123,12 +159,13 @@ const dbDiscoveryTools = {
 
     async lookupClient(conn, clientCode) {
         const rows = await safeQuery(conn, `
-            SELECT TRIM(CODIGOCLIENTE) as CODIGO, TRIM(NOMBRECLIENTE) as NOMBRE,
-                   TRIM(DIRECCION) as DIRECCION, TRIM(POBLACION) as POBLACION,
-                   TRIM(PROVINCIA) as PROVINCIA, TRIM(TARIFA) as TARIFA,
-                   TRIM(CODIGOVENDEDOR) as VENDEDOR
-            FROM DSEDAC.CLI
-            WHERE TRIM(CODIGOCLIENTE) = ?
+            SELECT TRIM(C.CODIGOCLIENTE) as CODIGO, TRIM(C.NOMBRECLIENTE) as NOMBRE,
+                   TRIM(C.DIRECCION) as DIRECCION, TRIM(C.POBLACION) as POBLACION,
+                   TRIM(C.PROVINCIA) as PROVINCIA,
+                   TRIM(P.VENDEDORCOMERCIAL) as VENDEDOR
+            FROM DSEDAC.CLI C
+            LEFT JOIN DSEDAC.CLP P ON C.CODIGOCLIENTE = P.CODIGOCLIENTE
+            WHERE TRIM(C.CODIGOCLIENTE) = ?
             FETCH FIRST 1 ROWS ONLY
         `, [clientCode]);
         if (rows.length === 0) return null;
@@ -136,14 +173,14 @@ const dbDiscoveryTools = {
         return {
             CODIGO: r.CODIGO, NOMBRE: r.NOMBRE, DIRECCION: r.DIRECCION,
             POBLACION: r.POBLACION, PROVINCIA: r.PROVINCIA,
-            TARIFA: r.TARIFA, VENDEDOR: r.VENDEDOR
+            VENDEDOR: r.VENDEDOR
         };
     },
 
     async lookupProduct(conn, productCode) {
         const rows = await safeQuery(conn, `
             SELECT TRIM(CODIGOARTICULO) as CODIGO, TRIM(DESCRIPCIONARTICULO) as NOMBRE,
-                   TRIM(FAMILIA) as FAMILIA, PRECIOVENTA as PRECIO
+                   TRIM(CODIGOFAMILIA) as FAMILIA, 0 as PRECIO
             FROM DSEDAC.ART
             WHERE TRIM(CODIGOARTICULO) = ?
             FETCH FIRST 1 ROWS ONLY
@@ -164,7 +201,7 @@ const dbDiscoveryTools = {
 const pricingTools = {
     async getProductPrice(conn, productCode) {
         const tariff = await safeQuery(conn, `
-            SELECT A.CODIGOARTICULO, A.DESCRIPCIONARTICULO, A.PRECIOVENTA,
+            SELECT A.CODIGOARTICULO, A.DESCRIPCIONARTICULO, COALESCE((SELECT L.PRECIOVENTA FROM DSEDAC.LAC L WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO) AND L.PRECIOVENTA > 0 ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC FETCH FIRST 1 ROW ONLY), 0) AS PRECIOVENTA,
                    COALESCE((
                        SELECT L.PRECIOCOSTO FROM DSEDAC.LAC L
                        WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
@@ -178,7 +215,7 @@ const pricingTools = {
         `, [productCode]);
 
         const lastSale = await safeQuery(conn, `
-            SELECT PRECIOVENTAUNITARIO, TRIM(CODIGOCLIENTEALBARAN) as CLIENTE,
+            SELECT PRECIOVENTA, TRIM(CODIGOCLIENTEALBARAN) as CLIENTE,
                    ANODOCUMENTO, MESDOCUMENTO
             FROM DSEDAC.LAC
             WHERE TRIM(CODIGOARTICULO) = ?
@@ -190,14 +227,14 @@ const pricingTools = {
             product: tariff[0] || {},
             tariffPrice: parseFloat(tariff[0]?.PRECIOVENTA) || 0,
             cost: parseFloat(tariff[0]?.PRECIOCOSTO) || 0,
-            lastSoldPrice: parseFloat(lastSale[0]?.PRECIOVENTAUNITARIO) || 0,
+            lastSoldPrice: parseFloat(lastSale[0]?.PRECIOVENTA) || 0,
             lastSoldTo: lastSale[0]?.CLIENTE
         };
     },
 
     async calculateBreakeven(conn, productCode) {
         const art = await safeQuery(conn, `
-            SELECT A.PRECIOVENTA,
+            SELECT COALESCE((SELECT L.PRECIOVENTA FROM DSEDAC.LAC L WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO) AND L.PRECIOVENTA > 0 ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC FETCH FIRST 1 ROW ONLY), 0) AS PRECIOVENTA,
                    COALESCE((
                        SELECT L.PRECIOCOSTO FROM DSEDAC.LAC L
                        WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
@@ -229,7 +266,7 @@ const pricingTools = {
 
     async simulateDiscount(conn, productCode, discountPercent) {
         const art = await safeQuery(conn, `
-            SELECT A.PRECIOVENTA,
+            SELECT COALESCE((SELECT L.PRECIOVENTA FROM DSEDAC.LAC L WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO) AND L.PRECIOVENTA > 0 ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC FETCH FIRST 1 ROW ONLY), 0) AS PRECIOVENTA,
                    COALESCE((
                        SELECT L.PRECIOCOSTO FROM DSEDAC.LAC L
                        WHERE TRIM(L.CODIGOARTICULO) = TRIM(A.CODIGOARTICULO)
@@ -310,13 +347,13 @@ const riskTools = {
 
     async getClientCreditLimit(conn, clientCode) {
         const client = await safeQuery(conn, `
-            SELECT LIMITECREDITO, RIESGOACUMULADO
+            SELECT RIESGOACUMULADO
             FROM DSEDAC.CLI WHERE TRIM(CODIGOCLIENTE) = ?
             FETCH FIRST 1 ROWS ONLY
         `, [clientCode]);
 
         const c = client[0] || {};
-        const limit = parseFloat(c.LIMITECREDITO) || 0;
+        const limit = 0;
         const used = parseFloat(c.RIESGOACUMULADO) || 0;
 
         return {
@@ -424,7 +461,7 @@ const commercialTools = {
         const history = await safeQuery(conn, `
             SELECT ANODOCUMENTO, MESDOCUMENTO, DIADOCUMENTO, 
                    TRIM(CODIGOARTICULO) as CODIGOARTICULO, DESCRIPCIONARTICULO,
-                   CANTIDADENVASES, IMPORTEVENTA, PRECIOVENTAUNITARIO
+                   CANTIDADENVASES, IMPORTEVENTA, PRECIOVENTA
             FROM DSEDAC.LAC
             WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
             ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
@@ -439,7 +476,7 @@ const commercialTools = {
                 description: h.DESCRIPCIONARTICULO?.trim(),
                 quantity: h.CANTIDADENVASES,
                 amount: parseFloat(h.IMPORTEVENTA) || 0,
-                unitPrice: parseFloat(h.PRECIOVENTAUNITARIO) || 0
+                unitPrice: parseFloat(h.PRECIOVENTA) || 0
             }))
         };
     },
@@ -744,23 +781,23 @@ const objectivesTools = {
         let sql, params;
         if (familyCode) {
             sql = `
-                SELECT TRIM(A.FAMILIA) as FAMILIA, SUM(L.IMPORTEVENTA) as VENTAS
+                SELECT TRIM(A.CODIGOFAMILIA) as FAMILIA, SUM(L.IMPORTEVENTA) as VENTAS
                 FROM DSEDAC.LAC L
                 LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
                 WHERE L.ANODOCUMENTO = ? AND L.MESDOCUMENTO = ?
                   ${vendorFilter.sql}
-                  AND TRIM(A.FAMILIA) = ?
-                GROUP BY A.FAMILIA
+                  AND TRIM(A.CODIGOFAMILIA) = ?
+                GROUP BY A.CODIGOFAMILIA
             `;
             params = [currentYear, currentMonth, ...vendorFilter.params, familyCode];
         } else {
             sql = `
-                SELECT TRIM(A.FAMILIA) as FAMILIA, SUM(L.IMPORTEVENTA) as VENTAS
+                SELECT TRIM(A.CODIGOFAMILIA) as FAMILIA, SUM(L.IMPORTEVENTA) as VENTAS
                 FROM DSEDAC.LAC L
                 LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
                 WHERE L.ANODOCUMENTO = ? AND L.MESDOCUMENTO = ?
                   ${vendorFilter.sql}
-                GROUP BY A.FAMILIA
+                GROUP BY A.CODIGOFAMILIA
                 ORDER BY VENTAS DESC
             `;
             params = [currentYear, currentMonth, ...vendorFilter.params];
@@ -785,66 +822,211 @@ const objectivesTools = {
 };
 
 // ============================================================================
-// INVOICE & ALBARAN TOOLS
+// INVOICE & ALBARAN TOOLS (CFC/CAC/LAC — same model as facturas.service)
 // ============================================================================
 
-const invoiceTools = {
-    async getInvoiceDetails(conn, invoiceNumber) {
-        const rows = await safeQuery(conn, `
-            SELECT TRIM(NUMERODOCUMENTO) as NUMERO, TRIM(CODIGOCLIENTEALBARAN) as CLIENTE,
-                   IMPORTETOTAL as IMPORTE, ESTADO, FECHAEMISION
-            FROM DSEDAC.CVC
-            WHERE TRIM(NUMERODOCUMENTO) = ?
-            FETCH FIRST 1 ROWS ONLY
-        `, [invoiceNumber]);
+function parseInvoiceRef(invoiceNumber) {
+    const raw = String(invoiceNumber || '').trim();
+    if (!raw) return null;
 
-        if (rows.length === 0) {
-            return { error: `Factura ${invoiceNumber} no encontrada` };
+    const structured = raw.match(/^([A-Za-z0-9]{1,3})[\/\-\s]+(\d{1,8})[\/\-\s]+(\d{4})$/);
+    if (structured) {
+        return {
+            serie: structured[1].toUpperCase(),
+            numero: parseInt(structured[2], 10),
+            ejercicio: parseInt(structured[3], 10),
+        };
+    }
+
+    const digitsOnly = raw.replace(/[^\d]/g, '');
+    if (!digitsOnly) return null;
+    return {
+        serie: null,
+        numero: parseInt(digitsOnly, 10),
+        ejercicio: new Date().getFullYear(),
+    };
+}
+
+async function fetchCfcInvoiceHeader(conn, ref) {
+    if (!ref || !Number.isFinite(ref.numero) || !Number.isFinite(ref.ejercicio)) {
+        return null;
+    }
+    if (ref.numero >= 900000 || ref.numero <= 0) {
+        return null;
+    }
+
+    const params = [ref.numero, ref.ejercicio];
+    let sql = `
+        SELECT TRIM(CFC.SERIEFACTURA) AS SERIE,
+               CFC.NUMEROFACTURA AS NUMERO,
+               CFC.EJERCICIOFACTURA AS EJERCICIO,
+               TRIM(CFC.CODIGOCLIENTE) AS CLIENTE,
+               CFC.IMPORTETOTAL AS IMPORTE,
+               CFC.DIADOCUMENTO AS DIA,
+               CFC.MESDOCUMENTO AS MES,
+               CFC.ANODOCUMENTO AS ANO
+        FROM DSEDAC.CFC CFC
+        WHERE CFC.NUMEROFACTURA = ?
+          AND CFC.EJERCICIOFACTURA = ?
+          AND CFC.NUMEROFACTURA > 0
+          AND CFC.NUMEROFACTURA < 900000
+    `;
+    if (ref.serie) {
+        sql += ' AND TRIM(CFC.SERIEFACTURA) = ?';
+        params.push(ref.serie);
+    }
+    sql += ' FETCH FIRST 1 ROW ONLY';
+
+    const rows = await safeQuery(conn, sql, params);
+    return rows[0] || null;
+}
+
+const invoiceTools = {
+    async resolveInvoiceClientCode(conn, invoiceNumber) {
+        const ref = parseInvoiceRef(invoiceNumber);
+        if (ref) {
+            const header = await fetchCfcInvoiceHeader(conn, ref);
+            if (header?.CLIENTE) {
+                return String(header.CLIENTE).trim();
+            }
         }
 
-        const r = rows[0];
-        const albaranCount = await safeQuery(conn, `
-            SELECT COUNT(*) as CNT
+        const rows = await safeQuery(conn, `
+            SELECT TRIM(CODIGOCLIENTEALBARAN) AS CLIENTE
             FROM DSEDAC.CVC
-            WHERE TRIM(NUMERODOCUMENTO) = ?
-        `, [invoiceNumber]);
+            WHERE TRIM(CHAR(NUMERODOCUMENTO)) = ?
+            FETCH FIRST 1 ROW ONLY
+        `, [String(invoiceNumber || '').trim()]);
+
+        if (rows.length > 0 && rows[0].CLIENTE) {
+            return String(rows[0].CLIENTE).trim();
+        }
+        return null;
+    },
+
+    async getInvoiceDetails(conn, invoiceNumber, userCode, isJefeVentas, vendorScope) {
+        const ref = parseInvoiceRef(invoiceNumber);
+        if (!ref) {
+            return { error: `Referencia de factura invalida: ${invoiceNumber}` };
+        }
+
+        const header = await fetchCfcInvoiceHeader(conn, ref);
+        if (!header) {
+            return { error: `Factura ${invoiceNumber} no encontrada o sin permiso` };
+        }
+
+        const serie = String(header.SERIE || ref.serie || '').trim();
+        const numero = header.NUMERO;
+        const ejercicio = header.EJERCICIO;
+        const clientCode = String(header.CLIENTE || '').trim();
+
+        const lines = await safeQuery(conn, `
+            SELECT TRIM(LAC.CODIGOARTICULO) AS CODIGO,
+                   TRIM(LAC.DESCRIPCION) AS DESCRIPCION,
+                   LAC.CANTIDADUNIDADES AS CANTIDAD,
+                   LAC.PRECIOVENTA AS PRECIO,
+                   LAC.IMPORTEVENTA AS IMPORTE,
+                   LAC.NUMEROALBARAN AS ALBARAN,
+                   LAC.ANODOCUMENTO, LAC.MESDOCUMENTO, LAC.DIADOCUMENTO
+            FROM DSEDAC.CAC CAC
+            LEFT JOIN DSEDAC.LAC LAC
+              ON LAC.SUBEMPRESAALBARAN = CAC.SUBEMPRESAALBARAN
+             AND LAC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
+             AND LAC.SERIEALBARAN = CAC.SERIEALBARAN
+             AND LAC.TERMINALALBARAN = CAC.TERMINALALBARAN
+             AND LAC.NUMEROALBARAN = CAC.NUMEROALBARAN
+            WHERE CAC.NUMEROFACTURA = ?
+              AND TRIM(CAC.SERIEFACTURA) = ?
+              AND CAC.EJERCICIOFACTURA = ?
+            ORDER BY LAC.SECUENCIA
+            FETCH FIRST 50 ROWS ONLY
+        `, [numero, serie, ejercicio]);
+
+        const pendingRows = await safeQuery(conn, `
+            SELECT COALESCE(SUM(C.IMPORTEPENDIENTE), 0) AS PENDIENTE
+            FROM DSEDAC.CVC C
+            WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
+              AND TRIM(CHAR(C.NUMERODOCUMENTO)) = ?
+              AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')
+        `, [clientCode, String(numero)]);
 
         return {
-            invoiceNumber: r.NUMERO,
-            clientCode: r.CLIENTE,
-            amount: parseFloat(r.IMPORTE) || 0,
-            status: r.ESTADO?.trim() || 'Desconocido',
-            date: r.FECHAEMISION ? String(r.FECHAEMISION) : null,
-            albaranCount: parseInt(albaranCount[0]?.CNT) || 0
+            invoiceNumber: `${serie}/${numero}/${ejercicio}`,
+            serie,
+            numero,
+            ejercicio,
+            clientCode,
+            amount: parseFloat(header.IMPORTE) || 0,
+            pendingAmount: parseFloat(pendingRows[0]?.PENDIENTE) || 0,
+            status: 'Facturada',
+            issueDate: formatDbDate(header.ANO, header.MES, header.DIA),
+            dueDate: null,
+            lineCount: lines.length,
+            lines: lines.map((line) => ({
+                productCode: line.CODIGO,
+                description: line.DESCRIPCION?.trim(),
+                quantity: parseFloat(line.CANTIDAD) || 0,
+                unitPrice: parseFloat(line.PRECIO) || 0,
+                amount: parseFloat(line.IMPORTE) || 0,
+                albaranNumber: line.ALBARAN,
+                date: `${line.DIADOCUMENTO || ''}/${line.MESDOCUMENTO || ''}/${line.ANODOCUMENTO || ''}`.replace(/^\/+|\/+$/g, '') || null,
+            })),
         };
     },
 
-    async getAlbaranesByInvoice(conn, invoiceNumber) {
+    async getAlbaranesByInvoice(conn, invoiceNumber, userCode, isJefeVentas, vendorScope) {
+        const ref = parseInvoiceRef(invoiceNumber);
+        if (!ref) {
+            return { error: `Referencia de factura invalida: ${invoiceNumber}` };
+        }
+
+        const header = await fetchCfcInvoiceHeader(conn, ref);
+        if (!header) {
+            return { error: `Factura ${invoiceNumber} no encontrada o sin permiso` };
+        }
+
+        const serie = String(header.SERIE || ref.serie || '').trim();
+        const clientCode = String(header.CLIENTE || '').trim();
         const rows = await safeQuery(conn, `
-            SELECT TRIM(NUMEROALBARAN) as NUMERO, IMPORTEPENDIENTE as IMPORTE,
-                   FECHAEMISION as FECHA
-            FROM DSEDAC.CVC
-            WHERE TRIM(NUMERODOCUMENTO) = ?
-            ORDER BY FECHAEMISION DESC
-        `, [invoiceNumber]);
+            SELECT CAC.NUMEROALBARAN AS NUMERO,
+                   SUM(COALESCE(LAC.IMPORTEVENTA, 0)) AS IMPORTE,
+                   MAX(LAC.ANODOCUMENTO) AS ANO,
+                   MAX(LAC.MESDOCUMENTO) AS MES,
+                   MAX(LAC.DIADOCUMENTO) AS DIA
+            FROM DSEDAC.CAC CAC
+            LEFT JOIN DSEDAC.LAC LAC
+              ON LAC.SUBEMPRESAALBARAN = CAC.SUBEMPRESAALBARAN
+             AND LAC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
+             AND LAC.SERIEALBARAN = CAC.SERIEALBARAN
+             AND LAC.TERMINALALBARAN = CAC.TERMINALALBARAN
+             AND LAC.NUMEROALBARAN = CAC.NUMEROALBARAN
+            WHERE CAC.NUMEROFACTURA = ?
+              AND TRIM(CAC.SERIEFACTURA) = ?
+              AND CAC.EJERCICIOFACTURA = ?
+            GROUP BY CAC.NUMEROALBARAN
+            ORDER BY ANO DESC, MES DESC, DIA DESC
+            FETCH FIRST 20 ROWS ONLY
+        `, [header.NUMERO, serie, header.EJERCICIO]);
 
         return {
-            invoiceNumber,
-            albaranes: rows.map(r => ({
+            invoiceNumber: `${serie}/${header.NUMERO}/${header.EJERCICIO}`,
+            clientCode,
+            albaranes: rows.map((r) => ({
                 number: r.NUMERO,
+                clientCode,
                 amount: parseFloat(r.IMPORTE) || 0,
-                date: r.FECHA ? String(r.FECHA) : null
-            }))
+                date: `${r.DIA || ''}/${r.MES || ''}/${r.ANO || ''}`.replace(/^\/+|\/+$/g, '') || null,
+            })),
         };
     },
 
     async getClientInvoices(conn, clientCode) {
         const rows = await safeQuery(conn, `
             SELECT TRIM(NUMERODOCUMENTO) as NUMERO, IMPORTEPENDIENTE as IMPORTE,
-                   FECHAVENCIMIENTO as VENCIMIENTO, ESTADO
+                   ANOVENCIMIENTO, MESVENCIMIENTO, DIAVENCIMIENTO, SITUACION
             FROM DSEDAC.CVC
             WHERE TRIM(CODIGOCLIENTEALBARAN) = ? AND IMPORTEPENDIENTE > 0
-            ORDER BY FECHAVENCIMIENTO ASC
+            ORDER BY ANOVENCIMIENTO ASC, MESVENCIMIENTO ASC, DIAVENCIMIENTO ASC
             FETCH FIRST 50 ROWS ONLY
         `, [clientCode]);
 
@@ -855,8 +1037,8 @@ const invoiceTools = {
             invoices: rows.map(r => ({
                 number: r.NUMERO,
                 amount: parseFloat(r.IMPORTE) || 0,
-                dueDate: r.VENCIMIENTO ? String(r.VENCIMIENTO) : null,
-                status: r.ESTADO?.trim() || 'Pendiente'
+                dueDate: `${r.DIAVENCIMIENTO || ''}/${r.MESVENCIMIENTO || ''}/${r.ANOVENCIMIENTO || ''}`.replace(/^\/+|\/+$/g, '') || null,
+                status: r.SITUACION?.trim() || 'Pendiente'
             })),
             totalAmount: Math.round(totalAmount * 100) / 100
         };
@@ -875,53 +1057,44 @@ const pedidosTools = {
         const vendorFilter = _buildVendorFilter(vendorScope, userCode);
 
         const sql = `
-            SELECT COUNT(DISTINCT OPP.NUMEROORDENPREPARACION) as TOTAL_ORDERS,
-                   COUNT(*) as TOTAL_LINES,
-                   COUNT(DISTINCT OPP.CODIGOCLIENTE) as TOTAL_CLIENTS
-            FROM DSEDAC.OPP OPP
-            WHERE OPP.ANOREPARTO = ? AND OPP.MESREPARTO = ? AND OPP.DIAREPARTO = ?
-              ${vendorFilter.sql}
+            SELECT COUNT(*) AS TOTAL_ORDERS,
+                   COUNT(DISTINCT CPC.CODIGOCLIENTEALBARAN) AS TOTAL_CLIENTS,
+                   COALESCE(SUM(CPC.IMPORTETOTAL), 0) AS TOTAL_AMOUNT
+            FROM DSEDAC.CPC CPC
+            WHERE CPC.ANODOCUMENTO = ?
+              AND CPC.MESDOCUMENTO = ?
+              AND CPC.DIADOCUMENTO = ?
+              ${vendorFilter.sql.replace(/LCCDVD/g, 'CPC.CODIGOVENDEDOR')}
         `;
         const params = [currentYear, currentMonth, currentDay, ...vendorFilter.params];
 
         const result = await safeQuery(conn, sql, params);
         const r = result[0] || {};
 
-        // Get total amount from LAC
-        const amountSql = `
-            SELECT SUM(IMPORTEVENTA) as TOTAL_AMOUNT
-            FROM DSEDAC.LAC
-            WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ? AND DIADOCUMENTO = ?
-              ${vendorFilter.sql}
-        `;
-        const amountParams = [currentYear, currentMonth, currentDay, ...vendorFilter.params];
-
-        const amountResult = await safeQuery(conn, amountSql, amountParams);
-        const totalAmount = parseFloat(amountResult[0]?.TOTAL_AMOUNT) || 0;
-
         return {
             year: currentYear,
             month: currentMonth,
             day: currentDay,
             totalOrders: parseInt(r.TOTAL_ORDERS) || 0,
-            totalLines: parseInt(r.TOTAL_LINES) || 0,
             totalClients: parseInt(r.TOTAL_CLIENTS) || 0,
-            totalAmount: totalAmount,
-            orders: []
+            totalAmount: parseFloat(r.TOTAL_AMOUNT) || 0,
+            orders: [],
         };
     },
 
     async getClientOrders(conn, clientCode, userCode, isJefeVentas, limit = 10, vendorScope) {
-        const vendorFilter = _buildVendorFilter(vendorScope, userCode);
+        const vendorFilter = _buildVendorFilter(vendorScope, userCode, 'CPC.CODIGOVENDEDOR');
 
         const sql = `
-            SELECT ANODOCUMENTO, MESDOCUMENTO, DIADOCUMENTO,
-                   TRIM(NUMEROORDENPREPARACION) as ORDER_NUM,
-                   IMPORTEVENTA as AMOUNT, ESTADO
-            FROM DSEDAC.OPP
-            WHERE TRIM(CODIGOCLIENTE) = ?
+            SELECT CPC.ANODOCUMENTO, CPC.MESDOCUMENTO, CPC.DIADOCUMENTO,
+                   TRIM(CPC.NUMEROPEDIDO) AS ORDER_NUM,
+                   CPC.NUMEROALBARAN,
+                   CPC.IMPORTETOTAL AS AMOUNT,
+                   TRIM(CPC.SITUACIONALBARAN) AS ESTADO
+            FROM DSEDAC.CPC CPC
+            WHERE TRIM(CPC.CODIGOCLIENTEALBARAN) = ?
               ${vendorFilter.sql}
-            ORDER BY ANOREPARTO DESC, MESREPARTO DESC, DIAREPARTO DESC
+            ORDER BY CPC.ANODOCUMENTO DESC, CPC.MESDOCUMENTO DESC, CPC.DIADOCUMENTO DESC
             FETCH FIRST ? ROWS ONLY
         `;
         const params = [clientCode, ...vendorFilter.params, limit];
@@ -929,14 +1102,94 @@ const pedidosTools = {
         const rows = await safeQuery(conn, sql, params);
         return {
             clientCode,
-            orders: rows.map(r => ({
+            orders: rows.map((r) => ({
                 orderNumber: r.ORDER_NUM,
-                date: `${r.ANODOCUMENTO}-${String(r.MESDOCUMENTO).padStart(2, '0')}-${String(r.DIADOCUMENTO).padStart(2, '0')}`,
+                albaranNumber: r.NUMEROALBARAN,
+                date: formatDbDate(r.ANODOCUMENTO, r.MESDOCUMENTO, r.DIADOCUMENTO),
                 amount: parseFloat(r.AMOUNT) || 0,
-                status: r.ESTADO?.trim() || 'Confirmado'
-            }))
+                status: r.ESTADO?.trim() || 'Confirmado',
+            })),
         };
-    }
+    },
+
+    async resolveOrderClientCode(conn, orderNumber) {
+        const normalized = String(orderNumber || '').trim();
+        const digits = normalized.replace(/[^\d]/g, '');
+        const rows = await safeQuery(conn, `
+            SELECT TRIM(CPC.CODIGOCLIENTEALBARAN) AS CLIENTE
+            FROM DSEDAC.CPC CPC
+            WHERE (TRIM(CHAR(CPC.NUMEROPEDIDO)) = ? OR TRIM(CHAR(CPC.NUMEROPEDIDO)) = ?)
+            FETCH FIRST 1 ROW ONLY
+        `, [normalized, digits]);
+        if (rows.length > 0 && rows[0].CLIENTE) {
+            return String(rows[0].CLIENTE).trim();
+        }
+        return null;
+    },
+
+    async getOrderDetails(conn, orderNumber, userCode, isJefeVentas, vendorScope) {
+        const vendorFilter = _buildVendorFilter(vendorScope, userCode, 'CPC.CODIGOVENDEDOR');
+        const normalized = String(orderNumber || '').trim();
+        const digits = normalized.replace(/[^\d]/g, '');
+
+        const headerRows = await safeQuery(conn, `
+            SELECT CPC.ANODOCUMENTO, CPC.MESDOCUMENTO, CPC.DIADOCUMENTO,
+                   TRIM(CPC.NUMEROPEDIDO) AS PEDIDO,
+                   TRIM(CPC.CODIGOCLIENTEALBARAN) AS CLIENTE,
+                   CPC.IMPORTETOTAL,
+                   TRIM(CPC.SITUACIONALBARAN) AS ESTADO,
+                   CPC.NUMEROALBARAN,
+                   CPC.SUBEMPRESAALBARAN, CPC.EJERCICIOALBARAN,
+                   CPC.SERIEALBARAN, CPC.TERMINALALBARAN
+            FROM DSEDAC.CPC CPC
+            WHERE (TRIM(CHAR(CPC.NUMEROPEDIDO)) = ? OR TRIM(CHAR(CPC.NUMEROPEDIDO)) = ?)
+              ${vendorFilter.sql}
+            FETCH FIRST 1 ROW ONLY
+        `, [normalized, digits, ...vendorFilter.params]);
+
+        if (headerRows.length === 0) {
+            return { error: `Pedido ${orderNumber} no encontrado` };
+        }
+
+        const h = headerRows[0];
+        const lines = await safeQuery(conn, `
+            SELECT TRIM(LAC.CODIGOARTICULO) AS CODIGO,
+                   TRIM(LAC.DESCRIPCION) AS DESCRIPCION,
+                   LAC.CANTIDADENVASES,
+                   LAC.PRECIOVENTA,
+                   LAC.IMPORTEVENTA
+            FROM DSEDAC.LAC LAC
+            WHERE LAC.SUBEMPRESAALBARAN = ?
+              AND LAC.EJERCICIOALBARAN = ?
+              AND LAC.SERIEALBARAN = ?
+              AND LAC.TERMINALALBARAN = ?
+              AND LAC.NUMEROALBARAN = ?
+            ORDER BY LAC.SECUENCIA
+        `, [
+            h.SUBEMPRESAALBARAN,
+            h.EJERCICIOALBARAN,
+            h.SERIEALBARAN,
+            h.TERMINALALBARAN,
+            h.NUMEROALBARAN,
+        ]);
+
+        return {
+            orderNumber: h.PEDIDO,
+            clientCode: h.CLIENTE?.trim() || null,
+            date: formatDbDate(h.ANODOCUMENTO, h.MESDOCUMENTO, h.DIADOCUMENTO),
+            amount: parseFloat(h.IMPORTETOTAL) || 0,
+            status: h.ESTADO?.trim() || 'Confirmado',
+            albaranNumber: h.NUMEROALBARAN,
+            lineCount: lines.length,
+            lines: lines.map((line) => ({
+                productCode: line.CODIGO,
+                description: line.DESCRIPCION,
+                quantity: parseFloat(line.CANTIDADENVASES) || 0,
+                unitPrice: parseFloat(line.PRECIOVENTA) || 0,
+                amount: parseFloat(line.IMPORTEVENTA) || 0,
+            })),
+        };
+    },
 };
 
 // ============================================================================
@@ -1720,7 +1973,7 @@ const summaryTools = {
 const crossQueryTools = {
     async getPriceSoldToClient(conn, productCode, clientCode, limit = 5) {
         const rows = await safeQuery(conn, `
-            SELECT PRECIOVENTAUNITARIO, IMPORTEVENTA, CANTIDADENVASES,
+            SELECT PRECIOVENTA, IMPORTEVENTA, CANTIDADENVASES,
                    ANODOCUMENTO, MESDOCUMENTO, DIADOCUMENTO,
                    TRIM(NUMEROORDENPREPARACION) as ORDEN
             FROM DSEDAC.LAC
@@ -1735,7 +1988,7 @@ const crossQueryTools = {
             productCode,
             clientCode,
             sales: rows.map(r => ({
-                price: parseFloat(r.PRECIOVENTAUNITARIO) || 0,
+                price: parseFloat(r.PRECIOVENTA) || 0,
                 amount: parseFloat(r.IMPORTEVENTA) || 0,
                 quantity: parseFloat(r.CANTIDADENVASES) || 0,
                 date: `${r.ANODOCUMENTO}-${String(r.MESDOCUMENTO).padStart(2, '0')}-${String(r.DIADOCUMENTO).padStart(2, '0')}`,
@@ -1750,7 +2003,7 @@ const crossQueryTools = {
 
         const rows = await safeQuery(conn, `
             SELECT SUM(IMPORTEVENTA) as TOTAL, SUM(CANTIDADENVASES) as UNIDADES,
-                   AVG(PRECIOVENTAUNITARIO) as PRECIO_MEDIO, COUNT(*) as LINEAS
+                   AVG(PRECIOVENTA) as PRECIO_MEDIO, COUNT(*) as LINEAS
             FROM DSEDAC.LAC
             WHERE TRIM(CODIGOARTICULO) = ? AND TRIM(CODIGOCLIENTEALBARAN) = ?
               AND ANODOCUMENTO = ? AND MESDOCUMENTO = ?
@@ -1772,13 +2025,13 @@ const crossQueryTools = {
     async getClientProductsBought(conn, clientCode, limit = 20) {
         const rows = await safeQuery(conn, `
             SELECT TRIM(L.CODIGOARTICULO) as CODIGO, TRIM(A.DESCRIPCIONARTICULO) as NOMBRE,
-                   TRIM(A.FAMILIA) as FAMILIA,
+                   TRIM(A.CODIGOFAMILIA) as FAMILIA,
                    SUM(L.IMPORTEVENTA) as TOTAL, SUM(L.CANTIDADENVASES) as UNIDADES,
-                   AVG(L.PRECIOVENTAUNITARIO) as PRECIO_MEDIO
+                   AVG(L.PRECIOVENTA) as PRECIO_MEDIO
             FROM DSEDAC.LAC L
             LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
             WHERE TRIM(L.CODIGOCLIENTEALBARAN) = ?
-            GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, A.FAMILIA
+            GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, A.CODIGOFAMILIA
             ORDER BY TOTAL DESC
             FETCH FIRST ? ROWS ONLY
         `, [clientCode, limit]);
@@ -1793,6 +2046,121 @@ const crossQueryTools = {
                 totalUnits: parseFloat(r.UNIDADES) || 0,
                 avgPrice: Math.round((parseFloat(r.PRECIO_MEDIO) || 0) * 100) / 100
             }))
+        };
+    },
+
+    async getClientEvaluation(conn, clientCode, userCode, isJefeVentas, vendorScope) {
+        const normalizedClient = String(clientCode || '').trim();
+        if (!normalizedClient) {
+            return { error: 'clientCode requerido' };
+        }
+
+        const vendorCodes = resolveVendorCodesForScope(vendorScope, userCode, isJefeVentas);
+        const clientVendorFilter = buildClientVendorParamFilter(
+            vendorCodes.length ? vendorCodes : null,
+            'CLI'
+        );
+
+        const clientCheck = await safeQuery(conn, `
+            SELECT 1 AS OK
+            FROM DSEDAC.CLI CLI
+            WHERE TRIM(CLI.CODIGOCLIENTE) = ?
+              ${clientVendorFilter.clause}
+            FETCH FIRST 1 ROWS ONLY
+        `, [normalizedClient, ...clientVendorFilter.params]);
+
+        if (clientCheck.length === 0) {
+            return {
+                error: 'Cliente no encontrado o sin permiso',
+                clientCode: normalizedClient,
+            };
+        }
+
+        const currentYear = new Date().getFullYear();
+        const startYear = currentYear - 2;
+        const laclaeVendorFilter = buildLaclaeVendorParamFilter(vendorCodes, 'L');
+        const saleTypes = ['CC', 'VC'];
+        const saleLines = ['AB', 'VT'];
+
+        const monthlyRows = await safeQuery(conn, `
+            SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
+                   SUM(L.LCIMVT) AS SALES, SUM(L.LCCTUD) AS UNITS
+            FROM DSED.LACLAE L
+            WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
+              AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
+              ${laclaeVendorFilter.clause}
+            GROUP BY L.LCAADC, L.LCMMDC
+            ORDER BY L.LCAADC ASC, L.LCMMDC ASC
+        `, [
+            normalizedClient,
+            startYear,
+            saleTypes[0],
+            saleTypes[1],
+            saleLines[0],
+            saleLines[1],
+            ...laclaeVendorFilter.params,
+        ]);
+
+        const topProductsRows = await safeQuery(conn, `
+            SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME,
+                   SUM(L.LCIMVT) AS TOTAL_SALES, SUM(L.LCCTUD) AS TOTAL_UNITS
+            FROM DSED.LACLAE L
+            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+            WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
+              AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
+              ${laclaeVendorFilter.clause}
+            GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
+            ORDER BY TOTAL_SALES DESC
+            FETCH FIRST 20 ROWS ONLY
+        `, [
+            normalizedClient,
+            currentYear - 1,
+            saleTypes[0],
+            saleTypes[1],
+            saleLines[0],
+            saleLines[1],
+            ...laclaeVendorFilter.params,
+        ]);
+
+        const returnsRows = await safeQuery(conn, `
+            SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
+                   TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME,
+                   SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT
+            FROM DSED.LACLAE L
+            LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
+            WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
+              AND (L.LCSRAB = 'D' OR L.LCTPVT = 'DV')
+              ${laclaeVendorFilter.clause}
+            GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
+            ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC
+            FETCH FIRST 50 ROWS ONLY
+        `, [normalizedClient, startYear, ...laclaeVendorFilter.params]);
+
+        return {
+            clientCode: normalizedClient,
+            years: [startYear, startYear + 1, currentYear],
+            monthlySales: monthlyRows.map((row) => ({
+                year: row.YEAR,
+                month: row.MONTH,
+                sales: parseFloat(row.SALES) || 0,
+                units: parseFloat(row.UNITS) || 0,
+            })),
+            topProducts: topProductsRows.map((row) => ({
+                code: row.CODE,
+                name: row.NAME,
+                totalSales: parseFloat(row.TOTAL_SALES) || 0,
+                totalUnits: parseFloat(row.TOTAL_UNITS) || 0,
+            })),
+            returns: returnsRows.map((row) => ({
+                year: row.YEAR,
+                month: row.MONTH,
+                productCode: row.PRODUCT_CODE,
+                productName: row.PRODUCT_NAME,
+                units: parseFloat(row.UNITS) || 0,
+                amount: parseFloat(row.AMOUNT) || 0,
+            })),
+            source: 'DSED.LACLAE',
+            appSection: 'Pedidos > Evolución',
         };
     },
 
@@ -1828,28 +2196,44 @@ const crossQueryTools = {
 
     async getVendorMonthlySummary(conn, userCode, isJefeVentas, months = 6, vendorScope) {
         const now = new Date();
-        const vendorFilter = _buildVendorFilter(vendorScope, userCode);
+        const vendorFilter = _buildVendorFilter(vendorScope, userCode, 'CODIGOVENDEDOR');
+        const startDate = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+        const startYear = startDate.getFullYear();
+        const startMonth = startDate.getMonth() + 1;
+
+        const rows = await safeQuery(conn, `
+            SELECT ANODOCUMENTO, MESDOCUMENTO,
+                   SUM(IMPORTEVENTA) as VENTAS,
+                   COUNT(DISTINCT CODIGOCLIENTEALBARAN) as CLIENTES,
+                   COUNT(*) as OPERACIONES
+            FROM DSEDAC.LAC
+            WHERE (ANODOCUMENTO > ? OR (ANODOCUMENTO = ? AND MESDOCUMENTO >= ?))
+              ${vendorFilter.sql}
+            GROUP BY ANODOCUMENTO, MESDOCUMENTO
+            ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC
+        `, [startYear, startYear, startMonth, ...vendorFilter.params]);
+
+        const byPeriod = new Map(
+            rows.map((row) => [
+                `${row.ANODOCUMENTO}-${String(row.MESDOCUMENTO).padStart(2, '0')}`,
+                {
+                    period: `${row.ANODOCUMENTO}-${String(row.MESDOCUMENTO).padStart(2, '0')}`,
+                    sales: parseFloat(row.VENTAS) || 0,
+                    clients: parseInt(row.CLIENTES, 10) || 0,
+                    operations: parseInt(row.OPERACIONES, 10) || 0,
+                },
+            ])
+        );
 
         const months_data = [];
         for (let i = 0; i < months; i++) {
             const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-            const y = d.getFullYear();
-            const m = d.getMonth() + 1;
-
-            const rows = await safeQuery(conn, `
-                SELECT SUM(IMPORTEVENTA) as VENTAS, COUNT(DISTINCT CODIGOCLIENTEALBARAN) as CLIENTES,
-                       COUNT(*) as OPERACIONES
-                FROM DSEDAC.LAC
-                WHERE ANODOCUMENTO = ? AND MESDOCUMENTO = ?
-                  ${vendorFilter.sql}
-            `, [y, m, ...vendorFilter.params]);
-
-            const r = rows[0] || {};
-            months_data.push({
-                period: `${y}-${String(m).padStart(2, '0')}`,
-                sales: parseFloat(r.VENTAS) || 0,
-                clients: parseInt(r.CLIENTES) || 0,
-                operations: parseInt(r.OPERACIONES) || 0
+            const period = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+            months_data.push(byPeriod.get(period) || {
+                period,
+                sales: 0,
+                clients: 0,
+                operations: 0,
             });
         }
 
@@ -1862,14 +2246,14 @@ const crossQueryTools = {
 
         const rows = await safeQuery(conn, `
             SELECT TRIM(L.CODIGOARTICULO) as CODIGO, TRIM(A.DESCRIPCIONARTICULO) as NOMBRE,
-                   TRIM(A.FAMILIA) as FAMILIA,
+                   TRIM(A.CODIGOFAMILIA) as FAMILIA,
                    SUM(L.IMPORTEVENTA) as TOTAL, SUM(L.CANTIDADENVASES) as UNIDADES,
-                   AVG(L.PRECIOVENTAUNITARIO) as PRECIO_MEDIO
+                   AVG(L.PRECIOVENTA) as PRECIO_MEDIO
             FROM DSEDAC.LAC L
             LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
             WHERE TRIM(L.CODIGOCLIENTEALBARAN) = ?
               AND L.ANODOCUMENTO = ? AND L.MESDOCUMENTO = ?
-            GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, A.FAMILIA
+            GROUP BY L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, A.CODIGOFAMILIA
             ORDER BY TOTAL DESC
             FETCH FIRST ? ROWS ONLY
         `, [clientCode, currentYear, currentMonth, limit]);
@@ -1893,7 +2277,7 @@ const crossQueryTools = {
         const searchTerm = `%${query}%`;
         const rows = await safeQuery(conn, `
             SELECT TRIM(CODIGOARTICULO) as CODIGO, TRIM(DESCRIPCIONARTICULO) as NOMBRE,
-                   TRIM(FAMILIA) as FAMILIA, PRECIOVENTA as PRECIO
+                   TRIM(CODIGOFAMILIA) as FAMILIA, 0 as PRECIO
             FROM DSEDAC.ART
             WHERE TRIM(DESCRIPCIONARTICULO) LIKE ?
             ORDER BY DESCRIPCIONARTICULO
@@ -1911,12 +2295,13 @@ const crossQueryTools = {
     async searchClientByName(conn, query) {
         const searchTerm = `%${query}%`;
         const rows = await safeQuery(conn, `
-            SELECT TRIM(CODIGOCLIENTE) as CODIGO, TRIM(NOMBRECLIENTE) as NOMBRE,
-                   TRIM(POBLACION) as POBLACION, TRIM(PROVINCIA) as PROVINCIA,
-                   TRIM(CODIGOVENDEDOR) as VENDEDOR
-            FROM DSEDAC.CLI
-            WHERE TRIM(NOMBRECLIENTE) LIKE ?
-            ORDER BY NOMBRECLIENTE
+            SELECT TRIM(C.CODIGOCLIENTE) as CODIGO, TRIM(C.NOMBRECLIENTE) as NOMBRE,
+                   TRIM(C.POBLACION) as POBLACION, TRIM(C.PROVINCIA) as PROVINCIA,
+                   TRIM(P.VENDEDORCOMERCIAL) as VENDEDOR
+            FROM DSEDAC.CLI C
+            LEFT JOIN DSEDAC.CLP P ON C.CODIGOCLIENTE = P.CODIGOCLIENTE
+            WHERE TRIM(C.NOMBRECLIENTE) LIKE ?
+            ORDER BY C.NOMBRECLIENTE
             FETCH FIRST 10 ROWS ONLY
         `, [searchTerm]);
 

@@ -7,14 +7,15 @@ import 'package:gmp_app_mobilidad/features/chatbot/presentation/widgets/chat_mes
 import 'package:gmp_app_mobilidad/features/chatbot/providers/chatbot_provider.dart';
 
 /// [ChatbotPage] - Professional AI Sales Assistant
-/// 
+///
 /// Premium futuristic chat interface with:
 /// - Clean professional design without childish emojis
 /// - Quick action pills with icons
 /// - Gradient accents and glowing effects
 class ChatbotPage extends ConsumerStatefulWidget {
   const ChatbotPage({
-    required this.vendedorCodes, super.key,
+    required this.vendedorCodes,
+    super.key,
   });
 
   final List<String> vendedorCodes;
@@ -23,7 +24,8 @@ class ChatbotPage extends ConsumerStatefulWidget {
   ConsumerState<ChatbotPage> createState() => _ChatbotPageState();
 }
 
-class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProviderStateMixin {
+class _ChatbotPageState extends ConsumerState<ChatbotPage>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   late AnimationController _pulseController;
@@ -39,6 +41,22 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
     _pulseAnimation = Tween<double>(begin: 0.8, end: 1).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+    _syncVendedorCodesContext();
+  }
+
+  @override
+  void didUpdateWidget(covariant ChatbotPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.vendedorCodes.join(',') != widget.vendedorCodes.join(',')) {
+      _syncVendedorCodesContext();
+    }
+  }
+
+  void _syncVendedorCodesContext() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(chatbotProvider.notifier).setVendedorCodes(widget.vendedorCodes);
+    });
   }
 
   @override
@@ -55,7 +73,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
 
     ref.read(chatbotProvider.notifier).sendMessage(text);
     _messageController.clear();
-    
+
     Future.delayed(const Duration(milliseconds: 100), () {
       if (_scrollController.hasClients) {
         _scrollController.animateTo(
@@ -70,176 +88,36 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
   @override
   Widget build(BuildContext context) {
     // Check role for custom message
-    var isJefe = false;
-    try {
-      final authState = ProviderScope.containerOf(context)
-          .read(authProvider)
-          .value;
-      isJefe = (authState?.user?.isDirector ?? false) || widget.vendedorCodes.length > 1;
-    } catch (_) {}
+    final authState = ref.read(authProvider).value;
+    final isJefe = (authState?.user?.isDirector ?? false) ||
+        widget.vendedorCodes.length > 1;
 
     final chatbotState = ref.watch(chatbotProvider);
 
-    return Scaffold( // Wrapped in Scaffold for safety
+    return Scaffold(
+      // Wrapped in Scaffold for safety
       backgroundColor: const Color(0xFF0A0E21),
       body: Column(
         children: [
-             SmartSyncHeader(
-              title: isJefe ? 'NEXUS AI (Supervisor)' : 'NEXUS AI',
-              subtitle: 'Asistente Comercial Inteligente',
-              lastSync: DateTime.now(),
-              isLoading: chatbotState.isLoading,
-              onSync: () => ref.read(chatbotProvider.notifier).clearChat(), // Clear as sync/reset action
-            ),
-             Expanded(
-                child: Column(
-                  children: [
-                    _buildQuickActions(),
-                    Expanded(child: _buildMessageList()),
-                    _buildInputArea(),
-                  ],
-                ),
-             ),
-        ],
-      ),
-    );
-  }
-
-  // OLD CHATBOT UI - PRESERVED FOR FUTURE USE
-  Widget _buildChatbotInterface(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFF0A0E21),
-            Color(0xFF0D1320),
-            Color(0xFF0A0E21),
-          ],
-        ),
-      ),
-      child: Column(
-        children: [
-          _buildHeader(),
-          _buildQuickActions(),
-          Expanded(child: _buildMessageList()),
-          _buildInputArea(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.3),
-        border: Border(
-          bottom: BorderSide(
-            color: AppTheme.neonBlue.withValues(alpha: 0.2),
+          SmartSyncHeader(
+            title: isJefe ? 'NEXUS AI (Supervisor)' : 'NEXUS AI',
+            subtitle: 'Asistente Comercial Inteligente',
+            lastSync: DateTime.now(),
+            isLoading: chatbotState.isLoading,
+            onSync: () => ref
+                .read(chatbotProvider.notifier)
+                .clearChat(), // Clear as sync/reset action
           ),
-        ),
-      ),
-      child: Row(
-        children: [
-          // AI Avatar with glow
-          AnimatedBuilder(
-            animation: _pulseAnimation,
-            builder: (context, child) => Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [
-                    AppTheme.neonBlue,
-                    AppTheme.neonPurple,
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(16),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.3 * _pulseAnimation.value),
-                    blurRadius: 20,
-                    spreadRadius: 2,
-                  ),
-                ],
-              ),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  const Icon(Icons.psychology, color: Colors.white, size: 28),
-                  Positioned(
-                    right: 6,
-                    bottom: 6,
-                    child: Container(
-                      width: 12,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: AppTheme.neonGreen,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFF0A0E21), width: 2),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 16),
-          
-          // Title and status
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ShaderMask(
-                  shaderCallback: (bounds) => const LinearGradient(
-                    colors: [AppTheme.neonBlue, AppTheme.neonPurple],
-                  ).createShader(bounds),
-                  child: const Text(
-                    'NEXUS AI',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: AppTheme.neonGreen,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Asistente Comercial Activo',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: Colors.grey.shade500,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
+                _buildQuickActions(),
+                if (chatbotState.error != null) _buildErrorBanner(),
+                Expanded(child: _buildMessageList()),
+                _buildInputArea(),
               ],
             ),
           ),
-          
-          // Clear chat
-          if (ref.watch(chatbotProvider).messages.isNotEmpty)
-            IconButton(
-              icon: Icon(Icons.delete_outline, color: Colors.grey.shade600, size: 22),
-              onPressed: () => ref.read(chatbotProvider.notifier).clearChat(),
-              tooltip: 'Limpiar',
-            ),
         ],
       ),
     );
@@ -248,16 +126,60 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
   Widget _buildQuickActions() {
     // Professional quick actions without emojis
     final quickActions = [
-      (Icons.attach_money, 'Margen Global', 'margin'),
-      (Icons.trending_up, 'Precios', 'precios'),
-      (Icons.account_balance_wallet, 'Deuda Cliente', 'deuda'),
-      (Icons.local_offer, 'Promociones', 'promociones'),
-      (Icons.inventory, 'Stock', 'stock'),
-      (Icons.analytics, 'Comparativa', 'comparar'),
+      (
+        Icons.explore_outlined,
+        'Navegación',
+        'Guíame para moverme por clientes, facturas, pedidos, cobros y bolsa.',
+      ),
+      (
+        Icons.receipt_long_outlined,
+        'Facturas',
+        'Resume facturas pendientes y próximos pasos de revisión.',
+      ),
+      (
+        Icons.shopping_cart_outlined,
+        'Pedidos',
+        'Ayúdame a revisar pedidos, estado y oportunidades de venta.',
+      ),
+      (
+        Icons.query_stats_outlined,
+        'Evaluar',
+        'Evalúa la situación comercial con deuda, pedidos, facturas y acciones recomendadas.',
+      ),
+      (
+        Icons.euro_outlined,
+        'Comisiones',
+        'Explícame comisiones y evolución comercial relevante.',
+      ),
+      (
+        Icons.account_balance_wallet,
+        'Deuda Cliente',
+        'Analiza la deuda de un cliente y prioriza la acción de cobro.',
+      ),
+      (
+        Icons.inventory,
+        'Stock',
+        'Consulta disponibilidad de stock y alternativas si falta producto.',
+      ),
+      (
+        Icons.attach_money,
+        'Margen Global',
+        'Analiza margen global y riesgos de precio mínimo.',
+      ),
+      (
+        Icons.trending_up,
+        'Precios',
+        'Sugiere cómo revisar precios mínimos, máximos y margen.',
+      ),
+      (
+        Icons.local_offer,
+        'Promociones',
+        'Indica promociones aplicables y cómo validarlas.',
+      ),
     ];
 
     return Container(
-      height: 56,
+      height: 58,
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
@@ -268,7 +190,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
           final (icon, label, query) = quickActions[index];
           return GestureDetector(
             onTap: () {
-              _messageController.text = label;
+              _messageController.text = query;
               _sendMessage();
             },
             child: Container(
@@ -307,9 +229,39 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
     );
   }
 
+  Widget _buildErrorBanner() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.error.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.error.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        children: [
+          const Icon(
+            Icons.warning_amber_rounded,
+            color: AppTheme.error,
+            size: 18,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'No se pudo completar la última consulta. '
+              'Revisa la conexión e inténtalo de nuevo.',
+              style: TextStyle(color: Colors.grey.shade300, fontSize: 12.5),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMessageList() {
     final chatState = ref.watch(chatbotProvider);
-    
+
     if (chatState.messages.isEmpty) {
       return _buildWelcomeScreen();
     }
@@ -344,22 +296,45 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
         children: [
           const SizedBox(height: 40),
           // AI Logo
-          Container(
-            width: 100,
-            height: 100,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [AppTheme.neonBlue.withValues(alpha: 0.2), AppTheme.neonPurple.withValues(alpha: 0.1)],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+          AnimatedBuilder(
+            animation: _pulseAnimation,
+            builder: (context, child) => Transform.scale(
+              scale: _pulseAnimation.value,
+              child: child,
             ),
-            child: const Icon(Icons.psychology, size: 50, color: AppTheme.neonBlue),
+            child: Container(
+              width: 100,
+              height: 100,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    AppTheme.neonBlue.withValues(alpha: 0.2),
+                    AppTheme.neonPurple.withValues(alpha: 0.1),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: AppTheme.neonBlue.withValues(alpha: 0.3),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppTheme.neonBlue.withValues(alpha: 0.18),
+                    blurRadius: 28,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.psychology,
+                size: 50,
+                color: AppTheme.neonBlue,
+              ),
+            ),
           ),
           const SizedBox(height: 28),
-          
+
           // Title
           ShaderMask(
             shaderCallback: (bounds) => const LinearGradient(
@@ -376,9 +351,9 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
             ),
           ),
           const SizedBox(height: 12),
-          
+
           Text(
-            'Consulta precios, márgenes, deudas,\nstock y estrategias comerciales.',
+            'Consulta navegación, facturas, pedidos, deudas,\nstock y estrategias comerciales.',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
@@ -387,12 +362,12 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
             ),
           ),
           const SizedBox(height: 40),
-          
+
           // Capability cards
           _buildCapabilityGrid(),
-          
+
           const SizedBox(height: 32),
-          
+
           // Example queries
           _buildExampleQueries(),
         ],
@@ -402,10 +377,10 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
 
   Widget _buildCapabilityGrid() {
     final capabilities = [
-      (Icons.attach_money, 'Márgenes', 'Análisis por cliente o global'),
-      (Icons.local_offer, 'Precios', 'Mínimos y sugeridos'),
-      (Icons.account_balance_wallet, 'Deudas', 'Estado de cobro'),
-      (Icons.trending_up, 'Ventas', 'YoY y tendencias'),
+      (Icons.explore_outlined, 'Navegación', 'Guía por módulos clave'),
+      (Icons.receipt_long_outlined, 'Facturas', 'Pendientes y revisión'),
+      (Icons.shopping_cart_outlined, 'Pedidos', 'Estado y oportunidades'),
+      (Icons.query_stats_outlined, 'Evaluar', 'Prioridades comerciales'),
     ];
 
     return Wrap(
@@ -458,11 +433,14 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
   }
 
   Widget _buildExampleQueries() {
+    final currentClientCode = ref.watch(chatbotProvider).currentClientCode;
     final examples = [
-      '¿Cuál es mi margen global este mes?',
-      '¿A qué precio puedo vender el producto ABC?',
-      '¿Cuánto debe el cliente 12345?',
-      'Comparar ventas 2024 vs 2023',
+      'Guíame para revisar facturas, pedidos y deuda de un cliente.',
+      'Evalúa qué clientes necesitan atención comercial hoy.',
+      'Resume pedidos recientes y riesgos de stock.',
+      'Explícame cómo revisar comisiones y margen global.',
+      if (currentClientCode != null)
+        'Evalúa el cliente $currentClientCode con deuda, facturas y pedidos.',
     ];
 
     return Column(
@@ -481,45 +459,50 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
           ),
         ),
         const SizedBox(height: 12),
-        ...examples.map((q) => Padding(
-          padding: const EdgeInsets.only(bottom: 8),
-          child: GestureDetector(
-            onTap: () {
-              _messageController.text = q;
-              _sendMessage();
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.02),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.arrow_forward_ios, size: 12, color: AppTheme.neonBlue),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      q,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade400,
+        ...examples.map(
+          (q) => Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: GestureDetector(
+              onTap: () {
+                _messageController.text = q;
+                _sendMessage();
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.02),
+                  borderRadius: BorderRadius.circular(12),
+                  border:
+                      Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.arrow_forward_ios,
+                        size: 12, color: AppTheme.neonBlue),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        q,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade400,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
-        ),),
+        ),
       ],
     );
   }
 
   Widget _buildInputArea() {
     final chatState = ref.watch(chatbotProvider);
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -537,7 +520,8 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(28),
-                  border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.2)),
+                  border: Border.all(
+                      color: AppTheme.neonBlue.withValues(alpha: 0.2)),
                 ),
                 child: TextField(
                   controller: _messageController,
@@ -546,15 +530,17 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
                     hintText: 'Escribe tu consulta...',
                     hintStyle: TextStyle(color: Colors.grey.shade600),
                     border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 14),
                   ),
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: (_) => _sendMessage(),
+                  keyboardType: TextInputType.multiline,
+                  minLines: 1,
+                  maxLines: 5,
+                  textInputAction: TextInputAction.newline,
                 ),
               ),
             ),
             const SizedBox(width: 12),
-
             GestureDetector(
               onTap: chatState.isLoading ? null : _sendMessage,
               child: Container(
@@ -567,16 +553,20 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage> with SingleTickerProv
                         : [AppTheme.neonBlue, AppTheme.neonPurple],
                   ),
                   borderRadius: BorderRadius.circular(27),
-                  boxShadow: chatState.isLoading ? [] : [
-                    BoxShadow(
-                      color: AppTheme.neonBlue.withValues(alpha: 0.4),
-                      blurRadius: 16,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
+                  boxShadow: chatState.isLoading
+                      ? []
+                      : [
+                          BoxShadow(
+                            color: AppTheme.neonBlue.withValues(alpha: 0.4),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                 ),
                 child: Icon(
-                  chatState.isLoading ? Icons.hourglass_top : Icons.send_rounded,
+                  chatState.isLoading
+                      ? Icons.hourglass_top
+                      : Icons.send_rounded,
                   color: Colors.white,
                   size: 24,
                 ),

@@ -102,7 +102,62 @@ describe('commercial cobros hardening', () => {
       grandTotal: 125.5,
       grandTotalVencido: 25.5,
       clientCount: 1,
+      source: 'CVC',
+      pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 2 },
     });
+  });
+
+  test('getPendingSummary applies bounded page/offset and page-doc adjustment scope for ALL', async () => {
+    mockQuery
+      .mockResolvedValueOnce([
+        { CLIENTE: 'C001', NOMBRE: 'Cliente Uno', SERIE_DOCUMENTO: 'M', NUMERO_DOCUMENTO: 1, TOTAL_PENDIENTE: '100.00', TOTAL_VENCIDO: '0.00' },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const repo = new Db2CobrosRepository();
+
+    const result = await repo.getPendingSummary('ALL', {
+      userId: '98',
+      userRole: 'JEFE_VENTAS',
+      isJefeVentas: true,
+      limit: 25,
+      page: 3,
+    });
+
+    expect(result.pagination).toEqual({ limit: 25, page: 3, offset: 50, returnedDocuments: 1 });
+    const summarySql = mockQuery.mock.calls[0][0];
+    expect(summarySql).toMatch(/ORDER BY\s+TOTAL_PENDIENTE\s+DESC,\s+CLIENTE\s+ASC,\s+SERIE_DOCUMENTO\s+ASC,\s+NUMERO_DOCUMENTO\s+ASC/i);
+    expect(summarySql).toMatch(/OFFSET\s+50\s+ROWS\s+FETCH\s+FIRST\s+25\s+ROWS\s+ONLY/i);
+    const adjustmentSql = mockQuery.mock.calls[1][0];
+    expect(adjustmentSql).toMatch(/WITH\s+PAGE_DOCS/i);
+    expect(adjustmentSql).toMatch(/VALUES\s+\('C001',\s*'M',\s*'1',\s*'M-1'\)/i);
+  });
+
+  test('getPendingSummary derives page from explicit offset and skips blank client rows', async function () {
+    mockQuery
+      .mockResolvedValueOnce([
+        { CLIENTE: '   ', NOMBRE: '', SERIE_DOCUMENTO: 'O', NUMERO_DOCUMENTO: 999, TOTAL_PENDIENTE: '999999.99', TOTAL_VENCIDO: '999999.99' },
+        { CLIENTE: 'C001', NOMBRE: 'Cliente Uno', SERIE_DOCUMENTO: 'M', NUMERO_DOCUMENTO: 1, TOTAL_PENDIENTE: '100.00', TOTAL_VENCIDO: '0.00' },
+      ])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const repo = new Db2CobrosRepository();
+
+    const result = await repo.getPendingSummary('ALL', {
+      userId: '98',
+      userRole: 'JEFE_VENTAS',
+      isJefeVentas: true,
+      limit: 25,
+      offset: 50,
+    });
+
+    expect(result.pagination).toEqual({ limit: 25, page: 3, offset: 50, returnedDocuments: 2 });
+    expect(Object.keys(result.summary)).toEqual(['C001']);
+    expect(result.summary.C001).toEqual({ nombre: 'Cliente Uno', total: 100, vencido: 0, count: 1, estado: 'PENDIENTE' });
+    expect(result.grandTotal).toBe(100);
+    expect(result.grandTotalVencido).toBe(0);
+    const summarySql = mockQuery.mock.calls[0][0];
+    expect(summarySql).toMatch(/OFFSET\s+50\s+ROWS\s+FETCH\s+FIRST\s+25\s+ROWS\s+ONLY/i);
   });
 
   test('getPendingSummary subtracts app-side payments only from the matching document', async () => {
@@ -142,6 +197,8 @@ describe('commercial cobros hardening', () => {
       grandTotal: 100,
       grandTotalVencido: 100,
       clientCount: 1,
+      source: 'CVC',
+      pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 2 },
     });
   });
 

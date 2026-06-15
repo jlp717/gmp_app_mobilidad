@@ -13,6 +13,7 @@ abstract class PedidosOrderApi {
     required String tipoVenta,
     required List<OrderLine> lines,
     required String observaciones,
+    String? clientRequestId,
   });
 
   /// Confirms an existing order and returns the backend confirmation response.
@@ -39,6 +40,7 @@ class PedidosServiceOrderApi implements PedidosOrderApi {
     required String tipoVenta,
     required List<OrderLine> lines,
     required String observaciones,
+    String? clientRequestId,
   }) {
     return PedidosService.createOrder(
       clientCode: clientCode,
@@ -47,6 +49,7 @@ class PedidosServiceOrderApi implements PedidosOrderApi {
       tipoVenta: tipoVenta,
       lines: lines,
       observaciones: observaciones,
+      clientRequestId: clientRequestId,
     );
   }
 

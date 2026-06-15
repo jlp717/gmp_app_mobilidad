@@ -132,13 +132,14 @@ describe('pedidos client evolution route contract', () => {
     ]);
 
     const clientScopeCall = mockQueryWithParams.mock.calls[0];
-    expect(clientScopeCall[0]).toContain('DSEDAC.CLP');
-    expect(clientScopeCall[1]).toEqual(['C001', '01', '01', '01']);
+    expect(clientScopeCall[0]).toContain('DSEDAC.CLI');
+    expect(clientScopeCall[1]).toEqual(['C001', '01', '01']);
 
     const monthlyCall = mockQueryWithParams.mock.calls[1];
-    expect(monthlyCall[0]).toMatch(/LCCDVD|R1_T8CDVD/);
+    expect(monthlyCall[0]).toContain('DSED.LACLAE');
+    const startYear = new Date().getFullYear() - 2;
     expect(monthlyCall[1]).toEqual(
-      expect.arrayContaining(['C001', '01', 'CC', 'VC', 'AB', 'VT']),
+      expect.arrayContaining(['C001', startYear, 'CC', 'VC', 'AB', 'VT', '01']),
     );
   });
 });

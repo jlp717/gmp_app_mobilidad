@@ -2,7 +2,8 @@ param(
   [Parameter(Mandatory=$true)][ValidateSet("gmp","granja")][string]$Project,
   [switch]$NoWeb,
   [switch]$NoTelegram,
-  [switch]$RestartWeb
+  [switch]$RestartWeb,
+  [switch]$SkipFallbackRuntime
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,6 +28,14 @@ function Load-Env {
       $parts = $line -split "=", 2
       $name = $parts[0].Trim()
       if (-not $name -or $name -ieq "OPENAI_API_KEY") { continue }
+      if ((Get-Item "Env:$name" -ErrorAction SilentlyContinue) -and $name -in @(
+        "OPENCODE_SERVER_USERNAME",
+        "OPENCODE_SERVER_PASSWORD",
+        "ODBC_UID",
+        "ODBC_PWD",
+        "ODBC_DSN",
+        "ODBC_SCHEMA"
+      )) { continue }
       [Environment]::SetEnvironmentVariable($name, $parts[1], "Process")
     }
   } catch {
@@ -57,6 +66,60 @@ function Set-EnvFileValue([string]$Name, [string]$Value) {
 
 function Write-Utf8NoBom([string]$Path, [string]$Text) {
   [System.IO.File]::WriteAllText($Path, $Text, [System.Text.UTF8Encoding]::new($false))
+}
+
+function Repair-McpCommandArrays([string]$Path) {
+  if (-not (Test-Path -LiteralPath $Path -ErrorAction SilentlyContinue)) { return }
+  $text = Get-Content -LiteralPath $Path -Raw
+  $original = $text
+  $commands = @(
+    "C:/nvm4w/nodejs/context7-mcp.cmd",
+    "C:/nvm4w/nodejs/fetch-mcp.cmd",
+    "C:/nvm4w/nodejs/git-mcp-server.cmd",
+    "C:/nvm4w/nodejs/chrome-devtools-mcp.cmd",
+    "C:/nvm4w/nodejs/firecrawl-mcp.cmd",
+    "C:/nvm4w/nodejs/mcp-server-sentry.cmd",
+    "C:/nvm4w/nodejs/mcp-server-filesystem.cmd"
+  )
+  foreach ($command in $commands) {
+    $pattern = '"command"\s*:\s*"' + [regex]::Escape($command) + '"'
+    $replacement = '"command":  [' + "`n" + '                                                   "' + $command + '"' + "`n" + '                                               ]'
+    $text = [regex]::Replace($text, $pattern, $replacement)
+  }
+  if ($text -ne $original) { Write-Utf8NoBom $Path $text }
+}
+
+function Sync-OpenCodeAccountAuth([string]$RuntimeHome) {
+  $source = Join-Path $HomeDir ".local\share\opencode\auth.json"
+  $targetDir = Join-Path $RuntimeHome "opencode"
+  $target = Join-Path $targetDir "auth.json"
+  try {
+    New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $HomeDir ".local\share\opencode\log") -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $targetDir "log") -Force | Out-Null
+    if (-not (Test-Path -LiteralPath $source)) { return "source_missing" }
+
+    $sourceAuth = Get-Content -LiteralPath $source -Raw | ConvertFrom-Json
+    $merged = [ordered]@{}
+    if (Test-Path -LiteralPath $target) {
+      try {
+        $targetAuth = Get-Content -LiteralPath $target -Raw | ConvertFrom-Json
+        foreach ($prop in $targetAuth.PSObject.Properties) {
+          $merged[$prop.Name] = $prop.Value
+        }
+      } catch {}
+    }
+    foreach ($prop in $sourceAuth.PSObject.Properties) {
+      if ($prop.Name -in @("openai", "opencode-go")) {
+        $merged[$prop.Name] = $prop.Value
+      }
+    }
+    if ($merged.Count -eq 0) { return "empty" }
+    Write-Utf8NoBom $target (($merged | ConvertTo-Json -Depth 20) + "`n")
+    return "ok:$($merged.Keys -join ',')"
+  } catch {
+    return "degradado: $($_.Exception.Message)"
+  }
 }
 
 function ConvertTo-PlainHashtable($InputObject) {
@@ -91,15 +154,23 @@ function New-Db2McpEnvironment {
   [ordered]@{
     ODBC_DSN = if ($env:ODBC_DSN) { $env:ODBC_DSN } else { "GMP" }
     ODBC_SCHEMA = if ($env:ODBC_SCHEMA) { $env:ODBC_SCHEMA } else { "JAVIER" }
-    ODBC_UID = '${env.ODBC_UID}'
-    ODBC_PWD = '${env.ODBC_PWD}'
   }
+}
+
+function Get-ProjectMcpScript([string]$Name) {
+  return (Join-Path $PSScriptRoot "mcp\$Name").Replace("\", "/")
 }
 
 function Ensure-IbmDb2McpEnvironment {
   $paths = @(
     (Join-Path $ConfigDir "opencode.json"),
-    (Join-Path $HomeDir ".opencode-runtime\opencode\opencode.json")
+    (Join-Path $HomeDir ".opencode-runtime\opencode\opencode.json"),
+    (Join-Path $HomeDir "Desktop\Repositorios\gmp_app_mobilidad\.opencode-runtime\opencode\opencode.json"),
+    (Join-Path $HomeDir "Desktop\Repositorios\gmp_app_mobilidad\.opencode\opencode.json"),
+    (Join-Path $HomeDir "Desktop\Repositorios\gmp_app_mobilidad\opencode.json"),
+    (Join-Path $HomeDir "Desktop\Repositorios\granja_mari_pepa\.opencode-runtime\opencode\opencode.json"),
+    (Join-Path $HomeDir "Desktop\Repositorios\granja_mari_pepa\.opencode\opencode.json"),
+    (Join-Path $HomeDir "Desktop\Repositorios\granja_mari_pepa\opencode.json")
   )
   $updated = @()
   foreach ($path in $paths) {
@@ -112,9 +183,16 @@ function Ensure-IbmDb2McpEnvironment {
       if ($cfg.Contains("instructions") -and $cfg["instructions"] -is [string] -and $cfg["instructions"]) {
         $cfg["instructions"] = @($cfg["instructions"])
       }
+      if ($cfg.Contains("skills") -and
+          $cfg["skills"] -is [System.Collections.IDictionary] -and
+          $cfg["skills"].Contains("paths") -and
+          $cfg["skills"]["paths"] -is [string]) {
+        $cfg["skills"]["paths"] = @($cfg["skills"]["paths"])
+      }
       $cfg.mcp["ibm-db2-mcp"]["type"] = "local"
-      $cfg.mcp["ibm-db2-mcp"]["command"] = (New-JsonArray @($Node, (Join-Path $ConfigDir "mcp\ibm-odbc-mcp.cjs").Replace("\", "/")))
+      $cfg.mcp["ibm-db2-mcp"]["command"] = (New-JsonArray @($Node, (Get-ProjectMcpScript "ibm-odbc-mcp.cjs")))
       $cfg.mcp["ibm-db2-mcp"]["environment"] = New-Db2McpEnvironment
+      $cfg.mcp["ibm-db2-mcp"]["env"] = New-Db2McpEnvironment
       if (-not $cfg.mcp["ibm-db2-mcp"].Contains("timeout") -or [int]$cfg.mcp["ibm-db2-mcp"]["timeout"] -lt 30000) {
         $cfg.mcp["ibm-db2-mcp"]["timeout"] = 30000
       }
@@ -168,6 +246,7 @@ function Ensure-IbmDb2McpEnvironment {
         }
       }
       Write-Utf8NoBom $path (($cfg | ConvertTo-Json -Depth 100) + "`n")
+      Repair-McpCommandArrays $path
       $updated += $path
     } catch {
       return "degradado: $($_.Exception.Message)"
@@ -212,7 +291,13 @@ function Repair-FallbackModels {
 function Repair-Db2McpConfig {
   $paths = @(
     (Join-Path $ConfigDir "opencode.json"),
-    (Join-Path $HomeDir ".opencode-runtime\opencode\opencode.json")
+    (Join-Path $HomeDir ".opencode-runtime\opencode\opencode.json"),
+    (Join-Path $HomeDir "Desktop\Repositorios\gmp_app_mobilidad\.opencode-runtime\opencode\opencode.json"),
+    (Join-Path $HomeDir "Desktop\Repositorios\gmp_app_mobilidad\.opencode\opencode.json"),
+    (Join-Path $HomeDir "Desktop\Repositorios\gmp_app_mobilidad\opencode.json"),
+    (Join-Path $HomeDir "Desktop\Repositorios\granja_mari_pepa\.opencode-runtime\opencode\opencode.json"),
+    (Join-Path $HomeDir "Desktop\Repositorios\granja_mari_pepa\.opencode\opencode.json"),
+    (Join-Path $HomeDir "Desktop\Repositorios\granja_mari_pepa\opencode.json")
   )
   $updated = 0
   foreach ($path in $paths) {
@@ -229,11 +314,13 @@ function Repair-Db2McpConfig {
         $mcp | Add-Member -MemberType NoteProperty -Name 'ibm-db2-mcp' -Value $current
       }
       $current | Add-Member -MemberType NoteProperty -Name type -Value "local" -Force
-      $current | Add-Member -MemberType NoteProperty -Name command -Value @($Node, (Join-Path $ConfigDir "mcp\ibm-odbc-mcp.cjs").Replace("\", "/")) -Force
+      $current | Add-Member -MemberType NoteProperty -Name command -Value @($Node, (Get-ProjectMcpScript "ibm-odbc-mcp.cjs")) -Force
       $current | Add-Member -MemberType NoteProperty -Name environment -Value ([pscustomobject](New-Db2McpEnvironment)) -Force
+      $current | Add-Member -MemberType NoteProperty -Name env -Value ([pscustomobject](New-Db2McpEnvironment)) -Force
       $current | Add-Member -MemberType NoteProperty -Name enabled -Value $false -Force
       $current | Add-Member -MemberType NoteProperty -Name timeout -Value 30000 -Force
       Write-Utf8NoBom $path ($cfg | ConvertTo-Json -Depth 100)
+      Repair-McpCommandArrays $path
       $updated++
     } catch {
       return "ERROR: $($_.Exception.Message)"
@@ -255,10 +342,16 @@ function Test-CustomToolSchemas([string]$ProjectDir) {
 }
 
 function Set-CursorRuntimeAvailability([bool]$Enabled) {
-  $runtimeConfig = Join-Path $HomeDir ".opencode-runtime\opencode\opencode.json"
+  $runtimeRoot = if ($env:XDG_CONFIG_HOME) { $env:XDG_CONFIG_HOME } else { Join-Path $HomeDir ".opencode-runtime" }
+  $runtimeConfig = Join-Path $runtimeRoot "opencode\opencode.json"
   if (-not (Test-Path -LiteralPath $runtimeConfig)) { return "runtime_config_missing" }
   try {
-    $canonicalConfig = Join-Path $ConfigDir "opencode.json"
+    $projectConfig = if ($ProjectDir) { Join-Path $ProjectDir "opencode.json" } else { $null }
+    $canonicalConfig = if ($projectConfig -and (Test-Path -LiteralPath $projectConfig)) {
+      $projectConfig
+    } else {
+      Join-Path $ConfigDir "opencode.json"
+    }
     if (Test-Path -LiteralPath $canonicalConfig) {
       Copy-Item -LiteralPath $canonicalConfig -Destination $runtimeConfig -Force
     }
@@ -861,9 +954,9 @@ function Test-CriticalMcpSet {
   try {
     $cfg = Get-EffectiveOpenCodeConfig
     $critical = @(
-      "context7", "ddg-search", "fetch", "git", "beads", "time",
+      "context7-local", "ddg-search", "fetch-local", "git-local", "beads",
       "dart-flutter-mcp", "pub-mcp", "ibm-db2-mcp", "gmp-deploy-ssh",
-      "playwright", "github", "gh_grep", "memory",
+      "playwright", "github", "memory",
       "sequential-thinking"
     )
     $missing = @()
@@ -887,9 +980,9 @@ function Test-CriticalMcpSet {
 function Test-McpRuntimeStatus {
   try {
     $critical = @(
-      "context7", "ddg-search", "fetch", "git", "beads", "time",
+      "context7-local", "ddg-search", "fetch-local", "git-local", "beads",
       "dart-flutter-mcp", "pub-mcp", "ibm-db2-mcp", "gmp-deploy-ssh",
-      "playwright", "github", "gh_grep", "memory",
+      "playwright", "github", "memory",
       "sequential-thinking"
     )
     $raw = (& cmd /c "opencode mcp list 2>NUL") -join "`n"
@@ -975,6 +1068,13 @@ function Test-UnsupportedActiveModels([string]$ProjectDir) {
 Load-Env
 Ensure-OpenCodeWebAuth
 $env:OPENAI_API_KEY = $null
+$cursorApiAlias = @("CURSOR_ACP_KEY", "CURSOR_TOKEN", "CURSOR_AGENT_TOKEN") |
+  ForEach-Object { Get-Item "Env:$_" -ErrorAction SilentlyContinue } |
+  Where-Object { $_ -and $_.Value } |
+  Select-Object -First 1
+if (-not $env:CURSOR_API_KEY -and $cursorApiAlias) {
+  $env:CURSOR_API_KEY = $cursorApiAlias.Value
+}
 $env:XDG_CONFIG_HOME = Join-Path $HomeDir ".opencode-runtime"
 $env:OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX = "12000"
 $env:OPENCODE_EXPERIMENTAL_LSP_TOOL = "true"
@@ -1006,6 +1106,22 @@ if ($Project -eq "gmp") {
 
 if (-not (Test-Path -LiteralPath $ProjectDir)) { throw "Ruta de proyecto no existe: $ProjectDir" }
 Set-Location -LiteralPath $ProjectDir
+$ProjectRuntimeHome = Join-Path $ProjectDir ".opencode-runtime"
+$env:XDG_CONFIG_HOME = $ProjectRuntimeHome
+$env:XDG_DATA_HOME = $ProjectRuntimeHome
+$env:XDG_STATE_HOME = $ProjectRuntimeHome
+$env:XDG_CACHE_HOME = $ProjectRuntimeHome
+$accountAuthStatus = Sync-OpenCodeAccountAuth $ProjectRuntimeHome
+$runtimeConfigDir = Join-Path $ProjectRuntimeHome "opencode"
+$runtimeConfig = Join-Path $runtimeConfigDir "opencode.json"
+$projectConfig = Join-Path $ProjectDir "opencode.json"
+New-Item -ItemType Directory -Path $runtimeConfigDir -Force | Out-Null
+if (Test-Path -LiteralPath $projectConfig) {
+  Copy-Item -LiteralPath $projectConfig -Destination $runtimeConfig -Force
+}
+Repair-McpCommandArrays (Join-Path $ProjectDir "opencode.json")
+Repair-McpCommandArrays (Join-Path $ProjectDir ".opencode\opencode.json")
+Repair-McpCommandArrays $runtimeConfig
 $db2OdbcStatus = if ($Project -eq "gmp") { Ensure-GmpDb2Odbc $ProjectDir } else { "no_aplica" }
 if ($Project -eq "gmp" -and $env:ODBC_DSN) {
   Set-EnvFileValue "ODBC_DSN" $env:ODBC_DSN
@@ -1052,6 +1168,7 @@ if ($env:OPENCODE_FULL_PREFLIGHT -ne "1") {
     agent = $env:OPENCODE_AGENT
     expected_agents = $ExpectedAgents
     web_auth_status = if ($env:OPENCODE_SERVER_PASSWORD) { "activo" } else { "sin_password" }
+    account_auth_status = $accountAuthStatus
     web_restart_status = $webRestartStatus
     db2_status = $db2Status
     db2_odbc_status = $db2OdbcStatus
@@ -1078,6 +1195,7 @@ Web local: http://127.0.0.1:$Port
 Web movil: http://100.107.11.80:$Port
 Agente: $env:OPENCODE_AGENT
 OpenCode Web restart: $webRestartStatus
+OpenCode account auth: $accountAuthStatus
 DB2 192.168.1.22: $db2Status
 DB2 ODBC: $db2OdbcStatus ($env:ODBC_DSN)
 MCP DB2 env: $mcpEnvStatus
@@ -1225,6 +1343,7 @@ $preflightPayload = [ordered]@{
   backend_health_status = $backendHealthStatus
   image_status = $imageStatus
   web_auth_status = $webAuthStatus
+  account_auth_status = $accountAuthStatus
   chroma_status = $chromaStatus
   redis_status = $redisStatus
   metrics_status = $metricsStatus
@@ -1280,6 +1399,7 @@ Imagenes 192.168.1.191: $imageStatus
 Cursor ACP: $cursorStatus
 Cursor runtime: $cursorRuntimeStatus
 OpenCode Web Auth: $webAuthStatus
+OpenCode account auth: $accountAuthStatus
 ChromaDB: $chromaStatus
 Redis: $redisStatus
 Metricas: $metricsStatus

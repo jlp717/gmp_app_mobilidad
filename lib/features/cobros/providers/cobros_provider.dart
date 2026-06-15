@@ -66,6 +66,7 @@ class CobrosProvider extends ChangeNotifier {
   String _filtroEstado = 'todos';
   String _filtroCliente = '';
   DateTime? _filtroFecha;
+  final Map<String, String> _pendingCobroIdempotencyTokens = {};
 
   bool get isLoading => _isLoading;
   String? get error => _error;
@@ -451,6 +452,35 @@ class CobrosProvider extends ChangeNotifier {
     }
   }
 
+  String _cobroAttemptKey({
+    required String codigoCliente,
+    required String referencia,
+    required double importe,
+    required String formaPago,
+    required TipoVenta tipoVenta,
+    required TipoModoCobro tipoModo,
+    required String codigoUsuario,
+  }) {
+    return [
+      codigoUsuario.trim(),
+      codigoCliente.trim(),
+      referencia.trim(),
+      importe.toStringAsFixed(2),
+      formaPago.trim().toUpperCase(),
+      tipoVenta.code,
+      tipoModo.code,
+      isRepartidor ? 'REPARTIDOR' : 'COMERCIAL',
+    ].join('|');
+  }
+
+  bool _shouldKeepCobroRetryToken(Object error) {
+    if (error is ApiException) {
+      final statusCode = error.statusCode;
+      return statusCode == 0 || (statusCode != null && statusCode >= 500);
+    }
+    return false;
+  }
+
   Future<bool> registrarCobro({
     required String codigoCliente,
     required String referencia,
@@ -462,6 +492,25 @@ class CobrosProvider extends ChangeNotifier {
     String? observaciones,
     bool reloadAfter = true,
   }) async {
+    final actorCode = codigoUsuario ?? employeeCode;
+    final attemptKey = _cobroAttemptKey(
+      codigoCliente: codigoCliente,
+      referencia: referencia,
+      importe: importe,
+      formaPago: formaPago,
+      tipoVenta: tipoVenta,
+      tipoModo: tipoModo,
+      codigoUsuario: actorCode,
+    );
+    final idempotencyToken = _pendingCobroIdempotencyTokens.putIfAbsent(
+      attemptKey,
+      () => buildCobroIdempotencyToken(
+        employeeCode: actorCode,
+        codigoCliente: codigoCliente,
+        referencia: referencia,
+      ),
+    );
+
     try {
       final response =
           await ApiClient.post('/cobros/$codigoCliente/registrar', {
@@ -471,13 +520,9 @@ class CobrosProvider extends ChangeNotifier {
         'tipoVenta': tipoVenta.code,
         'tipoModo': tipoModo.code,
         'tipoUsuario': isRepartidor ? 'REPARTIDOR' : 'COMERCIAL',
-        'codigoUsuario': codigoUsuario ?? employeeCode,
+        'codigoUsuario': actorCode,
         'observaciones': observaciones,
-        'idempotencyToken': buildCobroIdempotencyToken(
-          employeeCode: codigoUsuario ?? employeeCode,
-          codigoCliente: codigoCliente,
-          referencia: referencia,
-        ),
+        'idempotencyToken': idempotencyToken,
       });
       if (response['success'] == true) {
         await CacheService.invalidate('cobros:pendientes:$codigoCliente');
@@ -497,10 +542,15 @@ class CobrosProvider extends ChangeNotifier {
             );
           }
         }
+        _pendingCobroIdempotencyTokens.remove(attemptKey);
         return true;
       }
+      _pendingCobroIdempotencyTokens.remove(attemptKey);
       return false;
     } catch (e) {
+      if (!_shouldKeepCobroRetryToken(e)) {
+        _pendingCobroIdempotencyTokens.remove(attemptKey);
+      }
       _error = 'Error registrando cobro: $e';
       notifyListeners();
       return false;

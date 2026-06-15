@@ -10,8 +10,14 @@ const router = express.Router();
 const logger = require('../middleware/logger');
 const { verifyToken } = require('../middleware/auth');
 const { getPool } = require('../config/db');
-const { processMessage } = require('../src/chatbot/llm-orchestrator');
+const { processMessage, resolveVendorScope } = require('../src/chatbot/llm-orchestrator');
 const { logChatEvent } = require('../src/chatbot/moderation');
+const {
+    createChatbotUserContext,
+    authorizeResolvedClient,
+    buildAuthorizationSafeResponse,
+    normalizeCode,
+} = require('../src/chatbot/chatbot_authorization');
 
 // ── Health Check (no auth needed — MUST be before verifyToken) ───────────────
 
@@ -33,19 +39,33 @@ router.use(verifyToken);
 router.post('/message', async (req, res) => {
     let conn;
     try {
-        const { message, conversationHistory } = req.body;
+        const { message, conversationHistory, clientCode: bodyClientCode } = req.body;
 
-        if (!message || message.trim().length === 0) {
+        if (typeof message !== 'string' || message.trim().length === 0) {
             return res.status(400).json({ error: 'Mensaje requerido' });
         }
 
-        // Extract user context from JWT token (set by verifyToken middleware)
-        const userContext = {
-            userCode: req.user.code,
-            isJefeVentas: req.user.isJefeVentas,
-            role: req.user.role,
-            clientCode: req.body.clientCode // Optional: context from Flutter
-        };
+        if (message.length > 2000) {
+            return res.status(400).json({ error: 'Mensaje demasiado largo' });
+        }
+
+        if (conversationHistory !== undefined && !Array.isArray(conversationHistory)) {
+            return res.status(400).json({ error: 'conversationHistory debe ser un array' });
+        }
+
+        // Extract user context from JWT token only. Never trust body clientCode/vendedor.
+        const userContext = createChatbotUserContext(req.user || {});
+        if (!userContext.userCode) {
+            return res.status(403).json({ error: 'Usuario no autorizado' });
+        }
+        const vendorScope = resolveVendorScope(
+            userContext.userCode,
+            userContext.role,
+            userContext.isJefeVentas
+        );
+        const safeConversationHistory = Array.isArray(conversationHistory)
+            ? conversationHistory.slice(-5).filter(item => item && ['user', 'assistant'].includes(item.role) && typeof item.content === 'string')
+            : [];
 
         // Get database connection
         const pool = getPool();
@@ -54,11 +74,29 @@ router.post('/message', async (req, res) => {
         conn = await pool.connect();
 
         try {
+            const enrichedContext = { ...userContext, vendorScope };
+            const normalizedBodyClient = normalizeCode(bodyClientCode);
+            if (normalizedBodyClient) {
+                const { authorization } = await authorizeResolvedClient(
+                    conn,
+                    enrichedContext,
+                    normalizedBodyClient
+                );
+                if (!authorization.allowed) {
+                    const safeResponse = buildAuthorizationSafeResponse(authorization.code);
+                    return res.status(403).json({
+                        error: 'Cliente fuera de ambito autorizado',
+                        response: safeResponse,
+                    });
+                }
+                enrichedContext.hintClientCode = normalizedBodyClient;
+            }
+
             const response = await processMessage(
                 conn,
                 message.trim(),
-                userContext,
-                conversationHistory || []
+                enrichedContext,
+                safeConversationHistory
             );
 
             // Audit log
@@ -74,13 +112,17 @@ router.post('/message', async (req, res) => {
             });
         } finally {
             if (conn) {
-                try { await conn.close(); } catch (e) { }
+                try { await conn.close(); } catch (closeErr) {
+                    logger.debug(`[CHATBOT] conn.close ignored: ${closeErr.message}`);
+                }
             }
         }
     } catch (error) {
         logger.error(`[CHATBOT] Route error: ${error.message}`);
         if (conn && conn.connected) {
-            try { await conn.close(); } catch (e) { }
+            try { await conn.close(); } catch (closeErr) {
+                logger.debug(`[CHATBOT] conn.close ignored: ${closeErr.message}`);
+            }
         }
 
         res.status(500).json({

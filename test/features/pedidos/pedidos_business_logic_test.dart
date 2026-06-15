@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_order_api.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/unit_selector_modal.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 
 class _RecordingOrderApi implements PedidosOrderApi {
   int? confirmedOrderId;
@@ -15,6 +18,7 @@ class _RecordingOrderApi implements PedidosOrderApi {
   String? confirmedVehicleCode;
   String? confirmedDriverCode;
   String? confirmedRouteCode;
+  String? createdClientRequestId;
 
   @override
   Future<Map<String, dynamic>> createOrder({
@@ -24,7 +28,9 @@ class _RecordingOrderApi implements PedidosOrderApi {
     required String tipoVenta,
     required List<OrderLine> lines,
     required String observaciones,
+    String? clientRequestId,
   }) async {
+    createdClientRequestId = clientRequestId;
     return {
       'id': 42,
       'estado': 'BORRADOR',
@@ -74,6 +80,7 @@ class _BlockingOrderApi implements PedidosOrderApi {
     required String tipoVenta,
     required List<OrderLine> lines,
     required String observaciones,
+    String? clientRequestId,
   }) {
     createOrderCalls++;
     return createCompleter.future;
@@ -95,7 +102,70 @@ class _BlockingOrderApi implements PedidosOrderApi {
   }
 }
 
+class _QueuedCreateOrderApi implements PedidosOrderApi {
+  int createOrderCalls = 0;
+  int confirmOrderCalls = 0;
+  String? createdClientRequestId;
+
+  @override
+  Future<Map<String, dynamic>> createOrder({
+    required String clientCode,
+    required String clientName,
+    required String vendedorCode,
+    required String tipoVenta,
+    required List<OrderLine> lines,
+    required String observaciones,
+    String? clientRequestId,
+  }) async {
+    createOrderCalls++;
+    createdClientRequestId = clientRequestId;
+    return {
+      'success': true,
+      'queued': true,
+      'syncId': 'create_order_1',
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> confirmOrder(
+    int orderId,
+    String saleType, {
+    String? deliveryDate,
+    String? vehicleCode,
+    String? driverCode,
+    String? routeCode,
+  }) async {
+    confirmOrderCalls++;
+    return {
+      'header': {'id': orderId, 'estado': 'CONFIRMADO'},
+    };
+  }
+}
+
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  late Directory hiveDir;
+
+  setUpAll(() async {
+    hiveDir =
+        await Directory.systemTemp.createTemp("pedidos_offline_service_test_");
+    Hive.init(hiveDir.path);
+    await PedidosOfflineService.init();
+  });
+
+  tearDown(() async {
+    await PedidosOfflineService.clearAll();
+    PedidosOfflineService.debugResetCreateOrderForTesting();
+  });
+
+  tearDownAll(() async {
+    await Hive.close();
+    if (await hiveDir.exists()) {
+      await hiveDir.delete(recursive: true);
+    }
+  });
+
   group('OrderLine recalculation', () {
     test('keeps gift lines at zero sale and negative cost margin', () {
       final line = OrderLine(
@@ -356,11 +426,13 @@ void main() {
           unitsFraction: 1,
           precioTarifa1: 10);
       provider.addLine(product, 1, 0, 'CAJAS', 10);
+      final beforeEnvases = provider.lines.single.cantidadEnvases;
+      final beforeUnidades = provider.lines.single.cantidadUnidades;
       final result =
           provider.updateLine(0, cantidadEnvases: 2, cantidadUnidades: 0);
       expect(result, contains('Stock insuficiente'));
-      expect(provider.lines.single.cantidadEnvases, 1);
-      expect(provider.lines.single.cantidadUnidades, 0);
+      expect(provider.lines.single.cantidadEnvases, beforeEnvases);
+      expect(provider.lines.single.cantidadUnidades, beforeUnidades);
     });
 
     testWidgets(
@@ -682,7 +754,39 @@ void main() {
       expect(api.confirmedVehicleCode, '44');
       expect(api.confirmedDriverCode, '88');
       expect(api.confirmedRouteCode, 'R9');
+      expect(api.createdClientRequestId, isNotNull);
+      expect(api.createdClientRequestId, startsWith('pedido_57_4300010363_'));
     });
+    test('reports queued create as pending and does not confirm offline draft',
+        () async {
+      final api = _QueuedCreateOrderApi();
+      final provider =
+          PedidosProvider(orderApi: api, refreshAfterConfirm: false);
+      provider.setClient('4300010363', 'SUSHI LORCA, S.L.');
+      provider.addLine(
+          Product(
+              code: 'ART-OFFLINE',
+              name: 'Producto offline',
+              stockEnvases: 10,
+              precioTarifa1: 10),
+          1,
+          0,
+          'CAJAS',
+          10);
+
+      final result = await provider.confirmOrder('57');
+
+      expect(result, isNotNull);
+      expect(result!['queued'], isTrue);
+      expect(result['pendingConfirmation'], isTrue);
+      expect(result['estado'], 'PENDIENTE_SINCRONIZACION');
+      expect(isConfirmedOrderResultForProvider(result), isFalse);
+      expect(api.createOrderCalls, 1);
+      expect(api.confirmOrderCalls, 0);
+      expect(api.createdClientRequestId, startsWith('pedido_57_4300010363_'));
+      expect(provider.lines, hasLength(1));
+    });
+
     test('guards reentrant confirmation while a save is already in progress',
         () async {
       final api = _BlockingOrderApi();
@@ -714,6 +818,107 @@ void main() {
 
       expect(api.createOrderCalls, 1);
       expect(api.confirmOrderCalls, 1);
+    });
+  });
+
+  group("PedidosOfflineService bounded sync", () {
+    OrderLine line(String code) {
+      return OrderLine(
+        codigoArticulo: code,
+        descripcion: "Producto $code",
+        cantidadEnvases: 1,
+        cantidadUnidades: 0,
+        unidadMedida: "CAJAS",
+        precioVenta: 10,
+      );
+    }
+
+    test("syncs only the configured batch and preserves clientRequestId",
+        () async {
+      final requestIds = [];
+      var calls = 0;
+      PedidosOfflineService.debugSetCreateOrderForTesting((
+          {required String clientCode,
+          required String clientName,
+          required String vendedorCode,
+          required String tipoVenta,
+          required List lines,
+          required String? clientRequestId}) async {
+        calls++;
+        requestIds.add(clientRequestId);
+        return {"id": calls, "estado": "BORRADOR"};
+      });
+
+      for (final i in [0, 1, 2, 3, 4]) {
+        await PedidosOfflineService.queueOrderForSync(
+          clientCode: "C$i",
+          clientName: "Cliente $i",
+          vendedorCode: "57",
+          saleType: "CC",
+          lines: [line("ART$i")],
+        );
+      }
+
+      final result = await PedidosOfflineService.syncPendingOrdersWithResult(
+        maxBatchSize: 2,
+        yieldEvery: 1,
+      );
+      var allRequestIdsPreserved = true;
+      for (final id in requestIds) {
+        if (id.toString().startsWith("pedido_offline_sync_")) {
+        } else {
+          allRequestIdsPreserved = false;
+        }
+      }
+
+      expect(result["totalPendingAtStart"], 5);
+      expect(result["selectedForRun"], 2);
+      expect(result["processed"], 2);
+      expect(result["synced"], 2);
+      expect(result["remainingPending"], 3);
+      expect(result["isBackpressured"], isTrue);
+      expect(calls, 2);
+      expect(requestIds, hasLength(2));
+      expect(allRequestIdsPreserved, isTrue);
+    });
+
+    test("does not delete queued response without server confirmation",
+        () async {
+      PedidosOfflineService.debugSetCreateOrderForTesting((
+          {required String clientCode,
+          required String clientName,
+          required String vendedorCode,
+          required String tipoVenta,
+          required List lines,
+          required String? clientRequestId}) async {
+        return {"queued": true, "syncId": "transport_queue_1"};
+      });
+
+      await PedidosOfflineService.queueOrderForSync(
+        clientCode: "C001",
+        clientName: "Cliente",
+        vendedorCode: "57",
+        saleType: "CC",
+        lines: [line("ART-OFFLINE")],
+      );
+
+      final result = await PedidosOfflineService.syncPendingOrdersWithResult(
+        maxBatchSize: 1,
+      );
+      final failedSyncs = PedidosOfflineService.getFailedSyncs();
+      final failed = failedSyncs.single as Map;
+
+      expect(result["synced"], 0);
+      expect(result["failed"], 1);
+      expect(result["preservedFailures"], 1);
+      expect(failed["status"], "failed");
+      expect(failed["error"].toString(), contains("no confirmado"));
+      expect(failed["clientRequestId"].toString(),
+          startsWith("pedido_offline_sync_"));
+
+      final syncKey = failed["syncKey"].toString();
+      expect(await PedidosOfflineService.retryFailedSync(syncKey), isTrue);
+      expect(PedidosOfflineService.getPendingSyncs(), hasLength(1));
     });
   });
 }

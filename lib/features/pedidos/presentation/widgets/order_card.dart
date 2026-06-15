@@ -8,12 +8,14 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/client_balance_badge.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_status_badge.dart';
 
 class OrderCard extends StatelessWidget {
-
   const OrderCard({
-    required this.order, required this.onTap, super.key,
+    required this.order,
+    required this.onTap,
+    super.key,
     this.onDuplicate,
     this.onCancel,
     this.onViewAlbaran,
@@ -28,6 +30,7 @@ class OrderCard extends StatelessWidget {
   final VoidCallback? onViewAlbaran;
   final VoidCallback? onResend;
   final VoidCallback? onDelete;
+
   /// Margen visible solo para JEFE_VENTAS. Default false para que el rol
   /// COMERCIAL nunca lo vea por accidente si la pagina olvida pasarlo.
   final bool isMarginVisible;
@@ -70,8 +73,11 @@ class OrderCard extends StatelessWidget {
                   children: [
                     OrderStatusBadge(estado: order.estado, fontSize: 10),
                     const Spacer(),
-                    Icon(Icons.calendar_today_outlined,
-                        size: 12, color: Colors.white.withValues(alpha: 0.4),),
+                    Icon(
+                      Icons.calendar_today_outlined,
+                      size: 12,
+                      color: Colors.white.withValues(alpha: 0.4),
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       order.fechaFormatted.isNotEmpty
@@ -100,8 +106,8 @@ class OrderCard extends StatelessWidget {
                           ],
                         ),
                         borderRadius: BorderRadius.circular(12),
-                        border:
-                            Border.all(color: theme.primary.withValues(alpha: 0.3)),
+                        border: Border.all(
+                            color: theme.primary.withValues(alpha: 0.3)),
                       ),
                       child: Icon(
                         theme.icon,
@@ -132,6 +138,16 @@ class OrderCard extends StatelessWidget {
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                             ),
+                          ),
+                          ClientDebtStatusChip(
+                            balance: {
+                              if (order.saldoPendiente != null)
+                                'saldoPendiente': order.saldoPendiente,
+                              if (order.importeVencido != null)
+                                'vencido': order.importeVencido,
+                              if (order.deudaEstado.isNotEmpty)
+                                'balanceStatus': order.deudaEstado,
+                            },
                           ),
                         ],
                       ),

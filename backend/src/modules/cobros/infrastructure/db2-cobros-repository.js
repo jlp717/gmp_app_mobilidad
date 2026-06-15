@@ -161,6 +161,32 @@ function formatRepartidorDocKey(serie, numero) {
   return `${trim(serie)}-${trim(numero)}`;
 }
 
+function db2StringLiteral(value) {
+  const escaped = trim(value).split('\'').join('\'\'');
+  return '\'' + escaped + '\'';
+}
+
+function buildPendingSummaryPageDocsCte(rows) {
+  const docs = [];
+  const seen = new Set();
+  for (const row of rows || []) {
+    if (docs.length >= 100) break;
+    const client = trim(row.CLIENTE);
+    const serie = trim(row.SERIE_DOCUMENTO);
+    const numero = trim(row.NUMERO_DOCUMENTO);
+    if (!client || !serie || !numero) continue;
+    const key = [client, serie, numero].join('|');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    docs.push({ client, serie, numero, docKey: formatRepartidorDocKey(serie, numero) });
+  }
+  if (docs.length === 0) return '';
+  const values = docs
+    .map((doc) => '(' + [doc.client, doc.serie, doc.numero, doc.docKey].map(db2StringLiteral).join(', ') + ')')
+    .join(',\n          ');
+  return 'WITH PAGE_DOCS (CLIENTE, SERIE, NUMERO, DOC_KEY) AS (VALUES\n          ' + values + '\n        )';
+}
+
 function parseDocReference(reference) {
   const value = trim(reference);
   const dashIndex = value.lastIndexOf('-');
@@ -517,6 +543,19 @@ class Db2CobrosRepository extends CobrosRepository {
       ? "AND TRIM(CVC.CODIGOCLIENTEALBARAN) <> ''"
       : '';
 
+    const requestedLimit = parseInt(context.limit, 10);
+    const safeLimit = Number.isFinite(requestedLimit)
+      ? Math.min(Math.max(requestedLimit, 1), 100)
+      : 100;
+    const requestedOffset = parseInt(context.offset, 10);
+    const hasOffset = Number.isFinite(requestedOffset);
+    const safeOffset = hasOffset ? Math.max(requestedOffset, 0) : null;
+    const requestedPage = parseInt(context.page, 10);
+    const safePage = hasOffset
+      ? Math.floor(safeOffset / safeLimit) + 1
+      : (Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1);
+    const pageOffset = hasOffset ? safeOffset : (safePage - 1) * safeLimit;
+
     const sql = `
       SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
              COALESCE(NULLIF(TRIM(MIN(CLI.NOMBREALTERNATIVO)), ''), TRIM(MIN(CLI.NOMBRECLIENTE)), '') AS NOMBRE,
@@ -534,18 +573,15 @@ class Db2CobrosRepository extends CobrosRepository {
          ${emptyClientFilter}
          ${vendorClause}
        GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CVC.SERIEDOCUMENTO), CVC.NUMERODOCUMENTO
-       ORDER BY TOTAL_PENDIENTE DESC
+       ORDER BY TOTAL_PENDIENTE DESC, CLIENTE ASC, SERIE_DOCUMENTO ASC, NUMERO_DOCUMENTO ASC
+       OFFSET ${pageOffset} ROWS FETCH FIRST ${safeLimit} ROWS ONLY
     `;
 
     const rows = queryParams.length > 0
       ? await queryWithParams(sql, queryParams, [])
       : await query(sql, false);
 
-    const appAdjustments = await this.getAppSideCobrosByDocForSummary(
-      vendorClause,
-      queryParams,
-      emptyClientFilter,
-    );
+    const appAdjustments = await this.getAppSideCobrosByDocForSummary(rows);
 
     const summary = {};
     let grandTotal = 0;
@@ -553,6 +589,7 @@ class Db2CobrosRepository extends CobrosRepository {
 
     for (const r of rows || []) {
       const code = trim(r.CLIENTE);
+      if (!code) continue;
       const docKey = `${trim(r.SERIE_DOCUMENTO)}-${r.NUMERO_DOCUMENTO}`;
       const appPaid = appAdjustments.get(`${code}|${docKey}`) || 0;
       const rawTotal = parseFloat(r.TOTAL_PENDIENTE) || 0;
@@ -582,72 +619,68 @@ class Db2CobrosRepository extends CobrosRepository {
       grandTotal,
       grandTotalVencido,
       clientCount: Object.keys(summary).length,
+      source: 'CVC',
+      pagination: {
+        limit: safeLimit,
+        page: safePage,
+        offset: pageOffset,
+        returnedDocuments: (rows || []).length,
+      },
     };
   }
 
-  async getAppSideCobrosByDocForSummary(vendorClause, queryParams, emptyClientFilter = '') {
+  async getAppSideCobrosByDocForSummary(pageRows = []) {
     const adjustments = new Map();
     const add = (clientCode, docKey, amount) => {
       const client = trim(clientCode);
       const doc = trim(docKey);
       if (!client || !doc) return;
-      const key = `${client}|${doc}`;
+      const key = client + '|' + doc;
       adjustments.set(key, (adjustments.get(key) || 0) + (parseFloat(amount) || 0));
     };
 
+    const pageDocsCte = buildPendingSummaryPageDocsCte(pageRows);
+    if (!pageDocsCte) return adjustments;
+
     try {
-      const comercialSql = `
-        SELECT TRIM(C.CODIGO_CLIENTE) AS CLIENTE,
-               TRIM(C.REFERENCIA) AS REF,
-               COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP
-          FROM ${APP_SCHEMA}.COBROS C
-         WHERE EXISTS (
-           SELECT 1
-             FROM DSEDAC.CVC CVC
-            WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGO_CLIENTE)
-              AND CVC.IMPORTEPENDIENTE <> 0
-              AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
-              ${emptyClientFilter}
-              ${vendorClause}
-         )
-         GROUP BY TRIM(C.CODIGO_CLIENTE), TRIM(C.REFERENCIA)`;
-      const rows = queryParams.length > 0
-        ? await queryWithParams(comercialSql, queryParams, [])
-        : await query(comercialSql, false);
+      const comercialSql = [
+        pageDocsCte,
+        'SELECT P.CLIENTE AS CLIENTE,',
+        '       P.DOC_KEY AS REF,',
+        '       COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP',
+        '  FROM PAGE_DOCS P',
+        '  JOIN ' + APP_SCHEMA + '.COBROS C',
+        '    ON TRIM(C.CODIGO_CLIENTE) = P.CLIENTE',
+        '   AND (TRIM(C.REFERENCIA) = P.DOC_KEY OR TRIM(C.REFERENCIA) LIKE ' + db2StringLiteral('%:') + ' || P.DOC_KEY)',
+        ' GROUP BY P.CLIENTE, P.DOC_KEY',
+      ].join('\n');
+      const rows = await query(comercialSql, false);
       for (const row of rows || []) {
         const reference = trim(row.REF);
         const match = reference.match(/([^:]+-\d+)$/);
         add(row.CLIENTE, match ? match[1] : reference, row.TOTAL_APP);
       }
     } catch (error) {
-      logger.warn(`[COBROS_REPO] App-side COBROS doc summary subtract skipped: ${error.message}`);
+      logger.warn('[COBROS_REPO] App-side COBROS doc summary subtract skipped: ' + error.message);
     }
 
     try {
-      const repartidorSql = `
-        SELECT TRIM(R.CODIGOCLIENTEALBARAN) AS CLIENTE,
-               TRIM(R.SERIEDOCUMENTO) AS SERIE,
-               R.NUMERODOCUMENTO AS NUMERO,
-               COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_APP
-          FROM ${APP_SCHEMA}.REPARTIDOR_COBROS R
-         WHERE EXISTS (
-           SELECT 1
-             FROM DSEDAC.CVC CVC
-            WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(R.CODIGOCLIENTEALBARAN)
-              AND CVC.IMPORTEPENDIENTE <> 0
-              AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
-              ${emptyClientFilter}
-              ${vendorClause}
-         )
-         GROUP BY R.CODIGOCLIENTEALBARAN, R.SERIEDOCUMENTO, R.NUMERODOCUMENTO`;
-      const rows = queryParams.length > 0
-        ? await queryWithParams(repartidorSql, queryParams, [])
-        : await query(repartidorSql, false);
-      for (const row of rows || []) {
-        add(row.CLIENTE, formatRepartidorDocKey(row.SERIE, row.NUMERO), row.TOTAL_APP);
-      }
+      const repartidorSql = [
+        pageDocsCte,
+        'SELECT P.CLIENTE AS CLIENTE,',
+        '       P.DOC_KEY AS DOC_KEY,',
+        '       COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_APP',
+        '  FROM PAGE_DOCS P',
+        '  JOIN ' + APP_SCHEMA + '.REPARTIDOR_COBROS R',
+        '    ON TRIM(R.CODIGOCLIENTEALBARAN) = P.CLIENTE',
+        '   AND TRIM(R.SERIEDOCUMENTO) = P.SERIE',
+        '   AND TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) = P.NUMERO',
+        ' GROUP BY P.CLIENTE, P.DOC_KEY',
+      ].join('\n');
+      const rows = await query(repartidorSql, false);
+      for (const row of rows || []) add(row.CLIENTE, row.DOC_KEY, row.TOTAL_APP);
     } catch (error) {
-      logger.warn(`[COBROS_REPO] App-side REPARTIDOR_COBROS doc summary subtract skipped: ${error.message}`);
+      logger.warn('[COBROS_REPO] App-side REPARTIDOR_COBROS doc summary subtract skipped: ' + error.message);
     }
 
     return adjustments;

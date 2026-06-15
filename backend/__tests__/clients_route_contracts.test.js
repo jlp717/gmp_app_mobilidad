@@ -106,3 +106,65 @@ describe('clients route access-control contracts', () => {
     expect(firstSql).toContain("L.CODIGOCLIENTEALBARAN IN('C001','C002')");
   });
 });
+
+describe('clients route regression contracts', () => {
+  test('GET /api/clients/compare returns typed 400 when client1/client2 are sent without codes', async () => {
+    mockUser = { code: '80', role: 'JEFE_VENTAS', isJefeVentas: true };
+
+    const res = await request(makeApp()).get('/api/clients/compare?client1=C001&client2=C002&vendedorCodes=ALL');
+
+    expect(res.status).toBe(400);
+    expect(res.body).toMatchObject({
+      success: false,
+      code: 'INVALID_CLIENT_COMPARE_PARAMS',
+    });
+    expect(mockQuery).not.toHaveBeenCalled();
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+
+  test('GET /api/clients/:code detail does not select invalid DSEDAC.CLI.EMAIL column', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/SELECT\s+1\s+AS\s+OK/i.test(sql)) return [{ OK: 1 }];
+      if (/C\.NOMBRECLIENTE\s+as\s+name/i.test(sql)) {
+        return [{
+          CODE: 'C001',
+          NAME: 'Cliente Uno',
+          NIF: 'B00000000',
+          ADDRESS: 'Calle',
+          CITY: 'Ciudad',
+          PROVINCE: 'Provincia',
+          POSTALCODE: '00000',
+          PHONE: '111',
+          PHONE2: '222',
+          ROUTE: 'R1',
+          CONTACTPERSON: 'Contacto',
+          NOTES: '',
+          YEARCREATED: 2020,
+        }];
+      }
+      return [];
+    });
+
+    const res = await request(makeApp()).get('/api/clients/C001?vendedorCodes=01');
+
+    expect(res.status).toBe(200);
+    const detailSql = mockQueryWithParams.mock.calls.find(function (call) {
+      return /C\.NOMBRECLIENTE\s+as\s+name/i.test(call[0]);
+    })[0];
+    expect(detailSql).toMatch(/FROM\s+DSEDAC\.CLI\s+C/i);
+    expect(detailSql).not.toMatch(/\bC\.EMAIL\b/i);
+  });
+
+  test('GET /api/clients/:code/sales-history/family does not query invalid DSEDAC.ART.DESCRIPCION', async () => {
+    mockQuery.mockResolvedValue([]);
+
+    const res = await request(makeApp())
+      .get('/api/clients/C001/sales-history/family?vendedorCodes=01&family1=01&groupLevel=1');
+
+    expect(res.status).toBe(200);
+    const familySql = mockQuery.mock.calls[0][0];
+    expect(familySql).toMatch(/LEFT\s+JOIN\s+DSEDAC\.ART\s+A/i);
+    expect(familySql).toMatch(/DESCRIPCIONARTICULO|L\.DESCRIPCION/i);
+    expect(familySql).not.toMatch(/\bA\.DESCRIPCION\b/i);
+  });
+});

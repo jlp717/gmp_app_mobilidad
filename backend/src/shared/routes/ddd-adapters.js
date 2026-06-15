@@ -29,6 +29,11 @@ const { cachedQuery } = require('../../../services/query-optimizer');
 const { query, queryWithParams } = require('../../../config/db');
 const { TTL: RedisTTL } = require('../../../services/redis-cache');
 const {
+  loginLimiter,
+  sanitizeInput,
+  bruteForceIpTracker,
+} = require('../../../middleware/security');
+const {
   buildClientVendorParamFilter,
   buildVendedorFilterLACLAE,
   sanitizeForSQL,
@@ -42,6 +47,16 @@ const {
 const { getClientCodesFromCache } = require('../../../services/laclae');
 
 // TTL constants (milliseconds)
+const INTERNAL_SERVER_ERROR_MESSAGE = 'Error interno del servidor';
+
+function publicErrorMessageForStatus(error, status, fallbackMessage = INTERNAL_SERVER_ERROR_MESSAGE) {
+  return Number(status) >= 500 ? fallbackMessage : (error?.message || fallbackMessage);
+}
+
+function sendInternalServerError(res, fallbackMessage = INTERNAL_SERVER_ERROR_MESSAGE) {
+  return res.status(500).json({ success: false, error: fallbackMessage });
+}
+
 const TTL_MS = {
   PRODUCT_CATALOG: 5 * 60 * 1000,
   PRODUCT_DETAIL: 2 * 60 * 1000,
@@ -197,6 +212,53 @@ function resolvePedidoVendorScope(req, requestedVendorCodes) {
 
 function dddForbiddenBody(code, error) {
   return { success: false, code, error };
+}
+
+function numericHttpStatus(value) {
+  const status = Number(value);
+  return Number.isInteger(status) && status >= 400 && status <= 599 ? status : null;
+}
+
+function statusFromPedidoError(error, fallbackStatus = 500) {
+  const explicitStatus = numericHttpStatus(error?.status || error?.statusCode);
+  if (explicitStatus) return explicitStatus;
+  switch (error?.code) {
+    case 'INVALID_LINE_PAYLOAD':
+    case 'INVALID_ORDER':
+    case 'INVALID_SALE_TYPE':
+      return 400;
+    case 'ORDER_NOT_FOUND':
+    case 'LINE_NOT_FOUND':
+      return 404;
+    case 'ORDER_NOT_EDITABLE':
+    case 'PEDIDO_ALREADY_CONFIRMING':
+    case 'PEDIDO_INVALID_STATE':
+    case 'PEDIDO_ALREADY_ANULADO':
+      return 409;
+    default:
+      return fallbackStatus;
+  }
+}
+
+function sendPedidosMutationError(res, error, { fallbackMessage, fallbackCode = 'PEDIDOS_MUTATION_ERROR' } = {}) {
+  const status = statusFromPedidoError(error);
+  const code = error?.code || fallbackCode;
+  const publicMessage = status >= 500
+    ? (fallbackMessage || 'Error interno procesando pedido')
+    : (error?.message || fallbackMessage || 'Error procesando pedido');
+  return res.status(status).json({ success: false, code, error: publicMessage });
+}
+
+function validateDddOrderLinePayload(body = {}) {
+  const codigoArticulo = String(body.codigoArticulo || '').trim();
+  if (!codigoArticulo) {
+    return { ok: false, status: 400, body: { success: false, code: 'INVALID_LINE_PAYLOAD', error: 'codigoArticulo is required' } };
+  }
+  const claseLinea = body.claseLinea === undefined ? 'VT' : String(body.claseLinea).trim();
+  if (!['VT', 'SC'].includes(claseLinea)) {
+    return { ok: false, status: 400, body: { success: false, code: 'INVALID_LINE_PAYLOAD', error: 'claseLinea inválida' } };
+  }
+  return { ok: true, payload: { ...body, codigoArticulo, claseLinea } };
 }
 
 function authorizePedidoVendorCode(req, vendedorCode, action = 'operar') {
@@ -389,11 +451,15 @@ function createAuthRoutes() {
   const router = express.Router();
   const repo = new Db2AuthRepository(getDbPool());
 
-  router.post('/login', async (req, res) => {
+  router.post('/login',
+    bruteForceIpTracker,
+    loginLimiter,
+    sanitizeInput,
+    async (req, res) => {
     try {
       const { username, password } = req.body;
       if (!username || !password) {
-        return res.status(400).json({ error: 'Username and password required' });
+        return res.status(400).json({ error: 'Usuario y contraseña requeridos', code: 'MISSING_CREDENTIALS' });
       }
 
       const user = await repo.findByCode(username);
@@ -466,7 +532,7 @@ function createAuthRoutes() {
           isJefeVentas: user.isJefeVentas,
           vendedorCode: user.code,
           isRepartidor: user.role === 'REPARTIDOR',
-          showCommissions: true
+          showCommissions: process.env.HIDE_COMMISSIONS !== 'true'
         },
         role: user.role,
         vendedorCodes,
@@ -477,7 +543,7 @@ function createAuthRoutes() {
       });
     } catch (error) {
       logger.error(`[DDD-AUTH] Login error: ${error.message}`);
-      res.status(500).json({ error: 'Internal server error' });
+      res.status(500).json({ error: 'Internal server error', code: 'AUTH_INTERNAL_ERROR' });
     }
   });
 
@@ -531,7 +597,7 @@ function createPedidosRoutes() {
       }, res, req);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /products: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -547,7 +613,7 @@ function createPedidosRoutes() {
       res.json({ success: true, stock });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in POST /products/stock-batch: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -582,7 +648,7 @@ function createPedidosRoutes() {
       }, res, req);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /products/:code: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -627,7 +693,7 @@ function createPedidosRoutes() {
       }, res);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /history: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -652,7 +718,7 @@ function createPedidosRoutes() {
       }, res, req);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /stats: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -671,7 +737,7 @@ function createPedidosRoutes() {
       res.json({ success: true, cartItem: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in POST /cart/add: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -687,7 +753,7 @@ function createPedidosRoutes() {
       });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in POST /confirm: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -711,7 +777,7 @@ function createPedidosRoutes() {
       res.json({ success: true, balance });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /client-balance: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -731,7 +797,7 @@ function createPedidosRoutes() {
       res.json({ success: true, clientHistory: recommendations.clientHistory, similarClients: recommendations.similarClients });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /recommendations: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -756,7 +822,7 @@ function createPedidosRoutes() {
       }, res, req);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /orders/stats: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -769,7 +835,7 @@ function createPedidosRoutes() {
       res.json({ success: true, stock });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /products/:code/stock: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -781,7 +847,7 @@ function createPedidosRoutes() {
       res.json({ success: true, families });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /families: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -793,7 +859,7 @@ function createPedidosRoutes() {
       res.json({ success: true, brands });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /brands: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -816,7 +882,7 @@ function createPedidosRoutes() {
       res.json({ success: true, prices: safePrices });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /client-prices: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -938,7 +1004,7 @@ function createPedidosRoutes() {
       res.json({ success: true, alternatives: (similar || []).map((product) => stripMarginFromProduct(product, req.user)) });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /similar-products: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -964,7 +1030,7 @@ function createPedidosRoutes() {
       res.json({ success: true, products: (results || []).map((product) => stripMarginFromProduct(product, req.user)) });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /search-products: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -1068,7 +1134,7 @@ function createPedidosRoutes() {
       }, req.user));
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /product-history: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -1084,7 +1150,7 @@ function createPedidosRoutes() {
       res.json({ success: true, analytics });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /analytics: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -1100,7 +1166,7 @@ function createPedidosRoutes() {
       res.json({ success: true, families });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /families/detailed: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -1115,7 +1181,7 @@ function createPedidosRoutes() {
       res.json({ success: true, ...result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /draft-status: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -1131,7 +1197,7 @@ function createPedidosRoutes() {
       res.json({ success: true, ...result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in POST /draft-status/auto-confirm: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -1296,7 +1362,7 @@ function createPedidosRoutes() {
       res.json({ success: true, products });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in POST /complementary: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -1334,7 +1400,7 @@ function createPedidosRoutes() {
       }, res, req);
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -1355,7 +1421,7 @@ function createPedidosRoutes() {
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /delivery-options: ${error.message}`);
       const status = error.message.includes('Fecha reparto') ? 409 : 500;
-      res.status(status).json({ success: false, error: error.message });
+      res.status(status).json({ success: false, error: publicErrorMessageForStatus(error, status) });
     }
   });
 
@@ -1368,7 +1434,7 @@ function createPedidosRoutes() {
       res.json({ success: true, vehicles });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /available-vehicles: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -1411,7 +1477,7 @@ function createPedidosRoutes() {
       res.json({ success: true, order: stripMarginFromOrder(order, req.user) });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /:id: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -1472,7 +1538,7 @@ function createPedidosRoutes() {
         return res.status(409).json({ success: false, code: error.code, error: error.message });
       }
       logger.error(`[DDD-PEDIDOS] Error in POST /create: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -1536,11 +1602,7 @@ function createPedidosRoutes() {
       res.json({ success: true, ...normalized });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/confirm: ${error.message}`);
-      const status = error.message.includes('Fecha reparto') ? 409
-        : error.message.includes('BORRADOR') ? 409
-        : error.message.includes('no encontrado') ? 404
-        : 500;
-      res.status(status).json({ success: false, error: error.message });
+      return sendPedidosMutationError(res, error, { fallbackMessage: 'Error interno al confirmar pedido', fallbackCode: 'PEDIDO_CONFIRM_ERROR' });
     }
   });
 
@@ -1550,13 +1612,15 @@ function createPedidosRoutes() {
       const { id } = req.params;
       const ownership = await authorizePedidoMutation(req, id, 'modificar lineas de');
       if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
+      const validation = validateDddOrderLinePayload(req.body || {});
+      if (!validation.ok) return res.status(validation.status).json(validation.body);
       const pedidosService = require('../../../services/pedidos.service');
-      const result = await pedidosService.addOrderLine(parseInt(id), req.body);
+      const result = await pedidosService.addOrderLine(parseInt(id), validation.payload);
       invalidateOrderListCaches(cache);
       res.json({ success: true, line: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/lines: ${error.message}`);
-      res.status(error.code === 'ORDER_NOT_EDITABLE' ? 409 : 500).json({ success: false, error: error.message, code: error.code });
+      return sendPedidosMutationError(res, error, { fallbackMessage: 'Error interno al añadir línea de pedido', fallbackCode: 'PEDIDO_LINE_ADD_ERROR' });
     }
   });
 
@@ -1573,7 +1637,7 @@ function createPedidosRoutes() {
       res.json({ success: true, line: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/lines/:lineId: ${error.message}`);
-      res.status(error.code === 'ORDER_NOT_EDITABLE' ? 409 : 500).json({ success: false, error: error.message, code: error.code });
+      return sendPedidosMutationError(res, error, { fallbackMessage: 'Error interno al modificar línea de pedido', fallbackCode: 'PEDIDO_LINE_UPDATE_ERROR' });
     }
   });
 
@@ -1590,7 +1654,7 @@ function createPedidosRoutes() {
       res.json({ success: true, line: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/lines/:lineId/delete: ${error.message}`);
-      res.status(error.code === 'ORDER_NOT_EDITABLE' ? 409 : 500).json({ success: false, error: error.message, code: error.code });
+      return sendPedidosMutationError(res, error, { fallbackMessage: 'Error interno al eliminar línea de pedido', fallbackCode: 'PEDIDO_LINE_DELETE_ERROR' });
     }
   });
 
@@ -1607,8 +1671,7 @@ function createPedidosRoutes() {
       res.json({ success: true, line: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in DELETE /:id/lines/:lineId: ${error.message}`);
-      const status = error.code === "ORDER_NOT_EDITABLE" ? 409 : error.code === "ORDER_NOT_FOUND" ? 404 : 500;
-      res.status(status).json({ success: false, error: error.message, code: error.code });
+      return sendPedidosMutationError(res, error, { fallbackMessage: 'Error interno al eliminar línea de pedido', fallbackCode: 'PEDIDO_LINE_DELETE_ERROR' });
     }
   });
 
@@ -1632,7 +1695,7 @@ function createPedidosRoutes() {
         : error.code === 'INVALID_ORDER_STATUS' ? 400
           : error.code === 'INVALID_ORDER_TRANSITION' ? 409
             : 500;
-      res.status(statusCode).json({ success: false, error: error.message, code: error.code });
+      res.status(statusCode).json({ success: false, error: publicErrorMessageForStatus(error, statusCode), code: error.code });
     }
   });
 
@@ -1652,10 +1715,7 @@ function createPedidosRoutes() {
       res.json({ success: true, order: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/cancel: ${error.message}`);
-      const status = error.message.includes('no se puede') || error.message.includes('anulado') || error.message.includes('enviado')
-        ? 409
-        : error.message.includes('no encontrado') ? 404 : 500;
-      res.status(status).json({ success: false, error: error.message });
+      return sendPedidosMutationError(res, error, { fallbackMessage: 'Error interno al anular pedido', fallbackCode: 'PEDIDO_CANCEL_ERROR' });
     }
   });
 
@@ -1670,7 +1730,8 @@ function createPedidosRoutes() {
       res.json({ success: true, order: stripMarginFromOrder(order, req.user) });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /:id/clone: ${error.message}`);
-      res.status(error.message.includes('not found') ? 404 : 500).json({ success: false, error: error.message });
+      const statusCode = error.message.includes('not found') ? 404 : 500;
+      res.status(statusCode).json({ success: false, error: publicErrorMessageForStatus(error, statusCode) });
     }
   });
 
@@ -1685,7 +1746,7 @@ function createPedidosRoutes() {
       res.json({ success: true, albaranes });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /:id/albaran: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -1700,7 +1761,7 @@ function createPedidosRoutes() {
       res.json({ success: true, pdf });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /:id/pdf: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -1718,11 +1779,44 @@ function createPedidosRoutes() {
       res.json({ success: true, order: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in DELETE /:id: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      return sendPedidosMutationError(res, error, { fallbackMessage: 'Error interno al eliminar pedido', fallbackCode: 'PEDIDO_DELETE_ERROR' });
     }
   });
 
   return router;
+}
+
+async function getCobrosCreditLimit(clientCode) {
+  const code = String(clientCode || '').trim();
+  if (!code) return 0;
+  try {
+    const columnRows = await queryWithParams(
+      `SELECT COLUMN_NAME
+         FROM QSYS2.SYSCOLUMNS
+        WHERE TABLE_SCHEMA = ?
+          AND TABLE_NAME = ?
+          AND COLUMN_NAME = ?
+        FETCH FIRST 1 ROW ONLY`,
+      ['DSEDAC', 'CLI', 'LIMITECREDITO'],
+      false,
+      false,
+    );
+    const hasLimiteCredito = (columnRows || []).some((row) => String(row.COLUMN_NAME || '').trim() === 'LIMITECREDITO');
+    if (!hasLimiteCredito) return 0;
+    const cliRows = await queryWithParams(
+      `SELECT LIMITECREDITO
+         FROM DSEDAC.CLI
+        WHERE TRIM(CODIGOCLIENTE) = ?
+        FETCH FIRST 1 ROW ONLY`,
+      [code],
+      false,
+      false,
+    );
+    return parseFloat(cliRows?.[0]?.LIMITECREDITO) || 0;
+  } catch (error) {
+    logger.warn(`[DDD-COBROS] limiteCredito lookup skipped for ${code}: ${error.message}`);
+    return 0;
+  }
 }
 
 // =============================================================================
@@ -1749,6 +1843,17 @@ function createCobrosRoutes() {
     return `${role}:${userId}:${visibleScope}`;
   };
 
+  const parseCobrosPagination = (queryParams = {}) => {
+    const requestedLimit = parseInt(queryParams.limit, 10);
+    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 100) : 100;
+    const requestedOffset = parseInt(queryParams.offset, 10);
+    const hasOffset = Number.isFinite(requestedOffset);
+    const offset = hasOffset ? Math.max(requestedOffset, 0) : null;
+    const requestedPage = parseInt(queryParams.page, 10);
+    const page = hasOffset ? Math.floor(offset / limit) + 1 : (Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1);
+    return { limit, page, offset: hasOffset ? offset : (page - 1) * limit };
+  };
+
   const sendCobrosError = (res, error) => {
     const status = Number(error.status) ||
       (error.code === 'INVALID_IDEMPOTENCY_TOKEN' ? 400 :
@@ -1762,7 +1867,7 @@ function createCobrosRoutes() {
                       error.code === 'PAYMENT_ALREADY_REGISTERED' ? 409 : 500);
     return res.status(status).json({
       success: false,
-      error: error.message,
+      error: publicErrorMessageForStatus(error, status),
       code: error.code || 'COBROS_ERROR',
     });
   };
@@ -1790,7 +1895,7 @@ function createCobrosRoutes() {
       }, res);
     } catch (error) {
       logger.error(`[DDD-COBROS] Error in GET /pendientes: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -1804,14 +1909,18 @@ function createCobrosRoutes() {
       // Sin caché, cada /estado repetía esa query completa.
       const cacheKey = `ddd:cobros:estado:${String(codigoCliente).trim()}:${cobrosCacheScope(req)}`;
       await withCache(cache, cacheKey, TTL_MS.PENDIENTES, async () => {
-        const pendientes = await repo.getPendientes(String(codigoCliente).trim(), cobrosContext(req));
+        const clientCode = String(codigoCliente).trim();
+        const pendientes = await repo.getPendientes(clientCode, cobrosContext(req));
         const totalPendiente = parseFloat(pendientes?.resumen?.totalPendiente) || 0;
+        const limiteCredito = Number.isFinite(parseFloat(pendientes?.resumen?.limiteCredito))
+          ? parseFloat(pendientes.resumen.limiteCredito)
+          : await getCobrosCreditLimit(clientCode);
         return {
           success: true,
           estadoCliente: {
-            codigo: String(codigoCliente).trim(),
+            codigo: clientCode,
             nombre: '',
-            limiteCredito: 0,
+            limiteCredito,
             totalPendiente,
             diasMora: 0,
             estado: totalPendiente > 0 ? 'EN_ROJO' : 'ACTIVO',
@@ -1909,9 +2018,13 @@ function createCobrosRoutes() {
     try {
       const vendedorCodeParam = req.params.vendedorCode;
       logger.info(`[COBROS] Pending summary for vendor: ${vendedorCodeParam}`);
-      const cacheKey = `ddd:cobros:pending-summary:${String(vendedorCodeParam || '').trim()}:${cobrosCacheScope(req)}`;
+      const pagination = parseCobrosPagination(req.query);
+      const cacheKey = `ddd:cobros:pending-summary:${String(vendedorCodeParam || '').trim()}:${cobrosCacheScope(req)}:limit:${pagination.limit}:page:${pagination.page}:offset:${pagination.offset}`;
       await withCache(cache, cacheKey, TTL_MS.PENDIENTES, async () => {
-        const result = await repo.getPendingSummary(vendedorCodeParam, cobrosContext(req));
+        const result = await repo.getPendingSummary(vendedorCodeParam, {
+          ...cobrosContext(req),
+          ...pagination,
+        });
         return { success: true, ...result };
       }, res);
     } catch (error) {
@@ -1945,7 +2058,7 @@ function createCobrosRoutes() {
       }, res);
     } catch (error) {
       logger.error(`[DDD-COBROS] Error in GET /historico: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -1989,7 +2102,7 @@ function createEntregasRoutes() {
       }, res);
     } catch (error) {
       logger.error(`[DDD-ENTREGAS] Error in GET /albaranes: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -2010,7 +2123,7 @@ function createEntregasRoutes() {
       }, res);
     } catch (error) {
       logger.error(`[DDD-ENTREGAS] Error in GET /albaranes/:id: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -2037,7 +2150,7 @@ function createEntregasRoutes() {
       res.json({ success: true, delivery: result });
     } catch (error) {
       logger.error(`[DDD-ENTREGAS] Error in POST /deliver: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -2053,7 +2166,7 @@ function createEntregasRoutes() {
       }, res);
     } catch (error) {
       logger.error(`[DDD-ENTREGAS] Error in GET /gamification: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -2070,7 +2183,7 @@ function createEntregasRoutes() {
       }, res);
     } catch (error) {
       logger.error(`[DDD-ENTREGAS] Error in GET /summary: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -2101,7 +2214,7 @@ function createRuteroRoutes() {
       }, res);
     } catch (error) {
       logger.error(`[DDD-RUTERO] Error in GET /config: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -2121,7 +2234,7 @@ function createRuteroRoutes() {
       res.json({ success: true, result });
     } catch (error) {
       logger.error(`[DDD-RUTERO] Error in PUT /config/:id/order: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -2137,7 +2250,7 @@ function createRuteroRoutes() {
       }, res);
     } catch (error) {
       logger.error(`[DDD-RUTERO] Error in GET /commissions: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -2153,7 +2266,7 @@ function createRuteroRoutes() {
       }, res);
     } catch (error) {
       logger.error(`[DDD-RUTERO] Error in GET /summary: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -2290,7 +2403,7 @@ function createClientsRoutes() {
       res.json(result.data);
     } catch (error) {
       logger.error(`[DDD-CLIENTS] Error: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 
@@ -2338,7 +2451,7 @@ function createCommissionsRoutes() {
       res.json(result.data);
     } catch (error) {
       logger.error(`[DDD-COMMISSIONS] Error: ${error.message}`);
-      res.status(500).json({ success: false, error: error.message });
+      sendInternalServerError(res);
     }
   });
 

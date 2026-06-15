@@ -447,8 +447,8 @@ $mcp = [ordered]@{
   "time" = [ordered]@{ type="local"; command=@("C:/Users/Javier/.local/bin/uvx.exe","mcp-server-time"); enabled=$true; timeout=30000 }
   "dart-flutter-mcp" = [ordered]@{ type="local"; command=@("C:/flutter/bin/dart.bat","mcp-server"); enabled=$false; timeout=30000 }
   "pub-mcp" = [ordered]@{ type="local"; command=@("C:/nvm4w/nodejs/pub-mcp.cmd","--stdio"); enabled=$false; timeout=30000 }
-  "ibm-db2-mcp" = [ordered]@{ type="local"; command=@("C:/Program Files/nodejs/node.exe","C:/Users/Javier/.config/opencode/mcp/ibm-odbc-mcp.cjs"); environment=[ordered]@{ ODBC_DSN="GMP"; ODBC_UID='${env.ODBC_UID}'; ODBC_PWD='${env.ODBC_PWD}'; ODBC_SCHEMA="JAVIER" }; enabled=$false; timeout=30000 }
-  "gmp-deploy-ssh" = [ordered]@{ type="local"; command=@("C:/Program Files/nodejs/node.exe","C:/Users/Javier/.config/opencode/mcp/gmp-deploy-ssh-mcp.cjs"); environment=[ordered]@{ SSH_GMP_HOST='${env.SSH_GMP_HOST}'; SSH_GMP_USER='${env.SSH_GMP_USER}'; SSH_GMP_PASSWORD='${env.SSH_GMP_PASSWORD}' }; enabled=$false; timeout=30000 }
+  "ibm-db2-mcp" = [ordered]@{ type="local"; command=@("C:/Program Files/nodejs/node.exe","C:/Users/Javier/.config/opencode/mcp/ibm-odbc-mcp.cjs"); environment=[ordered]@{ ODBC_DSN="GMP"; ODBC_SCHEMA="JAVIER" }; enabled=$false; timeout=30000 }
+  "gmp-deploy-ssh" = [ordered]@{ type="local"; command=@("C:/Program Files/nodejs/node.exe","C:/Users/Javier/.config/opencode/mcp/gmp-deploy-ssh-mcp.cjs"); environment=[ordered]@{ SSH_GMP_HOST="192.168.1.230"; SSH_GMP_USER="gmp" }; enabled=$false; timeout=30000 }
   "playwright" = [ordered]@{ type="local"; command=@("C:/nvm4w/nodejs/playwright-mcp.cmd"); enabled=$false; timeout=30000 }
   "chrome-devtools" = [ordered]@{ type="local"; command=@("C:/nvm4w/nodejs/chrome-devtools-mcp.cmd"); enabled=$false; timeout=30000 }
   "github" = [ordered]@{ type="local"; command=@("C:/nvm4w/nodejs/mcp-server-github.cmd"); environment=[ordered]@{ GITHUB_TOKEN='${env.GITHUB_TOKEN}' }; enabled=$false; timeout=30000 }

@@ -6,7 +6,7 @@
     "username":  "Javier",
     "share":  "disabled",
     "autoupdate":  "notify",
-    "snapshot":  true,
+    "snapshot":  false,
     "instructions":  [
                          ".opencode/AGENTS.md",
                          "AGENTS.md",
@@ -34,6 +34,10 @@
                                    "build/**",
                                    ".next/**",
                                    ".swarm/**",
+                                   ".opencode-runtime/**",
+                                   ".opencode/snapshots/**",
+                                   ".opencode/chromadb/**",
+                                   ".beads/dolt/**",
                                    "**/*.log",
                                    ".git-rewrite/**"
                                ]
@@ -115,6 +119,9 @@
                        "lsp":  "allow"
                    },
     "plugin":  [
+                   "./.opencode/plugins/model-fallback-forward.ts",
+                   "./.opencode/plugins/flow-observability.ts",
+                   "./.opencode/plugins/execution-visibility.ts",
                    "./.opencode/plugins/env-protection.ts",
                    "./.opencode/plugins/context-compaction.ts",
                    "./.opencode/plugins/task-tracer.ts",
@@ -148,7 +155,10 @@
                   "readiness-smoke":  true,
                   "correction-capture":  true,
                   "handoff-ledger":  true,
-                  "daily-digest-summary":  true
+                  "daily-digest-summary":  true,
+                  "model-provider-health":  true,
+                  "flow-status":  true,
+                  "flow-trace":  true
               },
     "command":  {
                     "quality":  {
@@ -162,45 +172,60 @@
                                   "template":  "Ejecuta prompt-optimizer y decision-router sobre esta peticion. No implementes todavia; devuelve ruta, riesgos, gates y evidencias: $ARGUMENTS"
                               },
                     "flow-check":  {
-                                      "description":  "Valida la ruta V4 contra politicas de agentes, MCPs, skills, gates y evidencias.",
-                                      "agent":  "chief-engineer-assistant",
-                                      "template":  "Ejecuta flow-policy-check sobre la ruta actual o task_id. Si hay BLOCK, corrige la ruta antes de delegar. Argumentos: $ARGUMENTS"
-                                  },
+                                       "description":  "Valida la ruta V4 contra politicas de agentes, MCPs, skills, gates y evidencias.",
+                                       "agent":  "chief-engineer-assistant",
+                                       "template":  "Ejecuta flow-policy-check sobre la ruta actual o task_id. Si hay BLOCK, corrige la ruta antes de delegar. Argumentos: $ARGUMENTS"
+                                   },
                     "classify":  {
-                                      "description":  "Clasifica una peticion sin ejecutar: workflow, riesgo, modelo, autonomia y verificacion.",
-                                      "agent":  "chief-engineer-assistant",
-                                      "template":  "Ejecuta prompt-optimizer, decision-router y flow-policy-check sin implementar. Devuelve classification, agentes, MCPs, gates y stop_conditions: $ARGUMENTS"
-                                  },
+                                     "description":  "Clasifica una peticion sin ejecutar: workflow, riesgo, modelo, autonomia y verificacion.",
+                                     "agent":  "chief-engineer-assistant",
+                                     "template":  "Ejecuta prompt-optimizer, decision-router y flow-policy-check sin implementar. Devuelve classification, agentes, MCPs, gates y stop_conditions: $ARGUMENTS"
+                                 },
                     "route-eval":  {
-                                      "description":  "Ejecuta escenarios de regresion del decision-router.",
-                                      "agent":  "chief-engineer-assistant",
-                                      "template":  "Ejecuta decision-router con self_test=true. Si falla, no implementes nada y muestra diferencias: $ARGUMENTS"
-                                  },
+                                       "description":  "Ejecuta escenarios de regresion del decision-router.",
+                                       "agent":  "chief-engineer-assistant",
+                                       "template":  "Ejecuta decision-router con self_test=true. Si falla, no implementes nada y muestra diferencias: $ARGUMENTS"
+                                   },
                     "team-curator":  {
-                                      "description":  "Genera reporte curador semanal del equipo y opcionalmente lo envia a Telegram.",
-                                      "agent":  "team-curator",
-                                      "template":  "Ejecuta team-curator-report. Si ARGUMENTS contiene telegram, envia resumen a Telegram. Argumentos: $ARGUMENTS"
-                                  },
+                                         "description":  "Genera reporte curador semanal del equipo y opcionalmente lo envia a Telegram.",
+                                         "agent":  "team-curator",
+                                         "template":  "Ejecuta team-curator-report. Si ARGUMENTS contiene telegram, envia resumen a Telegram. Argumentos: $ARGUMENTS"
+                                     },
                     "model-audit":  {
-                                      "description":  "Audita modelos pinneados por agente y fallback policy.",
-                                      "agent":  "team-curator",
-                                      "template":  "Ejecuta model-assignment-audit. Si hay BLOCK, no ejecutes Tier 2/3 hasta corregirlo. Argumentos: $ARGUMENTS"
-                                  },
+                                        "description":  "Audita modelos pinneados por agente y fallback policy.",
+                                        "agent":  "team-curator",
+                                        "template":  "Ejecuta model-assignment-audit. Si hay BLOCK, no ejecutes Tier 2/3 hasta corregirlo. Argumentos: $ARGUMENTS"
+                                    },
                     "state-audit":  {
-                                      "description":  "Audita maquina de estados, transiciones y gates de aprobacion.",
-                                      "agent":  "team-curator",
-                                      "template":  "Ejecuta workflow-state-audit. Si hay BLOCK, no ejecutes Tier 2/3 hasta corregirlo. Argumentos: $ARGUMENTS"
-                                  },
+                                        "description":  "Audita maquina de estados, transiciones y gates de aprobacion.",
+                                        "agent":  "team-curator",
+                                        "template":  "Ejecuta workflow-state-audit. Si hay BLOCK, no ejecutes Tier 2/3 hasta corregirlo. Argumentos: $ARGUMENTS"
+                                    },
                     "approve-plan":  {
-                                      "description":  "Aprueba explicitamente el plan de una tarea antes de editar codigo.",
-                                      "agent":  "chief-engineer-assistant",
-                                      "template":  "Ejecuta plan-approval-gate con action=approve para el task_id indicado. Solo acepta frases como 'apruebo el plan' o 'adelante con el plan'. Argumentos: $ARGUMENTS"
-                                  },
+                                         "description":  "Aprueba explicitamente el plan de una tarea antes de editar codigo.",
+                                         "agent":  "chief-engineer-assistant",
+                                         "template":  "Ejecuta plan-approval-gate con action=approve para el task_id indicado. Solo acepta frases como \u0027apruebo el plan\u0027 o \u0027adelante con el plan\u0027. Argumentos: $ARGUMENTS"
+                                     },
                     "readiness":  {
                                       "description":  "Smoke test barato de proveedores, Cursor, MCPs, skills, tools, comandos y ultimo preflight.",
                                       "agent":  "team-curator",
                                       "template":  "Ejecuta readiness-smoke. Si hay BLOCK, no inicies Tier 2/3 hasta corregirlo. Argumentos: $ARGUMENTS"
                                   },
+                    "flow":  {
+                                 "description":  "Muestra ejecucion reciente: tools, errores, fallback y salud de proveedores.",
+                                 "agent":  "chief-engineer-assistant",
+                                 "template":  "Ejecuta flow-status con limit=20. Si ARGUMENTS trae session_id, filtra por esa sesion. Resume en lenguaje claro que se ejecuto y si hay fallback activo."
+                             },
+                    "models":  {
+                                   "description":  "Estado de fallback de modelos y proveedores bloqueados.",
+                                   "agent":  "chief-engineer-assistant",
+                                   "template":  "Ejecuta model-provider-health. Si ARGUMENTS trae un agente, pasalo como agent. Explica modelo efectivo y bloqueos activos."
+                               },
+                    "trace":  {
+                                  "description":  "Resumen legible paso a paso del flujo reciente (fases, tools, modelos).",
+                                  "agent":  "chief-engineer-assistant",
+                                  "template":  "Ejecuta flow-trace mode=summary limit=20. Si ARGUMENTS trae session_id, filtralo. Explica que se ejecuto en lenguaje claro."
+                              },
                     "teach":  {
                                   "description":  "Guarda una correccion de Javier como memoria prioritaria.",
                                   "agent":  "chief-engineer-assistant",
@@ -243,78 +268,161 @@
                                  }
                 },
     "mcp":  {
-                "context7":  {
-                                 "enabled":  true
-                             },
+                "context7-local":  {
+                                       "enabled":  true,
+                                       "type":  "local",
+                                       "command":  [
+                                                   "C:/nvm4w/nodejs/context7-mcp.cmd"
+                                               ],
+                                       "timeout":  30000
+                                   },
                 "ddg-search":  {
-                                   "enabled":  true
+                                   "enabled":  true,
+                                   "type":  "local",
+                                   "command":  [
+                                                   "C:/nvm4w/nodejs/duckduckgo-mcp-server.cmd"
+                                               ],
+                                   "timeout":  30000
                                },
-                "fetch":  {
-                              "enabled":  true
-                          },
-                "git":  {
-                            "enabled":  true
-                        },
+                "fetch-local":  {
+                                    "enabled":  true,
+                                    "type":  "local",
+                                    "command":  [
+                                                   "C:/nvm4w/nodejs/fetch-mcp.cmd"
+                                               ],
+                                    "timeout":  30000
+                                },
+                "git-local":  {
+                                  "enabled":  true,
+                                  "type":  "local",
+                                  "command":  [
+                                                   "C:/nvm4w/nodejs/git-mcp-server.cmd"
+                                               ],
+                                  "timeout":  30000
+                              },
                 "beads":  {
-                              "enabled":  true
+                              "enabled":  true,
+                              "type":  "local",
+                              "command":  [
+                                              "C:/Users/Javier/AppData/Local/Programs/Python/Python311/Scripts/beads-mcp.exe"
+                                          ],
+                              "timeout":  30000
                           },
-                "time":  {
-                             "enabled":  true
-                         },
                 "memory":  {
-                               "enabled":  true
+                               "enabled":  true,
+                               "type":  "local",
+                               "command":  [
+                                               "C:/nvm4w/nodejs/mcp-server-memory.cmd"
+                                           ],
+                               "timeout":  30000
                            },
                 "sequential-thinking":  {
-                                            "enabled":  true
+                                            "enabled":  true,
+                                            "type":  "local",
+                                            "command":  [
+                                                            "C:/nvm4w/nodejs/mcp-server-sequential-thinking.cmd"
+                                                        ],
+                                            "timeout":  30000
                                         },
                 "dart-flutter-mcp":  {
-                                         "enabled":  true
+                                         "enabled":  false,
+                                         "type":  "local",
+                                         "command":  [
+                                                         "C:/flutter/bin/dart.bat",
+                                                         "mcp-server"
+                                                     ],
+                                         "timeout":  30000
                                      },
                 "pub-mcp":  {
-                                "enabled":  true
+                                "enabled":  true,
+                                "type":  "local",
+                                "command":  [
+                                                "C:/nvm4w/nodejs/pub-mcp.cmd",
+                                                "--stdio"
+                                            ],
+                                "timeout":  30000
                             },
                 "ibm-db2-mcp":  {
-                                    "enabled":  true
+                                    "type":  "local",
+                                    "command":  [
+                                                    "C:\\Program Files\\nodejs\\node.exe",
+                                                    "C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/scripts/opencode/mcp/ibm-odbc-mcp.cjs"
+                                                ],
+                                    "environment":  {
+                                                        "ODBC_DSN":  "GMP",
+                                                        "ODBC_SCHEMA":  "JAVIER"
+                                                    },
+                                    "enabled":  true,
+                                    "timeout":  30000,
+                                    "env":  {
+                                                "ODBC_DSN":  "GMP",
+                                                "ODBC_SCHEMA":  "JAVIER"
+                                            }
                                 },
                 "gmp-deploy-ssh":  {
-                                       "enabled":  true
+                                       "type":  "local",
+                                       "command":  [
+                                                       "C:\\Program Files\\nodejs\\node.exe",
+                                                       "C:/Users/Javier/Desktop/Repositorios/gmp_app_mobilidad/scripts/opencode/mcp/gmp-deploy-ssh-mcp.cjs"
+                                                   ],
+                                       "environment":  {
+                                                           "SSH_GMP_HOST":  "192.168.1.230",
+                                                           "SSH_GMP_USER":  "gmp"
+                                                       },
+                                       "enabled":  true,
+                                       "timeout":  30000
                                    },
                 "playwright":  {
-                                   "enabled":  true
+                                   "enabled":  true,
+                                   "type":  "local",
+                                   "command":  [
+                                                   "C:/nvm4w/nodejs/playwright-mcp.cmd"
+                                               ],
+                                   "timeout":  30000
                                },
                 "chrome-devtools":  {
-                                        "enabled":  true
+                                        "enabled":  true,
+                                        "type":  "local",
+                                        "command":  [
+                                                   "C:/nvm4w/nodejs/chrome-devtools-mcp.cmd"
+                                               ],
+                                        "timeout":  30000
                                     },
                 "github":  {
-                               "enabled":  true
+                               "enabled":  true,
+                               "type":  "local",
+                               "command":  [
+                                               "C:/nvm4w/nodejs/mcp-server-github.cmd"
+                                           ],
+                               "environment":  {
+                                                   "GITHUB_TOKEN":  "${env.GITHUB_TOKEN}"
+                                               },
+                               "timeout":  30000
                            },
-                "gh_grep":  {
-                                "enabled":  true
-                            },
                 "firecrawl":  {
-                                  "enabled":  false
+                                  "enabled":  false,
+                                  "type":  "local",
+                                  "command":  [
+                                                   "C:/nvm4w/nodejs/firecrawl-mcp.cmd"
+                                               ],
+                                  "timeout":  30000
                               },
                 "sentry":  {
-                               "enabled":  false
+                               "enabled":  false,
+                               "type":  "local",
+                               "command":  [
+                                                   "C:/nvm4w/nodejs/mcp-server-sentry.cmd"
+                                               ],
+                               "timeout":  30000
                            },
-                "supabase":  {
-                                 "enabled":  false
-                             },
-                "postgres":  {
-                                 "enabled":  false
-                             },
-                "telegram":  {
-                                 "enabled":  false
-                             },
                 "filesystem":  {
-                                   "enabled":  false
-                               },
-                "claude-flow":  {
-                                    "enabled":  false
-                                },
-                "guardvibe":  {
-                                  "enabled":  false
-                              }
+                                   "enabled":  false,
+                                   "type":  "local",
+                                   "command":  [
+                                                   "C:/nvm4w/nodejs/mcp-server-filesystem.cmd"
+                                               ],
+                                   "timeout":  30000
+                               }
             },
     "provider":  {
                      "openai":  {
@@ -348,19 +456,18 @@
                                                                                 }
                                                                }
                                                }
-                                }
-,
+                                },
                      "opencode":  {
                                       "models":  {
                                                      "deepseek-v4-flash-free":  {
-                                                                                     "name":  "DeepSeek V4 Flash Free"
-                                                                                 },
+                                                                                    "name":  "DeepSeek V4 Flash Free"
+                                                                                },
                                                      "mimo-v2.5-free":  {
                                                                             "name":  "MiMo V2.5 Free"
                                                                         },
                                                      "minimax-m3-free":  {
-                                                                              "name":  "MiniMax M3 Free"
-                                                                          },
+                                                                             "name":  "MiniMax M3 Free"
+                                                                         },
                                                      "nemotron-3-super-free":  {
                                                                                    "name":  "Nemotron 3 Super Free"
                                                                                },

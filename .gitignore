@@ -12,6 +12,7 @@
 
 # Secrets and configuration
 .opencode/
+.opencode-runtime/
 .env
 .config/
 .secrets/

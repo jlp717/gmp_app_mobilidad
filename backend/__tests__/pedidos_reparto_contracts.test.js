@@ -259,6 +259,7 @@ describe('pedidos reparto confirmation contract', () => {
   test('DSEDAC target exports commercial order to CPC/LPC with ERP column names', async () => {
     process.env.PEDIDOS_CONFIRMATION_SCHEMA = 'DSEDAC';
     process.env.PEDIDOS_EXPORT_TO_SYSTEM = 'true';
+    process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED = 'true';
     process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED = 'true';
     process.env.PEDIDOS_SYSTEM_TERMINAL = '10';
     mockGetClientDays.mockReturnValue({
@@ -311,6 +312,7 @@ describe('pedidos reparto confirmation contract', () => {
   test('DSEDAC target carries manual vehicle assignment into CPC export', async () => {
     process.env.PEDIDOS_CONFIRMATION_SCHEMA = 'DSEDAC';
     process.env.PEDIDOS_EXPORT_TO_SYSTEM = 'true';
+    process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED = 'true';
     process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED = 'true';
     process.env.PEDIDOS_SYSTEM_TERMINAL = '10';
     mockGetClientDays.mockReturnValue({

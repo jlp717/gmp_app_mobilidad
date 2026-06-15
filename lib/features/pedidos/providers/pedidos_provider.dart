@@ -81,6 +81,7 @@ class PedidosProvider with ChangeNotifier {
 
   // ── Product Catalog State ──
   List<Product> _products = [];
+  final Map<String, Product> _productMetadataByCode = {};
   bool _isLoadingProducts = false;
   String? _productSearch;
   String? _selectedFamily;
@@ -122,6 +123,7 @@ class PedidosProvider with ChangeNotifier {
 
   // ── Client Balance ──
   Map<String, dynamic> _clientBalance = {};
+  int _clientBalanceLoadGeneration = 0;
 
   // ── Favorites (Hive-based, local) ──
   final Set<String> _favoriteProductCodes = {};
@@ -129,6 +131,7 @@ class PedidosProvider with ChangeNotifier {
   // ── Auto-save ──
   DateTime? _lastAutoSaved;
   bool _isDirty = false;
+  String? _activeCheckoutClientRequestId;
 
   // ── Stock Filter ──
   bool _onlyWithStock = false;
@@ -197,6 +200,36 @@ class PedidosProvider with ChangeNotifier {
 
   double get _discountFactor => 1 - (_globalDiscountPct / 100);
 
+  String _productCacheKey(String productCode) => productCode.trim();
+
+  void _rememberProductMetadata(Product product) {
+    final key = _productCacheKey(product.code);
+    if (key.isEmpty) return;
+    _productMetadataByCode[key] = product;
+  }
+
+  void _rememberProductMetadataBatch(Iterable<Product> products) {
+    for (final product in products) {
+      _rememberProductMetadata(product);
+    }
+  }
+
+  Product? _productMetadataForCode(String productCode) {
+    final key = _productCacheKey(productCode);
+    if (key.isEmpty) return null;
+    return _productMetadataByCode[key];
+  }
+
+  String _newCheckoutClientRequestId(String vendedorCode) {
+    final vendor =
+        vendedorCode.trim().isEmpty ? 'unknown' : vendedorCode.trim();
+    final client = (_clientCode ?? '').trim().isEmpty
+        ? 'unknown'
+        : (_clientCode ?? '').trim();
+    final stamp = DateTime.now().toUtc().microsecondsSinceEpoch;
+    return 'pedido_${vendor}_${client}_$stamp';
+  }
+
   // ── Getters ──
   List<OrderLine> get lines => List.unmodifiable(_lines);
   String? get clientCode => _clientCode;
@@ -222,10 +255,13 @@ class PedidosProvider with ChangeNotifier {
   String? get error => _error;
   Map<String, dynamic> get clientBalance => _clientBalance;
   double get clientSaldoPendiente {
-    final saldo = _clientBalance['saldoPendiente'];
+    final saldo = _clientBalance['saldoPendiente'] ??
+        _clientBalance['pendiente'] ??
+        _clientBalance['totalPendiente'] ??
+        _clientBalance['deuda'];
     if (saldo is num) return saldo.toDouble();
     if (saldo is String) return double.tryParse(saldo) ?? 0;
-    return 0; // Defensive: Map or unexpected type -> 0
+    return 0;
   }
 
   Set<String> get favoriteProductCodes => _favoriteProductCodes;
@@ -449,12 +485,18 @@ class PedidosProvider with ChangeNotifier {
       _productOffset = 0;
       _hasMoreProducts = true;
       _products = [];
+      _productMetadataByCode.clear();
+      _activeCheckoutClientRequestId = null;
       _productSearch = null;
       _selectedFamily = null;
       _selectedBrand = null;
     }
     _clientCode = code;
     _clientName = name;
+    _clientBalance = {
+      'balanceStatus': 'loading',
+      'clientCode': code.trim(),
+    };
     notifyListeners();
   }
 
@@ -468,11 +510,15 @@ class PedidosProvider with ChangeNotifier {
     _clientHistory.clear();
     _similarClients.clear();
     _products = [];
+    _productMetadataByCode.clear();
+    _activeCheckoutClientRequestId = null;
     _productOffset = 0;
     _hasMoreProducts = false;
     _productSearch = null;
     _selectedFamily = null;
     _selectedBrand = null;
+    _clientBalance = {};
+    _clientBalanceLoadGeneration++;
     notifyListeners();
   }
 
@@ -554,6 +600,7 @@ class PedidosProvider with ChangeNotifier {
         return;
       }
 
+      _rememberProductMetadataBatch(results);
       final filtered =
           _onlyWithStock ? results.where((p) => p.hasStock).toList() : results;
       if (reset) {
@@ -625,13 +672,16 @@ class PedidosProvider with ChangeNotifier {
 
   void _applyStockToProduct(String productCode, Map<String, double> stock) {
     final idx = _products.indexWhere((p) => p.code == productCode);
-    if (idx < 0) return;
+    final cached = _productMetadataForCode(productCode);
+    final product = idx >= 0 ? _products[idx] : cached;
+    if (product == null) return;
 
-    final product = _products[idx];
-    _products[idx] = product.copyWithStock(
+    final updated = product.copyWithStock(
       stockEnvases: stock['envases'] ?? product.stockEnvases,
       stockUnidades: stock['unidades'] ?? product.stockUnidades,
     );
+    if (idx >= 0) _products[idx] = updated;
+    _rememberProductMetadata(updated);
   }
 
   Future<void> refreshStock(String productCode) async {
@@ -660,6 +710,8 @@ class PedidosProvider with ChangeNotifier {
       _notify(immediate: true);
       return msg;
     }
+
+    _rememberProductMetadata(product);
 
     final unit = unidadMedida.trim().isEmpty
         ? 'CAJAS'
@@ -788,6 +840,7 @@ class PedidosProvider with ChangeNotifier {
     }
 
     _syncGiftPromotionLines(product.code, product: product);
+    _activeCheckoutClientRequestId = null;
     _error = null;
     _isDirty = true;
     _invalidateCache();
@@ -829,7 +882,10 @@ class PedidosProvider with ChangeNotifier {
     }
 
     final pIdx = _products.indexWhere((p) => p.code == line.codigoArticulo);
-    final product = pIdx >= 0 ? _products[pIdx] : null;
+    final listedProduct = pIdx >= 0 ? _products[pIdx] : null;
+    if (listedProduct != null) _rememberProductMetadata(listedProduct);
+    final product =
+        listedProduct ?? _productMetadataForCode(line.codigoArticulo);
 
     if (product != null && product.isDualFieldProduct) {
       final nextEnvases = cantidadEnvases ?? line.cantidadEnvases;
@@ -850,10 +906,10 @@ class PedidosProvider with ChangeNotifier {
       if (cantidadEnvases != null) line.cantidadEnvases = cantidadEnvases;
       if (cantidadUnidades != null) line.cantidadUnidades = cantidadUnidades;
     } else {
-      if (pIdx >= 0) {
+      if (product != null) {
         final maxQty = nextUnit == 'CAJAS'
-            ? product!.stockEnvases
-            : product!.stockForUnit(nextUnit);
+            ? product.stockEnvases
+            : product.stockForUnit(nextUnit);
         if (nextQty > maxQty) {
           final msg = nextUnit == 'CAJAS'
               ? 'Stock insuficiente: Solo hay ${product.stockEnvases.toInt()} cajas.'
@@ -877,22 +933,22 @@ class PedidosProvider with ChangeNotifier {
     final shouldSyncGifts =
         !line.isAutoGift && line.tipoLinea.trim().toUpperCase() != 'G';
     if (precioVenta != null) line.precioVenta = precioVenta;
-    if (pIdx >= 0) {
-      final productForUnit = _products[pIdx];
-      line.unidadesCaja = productForUnit.quantityPerBoxForUnit(nextUnit);
-      line.precioCosto = productForUnit.costForUnit(nextUnit);
-      line.precioMinimo = productForUnit.minimumPriceForUnit(nextUnit);
+    if (product != null) {
+      line.unidadesCaja = product.quantityPerBoxForUnit(nextUnit);
+      line.precioCosto = product.costForUnit(nextUnit);
+      line.precioMinimo = product.minimumPriceForUnit(nextUnit);
     }
     line.recalculate();
     if (shouldSyncGifts) {
       _syncGiftPromotionLines(
         line.codigoArticulo,
-        product: pIdx >= 0 ? _products[pIdx] : null,
+        product: product,
       );
     }
     _lastQtyByProduct[_qtyKey(line.codigoArticulo)] = nextQty;
     _lastUnitByProduct[_qtyKey(line.codigoArticulo, _clientCode)] =
         line.unidadMedida;
+    _activeCheckoutClientRequestId = null;
     _isDirty = true;
     _invalidateCache();
     _notify();
@@ -954,6 +1010,7 @@ class PedidosProvider with ChangeNotifier {
     _lastAutoSaved = null;
     _complementaryProducts = [];
     _clientBalance = {};
+    _clientBalanceLoadGeneration++;
     _error = null;
     _invalidateCache();
     _notify();
@@ -1151,6 +1208,8 @@ class PedidosProvider with ChangeNotifier {
           : '';
       final fullObservaciones =
           [discountTag, obs].where((s) => s.isNotEmpty).join(' ').trim();
+      final clientRequestId = _activeCheckoutClientRequestId ??=
+          _newCheckoutClientRequestId(vendedorCode);
 
       // Step 1: Create the order
       debugPrint(
@@ -1162,8 +1221,18 @@ class PedidosProvider with ChangeNotifier {
         tipoVenta: _saleType,
         lines: linesForSubmit,
         observaciones: fullObservaciones,
+        clientRequestId: clientRequestId,
       );
       debugPrint('[confirmOrder] createOrder result id=${createResult['id']}');
+
+      if (createResult['queued'] == true) {
+        final pending = Map<String, dynamic>.from(createResult);
+        pending['pendingConfirmation'] = true;
+        pending['estado'] ??= 'PENDIENTE_SINCRONIZACION';
+        pending['message'] ??=
+            'Pedido guardado para sincronizar. No esta confirmado todavia.';
+        return pending;
+      }
 
       if (createResult['id'] == null) {
         _error = 'Error al crear el pedido';
@@ -1202,6 +1271,8 @@ class PedidosProvider with ChangeNotifier {
         _globalDiscountPct = 0;
         _complementaryProducts = [];
         _clientBalance = {};
+        _clientBalanceLoadGeneration++;
+        _productMetadataByCode.clear();
       }
 
       // Always refresh orders list + stats after any confirmation attempt
@@ -1212,6 +1283,7 @@ class PedidosProvider with ChangeNotifier {
 
       debugPrint(
           '[confirmOrder] SUCCESS: order confirmed, result keys=${result.keys.toList()}');
+      _activeCheckoutClientRequestId = null;
       return result;
     } catch (e, st) {
       debugPrint('[confirmOrder] ERROR: $e');
@@ -1532,11 +1604,45 @@ class PedidosProvider with ChangeNotifier {
 
   // ── Client Balance ──
   Future<void> loadClientBalance(String clientCode) async {
+    final code = clientCode.trim();
+    if (code.isEmpty) {
+      _clientBalance = {};
+      notifyListeners();
+      return;
+    }
+
+    final generation = ++_clientBalanceLoadGeneration;
+    _clientBalance = {
+      'balanceStatus': 'loading',
+      'clientCode': code,
+    };
+    notifyListeners();
+
     try {
-      _clientBalance = await PedidosService.getClientBalance(clientCode);
+      final balance = await PedidosService.getClientBalance(code);
+      if (_disposed || generation != _clientBalanceLoadGeneration) return;
+      if ((_clientCode ?? '').trim() != code) return;
+      _clientBalance = balance.isEmpty
+          ? {
+              'balanceStatus': 'unknown',
+              'clientCode': code,
+              'message': 'Sin datos de deuda devueltos',
+            }
+          : {
+              ...balance,
+              'balanceStatus': balance['balanceStatus'] ?? 'data',
+              'clientCode': code,
+            };
       notifyListeners();
     } catch (e) {
-      debugPrint('[PedidosProvider] loadClientBalance error: $e');
+      if (_disposed || generation != _clientBalanceLoadGeneration) return;
+      _clientBalance = {
+        'balanceStatus': 'error',
+        'loadError': true,
+        'clientCode': code,
+        'message': 'No se pudo cargar la deuda',
+      };
+      notifyListeners();
     }
   }
 

@@ -3,6 +3,7 @@
 /// Hive-based local storage for draft orders and offline sync queue
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
@@ -13,9 +14,21 @@ import 'package:hive_flutter/hive_flutter.dart';
 class PedidosOfflineService {
   static const _draftsBoxName = 'pedidos_drafts';
   static const _syncQueueBoxName = 'pedidos_sync_queue';
+  static const _defaultMaxBatchSize = 25;
+  static const _maxBatchSize = 50;
+  static const _maxConcurrentSyncs = 1;
+  static const _defaultYieldEvery = 5;
 
   static Box<dynamic>? _draftsBox;
   static Box<dynamic>? _syncQueueBox;
+
+  static Future Function(
+      {required String clientCode,
+      required String clientName,
+      required String vendedorCode,
+      required String tipoVenta,
+      required List lines,
+      required String? clientRequestId}) _createOrder = _defaultCreateOrder;
 
   /// Initialize Hive boxes
   static Future<void> init() async {
@@ -114,91 +127,127 @@ class PedidosOfflineService {
   // ── Sync Queue (offline order confirmations) ──
 
   /// Queue a confirmed order for sync when back online
-  static Future<void> queueOrderForSync({
+  static Future queueOrderForSync({
     required String clientCode,
     required String clientName,
     required String vendedorCode,
     required String saleType,
-    required List<OrderLine> lines,
+    required List lines,
   }) async {
     final box = _syncQueueBox ?? await Hive.openBox(_syncQueueBoxName);
-    final key = 'sync_${DateTime.now().millisecondsSinceEpoch}';
-    final clientRequestId = 'pedido_offline_$key';
+    final key = await _nextSyncKey(box);
+    final lineJson = [];
+    for (final line in lines) {
+      lineJson.add((line as OrderLine).toJson());
+    }
     final data = {
-      'clientCode': clientCode,
-      'clientName': clientName,
-      'vendedorCode': vendedorCode,
-      'saleType': saleType,
-      'lines': lines.map((l) => l.toJson()).toList(),
-      'clientRequestId': clientRequestId,
-      'queuedAt': DateTime.now().toIso8601String(),
-      'status': 'pending',
+      "clientCode": clientCode,
+      "clientName": clientName,
+      "vendedorCode": vendedorCode,
+      "saleType": saleType,
+      "lines": lineJson,
+      "clientRequestId": "pedido_offline_$key",
+      "queuedAt": DateTime.now().toIso8601String(),
+      "status": "pending",
+      "attempts": 0,
     };
     await box.put(key, jsonEncode(data));
-    debugPrint('[PedidosOffline] Order queued for sync: $key');
+    debugPrint("[PedidosOffline] Order queued for sync: $key");
   }
 
-  /// Get all pending sync items
-  static List<Map<String, dynamic>> getPendingSyncs() {
-    final box = _syncQueueBox;
-    if (box == null || box.isEmpty) return [];
+  /// Get all pending sync items in stable queue order.
+  static List getPendingSyncs() {
+    return _getSyncsByStatus("pending");
+  }
 
-    final items = <Map<String, dynamic>>[];
-    for (final key in box.keys) {
+  /// Get failed sync items preserved for manual review or retry.
+  static List getFailedSyncs() {
+    return _getSyncsByStatus("failed");
+  }
+
+  /// Mark a failed queued order as pending for the next bounded retry.
+  static Future retryFailedSync(String syncKey) async {
+    final box = _syncQueueBox ?? await Hive.openBox(_syncQueueBoxName);
+    final data = _decodeSyncItem(box, syncKey);
+    if (data == null) return false;
+    if (data["status"] == "failed") {
+      data["status"] = "pending";
+    } else {
+      return false;
+    }
+    data.remove("error");
+    data.remove("failedAt");
+    await box.put(syncKey, jsonEncode(data));
+    return true;
+  }
+
+  /// Sync pending orders with bounded batch size and explicit progress.
+  static Future syncPendingOrdersWithResult({
+    int maxBatchSize = _defaultMaxBatchSize,
+    int maxConcurrency = _maxConcurrentSyncs,
+    int yieldEvery = _defaultYieldEvery,
+  }) async {
+    final box = _syncQueueBox ?? await Hive.openBox(_syncQueueBoxName);
+    final pending = getPendingSyncs();
+    final batchLimit = maxBatchSize.clamp(1, _maxBatchSize).toInt();
+    final effectiveConcurrency =
+        maxConcurrency.clamp(1, _maxConcurrentSyncs).toInt();
+    final selected = pending.take(batchLimit).toList(growable: false);
+    final failures = [];
+    var processed = 0;
+    var synced = 0;
+
+    for (final item in selected) {
+      final syncKey = item["syncKey"].toString();
       try {
-        final raw = box.get(key);
-        if (raw is String) {
-          final data = jsonDecode(raw) as Map<String, dynamic>;
-          if (data['status'] == 'pending') {
-            data['syncKey'] = key;
-            items.add(data);
+        final prepared = await _prepareSyncItem(box, syncKey, item);
+        final response = await _createOrder(
+          clientCode: prepared["clientCode"].toString(),
+          clientName: prepared["clientName"].toString(),
+          vendedorCode: prepared["vendedorCode"].toString(),
+          tipoVenta: prepared["saleType"] as String? ?? "CC",
+          lines: _decodeOrderLines(prepared["lines"]),
+          clientRequestId: prepared["clientRequestId"] as String?,
+        );
+        if (response is Map) {
+          if (response["queued"] == true) {
+            throw StateError(
+                "Pedido no confirmado por servidor; conservado para revision.");
           }
         }
-      } catch (e) {
-        debugPrint('[PedidosOffline] Error reading sync item $key: $e');
-      }
-    }
-    return items;
-  }
-
-  /// Sync all pending orders to the server
-  static Future<int> syncPendingOrders() async {
-    final pending = getPendingSyncs();
-    if (pending.isEmpty) return 0;
-
-    var synced = 0;
-    for (final item in pending) {
-      try {
-        final lines = (item['lines'] as List)
-            .map((l) => OrderLine.fromJson(l as Map<String, dynamic>))
-            .toList();
-
-        await PedidosService.createOrder(
-          clientCode: item['clientCode'] as String,
-          clientName: item['clientName'] as String,
-          vendedorCode: item['vendedorCode'] as String,
-          tipoVenta: item['saleType'] as String? ?? 'CC',
-          lines: lines,
-          clientRequestId: item['clientRequestId'] as String?,
-        );
-
-        // Mark as synced
-        final box = _syncQueueBox ?? await Hive.openBox(_syncQueueBoxName);
-        await box.delete(item['syncKey']);
+        await box.delete(syncKey);
         synced++;
       } catch (e) {
-        debugPrint('[PedidosOffline] Sync failed for ${item['syncKey']}: $e');
-        // Mark as failed
-        final box = _syncQueueBox ?? await Hive.openBox(_syncQueueBoxName);
-        final data = jsonDecode(box.get(item['syncKey']) as String)
-            as Map<String, dynamic>;
-        data['status'] = 'failed';
-        data['error'] = e.toString();
-        await box.put(item['syncKey'], jsonEncode(data));
+        failures.add(await _markSyncFailed(box, syncKey, e));
+      }
+      processed++;
+      if (yieldEvery == 0) {
+      } else if (processed % yieldEvery == 0) {
+        await Future.delayed(Duration.zero);
       }
     }
-    debugPrint('[PedidosOffline] Synced $synced/${pending.length} orders');
-    return synced;
+
+    final remainingPending = getPendingSyncs().length;
+    final preservedFailures = getFailedSyncs().length;
+    return {
+      "totalPendingAtStart": pending.length,
+      "selectedForRun": selected.length,
+      "processed": processed,
+      "synced": synced,
+      "failed": failures.length,
+      "remainingPending": remainingPending,
+      "preservedFailures": preservedFailures,
+      "batchLimit": batchLimit,
+      "maxConcurrency": effectiveConcurrency,
+      "isBackpressured": remainingPending == 0 ? false : true,
+      "failures": failures,
+    };
+  }
+
+  /// Sync all pending orders to the server, preserving the legacy count API.
+  static Future syncPendingOrders() async {
+    final result = await syncPendingOrdersWithResult();
+    return result["synced"] as int;
   }
 
   /// Get count of pending syncs
@@ -210,5 +259,139 @@ class PedidosOfflineService {
   static Future<void> clearAll() async {
     await _draftsBox?.clear();
     await _syncQueueBox?.clear();
+  }
+
+  @visibleForTesting
+  static void debugSetCreateOrderForTesting(
+      Future Function(
+              {required String clientCode,
+              required String clientName,
+              required String vendedorCode,
+              required String tipoVenta,
+              required List lines,
+              required String? clientRequestId})
+          createOrder) {
+    _createOrder = createOrder;
+  }
+
+  @visibleForTesting
+  static void debugResetCreateOrderForTesting() {
+    _createOrder = _defaultCreateOrder;
+  }
+
+  static Future _defaultCreateOrder({
+    required String clientCode,
+    required String clientName,
+    required String vendedorCode,
+    required String tipoVenta,
+    required List lines,
+    required String? clientRequestId,
+  }) {
+    return PedidosService.createOrder(
+      clientCode: clientCode,
+      clientName: clientName,
+      vendedorCode: vendedorCode,
+      tipoVenta: tipoVenta,
+      lines: lines.cast(),
+      clientRequestId: clientRequestId,
+    );
+  }
+
+  static Future _nextSyncKey(Box box) async {
+    var key = "sync_${DateTime.now().microsecondsSinceEpoch}";
+    while (box.containsKey(key)) {
+      await Future.delayed(Duration.zero);
+      key = "sync_${DateTime.now().microsecondsSinceEpoch}";
+    }
+    return key;
+  }
+
+  static List _getSyncsByStatus(String status) {
+    final box = _syncQueueBox;
+    if (box == null) return [];
+    if (box.isEmpty) return [];
+
+    final items = [];
+    for (final key in box.keys) {
+      try {
+        final data = _decodeSyncItem(box, key.toString());
+        if (data == null) {
+        } else if (data["status"] == status) {
+          data["syncKey"] = key;
+          items.add(data);
+        }
+      } catch (e) {
+        debugPrint("[PedidosOffline] Error reading sync item $key: $e");
+      }
+    }
+    items.sort((a, b) {
+      final byQueuedAt = (a["queuedAt"]?.toString() ?? "")
+          .compareTo(b["queuedAt"]?.toString() ?? "");
+      if (byQueuedAt == 0) {
+        return a["syncKey"].toString().compareTo(b["syncKey"].toString());
+      }
+      return byQueuedAt;
+    });
+    return items;
+  }
+
+  static Map? _decodeSyncItem(Box box, String syncKey) {
+    final raw = box.get(syncKey);
+    if (raw is String) {
+      return jsonDecode(raw) as Map;
+    }
+    return null;
+  }
+
+  static Future _prepareSyncItem(Box box, String syncKey, Map item) async {
+    final data = Map.from(item);
+    data.remove("syncKey");
+    final existingRequestId = data["clientRequestId"]?.toString().trim();
+    if (existingRequestId == null) {
+      data["clientRequestId"] = "pedido_offline_$syncKey";
+    } else if (existingRequestId.isEmpty) {
+      data["clientRequestId"] = "pedido_offline_$syncKey";
+    }
+    data["status"] = "pending";
+    data["attempts"] = _asInt(data["attempts"]);
+    data["lastSyncStartedAt"] = DateTime.now().toIso8601String();
+    await box.put(syncKey, jsonEncode(data));
+    return data;
+  }
+
+  static List _decodeOrderLines(Object? rawLines) {
+    if (rawLines is List) {
+      final lines = [];
+      for (final line in rawLines) {
+        lines.add(OrderLine.fromJson((line as Map).cast()));
+      }
+      return lines;
+    }
+    throw const FormatException("Pedido offline sin lineas validas.");
+  }
+
+  static Future _markSyncFailed(Box box, String syncKey, Object error) async {
+    final data = _decodeSyncItem(box, syncKey) ?? {};
+    final attempts = _asInt(data["attempts"]) + 1;
+    data["status"] = "failed";
+    data["attempts"] = attempts;
+    data["error"] = error.toString();
+    data["failedAt"] = DateTime.now().toIso8601String();
+    data.putIfAbsent("clientRequestId", () {
+      return "pedido_offline_$syncKey";
+    });
+    await box.put(syncKey, jsonEncode(data));
+    debugPrint("[PedidosOffline] Sync failed for $syncKey: $error");
+    return {
+      "syncKey": syncKey,
+      "clientRequestId": data["clientRequestId"],
+      "error": error.toString(),
+      "attempts": attempts,
+    };
+  }
+
+  static int _asInt(Object? value) {
+    if (value is int) return value;
+    return int.tryParse(value?.toString() ?? "") ?? 0;
   }
 }
