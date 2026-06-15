@@ -269,6 +269,35 @@ describe('pedidos create order persistence contract', () => {
     expect(lineCall[1][17]).toBe(10);
   });
 
+  test('createOrder keeps envase input with cajas quantity from inserting zero line totals', async () => {
+    mockCreateOrderFlow();
+
+    await pedidosService.createOrder({
+      clientCode: 'C001',
+      clientName: 'Cliente',
+      vendedorCode: '01',
+      lines: [{
+        codigoArticulo: '4311',
+        descripcion: 'Producto 4311',
+        cantidadEnvases: 1,
+        cantidadUnidades: 0,
+        unidadMedida: 'envase',
+        precioVenta: 49.572,
+        precioCosto: 0,
+      }],
+    });
+
+    const lineCall = mockQueryWithParams.mock.calls.find(function (call) {
+      return /INSERT\s+INTO\s+JAVIER\.PEDIDOS_LIN/i.test(call[0]);
+    });
+    expect(lineCall).toBeDefined();
+    expect(lineCall[1][4]).toBe(1);
+    expect(lineCall[1][5]).toBe(0);
+    expect(lineCall[1][8]).toBe(49.572);
+    expect(lineCall[1][13]).toBe(49.57);
+    expect(lineCall[1][13]).toBeGreaterThan(0);
+  });
+
   test('getOrderDetail returns bolsa trace grouped by order line', async () => {
     const rows = mockCreatedOrderReads();
     mockQueryWithParams.mockImplementation(async (sql) => {
@@ -478,6 +507,55 @@ describe('pedidos state machine contract', () => {
   });
 });
 
+
+describe('pedidos mutation service error contract', () => {
+  test('deleteOrderLine returns typed LINE_NOT_FOUND when line was already deleted', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/SELECT\s+TRIM\(ESTADO\)\s+AS\s+ESTADO/i.test(sql)) return [{ ESTADO: 'BORRADOR' }];
+      if (/SELECT\s+ID\s+FROM\s+JAVIER\.PEDIDOS_LIN\s+WHERE\s+ID\s+=\s+\?\s+AND\s+PEDIDO_ID\s+=\s+\?/i.test(sql)) return [];
+      return [];
+    });
+
+    await expect(pedidosService.deleteOrderLine(7, 42)).rejects.toMatchObject({ code: 'LINE_NOT_FOUND', status: 404 });
+
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.PEDIDOS_LIN/i.test(sql))).toBe(false);
+  });
+
+  test('cancelOrder uses CAS conditional update and reports terminal-state conflict', async () => {
+    let stateReadCount = 0;
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/SELECT\s+ESTADO,\s+CODIGOCLIENTE,\s+IMPORTETOTAL\s+FROM\s+JAVIER\.PEDIDOS_CAB\s+WHERE\s+ID\s+=\s+\?/i.test(sql)) {
+        stateReadCount += 1;
+        return stateReadCount === 1
+          ? [{ ESTADO: 'BORRADOR', CODIGOCLIENTE: 'C001', IMPORTETOTAL: '100.00' }]
+          : [{ ESTADO: 'CONFIRMADO', CODIGOCLIENTE: 'C001', IMPORTETOTAL: '100.00' }];
+      }
+      if (/UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO\s+=\s+'ANULADO'/i.test(sql)) {
+        return { count: 0 };
+      }
+      return [];
+    });
+
+    await expect(pedidosService.cancelOrder(42)).rejects.toMatchObject({
+      code: 'PEDIDO_STATE_CONFLICT',
+      status: 409,
+    });
+
+    const updateCall = mockQueryWithParams.mock.calls.find(([sql]) => /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO\s+=\s+'ANULADO'/i.test(sql));
+    expect(updateCall).toBeDefined();
+    expect(updateCall[0]).toMatch(/WHERE\s+ID\s+=\s+\?\s+AND\s+ESTADO\s+IN\s+\('BORRADOR',\s*'CONFIRMADO'\)/i);
+    expect(updateCall[1]).toEqual([42]);
+  });
+
+  test('cancelOrder returns typed errors for already ANULADO and ENVIADO states', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([{ ESTADO: 'ANULADO' }]);
+    await expect(pedidosService.cancelOrder(42)).rejects.toMatchObject({ code: 'PEDIDO_ALREADY_ANULADO', status: 409 });
+
+    mockQueryWithParams.mockReset();
+    mockQueryWithParams.mockResolvedValueOnce([{ ESTADO: 'ENVIADO' }]);
+    await expect(pedidosService.cancelOrder(42)).rejects.toMatchObject({ code: 'PEDIDO_INVALID_STATE', status: 409 });
+  });
+});
 
 describe('pedidos confirm route bolsa contract', function() {
   test('PUT /api/pedidos/:id/confirm forwards BOLSA_INSUFICIENTE payload', async function() {

@@ -12,12 +12,19 @@ import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.da
 /// COMERCIAL ve alertas de acción sin datos sensibles.
 class ClientAlertsWidget extends StatefulWidget {
   const ClientAlertsWidget({
-    required this.clientId, super.key,
+    required this.clientId,
+    super.key,
     this.compact = false,
+    this.fetchWhenCompact = false,
+    this.hasPrefetchedAlerts = false,
+    this.prefetchedAlerts,
   });
 
   final String clientId;
   final bool compact;
+  final bool fetchWhenCompact;
+  final bool hasPrefetchedAlerts;
+  final List<KpiAlert>? prefetchedAlerts;
 
   @override
   State<ClientAlertsWidget> createState() => _ClientAlertsWidgetState();
@@ -30,26 +37,58 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
   bool _expanded = true;
   bool _hasError = false;
 
+  bool get _shouldFetch => !widget.compact || widget.fetchWhenCompact;
+
   @override
   void initState() {
     super.initState();
-    _loadAlerts();
+    _hydrateOrLoad();
   }
 
   @override
   void didUpdateWidget(ClientAlertsWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.clientId != widget.clientId) {
-      _loadAlerts();
+    if (oldWidget.clientId != widget.clientId ||
+        oldWidget.fetchWhenCompact != widget.fetchWhenCompact ||
+        oldWidget.hasPrefetchedAlerts != widget.hasPrefetchedAlerts ||
+        oldWidget.prefetchedAlerts != widget.prefetchedAlerts) {
+      _hydrateOrLoad();
     }
+  }
+
+  void _hydrateOrLoad() {
+    final prefetched = widget.prefetchedAlerts;
+    if (!_shouldFetch) {
+      setState(() {
+        _alerts = prefetched ?? const <KpiAlert>[];
+        _loading = false;
+        _hasError = false;
+      });
+      return;
+    }
+    if (prefetched != null) {
+      setState(() {
+        _alerts = prefetched;
+        _loading = false;
+        _hasError = false;
+      });
+      return;
+    }
+    _loadAlerts();
   }
 
   Future<void> _loadAlerts() async {
     if (!mounted) return;
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      _hasError = false;
+    });
 
     try {
-      final alerts = await _service.getClientAlerts(widget.clientId);
+      final alerts = await _service.getClientAlerts(
+        widget.clientId,
+        throwOnError: !widget.compact,
+      );
       if (mounted) {
         setState(() {
           _alerts = alerts;
@@ -68,9 +107,8 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
 
   bool get _isJefe {
     try {
-      final authState = ProviderScope.containerOf(context)
-          .read(authProvider)
-          .value;
+      final authState =
+          ProviderScope.containerOf(context).read(authProvider).value;
       return authState?.user?.isDirector ?? false;
     } catch (_) {
       return false;
@@ -89,9 +127,11 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
     }
 
     if (_alerts.isEmpty) {
-      // Compact: hide completely when no alerts
-      if (widget.compact) return const SizedBox.shrink();
-      // Full: show panel with empty/error state
+      if (widget.compact) {
+        return widget.hasPrefetchedAlerts
+            ? _buildPrefetchedCompactView()
+            : const SizedBox.shrink();
+      }
       return _buildEmptyPanel();
     }
 
@@ -222,9 +262,15 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
             ),
           ),
           const SizedBox(width: 4),
-          if (criticalCount > 0) _buildCompactBadge(criticalCount, _severityColor('critical'), Icons.error_rounded),
-          if (warningCount > 0) _buildCompactBadge(warningCount, _severityColor('warning'), Icons.warning_amber_rounded),
-          if (infoCount > 0) _buildCompactBadge(infoCount, _severityColor('info'), Icons.info_rounded),
+          if (criticalCount > 0)
+            _buildCompactBadge(
+                criticalCount, _severityColor('critical'), Icons.error_rounded),
+          if (warningCount > 0)
+            _buildCompactBadge(warningCount, _severityColor('warning'),
+                Icons.warning_amber_rounded),
+          if (infoCount > 0)
+            _buildCompactBadge(
+                infoCount, _severityColor('info'), Icons.info_rounded),
         ],
       ),
     );
@@ -259,6 +305,32 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPrefetchedCompactView() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+        decoration: BoxDecoration(
+          color: AppTheme.neonPurple.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(
+            color: AppTheme.neonPurple.withValues(alpha: 0.35),
+            width: 0.5,
+          ),
+        ),
+        child: const Text(
+          'Nestle',
+          style: TextStyle(
+            fontSize: 7,
+            fontWeight: FontWeight.w800,
+            color: AppTheme.neonPurple,
+            letterSpacing: 0.5,
+          ),
+        ),
       ),
     );
   }
@@ -390,7 +462,8 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                           '${_alerts.length} alerta${_alerts.length != 1 ? 's' : ''} activa${_alerts.length != 1 ? 's' : ''}',
                           style: TextStyle(
                             fontSize: 11,
-                            color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                            color:
+                                AppTheme.textSecondary.withValues(alpha: 0.7),
                           ),
                         ),
                       ],
@@ -399,26 +472,41 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                   // Severity counters
                   if (criticalCount > 0)
                     _buildSeverityChip(
-                        criticalCount, _severityColor('critical'), 'URG',),
+                      criticalCount,
+                      _severityColor('critical'),
+                      'URG',
+                    ),
                   if (warningCount > 0)
                     _buildSeverityChip(
-                        warningCount, _severityColor('warning'), 'ATEN',),
+                      warningCount,
+                      _severityColor('warning'),
+                      'ATEN',
+                    ),
                   if (infoCount > 0)
                     _buildSeverityChip(
-                        infoCount, _severityColor('info'), 'INFO',),
+                      infoCount,
+                      _severityColor('info'),
+                      'INFO',
+                    ),
                   const SizedBox(width: 8),
                   // Refresh + expand
                   InkWell(
                     onTap: _loadAlerts,
-                    child: const Icon(Icons.refresh_rounded,
-                        size: 16, color: AppTheme.textTertiary,),
+                    child: const Icon(
+                      Icons.refresh_rounded,
+                      size: 16,
+                      color: AppTheme.textTertiary,
+                    ),
                   ),
                   const SizedBox(width: 4),
                   AnimatedRotation(
                     turns: _expanded ? 0.0 : -0.25,
                     duration: const Duration(milliseconds: 200),
-                    child: const Icon(Icons.expand_more_rounded,
-                        size: 18, color: AppTheme.textTertiary,),
+                    child: const Icon(
+                      Icons.expand_more_rounded,
+                      size: 18,
+                      color: AppTheme.textTertiary,
+                    ),
                   ),
                 ],
               ),
@@ -434,11 +522,18 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                 ),
                 child: Padding(
                   padding: const EdgeInsets.only(
-                      left: 8, right: 8, bottom: 10, top: 4,),
+                    left: 8,
+                    right: 8,
+                    bottom: 10,
+                    top: 4,
+                  ),
                   child: Column(
                     children: sortedTypes.map((type) {
                       return _buildAlertGroupCollapsible(
-                          type, grouped[type]!, isJefe,);
+                        type,
+                        grouped[type]!,
+                        isJefe,
+                      );
                     }).toList(),
                   ),
                 ),
@@ -472,7 +567,8 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
   // ============================================================
   // GRUPO de alertas por tipo (Collapsible con ExpansionTile)
   // ============================================================
-  Widget _buildAlertGroupCollapsible(String type, List<KpiAlert> alerts, bool isJefe) {
+  Widget _buildAlertGroupCollapsible(
+      String type, List<KpiAlert> alerts, bool isJefe) {
     final config = _typeConfig(type);
     final highestSeverity = alerts.fold<String>('info', (prev, a) {
       if (a.severity == 'critical') return 'critical';
@@ -531,7 +627,8 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
               ),
             ],
           ),
-          children: alerts.map((a) => _buildAlertTile(a, config, isJefe)).toList(),
+          children:
+              alerts.map((a) => _buildAlertTile(a, config, isJefe)).toList(),
         ),
       ),
     );
@@ -553,7 +650,7 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
       detailInfo = alert.detail;
       if (alert.actions.isNotEmpty) {
         // En vez de mostrar los actions como lista, el detail de alert_transformer actual ya los incluye en texto,
-        // pero podemos incluirlos si se quiere o dejarlos omitidos. 
+        // pero podemos incluirlos si se quiere o dejarlos omitidos.
         // El detail de alert_transformer ya dice "Que hacer: ..."
       }
     } else {
@@ -601,7 +698,8 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
               // Badge de urgencia pequeno a la derecha
               if (alert.severity == 'critical')
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                   decoration: BoxDecoration(
                     color: sevColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(3),
@@ -617,9 +715,10 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
                 ),
             ],
           ),
-          
+
           // Collapsible Details
-          if (detailInfo.isNotEmpty || (showFinancials && alert.rawData != null))
+          if (detailInfo.isNotEmpty ||
+              (showFinancials && alert.rawData != null))
             _CollapsibleDetail(
               detail: detailInfo,
               sevColor: sevColor,
@@ -640,23 +739,28 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
     final items = <Widget>[];
 
     if (raw.containsKey('cuotaAnual') && raw['cuotaAnual'] != null) {
-      items.add(_buildFinancialPill('Cuota', '${_formatNum(raw['cuotaAnual'])}€', AppTheme.neonBlue));
+      items.add(_buildFinancialPill(
+          'Cuota', '${_formatNum(raw['cuotaAnual'])}€', AppTheme.neonBlue));
     }
     if (raw.containsKey('desviacionEur') && raw['desviacionEur'] != null) {
       final val = (raw['desviacionEur'] as num).toDouble();
-      items.add(_buildFinancialPill(
-        'Desv.',
-        '${val >= 0 ? '+' : ''}${_formatNum(val)}€',
-        val < 0 ? AppTheme.error : AppTheme.success,
-      ),);
+      items.add(
+        _buildFinancialPill(
+          'Desv.',
+          '${val >= 0 ? '+' : ''}${_formatNum(val)}€',
+          val < 0 ? AppTheme.error : AppTheme.success,
+        ),
+      );
     }
     if (raw.containsKey('desviacionPct') && raw['desviacionPct'] != null) {
       final val = (raw['desviacionPct'] as num).toDouble();
-      items.add(_buildFinancialPill(
-        '%',
-        '${val >= 0 ? '+' : ''}${val.toStringAsFixed(0)}%',
-        val < 0 ? AppTheme.error : AppTheme.success,
-      ),);
+      items.add(
+        _buildFinancialPill(
+          '%',
+          '${val >= 0 ? '+' : ''}${val.toStringAsFixed(0)}%',
+          val < 0 ? AppTheme.error : AppTheme.success,
+        ),
+      );
     }
 
     if (items.isEmpty) return const SizedBox.shrink();
@@ -711,11 +815,11 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
   Color _severityColor(String severity) {
     switch (severity) {
       case 'critical':
-        return AppTheme.error;    // Neon red
+        return AppTheme.error; // Neon red
       case 'warning':
-        return AppTheme.warning;  // Neon orange
+        return AppTheme.warning; // Neon orange
       case 'info':
-        return AppTheme.info;     // Neon cyan
+        return AppTheme.info; // Neon cyan
       default:
         return AppTheme.textTertiary;
     }
@@ -723,10 +827,14 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
 
   String _severityLabel(String severity) {
     switch (severity) {
-      case 'critical': return 'URGENTE';
-      case 'warning': return 'ATENCION';
-      case 'info': return 'INFO';
-      default: return severity.toUpperCase();
+      case 'critical':
+        return 'URGENTE';
+      case 'warning':
+        return 'ATENCION';
+      case 'info':
+        return 'INFO';
+      default:
+        return severity.toUpperCase();
     }
   }
 
@@ -788,7 +896,6 @@ class _ClientAlertsWidgetState extends State<ClientAlertsWidget> {
 // Config model for alert type visual properties
 // ============================================================
 class _AlertTypeConfig {
-
   const _AlertTypeConfig({
     required this.label,
     required this.icon,
@@ -927,4 +1034,3 @@ class _CollapsibleDetailState extends State<_CollapsibleDetail> {
     );
   }
 }
-

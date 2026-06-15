@@ -14,12 +14,15 @@ class ChatbotService {
   Future<String> sendMessage({
     required String message,
     List<Map<String, String>>? conversationHistory,
+    String? clientCode,
   }) async {
     try {
       final body = <String, dynamic>{
         'message': message,
         if (conversationHistory != null && conversationHistory.isNotEmpty)
           'conversationHistory': conversationHistory,
+        if (clientCode != null && clientCode.trim().isNotEmpty)
+          'clientCode': clientCode.trim(),
       };
 
       final response = await ApiClient.post(

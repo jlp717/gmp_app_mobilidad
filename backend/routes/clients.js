@@ -350,7 +350,11 @@ router.get('/compare', verifyToken, async (req, res) => {
     if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
     vendedorCodes = scoped.vendedorCodes;
     if (!codes) {
-      return res.status(400).json({ error: 'Se requieren códigos de cliente (codes=CLI1,CLI2)' });
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_CLIENT_COMPARE_PARAMS',
+        error: 'Se requieren códigos de cliente (codes=CLI1,CLI2)',
+      });
     }
 
     // Sanitize input for IN clause
@@ -471,7 +475,7 @@ router.get('/:code', verifyToken, async (req, res) => {
       SELECT C.CODIGOCLIENTE as code, C.NOMBRECLIENTE as name, C.NIF as nif,
   C.DIRECCION as address, C.POBLACION as city, C.PROVINCIA as province,
   C.CODIGOPOSTAL as postalCode, C.TELEFONO1 as phone, C.TELEFONO2 as phone2,
-  C.EMAIL as email,
+  CAST(NULL AS VARCHAR(254)) as email,
   C.CODIGORUTA as route, C.PERSONACONTACTO as contactPerson,
   C.OBSERVACIONES1 as notes, C.ANOALTA as yearCreated
       FROM DSEDAC.CLI C
@@ -774,14 +778,14 @@ router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
     const products = await query(`
       SELECT L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
         L.CODIGOARTICULO as productCode,
-        COALESCE(A.DESCRIPCION, 'Sin descripción') as productName,
+        COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.DESCRIPCION), 'Sin descripción') as productName,
         SUM(L.CANTIDADENVASES) as boxes, SUM(L.CANTIDADUNIDADES) as units,
         SUM(L.IMPORTEVENTA) as amount, SUM(L.IMPORTEMARGENREAL) as margin,
         L.CODIGOVENDEDOR as vendedor
       FROM DSEDAC.LINDTO L
       LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
       WHERE ${whereClause}
-      GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO, L.DIADOCUMENTO, L.CODIGOARTICULO, A.DESCRIPCION, L.CODIGOVENDEDOR
+      GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO, L.DIADOCUMENTO, L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION, L.CODIGOVENDEDOR
       ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
       FETCH FIRST ${parseInt(limit)} ROWS ONLY
     `);

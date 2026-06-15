@@ -14,7 +14,6 @@ extension ListExt<T> on List<T> {
 // ── State ────────────────────────────────────────────────────────────────────
 
 class ChatMessage {
-
   ChatMessage({
     required this.content,
     required this.isUser,
@@ -26,7 +25,6 @@ class ChatMessage {
 }
 
 class ChatbotState {
-
   const ChatbotState({
     this.messages = const [],
     this.isLoading = false,
@@ -64,7 +62,6 @@ class ChatbotState {
 // ── Notifier ─────────────────────────────────────────────────────────────────
 
 class ChatbotNotifier extends Notifier<ChatbotState> {
-
   ChatbotNotifier({List<String> vendedorCodes = const []})
       : _initialVendedorCodes = vendedorCodes;
   final ChatbotService _service = ChatbotService();
@@ -74,8 +71,16 @@ class ChatbotNotifier extends Notifier<ChatbotState> {
   @override
   ChatbotState build() => ChatbotState(vendedorCodes: _initialVendedorCodes);
 
-  void setClientContext(String clientCode) {
-    state = state.copyWith(currentClientCode: clientCode);
+  void setClientContext(String? clientCode) {
+    final normalized = clientCode?.trim();
+    state = state.copyWith(
+      currentClientCode:
+          (normalized == null || normalized.isEmpty) ? null : normalized,
+    );
+  }
+
+  void setVendedorCodes(List<String> vendedorCodes) {
+    state = state.copyWith(vendedorCodes: List.unmodifiable(vendedorCodes));
   }
 
   Future<void> sendMessage(String text) async {
@@ -100,6 +105,7 @@ class ChatbotNotifier extends Notifier<ChatbotState> {
       final response = await _service.sendMessage(
         message: text,
         conversationHistory: history,
+        clientCode: state.currentClientCode,
       );
 
       state = state.copyWith(

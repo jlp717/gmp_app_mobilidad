@@ -14,6 +14,7 @@
 const Groq = require('groq-sdk');
 const logger = require('../../middleware/logger');
 const { moderateInput, validateOutput } = require('./moderation');
+const { authorizeResolvedClient, buildAuthorizationSafeResponse, extractRequestedClientCode } = require('./chatbot_authorization');
 const {
     dbDiscoveryTools,
     pricingTools,
@@ -577,6 +578,20 @@ const TOOL_DEFINITIONS = [
             }
         }
     },
+    {
+        type: 'function',
+        function: {
+            name: 'get_order_details',
+            description: 'Obtiene detalle de un pedido: cliente, importe, estado y lineas de producto',
+            parameters: {
+                type: 'object',
+                properties: {
+                    orderNumber: { type: 'string', description: 'Numero de pedido' }
+                },
+                required: ['orderNumber']
+            }
+        }
+    },
     // ═══════════════════════════════════════════════════════════════════════
     // COBROS
     // ═══════════════════════════════════════════════════════════════════════
@@ -872,6 +887,20 @@ const TOOL_DEFINITIONS = [
     {
         type: 'function',
         function: {
+            name: 'get_client_evaluation',
+            description: 'Evaluacion de compras del cliente (pestaña Evolucion en Pedidos): ventas mensuales, top productos y devoluciones desde DSED.LACLAE',
+            parameters: {
+                type: 'object',
+                properties: {
+                    clientCode: { type: 'string', description: 'Codigo del cliente' }
+                },
+                required: ['clientCode']
+            }
+        }
+    },
+    {
+        type: 'function',
+        function: {
             name: 'get_client_monthly_sales',
             description: 'Obtiene las ventas mensuales de un cliente en los ultimos N meses',
             parameters: {
@@ -931,10 +960,113 @@ const TOOL_DEFINITIONS = [
     }
 ];
 
+const CLIENT_SCOPED_TOOLS = new Set([
+    'get_commission_details', 'get_margin_by_client', 'get_client_debt',
+    'check_client_blocked', 'get_client_credit', 'get_risk_score',
+    'detect_churn', 'compare_sales_yoy', 'get_client_history',
+    'get_client_invoices', 'get_client_orders', 'get_pending_cobros',
+    'lookup_client', 'get_price_sold_to_client', 'get_product_sales_by_client',
+    'get_client_products', 'get_client_monthly_sales', 'get_client_evaluation', 'get_top_products_by_client'
+]);
+
+const INVOICE_SCOPED_TOOLS = new Set([
+    'get_invoice_details',
+    'get_albaranes_by_invoice',
+]);
+
+const ORDER_SCOPED_TOOLS = new Set([
+    'get_order_details',
+]);
+
+async function authorizeInvoiceScopedTool(toolName, args, context) {
+    if (!INVOICE_SCOPED_TOOLS.has(toolName)) return { allowed: true };
+    const invoiceNumber = args?.invoiceNumber;
+    if (!invoiceNumber) return { allowed: true };
+
+    const clientCode = await invoiceTools.resolveInvoiceClientCode(context.conn, invoiceNumber);
+    if (!clientCode) {
+        return { allowed: false, result: { error: `Factura ${invoiceNumber} no encontrada` } };
+    }
+
+    const { authorization } = await authorizeResolvedClient(context.conn, context, clientCode);
+    if (!authorization.allowed) {
+        logger.warn('[CHATBOT-AUTHZ] Denied invoice scope ' + authorization.code + ' for invoice ' + invoiceNumber);
+        return { allowed: false, result: { safeResponse: buildAuthorizationSafeResponse(authorization.code) } };
+    }
+
+    return { allowed: true };
+}
+
+async function authorizeOrderScopedTool(toolName, args, context) {
+    if (!ORDER_SCOPED_TOOLS.has(toolName)) return { allowed: true };
+    const orderNumber = args?.orderNumber;
+    if (!orderNumber) return { allowed: true };
+
+    const clientCode = await pedidosTools.resolveOrderClientCode(context.conn, orderNumber);
+    if (!clientCode) {
+        return { allowed: false, result: { error: `Pedido ${orderNumber} no encontrado` } };
+    }
+
+    const { authorization } = await authorizeResolvedClient(context.conn, context, clientCode);
+    if (!authorization.allowed) {
+        logger.warn('[CHATBOT-AUTHZ] Denied order scope ' + authorization.code + ' for order ' + orderNumber);
+        return { allowed: false, result: { safeResponse: buildAuthorizationSafeResponse(authorization.code) } };
+    }
+
+    return { allowed: true };
+}
+
+function getAppNavigationResponseForMessage(message) {
+    const text = String(message || '').toLowerCase();
+    const navigationIntent = /(d[oó]nde|abrir|ir a|navega|pantalla|secci[oó]n|men[uú]|pesta[ñn]a|ayuda app)/.test(text);
+    if (!navigationIntent) return null;
+    const sections = [
+        ['Chat IA', 'consultas comerciales y operativas con NEXUS'],
+        ['Pedidos', 'crear y revisar pedidos'],
+        ['Pedidos > Evolución', 'historial de compras por producto y mes (pestaña Evolución dentro de Pedidos)'],
+        ['Cobros', 'pendientes, recibos y seguimiento de deuda'],
+        ['Facturas', 'consulta de facturas, líneas y vencimientos'],
+        ['Comisiones', 'objetivos, ventas y comisiones'],
+        ['Bolsa', 'saldo y movimientos de bolsa comercial'],
+        ['Clientes', 'ficha, riesgo y actividad comercial'],
+        ['Evolución (menú)', 'tendencias globales de clientes y productos']
+    ];
+    return 'Secciones disponibles en la app GMP:\n' + sections.map(([name, desc]) => '- ' + name + ': ' + desc).join('\n') + '\n\nDominio: navegacion interna de la app GMP. No abre sistemas externos.';
+}
+
+function getEvaluationGuidanceResponse(message) {
+    const text = String(message || '').toLowerCase();
+    const evaluationIntent = /(evaluaci[oó]n|evoluci[oó]n|productos?\s+comprados?|qu[eé]\s+compr[oó]|historial\s+de\s+compras|compras\s+por\s+mes)/.test(text);
+    const navigationIntent = /(d[oó]nde|abrir|ir a|navega|pantalla|secci[oó]n|men[uú]|pesta[ñn]a)/.test(text);
+    if (!evaluationIntent || navigationIntent) return null;
+    return 'Puedo responder evaluacion de compras con datos reales (pestaña Pedidos > Evolucion): productos, cantidades, importes y mes por cliente. Indica codigo de cliente (ej. "evaluacion del cliente 12345"). Sin datos autorizados, no invento nada.';
+}
+
+async function authorizeClientScopedTool(toolName, args, context) {
+    if (!CLIENT_SCOPED_TOOLS.has(toolName)) return { allowed: true, args };
+    const requestedClientCode = args.clientCode || (toolName === 'get_commission_details' ? context.clientCode : null);
+    if (!requestedClientCode) return { allowed: true, args };
+    const { owner, authorization } = await authorizeResolvedClient(context.conn, context, requestedClientCode);
+    if (!authorization.allowed) {
+        logger.warn('[CHATBOT-AUTHZ] Denied client scope ' + authorization.code + ' for client ' + requestedClientCode);
+        return { allowed: false, result: { safeResponse: buildAuthorizationSafeResponse(authorization.code) } };
+    }
+    return { allowed: true, args: { ...args, clientCode: owner.clientCode || requestedClientCode } };
+}
+
 // ── Tool Executor ────────────────────────────────────────────────────────────
 
 async function executeTool(toolName, args, context) {
     const { conn, userCode, isJefeVentas, role, clientCode: ctxClient, vendorScope } = context;
+    const authz = await authorizeClientScopedTool(toolName, args || {}, context);
+    if (!authz.allowed) return authz.result;
+    args = authz.args;
+
+    const invoiceAuthz = await authorizeInvoiceScopedTool(toolName, args || {}, context);
+    if (!invoiceAuthz.allowed) return invoiceAuthz.result;
+
+    const orderAuthz = await authorizeOrderScopedTool(toolName, args || {}, context);
+    if (!orderAuthz.allowed) return orderAuthz.result;
 
     // ── Role-Based Access Control ─────────────────────────────────────────
     // vendorScope: array of vendor codes this user can access
@@ -1000,9 +1132,21 @@ async function executeTool(toolName, args, context) {
 
         // Invoices & Albaranes
         case 'get_invoice_details':
-            return await invoiceTools.getInvoiceDetails(conn, args.invoiceNumber);
+            return await invoiceTools.getInvoiceDetails(
+                conn,
+                args.invoiceNumber,
+                userCode,
+                effectiveIsJefeVentas,
+                effectiveVendorCodes
+            );
         case 'get_albaranes_by_invoice':
-            return await invoiceTools.getAlbaranesByInvoice(conn, args.invoiceNumber);
+            return await invoiceTools.getAlbaranesByInvoice(
+                conn,
+                args.invoiceNumber,
+                userCode,
+                effectiveIsJefeVentas,
+                effectiveVendorCodes
+            );
         case 'get_client_invoices':
             return await invoiceTools.getClientInvoices(conn, args.clientCode);
 
@@ -1011,6 +1155,8 @@ async function executeTool(toolName, args, context) {
             return await pedidosTools.getDailyOrders(conn, userCode, effectiveIsJefeVentas, args.year, args.month, args.day, effectiveVendorCodes);
         case 'get_client_orders':
             return await pedidosTools.getClientOrders(conn, args.clientCode, userCode, effectiveIsJefeVentas, args.limit || 10, effectiveVendorCodes);
+        case 'get_order_details':
+            return await pedidosTools.getOrderDetails(conn, args.orderNumber, userCode, effectiveIsJefeVentas, effectiveVendorCodes);
 
         // Cobros
         case 'get_pending_cobros':
@@ -1075,6 +1221,14 @@ async function executeTool(toolName, args, context) {
             return await crossQueryTools.getProductSalesByClient(conn, args.productCode, args.clientCode, args.month, args.year);
         case 'get_client_products':
             return await crossQueryTools.getClientProductsBought(conn, args.clientCode, args.limit || 20);
+        case 'get_client_evaluation':
+            return await crossQueryTools.getClientEvaluation(
+                conn,
+                args.clientCode,
+                userCode,
+                effectiveIsJefeVentas,
+                effectiveVendorCodes
+            );
         case 'get_client_monthly_sales':
             return await crossQueryTools.getClientMonthlySales(conn, args.clientCode, args.months || 12);
         case 'get_top_products_by_client':
@@ -1092,6 +1246,9 @@ async function executeTool(toolName, args, context) {
 // ── Format Tool Results for LLM ──────────────────────────────────────────────
 
 function formatToolResult(toolName, result) {
+    if (result && result.safeResponse) {
+        return result.safeResponse;
+    }
     if (result.error) {
         return `Error: ${result.error}`;
     }
@@ -1263,11 +1420,19 @@ function formatToolResult(toolName, result) {
         // ── Invoices ──
         case 'get_invoice_details':
             if (result.error) return result.error;
+            const lineSummary = (result.lines || []).slice(0, 5)
+                .map((line) => `- ${line.productCode || '?'}: ${line.description || 'Sin descripcion'} | ${line.quantity || 0} uds | ${(line.amount || 0).toLocaleString('es-ES')}€`)
+                .join('\n');
             return `Factura ${result.invoiceNumber}:
 - Cliente: ${result.clientCode}
-- Importe: **${result.amount.toLocaleString('es-ES')}€**
+- Vendedor: ${result.vendorCode || 'N/A'}
+- Importe: **${(result.amount || 0).toLocaleString('es-ES')}€**
+- Pendiente: **${(result.pendingAmount || 0).toLocaleString('es-ES')}€**
 - Estado: ${result.status}
-- Albaranes asociados: ${result.albaranCount}`;
+- Emision: ${result.issueDate || 'N/A'}
+- Vencimiento: ${result.dueDate || 'N/A'}
+- Lineas (${result.lineCount || 0}):
+${lineSummary || '- Sin lineas en cartera para este cliente'}`;
 
         case 'get_albaranes_by_invoice':
             if (result.error) return result.error;
@@ -1295,6 +1460,19 @@ function formatToolResult(toolName, result) {
             const ordList = result.orders.slice(0, 5)
                 .map(o => `- ${o.date}: **${o.amount.toLocaleString('es-ES')}€** | ${o.status || 'Confirmado'}`).join('\n');
             return `Pedidos cliente ${result.clientCode}:\n${ordList}`;
+
+        case 'get_order_details':
+            if (result.error) return result.error;
+            const orderLines = (result.lines || []).slice(0, 8)
+                .map((line) => `- ${line.productCode}: ${line.description || 'Sin descripcion'} | ${line.quantity} uds | ${(line.amount || 0).toLocaleString('es-ES')}€`)
+                .join('\n');
+            return `Pedido ${result.orderNumber}:
+- Cliente: ${result.clientCode || 'N/A'}
+- Fecha: ${result.date || 'N/A'}
+- Importe: **${(result.amount || 0).toLocaleString('es-ES')}€**
+- Estado: ${result.status}
+- Lineas (${result.lineCount || 0}):
+${orderLines || '- Sin lineas'}`;
 
         // ── Cobros ──
         case 'get_pending_cobros':
@@ -1442,6 +1620,25 @@ Total: **${result.totalSales.toLocaleString('es-ES')}€** | Unidades: ${result.
                 .map(p => `- ${p.name} (${p.code}): **${p.totalSales.toLocaleString('es-ES')}€** | ${p.totalUnits} uds`).join('\n');
             return `Productos comprados por cliente ${result.clientCode}:\n${prodList}`;
 
+        case 'get_client_evaluation':
+            if (result.error) return result.error;
+            const evalMonths = (result.monthlySales || []).slice(-12)
+                .map((row) => `- ${row.year}-${String(row.month).padStart(2, '0')}: **${row.sales.toLocaleString('es-ES')}€** | ${row.units} uds`)
+                .join('\n');
+            const evalProducts = (result.topProducts || []).slice(0, 10)
+                .map((row) => `- ${row.name || 'Sin nombre'} (${row.code}): **${row.totalSales.toLocaleString('es-ES')}€** | ${row.totalUnits} uds`)
+                .join('\n');
+            const evalReturns = (result.returns || []).slice(0, 5)
+                .map((row) => `- ${row.year}-${String(row.month).padStart(2, '0')}: ${row.productName || row.productCode} | ${row.units} uds | ${row.amount.toLocaleString('es-ES')}€`)
+                .join('\n');
+            return `Evaluacion cliente ${result.clientCode} (${result.appSection || 'Pedidos > Evolucion'}):
+Ventas mensuales:
+${evalMonths || '- Sin ventas en el periodo'}
+Top productos:
+${evalProducts || '- Sin productos destacados'}
+Devoluciones recientes:
+${evalReturns || '- Sin devoluciones registradas'}`;
+
         case 'get_client_monthly_sales':
             if (result.monthly.length === 0) return `Cliente ${result.clientCode}: Sin ventas registradas.`;
             const monthList = result.monthly.slice(-6)
@@ -1563,8 +1760,12 @@ async function processWithLLM(conn, message, context, conversationHistory = []) 
 
 const { handleChatMessage: handleFallback } = require('./chatbot_handler');
 
-async function processWithFallback(conn, message, vendedorCodes, clientCode) {
-    return await handleFallback(conn, message, vendedorCodes, clientCode);
+async function processWithFallback(conn, message, vendorScope, clientCode, context = {}) {
+    return await handleFallback(conn, message, vendorScope, clientCode, {
+        ...context,
+        vendorScope,
+        clientCode: clientCode || context.clientCode || null
+    });
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -1576,9 +1777,31 @@ async function processMessage(conn, message, context, conversationHistory = []) 
         return moderation.response;
     }
 
+    const navigationResponse = getAppNavigationResponseForMessage(message);
+    if (navigationResponse) {
+        return navigationResponse;
+    }
+
+    const evaluationGuidance = getEvaluationGuidanceResponse(message);
+    if (evaluationGuidance && !extractRequestedClientCode(message)) {
+        return evaluationGuidance;
+    }
+
     // 2. Resolve vendor scope based on role
     const vendorScope = resolveVendorScope(context.userCode, context.role, context.isJefeVentas);
-    const enrichedContext = { ...context, vendorScope };
+    const requestedClientCode = extractRequestedClientCode(message);
+    let authorizedClientCode = context.hintClientCode || null;
+
+    if (requestedClientCode) {
+        const { owner, authorization } = await authorizeResolvedClient(conn, { ...context, vendorScope }, requestedClientCode);
+        if (!authorization.allowed) {
+            logger.warn('[CHATBOT-AUTHZ] Denied requested client ' + requestedClientCode + ': ' + authorization.code);
+            return buildAuthorizationSafeResponse(authorization.code);
+        }
+        authorizedClientCode = owner.clientCode || requestedClientCode;
+    }
+
+    const enrichedContext = { ...context, clientCode: authorizedClientCode, vendorScope };
 
     // 3. Try LLM first
     const llmResponse = await processWithLLM(conn, message, enrichedContext, conversationHistory);
@@ -1595,7 +1818,8 @@ async function processMessage(conn, message, context, conversationHistory = []) 
         conn,
         message,
         vendorScope,
-        context.clientCode
+        enrichedContext.clientCode,
+        enrichedContext
     );
 }
 
@@ -1628,6 +1852,7 @@ function resolveVendorScope(userCode, role, isJefeVentas) {
 
 module.exports = {
     processMessage,
+    resolveVendorScope,
     getGroqClient,
     TOOL_DEFINITIONS,
     formatToolResult

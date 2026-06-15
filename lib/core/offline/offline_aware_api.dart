@@ -182,11 +182,10 @@ class OfflineAwareApi {
         }
         return response;
       } catch (e) {
-        // If server error (not network), rethrow
-        if (e is ApiException && e.statusCode != null && e.statusCode! >= 500) {
+        if (!_shouldQueueMutationFailure(e)) {
           rethrow;
         }
-        // Network error — fall through to queue
+        // Verified network/timeout/server-unreachable error - fall through to queue.
       }
     }
 
@@ -224,7 +223,7 @@ class OfflineAwareApi {
         }
         return response;
       } catch (e) {
-        if (e is ApiException && e.statusCode != null && e.statusCode! >= 500) {
+        if (!_shouldQueueMutationFailure(e)) {
           rethrow;
         }
       }
@@ -255,7 +254,7 @@ class OfflineAwareApi {
         }
         return response;
       } catch (e) {
-        if (e is ApiException && e.statusCode != null && e.statusCode! >= 500) {
+        if (!_shouldQueueMutationFailure(e)) {
           rethrow;
         }
       }
@@ -272,6 +271,13 @@ class OfflineAwareApi {
     debugPrint('[OfflineAware] Queued DELETE for sync: $endpoint');
 
     return {'success': true, 'queued': true, 'syncId': operation.id};
+  }
+
+  static bool _shouldQueueMutationFailure(Object error) {
+    if (error is ApiException) {
+      return error.statusCode == 0;
+    }
+    return false;
   }
 
   static Map<String, dynamic> _deepCastMap(Map src) {

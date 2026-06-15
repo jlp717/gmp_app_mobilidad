@@ -1149,6 +1149,9 @@ class OrderSummary {
     this.ruta = '',
     this.diasReparto = '',
     this.repartoValidado = false,
+    this.saldoPendiente,
+    this.importeVencido,
+    this.deudaEstado = '',
   });
 
   factory OrderSummary.fromJson(Map<String, dynamic> json) {
@@ -1189,6 +1192,21 @@ class OrderSummary {
       diasReparto: (json['diasReparto'] ?? '').toString().trim(),
       repartoValidado: json['repartoValidado'] == true ||
           json['repartoValidado'].toString().toUpperCase() == 'S',
+      saldoPendiente: _toNullableDouble(
+        json['saldoPendiente'] ??
+            json['pendiente'] ??
+            json['totalPendiente'] ??
+            json['deuda'],
+      ),
+      importeVencido: _toNullableDouble(
+        json['vencido'] ?? json['totalVencido'] ?? json['importeVencido'],
+      ),
+      deudaEstado: (json['balanceStatus'] ??
+              json['debtStatus'] ??
+              json['deudaEstado'] ??
+              '')
+          .toString()
+          .trim(),
     );
   }
   final int id;
@@ -1221,6 +1239,9 @@ class OrderSummary {
   final String ruta;
   final String diasReparto;
   final bool repartoValidado;
+  final double? saldoPendiente;
+  final double? importeVencido;
+  final String deudaEstado;
 }
 
 /// Delivery date + provisional truck options before confirming an order.
@@ -2126,7 +2147,11 @@ class PedidosService {
       return response['balance'] as Map<String, dynamic>? ?? {};
     } catch (e) {
       debugPrint('[PedidosService] Error getClientBalance: $e');
-      return {};
+      return {
+        'balanceStatus': 'error',
+        'loadError': true,
+        'message': 'No se pudo cargar la deuda',
+      };
     }
   }
 
@@ -2227,6 +2252,12 @@ double _toDouble(dynamic value, {double fallback = 0}) {
   if (value == null) return fallback;
   if (value is num) return value.toDouble();
   return double.tryParse(value.toString()) ?? fallback;
+}
+
+double? _toNullableDouble(dynamic value) {
+  if (value == null) return null;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString().replaceAll(',', '.'));
 }
 
 /// Safe int parser – handles null, int, String, num, Map (crash-proof).

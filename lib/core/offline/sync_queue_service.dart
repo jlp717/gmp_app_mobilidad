@@ -15,6 +15,7 @@ class SyncOperation {
     this.attempts = 0,
     this.createdAt,
     this.lastError,
+    this.failedAt,
   });
 
   final String id;
@@ -25,6 +26,9 @@ class SyncOperation {
   int attempts;
   DateTime? createdAt;
   String? lastError;
+  DateTime? failedAt;
+
+  bool get isFailed => failedAt != null;
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -35,6 +39,7 @@ class SyncOperation {
         'attempts': attempts,
         'createdAt': createdAt?.toIso8601String(),
         'lastError': lastError,
+        'failedAt': failedAt?.toIso8601String(),
       };
 
   factory SyncOperation.fromJson(Map<String, dynamic> json) => SyncOperation(
@@ -48,6 +53,9 @@ class SyncOperation {
             ? DateTime.parse(json['createdAt'] as String)
             : null,
         lastError: json['lastError'] as String?,
+        failedAt: json['failedAt'] != null
+            ? DateTime.parse(json['failedAt'] as String)
+            : null,
       );
 }
 
@@ -77,7 +85,11 @@ class SyncQueueService {
         '[SyncQueue] Initialized with ${_box?.length ?? 0} pending operations');
   }
 
-  int get pendingCount => _box?.length ?? 0;
+  int get pendingCount => pending.length;
+  int get failedCount => failed.length;
+
+  List<SyncOperation> get failed =>
+      pending.where((operation) => operation.isFailed).toList(growable: false);
 
   /// Enqueue a new sync operation.
   Future<void> enqueue(SyncOperation operation) async {
@@ -116,6 +128,11 @@ class SyncQueueService {
 
     int successCount = 0;
     for (final op in ops) {
+      if (op.isFailed) {
+        debugPrint('[SyncQueue] ${op.id} is failed; manual review required');
+        continue;
+      }
+
       // Skip if backoff delay not yet elapsed
       final backoff = _calculateBackoff(op.attempts);
       final nextRetry = (op.createdAt ?? DateTime.now()).add(backoff);
@@ -134,8 +151,10 @@ class SyncQueueService {
         op.attempts++;
         op.lastError = e.toString();
         if (op.attempts >= _maxAttempts) {
-          debugPrint('[SyncQueue] Max attempts reached for ${op.id}, removing');
-          await dequeue(op.id);
+          op.failedAt ??= DateTime.now();
+          await _box?.put(op.id, jsonEncode(op.toJson()));
+          debugPrint(
+              '[SyncQueue] Max attempts reached for ${op.id}, preserving failed operation');
         } else {
           // Update with incremented attempts
           await _box?.put(op.id, jsonEncode(op.toJson()));
@@ -165,7 +184,7 @@ class SyncQueueService {
       try {
         final op =
             SyncOperation.fromJson(jsonDecode(raw) as Map<String, dynamic>);
-        if ((op.createdAt ?? DateTime.now()).isBefore(cutoff)) {
+        if (!op.isFailed && (op.createdAt ?? DateTime.now()).isBefore(cutoff)) {
           stale.add(key);
         }
       } catch (_) {

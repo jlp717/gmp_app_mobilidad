@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/client_balance_badge.dart';
 
 class ClientSearchDialog {
   /// Show the client search bottom sheet.
@@ -38,7 +39,6 @@ class ClientSearchDialog {
 }
 
 class _ClientSearchBody extends StatefulWidget {
-
   const _ClientSearchBody({
     required this.vendedorCodes,
     required this.scrollController,
@@ -126,7 +126,8 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              const Icon(Icons.person_search, color: AppTheme.neonBlue, size: 22),
+              const Icon(Icons.person_search,
+                  color: AppTheme.neonBlue, size: 22),
               const SizedBox(width: 8),
               Text(
                 'Seleccionar cliente',
@@ -152,7 +153,8 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
               prefixIcon: const Icon(Icons.search, color: Colors.white54),
               suffixIcon: _searchController.text.isNotEmpty
                   ? IconButton(
-                      icon: const Icon(Icons.clear, color: Colors.white54, size: 18),
+                      icon: const Icon(Icons.clear,
+                          color: Colors.white54, size: 18),
                       onPressed: () {
                         _searchController.clear();
                         _loadClients();
@@ -173,7 +175,8 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: AppTheme.neonBlue),
               ),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             ),
             onChanged: _onSearchChanged,
           ),
@@ -201,12 +204,17 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
           children: [
             const Icon(Icons.error_outline, color: AppTheme.error, size: 40),
             const SizedBox(height: 8),
-            Text('Error al cargar clientes', style: TextStyle(color: Colors.white70, fontSize: Responsive.fontSize(context, small: 14, large: 16))),
+            Text('Error al cargar clientes',
+                style: TextStyle(
+                    color: Colors.white70,
+                    fontSize:
+                        Responsive.fontSize(context, small: 14, large: 16))),
             const SizedBox(height: 8),
             TextButton.icon(
               onPressed: () => _loadClients(search: _searchController.text),
               icon: const Icon(Icons.refresh, color: AppTheme.neonBlue),
-              label: const Text('Reintentar', style: TextStyle(color: AppTheme.neonBlue)),
+              label: const Text('Reintentar',
+                  style: TextStyle(color: AppTheme.neonBlue)),
             ),
           ],
         ),
@@ -217,7 +225,9 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
       return Center(
         child: Text(
           'No se encontraron clientes',
-          style: TextStyle(color: Colors.white54, fontSize: Responsive.fontSize(context, small: 14, large: 16)),
+          style: TextStyle(
+              color: Colors.white54,
+              fontSize: Responsive.fontSize(context, small: 14, large: 16)),
         ),
       );
     }
@@ -235,15 +245,18 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
             top: 0,
             left: 0,
             right: 0,
-            child: LinearProgressIndicator(color: AppTheme.neonBlue, backgroundColor: Colors.transparent),
+            child: LinearProgressIndicator(
+                color: AppTheme.neonBlue, backgroundColor: Colors.transparent),
           ),
       ],
     );
   }
 
   Widget _buildClientTile(Map<String, dynamic> client) {
-    final code = (client['CODIGOCLIENTE'] ?? client['code'] ?? '').toString().trim();
-    final name = (client['NOMBRECLIENTE'] ?? client['name'] ?? '').toString().trim();
+    final code =
+        (client['CODIGOCLIENTE'] ?? client['code'] ?? '').toString().trim();
+    final name =
+        (client['NOMBRECLIENTE'] ?? client['name'] ?? '').toString().trim();
     final city = (client['CIUDAD'] ?? client['city'] ?? '').toString().trim();
     final nif = (client['NIF'] ?? client['nif'] ?? '').toString().trim();
 
@@ -271,7 +284,8 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Center(
-                  child: Icon(Icons.storefront_outlined, color: AppTheme.neonBlue, size: 18),
+                  child: Icon(Icons.storefront_outlined,
+                      color: AppTheme.neonBlue, size: 18),
                 ),
               ),
               const SizedBox(width: 10),
@@ -284,7 +298,8 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
-                        fontSize: Responsive.fontSize(context, small: 13, large: 15),
+                        fontSize:
+                            Responsive.fontSize(context, small: 13, large: 15),
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -295,28 +310,45 @@ class _ClientSearchBodyState extends State<_ClientSearchBody> {
                           code,
                           style: TextStyle(
                             color: AppTheme.neonBlue,
-                            fontSize: Responsive.fontSize(context, small: 11, large: 12),
+                            fontSize: Responsive.fontSize(context,
+                                small: 11, large: 12),
                           ),
                         ),
                         if (city.isNotEmpty) ...[
-                          Text(' · ', style: TextStyle(color: Colors.white38, fontSize: Responsive.fontSize(context, small: 11, large: 12))),
+                          Text(' · ',
+                              style: TextStyle(
+                                  color: Colors.white38,
+                                  fontSize: Responsive.fontSize(context,
+                                      small: 11, large: 12))),
                           Flexible(
                             child: Text(
                               city,
-                              style: TextStyle(color: Colors.white54, fontSize: Responsive.fontSize(context, small: 11, large: 12)),
+                              style: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: Responsive.fontSize(context,
+                                      small: 11, large: 12)),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
                         if (nif.isNotEmpty) ...[
-                          Text(' · ', style: TextStyle(color: Colors.white38, fontSize: Responsive.fontSize(context, small: 11, large: 12))),
+                          Text(' · ',
+                              style: TextStyle(
+                                  color: Colors.white38,
+                                  fontSize: Responsive.fontSize(context,
+                                      small: 11, large: 12))),
                           Text(
                             nif,
-                            style: TextStyle(color: Colors.white54, fontSize: Responsive.fontSize(context, small: 11, large: 12)),
+                            style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: Responsive.fontSize(context,
+                                    small: 11, large: 12)),
                           ),
                         ],
                       ],
                     ),
+                    if (clientDebtIsVisible(client))
+                      ClientDebtStatusChip(balance: client),
                   ],
                 ),
               ),

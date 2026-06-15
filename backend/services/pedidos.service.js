@@ -952,10 +952,13 @@ function splitFixedText(value, width, count) {
     return chunks;
 }
 
-function cajaUnidadFlag(unidadMedida) {
+function isBoxUnidadMedida(unidadMedida) {
     const unit = trimString(unidadMedida).toUpperCase();
-    if (unit === 'CAJA' || unit === 'CAJAS' || unit === '') return 'C';
-    return 'U';
+    return unit === '' || unit === 'CAJA' || unit === 'CAJAS' || unit === 'ENVASE' || unit === 'ENVASES';
+}
+
+function cajaUnidadFlag(unidadMedida) {
+    return isBoxUnidadMedida(unidadMedida) ? 'C' : 'U';
 }
 
 async function withPedidosTransaction(callback) {
@@ -2248,7 +2251,7 @@ async function createOrder({
                 unidadesCaja,
                 precioVenta: precio
             });
-            const billingQty = unidadMedida === 'CAJAS' ? cantidadEnvases : cantidadUnidades;
+            const billingQty = isBoxUnidadMedida(unidadMedida) ? cantidadEnvases : cantidadUnidades;
             const importeCosto = parseFloat(ln.importeCosto) || Math.round((billingQty * (parseFloat(ln.precioCosto) || 0)) * 100) / 100;
             const importeMargen = importeVenta - importeCosto;
             const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
@@ -2806,14 +2809,14 @@ function calculateLineImporte({ unidadMedida, cantidadEnvases, cantidadUnidades,
     let importe = 0;
     if (um === 'KILOGRAMOS' || um === 'LITROS') {
         importe = unidades * precio;
-    } else if (envases > 0 && unidades > 0 && um === 'CAJAS') {
+    } else if (envases > 0 && unidades > 0 && isBoxUnidadMedida(um)) {
         const expectedEquivalentUnits = envases * uc;
         const unitsAreBoxEquivalence = Math.abs(unidades - expectedEquivalentUnits) < 0.0001
             || unidades >= expectedEquivalentUnits;
         importe = unitsAreBoxEquivalence
             ? envases * precio
             : (envases + (unidades / uc)) * precio;
-    } else if (um === 'CAJAS') {
+    } else if (isBoxUnidadMedida(um)) {
         importe = envases * precio;
     } else {
         // PIEZAS, BANDEJAS, ESTUCHES, UNIDADES, etc.
@@ -2829,6 +2832,15 @@ function calculateLineImporte({ unidadMedida, cantidadEnvases, cantidadUnidades,
 async function addOrderLine(pedidoId, lineData) {
     const id = parseInt(pedidoId);
     if (isNaN(id)) throw new Error('Invalid pedidoId');
+
+    const codigoArticulo = trimString(lineData.codigoArticulo);
+    if (!codigoArticulo) {
+        throw new OrderStateError('INVALID_LINE_PAYLOAD', 'codigoArticulo is required', 400);
+    }
+    const claseLinea = lineData.claseLinea === undefined ? 'VT' : trimString(lineData.claseLinea);
+    if (!['VT', 'SC'].includes(claseLinea)) {
+        throw new OrderStateError('INVALID_LINE_PAYLOAD', 'claseLinea inválida', 400);
+    }
 
     await assertOrderEditable(id);
 
@@ -2850,7 +2862,7 @@ async function addOrderLine(pedidoId, lineData) {
 
     // P1-A: Use shared calculator for consistent importe across add/create
     const importeVenta = calculateLineImporte({ unidadMedida, cantidadEnvases, cantidadUnidades, unidadesCaja, precioVenta: precio });
-    const billingQty = (unidadMedida === 'CAJAS') ? cantidadEnvases : cantidadUnidades;
+    const billingQty = isBoxUnidadMedida(unidadMedida) ? cantidadEnvases : cantidadUnidades;
     const importeCosto = Math.round((billingQty * precioCosto) * 100) / 100;
     const importeMargen = importeVenta - importeCosto;
     const pctMargen = importeVenta > 0 ? ((importeMargen / importeVenta) * 100) : 0;
@@ -2867,7 +2879,7 @@ async function addOrderLine(pedidoId, lineData) {
 
     const params = [
         id, nextSeq,
-        (lineData.codigoArticulo || '').trim(), (lineData.descripcion || '').substring(0, 40),
+        codigoArticulo, (lineData.descripcion || '').substring(0, 40),
         cantidadEnvases, cantidadUnidades,
         unidadMedida, unidadesCaja,
         precio, precioCosto,
@@ -2876,7 +2888,7 @@ async function addOrderLine(pedidoId, lineData) {
         importeVenta, importeCosto, importeMargen,
         Math.round(pctMargen * 100) / 100,
         descuentoLinea,
-        lineData.tipoLinea || 'R', lineData.tipoventa || 'CC', lineData.claseLinea || 'VT', nextSeq
+        lineData.tipoLinea || 'R', lineData.tipoventa || 'CC', claseLinea, nextSeq
     ];
 
     await queryWithParams(sql, params, false);
@@ -2899,7 +2911,7 @@ async function updateOrderLine(lineId, {
     if (isNaN(id)) throw new Error('Invalid lineId');
 
     if (claseLinea !== undefined && !['VT', 'SC'].includes(claseLinea)) {
-        throw new Error('claseLinea invÃ¡lida');
+        throw new OrderStateError('INVALID_LINE_PAYLOAD', 'claseLinea inválida', 400);
     }
 
     // Fetch current line to get pedidoId and defaults
@@ -2960,6 +2972,14 @@ async function deleteOrderLine(lineId, pedidoId) {
     if (isNaN(lid) || isNaN(pid)) throw new Error('Invalid lineId or pedidoId');
 
     await assertOrderEditable(pid);
+
+    const lineRows = await queryWithParams(
+        `SELECT ID FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE ID = ? AND PEDIDO_ID = ?`,
+        [lid, pid], false
+    );
+    if (!lineRows || lineRows.length === 0) {
+        throw new OrderStateError('LINE_NOT_FOUND', 'Línea de pedido no encontrada', 404);
+    }
 
     await queryWithParams(
         `DELETE FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE ID = ? AND PEDIDO_ID = ?`,
@@ -3424,34 +3444,62 @@ async function cancelOrder(orderId, options = {}) {
     );
     
     if (!currentRows || currentRows.length === 0) {
-        throw new Error('Pedido no encontrado');
+        throw new OrderStateError('ORDER_NOT_FOUND', 'Pedido no encontrado', 404);
     }
     
     const currentState = canonicalOrderStatus(currentRows[0].ESTADO);
     
     // Prevent double-cancel
     if (currentState === 'ANULADO') {
-        throw new Error('El pedido ya estÃ¡ anulado');
+        throw new OrderStateError('PEDIDO_ALREADY_ANULADO', 'El pedido ya está anulado', 409);
     }
     
     // Prevent cancelling shipped orders
     if (currentState === 'ENVIADO') {
-        throw new Error('No se puede anular un pedido que ya ha sido enviado');
+        throw new OrderStateError('PEDIDO_INVALID_STATE', 'No se puede anular un pedido que ya ha sido enviado', 409);
     }
     
     // Only allow cancelling BORRADOR or CONFIRMADO orders
     if (!['BORRADOR', 'CONFIRMADO'].includes(currentState)) {
-        throw new Error(`No se puede anular un pedido en estado: ${currentState}`);
+        throw new OrderStateError('PEDIDO_INVALID_STATE', `No se puede anular un pedido en estado: ${currentState}`, 409);
     }
 
     // Get order info for audit before cancelling
     let orderBefore;
     try { orderBefore = await getOrderDetail(id); } catch (e) { /* ok */ }
 
-    await queryWithParams(
-        `UPDATE ${ERP_SCHEMA}.PEDIDOS_CAB SET ESTADO = 'ANULADO', UPDATED_AT = CURRENT_TIMESTAMP WHERE ID = ?`,
+    const cancelResult = await queryWithParams(
+        `UPDATE ${ERP_SCHEMA}.PEDIDOS_CAB
+            SET ESTADO = 'ANULADO', UPDATED_AT = CURRENT_TIMESTAMP
+          WHERE ID = ?
+            AND ESTADO IN ('BORRADOR', 'CONFIRMADO')`,
         [id], false
     );
+    const cancelRowsAffected = (cancelResult && typeof cancelResult.count === 'number')
+        ? cancelResult.count
+        : (typeof cancelResult === 'number' ? cancelResult : null);
+
+    if (cancelRowsAffected === 0) {
+        const conflictRows = await queryWithParams(
+            `SELECT ESTADO, CODIGOCLIENTE, IMPORTETOTAL FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE ID = ?`,
+            [id], false
+        );
+        if (!conflictRows || conflictRows.length === 0) {
+            throw new OrderStateError('ORDER_NOT_FOUND', 'Pedido no encontrado', 404);
+        }
+        const conflictState = canonicalOrderStatus(conflictRows[0].ESTADO);
+        if (conflictState === 'ANULADO') {
+            throw new OrderStateError('PEDIDO_ALREADY_ANULADO', 'El pedido ya está anulado', 409);
+        }
+        if (conflictState === 'ENVIADO') {
+            throw new OrderStateError('PEDIDO_INVALID_STATE', 'No se puede anular un pedido que ya ha sido enviado', 409);
+        }
+        throw new OrderStateError(
+            'PEDIDO_STATE_CONFLICT',
+            `No se pudo anular el pedido porque cambió de estado durante la operación (estado actual: ${conflictState})`,
+            409,
+        );
+    }
 
     // Release stock reservations (only if order was CONFIRMADO)
     const releasedCodes = [];

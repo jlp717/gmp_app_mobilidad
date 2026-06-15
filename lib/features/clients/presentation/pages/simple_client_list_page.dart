@@ -14,6 +14,7 @@ import 'package:gmp_app_mobilidad/core/widgets/smart_sync_header.dart'; // Impor
 import 'package:gmp_app_mobilidad/features/clients/data/clients_service.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/data/kpi_alerts_service.dart';
 import 'package:gmp_app_mobilidad/features/kpi_alerts/presentation/widgets/client_alerts_widget.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/client_balance_badge.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/pages/pedidos_page.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -49,7 +50,8 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
 
   String _selectedAlertType = 'ALL';
   bool _onlyWithAlerts = false;
-  List<String>? _clientsWithAlertsCodes;
+  Set<String> _clientsWithAlertsCodes = const <String>{};
+  bool _alertsPrefetchLoaded = false;
   ProviderSubscription<String?>? _vendorSubscription;
   int _loadGeneration = 0;
 
@@ -156,24 +158,35 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
         search: query,
       );
 
-      // Apply KPI Alerts filtering
-      var filteredResults = results;
-      if (_onlyWithAlerts || _selectedAlertType != 'ALL') {
+      // Batch-compatible KPI prefetch: one request per list load, never one
+      // request per client row. Compact row badges consume this set only.
+      Set<String> alertCodesSet = const <String>{};
+      var alertsPrefetchLoaded = false;
+      try {
         final alertCodes = await KpiAlertsService.instance.getClientsWithAlerts(
           vendedorCodes: codesToPass,
           type: _selectedAlertType,
         );
+        alertCodesSet = alertCodes.toSet();
+        alertsPrefetchLoaded = true;
+      } catch (_) {
+        alertCodesSet = const <String>{};
+        alertsPrefetchLoaded = false;
+      }
 
-        final codesSet = alertCodes.toSet();
+      var filteredResults = results;
+      if (_onlyWithAlerts || _selectedAlertType != 'ALL') {
         filteredResults = results.where((c) {
           final code = c['code']?.toString() ?? '';
-          return codesSet.contains(code);
+          return alertCodesSet.contains(code);
         }).toList();
       }
 
       if (!mounted || generation != _loadGeneration) return;
       setState(() {
         _clients = filteredResults;
+        _clientsWithAlertsCodes = alertCodesSet;
+        _alertsPrefetchLoaded = alertsPrefetchLoaded;
         _isLoading = false;
         _lastFetchTime = DateTime.now();
       });
@@ -490,9 +503,12 @@ class _SimpleClientListPageState extends ConsumerState<SimpleClientListPage> {
         itemCount: _clients.length,
         itemBuilder: (context, index) {
           final client = _clients[index];
+          final code = client['code']?.toString() ?? '';
           return _ClientCard(
             client: client,
             isJefeVentas: widget.isJefeVentas,
+            hasPrefetchedAlerts:
+                _alertsPrefetchLoaded && _clientsWithAlertsCodes.contains(code),
             onTap: () => _navigateToClientMatrix(client),
             onWhatsAppTap: () => _openWhatsApp(client),
           );
@@ -626,10 +642,12 @@ class _ClientCard extends StatelessWidget {
   const _ClientCard(
       {required this.client,
       this.isJefeVentas = false,
+      this.hasPrefetchedAlerts = false,
       this.onTap,
       this.onWhatsAppTap});
   final Map<String, dynamic> client;
   final bool isJefeVentas;
+  final bool hasPrefetchedAlerts;
   final VoidCallback? onTap;
   final VoidCallback? onWhatsAppTap;
 
@@ -776,6 +794,8 @@ class _ClientCard extends StatelessWidget {
                             ],
                           ),
                         ],
+                        if (clientDebtIsVisible(client))
+                          ClientDebtStatusChip(balance: client),
                       ],
                     ),
                   ),
@@ -848,7 +868,12 @@ class _ClientCard extends StatelessWidget {
 
               // KPI Glacius badges
               if (code.isNotEmpty)
-                ClientAlertsWidget(clientId: code, compact: true),
+                ClientAlertsWidget(
+                  clientId: code,
+                  compact: true,
+                  fetchWhenCompact: false,
+                  hasPrefetchedAlerts: hasPrefetchedAlerts,
+                ),
 
               // Route & Days Badges
               _buildRouteDaysRow(),

@@ -1,8 +1,10 @@
-import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart';
+import 'package:gmp_app_mobilidad/features/cobros/presentation/pages/cobro_detail_screen.dart';
 import 'package:gmp_app_mobilidad/features/cobros/providers/cobros_provider.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/client_balance_badge.dart';
 
 void main() {
   group('Cobros models', () {
@@ -113,6 +115,36 @@ void main() {
       );
     });
   });
+  group('Client debt status parser', () {
+    test('keeps missing balance distinct from explicit zero debt', () {
+      expect(clientDebtFromMap(const {})['state'], 'none');
+      final zeroDebt = clientDebtFromMap(const {'saldoPendiente': 0});
+      expect(zeroDebt['state'], 'data');
+      expect(clientDebtLabel(zeroDebt), 'Al día');
+    });
+
+    test('exposes loading and error instead of hiding failed debt loads', () {
+      expect(
+        clientDebtLabel(clientDebtFromMap(const {'balanceStatus': 'loading'})),
+        'Consultando deuda',
+      );
+      expect(
+        clientDebtLabel(clientDebtFromMap(const {'loadError': true})),
+        'Deuda no disponible',
+      );
+    });
+
+    test('classifies overdue debt before generic pending risk', () {
+      final debt = clientDebtFromMap(const {
+        'saldoPendiente': 250,
+        'vencido': 10,
+      });
+
+      expect(debt['state'], 'data');
+      expect(clientDebtLabel(debt), 'Vencido');
+    });
+  });
+
   group('Cobros delivery completion mutation contract', () {
     test('completarEntrega batches item updates behind one idempotent mutation',
         () async {
@@ -182,6 +214,137 @@ void main() {
       expect(mutationBodies, hasLength(1));
       expect(mutationBodies.single, containsPair('idempotencyKey', isNotEmpty));
       expect(mutationBodies.single, contains('items'));
+    });
+  });
+
+  group('Cobros payable UX rules', () {
+    CobroPendiente buildCobro({
+      required String id,
+      required double pendiente,
+      EstadoCobro estado = EstadoCobro.pendiente,
+    }) {
+      return CobroPendiente(
+        id: id,
+        referencia: id,
+        tipo: TipoCobro.factura,
+        fecha: DateTime(2026, 6, 13),
+        importeTotal: 100,
+        importePendiente: pendiente,
+        estado: estado,
+      );
+    }
+
+    test('filters zero and epsilon documents out of payable list', () {
+      final payable = buildCobro(id: 'payable', pendiente: 12.34);
+      final zero = buildCobro(id: 'zero', pendiente: 0);
+      final epsilon = buildCobro(id: 'epsilon', pendiente: cobroPayableEpsilon);
+      final paid = buildCobro(
+        id: 'paid',
+        pendiente: 20,
+        estado: EstadoCobro.alDia,
+      );
+
+      expect(
+        cobrosPayableItems([payable, zero, epsilon, paid]).map((c) => c.id),
+        ['payable'],
+      );
+      expect(
+        cobrosNonPayableItems([payable, zero, epsilon, paid]).map((c) => c.id),
+        ['zero', 'epsilon', 'paid'],
+      );
+    });
+
+    test('rejects overpay, zero and non-payable payment amounts', () {
+      final cobro = buildCobro(id: 'doc', pendiente: 50);
+      final zero = buildCobro(id: 'zero', pendiente: 0);
+
+      expect(isValidCobroPaymentAmount(cobro, 0), isFalse);
+      expect(isValidCobroPaymentAmount(cobro, 50.01), isFalse);
+      expect(isValidCobroPaymentAmount(zero, 0.01), isFalse);
+      expect(isValidCobroPaymentAmount(cobro, 50), isTrue);
+    });
+
+    test('keeps only failed retryable selections after partial success', () {
+      final failed = buildCobro(id: 'failed', pendiente: 35);
+      final nowPaid = buildCobro(id: 'now-paid', pendiente: 0);
+
+      final nextSelection = nextCobroSelectionAfterSubmit(
+        currentSelection: const {
+          'success': 'COMPLETO',
+          'failed': 'PARCIAL',
+          'now-paid': 'COMPLETO',
+          'ignored-none': 'NONE',
+        },
+        successfulIds: {'success'},
+        latestCobros: [failed, nowPaid],
+      );
+
+      expect(nextSelection, {'failed': 'PARCIAL'});
+    });
+  });
+
+  group('Cobros online retry idempotency', () {
+    test('reuses idempotency token after an interrupted register attempt',
+        () async {
+      final requestBodies = <Map<String, dynamic>>[];
+      var calls = 0;
+      final interceptor = InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (options.method == 'POST' &&
+              options.path == '/cobros/4300010363/registrar') {
+            requestBodies.add(Map<String, dynamic>.from(options.data as Map));
+            calls++;
+            if (calls == 1) {
+              handler.reject(
+                DioException(
+                  requestOptions: options,
+                  type: DioExceptionType.sendTimeout,
+                ),
+              );
+              return;
+            }
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                data: const {'success': true},
+              ),
+            );
+            return;
+          }
+          handler.next(options);
+        },
+      );
+      ApiClient.dio.interceptors.add(interceptor);
+      addTearDown(() => ApiClient.dio.interceptors.remove(interceptor));
+
+      final provider = CobrosProvider(employeeCode: '57');
+
+      final first = await provider.registrarCobro(
+        codigoCliente: '4300010363',
+        referencia: 'M-1',
+        importe: 12.34,
+        formaPago: 'EFECTIVO',
+        tipoVenta: TipoVenta.contado,
+        tipoModo: TipoModoCobro.normal,
+        reloadAfter: false,
+      );
+      final second = await provider.registrarCobro(
+        codigoCliente: '4300010363',
+        referencia: 'M-1',
+        importe: 12.34,
+        formaPago: 'EFECTIVO',
+        tipoVenta: TipoVenta.contado,
+        tipoModo: TipoModoCobro.normal,
+        reloadAfter: false,
+      );
+
+      expect(first, isFalse);
+      expect(second, isTrue);
+      expect(requestBodies, hasLength(2));
+      expect(
+        requestBodies[1]['idempotencyToken'],
+        requestBodies[0]['idempotencyToken'],
+      );
     });
   });
 }

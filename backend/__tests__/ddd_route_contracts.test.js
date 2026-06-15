@@ -17,6 +17,7 @@ const mockPedidosService = {
   getOrderAlbaran: jest.fn(),
   generateOrderPdf: jest.fn(),
   getOrderVendorForAuth: jest.fn(),
+  addOrderLine: jest.fn(),
 };
 const mockPedidosRepo = {
   searchProducts: jest.fn(),
@@ -167,6 +168,26 @@ describe('DDD pedidos route contracts', () => {
     expect(res.body.id).toBe(22);
     expect(res.body.header).toEqual({ id: 22, estado: 'BORRADOR' });
     expect(res.body.lines).toEqual([{ id: 1 }]);
+  });
+
+  test('POST /create masks generic service errors from SQL and ODBC details', async () => {
+    const sqlError = new Error('SQL0204 Tabla interna no encontrada');
+    sqlError.odbcErrors = [{ state: '42S02', code: -204, message: 'ODBC driver raw detail' }];
+    mockPedidosService.createOrder.mockRejectedValue(sqlError);
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .post('/create')
+      .send({
+        clientCode: 'C001',
+        vendedorCode: '01',
+        lines: [{ codigoArticulo: 'P001', cantidadEnvases: 1 }],
+      });
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ success: false, error: 'Error interno del servidor' });
+    expect(JSON.stringify(res.body)).not.toContain('SQL0204');
+    expect(JSON.stringify(res.body)).not.toContain('ODBC');
+    expect(JSON.stringify(res.body)).not.toContain('Tabla interna');
   });
 
   test('POST /create rejects commercial creating orders for another vendor', async () => {
@@ -426,6 +447,78 @@ describe('DDD pedidos route contracts', () => {
     );
   });
 
+  test('PUT /:id/lines validates codigoArticulo and claseLinea before service call', async () => {
+    const missingArticle = await request(makeApp(createPedidosRoutes()))
+      .put('/22/lines')
+      .send({ cantidadEnvases: 1, claseLinea: 'VT' });
+
+    expect(missingArticle.status).toBe(400);
+    expect(missingArticle.body).toMatchObject({ success: false, code: 'INVALID_LINE_PAYLOAD' });
+    expect(mockPedidosService.addOrderLine).not.toHaveBeenCalled();
+
+    const invalidClass = await request(makeApp(createPedidosRoutes()))
+      .put('/22/lines')
+      .send({ codigoArticulo: 'P001', cantidadEnvases: 1, claseLinea: 'BAD' });
+
+    expect(invalidClass.status).toBe(400);
+    expect(invalidClass.body).toMatchObject({ success: false, code: 'INVALID_LINE_PAYLOAD' });
+    expect(mockPedidosService.addOrderLine).not.toHaveBeenCalled();
+  });
+
+  test('PUT /:id/confirm preserves typed service errors and hides public 500 detail', async () => {
+    const alreadyConfirming = new Error('Pedido ya confirmado o en proceso de confirmacion por otra sesion');
+    alreadyConfirming.code = 'PEDIDO_ALREADY_CONFIRMING';
+    alreadyConfirming.status = 409;
+    mockPedidosService.confirmOrder.mockRejectedValueOnce(alreadyConfirming);
+
+    const conflict = await request(makeApp(createPedidosRoutes()))
+      .put('/22/confirm')
+      .send({ saleType: 'CC' });
+
+    expect(conflict.status).toBe(409);
+    expect(conflict.body).toMatchObject({ success: false, code: 'PEDIDO_ALREADY_CONFIRMING', error: 'Pedido ya confirmado o en proceso de confirmacion por otra sesion' });
+
+    const bolsaWrite = new Error('No se pudo registrar movimiento de bolsa. SQL0204 detalle interno');
+    bolsaWrite.code = 'BOLSA_MOVEMENT_WRITE_FAILED';
+    bolsaWrite.status = 500;
+    mockPedidosService.confirmOrder.mockRejectedValueOnce(bolsaWrite);
+
+    const failure = await request(makeApp(createPedidosRoutes()))
+      .put('/22/confirm')
+      .send({ saleType: 'CC' });
+
+    expect(failure.status).toBe(500);
+    expect(failure.body).toMatchObject({ success: false, code: 'BOLSA_MOVEMENT_WRITE_FAILED', error: 'Error interno al confirmar pedido' });
+    expect(failure.body.error).not.toContain('SQL0204');
+  });
+
+  test('DELETE /:id/lines/:lineId pins repeated delete as typed LINE_NOT_FOUND', async () => {
+    const notFound = new Error('Línea de pedido no encontrada');
+    notFound.code = 'LINE_NOT_FOUND';
+    notFound.status = 404;
+    mockPedidosService.deleteOrderLine.mockRejectedValueOnce(notFound);
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .delete('/22/lines/7');
+
+    expect(res.status).toBe(404);
+    expect(res.body).toMatchObject({ success: false, code: 'LINE_NOT_FOUND' });
+  });
+
+  test('PUT /:id/cancel preserves already-anulado typed service error', async () => {
+    const alreadyAnulado = new Error('El pedido ya está anulado');
+    alreadyAnulado.code = 'PEDIDO_ALREADY_ANULADO';
+    alreadyAnulado.status = 409;
+    mockPedidosService.cancelOrder.mockRejectedValueOnce(alreadyAnulado);
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .put('/22/cancel')
+      .send({});
+
+    expect(res.status).toBe(409);
+    expect(res.body).toMatchObject({ success: false, code: 'PEDIDO_ALREADY_ANULADO', error: 'El pedido ya está anulado' });
+  });
+
   test('PUT /:id/confirm rejects invalid saleType and cross-vendor commercial ownership', async () => {
     const invalidType = await request(makeApp(createPedidosRoutes()))
       .put('/22/confirm')
@@ -499,6 +592,20 @@ describe('DDD cobros route contracts', () => {
     expect(res.body.resumen.total).toBe(42);
   });
 
+  test('GET /:codigoCliente/pendientes masks generic repository SQL and ODBC errors', async () => {
+    const repositoryError = new Error('SQL0802 ODBC raw conversion detail');
+    repositoryError.odbcErrors = [{ state: '22003', code: -802, message: 'Numeric conversion failed' }];
+    mockCobrosRepo.getPendientes.mockRejectedValue(repositoryError);
+
+    const res = await request(makeApp(createCobrosRoutes())).get('/C001/pendientes');
+
+    expect(res.status).toBe(500);
+    expect(res.body).toEqual({ success: false, error: 'Error interno del servidor' });
+    expect(JSON.stringify(res.body)).not.toContain('SQL0802');
+    expect(JSON.stringify(res.body)).not.toContain('ODBC');
+    expect(JSON.stringify(res.body)).not.toContain('conversion');
+  });
+
   test('GET /:codigoCliente/pendientes cache key includes authenticated commercial scope', async () => {
     mockCobrosRepo.getPendientes.mockResolvedValue({
       cobros: [],
@@ -512,6 +619,25 @@ describe('DDD cobros route contracts', () => {
 
     expect(mockCache.set.mock.calls[0][0]).toContain('COMERCIAL:01');
     expect(mockCache.set.mock.calls[1][0]).toContain('COMERCIAL:02');
+  });
+
+  test('GET /:codigoCliente/estado preserves LIMITECREDITO when DB2 column is available', async () => {
+    const db = require('../config/db');
+    mockCobrosRepo.getPendientes.mockResolvedValue({
+      cobros: [],
+      resumen: { totalPendiente: 25 },
+    });
+    db.queryWithParams.mockImplementation(async (sql) => {
+      if (/QSYS2\.SYSCOLUMNS/i.test(sql)) return [{ COLUMN_NAME: 'LIMITECREDITO' }];
+      if (/SELECT\s+LIMITECREDITO\s+FROM\s+DSEDAC\.CLI/i.test(sql)) return [{ LIMITECREDITO: 1500 }];
+      return [{ OK: 1 }];
+    });
+
+    const res = await request(makeApp(createCobrosRoutes())).get('/C001/estado');
+
+    expect(res.status).toBe(200);
+    expect(res.body.estadoCliente.totalPendiente).toBe(25);
+    expect(res.body.estadoCliente.limiteCredito).toBe(1500);
   });
 
   test('GET /:codigoCliente/estado hides raw repository errors', async function () {
@@ -573,6 +699,7 @@ describe('DDD cobros route contracts', () => {
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('IDEMPOTENCY_CONFLICT');
+    expect(res.body.error).toBe('Token de idempotencia reutilizado con otro payload');
   });
 
   test('GET /pending-summary/:vendedorCode delegates authorization to repository', async () => {
@@ -580,6 +707,8 @@ describe('DDD cobros route contracts', () => {
       summary: { C001: { total: 42, count: 1 } },
       grandTotal: 42,
       clientCount: 1,
+      source: 'CVC',
+      pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 1 },
     });
 
     const res = await request(makeApp(createCobrosRoutes())).get('/pending-summary/01');
@@ -590,10 +719,53 @@ describe('DDD cobros route contracts', () => {
       expect.objectContaining({ userId: '01', userRole: 'COMERCIAL' }),
     );
     expect(res.body.grandTotal).toBe(42);
+    expect(res.body.source).toBe('CVC');
+    expect(res.body.pagination).toEqual({ limit: 100, page: 1, offset: 0, returnedDocuments: 1 });
+  });
+
+  test('GET /pending-summary/ALL clamps pagination and passes it to repository', async function () {
+    mockCobrosRepo.getPendingSummary.mockResolvedValue({
+      summary: {}, grandTotal: 0, grandTotalVencido: 0, clientCount: 0, source: 'CVC',
+      pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 0 },
+    });
+
+    const res = await request(makeApp(createCobrosRoutes(), { id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true }))
+      .get('/pending-summary/ALL')
+      .query({ limit: '999', page: '0', offset: '-5' });
+
+    expect(res.status).toBe(200);
+    expect(mockCobrosRepo.getPendingSummary).toHaveBeenCalledWith(
+      'ALL',
+      expect.objectContaining({ limit: 100, page: 1, offset: 0 }),
+    );
+    expect(res.body).toMatchObject({
+      success: true, summary: {}, grandTotal: 0, grandTotalVencido: 0, clientCount: 0, source: 'CVC',
+      pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 0 },
+    });
+  });
+
+  test('GET /pending-summary/ALL derives page from explicit offset', async function () {
+    mockCobrosRepo.getPendingSummary.mockResolvedValue({
+      summary: { C001: { nombre: 'Cliente Uno', total: 100, vencido: 0, count: 1, estado: 'PENDIENTE' } },
+      grandTotal: 100, grandTotalVencido: 0, clientCount: 1, source: 'CVC',
+      pagination: { limit: 25, page: 3, offset: 50, returnedDocuments: 1 },
+    });
+
+    const res = await request(makeApp(createCobrosRoutes(), { id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true }))
+      .get('/pending-summary/ALL')
+      .query({ limit: '25', offset: '50' });
+
+    expect(res.status).toBe(200);
+    expect(mockCobrosRepo.getPendingSummary).toHaveBeenCalledWith(
+      'ALL',
+      expect.objectContaining({ limit: 25, page: 3, offset: 50 }),
+    );
+    expect(res.body.pagination).toEqual({ limit: 25, page: 3, offset: 50, returnedDocuments: 1 });
+    expect(res.body.summary.C001).toEqual({ nombre: 'Cliente Uno', total: 100, vencido: 0, count: 1, estado: 'PENDIENTE' });
   });
 
   test('GET /pending-summary/:vendedorCode forwards manager visible vendorCodes', async () => {
-    mockCobrosRepo.getPendingSummary.mockResolvedValue({ summary: {}, grandTotal: 0, clientCount: 0 });
+    mockCobrosRepo.getPendingSummary.mockResolvedValue({ summary: {}, grandTotal: 0, grandTotalVencido: 0, clientCount: 0, source: 'CVC', pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 0 } });
 
     const res = await request(makeApp(createCobrosRoutes(), {
       id: '98',

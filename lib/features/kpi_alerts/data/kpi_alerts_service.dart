@@ -140,6 +140,7 @@ class KpiAlertsService {
   Future<List<KpiAlert>> getClientAlerts(
     String clientId, {
     bool forceRefresh = false,
+    bool throwOnError = false,
   }) async {
     if (!forceRefresh && _cache.containsKey(clientId)) {
       final entry = _cache[clientId]!;
@@ -177,6 +178,7 @@ class KpiAlertsService {
       return _cache[clientId]?.alerts ?? [];
     } catch (e) {
       debugPrint('[KpiAlerts] Error for $clientId: $e');
+      if (throwOnError && !_cache.containsKey(clientId)) rethrow;
       return _cache[clientId]?.alerts ?? [];
     }
   }

@@ -12,6 +12,7 @@ const logger = require('../middleware/logger');
 const { v4: uuidv4 } = require('uuid');
 const { db2QualifiedTable, db2InsertSql } = require('../utils/db2-identifiers');
 const { getDb2WriteSchema } = require('../utils/db2-schemas');
+const crypto = require('crypto');
 
 const APP_SCHEMA = getDb2WriteSchema();
 const COBROS_TABLE = db2QualifiedTable(APP_SCHEMA, 'COBROS');
@@ -53,6 +54,32 @@ const registrarCobroLimiter = rateLimit({
 function sanitizeCode(val) {
     if (val == null) return '';
     return String(val).trim();
+}
+
+function db2StringLiteral(value) {
+    const escaped = sanitizeCode(value).split('\'').join('\'\'');
+    return '\'' + escaped + '\'';
+}
+
+function buildPendingSummaryPageDocsCte(rows) {
+    const docs = [];
+    const seen = new Set();
+    for (const row of rows || []) {
+        if (docs.length >= 100) break;
+        const client = sanitizeCode(row.CLIENTE);
+        const serie = sanitizeCode(row.SERIE_DOCUMENTO);
+        const numero = sanitizeCode(row.NUMERO_DOCUMENTO);
+        if (!client || !serie || !numero) continue;
+        const key = [client, serie, numero].join('|');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        docs.push({ client, serie, numero, docKey: serie + '-' + numero });
+    }
+    if (docs.length === 0) return '';
+    const values = docs
+        .map((doc) => '(' + [doc.client, doc.serie, doc.numero, doc.docKey].map(db2StringLiteral).join(', ') + ')')
+        .join(',\n          ');
+    return 'WITH PAGE_DOCS (CLIENTE, SERIE, NUMERO, DOC_KEY) AS (VALUES\n          ' + values + '\n        )';
 }
 
 function toCents(value) {
@@ -100,6 +127,7 @@ function buildCobroInsert({
     tipoUsuario,
     codigoUsuario,
     observaciones,
+    idempotencyToken,
     includeErpColumns,
 }) {
     const columns = [
@@ -111,7 +139,7 @@ function buildCobroInsert({
         id, codigoCliente, referencia, importe,
         formaPago, tipoVenta, tipoModo,
         tipoUsuario, codigoUsuario, observaciones,
-        id,
+        idempotencyToken,
     ];
 
     if (includeErpColumns) {
@@ -524,8 +552,18 @@ function normalizeIdempotencyToken(rawToken) {
         throw err;
     }
     if (token.length <= 64) return token;
-    const crypto = require('crypto');
     return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+function paymentIdFromIdempotencyToken(token) {
+    return `CBR-${crypto.createHash('sha256').update(token).digest('hex').slice(0, 32)}`;
+}
+
+function isSameCobroPayload(row, expected) {
+    return String(row.CODIGO_CLIENTE || "").trim() === expected.codigoCliente
+        && String(row.REFERENCIA || "").trim() === expected.referencia
+        && Math.round((parseFloat(row.IMPORTE) || 0) * 100) === Math.round(expected.importe * 100)
+        && String(row.FORMA_PAGO || "").trim() === expected.formaPago;
 }
 
 /**
@@ -548,9 +586,11 @@ router.post('/:codigoCliente/registrar', registrarCobroLimiter, async (req, res)
             idempotencyToken,
         } = req.body;
 
-        let id;
+        let normalizedIdempotencyToken;
+        let paymentId;
         try {
-            id = normalizeIdempotencyToken(idempotencyToken);
+            normalizedIdempotencyToken = normalizeIdempotencyToken(idempotencyToken);
+            paymentId = paymentIdFromIdempotencyToken(normalizedIdempotencyToken);
         } catch (tokenErr) {
             return res.status(400).json({
                 success: false,
@@ -577,7 +617,7 @@ router.post('/:codigoCliente/registrar', registrarCobroLimiter, async (req, res)
             });
         }
 
-        logger.info(`[COBROS] Registrando cobro para ${codigoCliente}: ${importeNum} ref=${referenciaTrim} token=${id.slice(0, 12)}...`);
+        logger.info(`[COBROS] Registrando cobro para ${codigoCliente}: ${importeNum} ref=${referenciaTrim} paymentId=${paymentId.slice(0, 12)}...`);
 
         // CROSS-TABLE: si el REPARTIDOR ya cobro este documento al entregar,
         // bloqueamos el cobro comercial (cliente intentando doble-pago).
@@ -606,16 +646,17 @@ router.post('/:codigoCliente/registrar', registrarCobroLimiter, async (req, res)
         try {
             const existingRows = await queryWithParams(
                 `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
-                   FROM ${APP_SCHEMA}.COBROS WHERE ID = ?`,
-                [id], false, false
+                   FROM ${APP_SCHEMA}.COBROS WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
+                [paymentId, normalizedIdempotencyToken], false, false
             );
             if (existingRows && existingRows.length > 0) {
                 const e = existingRows[0];
-                const samePayload =
-                    String(e.CODIGO_CLIENTE || '').trim() === codigoCliente &&
-                    String(e.REFERENCIA || '').trim() === referenciaTrim &&
-                    Math.round((parseFloat(e.IMPORTE) || 0) * 100) === Math.round(importeNum * 100) &&
-                    String(e.FORMA_PAGO || '').trim() === formaPagoTrim;
+                const samePayload = isSameCobroPayload(e, {
+                    codigoCliente,
+                    referencia: referenciaTrim,
+                    importe: importeNum,
+                    formaPago: formaPagoTrim,
+                });
                 if (!samePayload) {
                     return res.status(409).json({
                         success: false,
@@ -635,7 +676,8 @@ router.post('/:codigoCliente/registrar', registrarCobroLimiter, async (req, res)
 
         try {
             let insert = buildCobroInsert({
-                id,
+                id: paymentId,
+                idempotencyToken: normalizedIdempotencyToken,
                 codigoCliente,
                 referencia: referenciaTrim,
                 importe: importeNum,
@@ -653,7 +695,8 @@ router.post('/:codigoCliente/registrar', registrarCobroLimiter, async (req, res)
                 if (!isColumnNotFound(erpInsertErr)) throw erpInsertErr;
                 logger.warn(`[COBROS] ERP-compatible columns missing in ${APP_SCHEMA}.COBROS, using legacy insert`);
                 insert = buildCobroInsert({
-                    id,
+                    id: paymentId,
+                    idempotencyToken: normalizedIdempotencyToken,
                     codigoCliente,
                     referencia: referenciaTrim,
                     importe: importeNum,
@@ -672,7 +715,25 @@ router.post('/:codigoCliente/registrar', registrarCobroLimiter, async (req, res)
             // replay-check antes de fallar (PK colision sobre ID).
             const msg = String(insertErr.message || '');
             if (/DUPLICATE|PRIMARY|UNIQUE|SQL0803/i.test(msg)) {
-                logger.warn(`[COBROS] Colision PK (race idempotencia) token=${id.slice(0, 12)}: ${msg}`);
+                logger.warn(`[COBROS] Colision PK (race idempotencia) paymentId=${paymentId.slice(0, 12)}: ${msg}`);
+                const existingRows = await queryWithParams(
+                    `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
+                       FROM ${APP_SCHEMA}.COBROS WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
+                    [paymentId, normalizedIdempotencyToken], false, false
+                );
+                const existing = existingRows && existingRows[0];
+                if (existing && !isSameCobroPayload(existing, {
+                    codigoCliente,
+                    referencia: referenciaTrim,
+                    importe: importeNum,
+                    formaPago: formaPagoTrim,
+                })) {
+                    return res.status(409).json({
+                        success: false,
+                        code: 'IDEMPOTENCY_CONFLICT',
+                        error: 'Token de idempotencia reutilizado con otro payload',
+                    });
+                }
                 return res.json({
                     success: true,
                     idempotent: true,
@@ -685,7 +746,7 @@ router.post('/:codigoCliente/registrar', registrarCobroLimiter, async (req, res)
         // Invalida cache de pendientes para que la siguiente consulta vea el nuevo cobro
         invalidateCobrosCache(codigoCliente);
 
-        res.json({ success: true, mensaje: 'Cobro registrado correctamente', id });
+        res.json({ success: true, mensaje: 'Cobro registrado correctamente', id: paymentId });
 
     } catch (error) {
         logger.error('[COBROS] Error registrando: ' + error.message);
@@ -720,6 +781,7 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
         const pendingSummaryPage = Number.isFinite(requestedPage)
             ? Math.max(requestedPage, 1)
             : 1;
+        const pendingSummaryOffset = (pendingSummaryPage - 1) * pendingSummaryLimit;
         const visibleVendorCodes = normalizeCodeList(context.vendorCodes);
         let selectedVendorCodes = isAll
             ? (manager ? visibleVendorCodes : [])
@@ -798,7 +860,7 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
               ${vendorClause}
             GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CVC.SERIEDOCUMENTO), CVC.NUMERODOCUMENTO
             ORDER BY TOTAL_PENDIENTE DESC, CLIENTE ASC, SERIE_DOCUMENTO ASC, NUMERO_DOCUMENTO ASC
-            FETCH FIRST ${pendingSummaryLimit} ROWS ONLY
+            OFFSET ${pendingSummaryOffset} ROWS FETCH FIRST ${pendingSummaryLimit} ROWS ONLY
         `;
 
         const cacheKeyVendedor = `cobros:pending-summary:${vendedorCodeParam}:${context.userRole}:${context.userId}:${selectedVendorCodes.join(',')}:limit:${pendingSummaryLimit}:page:${pendingSummaryPage}`;
@@ -816,53 +878,47 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
             appAdjustments.set(key, (appAdjustments.get(key) || 0) + (parseFloat(amount) || 0));
         };
 
-        if ((rows || []).length > 0) {
+        const pageDocsCte = buildPendingSummaryPageDocsCte(rows || []);
+        if (pageDocsCte) {
             try {
-                const comercialSql = `
-                  SELECT TRIM(C.CODIGO_CLIENTE) AS CLIENTE,
-                         TRIM(C.REFERENCIA) AS REF,
-                         COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP
-                    FROM ${APP_SCHEMA}.COBROS C
-                   WHERE EXISTS (
-                     SELECT 1
-                       FROM DSEDAC.CVC CVC
-                      WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGO_CLIENTE)
-                        AND CVC.IMPORTEPENDIENTE <> 0
-                        AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
-                        ${emptyClientFilter}
-                        ${vendorClause}
-                   )
-                   GROUP BY TRIM(C.CODIGO_CLIENTE), TRIM(C.REFERENCIA)`;
-                const appRows = await queryWithParams(comercialSql, vendorParams, []);
+                const comercialSql = [
+                    pageDocsCte,
+                    'SELECT P.CLIENTE AS CLIENTE,',
+                    '       P.DOC_KEY AS REF,',
+                    '       COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP',
+                    '  FROM PAGE_DOCS P',
+                    '  JOIN ' + APP_SCHEMA + '.COBROS C',
+                    '    ON TRIM(C.CODIGO_CLIENTE) = P.CLIENTE',
+                    '   AND (TRIM(C.REFERENCIA) = P.DOC_KEY OR TRIM(C.REFERENCIA) LIKE ' + db2StringLiteral('%:') + ' || P.DOC_KEY)',
+                    ' GROUP BY P.CLIENTE, P.DOC_KEY',
+                ].join('\n');
+                const appRows = await queryWithParams(comercialSql, []);
                 for (const row of appRows || []) {
                     const reference = sanitizeCode(row.REF);
                     const match = reference.match(/([^:]+-\d+)$/);
                     addAdjustment(row.CLIENTE, match ? match[1] : reference, row.TOTAL_APP);
                 }
             } catch (error) {
-                logger.warn(`[COBROS] App-side COBROS summary subtract skipped: ${error.message}`);
+                logger.warn('[COBROS] App-side COBROS summary subtract skipped: ' + error.message);
             }
 
             try {
-                const repartidorSql = `
-                  SELECT TRIM(R.CODIGOCLIENTEALBARAN) AS CLIENTE,
-                         TRIM(R.SERIEDOCUMENTO) || '-' || TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) AS DOC_KEY,
-                         COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
-                    FROM ${APP_SCHEMA}.REPARTIDOR_COBROS R
-                   WHERE EXISTS (
-                     SELECT 1
-                       FROM DSEDAC.CVC CVC
-                      WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(R.CODIGOCLIENTEALBARAN)
-                        AND CVC.IMPORTEPENDIENTE <> 0
-                        AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
-                        ${emptyClientFilter}
-                        ${vendorClause}
-                   )
-                   GROUP BY TRIM(R.CODIGOCLIENTEALBARAN), TRIM(R.SERIEDOCUMENTO), TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20)))`;
-                const repRows = await queryWithParams(repartidorSql, vendorParams, []);
+                const repartidorSql = [
+                    pageDocsCte,
+                    'SELECT P.CLIENTE AS CLIENTE,',
+                    '       P.DOC_KEY AS DOC_KEY,',
+                    '       COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_REP',
+                    '  FROM PAGE_DOCS P',
+                    '  JOIN ' + APP_SCHEMA + '.REPARTIDOR_COBROS R',
+                    '    ON TRIM(R.CODIGOCLIENTEALBARAN) = P.CLIENTE',
+                    '   AND TRIM(R.SERIEDOCUMENTO) = P.SERIE',
+                    '   AND TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) = P.NUMERO',
+                    ' GROUP BY P.CLIENTE, P.DOC_KEY',
+                ].join('\n');
+                const repRows = await queryWithParams(repartidorSql, []);
                 for (const row of repRows || []) addAdjustment(row.CLIENTE, row.DOC_KEY, row.TOTAL_REP);
             } catch (error) {
-                logger.warn(`[COBROS] App-side REPARTIDOR_COBROS summary subtract skipped: ${error.message}`);
+                logger.warn('[COBROS] App-side REPARTIDOR_COBROS summary subtract skipped: ' + error.message);
             }
         }
 
@@ -905,6 +961,12 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
             grandTotalVencido,
             clientCount: Object.keys(summary).length,
             source: 'CVC',
+            pagination: {
+                limit: pendingSummaryLimit,
+                page: pendingSummaryPage,
+                offset: pendingSummaryOffset,
+                returnedDocuments: (rows || []).length,
+            },
         });
 
     } catch (error) {
