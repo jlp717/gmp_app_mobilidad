@@ -329,7 +329,8 @@ describe('bolsa ledger per-line persistence', () => {
     const movementInserts = q.mock.calls.filter(([sql]) => /INSERT\s+INTO\s+JAVIER\.MOVIMIENTOS_BOLSA/i.test(sql));
     expect(movementInserts).toHaveLength(1);
     const [sql, params] = movementInserts[0];
-    expect((sql.match(/\(\?, \?, \?, \?, \?, 'CONSUMO'/g) || []).length).toBe(2);
+    expect((sql.match(/\(\?, \?, \?, \?, \?, \?,/g) || []).length).toBe(2);
+    expect(params.filter((value) => value === 'CONSUMO')).toHaveLength(2);
     expect(params).toEqual(expect.arrayContaining([7, 'ART-UNDER-1', 10, 7, 2, 'CAJAS', 'pedido-42-line-7-under-min']));
     expect(params).toEqual(expect.arrayContaining([8, 'ART-UNDER-2', 5, 3, 1, 'UNIDADES', 'pedido-42-line-8-under-min']));
   });

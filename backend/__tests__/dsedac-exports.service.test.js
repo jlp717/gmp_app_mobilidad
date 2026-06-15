@@ -24,6 +24,7 @@ describe('DSEDAC auxiliary export safety', () => {
     delete process.env.PEDIDOS_CONFIRMATION_SCHEMA;
     delete process.env.PEDIDOS_EXPORT_TO_SYSTEM;
     delete process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED;
+    delete process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED;
     mockQueryWithParams.mockReset();
   });
 
@@ -50,6 +51,7 @@ describe('DSEDAC auxiliary export safety', () => {
       PEDIDOS_CONFIRMATION_SCHEMA: 'DSEDAC',
       PEDIDOS_EXPORT_TO_SYSTEM: 'true',
       PEDIDOS_DSEDAC_EXPORT_APPROVED: 'true',
+      PEDIDOS_DSEDAC_STORAGE_APPROVED: 'true',
     });
 
     const result = await service.exportCobroToSystem({

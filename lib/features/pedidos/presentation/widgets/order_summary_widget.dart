@@ -1145,12 +1145,16 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                                 );
                                 return;
                               }
-                              provider.updateLine(
+                              final err = provider.updateLine(
                                 index,
                                 cantidadEnvases: c,
                                 cantidadUnidades: u,
                                 precioVenta: price,
                               );
+                              if (err != null) {
+                                showValidation(err);
+                                return;
+                              }
                             } else {
                               final qty = double.tryParse(
                                     qtyController.text.replaceAll(',', '.'),
@@ -1163,12 +1167,16 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                                 return;
                               }
                               final isBoxes = _lineUsesBoxes(line);
-                              provider.updateLine(
+                              final err = provider.updateLine(
                                 index,
                                 cantidadEnvases: isBoxes ? qty : null,
                                 cantidadUnidades: isBoxes ? null : qty,
                                 precioVenta: price,
                               );
+                              if (err != null) {
+                                showValidation(err);
+                                return;
+                              }
                             }
                             Navigator.pop(ctx);
                           },

@@ -380,7 +380,9 @@ describe('pedidos DSEDAC write safety contract', () => {
     const target = pedidosService.getPedidosConfirmationTarget();
 
     expect(target).toMatchObject({
-      schema: 'DSEDAC',
+      schema: 'JAVIER',
+      requestedSchema: 'DSEDAC',
+      storageApproved: false,
       mode: 'LOCAL',
       shouldExportToSystem: false,
       exportRequested: true,
@@ -574,6 +576,33 @@ describe('pedidos mutation route ownership contract', function() {
     expect(mockService.getOrderVendorForAuth).toHaveBeenCalledWith(42);
     expect(mockService.confirmOrder).not.toHaveBeenCalled();
   });
+  test('normal confirm path ignores forceConfirm for COMERCIAL without explicit admin gate', async function() {
+    const { request, app, mockService } = makeMutationApp({ user: { code: '01', role: 'COMERCIAL' }, orderVendor: '01' });
+
+    const res = await request(app)
+      .put('/api/pedidos/42/confirm')
+      .send({ saleType: 'CC', forceConfirm: true });
+
+    expect(res.status).toBe(200);
+    expect(mockService.confirmOrder).toHaveBeenCalledWith(42, 'CC', expect.objectContaining({
+      forceConfirm: false,
+      userId: '01',
+    }));
+  });
+
+  test('JEFE_VENTAS cannot confirm order outside visible vendor scope', async function() {
+    const { request, app, mockService } = makeMutationApp({
+      user: { code: '80', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: ['01'] },
+      orderVendor: '02',
+    });
+
+    const res = await request(app).put('/api/pedidos/42/confirm').send({ saleType: 'CC' });
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ success: false, code: 'FORBIDDEN_VENDOR' });
+    expect(mockService.confirmOrder).not.toHaveBeenCalled();
+  });
+
   test('COMERCIAL cannot create an order for another vendor', async function() {
     const { request, app, mockService } = makeMutationApp({ user: { code: '01', role: 'COMERCIAL' }, orderVendor: '01' });
     const res = await request(app).post('/api/pedidos/create').send({

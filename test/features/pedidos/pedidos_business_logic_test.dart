@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_order_api.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/unit_selector_modal.dart';
 
 class _RecordingOrderApi implements PedidosOrderApi {
   int? confirmedOrderId;
@@ -290,6 +292,164 @@ void main() {
     });
   });
 
+  group('PedidosProvider stock guard', () {
+    test('addLine does not mutate cart when requested quantity exceeds stock',
+        () {
+      final provider = PedidosProvider();
+      provider.setClient('4300010363', 'Cliente test');
+
+      final result = provider.addLine(
+        Product(
+          code: 'STOCK-LIMIT-1',
+          name: 'Producto stock limitado',
+          stockEnvases: 2,
+          unitsPerBox: 12,
+          precioTarifa1: 10,
+        ),
+        3,
+        36,
+        'CAJAS',
+        10,
+      );
+
+      expect(result, isNotNull);
+      expect(
+        provider.lines,
+        isEmpty,
+        reason:
+            'Quick/strict add must not silently add a PARCIAL line when requested quantity exceeds stock.',
+      );
+    });
+
+    test('addLine can still apply explicit partial when requested', () {
+      final provider = PedidosProvider();
+      provider.setClient('4300010363', 'Cliente test');
+      final result = provider.addLine(
+        Product(
+            code: 'STOCK-PARTIAL-1',
+            name: 'Producto parcial',
+            stockEnvases: 2,
+            unitsPerBox: 12,
+            precioTarifa1: 10),
+        3,
+        36,
+        'CAJAS',
+        10,
+        allowPartial: true,
+      );
+      expect(result, startsWith('PARCIAL:1'));
+      expect(provider.lines, hasLength(1));
+      expect(provider.lines.single.cantidadEnvases, 2);
+    });
+
+    test(
+        'updateLine rejects dual-field quantities above stock without mutation',
+        () {
+      final provider = PedidosProvider();
+      provider.setClient('4300010363', 'Cliente test');
+      final product = Product(
+          code: 'DUAL-STOCK-1',
+          name: 'Producto dual',
+          stockEnvases: 1,
+          stockUnidades: 0,
+          unitsPerBox: 12,
+          unitsFraction: 1,
+          precioTarifa1: 10);
+      provider.addLine(product, 1, 0, 'CAJAS', 10);
+      final result =
+          provider.updateLine(0, cantidadEnvases: 2, cantidadUnidades: 0);
+      expect(result, contains('Stock insuficiente'));
+      expect(provider.lines.single.cantidadEnvases, 1);
+      expect(provider.lines.single.cantidadUnidades, 0);
+    });
+
+    testWidgets(
+        'UnitSelectorModal blocks accepting quantity above selected stock',
+        (tester) async {
+      await tester.pumpWidget(MaterialApp(
+          home: Builder(
+              builder: (context) => ElevatedButton(
+                  onPressed: () {
+                    UnitSelectorModal.show(context,
+                        product: Product(
+                            code: 'MODAL-STOCK-1',
+                            name: 'Producto modal',
+                            stockEnvases: 1,
+                            unitsPerBox: 12,
+                            precioTarifa1: 10),
+                        initialUnit: 'CAJAS',
+                        initialQuantity: 2,
+                        availableUnits: const ['CAJAS']);
+                  },
+                  child: const Text('open')))));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ACEPTAR'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Stock insuficiente'), findsOneWidget);
+      expect(find.text('Seleccionar unidad y cantidad'), findsOneWidget);
+    });
+
+    testWidgets('UnitSelectorModal blocks normal accept when quantity is zero',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () {
+                UnitSelectorModal.show(
+                  context,
+                  initialUnit: 'CAJAS',
+                  initialQuantity: 0,
+                  availableUnits: const ['CAJAS'],
+                );
+              },
+              child: const Text('open zero'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open zero'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('ACEPTAR'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Indica una cantidad valida.'), findsOneWidget);
+      expect(find.text('Seleccionar unidad y cantidad'), findsOneWidget);
+    });
+
+    testWidgets(
+        'UnitSelectorModal keeps explicit LIMPIAR zero quantity behavior',
+        (tester) async {
+      Future<Map<String, dynamic>?>? modalResult;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () {
+                modalResult = UnitSelectorModal.show(
+                  context,
+                  initialUnit: 'CAJAS',
+                  initialQuantity: 1,
+                  availableUnits: const ['CAJAS'],
+                );
+              },
+              child: const Text('open clear'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open clear'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('LIMPIAR'));
+      await tester.pumpAndSettle();
+
+      final result = await modalResult;
+      expect(result, isNotNull);
+      expect(result!['quantity'], 0.0);
+      expect(result['cleared'], isTrue);
+    });
+  });
   group('Promotions', () {
     test('parses gift promotion metadata from backend JSON', () {
       final promo = PromotionItem.fromJson({

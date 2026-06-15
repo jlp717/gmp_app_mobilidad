@@ -10,7 +10,7 @@
  *        \-> tambien escribe en DSEDAC.* (ERP real) cuando el feature flag
  *            PEDIDOS_EXPORT_TO_SYSTEM=true esta activo.
  *
- * Decisiones de diseño:
+ * Decisiones de diseÃ±o:
  *  - Best-effort: si el export falla, se loguea pero NO rompe el flujo
  *    principal (la fila en JAVIER ya esta persistida).
  *  - Idempotente: se comprueba antes de insertar si el documento ya existe
@@ -26,15 +26,51 @@
  *  - DSEDAC.LAC   = lineas albaran cliente
  *
  * EXCLUYE: pedidos (ya existe exportCommercialOrderToSystem en pedidos.service.js)
- *          y bolsa (siempre JAVIER por diseño).
+ *          y bolsa (siempre JAVIER por diseÃ±o).
  */
 
 const { queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
+const { getDb2WriteSchema, getDb2WriteSchemaRequested, isDsedacWriteApproved } = require('../utils/db2-schemas');
 
-const ERP_SCHEMA = String(process.env.PEDIDOS_CONFIRMATION_SCHEMA || 'JAVIER').trim().toUpperCase();
-const EXPORTS_ENABLED = String(process.env.PEDIDOS_EXPORT_TO_SYSTEM || 'false').toLowerCase() === 'true';
-const EXPORTS_APPROVED = String(process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED || 'false').toLowerCase() === 'true';
+const CRC_EXISTING_BY_TOKEN_SQL = 'SELECT 1 FROM DSEDAC.CRC WHERE IDMARCALIQUIDACION = ? FETCH FIRST 1 ROW ONLY';
+const CRC_NEXT_NUMERO_SQL = 'SELECT COALESCE(NUMERORECIBO, 0) AS N FROM DSEDAC.CRC WHERE SUBEMPRESARECIBO = ? AND EJERCICIORECIBO = ? ORDER BY NUMERORECIBO DESC FETCH FIRST 1 ROW ONLY';
+const CRC_INSERT_SQL = [
+  'INSERT INTO DSEDAC.CRC (',
+  'SUBEMPRESARECIBO, EJERCICIORECIBO, SERIERECIBO, TERMINALRECIBO, NUMERORECIBO,',
+  'CODIGOCLIENTEFACTURA, CODIGOVENDEDOR, TIPORECIBO,',
+  'DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO, HORADOCUMENTO,',
+  'IMPORTECOBRADO, IDMARCALIQUIDACION',
+  ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+].join(' ');
+const CLV_EXISTING_BY_TOKEN_SQL = 'SELECT 1 FROM DSEDAC.CLV WHERE OBSERVACIONES = ? FETCH FIRST 1 ROW ONLY';
+const CLV_NEXT_REGISTRO_SQL = 'SELECT COALESCE(NUMEROREGISTRO, 0) AS N FROM DSEDAC.CLV WHERE CODIGOVENDEDOR = ? AND ANOLIQUIDACION = ? ORDER BY NUMEROREGISTRO DESC FETCH FIRST 1 ROW ONLY';
+const CLV_INSERT_SQL = [
+  'INSERT INTO DSEDAC.CLV (',
+  'CODIGOVENDEDOR, NUMEROREGISTRO, DIALIQUIDACION, MESLIQUIDACION, ANOLIQUIDACION,',
+  'CODIGOCONCEPTO, DESCRIPCIONCONCEPTO, OBSERVACIONES, IMPORTE,',
+  'CODIGOALMACEN, CODIGODELEGACION',
+  ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+].join(' ');
+const CAC_EXISTING_BY_DOCUMENTO_SQL = 'SELECT 1 FROM DSEDAC.CAC WHERE DOCUMENTO = ? FETCH FIRST 1 ROW ONLY';
+const CAC_NEXT_ALBARAN_SQL = 'SELECT COALESCE(NUMEROALBARAN, 0) AS N FROM DSEDAC.CAC WHERE SUBEMPRESAALBARAN = ? AND EJERCICIOALBARAN = ? AND SERIEALBARAN = ? AND TERMINALALBARAN = ? ORDER BY NUMEROALBARAN DESC FETCH FIRST 1 ROW ONLY';
+const CAC_INSERT_SQL = [
+  'INSERT INTO DSEDAC.CAC (',
+  'SUBEMPRESAALBARAN, EJERCICIOALBARAN, SERIEALBARAN, TERMINALALBARAN, NUMEROALBARAN,',
+  'DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO,',
+  'CODIGOCLIENTEALBARAN, CODIGOVENDEDOR,',
+  'IMPORTETOTAL, DOCUMENTO',
+  ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+].join(' ');
+const LAC_INSERT_SQL = [
+  'INSERT INTO DSEDAC.LAC (',
+  'SUBEMPRESAALBARAN, EJERCICIOALBARAN, SERIEALBARAN, TERMINALALBARAN, NUMEROALBARAN, SECUENCIA,',
+  'DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO,',
+  'CODIGOCLIENTEALBARAN, CODIGOVENDEDOR,',
+  'CODIGOARTICULO, DESCRIPCION,',
+  'CANTIDADENVASES, CANTIDADUNIDADES, PRECIOVENTA, IMPORTEVENTA',
+  ') VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+].join(' ');
 
 // Mapeo importes JAVIER -> CODIGOCONCEPTO de DSEDAC.CLV.
 // Los codigos son tentativos y se sobreescriben si CLV usa otros. Confirma
@@ -48,8 +84,24 @@ const CLV_CONCEPT_MAP = [
   { javierField: 'IMPORTEGASTOS',        codigo: 'GT', descripcion: 'GASTOS' },
 ];
 
+function exportGate() {
+  const effectiveSchema = getDb2WriteSchema();
+  const requestedSchema = getDb2WriteSchemaRequested();
+  const storageApproved = isDsedacWriteApproved();
+  const exportEnabled = String(process.env.PEDIDOS_EXPORT_TO_SYSTEM || 'false').toLowerCase() === 'true';
+  const exportApproved = String(process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED || 'false').toLowerCase() === 'true';
+  return {
+    enabled: effectiveSchema === 'DSEDAC' && requestedSchema === 'DSEDAC' && storageApproved && exportEnabled && exportApproved,
+    effectiveSchema,
+    requestedSchema,
+    storageApproved,
+    exportEnabled,
+    exportApproved,
+  };
+}
+
 function isEnabled() {
-  return EXPORTS_ENABLED && EXPORTS_APPROVED && ERP_SCHEMA === 'DSEDAC';
+  return exportGate().enabled;
 }
 
 function logSkip(tag, reason) {
@@ -67,7 +119,7 @@ function logSkip(tag, reason) {
  */
 async function exportCobroToSystem(cobroRow) {
   if (!isEnabled()) {
-    logSkip('exportCobroToSystem', 'export disabled, approval missing, or schema!=DSEDAC');
+    logSkip('exportCobroToSystem', 'export disabled, approval missing, effective schema!=DSEDAC, or requested schema!=DSEDAC');
     return { exported: false, reason: 'disabled' };
   }
   if (!cobroRow || !cobroRow.IDEMPOTENCY_TOKEN) {
@@ -77,7 +129,7 @@ async function exportCobroToSystem(cobroRow) {
   try {
     // 1. Idempotencia: existe ya este token en CRC?
     const existing = await queryWithParams(
-      `SELECT 1 FROM DSEDAC.CRC WHERE IDMARCALIQUIDACION = ? FETCH FIRST 1 ROW ONLY`,
+      CRC_EXISTING_BY_TOKEN_SQL,
       [String(cobroRow.IDEMPOTENCY_TOKEN).slice(0, 30)],
       false, false
     );
@@ -87,23 +139,15 @@ async function exportCobroToSystem(cobroRow) {
 
     // 2. Reservar numero CRC (proximo NUMERORECIBO)
     const numRows = await queryWithParams(
-      `SELECT COALESCE(MAX(NUMERORECIBO), 0) + 1 AS N FROM DSEDAC.CRC
-        WHERE SUBEMPRESARECIBO = ? AND EJERCICIORECIBO = ?`,
+      CRC_NEXT_NUMERO_SQL,
       [String(process.env.PEDIDOS_SYSTEM_SUBEMPRESA || 'GMP'), new Date().getFullYear()],
       false, false
     );
-    const numero = parseInt(numRows?.[0]?.N) || 1;
+    const numero = (parseInt(numRows?.[0]?.N) || 0) + 1;
     const now = new Date();
 
     // 3. INSERT en CRC (solo columnas obligatorias mas comunes)
-    await queryWithParams(`
-      INSERT INTO DSEDAC.CRC (
-        SUBEMPRESARECIBO, EJERCICIORECIBO, SERIERECIBO, TERMINALRECIBO, NUMERORECIBO,
-        CODIGOCLIENTEFACTURA, CODIGOVENDEDOR, TIPORECIBO,
-        DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO, HORADOCUMENTO,
-        IMPORTECOBRADO, IDMARCALIQUIDACION
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
+    await queryWithParams(CRC_INSERT_SQL, [
       String(process.env.PEDIDOS_SYSTEM_SUBEMPRESA || 'GMP'),
       now.getFullYear(),
       String(process.env.PEDIDOS_SYSTEM_SERIE || 'R'),
@@ -120,7 +164,7 @@ async function exportCobroToSystem(cobroRow) {
       String(cobroRow.IDEMPOTENCY_TOKEN).slice(0, 30),
     ], false);
 
-    logger.info(`[DSEDAC-EXPORT] exportCobroToSystem: OK CRC#${numero} (cobro=${cobroRow.IDEMPOTENCY_TOKEN})`);
+    logger.info(`[DSEDAC-EXPORT] exportCobroToSystem: OK CRC#${numero} (dedupe key present)`);
     return { exported: true, numeroRecibo: numero };
   } catch (err) {
     logger.error(`[DSEDAC-EXPORT] exportCobroToSystem FAIL: ${err.message}`);
@@ -134,7 +178,7 @@ async function exportCobroToSystem(cobroRow) {
 
 async function exportLiquidacionToSystem(liquidacionRow) {
   if (!isEnabled()) {
-    logSkip('exportLiquidacionToSystem', 'export disabled, approval missing, or schema!=DSEDAC');
+    logSkip('exportLiquidacionToSystem', 'export disabled, approval missing, effective schema!=DSEDAC, or requested schema!=DSEDAC');
     return { exported: false, reason: 'disabled' };
   }
   if (!liquidacionRow || !liquidacionRow.IDEMPOTENCY_TOKEN) {
@@ -144,7 +188,7 @@ async function exportLiquidacionToSystem(liquidacionRow) {
   try {
     // Idempotencia (a nivel de liquidacion)
     const existing = await queryWithParams(
-      `SELECT 1 FROM DSEDAC.CLV WHERE OBSERVACIONES = ? FETCH FIRST 1 ROW ONLY`,
+      CLV_EXISTING_BY_TOKEN_SQL,
       [String(liquidacionRow.IDEMPOTENCY_TOKEN).slice(0, 40)],
       false, false
     );
@@ -158,11 +202,10 @@ async function exportLiquidacionToSystem(liquidacionRow) {
 
     // Reservar NUMEROREGISTRO inicial
     const numRows = await queryWithParams(
-      `SELECT COALESCE(MAX(NUMEROREGISTRO), 0) + 1 AS N FROM DSEDAC.CLV
-        WHERE CODIGOVENDEDOR = ? AND ANOLIQUIDACION = ?`,
+      CLV_NEXT_REGISTRO_SQL,
       [codigoVendedor, ano], false, false
     );
-    let numero = parseInt(numRows?.[0]?.N) || 1;
+    let numero = (parseInt(numRows?.[0]?.N) || 0) + 1;
 
     // Insertar N filas (una por concepto con importe > 0)
     let inserted = 0;
@@ -170,13 +213,7 @@ async function exportLiquidacionToSystem(liquidacionRow) {
       const importe = parseFloat(liquidacionRow[concept.javierField]) || 0;
       if (importe <= 0) continue;
       try {
-        await queryWithParams(`
-          INSERT INTO DSEDAC.CLV (
-            CODIGOVENDEDOR, NUMEROREGISTRO, DIALIQUIDACION, MESLIQUIDACION, ANOLIQUIDACION,
-            CODIGOCONCEPTO, DESCRIPCIONCONCEPTO, OBSERVACIONES, IMPORTE,
-            CODIGOALMACEN, CODIGODELEGACION
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
+        await queryWithParams(CLV_INSERT_SQL, [
           codigoVendedor, numero, dia, mes, ano,
           concept.codigo, concept.descripcion,
           String(liquidacionRow.IDEMPOTENCY_TOKEN).slice(0, 40),
@@ -194,7 +231,7 @@ async function exportLiquidacionToSystem(liquidacionRow) {
     if (inserted === 0) {
       return { exported: false, reason: 'no_lines_to_export' };
     }
-    logger.info(`[DSEDAC-EXPORT] exportLiquidacionToSystem: OK ${inserted} filas CLV (token=${liquidacionRow.IDEMPOTENCY_TOKEN})`);
+    logger.info(`[DSEDAC-EXPORT] exportLiquidacionToSystem: OK ${inserted} filas CLV (dedupe key present)`);
     return { exported: true, rowsInserted: inserted };
   } catch (err) {
     logger.error(`[DSEDAC-EXPORT] exportLiquidacionToSystem FAIL: ${err.message}`);
@@ -208,7 +245,7 @@ async function exportLiquidacionToSystem(liquidacionRow) {
 
 async function exportEntregaToSystem(entregaHeader, entregaLineas = []) {
   if (!isEnabled()) {
-    logSkip('exportEntregaToSystem', 'export disabled, approval missing, or schema!=DSEDAC');
+    logSkip('exportEntregaToSystem', 'export disabled, approval missing, effective schema!=DSEDAC, or requested schema!=DSEDAC');
     return { exported: false, reason: 'disabled' };
   }
   if (!entregaHeader || !entregaHeader.IDEMPOTENCY_TOKEN) {
@@ -218,7 +255,7 @@ async function exportEntregaToSystem(entregaHeader, entregaLineas = []) {
   try {
     // Idempotencia
     const existing = await queryWithParams(
-      `SELECT 1 FROM DSEDAC.CAC WHERE DOCUMENTO = ? FETCH FIRST 1 ROW ONLY`,
+      CAC_EXISTING_BY_DOCUMENTO_SQL,
       [String(entregaHeader.IDEMPOTENCY_TOKEN).slice(0, 20)],
       false, false
     );
@@ -233,23 +270,14 @@ async function exportEntregaToSystem(entregaHeader, entregaLineas = []) {
 
     // Reservar numero albaran
     const numRows = await queryWithParams(
-      `SELECT COALESCE(MAX(NUMEROALBARAN), 0) + 1 AS N FROM DSEDAC.CAC
-        WHERE SUBEMPRESAALBARAN = ? AND EJERCICIOALBARAN = ?
-          AND SERIEALBARAN = ? AND TERMINALALBARAN = ?`,
+      CAC_NEXT_ALBARAN_SQL,
       [subempresa, ano, serie, terminal], false, false
     );
-    const numeroAlbaran = parseInt(numRows?.[0]?.N) || 1;
+    const numeroAlbaran = (parseInt(numRows?.[0]?.N) || 0) + 1;
     const now = new Date();
 
     // INSERT CAC (columnas obligatorias)
-    await queryWithParams(`
-      INSERT INTO DSEDAC.CAC (
-        SUBEMPRESAALBARAN, EJERCICIOALBARAN, SERIEALBARAN, TERMINALALBARAN, NUMEROALBARAN,
-        DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO,
-        CODIGOCLIENTEALBARAN, CODIGOVENDEDOR,
-        IMPORTETOTAL, DOCUMENTO
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, [
+    await queryWithParams(CAC_INSERT_SQL, [
       subempresa, ano, serie, terminal, numeroAlbaran,
       now.getDate(), now.getMonth() + 1, now.getFullYear(),
       String(entregaHeader.CODIGOCLIENTEALBARAN || entregaHeader.CODIGOCLIENTE || '').padEnd(10).slice(0, 10),
@@ -263,15 +291,7 @@ async function exportEntregaToSystem(entregaHeader, entregaLineas = []) {
     for (let i = 0; i < entregaLineas.length; i++) {
       const line = entregaLineas[i];
       try {
-        await queryWithParams(`
-          INSERT INTO DSEDAC.LAC (
-            SUBEMPRESAALBARAN, EJERCICIOALBARAN, SERIEALBARAN, TERMINALALBARAN, NUMEROALBARAN, SECUENCIA,
-            DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO,
-            CODIGOCLIENTEALBARAN, CODIGOVENDEDOR,
-            CODIGOARTICULO, DESCRIPCION,
-            CANTIDADENVASES, CANTIDADUNIDADES, PRECIOVENTA, IMPORTEVENTA
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [
+        await queryWithParams(LAC_INSERT_SQL, [
           subempresa, ano, serie, terminal, numeroAlbaran, (i + 1),
           now.getDate(), now.getMonth() + 1, now.getFullYear(),
           String(entregaHeader.CODIGOCLIENTEALBARAN || entregaHeader.CODIGOCLIENTE || '').padEnd(10).slice(0, 10),
@@ -289,7 +309,7 @@ async function exportEntregaToSystem(entregaHeader, entregaLineas = []) {
       }
     }
 
-    logger.info(`[DSEDAC-EXPORT] exportEntregaToSystem: OK CAC#${numeroAlbaran} + ${linesInserted} LAC (token=${entregaHeader.IDEMPOTENCY_TOKEN})`);
+    logger.info(`[DSEDAC-EXPORT] exportEntregaToSystem: OK CAC#${numeroAlbaran} + ${linesInserted} LAC (dedupe key present)`);
     return { exported: true, numeroAlbaran, linesInserted };
   } catch (err) {
     logger.error(`[DSEDAC-EXPORT] exportEntregaToSystem FAIL: ${err.message}`);
@@ -299,6 +319,7 @@ async function exportEntregaToSystem(entregaHeader, entregaLineas = []) {
 
 module.exports = {
   isEnabled,
+  exportGate,
   exportCobroToSystem,
   exportLiquidacionToSystem,
   exportEntregaToSystem,

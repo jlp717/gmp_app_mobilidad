@@ -408,6 +408,24 @@ describe('DDD pedidos route contracts', () => {
     expect(res.body.code).toBe('BOLSA_INSUFICIENTE');
   });
 
+  test('PUT /:id/confirm does not honor client forceConfirm for normal commercial confirm', async () => {
+    mockPedidosService.confirmOrder.mockResolvedValueOnce({
+      header: { id: 22, estado: 'CONFIRMADO' },
+      lines: [],
+    });
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .put('/22/confirm')
+      .send({ saleType: 'CC', forceConfirm: true });
+
+    expect(res.status).toBe(200);
+    expect(mockPedidosService.confirmOrder).toHaveBeenCalledWith(
+      22,
+      'CC',
+      expect.objectContaining({ forceConfirm: false, userId: '01' }),
+    );
+  });
+
   test('PUT /:id/confirm rejects invalid saleType and cross-vendor commercial ownership', async () => {
     const invalidType = await request(makeApp(createPedidosRoutes()))
       .put('/22/confirm')

@@ -15,11 +15,51 @@ const {
   getCurrentDate,
   buildClientListVendorSqlFilter,
   buildLaclaeBoundedClientCodesSql,
+  buildClientVendorParamFilter,
 } = require('../utils/common');
 const { cachedQuery } = require('../services/query-optimizer');
 const { TTL } = require('../services/redis-cache');
 const { getClientDays } = require('../services/laclae');
 
+
+function normalizeVendorCode(value) { return String(value || '').trim(); }
+function clientCodesMatch(left, right) {
+  const a = normalizeVendorCode(left);
+  const b = normalizeVendorCode(right);
+  return a === b || (a.replace(/^0+/, '') && a.replace(/^0+/, '') === b.replace(/^0+/, ''));
+}
+function isClientsManager(user) {
+  const role = String(user?.role || '').trim().toUpperCase();
+  return user?.isJefeVentas === true || role === 'JEFE_VENTAS' || role === 'ADMIN';
+}
+function clientsVisibleVendorCodes(user) {
+  const values = user?.vendorCodes || user?.vendedorCodes;
+  return Array.isArray(values) ? values.map(normalizeVendorCode).filter(Boolean) : [];
+}
+function vendorCodeArrayForClientScope(vendedorCodes) {
+  if (!vendedorCodes || vendedorCodes === 'ALL') return [];
+  return String(vendedorCodes)
+    .split(',')
+    .map(normalizeVendorCode)
+    .filter(code => /^[a-zA-Z0-9]+$/.test(code));
+}
+function resolveClientsVendedorCodes(req, requested) {
+  const user = req.user || {};
+  const userCode = normalizeVendorCode(user.code || user.id || user.codigoVendedor || user.vendedorCode);
+  const raw = normalizeVendorCode(requested);
+  const requestedAll = !raw || raw.toUpperCase() === 'ALL' || (userCode && clientCodesMatch(raw, userCode));
+  if (!isClientsManager(user)) {
+    if (!userCode) return { ok: false, status: 403, body: { success: false, code: 'FORBIDDEN_VENDOR', error: 'Usuario sin vendedor asignado' } };
+    return { ok: true, vendedorCodes: userCode };
+  }
+  const visible = clientsVisibleVendorCodes(user);
+  if (requestedAll) return { ok: true, vendedorCodes: visible.length ? visible.join(',') : 'ALL' };
+  const codes = raw.split(',').map(normalizeVendorCode).filter(Boolean);
+  if (visible.length && codes.some(code => !visible.some(v => clientCodesMatch(v, code)))) {
+    return { ok: false, status: 403, body: { success: false, code: 'FORBIDDEN_VENDOR', error: 'Vendedor fuera de alcance' } };
+  }
+  return { ok: true, vendedorCodes: codes.join(',') };
+}
 
 // =============================================================================
 // CLIENTS LIST (OPTIMIZED v2 - 2026-02-02)
@@ -27,7 +67,10 @@ const { getClientDays } = require('../services/laclae');
 const getClientsHandler = async (req, res) => {
   const startTime = Date.now();
   try {
-    const { vendedorCodes, search, limit = 100, offset = 0 } = req.query;
+    let { vendedorCodes, search, limit = 100, offset = 0 } = req.query;
+    const scoped = resolveClientsVendedorCodes(req, vendedorCodes);
+    if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
+    vendedorCodes = scoped.vendedorCodes;
     const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
     const isSearchQuery = !!search;
 
@@ -297,19 +340,134 @@ router.put('/notes', verifyToken, async (req, res) => {
 });
 
 // =============================================================================
+// CLIENT COMPARISON
+// =============================================================================
+router.get('/compare', verifyToken, async (req, res) => {
+  try {
+    const { codes } = req.query;
+    let { vendedorCodes } = req.query;
+    const scoped = resolveClientsVendedorCodes(req, vendedorCodes);
+    if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
+    vendedorCodes = scoped.vendedorCodes;
+    if (!codes) {
+      return res.status(400).json({ error: 'Se requieren códigos de cliente (codes=CLI1,CLI2)' });
+    }
+
+    // Sanitize input for IN clause
+    const clientCodes = codes.split(',')
+      .map(c => `'${sanitizeForSQL(c.trim())}'`)
+      .join(',');
+
+    const now = getCurrentDate();
+    const year = now.getFullYear();
+    const vendedorFilter = buildVendedorFilter(vendedorCodes, 'L');
+
+    // Get comparison data for each client
+    const comparison = await query(`
+      SELECT
+        L.CODIGOCLIENTEALBARAN as code,
+        MIN(C.NOMBRECLIENTE) as name,
+        MIN(C.POBLACION) as city,
+        SUM(L.IMPORTEVENTA) as totalSales,
+        SUM(L.IMPORTEMARGENREAL) as totalMargin,
+        SUM(L.CANTIDADENVASES) as totalBoxes,
+        COUNT(DISTINCT L.ANODOCUMENTO || '-' || L.MESDOCUMENTO) as activeMonths,
+        COUNT(DISTINCT L.CODIGOARTICULO) as uniqueProducts,
+        AVG(L.IMPORTEVENTA) as avgOrderValue,
+        MIN(L.ANODOCUMENTO * 100 + L.MESDOCUMENTO) as firstPurchase,
+        MAX(L.ANODOCUMENTO * 100 + L.MESDOCUMENTO) as lastPurchase
+      FROM DSEDAC.LINDTO L
+      LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
+      WHERE L.CODIGOCLIENTEALBARAN IN(${clientCodes})
+        AND L.ANODOCUMENTO >= ${MIN_YEAR}
+        AND L.TIPOVENTA IN ('CC', 'VC')
+        AND L.TIPOLINEA IN ('AB', 'VT') -- Added Golden Logic
+        AND L.SERIEALBARAN NOT IN ('N', 'Z')
+        ${vendedorFilter}
+      GROUP BY L.CODIGOCLIENTEALBARAN
+    `);
+
+    // Get monthly breakdown for each client
+    const monthlyBreakdown = await query(`
+      SELECT
+        CODIGOCLIENTEALBARAN as code,
+        ANODOCUMENTO as year,
+        MESDOCUMENTO as month,
+        SUM(IMPORTEVENTA) as sales
+      FROM DSEDAC.LINDTO
+      WHERE CODIGOCLIENTEALBARAN IN(${clientCodes})
+        AND ANODOCUMENTO >= ${year - 1}
+        AND TIPOVENTA IN ('CC', 'VC')
+        AND TIPOLINEA IN ('AB', 'VT')
+        AND SERIEALBARAN NOT IN ('N', 'Z')
+        ${vendedorFilter}
+      GROUP BY CODIGOCLIENTEALBARAN, ANODOCUMENTO, MESDOCUMENTO
+      ORDER BY ANODOCUMENTO, MESDOCUMENTO
+    `);
+
+    const clientsData = comparison.map(c => ({
+      code: c.CODE?.trim(),
+      name: c.NAME?.trim() || 'Sin nombre',
+      city: c.CITY?.trim(),
+      totalSales: formatCurrency(c.TOTALSALES),
+      totalMargin: formatCurrency(c.TOTALMARGIN),
+      marginPercent: c.TOTALSALES > 0 ? Math.round((c.TOTALMARGIN / c.TOTALSALES) * 1000) / 10 : 0,
+      totalBoxes: parseInt(c.TOTALBOXES) || 0,
+      activeMonths: parseInt(c.ACTIVEMONTHS) || 0,
+      uniqueProducts: parseInt(c.UNIQUEPRODUCTS) || 0,
+      avgOrderValue: formatCurrency(c.AVGORDERVALUE),
+      monthly: monthlyBreakdown
+        .filter(m => m.CODE?.trim() === c.CODE?.trim())
+        .map(m => ({
+          period: `${m.YEAR}-${String(m.MONTH).padStart(2, '0')}`,
+          sales: formatCurrency(m.SALES)
+        }))
+    }));
+
+    res.json({ clients: clientsData });
+
+  } catch (error) {
+    logger.error(`Client compare error: ${error.message} `);
+    handleRouteError(error, res, 'Error comparando clientes', 500);
+  }
+});
+
+// =============================================================================
 // CLIENT DETAIL
 // =============================================================================
 router.get('/:code', verifyToken, async (req, res) => {
   try {
     const { code } = req.params;
-    const { vendedorCodes } = req.query;
+    let { vendedorCodes } = req.query;
+    const scoped = resolveClientsVendedorCodes(req, vendedorCodes);
+    if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
+    vendedorCodes = scoped.vendedorCodes;
     const vendedorFilter = buildVendedorFilter(vendedorCodes);
     const clientCode = code.trim();
     const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
 
-    // Basic client info
-    // Include all phone fields for WhatsApp feature
-    const clientInfo = await query(`
+    const scopeFilter = buildClientVendorParamFilter(vendorCodeArrayForClientScope(vendedorCodes), 'C');
+    if (scopeFilter.clause) {
+      const scopeRows = await queryWithParams(`
+        SELECT 1 AS OK
+        FROM DSEDAC.CLI C
+        WHERE C.CODIGOCLIENTE = ?
+          ${scopeFilter.clause}
+        FETCH FIRST 1 ROWS ONLY
+      `, [safeClientCode, ...scopeFilter.params], false);
+
+      if (scopeRows.length === 0) {
+        return res.status(403).json({
+          success: false,
+          code: 'FORBIDDEN_CLIENT',
+          error: 'Cliente fuera de alcance del vendedor',
+        });
+      }
+    }
+
+    // Basic client info. Scope is verified before reading PII/business fields for COMERCIAL.
+    // Include all phone fields for WhatsApp feature.
+    const clientInfo = await queryWithParams(`
       SELECT C.CODIGOCLIENTE as code, C.NOMBRECLIENTE as name, C.NIF as nif,
   C.DIRECCION as address, C.POBLACION as city, C.PROVINCIA as province,
   C.CODIGOPOSTAL as postalCode, C.TELEFONO1 as phone, C.TELEFONO2 as phone2,
@@ -317,11 +475,11 @@ router.get('/:code', verifyToken, async (req, res) => {
   C.CODIGORUTA as route, C.PERSONACONTACTO as contactPerson,
   C.OBSERVACIONES1 as notes, C.ANOALTA as yearCreated
       FROM DSEDAC.CLI C
-      WHERE C.CODIGOCLIENTE = '${safeClientCode}'
+      WHERE C.CODIGOCLIENTE = ?
       FETCH FIRST 1 ROWS ONLY
-  `);
+  `, [safeClientCode], false);
 
-if (clientInfo.length === 0) {
+    if (clientInfo.length === 0) {
       return res.status(404).json({ error: 'Cliente no encontrado' });
     }
 
@@ -585,7 +743,10 @@ router.put('/:code/notes', verifyToken, async (req, res) => {
 router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
   try {
     const { code } = req.params;
-    const { vendedorCodes, limit = 100, family1, family2, family3, groupLevel } = req.query;
+    let { vendedorCodes, limit = 100, family1, family2, family3, groupLevel } = req.query;
+    const scoped = resolveClientsVendedorCodes(req, vendedorCodes);
+    if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
+    vendedorCodes = scoped.vendedorCodes;
     const vendedorFilter = buildVendedorFilter(vendedorCodes);
     const clientCode = code.trim();
     const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
@@ -650,7 +811,10 @@ router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
 router.get('/:code/sales-history', verifyToken, async (req, res) => {
   try {
     const { code } = req.params;
-    const { vendedorCodes, limit = 50, offset = 0, groupByFamily = '0' } = req.query;
+    let { vendedorCodes, limit = 50, offset = 0, groupByFamily = '0' } = req.query;
+    const scoped = resolveClientsVendedorCodes(req, vendedorCodes);
+    if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
+    vendedorCodes = scoped.vendedorCodes;
     const vendedorFilter = buildVendedorFilter(vendedorCodes);
     const clientCode = code.trim();
     const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
@@ -765,93 +929,5 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
 });
 
 
-// =============================================================================
-// CLIENT COMPARISON
-// =============================================================================
-router.get('/compare', verifyToken, async (req, res) => {
-  try {
-    const { codes, vendedorCodes } = req.query;
-    if (!codes) {
-      return res.status(400).json({ error: 'Se requieren códigos de cliente (codes=CLI1,CLI2)' });
-    }
-
-    // Sanitize input for IN clause
-    const clientCodes = codes.split(',')
-      .map(c => `'${sanitizeForSQL(c.trim())}'`)
-      .join(',');
-
-    const now = getCurrentDate();
-    const year = now.getFullYear();
-    const vendedorFilter = buildVendedorFilter(vendedorCodes, 'L');
-
-    // Get comparison data for each client
-    const comparison = await query(`
-      SELECT
-        L.CODIGOCLIENTEALBARAN as code,
-        MIN(C.NOMBRECLIENTE) as name,
-        MIN(C.POBLACION) as city,
-        SUM(L.IMPORTEVENTA) as totalSales,
-        SUM(L.IMPORTEMARGENREAL) as totalMargin,
-        SUM(L.CANTIDADENVASES) as totalBoxes,
-        COUNT(DISTINCT L.ANODOCUMENTO || '-' || L.MESDOCUMENTO) as activeMonths,
-        COUNT(DISTINCT L.CODIGOARTICULO) as uniqueProducts,
-        AVG(L.IMPORTEVENTA) as avgOrderValue,
-        MIN(L.ANODOCUMENTO * 100 + L.MESDOCUMENTO) as firstPurchase,
-        MAX(L.ANODOCUMENTO * 100 + L.MESDOCUMENTO) as lastPurchase
-      FROM DSEDAC.LINDTO L
-      LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
-      WHERE L.CODIGOCLIENTEALBARAN IN(${clientCodes})
-        AND L.ANODOCUMENTO >= ${MIN_YEAR} 
-        AND L.TIPOVENTA IN ('CC', 'VC')
-        AND L.TIPOLINEA IN ('AB', 'VT') -- Added Golden Logic
-        AND L.SERIEALBARAN NOT IN ('N', 'Z')
-        ${vendedorFilter}
-      GROUP BY L.CODIGOCLIENTEALBARAN
-    `);
-
-    // Get monthly breakdown for each client
-    const monthlyBreakdown = await query(`
-      SELECT
-        CODIGOCLIENTEALBARAN as code,
-        ANODOCUMENTO as year,
-        MESDOCUMENTO as month,
-        SUM(IMPORTEVENTA) as sales
-      FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN IN(${clientCodes})
-        AND ANODOCUMENTO >= ${year - 1} 
-        AND TIPOVENTA IN ('CC', 'VC')
-        AND TIPOLINEA IN ('AB', 'VT')
-        AND SERIEALBARAN NOT IN ('N', 'Z')
-        ${vendedorFilter}
-      GROUP BY CODIGOCLIENTEALBARAN, ANODOCUMENTO, MESDOCUMENTO
-      ORDER BY ANODOCUMENTO, MESDOCUMENTO
-    `);
-
-    const clientsData = comparison.map(c => ({
-      code: c.CODE?.trim(),
-      name: c.NAME?.trim() || 'Sin nombre',
-      city: c.CITY?.trim(),
-      totalSales: formatCurrency(c.TOTALSALES),
-      totalMargin: formatCurrency(c.TOTALMARGIN),
-      marginPercent: c.TOTALSALES > 0 ? Math.round((c.TOTALMARGIN / c.TOTALSALES) * 1000) / 10 : 0,
-      totalBoxes: parseInt(c.TOTALBOXES) || 0,
-      activeMonths: parseInt(c.ACTIVEMONTHS) || 0,
-      uniqueProducts: parseInt(c.UNIQUEPRODUCTS) || 0,
-      avgOrderValue: formatCurrency(c.AVGORDERVALUE),
-      monthly: monthlyBreakdown
-        .filter(m => m.CODE?.trim() === c.CODE?.trim())
-        .map(m => ({
-          period: `${m.YEAR}-${String(m.MONTH).padStart(2, '0')}`,
-          sales: formatCurrency(m.SALES)
-        }))
-    }));
-
-    res.json({ clients: clientsData });
-
-  } catch (error) {
-    logger.error(`Client compare error: ${error.message} `);
-    handleRouteError(error, res, 'Error comparando clientes', 500);
-  }
-});
 
 module.exports = router;

@@ -70,7 +70,7 @@ router.get('/:vendedorCode/status', verifyToken, async (req, res) => {
             return sendForbiddenVendor(req, res);
         }
         const now = new Date();
-        const bolsa = await bolsaService.getOrCreateBolsa(
+        const bolsa = await bolsaService.getBolsaStatus(
             vendedorCode,
             now.getFullYear(),
             now.getMonth() + 1
