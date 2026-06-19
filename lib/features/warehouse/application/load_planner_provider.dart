@@ -79,12 +79,14 @@ class LoadPlannerProvider extends ChangeNotifier {
       acc.volume += b.volume;
     }
     return map.entries
-        .map((e) => ClientSummary(
-              clientCode: e.key,
-              boxCount: e.value.count,
-              totalWeight: e.value.weight,
-              totalVolume: e.value.volume,
-            ),)
+        .map(
+          (e) => ClientSummary(
+            clientCode: e.key,
+            boxCount: e.value.count,
+            totalWeight: e.value.weight,
+            totalVolume: e.value.volume,
+          ),
+        )
         .toList()
       ..sort((a, b) => b.totalWeight.compareTo(a.totalWeight));
   }
@@ -152,9 +154,8 @@ class LoadPlannerProvider extends ChangeNotifier {
         );
 
         // Reconcile: check if saved boxes still match current orders
-        final freshBoxIds =
-            result.placed.map((b) => b.id).toSet()
-              ..addAll(result.overflow.map((b) => b.id));
+        final freshBoxIds = result.placed.map((b) => b.id).toSet()
+          ..addAll(result.overflow.map((b) => b.id));
         _placedBoxes =
             _placedBoxes.where((b) => freshBoxIds.contains(b.id)).toList();
 
@@ -162,38 +163,42 @@ class LoadPlannerProvider extends ChangeNotifier {
         final savedIds = _placedBoxes.map((b) => b.id).toSet();
         for (final freshBox in result.placed) {
           if (!savedIds.contains(freshBox.id)) {
-            _placedBoxes.add(LoadBox.fromJson({
-              'id': freshBox.id,
-              'label': freshBox.label,
-              'orderNumber': freshBox.orderNumber,
-              'clientCode': freshBox.clientCode,
-              'articleCode': freshBox.articleCode,
-              'weight': freshBox.weight,
-              'x': freshBox.x,
-              'y': freshBox.y,
-              'z': freshBox.z,
-              'w': freshBox.w,
-              'd': freshBox.d,
-              'h': freshBox.h,
-            }),);
+            _placedBoxes.add(
+              LoadBox.fromJson({
+                'id': freshBox.id,
+                'label': freshBox.label,
+                'orderNumber': freshBox.orderNumber,
+                'clientCode': freshBox.clientCode,
+                'articleCode': freshBox.articleCode,
+                'weight': freshBox.weight,
+                'x': freshBox.x,
+                'y': freshBox.y,
+                'z': freshBox.z,
+                'w': freshBox.w,
+                'd': freshBox.d,
+                'h': freshBox.h,
+              }),
+            );
           }
         }
 
         _overflowBoxes = result.overflow
-            .map((b) => LoadBox.fromJson({
-                  'id': b.id,
-                  'label': b.label,
-                  'orderNumber': b.orderNumber,
-                  'clientCode': b.clientCode,
-                  'articleCode': b.articleCode,
-                  'weight': b.weight,
-                  'x': b.x,
-                  'y': b.y,
-                  'z': b.z,
-                  'w': b.w,
-                  'd': b.d,
-                  'h': b.h,
-                }),)
+            .map(
+              (b) => LoadBox.fromJson({
+                'id': b.id,
+                'label': b.label,
+                'orderNumber': b.orderNumber,
+                'clientCode': b.clientCode,
+                'articleCode': b.articleCode,
+                'weight': b.weight,
+                'x': b.x,
+                'y': b.y,
+                'z': b.z,
+                'w': b.w,
+                'd': b.d,
+                'h': b.h,
+              }),
+            )
             .toList();
 
         _recalculateMetrics();
@@ -240,37 +245,41 @@ class LoadPlannerProvider extends ChangeNotifier {
     );
 
     _placedBoxes = result.placed
-        .map((b) => LoadBox(
-              id: b.id,
-              label: b.label,
-              orderNumber: b.orderNumber,
-              clientCode: b.clientCode,
-              articleCode: b.articleCode,
-              weight: b.weight,
-              x: b.x,
-              y: b.y,
-              z: b.z,
-              w: b.w,
-              d: b.d,
-              h: b.h,
-            ),)
+        .map(
+          (b) => LoadBox(
+            id: b.id,
+            label: b.label,
+            orderNumber: b.orderNumber,
+            clientCode: b.clientCode,
+            articleCode: b.articleCode,
+            weight: b.weight,
+            x: b.x,
+            y: b.y,
+            z: b.z,
+            w: b.w,
+            d: b.d,
+            h: b.h,
+          ),
+        )
         .toList();
 
     _overflowBoxes = result.overflow
-        .map((b) => LoadBox(
-              id: b.id,
-              label: b.label,
-              orderNumber: b.orderNumber,
-              clientCode: b.clientCode,
-              articleCode: b.articleCode,
-              weight: b.weight,
-              x: b.x,
-              y: b.y,
-              z: b.z,
-              w: b.w,
-              d: b.d,
-              h: b.h,
-            ),)
+        .map(
+          (b) => LoadBox(
+            id: b.id,
+            label: b.label,
+            orderNumber: b.orderNumber,
+            clientCode: b.clientCode,
+            articleCode: b.articleCode,
+            weight: b.weight,
+            x: b.x,
+            y: b.y,
+            z: b.z,
+            w: b.w,
+            d: b.d,
+            h: b.h,
+          ),
+        )
         .toList();
 
     _metrics = PlannerMetrics.fromJson({
@@ -618,8 +627,7 @@ class LoadPlannerProvider extends ChangeNotifier {
   void excludeAllOrders() {
     if (_placedBoxes.isEmpty) return;
     _pushUndo();
-    final allOrderNumbers =
-        _placedBoxes.map((b) => b.orderNumber).toSet();
+    final allOrderNumbers = _placedBoxes.map((b) => b.orderNumber).toSet();
     _excludedOrders.addAll(allOrderNumbers);
     _overflowBoxes.addAll(_placedBoxes);
     _placedBoxes = [];

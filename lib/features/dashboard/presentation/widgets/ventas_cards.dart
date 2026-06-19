@@ -11,7 +11,12 @@ import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_m
 /// - Clientes Atendidos (hoy, mes)
 class VentasCards extends StatelessWidget {
   const VentasCards({
-    required this.ventasHoy, required this.ventasMes, required this.ventasAnio, required this.clientesAtendidos, required this.pedidosPendientes, super.key,
+    required this.ventasHoy,
+    required this.ventasMes,
+    required this.ventasAnio,
+    required this.clientesAtendidos,
+    required this.pedidosPendientes,
+    super.key,
   });
 
   final VentasMetrics ventasHoy;
@@ -174,8 +179,7 @@ class _VentaCardCompact extends StatelessWidget {
                     color: Colors.grey[600],
                   ),
                 ),
-                if (variacion != null)
-                  _buildVariacion(context, variacion!),
+                if (variacion != null) _buildVariacion(context, variacion!),
               ],
             ),
           ],

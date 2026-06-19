@@ -20,6 +20,60 @@ $EnvFile = Join-Path $ConfigDir ".env"
 $Node = "C:\Program Files\nodejs\node.exe"
 $OpenCode = "C:\nvm4w\nodejs\opencode.cmd"
 
+function Start-CursorAcpService([string]$Workspace, [int]$WebPort) {
+  $modelsUrl = "http://127.0.0.1:32124/v1/models"
+  if (Test-Url $modelsUrl 3) { return "already_running" }
+
+  $standalone = Join-Path $ConfigDir "cursor-acp-standalone.mjs"
+  if ((Test-Path -LiteralPath $standalone) -and $Workspace) {
+    try {
+      $logDir = Join-Path $Workspace ".opencode\logs"
+      New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+      $outLog = Join-Path $logDir "cursor-acp-standalone.out.log"
+      $errLog = Join-Path $logDir "cursor-acp-standalone.err.log"
+      $serverUrl = "http://127.0.0.1:$WebPort"
+      Start-Process -FilePath $Node -ArgumentList @($standalone, $Workspace, $serverUrl) -WorkingDirectory $Workspace -WindowStyle Hidden -RedirectStandardOutput $outLog -RedirectStandardError $errLog -ErrorAction Stop
+      Start-Sleep -Seconds 6
+      if (Test-Url $modelsUrl 5) { return "started" }
+    } catch {
+      return "failed: $($_.Exception.Message)"
+    }
+  }
+
+  $cursorRoot = Join-Path $HomeDir "AppData\Local\cursor-agent"
+  $svcCmd = Join-Path $cursorRoot "cursor-agent-svc.cmd"
+  $svcJs = Join-Path $cursorRoot "cursor-agent-svc.js"
+  if (-not (Test-Path -LiteralPath $svcCmd) -and -not (Test-Path -LiteralPath $svcJs)) { return "missing" }
+  $processes = Get-Process -Name "node" -ErrorAction SilentlyContinue
+  foreach ($p in $processes) {
+    try {
+      $cmdLine = (Get-CimInstance Win32_Process -Filter "ProcessId = $($p.Id)" -ErrorAction SilentlyContinue).CommandLine
+      if ($cmdLine -like "*cursor-agent-svc*") { return "already_running_no_http" }
+    } catch {}
+  }
+  try {
+    $rootNode = Join-Path $cursorRoot "node.exe"
+    if (Test-Path -LiteralPath $rootNode) {
+      Start-Process -FilePath $svcCmd -WindowStyle Hidden -ErrorAction Stop
+    } elseif (Test-Path -LiteralPath $svcJs) {
+      $versionRoot = Join-Path $cursorRoot "versions"
+      $node = @(Get-ChildItem -LiteralPath $versionRoot -Directory -ErrorAction SilentlyContinue |
+        Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName "node.exe") } |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1 |
+        ForEach-Object { Join-Path $_.FullName "node.exe" })[0]
+      if (-not $node) { return "failed: node.exe missing" }
+      Start-Process -FilePath $node -ArgumentList @($svcJs) -WindowStyle Hidden -ErrorAction Stop
+    } else {
+      return "missing"
+    }
+    Start-Sleep -Seconds 3
+    if (Test-Url $modelsUrl 3) { return "started" }
+    return "started_no_http"
+  } catch {
+    return "failed: $($_.Exception.Message)"
+  }
+}
 function Load-Env {
   try {
     if (-not (Test-Path -LiteralPath $EnvFile)) { return }
@@ -27,7 +81,7 @@ function Load-Env {
       if ($line -match "^\s*#" -or $line -notmatch "=") { continue }
       $parts = $line -split "=", 2
       $name = $parts[0].Trim()
-      if (-not $name -or $name -ieq "OPENAI_API_KEY") { continue }
+      if (-not $name) { continue }
       if ((Get-Item "Env:$name" -ErrorAction SilentlyContinue) -and $name -in @(
         "OPENCODE_SERVER_USERNAME",
         "OPENCODE_SERVER_PASSWORD",
@@ -367,6 +421,20 @@ function Test-Url([string]$Url, [int]$TimeoutSec = 5) {
     $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec $TimeoutSec
     return $response.StatusCode -ge 200 -and $response.StatusCode -lt 300
   } catch { return $false }
+}
+
+function Invoke-MobileOperationalSnapshot([string]$ProjectDir) {
+  try {
+    $bun = (Get-Command bun -ErrorAction SilentlyContinue).Source
+    if (-not $bun) { return "degradado: bun_missing" }
+    $snapshotScript = Join-Path $ProjectDir ".opencode\scripts\mobile-operational-snapshot.mjs"
+    if (-not (Test-Path -LiteralPath $snapshotScript)) { return "degradado: snapshot_script_missing" }
+    $output = & $bun $snapshotScript 2>&1
+    if ($LASTEXITCODE -ne 0) { return "degradado: $($output -join ' ')" }
+    return "ok:$($output -join ' ')"
+  } catch {
+    return "degradado: $($_.Exception.Message)"
+  }
 }
 
 function Test-WebAuthenticated([string]$Url, [int]$TimeoutSec = 5) {
@@ -1067,7 +1135,6 @@ function Test-UnsupportedActiveModels([string]$ProjectDir) {
 
 Load-Env
 Ensure-OpenCodeWebAuth
-$env:OPENAI_API_KEY = $null
 $cursorApiAlias = @("CURSOR_ACP_KEY", "CURSOR_TOKEN", "CURSOR_AGENT_TOKEN") |
   ForEach-Object { Get-Item "Env:$_" -ErrorAction SilentlyContinue } |
   Where-Object { $_ -and $_.Value } |
@@ -1080,7 +1147,7 @@ $env:OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX = "12000"
 $env:OPENCODE_EXPERIMENTAL_LSP_TOOL = "true"
 $env:CURSOR_ACP_MCP_BRIDGE = "false"
 $env:CURSOR_ACP_LOG_SILENT = "true"
-$env:PATH = "C:\Program Files\Git\usr\bin;C:\nvm4w\nodejs;C:\Program Files\nodejs;C:\Users\Javier\AppData\Roaming\npm;C:\Users\Javier\AppData\Roaming\Python\Python311\Scripts;C:\Python311;C:\Users\Javier\AppData\Local\cursor-agent;" + $env:PATH
+$env:PATH = "C:\Program Files\Git\usr\bin;C:\nvm4w\nodejs;C:\Program Files\nodejs;C:\Users\Javier\.local\bin;C:\Users\Javier\AppData\Roaming\npm;C:\Users\Javier\AppData\Roaming\Python\Python311\Scripts;C:\Python311;C:\Users\Javier\AppData\Local\cursor-agent;" + $env:PATH
 if (Test-Path -LiteralPath (Join-Path $HomeDir "AppData\Local\cursor-agent\cursor-agent.cmd")) {
   $env:CURSOR_AGENT_EXECUTABLE = Join-Path $HomeDir "AppData\Local\cursor-agent\cursor-agent.cmd"
 }
@@ -1106,6 +1173,7 @@ if ($Project -eq "gmp") {
 
 if (-not (Test-Path -LiteralPath $ProjectDir)) { throw "Ruta de proyecto no existe: $ProjectDir" }
 Set-Location -LiteralPath $ProjectDir
+$cursorAcpStatus = Start-CursorAcpService $ProjectDir $Port
 $ProjectRuntimeHome = Join-Path $ProjectDir ".opencode-runtime"
 $env:XDG_CONFIG_HOME = $ProjectRuntimeHome
 $env:XDG_DATA_HOME = $ProjectRuntimeHome
@@ -1135,6 +1203,7 @@ if (-not (Test-Path ".opencode\TEAM_TRACE.jsonl")) { New-Item -ItemType File -Pa
 if (-not (Test-Path ".opencode\tokens.jsonl")) { New-Item -ItemType File -Path ".opencode\tokens.jsonl" -Force | Out-Null }
 $traceRotationStatus = Rotate-IfLarge ".opencode\TEAM_TRACE.jsonl" 52428800 5
 $tokenRotationStatus = Rotate-IfLarge ".opencode\tokens.jsonl" 10485760 5
+$mobileSnapshotStatus = Invoke-MobileOperationalSnapshot $ProjectDir
 
 if (-not $NoWeb -and (Test-Tcp "127.0.0.1" $Port 1000)) {
   if (Test-WebAuthenticated "http://127.0.0.1:$Port" 5) {
@@ -1177,6 +1246,7 @@ if ($env:OPENCODE_FULL_PREFLIGHT -ne "1") {
     backend_status = $sshStatus
     image_status = $imageStatus
     cursor_cli_status = $cursorCliStatus
+    cursor_acp_service_status = $cursorAcpStatus
     metrics_status = $metricsStatus
     memory_count = $memoryCount
     skill_count = $skillCount
@@ -1185,6 +1255,7 @@ if ($env:OPENCODE_FULL_PREFLIGHT -ne "1") {
     stale_state_count = $staleCount
     trace_rotation_status = $traceRotationStatus
     token_rotation_status = $tokenRotationStatus
+    mobile_operational_snapshot_status = $mobileSnapshotStatus
     deep_audit = "omitido_en_arranque; ejecutar con OPENCODE_FULL_PREFLIGHT=1"
   }
   Write-Utf8NoBom ".opencode\state\preflight-last.json" (($fastPayload | ConvertTo-Json -Depth 20) + "`n")
@@ -1202,12 +1273,14 @@ MCP DB2 env: $mcpEnvStatus
 Backend 192.168.1.230: $sshStatus
 Imagenes 192.168.1.191: $imageStatus
 Cursor CLI modelos: $cursorCliStatus
+Cursor ACP service: $cursorAcpStatus
 Metricas: $metricsStatus
 Memoria: $memoryCount entradas
 Skills: $skillCount validas
 Tareas activas reales: $pendingCount
 Estados antiguos/bloqueados no activos: $staleCount
 Trazas: $traceRotationStatus
+Autopilot movil: $mobileSnapshotStatus
 Auditoria profunda: diferida para no bloquear el arranque
 "@
   Write-Host $summary
@@ -1323,6 +1396,7 @@ $preflightPayload = [ordered]@{
   workflow_state_status = $workflowStateStatus
   cursor_pinned_status = $cursorPinnedStatus
   cursor_cli_status = $cursorCliStatus
+  cursor_acp_service_status = $cursorAcpStatus
   critical_mcp_status = $criticalMcpStatus
   mcp_runtime_status = $mcpRuntimeStatus
   forbidden_mcp_status = $forbiddenMcpStatus
@@ -1357,6 +1431,7 @@ $preflightPayload = [ordered]@{
   stale_state_count = $staleCount
   trace_rotation_status = $traceRotationStatus
   token_rotation_status = $tokenRotationStatus
+  mobile_operational_snapshot_status = $mobileSnapshotStatus
 }
 Write-PreflightState $ProjectDir $preflightPayload
 $readinessStatus = Invoke-ReadinessSmoke $ProjectDir
@@ -1412,6 +1487,7 @@ Skills: $skillCount validas
 Tareas activas reales: $pendingCount
 Estados antiguos/bloqueados no activos: $staleCount
 Trazas: $traceRotationStatus
+Autopilot movil: $mobileSnapshotStatus
 "@
 
 Write-Host $summary

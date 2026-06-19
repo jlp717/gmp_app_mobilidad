@@ -4,9 +4,9 @@ import 'package:gmp_app_mobilidad/core/utils/date_formatter.dart';
 
 /// Date range picker dialog
 class DateRangePicker extends StatelessWidget {
-
   const DateRangePicker({
-    required this.onDateRangeSelected, super.key,
+    required this.onDateRangeSelected,
+    super.key,
     this.startDate,
     this.endDate,
   });
@@ -19,7 +19,9 @@ class DateRangePicker extends StatelessWidget {
     return IconButton(
       icon: Icon(
         Icons.calendar_month,
-        color: (startDate != null && endDate != null) ? AppTheme.neonGreen : Colors.white70,
+        color: (startDate != null && endDate != null)
+            ? AppTheme.neonGreen
+            : Colors.white70,
       ),
       tooltip: 'Seleccionar rango de fechas',
       onPressed: () => _showDateRangePicker(context),
@@ -35,7 +37,8 @@ class DateRangePicker extends StatelessWidget {
       builder: (context) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
           backgroundColor: AppTheme.surfaceColor,
-          title: const Text('Rango de Fechas', style: TextStyle(color: Colors.white)),
+          title: const Text('Rango de Fechas',
+              style: TextStyle(color: Colors.white)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -98,11 +101,13 @@ class DateRangePicker extends StatelessWidget {
                 onDateRangeSelected(null, null);
                 Navigator.pop(context);
               },
-              child: const Text('Limpiar', style: TextStyle(color: Colors.redAccent)),
+              child: const Text('Limpiar',
+                  style: TextStyle(color: Colors.redAccent)),
             ),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+              child: const Text('Cancelar',
+                  style: TextStyle(color: Colors.white54)),
             ),
             ElevatedButton(
               onPressed: tempStart != null && tempEnd != null
@@ -131,7 +136,8 @@ class DateRangePicker extends StatelessWidget {
     );
   }
 
-  Widget _buildDateButton(BuildContext context, String label, DateTime? date, Function(DateTime?) onDateSelected) {
+  Widget _buildDateButton(BuildContext context, String label, DateTime? date,
+      Function(DateTime?) onDateSelected) {
     return OutlinedButton(
       onPressed: () async {
         final picked = await showDatePicker(
@@ -157,15 +163,19 @@ class DateRangePicker extends StatelessWidget {
       },
       style: OutlinedButton.styleFrom(
         backgroundColor: AppTheme.darkBase,
-        side: BorderSide(color: date != null ? AppTheme.neonGreen : Colors.white30),
+        side: BorderSide(
+            color: date != null ? AppTheme.neonGreen : Colors.white30),
       ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(label, style: const TextStyle(color: Colors.white54, fontSize: 10)),
+          Text(label,
+              style: const TextStyle(color: Colors.white54, fontSize: 10)),
           const SizedBox(height: 4),
           Text(
-            date != null ? '${date.day}/${date.month}/${date.year}' : '--/--/----',
+            date != null
+                ? '${date.day}/${date.month}/${date.year}'
+                : '--/--/----',
             style: TextStyle(
               color: date != null ? AppTheme.neonGreen : Colors.white30,
               fontSize: 12,

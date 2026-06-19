@@ -114,7 +114,8 @@ void main() {
       expect(albaran.items.length, 2);
       expect(albaran.items[0].codigoArticulo, '7865');
       expect(albaran.items[0].cantidadPedida, 4.0);
-      expect(albaran.items[1].descripcion, 'NAPOLITANA CHOCOLATE FERM.115GR (70U).24');
+      expect(albaran.items[1].descripcion,
+          'NAPOLITANA CHOCOLATE FERM.115GR (70U).24');
     });
 
     test('detects factura vs albaran document type', () {

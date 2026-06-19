@@ -347,8 +347,11 @@ class CacheServiceOptimized {
   }
 
   /// Set value in memory cache with LRU eviction
-  static void _setMemoryCache(String key, dynamic value,
-      {bool promote = true,}) {
+  static void _setMemoryCache(
+    String key,
+    dynamic value, {
+    bool promote = true,
+  }) {
     if (promote) {
       _updateAccessOrder(key);
     }
@@ -380,9 +383,11 @@ class CacheServiceOptimized {
     if (_cacheBox == null) return;
 
     final keysToDelete = _cacheBox!.keys
-        .where((k) =>
-            k.toString().startsWith(prefix) ||
-            k.toString().startsWith('hashed_$prefix'),)
+        .where(
+          (k) =>
+              k.toString().startsWith(prefix) ||
+              k.toString().startsWith('hashed_$prefix'),
+        )
         .toList();
 
     if (keysToDelete.isEmpty) return;
@@ -401,7 +406,8 @@ class CacheServiceOptimized {
 
     await Future.wait(batchOperations);
     debugPrint(
-        '[CacheService] INVALIDATED ${keysToDelete.length} entries: $prefix',);
+      '[CacheService] INVALIDATED ${keysToDelete.length} entries: $prefix',
+    );
   }
 
   /// Clear all cached data
@@ -490,7 +496,8 @@ class CacheServiceOptimized {
 
     await Future.wait(batchOperations);
     debugPrint(
-        '[CacheService] GC collected ${expiredKeys.length} expired entries',);
+      '[CacheService] GC collected ${expiredKeys.length} expired entries',
+    );
   }
 }
 

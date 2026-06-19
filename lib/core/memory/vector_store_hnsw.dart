@@ -3,17 +3,16 @@ import 'dart:math';
 import 'package:collection/collection.dart';
 
 /// **HNSW (Hierarchical Navigable Small World) Vector Search**
-/// 
+///
 /// Implementación optimizada para búsqueda semántica aproximada (ANN)
 /// en espacio de memoria unificado de AgentDB.
-/// 
+///
 /// Características:
 /// - Búsqueda O(log n) en espacios de alta dimensionalidad
 /// - Construcción incremental de grafos de proximidad
 /// - Múltiples capas de navegación (skip-list style)
 /// - Distancia coseno para similitud semántica
 class HNSWVectorStore {
-  
   HNSWVectorStore({
     this.maxConnections = 16,
     this.maxLayers = 8,
@@ -22,14 +21,14 @@ class HNSWVectorStore {
   final int maxConnections;
   final int maxLayers;
   final double expansionFactor;
-  
+
   final Random _random = Random();
   final Map<String, HNSWNode> _nodes = {};
   HNSWNode? _entryPoint;
-  
+
   /// Embeddings cache para acceso rápido
   final Map<String, List<double>> _embeddingCache = {};
-  
+
   /// Inserta un vector con su identificador y metadata
   void insert({
     required String id,
@@ -39,11 +38,11 @@ class HNSWVectorStore {
     _embeddingCache[id] = vector;
     final node = HNSWNode(id: id, vector: vector, metadata: metadata);
     _nodes[id] = node;
-    
+
     // Construir grafo HNSW
     _buildHNSWGraph(node);
   }
-  
+
   void _buildHNSWGraph(HNSWNode newNode) {
     if (_entryPoint == null) {
       _entryPoint = newNode;
@@ -77,7 +76,7 @@ class HNSWVectorStore {
       _entryPoint = newNode;
     }
   }
-  
+
   void _connectNode(HNSWNode newNode, List<HNSWNode> neighbors, int layer) {
     // Conectar nuevo nodo a sus vecinos más cercanos
     for (final neighbor in neighbors) {
@@ -88,31 +87,27 @@ class HNSWVectorStore {
         neighbor.links[layer].add(newNode.id);
       }
     }
-    
+
     // Rebalancear conexiones si exceden máximo
     _rebalanceConnections(newNode, layer);
   }
-  
+
   void _rebalanceConnections(HNSWNode node, int layer) {
     if (node.links[layer].length <= maxConnections) return;
-    
+
     // Mantener solo las conexiones más cercanas
-    final neighbors = node.links[layer]
-        .map((id) => _nodes[id]!)
-        .toList();
-    
+    final neighbors = node.links[layer].map((id) => _nodes[id]!).toList();
+
     neighbors.sort((a, b) {
       final distA = _cosineDistance(node.vector, a.vector);
       final distB = _cosineDistance(node.vector, b.vector);
       return distA.compareTo(distB);
     });
-    
-    node.links[layer] = neighbors
-        .take(maxConnections)
-        .map((n) => n.id)
-        .toList();
+
+    node.links[layer] =
+        neighbors.take(maxConnections).map((n) => n.id).toList();
   }
-  
+
   /// Búsqueda de k vecinos más cercanos
   List<VectorSearchResult> search({
     required List<double> queryVector,
@@ -120,9 +115,9 @@ class HNSWVectorStore {
     double? threshold,
   }) {
     if (_entryPoint == null) return [];
-    
+
     var currentEntryPoint = _entryPoint!;
-    
+
     // Búsqueda greedy desde la capa más alta
     for (var layer = _entryPoint!.layer; layer >= 0; layer--) {
       final nearestNeighbors = _searchLayer(
@@ -131,9 +126,10 @@ class HNSWVectorStore {
         layer,
         1,
       );
-      currentEntryPoint = _nodes[nearestNeighbors.first.id] ?? currentEntryPoint;
+      currentEntryPoint =
+          _nodes[nearestNeighbors.first.id] ?? currentEntryPoint;
     }
-    
+
     // Búsqueda exhaustiva en capa 0
     final candidates = _searchLayer(
       HNSWNode(id: 'query', vector: queryVector),
@@ -141,21 +137,23 @@ class HNSWVectorStore {
       0,
       k * expansionFactor.toInt(),
     );
-    
+
     // Filtrar por threshold y retornar top-k
     final results = candidates
-        .map((node) => VectorSearchResult(
-              id: node.id,
-              distance: _cosineDistance(queryVector, node.vector),
-              metadata: node.metadata,
-            ),)
+        .map(
+          (node) => VectorSearchResult(
+            id: node.id,
+            distance: _cosineDistance(queryVector, node.vector),
+            metadata: node.metadata,
+          ),
+        )
         .where((result) => threshold == null || result.distance >= threshold)
         .toList();
-    
+
     results.sort((a, b) => b.distance.compareTo(a.distance));
     return results.take(k).toList();
   }
-  
+
   List<HNSWNode> _searchLayer(
     HNSWNode query,
     HNSWNode entryPoint,
@@ -184,7 +182,8 @@ class HNSWVectorStore {
           final distB = _cosineDistance(query.vector, b.vector);
           return distA > distB ? a : b;
         });
-        final farthestDist = _cosineDistance(query.vector, farthestResult.vector);
+        final farthestDist =
+            _cosineDistance(query.vector, farthestResult.vector);
         if (closestDist > farthestDist) {
           break;
         }
@@ -206,10 +205,10 @@ class HNSWVectorStore {
         }
       }
     }
-    
+
     return results;
   }
-  
+
   int _getRandomLayer() {
     var layer = 0;
     while (_random.nextDouble() < 0.5 && layer < maxLayers - 1) {
@@ -217,60 +216,59 @@ class HNSWVectorStore {
     }
     return layer;
   }
-  
+
   double _cosineDistance(List<double> a, List<double> b) {
     if (a.length != b.length) {
       throw ArgumentError('Vectors must have same dimension');
     }
-    
+
     double dotProduct = 0;
     double normA = 0;
     double normB = 0;
-    
+
     for (var i = 0; i < a.length; i++) {
       dotProduct += a[i] * b[i];
       normA += a[i] * a[i];
       normB += b[i] * b[i];
     }
-    
+
     if (normA == 0 || normB == 0) return 0;
-    
+
     return dotProduct / (sqrt(normA) * sqrt(normB));
   }
-  
+
   /// Elimina un vector del índice
   bool remove(String id) {
     final node = _nodes[id];
     if (node == null) return false;
-    
+
     // Remover de todos los links
     for (final otherNode in _nodes.values) {
       for (var layer = 0; layer < otherNode.links.length; layer++) {
         otherNode.links[layer].remove(id);
       }
     }
-    
+
     _nodes.remove(id);
     _embeddingCache.remove(id);
-    
+
     // Actualizar entry point si es necesario
     if (_entryPoint?.id == id) {
-      _entryPoint = _nodes.values
-          .where((n) => n.layer > 0)
-          .fold<HNSWNode?>(null, (a, b) => a == null || b.layer > a.layer ? b : a);
+      _entryPoint = _nodes.values.where((n) => n.layer > 0).fold<HNSWNode?>(
+          null, (a, b) => a == null || b.layer > a.layer ? b : a);
     }
-    
+
     return true;
   }
-  
+
   /// Obtiene metadata por ID
   Map<String, dynamic>? getMetadata(String id) {
     return _nodes[id]?.metadata;
   }
-  
+
   /// Número de vectores almacenados
   int get size => _nodes.length;
-  
+
   /// Limpia todo el índice
   void clear() {
     _nodes.clear();
@@ -281,7 +279,6 @@ class HNSWVectorStore {
 
 /// Nodo en el grafo HNSW
 class HNSWNode {
-  
   HNSWNode({
     required this.id,
     required this.vector,
@@ -297,7 +294,6 @@ class HNSWNode {
 
 /// Resultado de búsqueda vectorial
 class VectorSearchResult {
-  
   VectorSearchResult({
     required this.id,
     required this.distance,
@@ -306,9 +302,10 @@ class VectorSearchResult {
   final String id;
   final double distance; // 0-1, donde 1 es idéntico
   final Map<String, dynamic>? metadata;
-  
+
   @override
-  String toString() => 'VectorSearchResult(id: $id, distance: ${distance.toStringAsFixed(3)})';
+  String toString() =>
+      'VectorSearchResult(id: $id, distance: ${distance.toStringAsFixed(3)})';
 }
 
 /// Extensión para obtener valor de let

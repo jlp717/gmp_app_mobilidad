@@ -10,19 +10,19 @@ import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 /// Uses product-code-based gradient for visually distinct placeholders.
 /// Now caches image bytes persistently using CacheService.
 class SmartProductImage extends StatelessWidget {
-  const SmartProductImage({
-    required this.imageUrl,
-    required this.productCode,
-    super.key,
-    this.productName,
-    this.width = double.infinity,
-    this.height = double.infinity,
-    this.fit = BoxFit.cover,
-    this.borderRadius,
-    this.showCodeOnFallback = true,
-    this.headers,
-    this.forceRetry = false  // Nuevo parámetro para forzar reintento
-  });
+  const SmartProductImage(
+      {required this.imageUrl,
+      required this.productCode,
+      super.key,
+      this.productName,
+      this.width = double.infinity,
+      this.height = double.infinity,
+      this.fit = BoxFit.cover,
+      this.borderRadius,
+      this.showCodeOnFallback = true,
+      this.headers,
+      this.forceRetry = false // Nuevo parámetro para forzar reintento
+      });
   final String imageUrl;
   final String productCode;
   final String? productName;
@@ -32,7 +32,7 @@ class SmartProductImage extends StatelessWidget {
   final BorderRadiusGeometry? borderRadius;
   final bool showCodeOnFallback;
   final Map<String, String>? headers;
-  final bool forceRetry;  // Nuevo parámetro para forzar reintento
+  final bool forceRetry; // Nuevo parámetro para forzar reintento
 
   /// TTL-based failed URL cache: URL → timestamp when it failed.
   /// Entries expire after [_failedUrlTTL] to allow retries.

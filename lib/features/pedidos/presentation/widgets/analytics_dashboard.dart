@@ -9,9 +9,9 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 class AnalyticsDashboard extends StatelessWidget {
-
   const AnalyticsDashboard({
-    required this.analytics, super.key,
+    required this.analytics,
+    super.key,
     this.isLoading = false,
   });
   final Map<String, dynamic> analytics;
@@ -22,13 +22,17 @@ class AnalyticsDashboard extends StatelessWidget {
     if (isLoading) {
       return const Padding(
         padding: EdgeInsets.all(32),
-        child: Center(child: CircularProgressIndicator(color: AppTheme.neonBlue)),
+        child:
+            Center(child: CircularProgressIndicator(color: AppTheme.neonBlue)),
       );
     }
 
-    final monthly = (analytics['monthly'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final topProducts = (analytics['topProducts'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final statusDist = analytics['statusDistribution'] as Map<String, dynamic>? ?? {};
+    final monthly =
+        (analytics['monthly'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final topProducts =
+        (analytics['topProducts'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final statusDist =
+        analytics['statusDistribution'] as Map<String, dynamic>? ?? {};
 
     if (monthly.isEmpty && topProducts.isEmpty) {
       return Padding(
@@ -36,7 +40,9 @@ class AnalyticsDashboard extends StatelessWidget {
         child: Center(
           child: Text(
             'Sin datos de analytics aun',
-            style: TextStyle(color: Colors.white38, fontSize: Responsive.fontSize(context, small: 14, large: 16)),
+            style: TextStyle(
+                color: Colors.white38,
+                fontSize: Responsive.fontSize(context, small: 14, large: 16)),
           ),
         ),
       );
@@ -63,7 +69,8 @@ class AnalyticsDashboard extends StatelessWidget {
     );
   }
 
-  Widget _buildKpiCards(BuildContext context, List<Map<String, dynamic>> monthly) {
+  Widget _buildKpiCards(
+      BuildContext context, List<Map<String, dynamic>> monthly) {
     final current = monthly.first;
     final previous = monthly.length > 1 ? monthly[1] : null;
 
@@ -76,17 +83,45 @@ class AnalyticsDashboard extends StatelessWidget {
 
     return Row(
       children: [
-        Expanded(child: _kpiCard(context, 'Ventas', '\u20AC${revenue.toStringAsFixed(0)}',
-            _trendPct(revenue, prevRevenue), Icons.euro,),),
+        Expanded(
+          child: _kpiCard(
+            context,
+            'Ventas',
+            '\u20AC${revenue.toStringAsFixed(0)}',
+            _trendPct(revenue, prevRevenue),
+            Icons.euro,
+          ),
+        ),
         const SizedBox(width: 8),
-        Expanded(child: _kpiCard(context, 'Pedidos', '$orders',
-            _trendPct(orders.toDouble(), prevOrders.toDouble()), Icons.receipt_long,),),
+        Expanded(
+          child: _kpiCard(
+            context,
+            'Pedidos',
+            '$orders',
+            _trendPct(orders.toDouble(), prevOrders.toDouble()),
+            Icons.receipt_long,
+          ),
+        ),
         const SizedBox(width: 8),
-        Expanded(child: _kpiCard(context, 'Ticket medio', '\u20AC${avgOrder.toStringAsFixed(0)}',
-            null, Icons.analytics_outlined,),),
+        Expanded(
+          child: _kpiCard(
+            context,
+            'Ticket medio',
+            '\u20AC${avgOrder.toStringAsFixed(0)}',
+            null,
+            Icons.analytics_outlined,
+          ),
+        ),
         const SizedBox(width: 8),
-        Expanded(child: _kpiCard(context, 'Clientes', '$clients',
-            null, Icons.people_outline,),),
+        Expanded(
+          child: _kpiCard(
+            context,
+            'Clientes',
+            '$clients',
+            null,
+            Icons.people_outline,
+          ),
+        ),
       ],
     );
   }
@@ -96,7 +131,8 @@ class AnalyticsDashboard extends StatelessWidget {
     return ((current - previous) / previous) * 100;
   }
 
-  Widget _kpiCard(BuildContext context, String label, String value, double? trend, IconData icon) {
+  Widget _kpiCard(BuildContext context, String label, String value,
+      double? trend, IconData icon) {
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -112,25 +148,45 @@ class AnalyticsDashboard extends StatelessWidget {
               Icon(icon, color: AppTheme.neonBlue, size: 14),
               const SizedBox(width: 4),
               Expanded(
-                child: Text(label, style: TextStyle(color: Colors.white54,
-                    fontSize: Responsive.fontSize(context, small: 10, large: 11),),
-                    overflow: TextOverflow.ellipsis,),
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: Colors.white54,
+                    fontSize:
+                        Responsive.fontSize(context, small: 10, large: 11),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
             ],
           ),
           const SizedBox(height: 6),
-          Text(value, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold,
-              fontSize: Responsive.fontSize(context, small: 14, large: 16),),),
+          Text(
+            value,
+            style: TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: Responsive.fontSize(context, small: 14, large: 16),
+            ),
+          ),
           if (trend != null) ...[
             const SizedBox(height: 2),
             Row(
               children: [
-                Icon(trend >= 0 ? Icons.trending_up : Icons.trending_down,
-                    color: trend >= 0 ? AppTheme.neonGreen : AppTheme.error, size: 12,),
+                Icon(
+                  trend >= 0 ? Icons.trending_up : Icons.trending_down,
+                  color: trend >= 0 ? AppTheme.neonGreen : AppTheme.error,
+                  size: 12,
+                ),
                 const SizedBox(width: 2),
-                Text('${trend >= 0 ? '+' : ''}${trend.toStringAsFixed(0)}%',
-                    style: TextStyle(color: trend >= 0 ? AppTheme.neonGreen : AppTheme.error,
-                        fontSize: 10, fontWeight: FontWeight.w600,),),
+                Text(
+                  '${trend >= 0 ? '+' : ''}${trend.toStringAsFixed(0)}%',
+                  style: TextStyle(
+                    color: trend >= 0 ? AppTheme.neonGreen : AppTheme.error,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
           ],
@@ -139,7 +195,8 @@ class AnalyticsDashboard extends StatelessWidget {
     );
   }
 
-  Widget _buildRevenueChart(BuildContext context, List<Map<String, dynamic>> monthly) {
+  Widget _buildRevenueChart(
+      BuildContext context, List<Map<String, dynamic>> monthly) {
     final reversed = monthly.reversed.toList();
     final maxY = reversed.fold<double>(0, (max, m) {
       final v = (m['totalRevenue'] as num?)?.toDouble() ?? 0;
@@ -156,8 +213,14 @@ class AnalyticsDashboard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Evolucion mensual', style: TextStyle(color: Colors.white70,
-              fontSize: Responsive.fontSize(context, small: 12, large: 14), fontWeight: FontWeight.w600,),),
+          Text(
+            'Evolucion mensual',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: Responsive.fontSize(context, small: 12, large: 14),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 12),
           SizedBox(
             height: 140,
@@ -175,11 +238,14 @@ class AnalyticsDashboard extends StatelessWidget {
                       showTitles: true,
                       getTitlesWidget: (value, meta) {
                         final idx = value.toInt();
-                        if (idx < 0 || idx >= reversed.length) return const SizedBox.shrink();
+                        if (idx < 0 || idx >= reversed.length)
+                          return const SizedBox.shrink();
                         final m = reversed[idx];
                         return Padding(
                           padding: const EdgeInsets.only(top: 4),
-                          child: Text('${m['month']}', style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                          child: Text('${m['month']}',
+                              style: const TextStyle(
+                                  color: Colors.white38, fontSize: 10)),
                         );
                       },
                     ),
@@ -188,15 +254,20 @@ class AnalyticsDashboard extends StatelessWidget {
                 gridData: const FlGridData(show: false),
                 borderData: FlBorderData(show: false),
                 barGroups: reversed.asMap().entries.map((e) {
-                  final val = (e.value['totalRevenue'] as num?)?.toDouble() ?? 0;
-                  return BarChartGroupData(x: e.key, barRods: [
-                    BarChartRodData(
-                      toY: val,
-                      color: AppTheme.neonBlue.withValues(alpha: 0.8),
-                      width: 16,
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                    ),
-                  ],);
+                  final val =
+                      (e.value['totalRevenue'] as num?)?.toDouble() ?? 0;
+                  return BarChartGroupData(
+                    x: e.key,
+                    barRods: [
+                      BarChartRodData(
+                        toY: val,
+                        color: AppTheme.neonBlue.withValues(alpha: 0.8),
+                        width: 16,
+                        borderRadius: const BorderRadius.vertical(
+                            top: Radius.circular(4)),
+                      ),
+                    ],
+                  );
                 }).toList(),
               ),
             ),
@@ -206,7 +277,8 @@ class AnalyticsDashboard extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusCards(BuildContext context, Map<String, dynamic> statusDist) {
+  Widget _buildStatusCards(
+      BuildContext context, Map<String, dynamic> statusDist) {
     final statuses = {
       'BORRADOR': (AppTheme.neonBlue, Icons.edit_note),
       'CONFIRMADO': (AppTheme.neonGreen, Icons.check_circle),
@@ -225,16 +297,30 @@ class AnalyticsDashboard extends StatelessWidget {
             decoration: BoxDecoration(
               color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
+              border:
+                  Border.all(color: color.withValues(alpha: 0.3), width: 0.5),
             ),
             child: Column(
               children: [
                 Icon(icon, color: color, size: 16),
                 const SizedBox(height: 4),
-                Text('$count', style: TextStyle(color: color, fontWeight: FontWeight.bold,
-                    fontSize: Responsive.fontSize(context, small: 14, large: 16),),),
-                Text(entry.key.substring(0, 4), style: TextStyle(color: color.withValues(alpha: 0.7),
-                    fontSize: 9, fontWeight: FontWeight.w500,),),
+                Text(
+                  '$count',
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.bold,
+                    fontSize:
+                        Responsive.fontSize(context, small: 14, large: 16),
+                  ),
+                ),
+                Text(
+                  entry.key.substring(0, 4),
+                  style: TextStyle(
+                    color: color.withValues(alpha: 0.7),
+                    fontSize: 9,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ],
             ),
           ),
@@ -243,7 +329,8 @@ class AnalyticsDashboard extends StatelessWidget {
     );
   }
 
-  Widget _buildTopProducts(BuildContext context, List<Map<String, dynamic>> topProducts) {
+  Widget _buildTopProducts(
+      BuildContext context, List<Map<String, dynamic>> topProducts) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -254,21 +341,34 @@ class AnalyticsDashboard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Top productos', style: TextStyle(color: Colors.white70,
-              fontSize: Responsive.fontSize(context, small: 12, large: 14), fontWeight: FontWeight.w600,),),
+          Text(
+            'Top productos',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: Responsive.fontSize(context, small: 12, large: 14),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
           ...topProducts.take(5).map((p) {
             final sales = (p['totalSales'] as num?)?.toDouble() ?? 0;
-            final maxSales = (topProducts.first['totalSales'] as num?)?.toDouble() ?? 1;
+            final maxSales =
+                (topProducts.first['totalSales'] as num?)?.toDouble() ?? 1;
             return Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: Row(
                 children: [
                   Expanded(
                     flex: 3,
-                    child: Text((p['name'] ?? '').toString(), style: TextStyle(color: Colors.white70,
-                        fontSize: Responsive.fontSize(context, small: 11, large: 12),),
-                        overflow: TextOverflow.ellipsis,),
+                    child: Text(
+                      (p['name'] ?? '').toString(),
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize:
+                            Responsive.fontSize(context, small: 11, large: 12),
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                   Expanded(
                     flex: 2,
@@ -283,8 +383,15 @@ class AnalyticsDashboard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text('\u20AC${sales.toStringAsFixed(0)}', style: TextStyle(color: AppTheme.neonGreen,
-                      fontSize: Responsive.fontSize(context, small: 11, large: 12), fontWeight: FontWeight.w600,),),
+                  Text(
+                    '\u20AC${sales.toStringAsFixed(0)}',
+                    style: TextStyle(
+                      color: AppTheme.neonGreen,
+                      fontSize:
+                          Responsive.fontSize(context, small: 11, large: 12),
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ],
               ),
             );

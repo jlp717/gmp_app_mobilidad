@@ -10,11 +10,9 @@ const Map<String, String> _financeErrorCodeMessages = <String, String>{
           'Refresca la pantalla y vuelve a intentarlo.',
   'INCONSISTENT_IDEMPOTENCY':
       'Datos de la liquidación inconsistentes. Refresca y vuelve a intentar.',
-  'PAYMENT_ALREADY_REGISTERED':
-      'Este documento ya tiene un cobro registrado. '
-          'Si necesitas corregirlo, anula el cobro existente desde el detalle.',
-  'DUPLICATE_PAYMENT':
-      'Este documento ya tiene un cobro registrado.',
+  'PAYMENT_ALREADY_REGISTERED': 'Este documento ya tiene un cobro registrado. '
+      'Si necesitas corregirlo, anula el cobro existente desde el detalle.',
+  'DUPLICATE_PAYMENT': 'Este documento ya tiene un cobro registrado.',
   'PAYMENT_AUTHZ_DENIED':
       'No tienes autorización para cobrar/anular este documento.',
   'DOCUMENT_NOT_ASSIGNED':

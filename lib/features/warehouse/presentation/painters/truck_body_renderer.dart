@@ -18,7 +18,8 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service.dart';
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/painters/projection_3d.dart';
 
-class TruckBodyRenderer { // License plate text
+class TruckBodyRenderer {
+  // License plate text
 
   TruckBodyRenderer({
     required this.proj,
@@ -51,13 +52,13 @@ class TruckBodyRenderer { // License plate text
   static const Color _containerFloor = Color(0xFF1A202C);
 
   // Cab
-  static const Color _cabPrimary = Color(0xFF1E40AF);    // Deep blue
-  static const Color _cabSecondary = Color(0xFF2563EB);   // Lighter blue
-  static const Color _cabAccent = Color(0xFF60A5FA);      // Bright accent
-  static const Color _windshield = Color(0xFF38BDF8);     // Glass blue
-  static const Color _headlight = Color(0xFFFDE68A);      // Warm yellow
-  static const Color _chrome = Color(0xFFE2E8F0);         // Chrome silver
-  static const Color _indicator = Color(0xFFFF8C42);      // Orange indicator
+  static const Color _cabPrimary = Color(0xFF1E40AF); // Deep blue
+  static const Color _cabSecondary = Color(0xFF2563EB); // Lighter blue
+  static const Color _cabAccent = Color(0xFF60A5FA); // Bright accent
+  static const Color _windshield = Color(0xFF38BDF8); // Glass blue
+  static const Color _headlight = Color(0xFFFDE68A); // Warm yellow
+  static const Color _chrome = Color(0xFFE2E8F0); // Chrome silver
+  static const Color _indicator = Color(0xFFFF8C42); // Orange indicator
 
   // Environment
   static const Color _groundShadow = Color(0x20000000);
@@ -106,7 +107,8 @@ class TruckBodyRenderer { // License plate text
           Colors.transparent,
         ],
         stops: const [0.0, 0.55, 1.0],
-      ).createShader(Rect.fromCenter(center: center, width: rx * 2, height: ry * 2));
+      ).createShader(
+          Rect.fromCenter(center: center, width: rx * 2, height: ry * 2));
 
     canvas.drawOval(
       Rect.fromCenter(center: center, width: rx * 2, height: ry * 2),
@@ -127,7 +129,8 @@ class TruckBodyRenderer { // License plate text
     ];
 
     PolyHelper.fillFaceSolid(canvas, pts, _containerFloor, 0.9, 1);
-    PolyHelper.strokeFace(canvas, pts, _containerFrame.withValues(alpha: 0.4), 1.5);
+    PolyHelper.strokeFace(
+        canvas, pts, _containerFrame.withValues(alpha: 0.4), 1.5);
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -183,7 +186,8 @@ class TruckBodyRenderer { // License plate text
           ),
           textDirection: TextDirection.ltr,
         )..layout();
-        tp.paint(canvas, Offset(labelPos.dx - tp.width - 2, labelPos.dy - tp.height / 2));
+        tp.paint(canvas,
+            Offset(labelPos.dx - tp.width - 2, labelPos.dy - tp.height / 2));
       }
     }
   }
@@ -287,7 +291,8 @@ class TruckBodyRenderer { // License plate text
       proj.project(ox, oy + cD, oz + cH, size),
       proj.project(ox, oy, oz + cH, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, leftPts, _containerBase, Lighting3D.leftLight, 0.17);
+    PolyHelper.fillFaceSolid(
+        canvas, leftPts, _containerBase, Lighting3D.leftLight, 0.17);
 
     // Right wall (translucent — reduced alpha for cargo visibility)
     final rightPts = [
@@ -296,7 +301,8 @@ class TruckBodyRenderer { // License plate text
       proj.project(ox + cW, oy + cD, oz + cH, size),
       proj.project(ox + cW, oy, oz + cH, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, rightPts, _containerBase, Lighting3D.rightLight, 0.17);
+    PolyHelper.fillFaceSolid(
+        canvas, rightPts, _containerBase, Lighting3D.rightLight, 0.17);
 
     // Back wall (reduced alpha for better cargo visibility)
     final backPts = [
@@ -305,7 +311,8 @@ class TruckBodyRenderer { // License plate text
       proj.project(ox + cW, oy + cD, oz + cH, size),
       proj.project(ox, oy + cD, oz + cH, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, backPts, _containerBase, Lighting3D.backLight, 0.22);
+    PolyHelper.fillFaceSolid(
+        canvas, backPts, _containerBase, Lighting3D.backLight, 0.22);
 
     // Roof (very translucent)
     final roofPts = [
@@ -314,7 +321,8 @@ class TruckBodyRenderer { // License plate text
       proj.project(ox + cW, oy + cD, oz + cH, size),
       proj.project(ox, oy + cD, oz + cH, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, roofPts, _containerBase, Lighting3D.topLight, 0.08);
+    PolyHelper.fillFaceSolid(
+        canvas, roofPts, _containerBase, Lighting3D.topLight, 0.08);
 
     // Ambient occlusion — dark gradient at floor-wall junctions
     _drawAmbientOcclusion(canvas);
@@ -370,8 +378,10 @@ class TruckBodyRenderer { // License plate text
 
     // Door inner face
     final leftDoorFace = [ldBotHinge, ldBotFar, ldTopFar, ldTopHinge];
-    PolyHelper.fillFaceSolid(canvas, leftDoorFace, _containerBase, Lighting3D.leftLight, 0.7);
-    PolyHelper.strokeFace(canvas, leftDoorFace, _containerFrame.withValues(alpha: 0.5), 1.5);
+    PolyHelper.fillFaceSolid(
+        canvas, leftDoorFace, _containerBase, Lighting3D.leftLight, 0.7);
+    PolyHelper.strokeFace(
+        canvas, leftDoorFace, _containerFrame.withValues(alpha: 0.5), 1.5);
 
     // Door top edge (thickness)
     final ldThickTop = [
@@ -380,7 +390,8 @@ class TruckBodyRenderer { // License plate text
       proj.project(ox + doorThickness, oy - doorW, oz + cH, size),
       proj.project(ox + doorThickness, oy, oz + cH, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, ldThickTop, _containerFrame, Lighting3D.topLight, 0.5);
+    PolyHelper.fillFaceSolid(
+        canvas, ldThickTop, _containerFrame, Lighting3D.topLight, 0.5);
 
     // Door outer face (slightly visible)
     final ldOuterFace = [
@@ -389,7 +400,8 @@ class TruckBodyRenderer { // License plate text
       proj.project(ox + doorThickness, oy - doorW, oz + cH, size),
       proj.project(ox + doorThickness, oy, oz + cH, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, ldOuterFace, _containerBase, Lighting3D.rightLight, 0.5);
+    PolyHelper.fillFaceSolid(
+        canvas, ldOuterFace, _containerBase, Lighting3D.rightLight, 0.5);
 
     // ── Right door (hinged on ox+cW, opens toward negative Y) ──
     final rdBotHinge = proj.project(ox + cW, oy, oz, size);
@@ -398,8 +410,10 @@ class TruckBodyRenderer { // License plate text
     final rdTopFar = proj.project(ox + cW, oy - doorW, oz + cH, size);
 
     final rightDoorFace = [rdBotHinge, rdBotFar, rdTopFar, rdTopHinge];
-    PolyHelper.fillFaceSolid(canvas, rightDoorFace, _containerBase, Lighting3D.rightLight, 0.7);
-    PolyHelper.strokeFace(canvas, rightDoorFace, _containerFrame.withValues(alpha: 0.5), 1.5);
+    PolyHelper.fillFaceSolid(
+        canvas, rightDoorFace, _containerBase, Lighting3D.rightLight, 0.7);
+    PolyHelper.strokeFace(
+        canvas, rightDoorFace, _containerFrame.withValues(alpha: 0.5), 1.5);
 
     // Door top edge
     final rdThickTop = [
@@ -408,7 +422,8 @@ class TruckBodyRenderer { // License plate text
       proj.project(ox + cW - doorThickness, oy - doorW, oz + cH, size),
       proj.project(ox + cW - doorThickness, oy, oz + cH, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, rdThickTop, _containerFrame, Lighting3D.topLight, 0.5);
+    PolyHelper.fillFaceSolid(
+        canvas, rdThickTop, _containerFrame, Lighting3D.topLight, 0.5);
 
     // Door outer face
     final rdOuterFace = [
@@ -417,7 +432,8 @@ class TruckBodyRenderer { // License plate text
       proj.project(ox + cW - doorThickness, oy - doorW, oz + cH, size),
       proj.project(ox + cW - doorThickness, oy, oz + cH, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, rdOuterFace, _containerBase, Lighting3D.leftLight, 0.5);
+    PolyHelper.fillFaceSolid(
+        canvas, rdOuterFace, _containerBase, Lighting3D.leftLight, 0.5);
 
     // ── Hinges (chrome circles on hinge edge) ──
     final hingePaint = Paint()..color = _chrome.withValues(alpha: 0.7);
@@ -515,19 +531,30 @@ class TruckBodyRenderer { // License plate text
 
     // Top edges
     _drawEdge(canvas, ox, oy, oz + cH, ox + cW, oy, oz + cH, framePaint);
-    _drawEdge(canvas, ox, oy + cD, oz + cH, ox + cW, oy + cD, oz + cH, framePaint);
+    _drawEdge(
+        canvas, ox, oy + cD, oz + cH, ox + cW, oy + cD, oz + cH, framePaint);
     _drawEdge(canvas, ox, oy, oz + cH, ox, oy + cD, oz + cH, framePaint);
-    _drawEdge(canvas, ox + cW, oy, oz + cH, ox + cW, oy + cD, oz + cH, framePaint);
+    _drawEdge(
+        canvas, ox + cW, oy, oz + cH, ox + cW, oy + cD, oz + cH, framePaint);
 
     // Vertical edges
     _drawEdge(canvas, ox, oy, oz, ox, oy, oz + cH, framePaint);
     _drawEdge(canvas, ox + cW, oy, oz, ox + cW, oy, oz + cH, framePaint);
     _drawEdge(canvas, ox, oy + cD, oz, ox, oy + cD, oz + cH, framePaint);
-    _drawEdge(canvas, ox + cW, oy + cD, oz, ox + cW, oy + cD, oz + cH, framePaint);
+    _drawEdge(
+        canvas, ox + cW, oy + cD, oz, ox + cW, oy + cD, oz + cH, framePaint);
   }
 
-  void _drawEdge(Canvas canvas, double x1, double y1, double z1,
-                  double x2, double y2, double z2, Paint paint,) {
+  void _drawEdge(
+    Canvas canvas,
+    double x1,
+    double y1,
+    double z1,
+    double x2,
+    double y2,
+    double z2,
+    Paint paint,
+  ) {
     canvas.drawLine(
       proj.project(x1, y1, z1, size),
       proj.project(x2, y2, z2, size),
@@ -623,8 +650,10 @@ class TruckBodyRenderer { // License plate text
       proj.project(cabX + cabW, cabY, cabZ + cabH * 0.65, size),
       proj.project(cabX, cabY, cabZ + cabH * 0.65, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, bottomFront, _cabPrimary, Lighting3D.frontLight, 0.95);
-    PolyHelper.strokeFace(canvas, bottomFront, _cabSecondary.withValues(alpha: 0.3), 1);
+    PolyHelper.fillFaceSolid(
+        canvas, bottomFront, _cabPrimary, Lighting3D.frontLight, 0.95);
+    PolyHelper.strokeFace(
+        canvas, bottomFront, _cabSecondary.withValues(alpha: 0.3), 1);
 
     // Grille (horizontal lines between headlights)
     _drawGrille(canvas, cabX, cabY, cabZ, cabW, cabH);
@@ -647,7 +676,8 @@ class TruckBodyRenderer { // License plate text
     canvas.drawLine(midW1, midW1t, reflectPaint);
     final midW2 = Offset.lerp(windshield[0], windshield[1], 0.65)!;
     final midW2t = Offset.lerp(windshield[3], windshield[2], 0.65)!;
-    canvas.drawLine(midW2, midW2t, reflectPaint..color = Colors.white.withValues(alpha: 0.08));
+    canvas.drawLine(midW2, midW2t,
+        reflectPaint..color = Colors.white.withValues(alpha: 0.08));
 
     // Cab roof
     final roof = [
@@ -656,8 +686,10 @@ class TruckBodyRenderer { // License plate text
       proj.project(cabX + cabW, cabY + cabD, cabZ + cabH, size),
       proj.project(cabX, cabY + cabD, cabZ + cabH, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, roof, _cabPrimary, Lighting3D.topLight, 0.85);
-    PolyHelper.strokeFace(canvas, roof, _cabSecondary.withValues(alpha: 0.2), 1);
+    PolyHelper.fillFaceSolid(
+        canvas, roof, _cabPrimary, Lighting3D.topLight, 0.85);
+    PolyHelper.strokeFace(
+        canvas, roof, _cabSecondary.withValues(alpha: 0.2), 1);
 
     // Cab side
     final side = [
@@ -667,7 +699,8 @@ class TruckBodyRenderer { // License plate text
       proj.project(cabX + cabW, cabY - cabD * 0.2, cabZ + cabH, size),
       proj.project(cabX + cabW, cabY, cabZ + cabH * 0.65, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, side, _cabSecondary, Lighting3D.rightLight, 0.9);
+    PolyHelper.fillFaceSolid(
+        canvas, side, _cabSecondary, Lighting3D.rightLight, 0.9);
     PolyHelper.strokeFace(canvas, side, _cabAccent.withValues(alpha: 0.2), 1);
 
     // Side window
@@ -697,7 +730,8 @@ class TruckBodyRenderer { // License plate text
     PolyHelper.fillFaceSolid(canvas, bumper, _chrome, 0.7, 0.8);
 
     // License plate on bumper
-    _drawLicensePlate(canvas, cabX + cabW * 0.3, cabY - 3.5, cabZ + cabH * 0.04, cabW * 0.4, cabH * 0.08);
+    _drawLicensePlate(canvas, cabX + cabW * 0.3, cabY - 3.5, cabZ + cabH * 0.04,
+        cabW * 0.4, cabH * 0.08);
 
     // Mirrors
     _drawMirror(canvas, cabX - 8, cabY + cabD * 0.3, cabZ + cabH * 0.6);
@@ -717,8 +751,10 @@ class TruckBodyRenderer { // License plate text
       proj.project(ox + cW * 0.1, cabY, oz + cH, size),
       proj.project(ox, cabY, oz + cH * 0.55, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, front, _cabPrimary, Lighting3D.frontLight, 0.92);
-    PolyHelper.strokeFace(canvas, front, _cabSecondary.withValues(alpha: 0.3), 1);
+    PolyHelper.fillFaceSolid(
+        canvas, front, _cabPrimary, Lighting3D.frontLight, 0.92);
+    PolyHelper.strokeFace(
+        canvas, front, _cabSecondary.withValues(alpha: 0.3), 1);
 
     // Grille
     _drawGrille(canvas, ox, cabY, oz, cW, cH);
@@ -749,7 +785,8 @@ class TruckBodyRenderer { // License plate text
       proj.project(ox + cW, cabY + cabD, oz + cH, size),
       proj.project(ox + cW, cabY, oz + cH, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, side, _cabSecondary, Lighting3D.rightLight, 0.85);
+    PolyHelper.fillFaceSolid(
+        canvas, side, _cabSecondary, Lighting3D.rightLight, 0.85);
 
     // Side indicator
     _drawIndicator(canvas, ox + cW, cabY + cabD * 0.1, oz + cH * 0.3);
@@ -761,7 +798,8 @@ class TruckBodyRenderer { // License plate text
       proj.project(ox + cW, cabY + cabD, oz + cH, size),
       proj.project(ox, cabY + cabD, oz + cH, size),
     ];
-    PolyHelper.fillFaceSolid(canvas, roofExt, _cabPrimary, Lighting3D.topLight, 0.8);
+    PolyHelper.fillFaceSolid(
+        canvas, roofExt, _cabPrimary, Lighting3D.topLight, 0.8);
 
     // Headlights
     _drawHeadlight(canvas, ox + cW * 0.15, cabY + 1, oz + cH * 0.2);
@@ -777,7 +815,8 @@ class TruckBodyRenderer { // License plate text
     PolyHelper.fillFaceSolid(canvas, bumper, _chrome, 0.6, 0.7);
 
     // License plate
-    _drawLicensePlate(canvas, ox + cW * 0.3, cabY + 1.5, oz + cH * 0.03, cW * 0.4, cH * 0.07);
+    _drawLicensePlate(
+        canvas, ox + cW * 0.3, cabY + 1.5, oz + cH * 0.03, cW * 0.4, cH * 0.07);
 
     // Mirrors
     _drawMirror(canvas, ox - 8, cabY + cabD * 0.3, oz + cH * 0.65);
@@ -788,7 +827,8 @@ class TruckBodyRenderer { // License plate text
   // CAB DETAILS — Grille, headlights, indicators, mirrors, license plate
   // ═══════════════════════════════════════════════════════════════════════
 
-  void _drawGrille(Canvas canvas, double gx, double gy, double gz, double gw, double gh) {
+  void _drawGrille(
+      Canvas canvas, double gx, double gy, double gz, double gw, double gh) {
     final grillePaint = Paint()
       ..color = _chrome.withValues(alpha: 0.2)
       ..strokeWidth = 0.8;
@@ -814,19 +854,22 @@ class TruckBodyRenderer { // License plate text
     if (r < 1) return;
 
     canvas.drawCircle(
-      center, r * 2.5,
+      center,
+      r * 2.5,
       Paint()
         ..color = _headlight.withValues(alpha: 0.15)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
     );
     canvas.drawCircle(
-      center, r,
+      center,
+      r,
       Paint()
         ..color = _headlight
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
     );
     canvas.drawCircle(
-      center, r * 1.3,
+      center,
+      r * 1.3,
       Paint()
         ..color = _chrome.withValues(alpha: 0.5)
         ..style = PaintingStyle.stroke
@@ -838,9 +881,11 @@ class TruckBodyRenderer { // License plate text
     final center = proj.project(x, y, z, size);
     final r = 2.5 * proj.zoom;
     if (r < 1) return;
-    canvas.drawCircle(center, r, Paint()..color = _indicator.withValues(alpha: 0.7));
     canvas.drawCircle(
-      center, r * 1.5,
+        center, r, Paint()..color = _indicator.withValues(alpha: 0.7));
+    canvas.drawCircle(
+      center,
+      r * 1.5,
       Paint()
         ..color = _indicator.withValues(alpha: 0.15)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
@@ -868,7 +913,8 @@ class TruckBodyRenderer { // License plate text
     );
   }
 
-  void _drawLicensePlate(Canvas canvas, double px, double py, double pz, double pw, double ph) {
+  void _drawLicensePlate(
+      Canvas canvas, double px, double py, double pz, double pw, double ph) {
     final plateText = matricula ?? '';
     if (plateText.isEmpty) return;
 
@@ -882,7 +928,8 @@ class TruckBodyRenderer { // License plate text
       Rect.fromCenter(center: center, width: plateW, height: plateH),
       const Radius.circular(2),
     );
-    canvas.drawRRect(plateRect, Paint()..color = Colors.white.withValues(alpha: 0.85));
+    canvas.drawRRect(
+        plateRect, Paint()..color = Colors.white.withValues(alpha: 0.85));
     canvas.drawRRect(
       plateRect,
       Paint()
@@ -904,7 +951,8 @@ class TruckBodyRenderer { // License plate text
       ),
       textDirection: TextDirection.ltr,
     )..layout(maxWidth: plateW - 4);
-    tp.paint(canvas, Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
+    tp.paint(
+        canvas, Offset(center.dx - tp.width / 2, center.dy - tp.height / 2));
   }
 
   // ═══════════════════════════════════════════════════════════════════════
@@ -920,7 +968,8 @@ class TruckBodyRenderer { // License plate text
     final archY = cD * 0.75; // Near rear wheels
     const archD = 60.0;
 
-    final archPaint = Paint()..color = const Color(0xFF1A1A2E).withValues(alpha: 0.4);
+    final archPaint = Paint()
+      ..color = const Color(0xFF1A1A2E).withValues(alpha: 0.4);
 
     // Left wheel arch
     final leftArch = [
@@ -977,26 +1026,31 @@ class TruckBodyRenderer { // License plate text
     canvas.drawCircle(
       Offset(center.dx + 1, center.dy + 2),
       sr * 1.1,
-      Paint()..color = const Color(0x40000000)
+      Paint()
+        ..color = const Color(0x40000000)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3),
     );
     // Tire (dark rubber)
     canvas.drawCircle(center, sr, Paint()..color = const Color(0xFF1A1A2E));
     // Tire tread ring
     canvas.drawCircle(
-      center, sr * 0.85,
+      center,
+      sr * 0.85,
       Paint()
         ..color = const Color(0xFF2D2D44)
         ..style = PaintingStyle.stroke
         ..strokeWidth = sr * 0.15,
     );
     // Hub cap (chrome)
-    canvas.drawCircle(center, sr * 0.45, Paint()..color = _chrome.withValues(alpha: 0.6));
+    canvas.drawCircle(
+        center, sr * 0.45, Paint()..color = _chrome.withValues(alpha: 0.6));
     // Hub center
-    canvas.drawCircle(center, sr * 0.15, Paint()..color = const Color(0xFF4A5568));
+    canvas.drawCircle(
+        center, sr * 0.15, Paint()..color = const Color(0xFF4A5568));
     // Chrome rim
     canvas.drawCircle(
-      center, sr * 0.65,
+      center,
+      sr * 0.65,
       Paint()
         ..color = _chrome.withValues(alpha: 0.3)
         ..style = PaintingStyle.stroke
@@ -1009,8 +1063,10 @@ class TruckBodyRenderer { // License plate text
     for (var i = 0; i < 5; i++) {
       final angle = i * math.pi * 2 / 5;
       canvas.drawLine(
-        Offset(center.dx + math.cos(angle) * sr * 0.2, center.dy + math.sin(angle) * sr * 0.2),
-        Offset(center.dx + math.cos(angle) * sr * 0.6, center.dy + math.sin(angle) * sr * 0.6),
+        Offset(center.dx + math.cos(angle) * sr * 0.2,
+            center.dy + math.sin(angle) * sr * 0.2),
+        Offset(center.dx + math.cos(angle) * sr * 0.6,
+            center.dy + math.sin(angle) * sr * 0.6),
         spokePaint,
       );
     }
@@ -1020,7 +1076,8 @@ class TruckBodyRenderer { // License plate text
   // WEIGHT HEATMAP — Overlay on floor
   // ═══════════════════════════════════════════════════════════════════════
 
-  void drawWeightHeatmap(Canvas canvas, List<dynamic> placed, double maxWeight) {
+  void drawWeightHeatmap(
+      Canvas canvas, List<dynamic> placed, double maxWeight) {
     if (placed.isEmpty) return;
     for (final b in placed) {
       if (b is! PlacedBox) continue;

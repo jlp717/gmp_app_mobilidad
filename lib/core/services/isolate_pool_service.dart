@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart';
 
 /// IsolatePoolService - Managed pool of Isolates for heavy computations
 /// =====================================================================
-/// 
+///
 /// Features:
 /// - Pre-spawned Isolate pool for instant task execution
 /// - Priority-based task queue
@@ -28,7 +28,6 @@ enum TaskPriority { low, normal, high, critical }
 
 /// Task wrapper for queue management
 class _IsolateTask<T, R> {
-
   _IsolateTask({
     required this.computation,
     required this.message,
@@ -48,7 +47,6 @@ class _IsolateTask<T, R> {
 
 /// Worker state tracking
 class _IsolateWorker {
-
   _IsolateWorker(this.id);
   final int id;
   Isolate? isolate;
@@ -96,7 +94,8 @@ class IsolatePoolService {
     }
 
     _isInitialized = true;
-    debugPrint('[IsolatePool] ✅ Pool initialized with ${_workers.length} workers');
+    debugPrint(
+        '[IsolatePool] ✅ Pool initialized with ${_workers.length} workers');
   }
 
   /// Calculate optimal pool size based on platform
@@ -140,18 +139,22 @@ class IsolatePoolService {
       if (message is _WorkerMessage) {
         try {
           final result = message.computation(message.data);
-          message.responsePort.send(_WorkerResponse(
-            taskId: message.taskId,
-            result: result,
-            success: true,
-          ),);
+          message.responsePort.send(
+            _WorkerResponse(
+              taskId: message.taskId,
+              result: result,
+              success: true,
+            ),
+          );
         } catch (e, stack) {
-          message.responsePort.send(_WorkerResponse(
-            taskId: message.taskId,
-            error: e.toString(),
-            stackTrace: stack.toString(),
-            success: false,
-          ),);
+          message.responsePort.send(
+            _WorkerResponse(
+              taskId: message.taskId,
+              error: e.toString(),
+              stackTrace: stack.toString(),
+              success: false,
+            ),
+          );
         }
       }
     });
@@ -201,7 +204,8 @@ class IsolatePoolService {
     _taskQueue[priorityKey]!.add(task);
 
     // Warn if queue is getting full
-    final totalQueued = _taskQueue.values.fold<int>(0, (sum, q) => sum + q.length);
+    final totalQueued =
+        _taskQueue.values.fold<int>(0, (sum, q) => sum + q.length);
     if (totalQueued > _maxTaskQueue * 0.8) {
       debugPrint('[IsolatePool] ⚠️ Task queue at $totalQueued/$_maxTaskQueue');
     }
@@ -235,7 +239,8 @@ class IsolatePoolService {
   }
 
   /// Execute task on worker
-  static Future<void> _executeTask(_IsolateWorker worker, _IsolateTask task) async {
+  static Future<void> _executeTask(
+      _IsolateWorker worker, _IsolateTask task) async {
     worker.isBusy = true;
     worker.taskCount++;
     final startTime = DateTime.now();
@@ -245,12 +250,14 @@ class IsolatePoolService {
       final taskId = DateTime.now().microsecondsSinceEpoch.toString();
 
       // Send work to isolate
-      worker.sendPort!.send(_WorkerMessage(
-        taskId: taskId,
-        computation: task.computation,
-        data: task.message,
-        responsePort: responsePort.sendPort,
-      ),);
+      worker.sendPort!.send(
+        _WorkerMessage(
+          taskId: taskId,
+          computation: task.computation,
+          data: task.message,
+          responsePort: responsePort.sendPort,
+        ),
+      );
 
       // Wait for response with timeout
       final response = await responsePort.first.timeout(
@@ -277,7 +284,6 @@ class IsolatePoolService {
 
       // Track queue time
       _totalQueueTime += task.queueTime.inMilliseconds;
-
     } catch (e) {
       task.completer.completeError(e);
       worker.failureCount++;
@@ -315,9 +321,11 @@ class IsolatePoolService {
 
   /// Get pool statistics
   static Map<String, dynamic> getStats() {
-    final totalQueued = _taskQueue.values.fold<int>(0, (sum, q) => sum + q.length);
+    final totalQueued =
+        _taskQueue.values.fold<int>(0, (sum, q) => sum + q.length);
     final busyWorkers = _workers.where((w) => w.isBusy).length;
-    final avgQueueTime = _tasksCompleted > 0 ? _totalQueueTime / _tasksCompleted : 0;
+    final avgQueueTime =
+        _tasksCompleted > 0 ? _totalQueueTime / _tasksCompleted : 0;
 
     return {
       'poolSize': _poolSize,
@@ -371,7 +379,6 @@ class IsolatePoolService {
 
 /// Message sent to worker
 class _WorkerMessage<T, R> {
-
   _WorkerMessage({
     required this.taskId,
     required this.computation,
@@ -386,10 +393,10 @@ class _WorkerMessage<T, R> {
 
 /// Response from worker
 class _WorkerResponse<T> {
-
   _WorkerResponse({
     required this.taskId,
-    required this.success, this.result,
+    required this.success,
+    this.result,
     this.error,
     this.stackTrace,
   });

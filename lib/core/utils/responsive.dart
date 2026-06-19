@@ -56,7 +56,7 @@ class Responsive {
   /// Phones in landscape have little vertical space (< 500px), so we shrink everything.
   static double landscapeScale(BuildContext ctx) {
     if (!isLandscapeCompact(ctx)) return 1;
-    
+
     final h = MediaQuery.of(ctx).size.height;
     // For heights between 250 and 500, return a value between 0.5 and 0.95
     // This aggressively shrinks fonts, paddings, and headers so users can see more data.
@@ -71,7 +71,8 @@ class Responsive {
   /// [desktop] across the 600 / 900 / 1200 px breakpoints.
   /// If [tablet] is omitted it defaults to the midpoint of phone & desktop.
   /// On screens >= 1200 px the [desktop] value is returned unchanged.
-  static double value(BuildContext ctx, {
+  static double value(
+    BuildContext ctx, {
     required double phone,
     required double desktop,
     double? tablet,
@@ -100,16 +101,22 @@ class Responsive {
   }
 
   /// Clamp a desired width so it never exceeds [maxPercent] of screen width.
-  static double clampWidth(BuildContext ctx, double desired,
-      {double maxPercent = 0.9,}) {
+  static double clampWidth(
+    BuildContext ctx,
+    double desired, {
+    double maxPercent = 0.9,
+  }) {
     final screenW = MediaQuery.of(ctx).size.width;
     final max = screenW * maxPercent;
     return desired > max ? max : desired;
   }
 
   /// Clamp a desired height so it never exceeds [maxPercent] of screen height.
-  static double clampHeight(BuildContext ctx, double desired,
-      {double maxPercent = 0.9,}) {
+  static double clampHeight(
+    BuildContext ctx,
+    double desired, {
+    double maxPercent = 0.9,
+  }) {
     final screenH = MediaQuery.of(ctx).size.height;
     final max = screenH * maxPercent;
     return desired > max ? max : desired;
@@ -127,8 +134,11 @@ class Responsive {
   // ---------------------------------------------------------------------------
 
   /// Returns [large] on big screens, [small] on phones, interpolated on medium.
-  static double fontSize(BuildContext ctx,
-      {required double small, required double large,}) {
+  static double fontSize(
+    BuildContext ctx, {
+    required double small,
+    required double large,
+  }) {
     final w = MediaQuery.of(ctx).size.shortestSide;
     final factor = landscapeScale(ctx);
     if (w >= 1200) return large * factor;
@@ -138,8 +148,11 @@ class Responsive {
   }
 
   /// Convenience for icon sizes — same interpolation as [fontSize].
-  static double iconSize(BuildContext ctx,
-      {required double phone, required double desktop,}) =>
+  static double iconSize(
+    BuildContext ctx, {
+    required double phone,
+    required double desktop,
+  }) =>
       fontSize(ctx, small: phone, large: desktop);
 
   // ---------------------------------------------------------------------------
@@ -147,8 +160,11 @@ class Responsive {
   // ---------------------------------------------------------------------------
 
   /// Returns [large] on big screens, [small] on phones.
-  static double padding(BuildContext ctx,
-      {required double small, required double large,}) {
+  static double padding(
+    BuildContext ctx, {
+    required double small,
+    required double large,
+  }) {
     final w = MediaQuery.of(ctx).size.shortestSide;
     final factor = landscapeScale(ctx);
     if (w >= 1200) return large * factor;
@@ -176,7 +192,8 @@ class Responsive {
 
   /// Modal/bottom-sheet height that adapts to orientation.
   /// In landscape the modal uses more of the available (shorter) height.
-  static double modalHeight(BuildContext ctx, {
+  static double modalHeight(
+    BuildContext ctx, {
     double portraitFraction = 0.85,
     double landscapeFraction = 0.95,
   }) {

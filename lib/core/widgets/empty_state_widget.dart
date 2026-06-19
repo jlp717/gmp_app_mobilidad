@@ -5,9 +5,9 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 /// Shared empty state widget — V2 Premium.
 /// Displays an icon, title, optional subtitle, and optional action button with modern styling.
 class EmptyStateWidget extends StatelessWidget {
-
   const EmptyStateWidget({
-    required this.title, super.key,
+    required this.title,
+    super.key,
     this.icon = Icons.inbox_outlined,
     this.subtitle,
     this.onAction,
@@ -42,7 +42,10 @@ class EmptyStateWidget extends StatelessWidget {
                 color: iconColor ?? Colors.white.withValues(alpha: 0.2),
                 size: 48,
               ),
-            ).animate().fadeIn(duration: 400.ms).scale(begin: const Offset(0.85, 0.85)),
+            )
+                .animate()
+                .fadeIn(duration: 400.ms)
+                .scale(begin: const Offset(0.85, 0.85)),
             const SizedBox(height: 20),
             Text(
               title,
@@ -75,10 +78,12 @@ class EmptyStateWidget extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.12),
                   foregroundColor: AppTheme.neonBlue,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                    side: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.25)),
+                    side: BorderSide(
+                        color: AppTheme.neonBlue.withValues(alpha: 0.25)),
                   ),
                   elevation: 0,
                 ),

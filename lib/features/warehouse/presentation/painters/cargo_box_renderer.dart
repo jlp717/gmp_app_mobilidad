@@ -15,7 +15,6 @@ import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service
 import 'package:gmp_app_mobilidad/features/warehouse/presentation/painters/projection_3d.dart';
 
 class CargoBoxRenderer {
-
   CargoBoxRenderer({
     required this.proj,
     required this.size,
@@ -42,8 +41,11 @@ class CargoBoxRenderer {
   // ═══════════════════════════════════════════════════════════════════════
 
   /// Render all placed boxes with Z-sorting, shadows, and labels.
-  void renderAll(Canvas canvas, List<PlacedBox> placed,
-      {List<PlacedBox>? cachedSort,}) {
+  void renderAll(
+    Canvas canvas,
+    List<PlacedBox> placed, {
+    List<PlacedBox>? cachedSort,
+  }) {
     if (placed.isEmpty) return;
 
     final sorted = cachedSort ?? _zSort(placed);
@@ -59,7 +61,10 @@ class CargoBoxRenderer {
 
   /// Render overflow boxes outside the truck boundary
   void renderOverflow(
-      Canvas canvas, List<PlacedBox> overflow, double containerDepth,) {
+    Canvas canvas,
+    List<PlacedBox> overflow,
+    double containerDepth,
+  ) {
     if (overflow.isEmpty) return;
 
     // Overflow banner with weight info
@@ -102,10 +107,17 @@ class CargoBoxRenderer {
     }
     if (overflow.length > maxShow) {
       final morePos = proj.project(ox, oy - 55, oz, size);
-      _drawText(canvas, morePos, '+${overflow.length - maxShow} mas',
-          const TextStyle(color: Color(0xFFFF8C8C), fontSize: 9,
-              fontWeight: FontWeight.w600,),
-          bgColor: const Color(0xAA1A1A2E),);
+      _drawText(
+        canvas,
+        morePos,
+        '+${overflow.length - maxShow} mas',
+        const TextStyle(
+          color: Color(0xFFFF8C8C),
+          fontSize: 9,
+          fontWeight: FontWeight.w600,
+        ),
+        bgColor: const Color(0xAA1A1A2E),
+      );
     }
   }
 
@@ -116,10 +128,10 @@ class CargoBoxRenderer {
   List<PlacedBox> _zSort(List<PlacedBox> boxes) {
     return List<PlacedBox>.from(boxes)
       ..sort((a, b) {
-        final za =
-            proj.depth(ox + a.x + a.w / 2, oy + a.y + a.d / 2, oz + a.z + a.h / 2);
-        final zb =
-            proj.depth(ox + b.x + b.w / 2, oy + b.y + b.d / 2, oz + b.z + b.h / 2);
+        final za = proj.depth(
+            ox + a.x + a.w / 2, oy + a.y + a.d / 2, oz + a.z + a.h / 2);
+        final zb = proj.depth(
+            ox + b.x + b.w / 2, oy + b.y + b.d / 2, oz + b.z + b.h / 2);
         return za.compareTo(zb);
       });
   }
@@ -166,18 +178,21 @@ class CargoBoxRenderer {
 
     // Determine projected area for LOD
     final screenArea = _approxScreenArea(corners);
-    final isSmall = screenArea < 600;  // Small box at this zoom level
-    final isTiny = screenArea < 150;   // Very small — minimal detail
+    final isSmall = screenArea < 600; // Small box at this zoom level
+    final isTiny = screenArea < 150; // Very small — minimal detail
 
     // ─── Face rendering ──────────────────────────────────────────────
 
     // Top face: corners [4,5,7,6] — Brightest (stronger gradient for depth)
     final topPts = [corners[4], corners[5], corners[7], corners[6]];
     // Heavier boxes get slightly darker shade
-    final weightRatio = maxWeight > 0 ? (b.weight / maxWeight).clamp(0.0, 1.0) : 0.0;
+    final weightRatio =
+        maxWeight > 0 ? (b.weight / maxWeight).clamp(0.0, 1.0) : 0.0;
     final weightDarken = 1.0 - (weightRatio * 0.15);
-    final topColorBright = Lighting3D.applyLight(color, 1.2 * weightDarken, alpha);
-    final topColorDark = Lighting3D.applyLight(color, 0.85 * weightDarken, alpha);
+    final topColorBright =
+        Lighting3D.applyLight(color, 1.2 * weightDarken, alpha);
+    final topColorDark =
+        Lighting3D.applyLight(color, 0.85 * weightDarken, alpha);
     PolyHelper.fillFaceGradient(canvas, topPts, topColorBright, topColorDark);
 
     // Front face: corners [0,1,5,4] — Medium
@@ -246,8 +261,16 @@ class CargoBoxRenderer {
       final faceW = (frontPts[1] - frontPts[0]).distance;
       final faceH = (frontPts[3] - frontPts[0]).distance;
       if (faceW > 35 && faceH > 25) {
-        final fcx = (frontPts[0].dx + frontPts[1].dx + frontPts[2].dx + frontPts[3].dx) / 4;
-        final fcy = (frontPts[0].dy + frontPts[1].dy + frontPts[2].dy + frontPts[3].dy) / 4;
+        final fcx = (frontPts[0].dx +
+                frontPts[1].dx +
+                frontPts[2].dx +
+                frontPts[3].dx) /
+            4;
+        final fcy = (frontPts[0].dy +
+                frontPts[1].dy +
+                frontPts[2].dy +
+                frontPts[3].dy) /
+            4;
         final code = b.articleCode.length > 5
             ? b.articleCode.substring(0, 5)
             : b.articleCode;
@@ -282,13 +305,16 @@ class CargoBoxRenderer {
   // BOX LABEL — Product name + weight badge
   // ═══════════════════════════════════════════════════════════════════════
 
-  void _drawBoxLabel(Canvas canvas, List<Offset> topPts, PlacedBox b,
-      Color boxColor, bool isSmall,) {
+  void _drawBoxLabel(
+    Canvas canvas,
+    List<Offset> topPts,
+    PlacedBox b,
+    Color boxColor,
+    bool isSmall,
+  ) {
     // Center of top face
-    final cx =
-        (topPts[0].dx + topPts[1].dx + topPts[2].dx + topPts[3].dx) / 4;
-    final cy =
-        (topPts[0].dy + topPts[1].dy + topPts[2].dy + topPts[3].dy) / 4;
+    final cx = (topPts[0].dx + topPts[1].dx + topPts[2].dx + topPts[3].dx) / 4;
+    final cy = (topPts[0].dy + topPts[1].dy + topPts[2].dy + topPts[3].dy) / 4;
     final center = Offset(cx, cy);
 
     // Determine available width based on face size
@@ -298,9 +324,8 @@ class CargoBoxRenderer {
     // Primary label: article code or client code depending on mode
     final String labelText;
     if (colorMode == ColorMode.client) {
-      labelText = b.clientCode.length > 8
-          ? b.clientCode.substring(0, 8)
-          : b.clientCode;
+      labelText =
+          b.clientCode.length > 8 ? b.clientCode.substring(0, 8) : b.clientCode;
     } else {
       labelText = b.articleCode.length > 8
           ? b.articleCode.substring(0, 8)
@@ -408,7 +433,7 @@ class CargoBoxRenderer {
 
     // Background
     canvas.drawRRect(rect, Paint()..color = bgColor);
-    
+
     // Border (for selected items)
     if (borderColor != null) {
       canvas.drawRRect(
@@ -438,7 +463,10 @@ class CargoBoxRenderer {
   // ═══════════════════════════════════════════════════════════════════════
 
   void _drawSizeClassBadge(
-      Canvas canvas, List<Offset> frontPts, double weight,) {
+    Canvas canvas,
+    List<Offset> frontPts,
+    double weight,
+  ) {
     final faceW = (frontPts[1] - frontPts[0]).distance;
     final faceH = (frontPts[3] - frontPts[0]).distance;
     if (faceW < 30 || faceH < 20) return;
@@ -484,7 +512,12 @@ class CargoBoxRenderer {
   // ═══════════════════════════════════════════════════════════════════════
 
   void _renderOverflowBox(
-      Canvas canvas, PlacedBox b, double bx, double by, double bz,) {
+    Canvas canvas,
+    PlacedBox b,
+    double bx,
+    double by,
+    double bz,
+  ) {
     const color = Color(0xFFFF6B6B);
     final corners = proj.projectBox(bx, by, bz, b.w, b.d, b.h, size);
 
@@ -503,7 +536,7 @@ class CargoBoxRenderer {
     // Red outline
     PolyHelper.strokeFace(canvas, topPts, const Color(0xFFFF4444), 1.5);
     PolyHelper.strokeFace(canvas, frontPts, const Color(0xFFFF4444), 1);
-    
+
     // Label
     _drawBoxLabel(canvas, topPts, b, color, true);
   }
@@ -513,7 +546,10 @@ class CargoBoxRenderer {
   // ═══════════════════════════════════════════════════════════════════════
 
   void drawInfoLabel(
-      Canvas canvas, TruckInterior interior, LoadMetrics metrics,) {
+    Canvas canvas,
+    TruckInterior interior,
+    LoadMetrics metrics,
+  ) {
     // Position at top-right area
     final pos = Offset(size.width - 10, 10);
 
@@ -540,7 +576,8 @@ class CargoBoxRenderer {
 
       // Background pill
       final rect = RRect.fromRectAndRadius(
-        Rect.fromLTWH(pos.dx - tp.width - 16, yOffset, tp.width + 16, tp.height + 8),
+        Rect.fromLTWH(
+            pos.dx - tp.width - 16, yOffset, tp.width + 16, tp.height + 8),
         const Radius.circular(6),
       );
       canvas.drawRRect(rect, Paint()..color = const Color(0xCC1A202C));
@@ -564,8 +601,13 @@ class CargoBoxRenderer {
   }
 
   /// Draw text at a position
-  void _drawText(Canvas canvas, Offset pos, String text, TextStyle style,
-      {Color? bgColor,}) {
+  void _drawText(
+    Canvas canvas,
+    Offset pos,
+    String text,
+    TextStyle style, {
+    Color? bgColor,
+  }) {
     final tp = TextPainter(
       text: TextSpan(text: text, style: style),
       textDirection: TextDirection.ltr,

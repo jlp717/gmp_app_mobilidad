@@ -8,9 +8,10 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 
 class PriceWarningDialog extends StatelessWidget {
-
   const PriceWarningDialog({
-    required this.price, required this.minPrice, super.key,
+    required this.price,
+    required this.minPrice,
+    super.key,
   });
   final double price;
   final double minPrice;
@@ -36,8 +37,10 @@ class PriceWarningDialog extends StatelessWidget {
         children: [
           Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 24),
           SizedBox(width: 8),
-          Text('Precio bajo',
-              style: TextStyle(color: Colors.white, fontSize: 18),),
+          Text(
+            'Precio bajo',
+            style: TextStyle(color: Colors.white, fontSize: 18),
+          ),
         ],
       ),
       content: Text(

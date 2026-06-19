@@ -4,14 +4,16 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 
 /// [ChatMessageBubble] - Professional styled message bubble
-/// 
+///
 /// Features:
 /// - User messages: right-aligned with neon blue gradient
 /// - Bot messages: left-aligned with dark glassmorphism
 /// - Clean typing indicator animation
 class ChatMessageBubble extends StatelessWidget {
   const ChatMessageBubble({
-    required this.message, required this.isUser, super.key,
+    required this.message,
+    required this.isUser,
+    super.key,
     this.timestamp,
     this.isLoading = false,
   });
@@ -30,7 +32,8 @@ class ChatMessageBubble extends StatelessWidget {
         bottom: 12,
       ),
       child: Row(
-        mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment:
+            isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!isUser) ...[
@@ -59,7 +62,6 @@ class ChatMessageBubble extends StatelessWidget {
               ),
             ),
           ],
-          
           Flexible(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -105,7 +107,7 @@ class ChatMessageBubble extends StatelessWidget {
                           Text(
                             _formatTime(timestamp!),
                             style: TextStyle(
-                              color: isUser 
+                              color: isUser
                                   ? Colors.white.withValues(alpha: 0.6)
                                   : Colors.grey.shade600,
                               fontSize: 10,
@@ -117,7 +119,6 @@ class ChatMessageBubble extends StatelessWidget {
                     ),
             ),
           ),
-          
           if (isUser) ...[
             // User avatar
             Container(
@@ -127,7 +128,8 @@ class ChatMessageBubble extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppTheme.neonBlue.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+                border:
+                    Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
               ),
               child: const Icon(
                 Icons.person,
@@ -145,7 +147,7 @@ class ChatMessageBubble extends StatelessWidget {
   Widget _buildFormattedMessage(String text, bool isUser) {
     // Simple parsing for bold (**text**) and bullet points
     final lines = text.split('\n');
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: lines.map((line) {
@@ -184,7 +186,7 @@ class ChatMessageBubble extends StatelessWidget {
     // Parse **bold** text
     final regex = RegExp(r'\*\*(.+?)\*\*');
     final matches = regex.allMatches(text);
-    
+
     if (matches.isEmpty) {
       return Text(
         text,
@@ -195,25 +197,27 @@ class ChatMessageBubble extends StatelessWidget {
         ),
       );
     }
-    
+
     final spans = <InlineSpan>[];
     var lastEnd = 0;
-    
+
     for (final match in matches) {
       if (match.start > lastEnd) {
         spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
       }
-      spans.add(TextSpan(
-        text: match.group(1),
-        style: const TextStyle(fontWeight: FontWeight.bold),
-      ),);
+      spans.add(
+        TextSpan(
+          text: match.group(1),
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+      );
       lastEnd = match.end;
     }
-    
+
     if (lastEnd < text.length) {
       spans.add(TextSpan(text: text.substring(lastEnd)));
     }
-    
+
     return RichText(
       text: TextSpan(
         style: TextStyle(

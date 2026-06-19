@@ -182,7 +182,8 @@ class OrderKpiDashboard extends ConsumerWidget {
   Widget? _trendIcon(double? pct) {
     if (pct == null) return null;
     if (pct > 0) {
-      return const Icon(Icons.arrow_upward, color: AppTheme.neonGreen, size: 12);
+      return const Icon(Icons.arrow_upward,
+          color: AppTheme.neonGreen, size: 12);
     } else if (pct < 0) {
       return const Icon(Icons.arrow_downward, color: AppTheme.error, size: 12);
     }

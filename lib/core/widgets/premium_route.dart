@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 /// Premium page route transition — slide + fade with subtle scale.
-/// 
+///
 /// Using this globally gives the app a consistent, polished feel
 /// across all screen transitions (push/pop).
 class PremiumSlideRoute<T> extends PageRouteBuilder<T> {
@@ -113,7 +113,8 @@ extension PremiumNavigator on BuildContext {
   }
 
   /// Replace current route with premium fade transition.
-  Future<T?> pushReplacementPremium<T extends Object?, TO extends Object?>(Widget page) {
+  Future<T?> pushReplacementPremium<T extends Object?, TO extends Object?>(
+      Widget page) {
     return Navigator.of(this).pushReplacement<T, TO>(
       PremiumFadeRoute<T>(page: page),
     );
@@ -156,5 +157,3 @@ CustomTransitionPage buildPremiumTransitionPage({
     },
   );
 }
-
-

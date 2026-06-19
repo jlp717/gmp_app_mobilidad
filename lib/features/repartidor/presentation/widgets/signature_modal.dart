@@ -13,7 +13,6 @@ import 'package:signature/signature.dart';
 /// Modal de firma digital para captura de firma del cliente
 /// Retorna la firma como base64 string o null si se cancela
 class SignatureModal extends StatefulWidget {
-
   const SignatureModal({
     super.key,
     this.title = 'Firma del Cliente',
@@ -27,7 +26,8 @@ class SignatureModal extends StatefulWidget {
   final Function(String base64Signature)? onConfirm;
 
   /// Muestra el modal y retorna la firma como base64 o null
-  static Future<String?> show(BuildContext context, {
+  static Future<String?> show(
+    BuildContext context, {
     String title = 'Firma del Cliente',
     String subtitle = 'Por favor, firme dentro del recuadro',
   }) async {
@@ -53,7 +53,7 @@ class _SignatureModalState extends State<SignatureModal> {
     _controller = SignatureController(
       exportBackgroundColor: Colors.white,
     );
-    
+
     _controller.addListener(() {
       if (mounted) {
         setState(() {
@@ -86,11 +86,11 @@ class _SignatureModalState extends State<SignatureModal> {
       if (signatureBytes != null) {
         // Convertir a base64
         final base64Signature = base64Encode(signatureBytes);
-        
+
         if (widget.onConfirm != null) {
           widget.onConfirm!(base64Signature);
         }
-        
+
         if (mounted) {
           Navigator.of(context).pop(base64Signature);
         }
@@ -132,10 +132,11 @@ class _SignatureModalState extends State<SignatureModal> {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          
+
           // Header (responsive padding)
           Padding(
-            padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
+            padding: EdgeInsets.all(
+                Responsive.padding(context, small: 12, large: 20)),
             child: Column(
               children: [
                 Row(
@@ -170,7 +171,8 @@ class _SignatureModalState extends State<SignatureModal> {
                             widget.subtitle,
                             style: TextStyle(
                               fontSize: 13,
-                              color: AppTheme.textSecondary.withValues(alpha: 0.8),
+                              color:
+                                  AppTheme.textSecondary.withValues(alpha: 0.8),
                             ),
                           ),
                         ],
@@ -188,7 +190,7 @@ class _SignatureModalState extends State<SignatureModal> {
               ],
             ),
           ),
-          
+
           // Signature Canvas
           Expanded(
             child: Container(
@@ -197,9 +199,9 @@ class _SignatureModalState extends State<SignatureModal> {
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: _isEmpty 
-                    ? Colors.grey.withValues(alpha: 0.3) 
-                    : AppTheme.neonGreen.withValues(alpha: 0.5),
+                  color: _isEmpty
+                      ? Colors.grey.withValues(alpha: 0.3)
+                      : AppTheme.neonGreen.withValues(alpha: 0.5),
                   width: 2,
                 ),
                 boxShadow: [
@@ -219,7 +221,7 @@ class _SignatureModalState extends State<SignatureModal> {
                       controller: _controller,
                       backgroundColor: Colors.white,
                     ),
-                    
+
                     // Placeholder text when empty
                     if (_isEmpty)
                       Center(
@@ -248,10 +250,11 @@ class _SignatureModalState extends State<SignatureModal> {
               ),
             ),
           ),
-          
+
           // Action Buttons (responsive padding)
           Padding(
-            padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
+            padding: EdgeInsets.all(
+                Responsive.padding(context, small: 12, large: 20)),
             child: Row(
               children: [
                 // Cancel button
@@ -265,7 +268,8 @@ class _SignatureModalState extends State<SignatureModal> {
                     label: const Text('Cancelar'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.textSecondary,
-                      side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
+                      side: BorderSide(
+                          color: Colors.white.withValues(alpha: 0.2)),
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -273,9 +277,9 @@ class _SignatureModalState extends State<SignatureModal> {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(width: 16),
-                
+
                 // Confirm button
                 Expanded(
                   flex: 2,
@@ -284,9 +288,8 @@ class _SignatureModalState extends State<SignatureModal> {
                     icon: const Icon(Icons.check),
                     label: const Text('Confirmar Firma'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: _isEmpty 
-                        ? Colors.grey 
-                        : AppTheme.neonGreen,
+                      backgroundColor:
+                          _isEmpty ? Colors.grey : AppTheme.neonGreen,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
@@ -298,7 +301,7 @@ class _SignatureModalState extends State<SignatureModal> {
               ],
             ),
           ),
-          
+
           // Safe area bottom padding
           SizedBox(height: MediaQuery.of(context).padding.bottom),
         ],

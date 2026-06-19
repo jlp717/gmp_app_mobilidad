@@ -4,11 +4,11 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Servicio de red inteligente con detección automática de servidor
-/// 
+///
 /// ARQUITECTURA PROFESIONAL:
 /// - PRODUCCIÓN: Siempre usa https://api.mari-pepa.com (Cloudflare Tunnel)
 /// - DESARROLLO: Detecta automáticamente el servidor local
-/// 
+///
 /// Los comerciales usan la app desde cualquier lugar → SIEMPRE producción
 /// Solo en desarrollo se prueba LAN/localhost
 class NetworkService {
@@ -17,13 +17,13 @@ class NetworkService {
 
   static String? _activeBaseUrl;
   static bool _isInitialized = false;
-  
+
   // Flag para forzar producción (usado en release builds)
   static bool _forceProduction = !kDebugMode;
 
   /// URL de producción (Cloudflare Named Tunnel - accesible desde cualquier lugar)
   static const String productionUrl = 'https://api.mari-pepa.com/api';
-  
+
   /// Servidores SOLO para desarrollo (debug)
   /// En producción (release) NUNCA se usan estas IPs
   static final List<ServerConfig> _devServers = [
@@ -71,7 +71,7 @@ class NetworkService {
   ];
 
   /// Obtiene la URL base activa (con cache)
-  /// 
+  ///
   /// En PRODUCCIÓN (release): Siempre retorna productionUrl
   /// En DESARROLLO (debug): Retorna el mejor servidor detectado
   static String get activeBaseUrl {
@@ -104,7 +104,7 @@ class NetworkService {
   static bool get isInitialized => _isInitialized;
 
   /// Inicializa el servicio de red
-  /// 
+  ///
   /// En PRODUCCIÓN: Usa directamente productionUrl
   /// En DESARROLLO: Detecta el mejor servidor disponible
   static Future<void> initialize() async {
@@ -128,19 +128,21 @@ class NetworkService {
       final savedUrl = prefs.getString(_prefsKeyActiveServer);
 
       // Si hay un servidor guardado de desarrollo, verificar si funciona
-      if (savedUrl != null && savedUrl.isNotEmpty && savedUrl != productionUrl) {
+      if (savedUrl != null &&
+          savedUrl.isNotEmpty &&
+          savedUrl != productionUrl) {
         final isHealthy = await _checkHealth(savedUrl);
         if (isHealthy) {
           _activeBaseUrl = savedUrl;
           _isInitialized = true;
-          debugPrint('[NetworkService] ✅ DESARROLLO: Usando servidor guardado: $savedUrl');
+          debugPrint(
+              '[NetworkService] ✅ DESARROLLO: Usando servidor guardado: $savedUrl');
           return;
         }
       }
 
       // Si no hay servidor guardado o no funciona, detectar automáticamente
       await detectBestServer();
-
     } catch (e) {
       debugPrint('[NetworkService] ⚠️ Error inicializando: $e');
       // Fallback a producción incluso en debug
@@ -169,11 +171,11 @@ class NetworkService {
       if (isHealthy) {
         _activeBaseUrl = server.baseUrl;
         _isInitialized = true;
-        
+
         // Guardar preferencia
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString(_prefsKeyActiveServer, server.baseUrl);
-        
+
         debugPrint('[NetworkService] ✅ Servidor detectado: ${server.name}');
         return;
       }
@@ -190,13 +192,15 @@ class NetworkService {
     try {
       final url = Uri.parse('${baseUrl.replaceFirst('/api', '')}/api/health');
       final response = await http.get(url).timeout(
-        const Duration(seconds: 3),
-        onTimeout: () => http.Response('Timeout', 408),
-      );
+            const Duration(seconds: 3),
+            onTimeout: () => http.Response('Timeout', 408),
+          );
 
       if (response.statusCode == 200) {
         final body = response.body.toLowerCase();
-        return body.contains('ok') || body.contains('success') || body.contains('connected');
+        return body.contains('ok') ||
+            body.contains('success') ||
+            body.contains('connected');
       }
       return false;
     } catch (e) {
@@ -214,19 +218,19 @@ class NetworkService {
   /// Útil cuando el usuario cambia de red (WiFi → Datos)
   static Future<bool> forceProductionServer() async {
     debugPrint('[NetworkService] 🔄 Forzando servidor de producción...');
-    
+
     final isHealthy = await _checkHealth(productionUrl);
     if (isHealthy) {
       _activeBaseUrl = productionUrl;
       _forceProduction = true;
-      
+
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_prefsKeyActiveServer, productionUrl);
-      
+
       debugPrint('[NetworkService] ✅ Producción forzada: $productionUrl');
       return true;
     }
-    
+
     debugPrint('[NetworkService] ❌ Producción no disponible');
     return false;
   }
@@ -255,7 +259,6 @@ class NetworkService {
 
 /// Configuración de servidor
 class ServerConfig {
-
   ServerConfig({
     required this.name,
     required this.baseUrl,

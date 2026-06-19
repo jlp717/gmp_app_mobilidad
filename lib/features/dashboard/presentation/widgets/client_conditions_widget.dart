@@ -24,7 +24,7 @@ class ClientConditionsWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    
+
     return Column(
       children: [
         // Sección Diversos
@@ -41,9 +41,7 @@ class ClientConditionsWidget extends StatelessWidget {
   Widget _buildDiversosSection(BuildContext context, bool isDark) {
     return Container(
       decoration: BoxDecoration(
-        color: isDark 
-            ? const Color(0xFF1E293B)
-            : const Color(0xFF5B8FB9),
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFF5B8FB9),
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -60,9 +58,7 @@ class ClientConditionsWidget extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: isDark 
-                  ? const Color(0xFF1E293B)
-                  : const Color(0xFF5B8FB9),
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFF5B8FB9),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
@@ -77,7 +73,7 @@ class ClientConditionsWidget extends StatelessWidget {
               ),
             ),
           ),
-          
+
           // Content: Medios y Congeladores
           Container(
             decoration: BoxDecoration(
@@ -102,9 +98,9 @@ class ClientConditionsWidget extends StatelessWidget {
                     // TODO: Navegar a detalle de medios
                   },
                 ),
-                
+
                 const SizedBox(height: 8),
-                
+
                 // Congeladores
                 _buildDiversosItem(
                   context: context,
@@ -142,12 +138,12 @@ class ClientConditionsWidget extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: isDark 
+            color: isDark
                 ? const Color(0xFF1E293B).withValues(alpha: 0.5)
                 : Colors.grey.shade50,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: isDark 
+              color: isDark
                   ? Colors.white.withValues(alpha: 0.1)
                   : Colors.grey.shade200,
             ),
@@ -187,7 +183,7 @@ class ClientConditionsWidget extends StatelessWidget {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: isDark 
+                        color: isDark
                             ? Colors.blue.shade300
                             : const Color(0xFF3B82F6),
                       ),
@@ -198,7 +194,7 @@ class ClientConditionsWidget extends StatelessWidget {
               // Chevron
               Icon(
                 Icons.chevron_right_rounded,
-                color: isDark 
+                color: isDark
                     ? Colors.white.withValues(alpha: 0.4)
                     : Colors.grey.shade400,
                 size: 20,
@@ -213,9 +209,7 @@ class ClientConditionsWidget extends StatelessWidget {
   Widget _buildCondicionesSection(BuildContext context, bool isDark) {
     return Container(
       decoration: BoxDecoration(
-        color: isDark 
-            ? const Color(0xFF1E293B)
-            : const Color(0xFF5B8FB9),
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFF5B8FB9),
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
@@ -232,9 +226,7 @@ class ClientConditionsWidget extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              color: isDark 
-                  ? const Color(0xFF1E293B)
-                  : const Color(0xFF5B8FB9),
+              color: isDark ? const Color(0xFF1E293B) : const Color(0xFF5B8FB9),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(12),
                 topRight: Radius.circular(12),
@@ -249,7 +241,7 @@ class ClientConditionsWidget extends StatelessWidget {
               ),
             ),
           ),
-          
+
           // Content
           Container(
             decoration: BoxDecoration(
@@ -270,9 +262,9 @@ class ClientConditionsWidget extends StatelessWidget {
                   value: tarifa,
                   isDark: isDark,
                 ),
-                
+
                 const SizedBox(height: 12),
-                
+
                 // Concepto Facturación
                 _buildConditionItem(
                   context: context,
@@ -297,12 +289,12 @@ class ClientConditionsWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: isDark 
+        color: isDark
             ? const Color(0xFF1E293B).withValues(alpha: 0.5)
             : Colors.grey.shade50,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
-          color: isDark 
+          color: isDark
               ? Colors.white.withValues(alpha: 0.1)
               : Colors.grey.shade200,
         ),
@@ -318,7 +310,7 @@ class ClientConditionsWidget extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: isDark 
+                    color: isDark
                         ? Colors.white.withValues(alpha: 0.6)
                         : Colors.grey.shade600,
                   ),
@@ -329,9 +321,8 @@ class ClientConditionsWidget extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: isDark 
-                        ? Colors.blue.shade300
-                        : const Color(0xFF1E40AF),
+                    color:
+                        isDark ? Colors.blue.shade300 : const Color(0xFF1E40AF),
                   ),
                 ),
               ],

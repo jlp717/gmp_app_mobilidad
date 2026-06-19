@@ -5,9 +5,9 @@ import 'package:latlong2/latlong.dart';
 
 /// OpenStreetMap Widget - 100% Free, no API key needed
 class ClientMapView extends StatefulWidget {
-
   const ClientMapView({
-    required this.clients, super.key,
+    required this.clients,
+    super.key,
     this.initialCenter,
     this.initialZoom = 10.0,
     this.onClientTap,
@@ -39,10 +39,10 @@ class _ClientMapViewState extends State<ClientMapView> {
 
   LatLng get _center {
     if (widget.initialCenter != null) return widget.initialCenter!;
-    
+
     // Default to Almería, Spain (assuming GMP is in this region)
     if (widget.clients.isEmpty) return const LatLng(36.8340, -2.4637);
-    
+
     // Calculate center from clients
     double avgLat = 0, avgLng = 0;
     var count = 0;
@@ -80,7 +80,7 @@ class _ClientMapViewState extends State<ClientMapView> {
               userAgentPackageName: 'com.gmp.mobilidad',
               maxZoom: 19,
             ),
-            
+
             // Client Markers
             MarkerLayer(
               markers: widget.clients
@@ -90,7 +90,7 @@ class _ClientMapViewState extends State<ClientMapView> {
             ),
           ],
         ),
-        
+
         // Map Controls
         Positioned(
           bottom: 16,
@@ -115,12 +115,13 @@ class _ClientMapViewState extends State<ClientMapView> {
               const SizedBox(height: 8),
               _MapButton(
                 icon: Icons.my_location,
-                onPressed: () => _mapController.move(_center, widget.initialZoom),
+                onPressed: () =>
+                    _mapController.move(_center, widget.initialZoom),
               ),
             ],
           ),
         ),
-        
+
         // Selected Client Info
         if (_selectedClient != null)
           Positioned(
@@ -137,7 +138,7 @@ class _ClientMapViewState extends State<ClientMapView> {
               },
             ),
           ),
-        
+
         // Legend
         Positioned(
           top: 16,
@@ -151,10 +152,13 @@ class _ClientMapViewState extends State<ClientMapView> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.location_pin, color: AppTheme.success, size: 20),
+                const Icon(Icons.location_pin,
+                    color: AppTheme.success, size: 20),
                 const SizedBox(width: 4),
-                Text('${widget.clients.where((c) => c.latitude != null).length} clientes', 
-                     style: const TextStyle(fontSize: 12),),
+                Text(
+                  '${widget.clients.where((c) => c.latitude != null).length} clientes',
+                  style: const TextStyle(fontSize: 12),
+                ),
               ],
             ),
           ),
@@ -165,7 +169,7 @@ class _ClientMapViewState extends State<ClientMapView> {
 
   Marker _buildMarker(ClientLocation client) {
     final isSelected = _selectedClient?.code == client.code;
-    
+
     return Marker(
       point: LatLng(client.latitude!, client.longitude!),
       width: isSelected ? 50 : 40,
@@ -199,7 +203,6 @@ class _ClientMapViewState extends State<ClientMapView> {
 }
 
 class _MapButton extends StatelessWidget {
-
   const _MapButton({required this.icon, required this.onPressed});
   final IconData icon;
   final VoidCallback onPressed;
@@ -223,7 +226,6 @@ class _MapButton extends StatelessWidget {
 }
 
 class _ClientInfoCard extends StatelessWidget {
-
   const _ClientInfoCard({
     required this.client,
     required this.onClose,
@@ -268,12 +270,14 @@ class _ClientInfoCard extends StatelessWidget {
                     if (client.city != null)
                       Text(
                         client.city!,
-                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                        style: const TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 12),
                       ),
                     if (client.lastSale != null)
                       Text(
                         'Última venta: €${client.lastSale!.toStringAsFixed(0)}',
-                        style: const TextStyle(color: AppTheme.success, fontSize: 11),
+                        style: const TextStyle(
+                            color: AppTheme.success, fontSize: 11),
                       ),
                   ],
                 ),
@@ -294,7 +298,6 @@ class _ClientInfoCard extends StatelessWidget {
 
 /// Model for client location data
 class ClientLocation {
-
   ClientLocation({
     required this.code,
     required this.name,

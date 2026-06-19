@@ -14,7 +14,9 @@ import 'package:intl/intl.dart';
 /// - Swipe gestures for rapid completion
 class SmartDeliveryCard extends StatefulWidget {
   const SmartDeliveryCard({
-    required this.albaran, required this.onTap, super.key,
+    required this.albaran,
+    required this.onTap,
+    super.key,
     this.onSwipeComplete,
     this.onSwipeNote,
     this.repartidorNames,
@@ -60,23 +62,25 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
 
   Color get _borderColor {
     if (_isEntregado) return AppTheme.success;
-    if (widget.albaran.colorEstado == 'purple' || _isFactura) return AppTheme.neonPurple;
-    if (widget.albaran.colorEstado == 'red' || _isUrgent) return AppTheme.obligatorio;
+    if (widget.albaran.colorEstado == 'purple' || _isFactura)
+      return AppTheme.neonPurple;
+    if (widget.albaran.colorEstado == 'red' || _isUrgent)
+      return AppTheme.obligatorio;
     return AppTheme.neonBlue;
   }
 
   BoxDecoration get _cardDecoration {
     Color baseColor;
     if (_isEntregado) {
-       baseColor = AppTheme.success;
+      baseColor = AppTheme.success;
     } else if (widget.albaran.colorEstado == 'purple' || _isFactura) {
-       baseColor = AppTheme.neonPurple;
+      baseColor = AppTheme.neonPurple;
     } else if (widget.albaran.colorEstado == 'red' || _isUrgent) {
-       baseColor = AppTheme.obligatorio;
+      baseColor = AppTheme.obligatorio;
     } else {
-       return AppTheme.holoCard(glowColor: _borderColor);
+      return AppTheme.holoCard(glowColor: _borderColor);
     }
-    
+
     return BoxDecoration(
       color: baseColor.withValues(alpha: 0.08), // Light background tint
       borderRadius: BorderRadius.circular(12),
@@ -90,7 +94,8 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1), // Compact vertical padding
+      padding: const EdgeInsets.symmetric(
+          horizontal: 8, vertical: 1), // Compact vertical padding
       child: GestureDetector(
         // Swipe disabled as requested
         onTapDown: (_) => _animController.forward(),
@@ -166,7 +171,8 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               Icon(
                 _isFactura ? Icons.receipt_long : Icons.description_outlined,
                 size: 14,
-                color: _isFactura ? AppTheme.neonPurple : AppTheme.textSecondary,
+                color:
+                    _isFactura ? AppTheme.neonPurple : AppTheme.textSecondary,
               ),
               const SizedBox(width: 6),
               Text(
@@ -174,7 +180,8 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                     ? '${widget.albaran.serieFactura.isNotEmpty ? widget.albaran.serieFactura : "F"}-${widget.albaran.numeroFactura}'
                     : '${widget.albaran.serie.isNotEmpty ? widget.albaran.serie : "A"}${widget.albaran.terminal > 0 ? "-${widget.albaran.terminal}" : ""}-${widget.albaran.numeroAlbaran}',
                 style: TextStyle(
-                  color: _isFactura ? AppTheme.neonPurple : AppTheme.textSecondary,
+                  color:
+                      _isFactura ? AppTheme.neonPurple : AppTheme.textSecondary,
                   fontWeight: FontWeight.bold,
                   fontSize: Responsive.isSmall(context) ? 10 : 12,
                 ),
@@ -182,9 +189,9 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
             ],
           ),
         ),
-        
+
         const SizedBox(width: 8),
-        
+
         // Status indicator
         if (_isEntregado)
           Container(
@@ -199,9 +206,9 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               size: 14,
             ),
           ),
-        
+
         const Spacer(),
-        
+
         // Amount
         Column(
           crossAxisAlignment: CrossAxisAlignment.end,
@@ -271,7 +278,8 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               child: Text(
                 widget.albaran.codigoCliente.length > 6
                     ? widget.albaran.codigoCliente.substring(
-                        widget.albaran.codigoCliente.length - 4,)
+                        widget.albaran.codigoCliente.length - 4,
+                      )
                     : widget.albaran.codigoCliente,
                 style: const TextStyle(
                   color: AppTheme.neonBlue,
@@ -318,10 +326,13 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
                 decoration: BoxDecoration(
                   color: Colors.orange.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+                  border:
+                      Border.all(color: Colors.orange.withValues(alpha: 0.5)),
                 ),
                 child: Text(
-                  widget.repartidorNames != null && widget.repartidorNames!.containsKey(widget.albaran.codigoRepartidor)
+                  widget.repartidorNames != null &&
+                          widget.repartidorNames!
+                              .containsKey(widget.albaran.codigoRepartidor)
                       ? 'R ${widget.albaran.codigoRepartidor} – ${widget.repartidorNames![widget.albaran.codigoRepartidor]}'
                       : 'R ${widget.albaran.codigoRepartidor}',
                   style: TextStyle(
@@ -333,9 +344,9 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
               ),
           ],
         ),
-        
+
         const SizedBox(height: 6),
-        
+
         // Address
         Row(
           children: [
@@ -362,10 +373,6 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
     );
   }
 
-
-
-
-
   Widget _buildQuickActions() {
     return Row(
       children: [
@@ -375,9 +382,9 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
           label: 'DETALLE',
           onTap: widget.onTap,
         ),
-        
+
         const SizedBox(width: 8),
-        
+
         // Payment button (if urgent)
         if (_isUrgent && !_isEntregado)
           _buildActionButton(
@@ -386,7 +393,6 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
             color: AppTheme.obligatorio,
             onTap: widget.onTap,
           ),
-        
       ],
     );
   }
@@ -394,10 +400,11 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
   Widget _buildActionButton({
     required IconData icon,
     required String label,
-    required VoidCallback onTap, Color? color,
+    required VoidCallback onTap,
+    Color? color,
   }) {
     final buttonColor = color ?? AppTheme.neonBlue;
-    
+
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -441,7 +448,8 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
 
   String _getPaymentLabel() {
     final code = widget.albaran.tipoPago.toUpperCase().trim();
-    if (code == '01' || code == 'CNT' || code.contains('CONTADO')) return 'CONTADO';
+    if (code == '01' || code == 'CNT' || code.contains('CONTADO'))
+      return 'CONTADO';
     if (code.contains('REP')) return 'REPOSICIÓN';
     if (code.contains('MEN')) return 'MENSUAL';
     if (code.contains('CRE') || code == 'CR') return 'CRÉDITO';
@@ -452,7 +460,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
 
   void _handleDragEnd(DragEndDetails details) {
     setState(() => _isDragging = false);
-    
+
     if (_dragOffset < -80) {
       // Swipe left - complete
       HapticFeedback.mediumImpact();
@@ -462,7 +470,7 @@ class _SmartDeliveryCardState extends State<SmartDeliveryCard>
       HapticFeedback.mediumImpact();
       widget.onSwipeNote?.call();
     }
-    
+
     setState(() => _dragOffset = 0);
   }
 }

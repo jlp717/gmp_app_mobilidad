@@ -11,11 +11,13 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 /// - Gamification badges and streaks
 /// - AI suggestion banner (optional)
 class HolographicKpiDashboard extends StatefulWidget {
-  
-
-
   const HolographicKpiDashboard({
-    required this.totalEntregas, required this.entregasCompletadas, required this.montoACobrar, required this.montoOpcional, required this.totalMonto, super.key,
+    required this.totalEntregas,
+    required this.entregasCompletadas,
+    required this.montoACobrar,
+    required this.montoOpcional,
+    required this.totalMonto,
+    super.key,
     this.montoCobrado = 0,
     this.isLoading = false,
   });
@@ -28,7 +30,8 @@ class HolographicKpiDashboard extends StatefulWidget {
   final bool isLoading;
 
   @override
-  State<HolographicKpiDashboard> createState() => _HolographicKpiDashboardState();
+  State<HolographicKpiDashboard> createState() =>
+      _HolographicKpiDashboardState();
 }
 
 class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
@@ -51,21 +54,21 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
       duration: const Duration(seconds: 3),
       vsync: this,
     )..repeat();
-    
+
     _scannerAnimation = Tween<double>(begin: 0, end: 2 * math.pi).animate(
       CurvedAnimation(parent: _scannerController, curve: Curves.linear),
     );
-    
+
     // Pulse effect
     _pulseController = AnimationController(
       duration: AppTheme.animPulse,
       vsync: this,
     )..repeat(reverse: true);
-    
+
     _pulseAnimation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    
+
     // Progress animation on load
     _progressController = AnimationController(
       duration: const Duration(milliseconds: 800),
@@ -95,7 +98,8 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 2, 12, 4), // Ultra compact margins
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8), // Minimal padding
+      padding: const EdgeInsets.symmetric(
+          horizontal: 12, vertical: 8), // Minimal padding
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -127,8 +131,9 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
   }
 
   Widget _buildContent() {
-    final isSmall = MediaQuery.of(context).size.width < 380 || Responsive.isSmall(context); // Extra small phone check
-    
+    final isSmall = MediaQuery.of(context).size.width < 380 ||
+        Responsive.isSmall(context); // Extra small phone check
+
     if (isSmall) {
       return Column(
         children: [
@@ -144,7 +149,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
       children: [
         // Circular progress for deliveries
         _buildDeliveryProgress(),
-        
+
         // Vertical divider
         Container(
           width: 1,
@@ -152,7 +157,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
           margin: const EdgeInsets.symmetric(horizontal: 10),
           color: AppTheme.borderColor,
         ),
-        
+
         // Money metrics
         Expanded(
           child: _buildMoneyMetrics(),
@@ -165,7 +170,7 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
     final progress = widget.totalEntregas > 0
         ? widget.entregasCompletadas / widget.totalEntregas
         : 0.0;
-    
+
     final size = isSmall ? 50.0 : 70.0;
 
     return AnimatedBuilder(
@@ -230,14 +235,14 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
                     letterSpacing: 1,
                   ),
                 ),
-                 Text(
-                   '${(progress * 100).toInt()}%',
-                   style: TextStyle(
-                     color: AppTheme.neonBlue,
-                     fontWeight: FontWeight.bold,
-                     fontSize: isSmall ? 14 : 18,
-                   ),
-                 ),
+                Text(
+                  '${(progress * 100).toInt()}%',
+                  style: TextStyle(
+                    color: AppTheme.neonBlue,
+                    fontWeight: FontWeight.bold,
+                    fontSize: isSmall ? 14 : 18,
+                  ),
+                ),
               ],
             ),
           ],
@@ -293,14 +298,17 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
       animation: _pulseAnimation,
       builder: (context, child) {
         final glowOpacity = isUrgent ? 0.1 + _pulseAnimation.value * 0.15 : 0.0;
-        
+
         return Container(
-          padding: EdgeInsets.symmetric(vertical: isSmall ? 4 : 8, horizontal: 2),
+          padding:
+              EdgeInsets.symmetric(vertical: isSmall ? 4 : 8, horizontal: 2),
           decoration: isUrgent
               ? BoxDecoration(
                   color: color.withValues(alpha: glowOpacity),
                   borderRadius: BorderRadius.circular(12),
-                  border: isUrgent ? Border.all(color: color.withValues(alpha: 0.3)) : null,
+                  border: isUrgent
+                      ? Border.all(color: color.withValues(alpha: 0.3))
+                      : null,
                 )
               : null,
           child: Column(
@@ -348,7 +356,6 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
     );
   }
 
-
   Widget _buildBadge({
     required IconData icon,
     required String value,
@@ -381,13 +388,9 @@ class _HolographicKpiDashboardState extends State<HolographicKpiDashboard>
       ),
     );
   }
-
-
-
 }
 
 class _HoloRingPainter extends CustomPainter {
-
   _HoloRingPainter({
     required this.progress,
     required this.scannerAngle,
@@ -454,7 +457,7 @@ class _HoloRingPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round;
 
     canvas.drawCircle(center, radius, scannerPaint);
-    
+
     // Outer glow
     final glowPaint = Paint()
       ..color = progressColor.withValues(alpha: 0.2)

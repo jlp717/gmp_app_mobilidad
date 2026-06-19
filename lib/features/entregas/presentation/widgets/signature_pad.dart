@@ -6,7 +6,6 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// Widget para capturar firma del cliente
 class SignaturePad extends StatefulWidget {
-
   const SignaturePad({required this.onSave, super.key});
   final void Function(String base64) onSave;
 
@@ -21,15 +20,18 @@ class _SignaturePadState extends State<SignaturePad> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: Responsive.modalHeight(context, portraitFraction: 0.5, landscapeFraction: 0.8),
-      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
+      height: Responsive.modalHeight(context,
+          portraitFraction: 0.5, landscapeFraction: 0.8),
+      padding:
+          EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // Header
           Row(
             children: [
-              Icon(Icons.draw, size: Responsive.iconSize(context, phone: 20, desktop: 24)),
+              Icon(Icons.draw,
+                  size: Responsive.iconSize(context, phone: 20, desktop: 24)),
               const SizedBox(width: 12),
               const Expanded(
                 child: Text(
@@ -64,11 +66,14 @@ class _SignaturePadState extends State<SignaturePad> {
                   onPanUpdate: (details) {
                     setState(() {
                       final box = context.findRenderObject()! as RenderBox;
-                      final localPos = box.globalToLocal(details.globalPosition);
-                      _points.add(Offset(
-                        localPos.dx - 16,
-                        localPos.dy - 140,
-                      ),);
+                      final localPos =
+                          box.globalToLocal(details.globalPosition);
+                      _points.add(
+                        Offset(
+                          localPos.dx - 16,
+                          localPos.dy - 140,
+                        ),
+                      );
                     });
                   },
                   onPanEnd: (_) {
@@ -105,14 +110,17 @@ class _SignaturePadState extends State<SignaturePad> {
               Expanded(
                 flex: 2,
                 child: ElevatedButton.icon(
-                  onPressed: _points.where((p) => p != null).length > 10 
+                  onPressed: _points.where((p) => p != null).length > 10
                       ? (_isSaving ? null : _guardar)
                       : null,
                   icon: _isSaving
                       ? const SizedBox(
-                          width: 20, height: 20,
+                          width: 20,
+                          height: 20,
                           child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white,),
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Icon(Icons.check),
                   label: Text(_isSaving ? 'Guardando...' : 'Guardar Firma'),
@@ -146,7 +154,7 @@ class _SignaturePadState extends State<SignaturePad> {
       // Crear imagen de la firma
       final recorder = ui.PictureRecorder();
       final canvas = Canvas(recorder);
-      
+
       // Fondo blanco
       canvas.drawRect(
         const Rect.fromLTWH(0, 0, 400, 200),
@@ -186,7 +194,6 @@ class _SignaturePadState extends State<SignaturePad> {
 }
 
 class _SignaturePainter extends CustomPainter {
-
   _SignaturePainter(this.points);
   final List<Offset?> points;
 

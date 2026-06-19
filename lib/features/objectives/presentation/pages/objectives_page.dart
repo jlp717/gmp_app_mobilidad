@@ -821,7 +821,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                               }
                             });
                           },
-                          selectedColor: AppTheme.neonPurple.withValues(alpha: 0.3),
+                          selectedColor:
+                              AppTheme.neonPurple.withValues(alpha: 0.3),
                           checkmarkColor: AppTheme.neonPurple,
                         ),
                       )
@@ -982,8 +983,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   decoration: BoxDecoration(
                     color: AppTheme.neonPurple.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(20),
-                    border:
-                        Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.5)),
+                    border: Border.all(
+                        color: AppTheme.neonPurple.withValues(alpha: 0.5)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -1012,7 +1013,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
         ),
 
         // Selector de vendedor para jefe de ventas
-        if (widget.isJefeVentas || widget.forceShowVendorSelector) _buildVendedorSelector(),
+        if (widget.isJefeVentas || widget.forceShowVendorSelector)
+          _buildVendedorSelector(),
 
         // Tab bar
         Container(
@@ -1584,8 +1586,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                   decoration: BoxDecoration(
                     color: AppTheme.neonPurple.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(8),
-                    border:
-                        Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.3)),
+                    border: Border.all(
+                        color: AppTheme.neonPurple.withValues(alpha: 0.3)),
                   ),
                   child: Theme(
                     data: Theme.of(context)
@@ -1834,7 +1836,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
                     decoration: BoxDecoration(
                       color: paceColor.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: paceColor.withValues(alpha: 0.3)),
+                      border:
+                          Border.all(color: paceColor.withValues(alpha: 0.3)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2112,7 +2115,8 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.bar_chart,
-                  size: 48, color: AppTheme.textSecondary.withValues(alpha: 0.5)),
+                  size: 48,
+                  color: AppTheme.textSecondary.withValues(alpha: 0.5)),
               const SizedBox(height: 8),
               const Text('Sin datos para mostrar',
                   style: TextStyle(color: AppTheme.textSecondary)),
@@ -2227,7 +2231,10 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
-                colors: [color.withValues(alpha: 0.2), color.withValues(alpha: 0)],
+                colors: [
+                  color.withValues(alpha: 0.2),
+                  color.withValues(alpha: 0)
+                ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -2674,7 +2681,9 @@ class _ObjectivesPageState extends ConsumerState<ObjectivesPage>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isSelected ? color.withValues(alpha: 0.15) : AppTheme.surfaceColor,
+          color: isSelected
+              ? color.withValues(alpha: 0.15)
+              : AppTheme.surfaceColor,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
               color: isSelected ? color : Colors.transparent, width: 1.5),

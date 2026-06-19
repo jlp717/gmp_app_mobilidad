@@ -358,8 +358,7 @@ void main() {
     });
 
     test('fromJson accepts both volumeOccupancyPct and volumePct', () {
-      final m1 =
-          PlannerMetrics.fromJson({'volumeOccupancyPct': 85.5});
+      final m1 = PlannerMetrics.fromJson({'volumeOccupancyPct': 85.5});
       expect(m1.volumePct, 85.5);
 
       final m2 = PlannerMetrics.fromJson({'volumePct': 75.0});

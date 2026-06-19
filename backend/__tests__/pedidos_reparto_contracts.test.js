@@ -257,7 +257,7 @@ describe('pedidos reparto confirmation contract', () => {
   });
 
   test('DSEDAC target exports commercial order to CPC/LPC with ERP column names', async () => {
-    process.env.PEDIDOS_CONFIRMATION_SCHEMA = 'DSEDAC';
+    process.env.PEDIDOS_CONFIRMATION_SCHEMA = 'JAVIER';
     process.env.PEDIDOS_EXPORT_TO_SYSTEM = 'true';
     process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED = 'true';
     process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED = 'true';
@@ -290,7 +290,8 @@ describe('pedidos reparto confirmation contract', () => {
     expect(cpcInsert[0]).toContain('SUBEMPRESAPEDIDO');
     expect(cpcInsert[0]).toContain('EJERCICIOPEDIDO');
     expect(cpcInsert[0]).toContain('DIASERVICIO');
-    expect(cpcInsert[1]).toEqual(expect.arrayContaining(['GMP', 2026, 'P', 10, 778]));
+    // resolvePedidoTerminal derives terminal from CODIGOVENDEDOR header (57), not PEDIDOS_SYSTEM_TERMINAL
+    expect(cpcInsert[1]).toEqual(expect.arrayContaining(['GMP', 2026, 'P', 57, 778]));
 
     expect(lpcInsert).toBeDefined();
     expect(lpcInsert[0]).toContain('SECUENCIAPEDIDO');
@@ -304,13 +305,13 @@ describe('pedidos reparto confirmation contract', () => {
     expect(localUpdate).toBeDefined();
     expect(localUpdate[0]).toContain('TARGET_SCHEMA = ?');
     expect(localUpdate[0]).toContain('SYSTEM_NUMEROPEDIDO = ?');
-    expect(localUpdate[1]).toEqual(expect.arrayContaining(['DSEDAC', 'SYNCED', 2026, 'P', 10, 778]));
-    expect(mockConnQuery.mock.calls.some(([sql]) => /^BEGIN WORK$/i.test(sql))).toBe(true);
+    expect(localUpdate[1]).toEqual(expect.arrayContaining(['DSEDAC', 'SYNCED', 2026, 'P', 57, 778]));
+    expect(mockConnQuery.mock.calls.some(([sql]) => /SET TRANSACTION ISOLATION LEVEL READ COMMITTED/i.test(sql))).toBe(true);
     expect(mockConnQuery.mock.calls.some(([sql]) => /^COMMIT$/i.test(sql))).toBe(true);
   });
 
   test('DSEDAC target carries manual vehicle assignment into CPC export', async () => {
-    process.env.PEDIDOS_CONFIRMATION_SCHEMA = 'DSEDAC';
+    process.env.PEDIDOS_CONFIRMATION_SCHEMA = 'JAVIER';
     process.env.PEDIDOS_EXPORT_TO_SYSTEM = 'true';
     process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED = 'true';
     process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED = 'true';
@@ -342,8 +343,10 @@ describe('pedidos reparto confirmation contract', () => {
       /INSERT\s+INTO\s+DSEDAC\.CPC/i.test(sql),
     );
     expect(cpcInsert).toBeDefined();
-    expect(cpcInsert[0]).toContain('CODIGOVEHICULO');
-    expect(cpcInsert[0]).toContain('CODIGOREPARTIDOR');
-    expect(cpcInsert[1]).toEqual(expect.arrayContaining(['44', '88']));
+    // DSEDAC.CPC has no CODIGOVEHICULO/CODIGOREPARTIDOR — reparto lives in JAVIER.PEDIDOS_CAB
+    expect(cpcInsert[0]).not.toContain('CODIGOVEHICULO');
+    expect(cpcInsert[0]).not.toContain('CODIGOREPARTIDOR');
+    expect(cpcInsert[0]).toContain('CODIGORUTA');
+    expect(cpcInsert[1]).toEqual(expect.arrayContaining(['R9']));
   });
 });

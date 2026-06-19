@@ -7,9 +7,9 @@ import 'package:flutter/material.dart';
 
 /// Semantic wrapper for better accessibility
 class AccessibleWidget extends StatelessWidget {
-
   const AccessibleWidget({
-    required this.child, super.key,
+    required this.child,
+    super.key,
     this.label,
     this.hint,
     this.role,
@@ -39,9 +39,10 @@ class AccessibleWidget extends StatelessWidget {
 
 /// Accessible button with label
 class AccessibleButton extends StatelessWidget {
-
   const AccessibleButton({
-    required this.onPressed, required this.child, super.key,
+    required this.onPressed,
+    required this.child,
+    super.key,
     this.semanticLabel,
   });
   final VoidCallback? onPressed;
@@ -64,7 +65,6 @@ class AccessibleButton extends StatelessWidget {
 
 /// Accessible text field
 class AccessibleTextField extends StatelessWidget {
-
   const AccessibleTextField({
     super.key,
     this.controller,
@@ -106,7 +106,6 @@ class AccessibleTextField extends StatelessWidget {
 
 /// High contrast text for accessibility
 class AccessibleText extends StatelessWidget {
-
   const AccessibleText(
     this.text, {
     super.key,

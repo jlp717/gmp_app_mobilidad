@@ -2,7 +2,6 @@ import 'package:equatable/equatable.dart';
 
 /// Top-level dashboard metrics container.
 class DashboardMetrics extends Equatable {
-
   const DashboardMetrics({
     this.vencimientos = const VencimientosMetrics(),
     this.cobros = const CobrosMetrics(),
@@ -20,7 +19,6 @@ class DashboardMetrics extends Equatable {
 
 /// Vencimientos (due dates / expirations).
 class VencimientosMetrics extends Equatable {
-
   const VencimientosMetrics({
     this.pendingCount = 0,
     this.totalAmount = 0,
@@ -34,7 +32,6 @@ class VencimientosMetrics extends Equatable {
 
 /// Cobros (collections / payments received).
 class CobrosMetrics extends Equatable {
-
   const CobrosMetrics({
     this.realizedCount = 0,
     this.totalAmount = 0,
@@ -48,7 +45,6 @@ class CobrosMetrics extends Equatable {
 
 /// Pedidos (orders).
 class PedidosMetrics extends Equatable {
-
   const PedidosMetrics({
     this.pendingCount = 0,
     this.totalAmount = 0,
@@ -62,7 +58,6 @@ class PedidosMetrics extends Equatable {
 
 /// Sales summary with daily breakdown.
 class SalesSummary extends Equatable {
-
   const SalesSummary({
     this.totalSales = 0,
     this.totalUnits = 0,
@@ -87,7 +82,6 @@ class SalesSummary extends Equatable {
 
 /// Single day sales data point.
 class DailySalesData extends Equatable {
-
   const DailySalesData({
     required this.dayLabel,
     this.sales = 0,
@@ -103,7 +97,6 @@ class DailySalesData extends Equatable {
 
 /// Recent sale entry.
 class UltimaVenta extends Equatable {
-
   const UltimaVenta({
     required this.fecha,
     required this.cliente,
@@ -121,7 +114,6 @@ class UltimaVenta extends Equatable {
 
 /// Sales metrics (today / year).
 class VentasMetrics extends Equatable {
-
   const VentasMetrics({
     this.total = 0,
     this.cantidad = 0,
@@ -137,7 +129,6 @@ class VentasMetrics extends Equatable {
 
 /// Monthly sales metrics with previous month comparison.
 class VentasMesMetrics extends Equatable {
-
   const VentasMesMetrics({
     this.total = 0,
     this.cantidad = 0,
@@ -155,7 +146,6 @@ class VentasMesMetrics extends Equatable {
 
 /// Clients attended count.
 class ClientesAtendidos extends Equatable {
-
   const ClientesAtendidos({
     this.hoy = 0,
     this.mes = 0,

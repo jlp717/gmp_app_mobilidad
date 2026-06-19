@@ -4,10 +4,10 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 /// Premium card wrapper with consistent gradient, border, and shadow.
 ///
 /// Wrap existing card content to instantly apply the V2.5 premium look.
-/// 
+///
 /// Features:
 /// - Subtle gradient background (top-left → bottom-right)
-/// - Neon border glow 
+/// - Neon border glow
 /// - Multi-layered shadow (ambient + directional)
 /// - Optional accent color for border glow
 /// - Optional glassmorphism effect
@@ -47,9 +47,7 @@ class PremiumCard extends StatelessWidget {
     return Container(
       margin: margin ?? const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
-        color: glassmorphism
-            ? AppTheme.darkCard.withValues(alpha: 0.6)
-            : null,
+        color: glassmorphism ? AppTheme.darkCard.withValues(alpha: 0.6) : null,
         gradient: glassmorphism
             ? null
             : LinearGradient(
@@ -153,9 +151,10 @@ class PremiumKpiCard extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               value,
-              style: valueStyle ?? AppTheme.metricValue.copyWith(
-                color: color,
-              ),
+              style: valueStyle ??
+                  AppTheme.metricValue.copyWith(
+                    color: color,
+                  ),
               maxLines: 1,
             ),
           ),
@@ -164,8 +163,7 @@ class PremiumKpiCard extends StatelessWidget {
             const SizedBox(height: 4),
             Row(
               children: [
-                if (trend != null)
-                  Icon(trend, size: 14, color: color),
+                if (trend != null) Icon(trend, size: 14, color: color),
                 if (trendLabel != null) ...[
                   const SizedBox(width: 4),
                   Text(

@@ -6,9 +6,10 @@ import 'package:flutter/material.dart';
 ///
 /// V2: Añade una sutil animación de entrada (fade + scale) al cambiar de pestaña.
 class LazyIndexedStack extends StatefulWidget {
-
   const LazyIndexedStack({
-    required this.index, required this.children, super.key,
+    required this.index,
+    required this.children,
+    super.key,
     this.alignment = AlignmentDirectional.topStart,
     this.textDirection,
     this.sizing = StackFit.loose,
@@ -32,7 +33,8 @@ class _LazyIndexedStackState extends State<LazyIndexedStack>
   @override
   void initState() {
     super.initState();
-    _activatedFlags = List.generate(widget.children.length, (i) => i == widget.index);
+    _activatedFlags =
+        List.generate(widget.children.length, (i) => i == widget.index);
     _previousIndex = widget.index;
     _animController = AnimationController(
       duration: const Duration(milliseconds: 300),
@@ -51,7 +53,9 @@ class _LazyIndexedStackState extends State<LazyIndexedStack>
       // Re-initialize flags if the array length changed to avoid index out of bounds
       _activatedFlags = List.generate(
         widget.children.length,
-        (i) => i == widget.index || (i < _activatedFlags.length && _activatedFlags[i]),
+        (i) =>
+            i == widget.index ||
+            (i < _activatedFlags.length && _activatedFlags[i]),
       );
     } else {
       _activatedFlags[widget.index] = true;

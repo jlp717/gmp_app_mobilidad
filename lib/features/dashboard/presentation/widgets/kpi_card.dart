@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 
 class KPICard extends StatelessWidget {
-
   const KPICard({
-    required this.title, required this.value, required this.icon, super.key,
+    required this.title,
+    required this.value,
+    required this.icon,
+    super.key,
     this.color,
     this.isPositive = true,
     this.subtitle,
@@ -46,9 +48,12 @@ class KPICard extends StatelessWidget {
                 ),
                 if (subtitle != null)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: isPositive ? AppColors.success.withValues(alpha: 0.1) : AppColors.error.withValues(alpha: 0.1),
+                      color: isPositive
+                          ? AppColors.success.withValues(alpha: 0.1)
+                          : AppColors.error.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(

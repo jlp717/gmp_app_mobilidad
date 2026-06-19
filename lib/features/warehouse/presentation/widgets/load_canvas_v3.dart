@@ -10,7 +10,7 @@ import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_
 import 'package:webview_flutter/webview_flutter.dart';
 
 /// LoadCanvas V3 Performance Optimized
-/// 
+///
 /// Optimizations implemented:
 /// - Lazy WebView initialization (only when visible)
 /// - Throttled JS communication (batch updates)
@@ -19,7 +19,7 @@ import 'package:webview_flutter/webview_flutter.dart';
 /// - Memory cleanup on dispose
 /// - Frame-based updates instead of immediate
 /// - WebView resource caching
-/// 
+///
 /// Expected improvements:
 /// - 60% faster initial load time
 /// - 50% reduction in JS bridge calls
@@ -36,7 +36,7 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
   WebViewController? _controller;
   bool _sceneReady = false;
   bool _webViewCreated = false;
-  
+
   // Track provider state for efficient updates
   ViewMode? _lastViewMode;
   ColorMode? _lastColorMode;
@@ -44,12 +44,12 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
   int _lastBoxCount = -1;
   bool _lastCollisionState = false;
   bool _fullStatePushed = false;
-  
+
   // Throttling control
   Timer? _syncTimer;
   bool _pendingSync = false;
   static const Duration _syncThrottle = Duration(milliseconds: 16); // ~60fps
-  
+
   // Safety timeout
   Timer? _safetyTimeout;
 
@@ -136,7 +136,7 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
     try {
       final data = jsonDecode(message.message) as Map<String, dynamic>;
       final type = data['type'] as String?;
-      
+
       switch (type) {
         case 'sceneReady':
           setState(() => _sceneReady = true);
@@ -169,8 +169,9 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
           }
 
         case 'boxDragEnd':
-          final hasCollision = 
-              context.read<LoadPlannerProvider>().dragState?.hasCollision ?? false;
+          final hasCollision =
+              context.read<LoadPlannerProvider>().dragState?.hasCollision ??
+                  false;
           if (hasCollision) {
             HapticFeedback.heavyImpact();
           } else {
@@ -185,9 +186,10 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
           final settledBoxes = data['boxes'] as List?;
           if (settledBoxes != null) {
             context.read<LoadPlannerProvider>().applySettledPositions(
-              settledBoxes.cast<Map<String, dynamic>>(),
-            );
-            _lastBoxCount = context.read<LoadPlannerProvider>().placedBoxes.length;
+                  settledBoxes.cast<Map<String, dynamic>>(),
+                );
+            _lastBoxCount =
+                context.read<LoadPlannerProvider>().placedBoxes.length;
           }
 
         case 'boxesRepacked':
@@ -195,10 +197,11 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
           final overflowList = data['overflow'] as List?;
           if (placedList != null) {
             context.read<LoadPlannerProvider>().applyRepackResult(
-              placedList.cast<Map<String, dynamic>>(),
-              overflowList?.cast<Map<String, dynamic>>() ?? [],
-            );
-            _lastBoxCount = context.read<LoadPlannerProvider>().placedBoxes.length;
+                  placedList.cast<Map<String, dynamic>>(),
+                  overflowList?.cast<Map<String, dynamic>>() ?? [],
+                );
+            _lastBoxCount =
+                context.read<LoadPlannerProvider>().placedBoxes.length;
           }
       }
     } catch (e) {
@@ -227,10 +230,10 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
 
   void _pushFullState() {
     if (!_sceneReady || _controller == null) return;
-    
+
     final provider = context.read<LoadPlannerProvider>();
     if (provider.truck == null) return;
-    
+
     _fullStatePushed = true;
 
     final truckJson = jsonEncode({
@@ -290,13 +293,13 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
 
   void _scheduleCollisionSync() {
     if (_syncTimer?.isActive ?? false) return;
-    
+
     _syncTimer = Timer(_syncThrottle, () {
       if (!mounted || _controller == null) return;
-      
+
       final provider = context.read<LoadPlannerProvider>();
       final hasCollision = provider.dragState?.hasCollision ?? false;
-      
+
       if (hasCollision != _lastCollisionState) {
         _lastCollisionState = hasCollision;
         final idx = provider.dragState?.boxIndex ?? -1;
@@ -308,15 +311,15 @@ class LoadCanvasV3State extends State<LoadCanvasV3> {
   void _scheduleBoxSync() {
     if (_pendingSync) return;
     _pendingSync = true;
-    
+
     Future.delayed(_syncThrottle, () {
       if (!mounted || _controller == null) return;
-      
+
       final provider = context.read<LoadPlannerProvider>();
       if (provider.placedBoxes.length != _lastBoxCount) {
         _pushBoxes(provider);
       }
-      
+
       _pendingSync = false;
     });
   }

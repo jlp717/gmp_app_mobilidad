@@ -8,9 +8,12 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:intl/intl.dart';
 
 class CobrosSummaryCard extends StatelessWidget {
-
   const CobrosSummaryCard({
-    required this.totalPendientes, required this.totalCompletadas, required this.totalCTR, required this.importeTotal, super.key,
+    required this.totalPendientes,
+    required this.totalCompletadas,
+    required this.totalCTR,
+    required this.importeTotal,
+    super.key,
   });
   final int totalPendientes;
   final int totalCompletadas;
@@ -24,7 +27,8 @@ class CobrosSummaryCard extends StatelessWidget {
     final progreso = total > 0 ? totalCompletadas / total : 0.0;
 
     return Container(
-      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
+      padding:
+          EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -74,9 +78,9 @@ class CobrosSummaryCard extends StatelessWidget {
               ),
             ],
           ),
-          
+
           const SizedBox(height: 20),
-          
+
           // Progreso circular
           Row(
             children: [
@@ -103,15 +107,19 @@ class CobrosSummaryCard extends StatelessWidget {
                           Text(
                             '${(progreso * 100).toInt()}%',
                             style: TextStyle(
-                              color: progreso >= 1 ? Colors.green : AppTheme.neonBlue,
+                              color: progreso >= 1
+                                  ? Colors.green
+                                  : AppTheme.neonBlue,
                               fontWeight: FontWeight.bold,
-                              fontSize: Responsive.fontSize(context, small: 16, large: 22),
+                              fontSize: Responsive.fontSize(context,
+                                  small: 16, large: 22),
                             ),
                           ),
                           Text(
                             '$totalCompletadas/$total',
                             style: TextStyle(
-                              color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                              color:
+                                  AppTheme.textSecondary.withValues(alpha: 0.7),
                               fontSize: 10,
                             ),
                           ),
@@ -121,9 +129,9 @@ class CobrosSummaryCard extends StatelessWidget {
                   ],
                 ),
               ),
-              
+
               const SizedBox(width: 20),
-              
+
               // Stats
               Expanded(
                 child: Column(
@@ -148,11 +156,11 @@ class CobrosSummaryCard extends StatelessWidget {
               ),
             ],
           ),
-          
+
           const SizedBox(height: 16),
           const Divider(color: Colors.white10),
           const SizedBox(height: 16),
-          
+
           // CTR Alerta
           if (totalCTR > 0)
             Container(
@@ -192,7 +200,7 @@ class CobrosSummaryCard extends StatelessWidget {
                 ],
               ),
             ),
-          
+
           // Importe total
           Container(
             padding: const EdgeInsets.all(16),
@@ -212,7 +220,8 @@ class CobrosSummaryCard extends StatelessWidget {
                   'Total Pendiente',
                   style: TextStyle(
                     color: AppTheme.textSecondary,
-                    fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                    fontSize:
+                        Responsive.fontSize(context, small: 11, large: 13),
                   ),
                 ),
                 Text(
@@ -220,7 +229,8 @@ class CobrosSummaryCard extends StatelessWidget {
                   style: TextStyle(
                     color: AppTheme.textPrimary,
                     fontWeight: FontWeight.bold,
-                    fontSize: Responsive.fontSize(context, small: 16, large: 20),
+                    fontSize:
+                        Responsive.fontSize(context, small: 16, large: 20),
                   ),
                 ),
               ],
@@ -231,7 +241,8 @@ class CobrosSummaryCard extends StatelessWidget {
     );
   }
 
-  Widget _buildStatRow(BuildContext context, {
+  Widget _buildStatRow(
+    BuildContext context, {
     required IconData icon,
     required String label,
     required String value,

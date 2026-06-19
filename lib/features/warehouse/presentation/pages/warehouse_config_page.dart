@@ -33,24 +33,17 @@ class _WarehouseConfigPageState extends State<WarehouseConfigPage> {
   };
 
   static const _descriptions = <String, String>{
-    'MAX_ALTURA_APILADO_CM':
-        'Altura maxima a la que se pueden apilar cajas',
-    'MARGEN_LATERAL_CM':
-        'Espacio minimo entre cajas y paredes laterales',
-    'EQUILIBRIO_EJES':
-        'Activar/desactivar calculo de equilibrio de ejes',
-    'PCT_MAX_EJE_TRASERO':
-        'Porcentaje maximo de peso en el eje trasero',
+    'MAX_ALTURA_APILADO_CM': 'Altura maxima a la que se pueden apilar cajas',
+    'MARGEN_LATERAL_CM': 'Espacio minimo entre cajas y paredes laterales',
+    'EQUILIBRIO_EJES': 'Activar/desactivar calculo de equilibrio de ejes',
+    'PCT_MAX_EJE_TRASERO': 'Porcentaje maximo de peso en el eje trasero',
     'HUECO_ENTRE_CAJAS_CM':
         'Espacio entre cajas para facilitar la carga/descarga',
-    'PRIORIDAD_OPTIMIZAR':
-        'Criterio de optimizacion: MARGEN, VOLUMEN o PESO',
-    'MUST_DELIVER_SIEMPRE':
-        'Pedidos must-deliver siempre se cargan primero',
+    'PRIORIDAD_OPTIMIZAR': 'Criterio de optimizacion: MARGEN, VOLUMEN o PESO',
+    'MUST_DELIVER_SIEMPRE': 'Pedidos must-deliver siempre se cargan primero',
     'TOLERANCIA_GLOBAL_PCT':
         'Porcentaje de tolerancia sobre la capacidad maxima',
-    'RESERVA_RETORNOS_PCT':
-        'Porcentaje de espacio reservado para retornos',
+    'RESERVA_RETORNOS_PCT': 'Porcentaje de espacio reservado para retornos',
   };
 
   @override

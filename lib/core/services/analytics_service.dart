@@ -43,7 +43,7 @@ class AnalyticsService {
   /// Log app installation (call once after first successful login)
   Future<void> logInstallIfNeeded() async {
     if (_installLogged) return;
-    
+
     try {
       await ApiClient.post('/logs/app-install', {
         'userId': _userId,
@@ -64,7 +64,7 @@ class AnalyticsService {
     Map<String, dynamic>? metadata,
   }) async {
     if (_userId == null) return; // Not logged in yet
-    
+
     try {
       await ApiClient.post('/logs/user-action', {
         'userId': _userId,

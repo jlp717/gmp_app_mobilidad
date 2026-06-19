@@ -4,9 +4,18 @@ import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 
 class PromotionDetailPage extends StatefulWidget {
-
   const PromotionDetailPage({
-    required this.promoType, required this.promoCode, required this.promoDesc, required this.dateFrom, required this.dateTo, required this.minQty, required this.giftQty, required this.cumulative, required this.items, required this.onProductTap, super.key,
+    required this.promoType,
+    required this.promoCode,
+    required this.promoDesc,
+    required this.dateFrom,
+    required this.dateTo,
+    required this.minQty,
+    required this.giftQty,
+    required this.cumulative,
+    required this.items,
+    required this.onProductTap,
+    super.key,
     this.onAddGift,
     this.hasStockResolver,
     this.qtyInOrderResolver,
@@ -197,7 +206,8 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                       color: AppTheme.neonPurple.withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                          color: AppTheme.neonPurple.withValues(alpha: 0.2),),
+                        color: AppTheme.neonPurple.withValues(alpha: 0.2),
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -246,8 +256,11 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
               decoration: InputDecoration(
                 hintText: 'Buscar articulo en promocion...',
                 hintStyle: const TextStyle(color: Colors.white38),
-                prefixIcon: const Icon(Icons.search,
-                    color: AppTheme.neonBlue, size: 18,),
+                prefixIcon: const Icon(
+                  Icons.search,
+                  color: AppTheme.neonBlue,
+                  size: 18,
+                ),
                 suffixIcon: IconButton(
                   onPressed: () =>
                       setState(() => _onlyWithStock = !_onlyWithStock),
@@ -296,11 +309,14 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide(
-                              color: AppTheme.borderColor.withValues(alpha: 0.5),),
+                            color: AppTheme.borderColor.withValues(alpha: 0.5),
+                          ),
                         ),
                         child: ListTile(
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 6,),
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
                           title: Text(
                             item.name,
                             style: const TextStyle(
@@ -339,8 +355,9 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                                     Text(
                                       'Oferta: ${PedidosFormatters.money(item.promoPrice, decimals: 3)}',
                                       style: const TextStyle(
-                                          color: AppTheme.neonGreen,
-                                          fontSize: 11,),
+                                        color: AppTheme.neonGreen,
+                                        fontSize: 11,
+                                      ),
                                     ),
                                   if (item.promoType == 'GIFT' &&
                                       widget.minQty > 0 &&
@@ -348,9 +365,10 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                                     Text(
                                       '${widget.minQty.toStringAsFixed(0)}+${widget.giftQty.toStringAsFixed(0)}',
                                       style: const TextStyle(
-                                          color: AppTheme.neonPurple,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,),
+                                        color: AppTheme.neonPurple,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
                                 ],
                               ),
@@ -371,7 +389,9 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                             child: const Text(
                               'Seleccionar',
                               style: TextStyle(
-                                  fontSize: 11, fontWeight: FontWeight.w700,),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                           isThreeLine: widget.promoType == 'GIFT',
@@ -393,7 +413,8 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                                     const SizedBox(height: 6),
                                     Text(
                                       PedidosFormatters.number(
-                                          _giftSelection[item.code] ?? 0,),
+                                        _giftSelection[item.code] ?? 0,
+                                      ),
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
@@ -449,7 +470,9 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                         ? 'Aplicando regalos...'
                         : 'Añadir regalos seleccionados',
                     style: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 14,),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.warning,
@@ -518,7 +541,8 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
         if (_eligibleGiftQty > 0) ...[
           Row(
             children: [
-              const Icon(Icons.check_circle, color: AppTheme.neonGreen, size: 14),
+              const Icon(Icons.check_circle,
+                  color: AppTheme.neonGreen, size: 14),
               const SizedBox(width: 4),
               Text(
                 'Tienes ${maxGifts.toStringAsFixed(0)} regalo(s) disponible(s)',

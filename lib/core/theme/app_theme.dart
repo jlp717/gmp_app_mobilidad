@@ -140,53 +140,65 @@ class AppTheme {
       textTheme: GoogleFonts.interTextTheme(
         ThemeData.dark().textTheme.copyWith(
               displayLarge: const TextStyle(
-                  fontSize: 57,
-                  fontWeight: FontWeight.w300,
-                  color: textPrimary,),
+                fontSize: 57,
+                fontWeight: FontWeight.w300,
+                color: textPrimary,
+              ),
               displayMedium: const TextStyle(
-                  fontSize: 45,
-                  fontWeight: FontWeight.w300,
-                  color: textPrimary,),
+                fontSize: 45,
+                fontWeight: FontWeight.w300,
+                color: textPrimary,
+              ),
               displaySmall: const TextStyle(
-                  fontSize: 36,
-                  fontWeight: FontWeight.w400,
-                  color: textPrimary,),
+                fontSize: 36,
+                fontWeight: FontWeight.w400,
+                color: textPrimary,
+              ),
               headlineLarge: const TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.w400,
-                  color: textPrimary,),
+                fontSize: 32,
+                fontWeight: FontWeight.w400,
+                color: textPrimary,
+              ),
               headlineMedium: const TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.w400,
-                  color: textPrimary,),
+                fontSize: 28,
+                fontWeight: FontWeight.w400,
+                color: textPrimary,
+              ),
               headlineSmall: const TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.w400,
-                  color: textPrimary,),
+                fontSize: 24,
+                fontWeight: FontWeight.w400,
+                color: textPrimary,
+              ),
               titleLarge: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w500,
-                  color: textPrimary,),
+                fontSize: 22,
+                fontWeight: FontWeight.w500,
+                color: textPrimary,
+              ),
               titleMedium: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
-                  color: textPrimary,),
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+                color: textPrimary,
+              ),
               titleSmall: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: textPrimary,),
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: textPrimary,
+              ),
               bodyLarge: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w400,
-                  color: textPrimary,),
+                fontSize: 16,
+                fontWeight: FontWeight.w400,
+                color: textPrimary,
+              ),
               bodyMedium: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w400,
-                  color: textSecondary,),
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+                color: textSecondary,
+              ),
               bodySmall: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
-                  color: textTertiary,),
+                fontSize: 12,
+                fontWeight: FontWeight.w400,
+                color: textTertiary,
+              ),
             ),
       ),
 
@@ -239,8 +251,8 @@ class AppTheme {
           disabledForegroundColor: textTertiary,
           elevation: 2,
           shadowColor: neonBlue.withValues(alpha: 0.3),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusMd)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(radiusMd)),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           animationDuration: const Duration(milliseconds: 200),
           enableFeedback: true,
@@ -252,8 +264,8 @@ class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: neonBlue,
           side: BorderSide(color: neonBlue.withValues(alpha: 0.5)),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusMd)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(radiusMd)),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           animationDuration: const Duration(milliseconds: 200),
         ),
@@ -263,8 +275,8 @@ class AppTheme {
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: neonBlue,
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(radiusSm)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(radiusSm)),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         ),
       ),
@@ -273,22 +285,28 @@ class AppTheme {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: darkSurface,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(radiusMd),
-            borderSide: BorderSide(color: borderColor.withValues(alpha: 0.5)),),
+          borderRadius: BorderRadius.circular(radiusMd),
+          borderSide: BorderSide(color: borderColor.withValues(alpha: 0.5)),
+        ),
         enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(radiusMd),
-            borderSide: BorderSide(color: borderColor.withValues(alpha: 0.3)),),
+          borderRadius: BorderRadius.circular(radiusMd),
+          borderSide: BorderSide(color: borderColor.withValues(alpha: 0.3)),
+        ),
         focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(radiusMd),
-            borderSide: const BorderSide(color: neonBlue, width: 2),),
+          borderRadius: BorderRadius.circular(radiusMd),
+          borderSide: const BorderSide(color: neonBlue, width: 2),
+        ),
         errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(radiusMd),
-            borderSide: const BorderSide(color: error, width: 1),),
+          borderRadius: BorderRadius.circular(radiusMd),
+          borderSide: const BorderSide(color: error, width: 1),
+        ),
         focusedErrorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(radiusMd),
-            borderSide: const BorderSide(color: error, width: 2),),
+          borderRadius: BorderRadius.circular(radiusMd),
+          borderSide: const BorderSide(color: error, width: 2),
+        ),
         labelStyle: const TextStyle(color: textSecondary),
         hintStyle: const TextStyle(color: textTertiary),
       ),
@@ -390,7 +408,10 @@ class AppTheme {
         borderRadius: BorderRadius.circular(radiusLg),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 20, offset: const Offset(0, 8)),
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.2),
+              blurRadius: 20,
+              offset: const Offset(0, 8)),
         ],
       );
 
@@ -401,7 +422,10 @@ class AppTheme {
         border: Border.all(color: color.withValues(alpha: 0.4)),
         boxShadow: [
           BoxShadow(color: color.withValues(alpha: 0.15), blurRadius: 16),
-          BoxShadow(color: color.withValues(alpha: 0.05), blurRadius: 32, spreadRadius: 2),
+          BoxShadow(
+              color: color.withValues(alpha: 0.05),
+              blurRadius: 32,
+              spreadRadius: 2),
         ],
       );
 

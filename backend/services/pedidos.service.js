@@ -427,6 +427,23 @@ function parseIntConfig(raw, fallback) {
     return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+
+function resolvePedidoTerminal(vendedorCode) {
+    const primary = trimString(vendedorCode).split(',')[0].trim();
+    if (/^\d{1,3}$/.test(primary)) {
+        const parsed = parseInt(primary, 10);
+        if (parsed >= 0 && parsed <= 999) return parsed;
+    }
+    return parseIntConfig(process.env.PEDIDOS_SYSTEM_TERMINAL, 10);
+}
+
+function formatPedidoNumeroAcisa(serie, terminal, numeroPedido) {
+    const serieLabel = trimString(serie) || 'M';
+    const terminalLabel = String(integerValue(terminal) || 0).padStart(3, '0');
+    const numeroLabel = String(integerValue(numeroPedido) || 0).padStart(6, '0');
+    return `${serieLabel}-${terminalLabel}-${numeroLabel}`;
+}
+
 function isAuthorizedForceConfirm(options = {}) {
     if (options.forceConfirm !== true) return false;
     const role = String(options.userRole || '').trim().toUpperCase();
@@ -442,7 +459,9 @@ function getPedidosConfirmationTarget() {
     const storageApproved = isDsedacWriteApproved();
     const exportEnabled = String(process.env.PEDIDOS_EXPORT_TO_SYSTEM || 'false').trim().toLowerCase() === 'true';
     const exportApproved = String(process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED || 'false').trim().toLowerCase() === 'true';
-    const shouldExportToSystem = schema === 'DSEDAC' && storageApproved && exportEnabled && exportApproved;
+    // Export to DSEDAC.CPC is independent of local write schema (JAVIER.PEDIDOS_*).
+    const shouldExportToSystem = storageApproved && exportEnabled && exportApproved;
+    const exportSchema = 'DSEDAC';
     const subempresa = trimString(process.env.PEDIDOS_SYSTEM_SUBEMPRESA || 'GMP').substring(0, 3) || 'GMP';
     const serie = trimString(process.env.PEDIDOS_SYSTEM_SERIE || 'P').substring(0, 1) || 'P';
     const terminal = parseIntConfig(process.env.PEDIDOS_SYSTEM_TERMINAL, 10);
@@ -450,9 +469,10 @@ function getPedidosConfirmationTarget() {
         schema,
         requestedSchema,
         storageApproved,
+        exportSchema,
         mode: shouldExportToSystem ? 'SYSTEM' : 'LOCAL',
         shouldExportToSystem,
-        exportRequested: requestedSchema === 'DSEDAC' && exportEnabled,
+        exportRequested: exportEnabled,
         exportApproved,
         subempresa,
         serie,
@@ -462,9 +482,9 @@ function getPedidosConfirmationTarget() {
         codigoTipoPedido: trimString(process.env.PEDIDOS_SYSTEM_CODIGO_TIPO_PEDIDO || '').substring(0, 3),
         codigoUsuario: trimString(process.env.PEDIDOS_SYSTEM_CODIGO_USUARIO || 'APP').substring(0, 10) || 'APP',
         tables: {
-            cab: db2QualifiedTable(schema, 'CPC'),
-            lin: db2QualifiedTable(schema, 'LPC'),
-            obs: db2QualifiedTable(schema, 'OCPC'),
+            cab: db2QualifiedTable(exportSchema, 'CPC'),
+            lin: db2QualifiedTable(exportSchema, 'LPC'),
+            obs: db2QualifiedTable(exportSchema, 'OCPC'),
         },
     };
 }
@@ -973,7 +993,8 @@ async function withPedidosTransaction(callback) {
 
     const conn = await pool.connect();
     try {
-        await conn.query('BEGIN WORK');
+        // IBM i ODBC rejects BEGIN WORK (-104); use isolation + COMMIT/ROLLBACK instead.
+        await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
         const result = await callback(conn);
         await conn.query('COMMIT');
         return result;
@@ -1025,7 +1046,7 @@ function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCo
         'DIADOCUMENTO', 'MESDOCUMENTO', 'ANODOCUMENTO', 'HORADOCUMENTO',
         'CODIGOCLIENTEALBARAN', 'CODIGOCLIENTEFACTURA', 'CODIGOCLIENTECADENA',
         'CODIGOVENDEDOR', 'CODIGOVENDEDORCOBRO', 'CODIGOPROMOTORPREVENTA', 'CODIGOCOMERCIAL',
-        'CODIGORUTA', 'CODIGOVEHICULO', 'CODIGOREPARTIDOR',
+        'CODIGORUTA',
         'CODIGOFORMAPAGO', 'CODIGOTARIFA', 'CODIGOALMACEN', 'RECARGOSN',
         'IMPORTEBASEIMPONIBLEBRUTA1', 'IMPORTEBASEIMPONIBLE1', 'IMPORTEBRUTO',
         'IMPORTETOTAL', 'IMPORTECOSTO', 'IMPORTEMARGEN',
@@ -1040,8 +1061,6 @@ function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCo
         cliente, cliente, '',
         vendedor, vendedor, vendedor, vendedor,
         truncate(routeCode, 4),
-        truncate(vehicleCode || header.CODIGOVEHICULO, 10),
-        truncate(driverCode || header.CODIGOREPARTIDOR, 2),
         truncate(header.CODIGOFORMAPAGO || '02', 2),
         integerValue(header.CODIGOTARIFA) || 1, integerValue(header.CODIGOALMACEN) || 1, 'N',
         base, base, base,
@@ -1136,7 +1155,10 @@ function buildDsedacOcpcInsert({ target, header, systemRef, userId }) {
 }
 
 async function exportCommercialOrderToSystem(conn, { header, lines, deliveryPlan, routeCode, saleType, userId, vehicleCode, driverCode }) {
-    const target = getPedidosConfirmationTarget();
+    const target = {
+        ...getPedidosConfirmationTarget(),
+        terminal: resolvePedidoTerminal(header.CODIGOVENDEDOR),
+    };
     if (!target.shouldExportToSystem) {
         return {
             targetSchema: 'JAVIER',
@@ -1163,11 +1185,21 @@ async function exportCommercialOrderToSystem(conn, { header, lines, deliveryPlan
     };
 
     const cab = buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCode, saleType, userId, vehicleCode, driverCode });
-    await conn.query(cab.sql, cab.params);
+    try {
+        await conn.query(cab.sql, cab.params);
+    } catch (e) {
+        logger.error(`[PEDIDOS] CPC insert failed cols=${cab.params?.length} sql=${cab.sql?.slice(0, 200)} err=${e.message} ${JSON.stringify(e.odbcErrors || [])}`);
+        throw e;
+    }
 
     for (const line of lines || []) {
         const lin = buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, routeCode, saleType });
-        await conn.query(lin.sql, lin.params);
+        try {
+            await conn.query(lin.sql, lin.params);
+        } catch (e) {
+            logger.error(`[PEDIDOS] LPC insert failed cols=${lin.params?.length} sql=${lin.sql?.slice(0, 200)} err=${e.message} ${JSON.stringify(e.odbcErrors || [])}`);
+            throw e;
+        }
     }
 
     const obs = buildDsedacOcpcInsert({ target, header, systemRef, userId });
@@ -1176,7 +1208,7 @@ async function exportCommercialOrderToSystem(conn, { header, lines, deliveryPlan
     }
 
     return {
-        targetSchema: target.schema,
+        targetSchema: target.exportSchema || 'DSEDAC',
         syncStatus: 'SYNCED',
         synced: true,
         systemRef,
@@ -1939,6 +1971,7 @@ function buildLocalPedidoCabInsert({
     origen,
 }) {
     const target = getPedidosConfirmationTarget();
+    const terminal = resolvePedidoTerminal(vendedorCode);
     const vendedor = (vendedorCode || '').split(',')[0].trim().substring(0, 2);
     const cliente = (clientCode || '').trim().substring(0, 10);
     const obs = (observaciones || '').substring(0, 200);
@@ -1959,12 +1992,12 @@ function buildLocalPedidoCabInsert({
         'CODIGOUSUARIO', 'CODIGOTIPOPEDIDO',
     ];
     const params = [
-        target.subempresa, ejercicio, numeroPedido, target.serie, target.terminal,
+        target.subempresa, ejercicio, numeroPedido, target.serie, terminal,
         dia, mes, ano, hora,
         cliente, (clientName || '').substring(0, 60), vendedor, formaPago,
         tarifa, almacen, tipoventa, obs,
         parseFloat(descuentoGlobal) || 0, origen,
-        target.subempresa, ejercicio, target.terminal,
+        target.subempresa, ejercicio, terminal,
         cliente, cliente, '',
         vendedor, vendedor, vendedor,
         'N', 0, 0,
@@ -2373,7 +2406,7 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
     // desde la suma real de IMPORTEVENTA en PEDIDOS_LIN. IMPORTE_CALCULADO se prioriza
     // sobre IMPORTETOTAL en el adaptador de routes.
     let sql = `
-        SELECT C.ID, C.EJERCICIO, C.NUMEROPEDIDO, C.SERIEPEDIDO,
+        SELECT C.ID, C.EJERCICIO, C.NUMEROPEDIDO, C.SERIEPEDIDO, C.TERMINAL, C.TERMINALPEDIDO,
             C.DIADOCUMENTO, C.MESDOCUMENTO, C.ANODOCUMENTO, C.HORADOCUMENTO,
             TRIM(C.CODIGOCLIENTE) AS CODIGOCLIENTE,
             TRIM(C.NOMBRECLIENTE) AS NOMBRECLIENTE,
@@ -2524,7 +2557,7 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
                 id: r.ID,
                 ejercicio: r.EJERCICIO,
                 numeroPedido: r.NUMEROPEDIDO,
-                numeroPedidoFormatted: `${r.SERIEPEDIDO || 'M'}-${ano}-${numPedido}`,
+                numeroPedidoFormatted: formatPedidoNumeroAcisa(r.SERIEPEDIDO, r.TERMINAL ?? r.TERMINALPEDIDO, r.NUMEROPEDIDO),
                 serie: r.SERIEPEDIDO,
                 fecha: `${dia}/${mes}/${ano}`,
                 fechaFormatted: `${dia}/${mes}/${ano} ${hh}:${mm}`,
@@ -3301,7 +3334,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
             });
             logger.info(`[PEDIDOS] Order #${id} exported to ${syncResult.targetSchema}.CPC and confirmed`);
         } catch (systemErr) {
-            logger.error(`[PEDIDOS] System export failed for order #${id}: ${systemErr.message}`);
+            logger.error(`[PEDIDOS] System export failed for order #${id}: ${systemErr.message}${systemErr.odbcErrors ? ' ' + JSON.stringify(systemErr.odbcErrors) : ''}`);
             // El transaction interno ya hizo rollback de los inserts; revertimos
             // CONFIRMANDO -> BORRADOR para que el usuario pueda reintentar.
             await revertConfirming('SYSTEM_EXPORT_FAILED');

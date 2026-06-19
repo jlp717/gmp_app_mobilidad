@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 
 /// MemoizationService - Intelligent function result caching
 /// =========================================================
-/// 
+///
 /// Features:
 /// - Automatic TTL-based expiration
 /// - LRU eviction policy
@@ -25,21 +25,21 @@ class MemoizationService {
   // Configuration
   static const int _maxCacheSize = 200;
   static const Duration _defaultTTL = Duration(minutes: 30);
-  
+
   // Internal cache storage
   static final LinkedHashMap<String, _MemoEntry> _cache = LinkedHashMap();
-  
+
   // Statistics
   static int _hits = 0;
   static int _misses = 0;
   static int _evictions = 0;
-  
+
   // Lock for thread safety
   static bool _isProcessing = false;
   static final List<Completer<void>> _waitQueue = [];
 
   /// Memoize a function result
-  /// 
+  ///
   /// [key] - Unique identifier for this computation
   /// [compute] - Function to execute if not cached
   /// [ttl] - Time to live for cached result
@@ -51,11 +51,11 @@ class MemoizationService {
     bool Function(T cached)? validator,
   }) async {
     await _acquireLock();
-    
+
     try {
       // Check cache
       final entry = _cache[key];
-      
+
       if (entry != null && !entry.isExpired) {
         // Validate if validator provided
         if (validator != null && !validator(entry.value as T)) {
@@ -68,19 +68,20 @@ class MemoizationService {
           return entry.value as T;
         }
       }
-      
+
       // Compute new value
       _misses++;
       final startTime = DateTime.now();
-      
+
       final result = await compute();
-      
+
       final computeTime = DateTime.now().difference(startTime);
-      debugPrint('[Memoize] 💾 MISS: $key (computed in ${computeTime.inMilliseconds}ms)');
-      
+      debugPrint(
+          '[Memoize] 💾 MISS: $key (computed in ${computeTime.inMilliseconds}ms)');
+
       // Store in cache
       _set(key, result, ttl);
-      
+
       return result;
     } finally {
       _releaseLock();
@@ -96,7 +97,7 @@ class MemoizationService {
   }) {
     // Check cache
     final entry = _cache[key];
-    
+
     if (entry != null && !entry.isExpired) {
       if (validator != null && !validator(entry.value as T)) {
         _cache.remove(key);
@@ -106,11 +107,11 @@ class MemoizationService {
         return entry.value as T;
       }
     }
-    
+
     _misses++;
     final result = compute();
     _set(key, result, ttl);
-    
+
     return result;
   }
 
@@ -123,7 +124,7 @@ class MemoizationService {
       _evictions++;
       debugPrint('[Memoize] 🗑️ Evicted: $oldestKey');
     }
-    
+
     _cache[key] = _MemoEntry(
       value: value,
       expiresAt: DateTime.now().add(ttl),
@@ -149,12 +150,13 @@ class MemoizationService {
   static void invalidatePattern(String pattern) {
     final regex = RegExp(pattern.replaceAll('*', '.*'));
     final keysToRemove = _cache.keys.where(regex.hasMatch).toList();
-    
+
     for (final key in keysToRemove) {
       _cache.remove(key);
     }
-    
-    debugPrint('[Memoize] 🧹 Invalidated ${keysToRemove.length} entries matching: $pattern');
+
+    debugPrint(
+        '[Memoize] 🧹 Invalidated ${keysToRemove.length} entries matching: $pattern');
   }
 
   /// Clear all cached data
@@ -166,19 +168,20 @@ class MemoizationService {
   /// Remove expired entries
   static void cleanup() {
     final keysToRemove = <String>[];
-    
+
     for (final entry in _cache.entries) {
       if (entry.value.isExpired) {
         keysToRemove.add(entry.key);
       }
     }
-    
+
     for (final key in keysToRemove) {
       _cache.remove(key);
     }
-    
+
     if (keysToRemove.isNotEmpty) {
-      debugPrint('[Memoize] 🧹 Cleaned up ${keysToRemove.length} expired entries');
+      debugPrint(
+          '[Memoize] 🧹 Cleaned up ${keysToRemove.length} expired entries');
     }
   }
 
@@ -186,10 +189,10 @@ class MemoizationService {
   static Map<String, dynamic> getStats() {
     final totalRequests = _hits + _misses;
     final hitRate = totalRequests > 0 ? (_hits / totalRequests * 100) : 0.0;
-    
+
     var expiredCount = 0;
     var validCount = 0;
-    
+
     for (final entry in _cache.values) {
       if (entry.isExpired) {
         expiredCount++;
@@ -197,7 +200,7 @@ class MemoizationService {
         validCount++;
       }
     }
-    
+
     return {
       'size': _cache.length,
       'maxSize': _maxCacheSize,
@@ -213,15 +216,16 @@ class MemoizationService {
   /// Handle memory pressure by clearing old entries
   static void handleMemoryPressure() {
     debugPrint('[Memoize] ⚠️ Memory pressure detected, clearing cache...');
-    
+
     // Remove oldest half
     final keysToRemove = _cache.keys.take(_cache.length ~/ 2).toList();
     for (final key in keysToRemove) {
       _cache.remove(key);
     }
-    
+
     _evictions += keysToRemove.length;
-    debugPrint('[Memoize] 🧹 Removed ${keysToRemove.length} entries due to memory pressure');
+    debugPrint(
+        '[Memoize] 🧹 Removed ${keysToRemove.length} entries due to memory pressure');
   }
 
   /// Lock management for thread safety
@@ -230,7 +234,7 @@ class MemoizationService {
       _isProcessing = true;
       return;
     }
-    
+
     final completer = Completer<void>();
     _waitQueue.add(completer);
     await completer.future;
@@ -248,7 +252,6 @@ class MemoizationService {
 
 /// Internal cache entry with metadata
 class _MemoEntry {
-  
   const _MemoEntry({
     required this.value,
     required this.expiresAt,
@@ -257,9 +260,9 @@ class _MemoEntry {
   final dynamic value;
   final DateTime expiresAt;
   final DateTime createdAt;
-  
+
   bool get isExpired => DateTime.now().isAfter(expiresAt);
-  
+
   Duration get age => DateTime.now().difference(createdAt);
   Duration get ttlRemaining => expiresAt.difference(DateTime.now());
 }
@@ -278,7 +281,6 @@ extension MemoizeFuture<T> on Future<T> Function() {
 
 /// Create a memoized version of a function
 class MemoizedFunction<T, R> {
-  
   MemoizedFunction(
     this._keyPrefix,
     this._fn, {
@@ -287,7 +289,7 @@ class MemoizedFunction<T, R> {
   final String _keyPrefix;
   final R Function(T arg) _fn;
   final Duration _ttl;
-  
+
   R call(T arg) {
     final key = '${_keyPrefix}_${arg.hashCode}';
     return MemoizationService.memoizeSync(
@@ -296,12 +298,12 @@ class MemoizedFunction<T, R> {
       ttl: _ttl,
     );
   }
-  
+
   void invalidateFor(T arg) {
     final key = '${_keyPrefix}_${arg.hashCode}';
     MemoizationService.invalidate(key);
   }
-  
+
   void invalidateAll() {
     MemoizationService.invalidatePattern('$_keyPrefix*');
   }

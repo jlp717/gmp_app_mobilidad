@@ -79,8 +79,8 @@ class DashboardChartFactory extends StatelessWidget {
                   final value = node.sales;
 
                   // Vary opacity based on index
-                  final sectionColor =
-                      color.withValues(alpha: 1.0 - (index * 0.1).clamp(0.0, 0.8));
+                  final sectionColor = color.withValues(
+                      alpha: 1.0 - (index * 0.1).clamp(0.0, 0.8));
 
                   return PieChartSectionData(
                     color: sectionColor,

@@ -11,7 +11,6 @@ import 'package:share_plus/share_plus.dart';
 
 /// Página de detalle de albarán con acciones de entrega
 class AlbaranDetailPage extends ConsumerStatefulWidget {
-
   const AlbaranDetailPage({required this.albaran, super.key});
   final AlbaranEntrega albaran;
 
@@ -53,12 +52,14 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                 children: [
                   Icon(Icons.check_circle, size: 16, color: Colors.white),
                   SizedBox(width: 4),
-                  Text('ENTREGADO',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                        fontSize: 12,
-                      ),),
+                  Text(
+                    'ENTREGADO',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
               ),
             )
@@ -75,11 +76,13 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                 children: [
                   Icon(Icons.euro, size: 16, color: Colors.black87),
                   SizedBox(width: 4),
-                  Text('COBRAR',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),),
+                  Text(
+                    'COBRAR',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -407,8 +410,11 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                                 color: Colors.red,
                                 shape: BoxShape.circle,
                               ),
-                              child: const Icon(Icons.close,
-                                  size: 14, color: Colors.white,),
+                              child: const Icon(
+                                Icons.close,
+                                size: 14,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
@@ -470,8 +476,11 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                     : Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.gesture,
-                              size: 32, color: Colors.grey.shade400,),
+                          Icon(
+                            Icons.gesture,
+                            size: 32,
+                            color: Colors.grey.shade400,
+                          ),
                           const SizedBox(height: 8),
                           Text(
                             'Toca para firmar',
@@ -538,8 +547,11 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.check_circle,
-                    color: Colors.green.shade700, size: 32,),
+                Icon(
+                  Icons.check_circle,
+                  color: Colors.green.shade700,
+                  size: 32,
+                ),
                 const SizedBox(width: 12),
                 Text(
                   '¡Entrega completada!',
@@ -597,7 +609,9 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white,),
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : const Icon(Icons.check_circle, size: 28),
             label: Text(
@@ -700,9 +714,9 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
       if (success && mounted) {
         // Sync updated firma path from provider (server returned the stored path)
         final updated = ref.read(entregasProvider).albaranes.firstWhere(
-          (a) => a.id == widget.albaran.id,
-          orElse: () => widget.albaran,
-        );
+              (a) => a.id == widget.albaran.id,
+              orElse: () => widget.albaran,
+            );
         widget.albaran.firma = updated.firma;
         widget.albaran.estado = EstadoEntrega.entregado;
 
@@ -712,7 +726,8 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(ref.read(entregasProvider).error ?? 'Error al registrar'),
+            content:
+                Text(ref.read(entregasProvider).error ?? 'Error al registrar'),
             backgroundColor: Colors.red,
           ),
         );
@@ -724,8 +739,10 @@ class _AlbaranDetailPageState extends ConsumerState<AlbaranDetailPage> {
 
   /// Diálogo post-entrega con opciones de ticket
   /// [popOnClose] controla si al cerrar el diálogo se vuelve a la lista
-  Future<void> _showPostDeliveryDialog(
-      {bool popOnClose = true, bool isResend = false,}) async {
+  Future<void> _showPostDeliveryDialog({
+    bool popOnClose = true,
+    bool isResend = false,
+  }) async {
     await showDialog(
       context: context,
       barrierDismissible: isResend,
@@ -826,7 +843,8 @@ class _PostDeliveryDialog extends ConsumerStatefulWidget {
   final bool isResend;
 
   @override
-  ConsumerState<_PostDeliveryDialog> createState() => _PostDeliveryDialogState();
+  ConsumerState<_PostDeliveryDialog> createState() =>
+      _PostDeliveryDialogState();
 }
 
 class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
@@ -924,7 +942,9 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
                 width: 18,
                 height: 18,
                 child: CircularProgressIndicator(
-                    strokeWidth: 2, color: Colors.white,),
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
               )
             : Icon(icon, size: 20),
         label: Text(label),
@@ -952,8 +972,9 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text('Error al generar el recibo'),
-                backgroundColor: Colors.red,),
+              content: Text('Error al generar el recibo'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
         return;
@@ -985,8 +1006,9 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-              content: Text('PDF generado correctamente'),
-              backgroundColor: Colors.green,),
+            content: Text('PDF generado correctamente'),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
@@ -1018,8 +1040,9 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-                content: Text('Error al generar el recibo'),
-                backgroundColor: Colors.red,),
+              content: Text('Error al generar el recibo'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
         return;
@@ -1098,8 +1121,9 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
               } else {
                 ScaffoldMessenger.of(ctx).showSnackBar(
                   const SnackBar(
-                      content: Text('Email no válido'),
-                      backgroundColor: Colors.orange,),
+                    content: Text('Email no válido'),
+                    backgroundColor: Colors.orange,
+                  ),
                 );
               }
             },
@@ -1126,7 +1150,8 @@ class _PostDeliveryDialogState extends ConsumerState<_PostDeliveryDialog> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                success ? 'Email enviado a $email' : 'Error al enviar email',),
+              success ? 'Email enviado a $email' : 'Error al enviar email',
+            ),
             backgroundColor: success ? Colors.green : Colors.red,
           ),
         );

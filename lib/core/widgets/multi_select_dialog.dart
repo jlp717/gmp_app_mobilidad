@@ -7,9 +7,12 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 /// Multi-select dialog — V2 Premium.
 /// Modern dialog with refined styling, search, and smooth interactions.
 class MultiSelectDialog<T> extends StatefulWidget {
-
   const MultiSelectDialog({
-    required this.items, required this.selectedItems, required this.title, required this.labelBuilder, super.key,
+    required this.items,
+    required this.selectedItems,
+    required this.title,
+    required this.labelBuilder,
+    super.key,
     this.onRemoteSearch,
   });
   final List<T> items;
@@ -71,12 +74,16 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
     final displayItems = widget.onRemoteSearch != null
         ? _currentItems
         : _currentItems.where((item) {
-            return widget.labelBuilder(item).toLowerCase().contains(_searchQuery.toLowerCase());
+            return widget
+                .labelBuilder(item)
+                .toLowerCase()
+                .contains(_searchQuery.toLowerCase());
           }).toList();
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppTheme.radiusLg)),
       child: Container(
         constraints: BoxConstraints(
           maxWidth: Responsive.clampWidth(context, 420),
@@ -121,24 +128,28 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
               controller: _searchController,
               decoration: InputDecoration(
                 hintText: 'Buscar...',
-                hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                hintStyle:
+                    TextStyle(color: Colors.white.withValues(alpha: 0.3)),
                 prefixIcon: _isLoading
                     ? const Padding(
                         padding: EdgeInsets.all(14),
                         child: SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonBlue),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: AppTheme.neonBlue),
                         ),
                       )
-                    : Icon(Icons.search_rounded, color: Colors.white.withValues(alpha: 0.3)),
+                    : Icon(Icons.search_rounded,
+                        color: Colors.white.withValues(alpha: 0.3)),
                 filled: true,
                 fillColor: AppTheme.darkSurface.withValues(alpha: 0.5),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   borderSide: BorderSide.none,
                 ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                contentPadding:
+                    const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
               ),
               style: const TextStyle(color: Colors.white),
               onChanged: _onSearchChanged,
@@ -150,7 +161,8 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                   ? Center(
                       child: Text(
                         'No se encontraron resultados',
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.25)),
+                        style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.25)),
                       ),
                     )
                   : ListView.builder(
@@ -160,9 +172,12 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                         final item = displayItems[index];
 
                         var isSelected = _tempSelected.contains(item);
-                        if (!isSelected && item is Map && item.containsKey('code')) {
+                        if (!isSelected &&
+                            item is Map &&
+                            item.containsKey('code')) {
                           final code = item['code'];
-                          isSelected = _tempSelected.any((e) => e is Map && e['code'] == code);
+                          isSelected = _tempSelected
+                              .any((e) => e is Map && e['code'] == code);
                         }
 
                         return Padding(
@@ -173,22 +188,30 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                               onTap: () {
                                 setState(() {
                                   if (isSelected) {
-                                    if (item is Map && item.containsKey('code')) {
-                                      _tempSelected.removeWhere((e) => e is Map && e['code'] == item['code']);
+                                    if (item is Map &&
+                                        item.containsKey('code')) {
+                                      _tempSelected.removeWhere((e) =>
+                                          e is Map &&
+                                          e['code'] == item['code']);
                                     } else {
                                       _tempSelected.remove(item);
                                     }
                                   } else {
-                                    if (item is Map && item.containsKey('code')) {
-                                      _tempSelected.removeWhere((e) => e is Map && e['code'] == item['code']);
+                                    if (item is Map &&
+                                        item.containsKey('code')) {
+                                      _tempSelected.removeWhere((e) =>
+                                          e is Map &&
+                                          e['code'] == item['code']);
                                     }
                                     _tempSelected.add(item);
                                   }
                                 });
                               },
-                              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+                              borderRadius:
+                                  BorderRadius.circular(AppTheme.radiusMd),
                               child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 6),
                                 child: Row(
                                   children: [
                                     Container(
@@ -199,15 +222,19 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                                         border: Border.all(
                                           color: isSelected
                                               ? AppTheme.neonBlue
-                                              : Colors.white.withValues(alpha: 0.15),
+                                              : Colors.white
+                                                  .withValues(alpha: 0.15),
                                           width: 1.5,
                                         ),
                                         color: isSelected
-                                            ? AppTheme.neonBlue.withValues(alpha: 0.15)
+                                            ? AppTheme.neonBlue
+                                                .withValues(alpha: 0.15)
                                             : Colors.transparent,
                                       ),
                                       child: isSelected
-                                          ? const Icon(Icons.check_rounded, color: AppTheme.neonBlue, size: 16)
+                                          ? const Icon(Icons.check_rounded,
+                                              color: AppTheme.neonBlue,
+                                              size: 16)
                                           : null,
                                     ),
                                     const SizedBox(width: 12),
@@ -217,8 +244,11 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                                         style: TextStyle(
                                           color: isSelected
                                               ? Colors.white
-                                              : Colors.white.withValues(alpha: 0.6),
-                                          fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+                                              : Colors.white
+                                                  .withValues(alpha: 0.6),
+                                          fontWeight: isSelected
+                                              ? FontWeight.w500
+                                              : FontWeight.normal,
                                         ),
                                       ),
                                     ),
@@ -239,22 +269,28 @@ class _MultiSelectDialogState<T> extends State<MultiSelectDialog<T>> {
                 TextButton(
                   onPressed: () => Navigator.pop(context),
                   style: TextButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 10),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
                   ),
-                  child: const Text('Cancelar', style: TextStyle(color: Colors.white54)),
+                  child: const Text('Cancelar',
+                      style: TextStyle(color: Colors.white54)),
                 ),
                 const SizedBox(width: 8),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.neonBlue,
                     foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMd)),
                     elevation: 0,
                   ),
                   onPressed: () => Navigator.pop(context, _tempSelected),
-                  child: const Text('Aplicar', style: TextStyle(fontWeight: FontWeight.w600)),
+                  child: const Text('Aplicar',
+                      style: TextStyle(fontWeight: FontWeight.w600)),
                 ),
               ],
             ),

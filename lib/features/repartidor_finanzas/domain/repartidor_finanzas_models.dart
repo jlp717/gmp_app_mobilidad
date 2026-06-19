@@ -695,6 +695,7 @@ class RepartidorCobroDia {
   }
 
   final String? id;
+
   /// Req #16: token de idempotencia del cobro. Necesario para anularlo.
   final String? idempotencyToken;
   final String fecha;

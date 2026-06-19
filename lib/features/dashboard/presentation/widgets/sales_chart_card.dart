@@ -13,7 +13,8 @@ import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_m
 /// - Gráfica de barras con fl_chart
 class SalesChartCard extends StatelessWidget {
   const SalesChartCard({
-    required this.salesSummary, super.key,
+    required this.salesSummary,
+    super.key,
   });
 
   final SalesSummary salesSummary;
@@ -102,7 +103,8 @@ class SalesChartCard extends StatelessWidget {
                       Icon(
                         Icons.bar_chart_outlined,
                         size: 48,
-                        color: theme.colorScheme.onSurfaceVariant.withValues(alpha: 0.5),
+                        color: theme.colorScheme.onSurfaceVariant
+                            .withValues(alpha: 0.5),
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -269,12 +271,8 @@ class SalesChartCard extends StatelessWidget {
               },
             ),
           ),
-          topTitles: const AxisTitles(
-            
-          ),
-          rightTitles: const AxisTitles(
-            
-          ),
+          topTitles: const AxisTitles(),
+          rightTitles: const AxisTitles(),
         ),
         gridData: FlGridData(
           drawVerticalLine: false,

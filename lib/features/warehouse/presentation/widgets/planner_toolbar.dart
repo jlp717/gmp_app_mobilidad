@@ -8,7 +8,6 @@ import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_
 
 /// Premium floating-pill toolbar with animated highlight indicators.
 class PlannerToolbar extends StatelessWidget {
-
   const PlannerToolbar({super.key, this.onToggleWalls, this.onRepack});
   final VoidCallback? onToggleWalls;
   final VoidCallback? onRepack;
@@ -158,8 +157,11 @@ class PlannerToolbar extends StatelessWidget {
         ),
         title: const Row(
           children: [
-            Icon(Icons.warning_amber_rounded,
-                color: AppTheme.warning, size: 22,),
+            Icon(
+              Icons.warning_amber_rounded,
+              color: AppTheme.warning,
+              size: 22,
+            ),
             SizedBox(width: 8),
             Text('Recalcular carga'),
           ],
@@ -193,7 +195,6 @@ class PlannerToolbar extends StatelessWidget {
 // =============================================================================
 
 class _PillSegmented<T> extends StatelessWidget {
-
   const _PillSegmented({
     required this.selected,
     required this.options,
@@ -258,8 +259,7 @@ class _PillSegmented<T> extends StatelessWidget {
                     duration: AppTheme.animFast,
                     style: TextStyle(
                       fontSize: 11,
-                      fontWeight:
-                          isActive ? FontWeight.w600 : FontWeight.w400,
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
                       color: isActive
                           ? AppTheme.neonBlue
                           : AppTheme.textTertiary.withValues(alpha: 0.7),
@@ -282,11 +282,11 @@ class _PillSegmented<T> extends StatelessWidget {
 // =============================================================================
 
 class _GlowToolButton extends StatefulWidget {
-
   const _GlowToolButton({
     required this.icon,
     required this.tooltip,
-    required this.onPressed, this.enabled = true,
+    required this.onPressed,
+    this.enabled = true,
     this.color,
   });
   final IconData icon;
@@ -311,7 +311,8 @@ class _GlowToolButtonState extends State<_GlowToolButton> {
     return Tooltip(
       message: widget.tooltip,
       child: GestureDetector(
-        onTapDown: widget.enabled ? (_) => setState(() => _pressed = true) : null,
+        onTapDown:
+            widget.enabled ? (_) => setState(() => _pressed = true) : null,
         onTapUp: widget.enabled
             ? (_) {
                 setState(() => _pressed = false);

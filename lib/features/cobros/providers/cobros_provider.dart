@@ -56,6 +56,7 @@ class CobrosProvider extends ChangeNotifier {
   List<Albaran> _albaranesPendientes = [];
   Albaran? _albaranActual;
   List<CobroPendiente> _cobrosPendientes = [];
+  List<CobroHistorico> _historicoCobros = [];
   ResumenCobros? _resumenCobros;
   EstadoCliente? _estadoClienteActual;
   Map<String, Map<String, dynamic>> _pendingSummary = {};
@@ -73,6 +74,8 @@ class CobrosProvider extends ChangeNotifier {
   List<Albaran> get albaranesPendientes => _albaranesPendientes;
   Albaran? get albaranActual => _albaranActual;
   List<CobroPendiente> get cobrosPendientes => _cobrosPendientes;
+  List<CobroHistorico> get historicoCobros =>
+      List.unmodifiable(_historicoCobros);
   ResumenCobros? get resumenCobros => _resumenCobros;
   EstadoCliente? get estadoClienteActual => _estadoClienteActual;
   String get filtroEstado => _filtroEstado;
@@ -414,10 +417,7 @@ class CobrosProvider extends ChangeNotifier {
         final payload = response['pendientes'] is Map
             ? Map<String, dynamic>.from(response['pendientes'] as Map)
             : response;
-        _cobrosPendientes = (payload['cobros'] as List<dynamic>?)
-                ?.map((e) => CobroPendiente.fromJson(e as Map<String, dynamic>))
-                .toList() ??
-            [];
+        _cobrosPendientes = _parseCobrosPendientes(payload['cobros']);
         if (payload['resumen'] != null) {
           _resumenCobros = ResumenCobros.fromJson(
             payload['resumen'] as Map<String, dynamic>,
@@ -429,6 +429,48 @@ class CobrosProvider extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  List<CobroPendiente> _parseCobrosPendientes(dynamic raw) {
+    return (raw as List<dynamic>?)
+            ?.map((e) => CobroPendiente.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        [];
+  }
+
+  /// Solo documentos cobrables por el comercial (excluye responsabilidad repartidor).
+  List<CobroPendiente> cobrosPendientesComercial() {
+    return _cobrosPendientes.where((c) {
+      if (c.cobradoPorRepartidor) return false;
+      return c.estado != EstadoCobro.alDia && c.importePendiente > 0.0001;
+    }).toList(growable: false);
+  }
+
+  Future<void> cargarHistoricoCobros(
+    String codigoCliente, {
+    bool forceRefresh = false,
+  }) async {
+    try {
+      final response = await ApiClient.get(
+        '/cobros/$codigoCliente/historico',
+        cacheKey: 'cobros:historico:$codigoCliente',
+        cacheTTL: const Duration(minutes: 5),
+        forceRefresh: forceRefresh,
+      );
+      if (response['success'] == true) {
+        final list = response['historico'] as List? ?? [];
+        _historicoCobros = list
+            .map(
+              (e) => CobroHistorico.fromJson(
+                Map<String, dynamic>.from(e as Map),
+              ),
+            )
+            .toList(growable: false);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('[CobrosProvider] cargarHistoricoCobros error: $e');
     }
   }
 
@@ -560,6 +602,7 @@ class CobrosProvider extends ChangeNotifier {
   void limpiarDatos() {
     _albaranesPendientes = [];
     _cobrosPendientes = [];
+    _historicoCobros = [];
     _albaranActual = null;
     _resumenCobros = null;
     _estadoClienteActual = null;

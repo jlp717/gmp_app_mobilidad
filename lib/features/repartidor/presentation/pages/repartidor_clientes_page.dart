@@ -14,8 +14,11 @@ import 'package:gmp_app_mobilidad/features/repartidor/data/repartidor_data_servi
 import 'package:gmp_app_mobilidad/features/repartidor/presentation/pages/repartidor_historico_page.dart';
 
 class RepartidorClientesPage extends StatefulWidget {
-
-  const RepartidorClientesPage({required this.repartidorId, super.key, this.isJefeMode = false, this.onNavigateToHistory});
+  const RepartidorClientesPage(
+      {required this.repartidorId,
+      super.key,
+      this.isJefeMode = false,
+      this.onNavigateToHistory});
   final String repartidorId;
   final bool isJefeMode;
   final void Function(String clientId, String clientName)? onNavigateToHistory;
@@ -80,11 +83,14 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
     // Local text filter
     if (_searchQuery.length > 1) {
       final q = _searchQuery.toUpperCase();
-      list = list.where((c) =>
-          c.name.toUpperCase().contains(q) ||
-          c.id.toUpperCase().contains(q) ||
-          c.address.toUpperCase().contains(q),
-      ).toList();
+      list = list
+          .where(
+            (c) =>
+                c.name.toUpperCase().contains(q) ||
+                c.id.toUpperCase().contains(q) ||
+                c.address.toUpperCase().contains(q),
+          )
+          .toList();
     }
 
     // Sort
@@ -129,15 +135,23 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                             ? ListView(
                                 children: const [
                                   SizedBox(height: 100),
-                                  Center(child: Icon(Icons.people_outline, color: AppTheme.textSecondary, size: 64)),
+                                  Center(
+                                      child: Icon(Icons.people_outline,
+                                          color: AppTheme.textSecondary,
+                                          size: 64)),
                                   SizedBox(height: 12),
-                                  Center(child: Text('No se encontraron clientes', style: TextStyle(color: AppTheme.textSecondary))),
+                                  Center(
+                                      child: Text('No se encontraron clientes',
+                                          style: TextStyle(
+                                              color: AppTheme.textSecondary))),
                                 ],
                               )
                             : OptimizedListView(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 8),
                                 itemCount: _filteredClients.length,
-                                itemBuilder: (context, index) => _buildClientCard(_filteredClients[index]),
+                                itemBuilder: (context, index) =>
+                                    _buildClientCard(_filteredClients[index]),
                               ),
                       ),
           ),
@@ -148,28 +162,48 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
 
   Widget _buildHeader() {
     return Container(
-      padding: EdgeInsets.fromLTRB(Responsive.padding(context, small: 12, large: 20), 16, Responsive.padding(context, small: 12, large: 20), 12),
+      padding: EdgeInsets.fromLTRB(
+          Responsive.padding(context, small: 12, large: 20),
+          16,
+          Responsive.padding(context, small: 12, large: 20),
+          12),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
-        border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+        border: Border(
+            bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
       ),
       child: Row(
         children: [
           Container(
-            padding: EdgeInsets.all(Responsive.padding(context, small: 8, large: 10)),
+            padding: EdgeInsets.all(
+                Responsive.padding(context, small: 8, large: 10)),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [AppTheme.neonGreen.withValues(alpha: 0.3), AppTheme.neonBlue.withValues(alpha: 0.2)]),
+              gradient: LinearGradient(colors: [
+                AppTheme.neonGreen.withValues(alpha: 0.3),
+                AppTheme.neonBlue.withValues(alpha: 0.2)
+              ]),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(Icons.people, color: AppTheme.neonGreen, size: Responsive.iconSize(context, phone: 20, desktop: 24)),
+            child: Icon(Icons.people,
+                color: AppTheme.neonGreen,
+                size: Responsive.iconSize(context, phone: 20, desktop: 24)),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Clientes de Reparto', style: TextStyle(fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
-                Text('${_clients.length} clientes', style: TextStyle(fontSize: Responsive.fontSize(context, small: 10, large: 12), color: AppTheme.textSecondary)),
+                Text('Clientes de Reparto',
+                    style: TextStyle(
+                        fontSize:
+                            Responsive.fontSize(context, small: 14, large: 18),
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary)),
+                Text('${_clients.length} clientes',
+                    style: TextStyle(
+                        fontSize:
+                            Responsive.fontSize(context, small: 10, large: 12),
+                        color: AppTheme.textSecondary)),
               ],
             ),
           ),
@@ -193,11 +227,15 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
         style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
         decoration: InputDecoration(
           hintText: 'Buscar por nombre, código o dirección...',
-          hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.6), fontSize: 13),
-          prefixIcon: const Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
+          hintStyle: TextStyle(
+              color: AppTheme.textSecondary.withValues(alpha: 0.6),
+              fontSize: 13),
+          prefixIcon:
+              const Icon(Icons.search, color: AppTheme.textSecondary, size: 20),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.clear, color: AppTheme.textSecondary, size: 18),
+                  icon: const Icon(Icons.clear,
+                      color: AppTheme.textSecondary, size: 18),
                   onPressed: () {
                     _searchController.clear();
                     setState(() => _searchQuery = '');
@@ -206,8 +244,11 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
               : null,
           filled: true,
           fillColor: AppTheme.darkBase,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none),
         ),
         onChanged: (v) {
           setState(() => _searchQuery = v);
@@ -224,9 +265,12 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
       color: AppTheme.surfaceColor,
       child: Row(
         children: [
-          Text('${_filteredClients.length} resultados', style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+          Text('${_filteredClients.length} resultados',
+              style:
+                  const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
           const Spacer(),
-          const Text('Ordenar: ', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+          const Text('Ordenar: ',
+              style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
           _sortChip('Visita', _SortBy.lastVisit),
           _sortChip('Nombre', _SortBy.name),
           _sortChip('Docs', _SortBy.totalDocs),
@@ -255,16 +299,28 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: selected ? AppTheme.neonBlue.withValues(alpha: 0.15) : Colors.transparent,
+            color: selected
+                ? AppTheme.neonBlue.withValues(alpha: 0.15)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: selected ? AppTheme.neonBlue.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.1)),
+            border: Border.all(
+                color: selected
+                    ? AppTheme.neonBlue.withValues(alpha: 0.4)
+                    : Colors.white.withValues(alpha: 0.1)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(label, style: TextStyle(fontSize: 10, color: selected ? AppTheme.neonBlue : AppTheme.textSecondary, fontWeight: selected ? FontWeight.bold : FontWeight.normal)),
+              Text(label,
+                  style: TextStyle(
+                      fontSize: 10,
+                      color:
+                          selected ? AppTheme.neonBlue : AppTheme.textSecondary,
+                      fontWeight:
+                          selected ? FontWeight.bold : FontWeight.normal)),
               if (selected)
-                Icon(_sortAsc ? Icons.arrow_upward : Icons.arrow_downward, size: 10, color: AppTheme.neonBlue),
+                Icon(_sortAsc ? Icons.arrow_upward : Icons.arrow_downward,
+                    size: 10, color: AppTheme.neonBlue),
             ],
           ),
         ),
@@ -281,7 +337,8 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
         onTap: () => _navigateToHistory(client),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 14)),
+          padding:
+              EdgeInsets.all(Responsive.padding(context, small: 10, large: 14)),
           child: Row(
             children: [
               // Avatar
@@ -291,13 +348,20 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
                   gradient: LinearGradient(
-                    colors: [AppTheme.neonGreen.withValues(alpha: 0.3), AppTheme.neonBlue.withValues(alpha: 0.2)],
+                    colors: [
+                      AppTheme.neonGreen.withValues(alpha: 0.3),
+                      AppTheme.neonBlue.withValues(alpha: 0.2)
+                    ],
                   ),
                 ),
                 child: Center(
                   child: Text(
                     client.name.isNotEmpty ? client.name[0].toUpperCase() : '?',
-                    style: TextStyle(color: AppTheme.neonGreen, fontSize: Responsive.fontSize(context, small: 14, large: 18), fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                        color: AppTheme.neonGreen,
+                        fontSize:
+                            Responsive.fontSize(context, small: 14, large: 18),
+                        fontWeight: FontWeight.bold),
                   ),
                 ),
               ),
@@ -309,14 +373,21 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                   children: [
                     Text(
                       client.name,
-                      style: TextStyle(fontSize: Responsive.fontSize(context, small: 12, large: 14), fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                      style: TextStyle(
+                          fontSize: Responsive.fontSize(context,
+                              small: 12, large: 14),
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.textPrimary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
                     Text(
                       '${client.id} · ${client.address}',
-                      style: TextStyle(fontSize: Responsive.fontSize(context, small: 9, large: 11), color: AppTheme.textSecondary),
+                      style: TextStyle(
+                          fontSize:
+                              Responsive.fontSize(context, small: 9, large: 11),
+                          color: AppTheme.textSecondary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -325,11 +396,18 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                       spacing: 12,
                       runSpacing: 4,
                       children: [
-                        _clientStat(Icons.receipt, '${client.totalDocuments} docs', AppTheme.neonBlue),
-                        _clientStat(Icons.euro, CurrencyFormatter.format(client.totalAmount), AppTheme.neonGreen),
+                        _clientStat(Icons.receipt,
+                            '${client.totalDocuments} docs', AppTheme.neonBlue),
+                        _clientStat(
+                            Icons.euro,
+                            CurrencyFormatter.format(client.totalAmount),
+                            AppTheme.neonGreen),
                         if (client.lastVisit != null)
-                          _clientStat(Icons.calendar_today, client.lastVisit!, AppTheme.textSecondary),
-                        if (widget.isJefeMode && client.repCode != null && client.repCode!.isNotEmpty)
+                          _clientStat(Icons.calendar_today, client.lastVisit!,
+                              AppTheme.textSecondary),
+                        if (widget.isJefeMode &&
+                            client.repCode != null &&
+                            client.repCode!.isNotEmpty)
                           _clientStat(
                             Icons.local_shipping,
                             client.repName != null && client.repName!.isNotEmpty
@@ -342,7 +420,8 @@ class _RepartidorClientesPageState extends State<RepartidorClientesPage> {
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right, color: AppTheme.textSecondary, size: 20),
+              const Icon(Icons.chevron_right,
+                  color: AppTheme.textSecondary, size: 20),
             ],
           ),
         ),

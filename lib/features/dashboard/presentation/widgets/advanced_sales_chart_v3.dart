@@ -6,7 +6,7 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/matrix_data_table.dart';
 
 /// AdvancedSalesChart V3 Performance Optimized
-/// 
+///
 /// Optimizations implemented:
 /// - Const constructors and immutable data
 /// - Cached gradient and style objects
@@ -15,16 +15,18 @@ import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/matrix
 /// - Lazy tooltip creation
 /// - Optimized bar group generation
 /// - Memory-efficient animation handling
-/// 
+///
 /// Expected improvements:
 /// - 40-50% reduction in chart build time
 /// - 60% fewer garbage collection events
 /// - 30% lower memory footprint
 /// - Smoother animations at 60fps
 class AdvancedSalesChartV3 extends StatefulWidget {
-
   const AdvancedSalesChartV3({
-    required this.matrixData, required this.hierarchy, required this.onBarTap, super.key,
+    required this.matrixData,
+    required this.hierarchy,
+    required this.onBarTap,
+    super.key,
     this.color = AppTheme.neonBlue,
   });
   final List<MatrixNode> matrixData;
@@ -38,16 +40,16 @@ class AdvancedSalesChartV3 extends StatefulWidget {
 
 class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
   int _touchedIndex = -1;
-  
+
   // Cached calculations (avoid recalculation on every build)
   List<MatrixNode>? _cachedTopItems;
   double? _cachedMaxY;
   List<BarChartGroupData>? _cachedBarGroups;
-  
+
   // Reusable objects (reduce GC pressure)
   late final LinearGradient _barGradient;
   late final BackgroundBarChartRodData _backgroundRod;
-  
+
   // Animation optimization
   final bool _isAnimating = false;
 
@@ -298,12 +300,8 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
           },
         ),
       ),
-      topTitles: const AxisTitles(
-        
-      ),
-      rightTitles: const AxisTitles(
-        
-      ),
+      topTitles: const AxisTitles(),
+      rightTitles: const AxisTitles(),
     );
   }
 
@@ -341,7 +339,6 @@ class _AdvancedSalesChartV3State extends State<AdvancedSalesChartV3> {
 
 /// Performance-optimized container with cached decoration
 class _PerformanceOptimizedContainer extends StatelessWidget {
-
   const _PerformanceOptimizedContainer({required this.child});
   final Widget child;
   static final _cachedDecoration = BoxDecoration(
@@ -369,9 +366,12 @@ class _PerformanceOptimizedContainer extends StatelessWidget {
 
 /// Memory-efficient pie chart implementation
 class PieChartV3 extends StatefulWidget {
-
   const PieChartV3({
-    required this.data, required this.title, required this.color, required this.onTap, super.key,
+    required this.data,
+    required this.title,
+    required this.color,
+    required this.onTap,
+    super.key,
   });
   final List<MatrixNode> data;
   final String title;
@@ -428,7 +428,8 @@ class _PieChartV3State extends State<PieChartV3> {
                     if (event is FlTapUpEvent &&
                         response != null &&
                         response.touchedSection != null) {
-                      final index = response.touchedSection!.touchedSectionIndex;
+                      final index =
+                          response.touchedSection!.touchedSectionIndex;
                       if (index >= 0 && index < topItems.length) {
                         widget.onTap(topItems[index].id, topItems[index].type);
                       }
@@ -456,8 +457,8 @@ class _PieChartV3State extends State<PieChartV3> {
       final isLarge = percentage > 0.1;
 
       // Vary opacity based on index
-      final sectionColor = widget.color.withValues(alpha: 
-        1.0 - (index * 0.1).clamp(0.0, 0.8),
+      final sectionColor = widget.color.withValues(
+        alpha: 1.0 - (index * 0.1).clamp(0.0, 0.8),
       );
 
       return PieChartSectionData(

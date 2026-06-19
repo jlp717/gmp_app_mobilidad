@@ -28,9 +28,11 @@ import 'package:share_plus/share_plus.dart';
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class PdfPreviewScreen extends StatefulWidget {
-
   const PdfPreviewScreen({
-    required this.pdfBytes, required this.title, required this.fileName, super.key,
+    required this.pdfBytes,
+    required this.title,
+    required this.fileName,
+    super.key,
     this.onEmailTap,
     this.onWhatsAppTap,
   });
@@ -169,8 +171,9 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text('Error al compartir: $e'),
-              backgroundColor: AppTheme.error,),
+            content: Text('Error al compartir: $e'),
+            backgroundColor: AppTheme.error,
+          ),
         );
       }
     }
@@ -301,7 +304,8 @@ class _PdfPreviewScreenState extends State<PdfPreviewScreen> {
       onPageError: (page, error) {
         if (mounted) {
           setState(
-              () => _errorMessage = 'Error en página ${page ?? 0}: $error',);
+            () => _errorMessage = 'Error en página ${page ?? 0}: $error',
+          );
         }
       },
     );

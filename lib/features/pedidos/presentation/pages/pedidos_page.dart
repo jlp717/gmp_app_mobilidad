@@ -910,7 +910,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               foregroundColor: AppTheme.darkBase,
               icon: const Icon(Icons.shopping_cart),
               label: Text(
-                '${provider.lineCount} | ${PedidosFormatters.money(provider.globalDiscountPct > 0 ? provider.totalConDescuento : provider.totalImporte)}',
+                '${provider.cartDisplayQtyLabel} | ${PedidosFormatters.money(provider.globalDiscountPct > 0 ? provider.totalConDescuento : provider.totalImporte)}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -1368,6 +1368,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           onTap: () => _onProductTap(product),
           isFavorite: provider.isFavorite(product.code),
           promo: provider.getPromo(product.code),
+          extraPromoCount: provider.getPromoCount(product.code) > 1
+              ? provider.getPromoCount(product.code) - 1
+              : 0,
           cartQty: cartQty,
           cartQtySuffix: cartQtySuffix,
           onQuickAdd: () async {
@@ -1387,6 +1390,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                   ? initialUnit
                   : product.availableUnits.first,
               initialQuantity: 1,
+              qtyAlreadyInCart: cartQty,
             );
             if (!mounted) return;
             if (result == null || result['cleared'] == true) return;

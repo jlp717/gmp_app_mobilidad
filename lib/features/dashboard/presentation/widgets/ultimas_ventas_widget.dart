@@ -11,7 +11,8 @@ import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_m
 /// - Número de albarán
 class UltimasVentasWidget extends StatelessWidget {
   const UltimasVentasWidget({
-    required this.ultimasVentas, super.key,
+    required this.ultimasVentas,
+    super.key,
   });
 
   final List<UltimaVenta> ultimasVentas;

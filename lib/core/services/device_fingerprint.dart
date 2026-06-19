@@ -4,6 +4,7 @@
 /// Used to send X-App-Version, X-Device-Model, X-Device-OS, X-Device-ID
 /// headers on every API call for enterprise audit traceability.
 library;
+
 import 'dart:io';
 
 import 'package:device_info_plus/device_info_plus.dart';
@@ -46,7 +47,8 @@ class DeviceFingerprint {
       }
 
       _initialized = true;
-      debugPrint('[DeviceFingerprint] ✅ $fullVersion | $deviceModel | $deviceOS | ID:$deviceId');
+      debugPrint(
+          '[DeviceFingerprint] ✅ $fullVersion | $deviceModel | $deviceOS | ID:$deviceId');
     } catch (e) {
       debugPrint('[DeviceFingerprint] ⚠️ Error: $e');
       _initialized = true; // Don't retry, use defaults
@@ -55,10 +57,10 @@ class DeviceFingerprint {
 
   /// Headers to attach to every API request
   static Map<String, String> get headers => {
-    'User-Agent': 'GMP-App/$fullVersion ($deviceModel; $deviceOS)',
-    'X-App-Version': fullVersion,
-    'X-Device-Model': deviceModel,
-    'X-Device-OS': deviceOS,
-    'X-Device-ID': deviceId,
-  };
+        'User-Agent': 'GMP-App/$fullVersion ($deviceModel; $deviceOS)',
+        'X-App-Version': fullVersion,
+        'X-Device-Model': deviceModel,
+        'X-Device-OS': deviceOS,
+        'X-Device-ID': deviceId,
+      };
 }

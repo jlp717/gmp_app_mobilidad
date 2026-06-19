@@ -45,6 +45,35 @@ beforeEach(() => {
   mockCachedQuery.mockClear();
 });
 
+function mockLegacyPendingSummaryDb({
+  pageRows = [],
+  portfolioRows = null,
+  pageCobros = [],
+  pageRepartidor = [],
+  portfolioCobros = [],
+  portfolioRepartidor = [],
+  portfolioQueryError = null,
+} = {}) {
+  const portfolio = portfolioRows == null ? pageRows : portfolioRows;
+  const routeSql = async (sql) => {
+    if (portfolioQueryError && /FROM\s+DSEDAC\.CVC\s+CVC/i.test(sql) && !/OFFSET\s+\d+\s+ROWS/i.test(sql)) {
+      throw portfolioQueryError;
+    }
+    if (/WITH\s+PAGE_DOCS/i.test(sql)) {
+      if (/\.COBROS/i.test(sql)) return pageCobros;
+      if (/REPARTIDOR_COBROS/i.test(sql)) return pageRepartidor;
+      return [];
+    }
+    if (/FROM\s+JAVIER\.COBROS\s+C/i.test(sql) && /EXISTS/i.test(sql)) return portfolioCobros;
+    if (/REPARTIDOR_COBROS\s+R/i.test(sql) && /EXISTS/i.test(sql)) return portfolioRepartidor;
+    if (/OFFSET\s+\d+\s+ROWS/i.test(sql)) return pageRows;
+    if (/FROM\s+DSEDAC\.CVC\s+CVC/i.test(sql)) return portfolio;
+    return [];
+  };
+  mockQuery.mockImplementation(routeSql);
+  mockQueryWithParams.mockImplementation(routeSql);
+}
+
 describe('legacy cobros route hardening', () => {
   test('pending-summary rejects COMERCIAL ALL requests', async () => {
     const res = await request(makeApp({ id: '01', code: '01', role: 'COMERCIAL' }))
@@ -65,7 +94,7 @@ describe('legacy cobros route hardening', () => {
   });
 
   test('pending-summary ALL for manager scopes to visible vendorCodes', async () => {
-    mockQueryWithParams.mockResolvedValueOnce([]);
+    mockLegacyPendingSummaryDb();
 
     const res = await request(makeApp({
       id: '98',
@@ -76,11 +105,11 @@ describe('legacy cobros route hardening', () => {
     })).get('/pending-summary/ALL');
 
     expect(res.status).toBe(200);
-    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['01', '02']);
+    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['01', '1', '02', '2', '01', '1', '02', '2']);
   });
 
   test('pending-summary uses semi-join vendor filter and due-today vencido rule', async () => {
-    mockQueryWithParams.mockResolvedValueOnce([]);
+    mockLegacyPendingSummaryDb();
 
     const res = await request(makeApp({ id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true }))
       .get('/pending-summary/01,02');
@@ -88,14 +117,15 @@ describe('legacy cobros route hardening', () => {
     expect(res.status).toBe(200);
     const sql = mockCachedQuery.mock.calls[0][1];
     expect(sql).toMatch(/EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+DSEDAC\.CLP\s+CLP/i);
+    expect(sql).toMatch(/FROM\s+DSED\.LACLAE\s+LAC/i);
     expect(sql).not.toMatch(/LEFT\s+JOIN\s+DSEDAC\.CLP/i);
     expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s*<>\s*''/i);
     expect(sql).toMatch(/<=\s*\(YEAR\(CURRENT_DATE\) \* 10000 \+ MONTH\(CURRENT_DATE\) \* 100 \+ DAY\(CURRENT_DATE\)\)/i);
-    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['01', '02']);
+    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(['01', '1', '02', '2', '01', '1', '02', '2']);
   });
 
   test('pending-summary SQL is bounded and deterministically ordered for production-sized CVC', async () => {
-    mockQuery.mockResolvedValueOnce([]);
+    mockLegacyPendingSummaryDb();
 
     const res = await request(makeApp({
       id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true,
@@ -113,7 +143,7 @@ describe('legacy cobros route hardening', () => {
   });
 
   test('pending-summary ALL without vendor scope excludes empty client CVC rows (B7)', async () => {
-    mockQuery.mockResolvedValueOnce([]);
+    mockLegacyPendingSummaryDb();
 
     const res = await request(makeApp({
       id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true,
@@ -145,9 +175,8 @@ describe('legacy cobros route hardening', () => {
   });
 
   test('pending-summary subtracts app-side COBROS from raw CVC totals', async () => {
-    // CVC raw: client C001 has 200 pending, 50 overdue
-    mockQuery.mockResolvedValueOnce([
-      {
+    mockLegacyPendingSummaryDb({
+      pageRows: [{
         CLIENTE: 'C001',
         SERIE_DOCUMENTO: 'M',
         NUMERO_DOCUMENTO: 1,
@@ -155,16 +184,12 @@ describe('legacy cobros route hardening', () => {
         TOTAL_VENCIDO: '50.00',
         NOMBRE_ALT: 'Cliente Uno',
         NOMBRE_CLI: 'Cliente Uno SL',
-      },
-    ]);
-    // App-side COBROS: 80 already paid via app for C001/M-1.
-    mockQueryWithParams.mockResolvedValueOnce([
-      { CLIENTE: 'C001', REF: 'CVC:M-1', TOTAL_APP: '80.00' },
-    ]);
-    // App-side REPARTIDOR_COBROS: 30 collected by repartidor for C001/M-1.
-    mockQueryWithParams.mockResolvedValueOnce([
-      { CLIENTE: 'C001', DOC_KEY: 'M-1', TOTAL_REP: '30.00' },
-    ]);
+      }],
+      pageCobros: [{ CLIENTE: 'C001', REF: 'CVC:M-1', TOTAL_APP: '80.00' }],
+      pageRepartidor: [{ CLIENTE: 'C001', DOC_KEY: 'M-1', TOTAL_REP: '30.00' }],
+      portfolioCobros: [{ CLIENTE: 'C001', REF: 'CVC:M-1', TOTAL_APP: '80.00' }],
+      portfolioRepartidor: [{ CLIENTE: 'C001', SERIE: 'M', NUMERO: '1', TOTAL_REP: '30.00' }],
+    });
 
     const res = await request(makeApp({
       id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true,
@@ -182,9 +207,8 @@ describe('legacy cobros route hardening', () => {
   });
 
   test('pending-summary total does not go below zero after app-side subtraction', async () => {
-    // CVC raw: client C002 has 50 pending
-    mockQuery.mockResolvedValueOnce([
-      {
+    mockLegacyPendingSummaryDb({
+      pageRows: [{
         CLIENTE: 'C002',
         SERIE_DOCUMENTO: 'M',
         NUMERO_DOCUMENTO: 2,
@@ -192,15 +216,12 @@ describe('legacy cobros route hardening', () => {
         TOTAL_VENCIDO: '50.00',
         NOMBRE_ALT: '',
         NOMBRE_CLI: 'Cliente Dos',
-      },
-    ]);
-    // App-side payments exceed CVC debt: 100 total
-    mockQueryWithParams.mockResolvedValueOnce([
-      { CLIENTE: 'C002', REF: 'CVC:M-2', TOTAL_APP: '70.00' },
-    ]);
-    mockQueryWithParams.mockResolvedValueOnce([
-      { CLIENTE: 'C002', DOC_KEY: 'M-2', TOTAL_REP: '30.00' },
-    ]);
+      }],
+      pageCobros: [{ CLIENTE: 'C002', REF: 'CVC:M-2', TOTAL_APP: '70.00' }],
+      pageRepartidor: [{ CLIENTE: 'C002', DOC_KEY: 'M-2', TOTAL_REP: '30.00' }],
+      portfolioCobros: [{ CLIENTE: 'C002', REF: 'CVC:M-2', TOTAL_APP: '70.00' }],
+      portfolioRepartidor: [{ CLIENTE: 'C002', SERIE: 'M', NUMERO: '2', TOTAL_REP: '30.00' }],
+    });
 
     const res = await request(makeApp({
       id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true,
@@ -215,9 +236,8 @@ describe('legacy cobros route hardening', () => {
   });
 
   test('pending-summary handles app-side query failures gracefully', async () => {
-    // CVC raw data
-    mockQuery.mockResolvedValueOnce([
-      {
+    mockLegacyPendingSummaryDb({
+      pageRows: [{
         CLIENTE: 'C003',
         SERIE_DOCUMENTO: 'M',
         NUMERO_DOCUMENTO: 3,
@@ -225,12 +245,42 @@ describe('legacy cobros route hardening', () => {
         TOTAL_VENCIDO: '0.00',
         NOMBRE_ALT: '',
         NOMBRE_CLI: 'Cliente Tres',
-      },
-    ]);
-    // COBROS query fails
-    mockQueryWithParams.mockRejectedValueOnce(new Error('Table not found'));
-    // REPARTIDOR_COBROS returns empty
-    mockQueryWithParams.mockResolvedValueOnce([]);
+      }],
+      portfolioRows: [{
+        CLIENTE: 'C003',
+        SERIE_DOCUMENTO: 'M',
+        NUMERO_DOCUMENTO: 3,
+        TOTAL_PENDIENTE: '100.00',
+        TOTAL_VENCIDO: '0.00',
+      }],
+    });
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/WITH\s+PAGE_DOCS/i.test(sql) && /\.COBROS/i.test(sql)) {
+        throw new Error('Table not found');
+      }
+      if (/WITH\s+PAGE_DOCS/i.test(sql) && /REPARTIDOR_COBROS/i.test(sql)) return [];
+      if (/OFFSET\s+\d+\s+ROWS/i.test(sql)) {
+        return [{
+          CLIENTE: 'C003',
+          SERIE_DOCUMENTO: 'M',
+          NUMERO_DOCUMENTO: 3,
+          TOTAL_PENDIENTE: '100.00',
+          TOTAL_VENCIDO: '0.00',
+          NOMBRE_ALT: '',
+          NOMBRE_CLI: 'Cliente Tres',
+        }];
+      }
+      if (/FROM\s+DSEDAC\.CVC\s+CVC/i.test(sql)) {
+        return [{
+          CLIENTE: 'C003',
+          SERIE_DOCUMENTO: 'M',
+          NUMERO_DOCUMENTO: 3,
+          TOTAL_PENDIENTE: '100.00',
+          TOTAL_VENCIDO: '0.00',
+        }];
+      }
+      return [];
+    });
 
     const res = await request(makeApp({
       id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true,
@@ -241,6 +291,52 @@ describe('legacy cobros route hardening', () => {
     expect(entry).toBeDefined();
     // Should still work with raw CVC data when app-side query fails
     expect(entry.total).toBeCloseTo(100, 1);
+  });
+
+  test('pending-summary grandTotal uses full portfolio, not paginated page only', async () => {
+    mockLegacyPendingSummaryDb({
+      pageRows: [{
+        CLIENTE: 'C001',
+        SERIE_DOCUMENTO: 'M',
+        NUMERO_DOCUMENTO: 1,
+        TOTAL_PENDIENTE: '100.00',
+        TOTAL_VENCIDO: '0.00',
+        NOMBRE_ALT: 'Cliente Uno',
+        NOMBRE_CLI: 'Cliente Uno',
+      }],
+      portfolioRows: [
+        {
+          CLIENTE: 'C001',
+          SERIE_DOCUMENTO: 'M',
+          NUMERO_DOCUMENTO: 1,
+          TOTAL_PENDIENTE: '100.00',
+          TOTAL_VENCIDO: '0.00',
+        },
+        {
+          CLIENTE: 'C002',
+          SERIE_DOCUMENTO: 'M',
+          NUMERO_DOCUMENTO: 2,
+          TOTAL_PENDIENTE: '200.00',
+          TOTAL_VENCIDO: '50.00',
+        },
+      ],
+    });
+
+    const res = await request(makeApp({
+      id: '98', code: '98', role: 'JEFE_VENTAS', isJefeVentas: true,
+    })).get('/pending-summary/ALL?limit=1&page=1');
+
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body.summary)).toEqual(['C001']);
+    expect(res.body.summary.C001.total).toBeCloseTo(100, 1);
+    expect(res.body.grandTotal).toBeCloseTo(300, 1);
+    expect(res.body.grandTotalVencido).toBeCloseTo(50, 1);
+    expect(res.body.clientCount).toBe(2);
+    const portfolioSql = mockCachedQuery.mock.calls.find(([, sql]) => (
+      /FROM\s+DSEDAC\.CVC\s+CVC/i.test(sql) && !/OFFSET\s+\d+\s+ROWS/i.test(sql)
+    ))?.[1];
+    expect(portfolioSql).toBeDefined();
+    expect(portfolioSql).not.toMatch(/FETCH FIRST/i);
   });
 });
 

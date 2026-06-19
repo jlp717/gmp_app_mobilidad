@@ -74,22 +74,24 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
           // The monthly endpoint returns: { monthly, summary }
           // The client-evolution endpoint returns: { monthlySales, topProducts, returns }
           // Map fields flexibly to support both response shapes
-          final monthlyData = (data['monthly'] ?? data['monthlySales'] ?? []) is List
-              ? ((data['monthly'] ?? data['monthlySales'] ?? []) as List)
-                  .map((e) => Map<String, dynamic>.from(e as Map))
-                  .toList()
-              : [];
-          final topProductsData = (data['products'] ?? data['topProducts'] ?? []) is List
-              ? ((data['products'] ?? data['topProducts'] ?? []) as List)
-                  .map((e) => Map<String, dynamic>.from(e as Map))
-                  .toList()
-              : [];
+          final monthlyData =
+              (data['monthly'] ?? data['monthlySales'] ?? []) is List
+                  ? ((data['monthly'] ?? data['monthlySales'] ?? []) as List)
+                      .map((e) => Map<String, dynamic>.from(e as Map))
+                      .toList()
+                  : [];
+          final topProductsData =
+              (data['products'] ?? data['topProducts'] ?? []) is List
+                  ? ((data['products'] ?? data['topProducts'] ?? []) as List)
+                      .map((e) => Map<String, dynamic>.from(e as Map))
+                      .toList()
+                  : [];
           final returnsData = (data['returns'] is List)
               ? (data['returns'] as List)
                   .map((e) => Map<String, dynamic>.from(e as Map))
                   .toList()
               : [];
-          
+
           setState(() {
             _monthlySales = monthlyData;
             _topProducts = topProductsData;
@@ -113,7 +115,8 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Center(child: ModernLoading(message: 'Cargando evoluci³n...'));
+      return const Center(
+          child: ModernLoading(message: 'Cargando evoluci³n...'));
     }
 
     if (_error != null) {
@@ -125,7 +128,8 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
             const SizedBox(height: 16),
             Text('Error: $_error'),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _loadEvolutionData, child: const Text('Reintentar')),
+            ElevatedButton(
+                onPressed: _loadEvolutionData, child: const Text('Reintentar')),
           ],
         ),
       );
@@ -136,7 +140,11 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Evoluci³n Mensual (3 A±os)', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          Text('Evoluci³n Mensual (3 A±os)',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           if (_monthlySales.isNotEmpty)
             Container(
@@ -147,21 +155,28 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
             )
           else
             const Center(child: Text('No hay datos de evoluci³n mensual')),
-            
           const SizedBox(height: 24),
-          
-          Text('Productos M¡s Comprados', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+          Text('Productos M¡s Comprados',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           if (_topProducts.isNotEmpty)
             _buildTopProductsList()
           else
-                      const SizedBox(height: 24),
-          Text('Historial de Devoluciones', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 24),
+          Text('Historial de Devoluciones',
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           if (_returns.isNotEmpty)
             _buildReturnsList()
           else
-            const Center(child: Text('No hay historial de devoluciones reciente')),
+            const Center(
+                child: Text('No hay historial de devoluciones reciente')),
         ],
       ),
     );
@@ -189,11 +204,14 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
               interval: 3,
               getTitlesWidget: (value, meta) {
                 final idx = value.toInt();
-                if (idx < 0 || idx >= _monthlySales.length) return const SizedBox.shrink();
+                if (idx < 0 || idx >= _monthlySales.length)
+                  return const SizedBox.shrink();
                 final row = _monthlySales[idx];
                 final year = row['year']?.toString() ?? '';
                 final month = row['month']?.toString().padLeft(2, '0') ?? '';
-                return Text('$year-$month', style: TextStyle(fontSize: 10, color: AppTheme.textSecondary));
+                return Text('$year-$month',
+                    style:
+                        TextStyle(fontSize: 10, color: AppTheme.textSecondary));
               },
             ),
           ),
@@ -208,7 +226,10 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
             belowBarData: BarAreaData(
               show: true,
               gradient: LinearGradient(
-                colors: [AppTheme.neonBlue.withValues(alpha: 0.3), AppTheme.neonBlue.withValues(alpha: 0)],
+                colors: [
+                  AppTheme.neonBlue.withValues(alpha: 0.3),
+                  AppTheme.neonBlue.withValues(alpha: 0)
+                ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
               ),
@@ -218,7 +239,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
       ),
     );
   }
-  
+
   Widget _buildTopProductsList() {
     return ListView.builder(
       shrinkWrap: true,
@@ -230,7 +251,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
         final code = product['code'] ?? '';
         final sales = (product['totalSales'] as num?)?.toDouble() ?? 0;
         final units = (product['totalUnits'] as num?)?.toInt() ?? 0;
-        
+
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           color: AppTheme.surfaceColor,
@@ -238,11 +259,20 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
             dense: true,
             leading: CircleAvatar(
               backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.2),
-              child: Text('${index + 1}', style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
+              child: Text('${index + 1}',
+                  style: TextStyle(color: AppTheme.neonBlue, fontSize: 12)),
             ),
-            title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-            subtitle: Text('C³d: $code Å¡ $units uds', style: const TextStyle(fontSize: 11)),
-            trailing: Text(CurrencyFormatter.formatWhole(sales), style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.success, fontSize: 13)),
+            title: Text(name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13)),
+            subtitle: Text('C³d: $code Å¡ $units uds',
+                style: const TextStyle(fontSize: 11)),
+            trailing: Text(CurrencyFormatter.formatWhole(sales),
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.success,
+                    fontSize: 13)),
           ),
         );
       },
@@ -262,7 +292,7 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
         final units = (ret['units'] as num?)?.toInt() ?? 0;
         final year = ret['year'];
         final month = ret['month']?.toString().padLeft(2, '0');
-        
+
         return Card(
           margin: const EdgeInsets.only(bottom: 8),
           color: AppTheme.error.withValues(alpha: 0.1),
@@ -273,9 +303,18 @@ class _ClientEvolutionTabState extends State<ClientEvolutionTab> {
           child: ListTile(
             dense: true,
             leading: const Icon(Icons.assignment_return, color: AppTheme.error),
-            title: Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
-            subtitle: Text('Cód: $code • $units uds • ${CurrencyFormatter.formatWhole(amount)}', style: const TextStyle(fontSize: 11)),
-            trailing: Text(CurrencyFormatter.formatWhole(amount), style: const TextStyle(fontWeight: FontWeight.bold, color: AppTheme.error, fontSize: 13)),
+            title: Text(name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13)),
+            subtitle: Text(
+                'Cód: $code • $units uds • ${CurrencyFormatter.formatWhole(amount)}',
+                style: const TextStyle(fontSize: 11)),
+            trailing: Text(CurrencyFormatter.formatWhole(amount),
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.error,
+                    fontSize: 13)),
           ),
         );
       },

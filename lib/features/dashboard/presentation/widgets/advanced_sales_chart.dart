@@ -95,7 +95,8 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                 decoration: BoxDecoration(
                   color: widget.color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: widget.color.withValues(alpha: 0.3)),
+                  border:
+                      Border.all(color: widget.color.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
@@ -221,7 +222,8 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                 gridData: FlGridData(
                   drawVerticalLine: false,
                   getDrawingHorizontalLine: (value) => FlLine(
-                      color: Colors.white.withValues(alpha: 0.05), strokeWidth: 1),
+                      color: Colors.white.withValues(alpha: 0.05),
+                      strokeWidth: 1),
                 ),
                 borderData: FlBorderData(show: false),
                 barGroups: topItems.asMap().entries.map((entry) {
@@ -235,7 +237,10 @@ class _AdvancedSalesChartState extends State<AdvancedSalesChart> {
                       BarChartRodData(
                         toY: node.sales,
                         gradient: LinearGradient(
-                          colors: [widget.color.withValues(alpha: 0.7), widget.color],
+                          colors: [
+                            widget.color.withValues(alpha: 0.7),
+                            widget.color
+                          ],
                           begin: Alignment.bottomCenter,
                           end: Alignment.topCenter,
                         ),

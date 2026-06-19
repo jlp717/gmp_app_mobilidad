@@ -8,9 +8,11 @@ import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_
 /// Premium floating glassmorphism info card for the selected box.
 /// Features: backdrop blur, dimension visualization, action buttons, smooth entry.
 class BoxInfoOverlay extends StatefulWidget {
-
   const BoxInfoOverlay({
-    required this.box, required this.index, required this.onClose, super.key,
+    required this.box,
+    required this.index,
+    required this.onClose,
+    super.key,
   });
   final LoadBox box;
   final int index;
@@ -220,7 +222,6 @@ class _BoxInfoOverlayState extends State<BoxInfoOverlay>
 // =============================================================================
 
 class _InfoRow extends StatelessWidget {
-
   const _InfoRow({
     required this.icon,
     required this.label,
@@ -238,7 +239,8 @@ class _InfoRow extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 5),
       child: Row(
         children: [
-          Icon(icon, size: 12, color: AppTheme.textTertiary.withValues(alpha: 0.6)),
+          Icon(icon,
+              size: 12, color: AppTheme.textTertiary.withValues(alpha: 0.6)),
           const SizedBox(width: 6),
           Text(
             label,
@@ -268,7 +270,6 @@ class _InfoRow extends StatelessWidget {
 // =============================================================================
 
 class _DimensionBars extends StatelessWidget {
-
   const _DimensionBars({
     required this.w,
     required this.d,
@@ -287,16 +288,17 @@ class _DimensionBars extends StatelessWidget {
       children: [
         _DimBar(label: 'L', value: w, maxDim: maxDim, color: AppTheme.neonBlue),
         const SizedBox(width: 6),
-        _DimBar(label: 'A', value: d, maxDim: maxDim, color: AppTheme.neonGreen),
+        _DimBar(
+            label: 'A', value: d, maxDim: maxDim, color: AppTheme.neonGreen),
         const SizedBox(width: 6),
-        _DimBar(label: 'H', value: h, maxDim: maxDim, color: AppTheme.neonPurple),
+        _DimBar(
+            label: 'H', value: h, maxDim: maxDim, color: AppTheme.neonPurple),
       ],
     );
   }
 }
 
 class _DimBar extends StatelessWidget {
-
   const _DimBar({
     required this.label,
     required this.value,
@@ -334,7 +336,8 @@ class _DimBar extends StatelessWidget {
                 value: v,
                 minHeight: 3,
                 backgroundColor: AppTheme.darkCard.withValues(alpha: 0.4),
-                valueColor: AlwaysStoppedAnimation(color.withValues(alpha: 0.6)),
+                valueColor:
+                    AlwaysStoppedAnimation(color.withValues(alpha: 0.6)),
               ),
             ),
           ),

@@ -472,6 +472,19 @@ function nullableTrim(value) {
     return trimmed || null;
 }
 
+function nullableInt(value) {
+    if (value === undefined || value === null || value === '') return null;
+    const parsed = Number.parseInt(value, 10);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toIsoTimestamp(value) {
+    if (value === undefined || value === null || value === '') return null;
+    if (value instanceof Date) return value.toISOString();
+    const parsed = Date.parse(String(value));
+    return Number.isFinite(parsed) ? new Date(parsed).toISOString() : String(value);
+}
+
 async function getMovimientos(vendedorCode, year, month, limit = 50) {
     const bolsa = await getBolsaStatus(vendedorCode, year, month);
     if (!bolsa.id) return [];
@@ -488,9 +501,9 @@ async function getMovimientos(vendedorCode, year, month, limit = 50) {
         saldoPosterior: parseFloat(r.SALDO_POSTERIOR) || 0,
         codigoArticulo: (r.CODIGO_ARTICULO || '').trim(),
         descripcion: (r.DESCRIPCION || '').trim(),
-        pedidoId: r.PEDIDO_ID,
-        fecha: r.CREATED_AT,
-        lineId: r.LINEA_ID ?? null,
+        pedidoId: nullableInt(r.PEDIDO_ID),
+        fecha: toIsoTimestamp(r.CREATED_AT),
+        lineId: nullableInt(r.LINEA_ID),
         precioMinimoCongelado: nullableNumber(r.PRECIO_MINIMO_CONGELADO),
         precioVenta: nullableNumber(r.PRECIO_VENTA),
         cantidad: nullableNumber(r.CANTIDAD),

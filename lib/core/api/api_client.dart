@@ -48,7 +48,8 @@ class ApiClient {
     if (_connectivityMonitoring) return;
     _connectivityMonitoring = true;
     _connectivitySub = Connectivity().onConnectivityChanged.listen((results) {
-      final result = results.isNotEmpty ? results.first : ConnectivityResult.none;
+      final result =
+          results.isNotEmpty ? results.first : ConnectivityResult.none;
       if (result == ConnectivityResult.none) return; // offline, keep last
       if (result != _lastConnectivity) {
         _lastConnectivity = result;
@@ -73,7 +74,8 @@ class ApiClient {
   static Future<void> checkConnectivity() async {
     try {
       final results = await Connectivity().checkConnectivity();
-      final result = results.isNotEmpty ? results.first : ConnectivityResult.none;
+      final result =
+          results.isNotEmpty ? results.first : ConnectivityResult.none;
       if (result != _lastConnectivity && result != ConnectivityResult.none) {
         _lastConnectivity = result;
         final token = _savedAuthToken;
@@ -139,12 +141,10 @@ class ApiClient {
     // Adaptive timeouts: mobile data has higher latency
     final isMobileData = _lastConnectivity == ConnectivityResult.mobile ||
         _lastConnectivity == ConnectivityResult.vpn;
-    final connectTimeout = isMobileData
-        ? const Duration(seconds: 20)
-        : ApiConfig.connectTimeout;
-    final receiveTimeout = isMobileData
-        ? const Duration(seconds: 45)
-        : ApiConfig.receiveTimeout;
+    final connectTimeout =
+        isMobileData ? const Duration(seconds: 20) : ApiConfig.connectTimeout;
+    final receiveTimeout =
+        isMobileData ? const Duration(seconds: 45) : ApiConfig.receiveTimeout;
     debugPrint('[ApiClient] 📡 Timeouts: connect=${connectTimeout.inSeconds}s, '
         'receive=${receiveTimeout.inSeconds}s (network=$_lastConnectivity)');
     final dio = Dio(

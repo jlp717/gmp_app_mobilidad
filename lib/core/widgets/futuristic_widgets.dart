@@ -40,10 +40,11 @@ class HolographicCard extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: gradientColors ?? [
-            AppTheme.darkSurface,
-            AppTheme.darkCard,
-          ],
+          colors: gradientColors ??
+              [
+                AppTheme.darkSurface,
+                AppTheme.darkCard,
+              ],
         ),
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         border: Border.all(
@@ -75,10 +76,10 @@ class HolographicCard extends StatelessWidget {
           onTap: onTap,
           child: animateOnHover
               ? card.animate().scale(
-                  begin: const Offset(1.0, 1.0),
-                  end: const Offset(1.02, 1.02),
-                  duration: AppTheme.animNormal,
-                )
+                    begin: const Offset(1.0, 1.0),
+                    end: const Offset(1.02, 1.02),
+                    duration: AppTheme.animNormal,
+                  )
               : card,
         ),
       );
@@ -132,11 +133,11 @@ class _NeonButtonState extends State<NeonButton>
       duration: const Duration(milliseconds: 1500),
       vsync: this,
     );
-    
+
     _glowAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
       CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
     );
-    
+
     // Solo iniciar la repetición si el widget aún está montado
     if (mounted) {
       _glowController.repeat(reverse: true);
@@ -158,12 +159,11 @@ class _NeonButtonState extends State<NeonButton>
   @override
   void didUpdateWidget(NeonButton oldWidget) {
     super.didUpdateWidget(oldWidget);
-    
+
     // Reiniciar la animación si cambian ciertas propiedades
-    if (oldWidget.isLoading != widget.isLoading || 
+    if (oldWidget.isLoading != widget.isLoading ||
         oldWidget.isDisabled != widget.isDisabled ||
         oldWidget.onPressed != widget.onPressed) {
-      
       if (widget.isLoading || widget.isDisabled || widget.onPressed == null) {
         // Detener la animación si el botón está deshabilitado
         _glowController.stop();
@@ -179,7 +179,8 @@ class _NeonButtonState extends State<NeonButton>
 
   @override
   Widget build(BuildContext context) {
-    final isEnabled = !widget.isDisabled && !widget.isLoading && widget.onPressed != null;
+    final isEnabled =
+        !widget.isDisabled && !widget.isLoading && widget.onPressed != null;
     final primaryColor = widget.primaryColor ?? AppTheme.neonBlue;
     final secondaryColor = widget.secondaryColor ?? AppTheme.neonPurple;
 
@@ -196,14 +197,18 @@ class _NeonButtonState extends State<NeonButton>
               ),
               child: ElevatedButton(
                 onPressed: null,
-                style: (widget.style ?? ElevatedButton.styleFrom(
-                  backgroundColor: Colors.grey,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-                  ),
-                )).copyWith(
+                style: (widget.style ??
+                        ElevatedButton.styleFrom(
+                          backgroundColor: Colors.grey,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 24, vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(AppTheme.radiusFull),
+                          ),
+                        ))
+                    .copyWith(
                   elevation: WidgetStateProperty.all(0),
                   shadowColor: WidgetStateProperty.all(Colors.transparent),
                 ),
@@ -219,7 +224,7 @@ class _NeonButtonState extends State<NeonButton>
             ),
           );
         }
-        
+
         return Container(
           decoration: BoxDecoration(
             gradient: LinearGradient(
@@ -233,12 +238,14 @@ class _NeonButtonState extends State<NeonButton>
             borderRadius: BorderRadius.circular(AppTheme.radiusFull),
             boxShadow: [
               BoxShadow(
-                color: primaryColor.withValues(alpha: 0.4 * _glowAnimation.value),
+                color:
+                    primaryColor.withValues(alpha: 0.4 * _glowAnimation.value),
                 blurRadius: 20 * _glowAnimation.value,
                 spreadRadius: 5 * _glowAnimation.value,
               ),
               BoxShadow(
-                color: secondaryColor.withValues(alpha: 0.3 * _glowAnimation.value),
+                color: secondaryColor.withValues(
+                    alpha: 0.3 * _glowAnimation.value),
                 blurRadius: 30 * _glowAnimation.value,
                 spreadRadius: 10 * _glowAnimation.value,
               ),
@@ -246,14 +253,18 @@ class _NeonButtonState extends State<NeonButton>
           ),
           child: ElevatedButton(
             onPressed: isEnabled ? widget.onPressed : null,
-            style: (widget.style ?? ElevatedButton.styleFrom(
-              backgroundColor: Colors.transparent,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppTheme.radiusFull),
-              ),
-            )).copyWith(
+            style: (widget.style ??
+                    ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(AppTheme.radiusFull),
+                      ),
+                    ))
+                .copyWith(
               elevation: WidgetStateProperty.all(0),
               shadowColor: WidgetStateProperty.all(Colors.transparent),
             ),
@@ -327,7 +338,8 @@ class DataVizCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: (iconColor ?? AppTheme.neonBlue).withValues(alpha: 0.1),
+                  color:
+                      (iconColor ?? AppTheme.neonBlue).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(AppTheme.radiusSm),
                 ),
                 child: Icon(
@@ -373,16 +385,25 @@ class DataVizCard extends StatelessWidget {
             Row(
               children: [
                 Icon(
-                  trendIcon ?? (trend!.startsWith('+') ? Icons.trending_up : Icons.trending_down),
+                  trendIcon ??
+                      (trend!.startsWith('+')
+                          ? Icons.trending_up
+                          : Icons.trending_down),
                   size: 14,
-                  color: trendColor ?? (trend!.startsWith('+') ? AppTheme.success : AppTheme.error),
+                  color: trendColor ??
+                      (trend!.startsWith('+')
+                          ? AppTheme.success
+                          : AppTheme.error),
                 ),
                 const SizedBox(width: 4),
                 Text(
                   trend!,
                   style: TextStyle(
                     fontSize: 12,
-                    color: trendColor ?? (trend!.startsWith('+') ? AppTheme.success : AppTheme.error),
+                    color: trendColor ??
+                        (trend!.startsWith('+')
+                            ? AppTheme.success
+                            : AppTheme.error),
                     fontWeight: FontWeight.w600,
                   ),
                 ),
@@ -535,7 +556,8 @@ class FuturisticTabBar extends StatelessWidget {
                     tabs[index],
                     style: TextStyle(
                       fontSize: 14,
-                      fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
+                      fontWeight:
+                          isActive ? FontWeight.w600 : FontWeight.normal,
                       color: isActive ? activeColor : inactiveColor,
                     ),
                   ),

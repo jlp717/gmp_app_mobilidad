@@ -6,10 +6,11 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 /// Coming Soon placeholder — V2 Premium.
 /// Animated, modern design for features under development.
 class ComingSoonPlaceholder extends StatelessWidget {
-
   const ComingSoonPlaceholder({
-    required this.title, super.key,
-    this.subtitle = 'Estamos trabajando en esta funcionalidad.\nDisponible próximamente.',
+    required this.title,
+    super.key,
+    this.subtitle =
+        'Estamos trabajando en esta funcionalidad.\nDisponible próximamente.',
     this.icon = Icons.rocket_launch,
     this.accentColor = AppTheme.neonPurple,
   });
@@ -24,15 +25,19 @@ class ComingSoonPlaceholder extends StatelessWidget {
       backgroundColor: AppTheme.darkBase,
       body: Center(
         child: Padding(
-          padding: EdgeInsets.all(Responsive.padding(context, small: 24, large: 40)),
+          padding:
+              EdgeInsets.all(Responsive.padding(context, small: 24, large: 40)),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               // Animated icon with glow
               Builder(builder: (context) {
-                final outerSize = Responsive.value(context, phone: 90, desktop: 130);
-                final innerSize = Responsive.value(context, phone: 60, desktop: 88);
-                final iconSz = Responsive.iconSize(context, phone: 30, desktop: 44);
+                final outerSize =
+                    Responsive.value(context, phone: 90, desktop: 130);
+                final innerSize =
+                    Responsive.value(context, phone: 60, desktop: 88);
+                final iconSz =
+                    Responsive.iconSize(context, phone: 30, desktop: 44);
                 return Container(
                   width: outerSize,
                   height: outerSize,
@@ -72,9 +77,13 @@ class ComingSoonPlaceholder extends StatelessWidget {
                 )
                     .animate()
                     .fadeIn(duration: 600.ms)
-                    .scale(begin: const Offset(0.85, 0.85), curve: Curves.easeOutCubic)
+                    .scale(
+                        begin: const Offset(0.85, 0.85),
+                        curve: Curves.easeOutCubic)
                     .then()
-                    .shimmer(duration: 3.seconds, color: accentColor.withValues(alpha: 0.15));
+                    .shimmer(
+                        duration: 3.seconds,
+                        color: accentColor.withValues(alpha: 0.15));
               }),
               const SizedBox(height: 32),
               // Title with gradient
@@ -85,7 +94,8 @@ class ComingSoonPlaceholder extends StatelessWidget {
                 child: Text(
                   title,
                   style: TextStyle(
-                    fontSize: Responsive.fontSize(context, small: 20, large: 26),
+                    fontSize:
+                        Responsive.fontSize(context, small: 20, large: 26),
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
                     letterSpacing: -0.3,
@@ -107,7 +117,8 @@ class ComingSoonPlaceholder extends StatelessWidget {
               const SizedBox(height: 32),
               // Badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(AppTheme.radiusFull),
                   color: accentColor.withValues(alpha: 0.08),
@@ -116,7 +127,8 @@ class ComingSoonPlaceholder extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.construction_rounded, size: 14, color: accentColor),
+                    Icon(Icons.construction_rounded,
+                        size: 14, color: accentColor),
                     const SizedBox(width: 8),
                     Text(
                       'EN DESARROLLO',

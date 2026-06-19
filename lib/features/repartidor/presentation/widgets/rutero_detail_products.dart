@@ -266,7 +266,8 @@ class RuteroDetailProducts extends StatelessWidget {
               label: Text(allChecked ? 'DESMARCAR TODO' : 'MARCAR TODO'),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppTheme.neonBlue,
-                side: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.5)),
+                side:
+                    BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.5)),
                 padding: const EdgeInsets.symmetric(vertical: 12),
               ),
             ),
@@ -360,8 +361,9 @@ class _ProductCard extends StatelessWidget {
       width: 28,
       height: 28,
       decoration: BoxDecoration(
-        color:
-            isChecked ? AppTheme.success.withValues(alpha: 0.2) : AppTheme.darkBase,
+        color: isChecked
+            ? AppTheme.success.withValues(alpha: 0.2)
+            : AppTheme.darkBase,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
           color: isChecked ? AppTheme.success : AppTheme.borderColor,

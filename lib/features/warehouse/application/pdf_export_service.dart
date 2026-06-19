@@ -242,15 +242,30 @@ class PdfExportService {
             child: pw.Row(
               mainAxisAlignment: pw.MainAxisAlignment.spaceAround,
               children: [
-                _truckDim('Largo', '${truck.lengthCm.toStringAsFixed(0)} cm',
-                    textPrimary, textTertiary,),
-                _truckDim('Ancho', '${truck.widthCm.toStringAsFixed(0)} cm',
-                    textPrimary, textTertiary,),
-                _truckDim('Alto', '${truck.heightCm.toStringAsFixed(0)} cm',
-                    textPrimary, textTertiary,),
-                _truckDim('Carga Max',
-                    '${truck.maxPayloadKg.toStringAsFixed(0)} kg',
-                    accentColor, textTertiary,),
+                _truckDim(
+                  'Largo',
+                  '${truck.lengthCm.toStringAsFixed(0)} cm',
+                  textPrimary,
+                  textTertiary,
+                ),
+                _truckDim(
+                  'Ancho',
+                  '${truck.widthCm.toStringAsFixed(0)} cm',
+                  textPrimary,
+                  textTertiary,
+                ),
+                _truckDim(
+                  'Alto',
+                  '${truck.heightCm.toStringAsFixed(0)} cm',
+                  textPrimary,
+                  textTertiary,
+                ),
+                _truckDim(
+                  'Carga Max',
+                  '${truck.maxPayloadKg.toStringAsFixed(0)} kg',
+                  accentColor,
+                  textTertiary,
+                ),
               ],
             ),
           ),
@@ -278,8 +293,14 @@ class PdfExportService {
           ),
           pw.SizedBox(height: 6),
 
-          _boxTable(placedBoxes, darkSurface, textPrimary, textSecondary,
-              textTertiary, accentColor,),
+          _boxTable(
+            placedBoxes,
+            darkSurface,
+            textPrimary,
+            textSecondary,
+            textTertiary,
+            accentColor,
+          ),
 
           // ═══════════════════════════════════════════════════
           // OVERFLOW BOXES TABLE (if any)
@@ -295,8 +316,14 @@ class PdfExportService {
               ),
             ),
             pw.SizedBox(height: 6),
-            _boxTable(overflowBoxes, darkSurface, textPrimary, textSecondary,
-                textTertiary, errorColor,),
+            _boxTable(
+              overflowBoxes,
+              darkSurface,
+              textPrimary,
+              textSecondary,
+              textTertiary,
+              errorColor,
+            ),
           ],
 
           pw.SizedBox(height: 20),
@@ -343,7 +370,8 @@ class PdfExportService {
 
     await Printing.layoutPdf(
       onLayout: (_) => bytes,
-      name: 'Plan_Carga_${vehicleCode}_${date.year}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}',
+      name:
+          'Plan_Carga_${vehicleCode}_${date.year}${date.month.toString().padLeft(2, '0')}${date.day.toString().padLeft(2, '0')}',
     );
   }
 
@@ -437,7 +465,8 @@ class PdfExportService {
     PdfColor accentColor,
   ) {
     return pw.TableHelper.fromTextArray(
-      border: pw.TableBorder.all(color: const PdfColor.fromInt(0xFF334155), width: 0.5),
+      border: pw.TableBorder.all(
+          color: const PdfColor.fromInt(0xFF334155), width: 0.5),
       headerDecoration: pw.BoxDecoration(color: bgColor),
       cellAlignment: pw.Alignment.centerLeft,
       headerHeight: 24,
@@ -456,14 +485,18 @@ class PdfExportService {
         'Dims (cm)',
         'Posición',
       ],
-      data: boxes.map((b) => [
-        b.articleCode,
-        b.clientCode,
-        '#${b.orderNumber}',
-        b.weight.toStringAsFixed(1),
-        '${b.w.toStringAsFixed(0)}×${b.d.toStringAsFixed(0)}×${b.h.toStringAsFixed(0)}',
-        'X:${b.x.toStringAsFixed(0)} Y:${b.y.toStringAsFixed(0)} Z:${b.z.toStringAsFixed(0)}',
-      ],).toList(),
+      data: boxes
+          .map(
+            (b) => [
+              b.articleCode,
+              b.clientCode,
+              '#${b.orderNumber}',
+              b.weight.toStringAsFixed(1),
+              '${b.w.toStringAsFixed(0)}×${b.d.toStringAsFixed(0)}×${b.h.toStringAsFixed(0)}',
+              'X:${b.x.toStringAsFixed(0)} Y:${b.y.toStringAsFixed(0)} Z:${b.z.toStringAsFixed(0)}',
+            ],
+          )
+          .toList(),
     );
   }
 }

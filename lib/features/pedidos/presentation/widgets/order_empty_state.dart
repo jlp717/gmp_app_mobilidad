@@ -8,7 +8,6 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 class OrderEmptyState extends StatelessWidget {
-
   const OrderEmptyState({
     super.key,
     this.hasActiveFilters = false,

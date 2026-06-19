@@ -18,7 +18,6 @@ import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 
 class ProductHistoryPage extends ConsumerStatefulWidget {
-
   const ProductHistoryPage({super.key, this.initialClientCode});
   final String? initialClientCode;
 
@@ -124,7 +123,9 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
           IconButton(
             icon: const Icon(Icons.sync, color: AppColors.primary),
             tooltip: 'Sincronizar',
-            onPressed: () => ref.read(salesHistoryProvider.notifier).loadHistory(reset: true),
+            onPressed: () => ref
+                .read(salesHistoryProvider.notifier)
+                .loadHistory(reset: true),
           ),
         ],
       ),
@@ -149,12 +150,14 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                           filled: true,
                           fillColor: AppColors.backgroundColor,
                           border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                           prefixIcon:
                               const Icon(Icons.person, color: Colors.white54),
                         ),
-                        onSubmitted: (val) =>
-                            ref.read(salesHistoryProvider.notifier).setClientCode(val.isEmpty ? null : val),
+                        onSubmitted: (val) => ref
+                            .read(salesHistoryProvider.notifier)
+                            .setClientCode(val.isEmpty ? null : val),
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -169,7 +172,8 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                           filled: true,
                           fillColor: AppColors.backgroundColor,
                           border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8),),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
                           prefixIcon:
                               const Icon(Icons.search, color: Colors.white54),
                         ),
@@ -178,8 +182,10 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                     ),
                     const SizedBox(width: 16),
                     IconButton(
-                      icon: const Icon(Icons.calendar_month,
-                          color: AppColors.primary,),
+                      icon: const Icon(
+                        Icons.calendar_month,
+                        color: AppColors.primary,
+                      ),
                       onPressed: _pickDateRange,
                       tooltip: 'Filtrar Fechas',
                     ),
@@ -188,8 +194,10 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                         _searchController.text.isNotEmpty)
                       TextButton.icon(
                         icon: const Icon(Icons.clear, color: Colors.redAccent),
-                        label: const Text('Limpiar',
-                            style: TextStyle(color: Colors.redAccent),),
+                        label: const Text(
+                          'Limpiar',
+                          style: TextStyle(color: Colors.redAccent),
+                        ),
                         onPressed: _clearFilters,
                       ),
                   ],
@@ -210,8 +218,11 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
                     ? ErrorStateWidget(message: 'Error: ${historyState.error}')
                     : historyState.items.isEmpty
                         ? const Center(
-                            child: Text('No hay datos',
-                                style: TextStyle(color: Colors.white54),),)
+                            child: Text(
+                              'No hay datos',
+                              style: TextStyle(color: Colors.white54),
+                            ),
+                          )
                         : OrientationBuilder(
                             builder: (context, orientation) {
                               if (orientation == Orientation.portrait) {
@@ -228,7 +239,9 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
   }
 
   Widget _buildSummaryHeader(
-      BuildContext context, Map<String, dynamic> summary,) {
+    BuildContext context,
+    Map<String, dynamic> summary,
+  ) {
     return SalesSummaryHeader(summary: summary);
   }
 
@@ -261,95 +274,186 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
           columnSpacing: 16,
           columns: const [
             DataColumn(
-                label: Text('Foto',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold,),),),
-            DataColumn(
-                label: Text('Ficha',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold,),),),
-            DataColumn(
-                label: Text('Fecha',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold,),),),
-            DataColumn(
-                label: Text('Cliente',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold,),),),
-            DataColumn(
-                label: Text('Factura',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold,),),),
-            DataColumn(
-                label: Text('Producto',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold,),),),
-            DataColumn(
-                label: Text('Lote',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold,),),),
-            DataColumn(
-                label: Text('Cant',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold,),),),
-            DataColumn(
-                label: Text('Precio',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold,),),),
-            DataColumn(
-                label: Text('Total',
-                    style: TextStyle(
-                        color: Colors.white, fontWeight: FontWeight.bold,),),),
-          ],
-          rows: items.map((item) {
-            return DataRow(cells: [
-              // Product thumbnail
-              DataCell(_ProductThumbnail(
-                imageUrl: item.imageUrl(baseUrl),
-                productName: item.productName,
-                size: 40,
-              ),),
-              // Ficha técnica button
-              DataCell(
-                IconButton(
-                  icon: const Icon(Icons.description_outlined,
-                      color: AppColors.primary, size: 20,),
-                  tooltip: 'Ficha Técnica',
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: () => _openFichaTecnica(context, item, baseUrl),
+              label: Text(
+                'Foto',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
-              DataCell(Text(item.date,
-                  style: const TextStyle(color: Colors.white70),),),
-              DataCell(Text(item.clientCode,
-                  style: const TextStyle(color: Colors.white70),),),
-              DataCell(Text(item.invoice,
-                  style: const TextStyle(color: AppColors.neonBlue),),),
-              DataCell(Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(item.productName,
-                      style: const TextStyle(color: Colors.white),
-                      overflow: TextOverflow.ellipsis,),
-                  Text(item.productCode,
-                      style:
-                          const TextStyle(color: Colors.white30, fontSize: 10),),
-                ],
-              ),),
-              DataCell(Text(
-                item.lote + (item.ref.isNotEmpty ? ' / ${item.ref}' : ''),
-                style: const TextStyle(color: Colors.white70),
-              ),),
-              DataCell(Text(item.quantity.toStringAsFixed(0),
-                  style: const TextStyle(color: AppColors.primary),),),
-              DataCell(Text(item.price,
-                  style: const TextStyle(color: Colors.white70),),),
-              DataCell(Text(item.total,
-                  style: const TextStyle(
-                      color: Colors.white, fontWeight: FontWeight.bold,),),),
-            ],);
+            ),
+            DataColumn(
+              label: Text(
+                'Ficha',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'Fecha',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'Cliente',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'Factura',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'Producto',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'Lote',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'Cant',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'Precio',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            DataColumn(
+              label: Text(
+                'Total',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+          rows: items.map((item) {
+            return DataRow(
+              cells: [
+                // Product thumbnail
+                DataCell(
+                  _ProductThumbnail(
+                    imageUrl: item.imageUrl(baseUrl),
+                    productName: item.productName,
+                    size: 40,
+                  ),
+                ),
+                // Ficha técnica button
+                DataCell(
+                  IconButton(
+                    icon: const Icon(
+                      Icons.description_outlined,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                    tooltip: 'Ficha Técnica',
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () => _openFichaTecnica(context, item, baseUrl),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    item.date,
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    item.clientCode,
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    item.invoice,
+                    style: const TextStyle(color: AppColors.neonBlue),
+                  ),
+                ),
+                DataCell(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        item.productName,
+                        style: const TextStyle(color: Colors.white),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        item.productCode,
+                        style: const TextStyle(
+                            color: Colors.white30, fontSize: 10),
+                      ),
+                    ],
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    item.lote + (item.ref.isNotEmpty ? ' / ${item.ref}' : ''),
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    item.quantity.toStringAsFixed(0),
+                    style: const TextStyle(color: AppColors.primary),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    item.price,
+                    style: const TextStyle(color: Colors.white70),
+                  ),
+                ),
+                DataCell(
+                  Text(
+                    item.total,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            );
           }).toList(),
         ),
       ),
@@ -360,7 +464,10 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
   // FICHA TÉCNICA – Download PDF and open viewer
   // ===========================================================================
   Future<void> _openFichaTecnica(
-      BuildContext ctx, ProductHistoryItem item, String baseUrl,) async {
+    BuildContext ctx,
+    ProductHistoryItem item,
+    String baseUrl,
+  ) async {
     final navigator = Navigator.of(ctx);
     final url = item.fichaUrl(baseUrl);
     final filePath =
@@ -403,12 +510,14 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
         return;
       }
 
-      navigator.push(MaterialPageRoute(
-        builder: (_) => _PdfViewerPage(
-          filePath: filePath,
-          title: 'Ficha Técnica - ${item.productCode.trim()}',
+      navigator.push(
+        MaterialPageRoute(
+          builder: (_) => _PdfViewerPage(
+            filePath: filePath,
+            title: 'Ficha Técnica - ${item.productCode.trim()}',
+          ),
         ),
-      ),);
+      );
     } catch (e) {
       if (navigator.canPop()) navigator.pop();
       final msg = e.toString().contains('404')
@@ -423,7 +532,6 @@ class _ProductHistoryPageState extends ConsumerState<ProductHistoryPage> {
 // PRODUCT CARD – Portrait layout item
 // =============================================================================
 class _ProductCard extends StatelessWidget {
-
   const _ProductCard({required this.item, required this.baseUrl});
   final ProductHistoryItem item;
   final String baseUrl;
@@ -455,9 +563,10 @@ class _ProductCard extends StatelessWidget {
                   Text(
                     item.productName,
                     style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,),
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -473,11 +582,14 @@ class _ProductCard extends StatelessWidget {
                     runSpacing: 4,
                     children: [
                       _InfoChip(
-                          icon: Icons.person_outline, label: item.clientCode,),
+                        icon: Icons.person_outline,
+                        label: item.clientCode,
+                      ),
                       _InfoChip(
-                          icon: Icons.receipt_long,
-                          label: item.invoice,
-                          color: AppColors.neonBlue,),
+                        icon: Icons.receipt_long,
+                        label: item.invoice,
+                        color: AppColors.neonBlue,
+                      ),
                       _InfoChip(icon: Icons.calendar_today, label: item.date),
                     ],
                   ),
@@ -489,27 +601,32 @@ class _ProductCard extends StatelessWidget {
                       child: Text(
                         'Lote: ${item.lote}${item.ref.isNotEmpty ? ' / ${item.ref}' : ''}',
                         style: const TextStyle(
-                            color: Colors.white38, fontSize: 11,),
+                          color: Colors.white38,
+                          fontSize: 11,
+                        ),
                       ),
                     ),
                   // Bottom row: quantity, price, total, ficha button
                   Row(
                     children: [
                       _ValueTag(
-                          label: 'Cant',
-                          value: item.quantity.toStringAsFixed(0),
-                          color: AppColors.primary,),
+                        label: 'Cant',
+                        value: item.quantity.toStringAsFixed(0),
+                        color: AppColors.primary,
+                      ),
                       const SizedBox(width: 8),
                       _ValueTag(
-                          label: 'Precio',
-                          value: item.price,
-                          color: Colors.white70,),
+                        label: 'Precio',
+                        value: item.price,
+                        color: Colors.white70,
+                      ),
                       const SizedBox(width: 8),
                       _ValueTag(
-                          label: 'Total',
-                          value: item.total,
-                          color: Colors.white,
-                          bold: true,),
+                        label: 'Total',
+                        value: item.total,
+                        color: Colors.white,
+                        bold: true,
+                      ),
                       const Spacer(),
                       // Ficha Técnica button
                       Material(
@@ -523,22 +640,31 @@ class _ProductCard extends StatelessWidget {
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 8, vertical: 4,),
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
                               border: Border.all(
-                                  color: AppColors.primary.withValues(alpha: 0.5),),
+                                color: AppColors.primary.withValues(alpha: 0.5),
+                              ),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: const Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.description_outlined,
-                                    color: AppColors.primary, size: 16,),
+                                Icon(
+                                  Icons.description_outlined,
+                                  color: AppColors.primary,
+                                  size: 16,
+                                ),
                                 SizedBox(width: 4),
-                                Text('Ficha',
-                                    style: TextStyle(
-                                        color: AppColors.primary,
-                                        fontSize: 11,),),
+                                Text(
+                                  'Ficha',
+                                  style: TextStyle(
+                                    color: AppColors.primary,
+                                    fontSize: 11,
+                                  ),
+                                ),
                               ],
                             ),
                           ),
@@ -560,7 +686,6 @@ class _ProductCard extends StatelessWidget {
 // PRODUCT THUMBNAIL – Reusable image widget with tap-to-fullscreen
 // =============================================================================
 class _ProductThumbnail extends StatelessWidget {
-
   const _ProductThumbnail({
     required this.imageUrl,
     required this.productName,
@@ -618,7 +743,6 @@ class _ProductThumbnail extends StatelessWidget {
 // PDF VIEWER PAGE – In-app PDF viewer for fichas técnicas
 // =============================================================================
 class _PdfViewerPage extends StatelessWidget {
-
   const _PdfViewerPage({required this.filePath, required this.title});
   final String filePath;
   final String title;
@@ -648,9 +772,11 @@ class _PdfViewerPage extends StatelessWidget {
 // HELPER WIDGETS
 // =============================================================================
 class _InfoChip extends StatelessWidget {
-
-  const _InfoChip(
-      {required this.icon, required this.label, this.color = Colors.white54,});
+  const _InfoChip({
+    required this.icon,
+    required this.label,
+    this.color = Colors.white54,
+  });
   final IconData icon;
   final String label;
   final Color color;
@@ -669,12 +795,12 @@ class _InfoChip extends StatelessWidget {
 }
 
 class _ValueTag extends StatelessWidget {
-
-  const _ValueTag(
-      {required this.label,
-      required this.value,
-      required this.color,
-      this.bold = false,});
+  const _ValueTag({
+    required this.label,
+    required this.value,
+    required this.color,
+    this.bold = false,
+  });
   final String label;
   final String value;
   final Color color;

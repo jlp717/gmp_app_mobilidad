@@ -12,10 +12,14 @@ const logger = require('../middleware/logger');
 const { v4: uuidv4 } = require('uuid');
 const { db2QualifiedTable, db2InsertSql } = require('../utils/db2-identifiers');
 const { getDb2WriteSchema } = require('../utils/db2-schemas');
+const { buildCvcVendorScopeFilter } = require('../utils/common');
 const crypto = require('crypto');
 
 const APP_SCHEMA = getDb2WriteSchema();
 const COBROS_TABLE = db2QualifiedTable(APP_SCHEMA, 'COBROS');
+
+// CTR / contra-reembolso: cobro en manos del repartidor, no del comercial.
+const FORMAS_PAGO_REPARTIDOR = ['01', 'CO', 'CTR', 'EF'];
 
 // Req: invalidate cobros cache for a client after a mutation. Best-effort, no throw.
 // Las claves reales de cachedQuery viven bajo "gmp:query:query:<cacheKey>:vendor:..."
@@ -27,6 +31,7 @@ async function invalidateCobrosCache(codigoCliente) {
         if (!cli) return;
         await Promise.all([
             invalidateCachePattern(`query:query:cobros:pendientes:cvc:${cli}:*`),
+            invalidateCachePattern(`query:query:cobros:historico:${cli}:*`),
             invalidateCachePattern('query:query:cobros:pending-summary:*'),
         ]);
     } catch (err) {
@@ -80,6 +85,103 @@ function buildPendingSummaryPageDocsCte(rows) {
         .map((doc) => '(' + [doc.client, doc.serie, doc.numero, doc.docKey].map(db2StringLiteral).join(', ') + ')')
         .join(',\n          ');
     return 'WITH PAGE_DOCS (CLIENTE, SERIE, NUMERO, DOC_KEY) AS (VALUES\n          ' + values + '\n        )';
+}
+
+function applyPendingSummaryDocTotals(row, appAdjustments) {
+    const code = sanitizeCode(row.CLIENTE);
+    if (!code) return null;
+    const docKey = sanitizeCode(row.SERIE_DOCUMENTO) + '-' + row.NUMERO_DOCUMENTO;
+    const appPaid = appAdjustments.get(code + '|' + docKey) || 0;
+    const rawTotal = parseFloat(row.TOTAL_PENDIENTE) || 0;
+    const rawVencido = parseFloat(row.TOTAL_VENCIDO) || 0;
+    const total = Math.max(0, rawTotal - appPaid);
+    if (toCents(total) <= 0) return null;
+    const vencido = rawVencido > 0 ? Math.min(total, Math.max(0, rawVencido - appPaid)) : 0;
+    return { code, total, vencido };
+}
+
+function computePendingSummaryPortfolioTotals(rows, appAdjustments) {
+    const clients = new Set();
+    let grandTotal = 0;
+    let grandTotalVencido = 0;
+    for (const row of rows || []) {
+        const applied = applyPendingSummaryDocTotals(row, appAdjustments);
+        if (!applied) continue;
+        clients.add(applied.code);
+        grandTotal += applied.total;
+        grandTotalVencido += applied.vencido;
+    }
+    return { grandTotal, grandTotalVencido, clientCount: clients.size };
+}
+
+async function getAppSideCobrosByDocForVendorScope(vendorClause, vendorParams) {
+    const adjustments = new Map();
+    const addAdjustment = (clientCode, docKey, amount) => {
+        const code = sanitizeCode(clientCode);
+        const doc = sanitizeCode(docKey);
+        if (!code || !doc) return;
+        const key = code + '|' + doc;
+        adjustments.set(key, (adjustments.get(key) || 0) + (parseFloat(amount) || 0));
+    };
+
+    const runQuery = vendorParams.length > 0
+        ? (sql, params) => queryWithParams(sql, params)
+        : (sql) => query(sql, false);
+
+    try {
+        const comercialSql = [
+            'SELECT TRIM(C.CODIGO_CLIENTE) AS CLIENTE,',
+            '       TRIM(C.REFERENCIA) AS REF,',
+            '       COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP',
+            '  FROM ' + APP_SCHEMA + '.COBROS C',
+            ' WHERE EXISTS (',
+            '   SELECT 1',
+            '     FROM DSEDAC.CVC CVC',
+            '    WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGO_CLIENTE)',
+            '      AND CVC.IMPORTEPENDIENTE <> 0',
+            '      AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> \'S\')',
+            vendorClause,
+            ' )',
+            ' GROUP BY TRIM(C.CODIGO_CLIENTE), TRIM(C.REFERENCIA)',
+        ].join('\n');
+        const appRows = await runQuery(comercialSql, vendorParams);
+        for (const row of appRows || []) {
+            const reference = sanitizeCode(row.REF);
+            const match = reference.match(/([^:]+-\d+)$/);
+            addAdjustment(row.CLIENTE, match ? match[1] : reference, row.TOTAL_APP);
+        }
+    } catch (error) {
+        logger.warn('[COBROS] App-side COBROS portfolio subtract skipped: ' + error.message);
+    }
+
+    try {
+        const repartidorSql = [
+            'SELECT TRIM(R.CODIGOCLIENTEALBARAN) AS CLIENTE,',
+            '       TRIM(R.SERIEDOCUMENTO) AS SERIE,',
+            '       TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) AS NUMERO,',
+            '       COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_REP',
+            '  FROM ' + APP_SCHEMA + '.REPARTIDOR_COBROS R',
+            ' WHERE EXISTS (',
+            '   SELECT 1',
+            '     FROM DSEDAC.CVC CVC',
+            '    WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(R.CODIGOCLIENTEALBARAN)',
+            '      AND TRIM(CVC.SERIEDOCUMENTO) = TRIM(R.SERIEDOCUMENTO)',
+            '      AND TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))) = TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20)))',
+            '      AND CVC.IMPORTEPENDIENTE <> 0',
+            '      AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> \'S\')',
+            vendorClause,
+            ' )',
+            ' GROUP BY TRIM(R.CODIGOCLIENTEALBARAN), TRIM(R.SERIEDOCUMENTO), TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20)))',
+        ].join('\n');
+        const repRows = await runQuery(repartidorSql, vendorParams);
+        for (const row of repRows || []) {
+            addAdjustment(row.CLIENTE, sanitizeCode(row.SERIE) + '-' + row.NUMERO, row.TOTAL_REP);
+        }
+    } catch (error) {
+        logger.warn('[COBROS] App-side REPARTIDOR_COBROS portfolio subtract skipped: ' + error.message);
+    }
+
+    return adjustments;
 }
 
 function toCents(value) {
@@ -226,6 +328,51 @@ function authorizeCobrosClientScope(req, codigoCliente, action = 'consultar') {
 }
 
 // Req #15: Calcula estado VENCIDO/PENDIENTE/AL_DIA a partir de fecha vencimiento.
+function isFormaPagoRepartidorResponsibility(formaPago) {
+    const code = sanitizeCode(formaPago).toUpperCase();
+    if (!code) return false;
+    if (FORMAS_PAGO_REPARTIDOR.includes(code)) return true;
+    return code.includes('CTR') || code.includes('REEMB');
+}
+
+function isCobradoPorRepartidor({ repartidorPaid = 0, formaPago }) {
+    if ((parseFloat(repartidorPaid) || 0) > 0) return true;
+    return isFormaPagoRepartidorResponsibility(formaPago);
+}
+
+function toIsoTimestamp(value) {
+    if (value == null || value === '') return null;
+    if (value instanceof Date) return value.toISOString();
+    const parsed = Date.parse(String(value));
+    return Number.isFinite(parsed) ? new Date(parsed).toISOString() : String(value);
+}
+
+function mapHistoricoRow(row) {
+    const fechaIso = toIsoTimestamp(row.FECHA);
+    const importe = parseFloat(row.IMPORTE) || 0;
+    const formaPago = sanitizeCode(row.FORMA_PAGO) || null;
+    const referencia = sanitizeCode(row.REFERENCIA);
+    const observaciones = String(row.OBSERVACIONES || '').trim();
+    const id = row.ID;
+    const codigoCliente = sanitizeCode(row.CODIGO_CLIENTE);
+    return {
+        id,
+        codigoCliente,
+        importe,
+        formaPago,
+        referencia,
+        observaciones,
+        fecha: fechaIso,
+        ID: id,
+        CODIGO_CLIENTE: codigoCliente,
+        IMPORTE: importe,
+        FORMA_PAGO: formaPago,
+        REFERENCIA: referencia,
+        OBSERVACIONES: observaciones,
+        FECHA: fechaIso,
+    };
+}
+
 function computeEstadoVencimiento(fechaVencimientoIso, fechaDocumentoIso) {
     if (!fechaVencimientoIso) return 'PENDIENTE';
     const venc = new Date(fechaVencimientoIso);
@@ -319,6 +466,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         // todavia no propagados al ERP, indexados por "SERIE-NUMERO" del documento.
         // Esto evita que el usuario vea como "pendiente" lo que ya fue cobrado.
         const appCobrosByDoc = new Map(); // key="SERIE-NUMERO" -> totalCobradoApp
+        const appRepartidorByDoc = new Map(); // key="SERIE-NUMERO" -> total cobrado por repartidor
         try {
             const repRows = await queryWithParams(
                 `SELECT TRIM(SERIEDOCUMENTO) || '-' || TRIM(CAST(NUMERODOCUMENTO AS VARCHAR(20))) AS DOC_KEY,
@@ -331,7 +479,9 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
             for (const r of (repRows || [])) {
                 const k = String(r.DOC_KEY || '').trim();
                 if (!k) continue;
-                appCobrosByDoc.set(k, (appCobrosByDoc.get(k) || 0) + (parseFloat(r.TOTAL) || 0));
+                const total = parseFloat(r.TOTAL) || 0;
+                appRepartidorByDoc.set(k, (appRepartidorByDoc.get(k) || 0) + total);
+                appCobrosByDoc.set(k, (appCobrosByDoc.get(k) || 0) + total);
             }
         } catch (e) {
             logger.warn(`[COBROS] App-side REPARTIDOR_COBROS subtract fallo: ${e.message}`);
@@ -368,10 +518,14 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                 // H4: descuenta cobros app-side aun no propagados al ERP.
                 const docKey = `${serie}-${numero}`;
                 const appPaid = appCobrosByDoc.get(docKey) || 0;
+                const repartidorPaid = appRepartidorByDoc.get(docKey) || 0;
                 const erpPendiente = parseFloat(row.IMPORTE_PENDIENTE) || 0;
                 const erpCobrado = parseFloat(row.IMPORTE_COBRADO) || 0;
                 const importePendienteAjustado = Math.max(0, erpPendiente - appPaid);
                 const importeCobradoAjustado = erpCobrado + appPaid;
+                const formaPago = (row.FORMA_PAGO || '').trim() || null;
+                const cobradoPorRepartidor = isCobradoPorRepartidor({ repartidorPaid, formaPago });
+                const esCTR = isFormaPagoRepartidorResponsibility(formaPago);
                 return {
                     id: `cvc_${serie}_${numero}_${row.XDE || 1}`,
                     tipo: tipoDoc === 'CAC' ? 'albaran' : 'factura',
@@ -382,9 +536,12 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                     importePendiente: importePendienteAjustado,
                     importeCobrado: importeCobradoAjustado,
                     estado: importePendienteAjustado <= 0.01 ? 'COBRADO' : estado,
-                    formaPago: (row.FORMA_PAGO || '').trim() || null,
+                    formaPago,
                     descripcion: `${tipoDoc} ${docKey}`,
                     appPaymentApplied: appPaid > 0 ? appPaid : undefined,
+                    cobradoPorRepartidor,
+                    esCTR,
+                    responsabilidad: cobradoPorRepartidor ? 'REPARTIDOR' : 'COMERCIAL',
                 };
             }
             // Fallback PEDIDOS_CAB format
@@ -443,6 +600,45 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
     } catch (error) {
         logger.error('[COBROS] Error: ' + error.message);
         res.status(500).json({ success: false, error: 'Error interno del servidor' });
+    }
+});
+
+/**
+ * GET /api/cobros/:codigoCliente/historico
+ * Historial de cobros comerciales registrados en JAVIER.COBROS (app-side).
+ */
+router.get('/:codigoCliente/historico', async (req, res) => {
+    try {
+        const codigoCliente = sanitizeCode(req.params.codigoCliente);
+        const clientScope = authorizeCobrosClientScope(req, codigoCliente, 'consultar historico de cobros');
+        if (!clientScope.ok) {
+            return res.status(clientScope.status).json(clientScope.body);
+        }
+
+        const safeLimit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 20));
+        const safeOffset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+        const sql = `
+            SELECT
+                C.ID, C.CODIGO_CLIENTE, C.IMPORTE, C.FORMA_PAGO,
+                C.REFERENCIA, C.OBSERVACIONES, C.FECHA
+            FROM ${APP_SCHEMA}.COBROS C
+            WHERE TRIM(C.CODIGO_CLIENTE) = ?
+            ORDER BY C.FECHA DESC
+            OFFSET ${safeOffset} ROWS FETCH FIRST ${safeLimit} ROWS ONLY`;
+
+        const cacheKey = `cobros:historico:${codigoCliente}:${safeLimit}:${safeOffset}`;
+        const rows = await cachedQuery(
+            (sqlText) => queryWithParams(sqlText, [codigoCliente]),
+            sql,
+            cacheKey,
+            TTL.MEDIUM
+        );
+        const historico = (rows || []).map(mapHistoricoRow);
+
+        res.json({ success: true, historico });
+    } catch (error) {
+        logger.error('[COBROS] Error historico: ' + error.message);
+        res.status(500).json({ success: false, error: 'Error obteniendo historico de cobros' });
     }
 });
 
@@ -801,36 +997,13 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
             }
         }
 
-        // IBM i ODBC has a practical parameter limit. Above 50 vendor codes,
-        // embed only sanitized alphanumeric codes.
-        const MAX_PARAMS = 50;
+        // Align vendor scope with clients list: CLP + LACLAE (+ LACLAE cache when warm).
         let vendorClause = '';
         let vendorParams = [];
         if (selectedVendorCodes.length > 0) {
-            if (selectedVendorCodes.length <= MAX_PARAMS) {
-                vendorClause = `
-              AND EXISTS (
-                SELECT 1
-                  FROM DSEDAC.CLP CLP
-                 WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
-                   AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${selectedVendorCodes.map(() => '?').join(',')})
-              )`;
-                vendorParams = selectedVendorCodes;
-            } else {
-                const safeCodes = selectedVendorCodes
-                    .filter(v => /^[A-Za-z0-9]{1,10}$/.test(v))
-                    .map(v => `'${v.replace(/'/g, "''")}'`)
-                    .join(',');
-                if (safeCodes) {
-                    vendorClause = `
-              AND EXISTS (
-                SELECT 1
-                  FROM DSEDAC.CLP CLP
-                 WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
-                   AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${safeCodes})
-              )`;
-                }
-            }
+            const scoped = buildCvcVendorScopeFilter(selectedVendorCodes);
+            vendorClause = scoped.clause;
+            vendorParams = scoped.params;
         }
 
         // B7: unscoped global summaries include ~1.143 CVC rows with empty client
@@ -842,7 +1015,23 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
         // Keep the legacy route aligned with the DDD repository: CVC is the source
         // of real debt, CLP is only a semi-join scope filter, and app-side cobros
         // are subtracted before reporting client state.
-        const sql = `
+        const portfolioSql = `
+          SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
+                 TRIM(CVC.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
+                 CVC.NUMERODOCUMENTO AS NUMERO_DOCUMENTO,
+                 SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
+                 SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
+                     <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
+                     THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
+            FROM DSEDAC.CVC CVC
+            WHERE CVC.IMPORTEPENDIENTE <> 0
+              AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+              ${emptyClientFilter}
+              ${vendorClause}
+            GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CVC.SERIEDOCUMENTO), CVC.NUMERODOCUMENTO
+        `;
+
+        const pageSql = `
           SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
                  TRIM(CVC.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
                  CVC.NUMERODOCUMENTO AS NUMERO_DOCUMENTO,
@@ -864,10 +1053,17 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
         `;
 
         const cacheKeyVendedor = `cobros:pending-summary:${vendedorCodeParam}:${context.userRole}:${context.userId}:${selectedVendorCodes.join(',')}:limit:${pendingSummaryLimit}:page:${pendingSummaryPage}`;
-        const queryFn = vendorParams.length > 0
-            ? () => queryWithParams(sql, vendorParams)
-            : () => query(sql, false);
-        const rows = await cachedQuery(queryFn, sql, cacheKeyVendedor, TTL.SHORT);
+        const cacheKeyPortfolio = `cobros:pending-summary-portfolio:${vendedorCodeParam}:${context.userRole}:${context.userId}:${selectedVendorCodes.join(',')}`;
+        const pageQueryFn = vendorParams.length > 0
+            ? () => queryWithParams(pageSql, vendorParams)
+            : () => query(pageSql, false);
+        const portfolioQueryFn = vendorParams.length > 0
+            ? () => queryWithParams(portfolioSql, vendorParams)
+            : () => query(portfolioSql, false);
+        const [rows, portfolioRows] = await Promise.all([
+            cachedQuery(pageQueryFn, pageSql, cacheKeyVendedor, TTL.SHORT),
+            cachedQuery(portfolioQueryFn, portfolioSql, cacheKeyPortfolio, TTL.SHORT),
+        ]);
 
         const appAdjustments = new Map();
         const addAdjustment = (clientCode, docKey, amount) => {
@@ -922,19 +1118,13 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
             }
         }
 
+        const portfolioAdjustments = await getAppSideCobrosByDocForVendorScope(vendorClause, vendorParams);
+
         const summary = {};
-        let grandTotal = 0;
-        let grandTotalVencido = 0;
         (rows || []).forEach(r => {
-            const code = (r.CLIENTE || '').trim();
-            const docKey = `${sanitizeCode(r.SERIE_DOCUMENTO)}-${r.NUMERO_DOCUMENTO}`;
-            const appPaid = appAdjustments.get(`${code}|${docKey}`) || 0;
-            const rawTotal = parseFloat(r.TOTAL_PENDIENTE) || 0;
-            const rawVencido = parseFloat(r.TOTAL_VENCIDO) || 0;
-            const total = Math.max(0, rawTotal - appPaid);
-            if (toCents(total) <= 0) return;
-            const vencido = rawVencido > 0 ? Math.min(total, Math.max(0, rawVencido - appPaid)) : 0;
-            // FIX 2026-05-16: incluir nombres del ERP para que el frontend no muestre "Cliente XXX"
+            const applied = applyPendingSummaryDocTotals(r, appAdjustments);
+            if (!applied) return;
+            const code = applied.code;
             const nombreAlt = (r.NOMBRE_ALT || '').trim();
             const nombreCli = (r.NOMBRE_CLI || '').trim();
             if (!summary[code]) {
@@ -946,20 +1136,23 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
                     nombre: nombreAlt || nombreCli || null,
                 };
             }
-            summary[code].total += total;
-            summary[code].vencido += vencido;
+            summary[code].total += applied.total;
+            summary[code].vencido += applied.vencido;
             summary[code].count += 1;
             summary[code].estado = summary[code].vencido > 0 ? 'VENCIDO' : 'PENDIENTE';
-            grandTotal += total;
-            grandTotalVencido += vencido;
         });
+
+        const { grandTotal, grandTotalVencido, clientCount } = computePendingSummaryPortfolioTotals(
+            portfolioRows,
+            portfolioAdjustments,
+        );
 
         res.json({
             success: true,
             summary,
             grandTotal,
             grandTotalVencido,
-            clientCount: Object.keys(summary).length,
+            clientCount,
             source: 'CVC',
             pagination: {
                 limit: pendingSummaryLimit,

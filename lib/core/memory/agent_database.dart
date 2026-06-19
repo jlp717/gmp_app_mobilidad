@@ -17,7 +17,6 @@ import 'package:hive_flutter/hive_flutter.dart';
 ///
 /// Arquitectura inspirada en Claude-Flow v3 AgentDB
 class AgentDatabase {
-
   AgentDatabase._();
   static AgentDatabase? _instance;
 
@@ -342,8 +341,10 @@ class AgentDatabase {
   // ==================== BATCH OPERATIONS ====================
 
   /// Ejecuta múltiples operaciones en lote
-  Future<void> batchSet(Map<String, dynamic> entries,
-      {MemoryType type = MemoryType.general,}) async {
+  Future<void> batchSet(
+    Map<String, dynamic> entries, {
+    MemoryType type = MemoryType.general,
+  }) async {
     for (final entry in entries.entries) {
       await setPersistent(key: entry.key, value: entry.value, type: type);
     }
@@ -427,7 +428,6 @@ enum MemoryType {
 
 /// Entrada de memoria
 class MemoryEntry {
-
   MemoryEntry({
     required this.key,
     required this.value,
@@ -464,7 +464,6 @@ class MemoryEntry {
 
 /// Operación de sincronización
 class SyncOperation {
-
   SyncOperation({
     required this.id,
     required this.operationType,
@@ -514,7 +513,6 @@ class SyncOperation {
 
 /// Estadísticas de memoria
 class MemoryStats {
-
   MemoryStats({
     required this.persistentCount,
     required this.stateCount,

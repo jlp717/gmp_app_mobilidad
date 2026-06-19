@@ -7,16 +7,21 @@ import 'package:gmp_app_mobilidad/features/dashboard/presentation/widgets/matrix
 /// Represents a single level in the hierarchy (e.g., "Clientes de Javier").
 /// Displays a Chart and a Table side-by-side (or vertical on small screens).
 class HierarchySection extends StatelessWidget {
-
   const HierarchySection({
-    required this.title, required this.levelName, required this.data, required this.hierarchy, required this.periods, required this.onNodeTap, super.key,
+    required this.title,
+    required this.levelName,
+    required this.data,
+    required this.hierarchy,
+    required this.periods,
+    required this.onNodeTap,
+    super.key,
     this.selectedNode,
     this.color = AppTheme.neonBlue,
     this.chartType = ChartType.bar,
   });
   final String title;
-  final String levelName; 
-  final List<MatrixNode> data; 
+  final String levelName;
+  final List<MatrixNode> data;
   final List<String> hierarchy;
   final List<String> periods;
   final Function(MatrixNode) onNodeTap;
@@ -49,7 +54,7 @@ class HierarchySection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        
+
         // Content: Chart + Table
         LayoutBuilder(
           builder: (context, constraints) {
@@ -61,24 +66,26 @@ class HierarchySection extends StatelessWidget {
                   child: DashboardChartFactory(
                     type: chartType,
                     data: data,
-                    title: title, 
+                    title: title,
                     color: color,
                     onTap: (id, type) {
-                      final node = data.firstWhere((n) => n.id == id, orElse: () => data[0]);
+                      final node = data.firstWhere((n) => n.id == id,
+                          orElse: () => data[0]);
                       onNodeTap(node);
                     },
                   ),
                 ),
-                
+
                 // Table (Detailed List)
                 MatrixDataTable(
                   data: data,
                   periods: periods,
                   onRowTap: (id, type) {
-                     final node = data.firstWhere((n) => n.id == id, orElse: () => data[0]);
-                     onNodeTap(node);
+                    final node = data.firstWhere((n) => n.id == id,
+                        orElse: () => data[0]);
+                    onNodeTap(node);
                   },
-                  onNodeTap: onNodeTap, 
+                  onNodeTap: onNodeTap,
                   selectedId: selectedNode?.id,
                 ),
               ],

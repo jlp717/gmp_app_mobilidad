@@ -129,6 +129,8 @@ class CobroPendiente {
     this.importeCobrado = 0,
     this.docKey,
     this.descripcion = '',
+    this.appPaymentApplied = 0,
+    this.cobradoPorRepartidor = false,
   });
 
   factory CobroPendiente.fromJson(Map<String, dynamic> json) {
@@ -177,6 +179,10 @@ class CobroPendiente {
           : null,
       descripcion:
           (json['descripcion'] ?? json['concepto'] ?? '').toString().trim(),
+      appPaymentApplied: ((json['appPaymentApplied'] ?? 0) as num).toDouble(),
+      cobradoPorRepartidor: json['cobradoPorRepartidor'] == true ||
+          json['cobradoRepartidor'] == true ||
+          json['responsabilidad']?.toString().toUpperCase() == 'REPARTIDOR',
     );
   }
   final String id;
@@ -193,7 +199,17 @@ class CobroPendiente {
   final Map<String, dynamic>? docKey;
   final String descripcion;
 
+  /// Importe ya cobrado en app (comercial o repartidor) no reflejado aún en ERP.
+  final double appPaymentApplied;
+
+  /// True cuando el cobro pendiente es responsabilidad del repartidor, no del comercial.
+  final bool cobradoPorRepartidor;
+
   bool get isVencido => estado == EstadoCobro.vencido;
+
+  bool get isSettledByRepartidor =>
+      cobradoPorRepartidor ||
+      (appPaymentApplied > 0.0001 && estado == EstadoCobro.alDia);
   String get conceptoVisible =>
       descripcion.isNotEmpty ? descripcion : '${tipo.label} $referencia';
   int get diasMora {
@@ -215,6 +231,46 @@ class CobroPendiente {
         return TipoCobro.normal;
     }
   }
+}
+
+/// Registro histórico de cobro comercial (tabla JAVIER.COBROS / DB2).
+class CobroHistorico {
+  CobroHistorico({
+    required this.id,
+    required this.importe,
+    required this.fecha,
+    this.formaPago,
+    this.referencia = '',
+    this.observaciones = '',
+  });
+
+  factory CobroHistorico.fromJson(Map<String, dynamic> json) {
+    dynamic pick(String upper, String lower) => json[upper] ?? json[lower];
+
+    final rawFecha = pick('FECHA', 'fecha');
+    DateTime fecha;
+    if (rawFecha is DateTime) {
+      fecha = rawFecha;
+    } else {
+      fecha = DateTime.tryParse(rawFecha?.toString() ?? '') ?? DateTime.now();
+    }
+
+    return CobroHistorico(
+      id: pick('ID', 'id')?.toString() ?? '',
+      importe: ((pick('IMPORTE', 'importe') ?? 0) as num).toDouble(),
+      fecha: fecha,
+      formaPago: pick('FORMA_PAGO', 'formaPago')?.toString(),
+      referencia: pick('REFERENCIA', 'referencia')?.toString() ?? '',
+      observaciones: pick('OBSERVACIONES', 'observaciones')?.toString() ?? '',
+    );
+  }
+
+  final String id;
+  final double importe;
+  final DateTime fecha;
+  final String? formaPago;
+  final String referencia;
+  final String observaciones;
 }
 
 /// Item de un albarán para entrega

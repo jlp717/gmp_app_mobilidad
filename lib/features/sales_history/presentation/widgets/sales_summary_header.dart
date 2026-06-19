@@ -5,9 +5,9 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:intl/intl.dart';
 
 class SalesSummaryHeader extends StatelessWidget {
-
   const SalesSummaryHeader({
-    required this.summary, super.key, 
+    required this.summary,
+    super.key,
     this.showMargin = true,
     this.isJefeVentas = true, // Por defecto muestra vista de jefe
   });
@@ -21,43 +21,56 @@ class SalesSummaryHeader extends StatelessWidget {
     final curr = summary['current'] ?? {};
     final prev = summary['previous'] ?? {};
     final growth = summary['growth'] ?? {};
-    
+
     // Check if client is new from backend response
     final isClientNewFromBackend = summary['isNewClient'] == true;
-    
+
     final currSales = (curr['sales'] as num?)?.toDouble() ?? 0;
     final prevSales = (prev['sales'] as num?)?.toDouble() ?? 0;
     final saleGrowth = (growth['sales'] as num?)?.toDouble() ?? 0;
-    
+
     final currMargin = (curr['margin'] as num?)?.toDouble() ?? 0;
     final prevMargin = (prev['margin'] as num?)?.toDouble() ?? 0;
     final marginGrowth = (growth['margin'] as num?)?.toDouble() ?? 0;
-    
+
     final currUnits = (curr['units'] as num?)?.toDouble() ?? 0;
     final prevUnits = (prev['units'] as num?)?.toDouble() ?? 0;
     final unitGrowth = (growth['units'] as num?)?.toDouble() ?? 0;
-    
+
     // Number of products (SKUs) sold
     final currProducts = (curr['productCount'] as num?)?.toInt() ?? 0;
     final prevProducts = (prev['productCount'] as num?)?.toInt() ?? 0;
-    final productGrowth = (growth['productCount'] as num?)?.toDouble() ?? 
-        (prevProducts > 0 ? ((currProducts - prevProducts) / prevProducts) * 100 : (currProducts > 0 ? 100 : 0));
-    
+    final productGrowth = (growth['productCount'] as num?)?.toDouble() ??
+        (prevProducts > 0
+            ? ((currProducts - prevProducts) / prevProducts) * 100
+            : (currProducts > 0 ? 100 : 0));
+
     // Fallback: calculate isNewClient if not provided by backend
-    final isNewClient = isClientNewFromBackend || (prevSales < 0.01 && currSales > 0);
-    
+    final isNewClient =
+        isClientNewFromBackend || (prevSales < 0.01 && currSales > 0);
+
     return Column(
       children: [
-        _buildPremiumSummary(context,
-          currSales, prevSales, saleGrowth, 
-          currUnits, prevUnits, unitGrowth,
-          currMargin, prevMargin, marginGrowth,
-          currProducts, prevProducts, productGrowth,
+        _buildPremiumSummary(
+          context,
+          currSales,
+          prevSales,
+          saleGrowth,
+          currUnits,
+          prevUnits,
+          unitGrowth,
+          currMargin,
+          prevMargin,
+          marginGrowth,
+          currProducts,
+          prevProducts,
+          productGrowth,
           isNewClient,
         ),
-        
+
         // Breakdown Section (Only if > 1 year and NOT landscape compact)
-        if (!Responsive.isLandscapeCompact(context) && ((summary['breakdown'] as List?)?.isNotEmpty ?? false)) ...[
+        if (!Responsive.isLandscapeCompact(context) &&
+            ((summary['breakdown'] as List?)?.isNotEmpty ?? false)) ...[
           _buildBreakdownSection(context, summary['breakdown'] as List),
         ],
       ],
@@ -70,19 +83,22 @@ class SalesSummaryHeader extends StatelessWidget {
     // We need to check if 'summary' has 'monthlyBreakdown'.
     // Since we only pass 'breakdown' to this method in the build(), we should update build() or check global 'summary'.
     // BUT 'summary' is a class field. So we can access `summary`.
-    
+
     final monthlyData = summary['monthlyBreakdown'] as List?;
     final useMonthly = monthlyData != null && monthlyData.isNotEmpty;
-    
-    final dataToShow = useMonthly ? monthlyData : breakdownJson;
-    final title = useMonthly ? 'EVOLUCIÓN MENSUAL (Mes Actual vs Año Anterior)' : 'HISTÓRICO ANUAL';
 
-    final fmt = NumberFormat.currency(locale: 'es_ES', symbol: '€', decimalDigits: 0);
-    
+    final dataToShow = useMonthly ? monthlyData : breakdownJson;
+    final title = useMonthly
+        ? 'EVOLUCIÓN MENSUAL (Mes Actual vs Año Anterior)'
+        : 'HISTÓRICO ANUAL';
+
+    final fmt =
+        NumberFormat.currency(locale: 'es_ES', symbol: '€', decimalDigits: 0);
+
     return Padding(
       padding: EdgeInsets.symmetric(
-          horizontal: 16, 
-          vertical: 8 * Responsive.landscapeScale(context),
+        horizontal: 16,
+        vertical: 8 * Responsive.landscapeScale(context),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -98,9 +114,13 @@ class SalesSummaryHeader extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-               Text(
-                title, 
-                style: const TextStyle(color: Colors.white60, fontSize: 10, fontWeight: FontWeight.w600, letterSpacing: 1.5),
+              Text(
+                title,
+                style: const TextStyle(
+                    color: Colors.white60,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: 1.5),
               ),
             ],
           ),
@@ -110,33 +130,49 @@ class SalesSummaryHeader extends StatelessWidget {
             child: Row(
               children: dataToShow!.map((item) {
                 final i = item as Map<String, dynamic>;
-                
+
                 // Determine label (Month Name or Year)
                 String label;
                 if (useMonthly) {
-                   final monthIndex = (i['month'] as num?)?.toInt() ?? 1;
-                   // List of short month names
-                   const months = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
-                   label = (monthIndex >= 1 && monthIndex <= 12) ? months[monthIndex - 1] : '-';
+                  final monthIndex = (i['month'] as num?)?.toInt() ?? 1;
+                  // List of short month names
+                  const months = [
+                    'ENE',
+                    'FEB',
+                    'MAR',
+                    'ABR',
+                    'MAY',
+                    'JUN',
+                    'JUL',
+                    'AGO',
+                    'SEP',
+                    'OCT',
+                    'NOV',
+                    'DIC'
+                  ];
+                  label = (monthIndex >= 1 && monthIndex <= 12)
+                      ? months[monthIndex - 1]
+                      : '-';
                 } else {
-                   label = i['year']?.toString() ?? '-';
+                  label = i['year']?.toString() ?? '-';
                 }
 
                 // Values
                 // For Monthly: 'current' is this year, 'previous' is last year
                 // For Annual: 'sales' is the sales for that year
-                
+
                 double mainValue;
                 double? prevValue; // Only for monthly comparison
-                
+
                 if (useMonthly) {
                   mainValue = (i['current'] as num?)?.toDouble() ?? 0;
                   prevValue = (i['previous'] as num?)?.toDouble() ?? 0;
                 } else {
                   mainValue = (i['sales'] as num?)?.toDouble() ?? 0;
-                  prevValue = null; // Annual view just lists years, maybe no direct comparison in card
+                  prevValue =
+                      null; // Annual view just lists years, maybe no direct comparison in card
                 }
-                
+
                 final u = (i['units'] as num?)?.toDouble() ?? 0;
                 // For monthly, units might not be in the breakdown object properly if I defined it as just sales?
                 // backend sending: { month, current, previous }. NO units/margin yet for monthly.
@@ -144,48 +180,57 @@ class SalesSummaryHeader extends StatelessWidget {
                 // But the prompt emphasized COLORS for SALES.
                 // Text below says: '${_formatCompact(u)} Uds...'.
                 // If I don't have units for monthly, I'll hide it or show 0.
-                
+
                 // COLOR LOGIC (Strictly requested)
                 // Blue (#0000FF) if prevSales == 0 (and assumedly current > 0 or new) - User said "cliente no tuvo ventas... marca como nuevo"
                 // Green (#00FF00) if curr > prev
                 // Red (#FF0000) if curr <= prev (desmejora)
-                
+
                 Color cardColor;
                 var statusLabel = '';
-                
+
                 if (useMonthly && prevValue != null) {
-                   if (prevValue == 0) {
-                      // CASO 1: Nuevo (No hubo ventas mes anterior)
-                      cardColor = const Color(0xFF0000FF).withValues(alpha: 0.2); // Azul background tint
-                      statusLabel = 'NUEVO';
-                   } else if (mainValue > prevValue) {
-                      // CASO 2: Mejora
-                      cardColor = const Color(0xFF00FF00).withValues(alpha: 0.15); // Verde
-                   } else {
-                      // CASO 3: Desmejora
-                      cardColor = const Color(0xFFFF0000).withValues(alpha: 0.15); // Rojo
-                   }
+                  if (prevValue == 0) {
+                    // CASO 1: Nuevo (No hubo ventas mes anterior)
+                    cardColor = const Color(0xFF0000FF)
+                        .withValues(alpha: 0.2); // Azul background tint
+                    statusLabel = 'NUEVO';
+                  } else if (mainValue > prevValue) {
+                    // CASO 2: Mejora
+                    cardColor = const Color(0xFF00FF00)
+                        .withValues(alpha: 0.15); // Verde
+                  } else {
+                    // CASO 3: Desmejora
+                    cardColor =
+                        const Color(0xFFFF0000).withValues(alpha: 0.15); // Rojo
+                  }
                 } else {
-                   // Annual default
-                   cardColor = AppTheme.darkCard.withValues(alpha: 0.8);
+                  // Annual default
+                  cardColor = AppTheme.darkCard.withValues(alpha: 0.8);
                 }
-                
+
                 // Border Color based on same logic to make it pop
                 var borderColor = Colors.white10;
-                 if (useMonthly && prevValue != null) {
-                   if (prevValue == 0) {
-                     borderColor = const Color(0xFF0000FF);
-                   } else if (mainValue > prevValue) borderColor = const Color(0xFF00FF00);
-                   else borderColor = const Color(0xFFFF0000);
+                if (useMonthly && prevValue != null) {
+                  if (prevValue == 0) {
+                    borderColor = const Color(0xFF0000FF);
+                  } else if (mainValue > prevValue)
+                    borderColor = const Color(0xFF00FF00);
+                  else
+                    borderColor = const Color(0xFFFF0000);
                 }
 
                 return Container(
                   margin: const EdgeInsets.only(right: 10),
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
                     color: cardColor, // Use dynamic bg
                     gradient: LinearGradient(
-                      colors: [AppTheme.surfaceColor.withValues(alpha: 0.5), cardColor],
+                      colors: [
+                        AppTheme.surfaceColor.withValues(alpha: 0.5),
+                        cardColor
+                      ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -198,28 +243,47 @@ class SalesSummaryHeader extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white)),
+                          Text(label,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                  color: Colors.white)),
                           if (statusLabel.isNotEmpty) ...[
                             const SizedBox(width: 6),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                              decoration: BoxDecoration(color: Colors.blue, borderRadius: BorderRadius.circular(4)),
-                              child: Text(statusLabel, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.white)),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 4, vertical: 2),
+                              decoration: BoxDecoration(
+                                  color: Colors.blue,
+                                  borderRadius: BorderRadius.circular(4)),
+                              child: Text(statusLabel,
+                                  style: const TextStyle(
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white)),
                             ),
                           ],
                         ],
                       ),
                       const SizedBox(height: 4),
-                      Text(fmt.format(mainValue), style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                      Text(fmt.format(mainValue),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold)),
                       if (useMonthly && prevValue != null)
-                         Text(
-                           'vs ${fmt.format(prevValue)}', 
-                           style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 10),
-                         ),
+                        Text(
+                          'vs ${fmt.format(prevValue)}',
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              fontSize: 10),
+                        ),
                       // Only show aux data if annual
                       if (!useMonthly) ...[
                         const SizedBox(height: 2),
-                        Text('${_formatCompact(u)} Uds', style: const TextStyle(color: Colors.white38, fontSize: 10)),
+                        Text('${_formatCompact(u)} Uds',
+                            style: const TextStyle(
+                                color: Colors.white38, fontSize: 10)),
                       ],
                     ],
                   ),
@@ -232,17 +296,26 @@ class SalesSummaryHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildPremiumSummary(BuildContext context,
-    double sales, double prevSales, double salesGrowth, 
-    double units, double prevUnits, double unitsGrowth,
-    double margin, double prevMargin, double marginGrowth,
-    int productCount, int prevProductCount, double productGrowth,
+  Widget _buildPremiumSummary(
+    BuildContext context,
+    double sales,
+    double prevSales,
+    double salesGrowth,
+    double units,
+    double prevUnits,
+    double unitsGrowth,
+    double margin,
+    double prevMargin,
+    double marginGrowth,
+    int productCount,
+    int prevProductCount,
+    double productGrowth,
     bool isNewClient,
   ) {
     return Container(
       margin: EdgeInsets.symmetric(
-          horizontal: 12, 
-          vertical: 8 * Responsive.landscapeScale(context),
+        horizontal: 12,
+        vertical: 8 * Responsive.landscapeScale(context),
       ),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
@@ -256,14 +329,18 @@ class SalesSummaryHeader extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 12, offset: const Offset(0, 6)),
+          BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 6)),
         ],
       ),
       child: Column(
         children: [
           // Header con VENTAS principal
-          _buildMainSalesSection(context, sales, prevSales, salesGrowth, isNewClient),
-          
+          _buildMainSalesSection(
+              context, sales, prevSales, salesGrowth, isNewClient),
+
           // Separator y UDS muestran si no está en compacto
           if (!Responsive.isLandscapeCompact(context)) ...[
             // Separator
@@ -272,22 +349,27 @@ class SalesSummaryHeader extends StatelessWidget {
               height: 1,
               decoration: const BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Colors.transparent, Colors.white24, Colors.transparent],
+                  colors: [
+                    Colors.transparent,
+                    Colors.white24,
+                    Colors.transparent
+                  ],
                 ),
               ),
             ),
-            
+
             // Secondary metrics row - MÁS COMPACTO
             Padding(
               padding: EdgeInsets.symmetric(
-                  horizontal: 12, 
-                  vertical: 10 * Responsive.landscapeScale(context),
+                horizontal: 12,
+                vertical: 10 * Responsive.landscapeScale(context),
               ),
               child: Row(
                 children: [
                   // UDS / CAJAS / KG
                   Expanded(
-                    child: _buildCompactMetricCard(context,
+                    child: _buildCompactMetricCard(
+                      context,
                       icon: Icons.inventory_2_outlined,
                       iconColor: AppTheme.neonBlue,
                       label: 'UDS',
@@ -299,10 +381,11 @@ class SalesSummaryHeader extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  
+
                   // PRODUCTOS
                   Expanded(
-                    child: _buildCompactMetricCard(context,
+                    child: _buildCompactMetricCard(
+                      context,
                       icon: Icons.category_outlined,
                       iconColor: AppTheme.warning,
                       label: 'PRODS',
@@ -314,12 +397,14 @@ class SalesSummaryHeader extends StatelessWidget {
                       isClientNew: isNewClient,
                     ),
                   ),
-                  
+
                   // MARGEN (solo jefe de ventas)
                   if (showMargin) ...[
                     const SizedBox(width: 8),
                     Expanded(
-                      child: _buildCompactMarginCard(context, margin, prevMargin, marginGrowth, isClientNew: isNewClient),
+                      child: _buildCompactMarginCard(
+                          context, margin, prevMargin, marginGrowth,
+                          isClientNew: isNewClient),
                     ),
                   ],
                 ],
@@ -331,13 +416,14 @@ class SalesSummaryHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildMainSalesSection(BuildContext context, double sales, double prevSales, double salesGrowth, bool isNewClient) {
+  Widget _buildMainSalesSection(BuildContext context, double sales,
+      double prevSales, double salesGrowth, bool isNewClient) {
     final isPositive = salesGrowth >= 0;
-    
+
     return Padding(
       padding: EdgeInsets.symmetric(
-          horizontal: 16, 
-          vertical: 12 * Responsive.landscapeScale(context),
+        horizontal: 16,
+        vertical: 12 * Responsive.landscapeScale(context),
       ),
       child: Row(
         children: [
@@ -359,15 +445,19 @@ class SalesSummaryHeader extends StatelessWidget {
                 Text(
                   _formatCurrency(sales),
                   style: const TextStyle(
-                    color: Colors.white, 
-                    fontSize: 22, 
+                    color: Colors.white,
+                    fontSize: 22,
                     fontWeight: FontWeight.bold,
                   ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'VENTAS', 
-                  style: TextStyle(color: AppTheme.neonGreen.withValues(alpha: 0.7), fontWeight: FontWeight.w500, fontSize: 9, letterSpacing: 1),
+                  'VENTAS',
+                  style: TextStyle(
+                      color: AppTheme.neonGreen.withValues(alpha: 0.7),
+                      fontWeight: FontWeight.w500,
+                      fontSize: 9,
+                      letterSpacing: 1),
                 ),
               ],
             ),
@@ -382,10 +472,12 @@ class SalesSummaryHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildPreviousYearComparison(double prevSales, double growth, bool isPositive) {
+  Widget _buildPreviousYearComparison(
+      double prevSales, double growth, bool isPositive) {
     if (isJefeVentas) {
       // Jefe de ventas: muestra "-96% vs 1.655,82 €"
-      final growthText = '${isPositive ? '+' : ''}${growth.toStringAsFixed(1)}%';
+      final growthText =
+          '${isPositive ? '+' : ''}${growth.toStringAsFixed(1)}%';
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
@@ -410,7 +502,10 @@ class SalesSummaryHeader extends StatelessWidget {
             ),
             Text(
               _formatCurrencyDecimals(prevSales),
-              style: const TextStyle(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.w500),
+              style: const TextStyle(
+                  color: Colors.white60,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500),
             ),
           ],
         ),
@@ -427,7 +522,10 @@ class SalesSummaryHeader extends StatelessWidget {
           const SizedBox(height: 2),
           Text(
             _formatCurrencyDecimals(prevSales),
-            style: const TextStyle(color: Colors.white60, fontSize: 16, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+                color: Colors.white60,
+                fontSize: 16,
+                fontWeight: FontWeight.w600),
           ),
         ],
       );
@@ -445,8 +543,9 @@ class SalesSummaryHeader extends StatelessWidget {
     bool isInteger = false,
   }) {
     final isPositive = growth >= 0;
-    final prevText = isInteger ? prevValue.toInt().toString() : _formatCompact(prevValue);
-    
+    final prevText =
+        isInteger ? prevValue.toInt().toString() : _formatCompact(prevValue);
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -464,11 +563,11 @@ class SalesSummaryHeader extends StatelessWidget {
               const SizedBox(width: 6),
               Expanded(
                 child: Text(
-                  label, 
+                  label,
                   style: TextStyle(
-                    color: iconColor.withValues(alpha: 0.9), 
-                    fontWeight: FontWeight.w600, 
-                    fontSize: 9, 
+                    color: iconColor.withValues(alpha: 0.9),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 9,
                     letterSpacing: 0.5,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -477,14 +576,15 @@ class SalesSummaryHeader extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          
+
           // Value
           Text(
             value,
-            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+                color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 6),
-          
+
           // Comparison
           if (isNew)
             _buildMiniStatusBadge('NUEVO', AppColors.neonBlue)
@@ -496,7 +596,8 @@ class SalesSummaryHeader extends StatelessWidget {
   }
 
   // === VERSIONES COMPACTAS ===
-  Widget _buildCompactMetricCard(BuildContext context, {
+  Widget _buildCompactMetricCard(
+    BuildContext context, {
     required IconData icon,
     required Color iconColor,
     required String label,
@@ -508,14 +609,18 @@ class SalesSummaryHeader extends StatelessWidget {
     bool isClientNew = false,
   }) {
     final isPositive = growth >= 0;
-    final prevText = isInteger ? prevValue.toInt().toString() : _formatCompact(prevValue);
-    
+    final prevText =
+        isInteger ? prevValue.toInt().toString() : _formatCompact(prevValue);
+
     // Si el cliente es nuevo, mostrar NUEVO en azul para todas las métricas
     final showNuevo = isClientNew || isNew;
-    
+
     return Container(
       padding: EdgeInsets.all(8 * Responsive.landscapeScale(context)),
-      constraints: BoxConstraints(minHeight: 70 * Responsive.landscapeScale(context)), // Altura mínima uniforme y responsive
+      constraints: BoxConstraints(
+          minHeight: 70 *
+              Responsive.landscapeScale(
+                  context)), // Altura mínima uniforme y responsive
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(10),
@@ -525,7 +630,11 @@ class SalesSummaryHeader extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           // Value principal
-          Text(value, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+          Text(value,
+              style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold)),
           const SizedBox(height: 2),
           // Label
           Row(
@@ -534,7 +643,11 @@ class SalesSummaryHeader extends StatelessWidget {
             children: [
               Icon(icon, color: iconColor, size: 10),
               const SizedBox(width: 3),
-              Text(label, style: TextStyle(color: iconColor.withValues(alpha: 0.8), fontWeight: FontWeight.w500, fontSize: 8)),
+              Text(label,
+                  style: TextStyle(
+                      color: iconColor.withValues(alpha: 0.8),
+                      fontWeight: FontWeight.w500,
+                      fontSize: 8)),
             ],
           ),
           const SizedBox(height: 4),
@@ -550,13 +663,20 @@ class SalesSummaryHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildCompactMarginCard(BuildContext context, double margin, double prevMargin, double marginGrowth, {bool isClientNew = false}) {
+  Widget _buildCompactMarginCard(BuildContext context, double margin,
+      double prevMargin, double marginGrowth,
+      {bool isClientNew = false}) {
     final isPositive = marginGrowth >= 0;
-    final marginColor = margin >= 15 ? AppTheme.success : (margin >= 10 ? AppTheme.warning : AppTheme.error);
-    
+    final marginColor = margin >= 15
+        ? AppTheme.success
+        : (margin >= 10 ? AppTheme.warning : AppTheme.error);
+
     return Container(
       padding: EdgeInsets.all(8 * Responsive.landscapeScale(context)),
-      constraints: BoxConstraints(minHeight: 70 * Responsive.landscapeScale(context)), // Altura mínima uniforme y responsive
+      constraints: BoxConstraints(
+          minHeight: 70 *
+              Responsive.landscapeScale(
+                  context)), // Altura mínima uniforme y responsive
       decoration: BoxDecoration(
         color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(10),
@@ -566,16 +686,25 @@ class SalesSummaryHeader extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           // Value
-          Text('${margin.toStringAsFixed(1)}%', style: TextStyle(color: marginColor, fontSize: 16, fontWeight: FontWeight.bold)),
+          Text('${margin.toStringAsFixed(1)}%',
+              style: TextStyle(
+                  color: marginColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold)),
           const SizedBox(height: 2),
           // Label
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.show_chart, color: AppTheme.neonPurple, size: 10),
+              const Icon(Icons.show_chart,
+                  color: AppTheme.neonPurple, size: 10),
               const SizedBox(width: 3),
-              Text('MARGEN', style: TextStyle(color: AppTheme.neonPurple.withValues(alpha: 0.8), fontWeight: FontWeight.w500, fontSize: 8)),
+              Text('MARGEN',
+                  style: TextStyle(
+                      color: AppTheme.neonPurple.withValues(alpha: 0.8),
+                      fontWeight: FontWeight.w500,
+                      fontSize: 8)),
             ],
           ),
           const SizedBox(height: 4),
@@ -583,7 +712,8 @@ class SalesSummaryHeader extends StatelessWidget {
           if (isClientNew)
             _buildMiniStatusBadge('NUEVO', AppColors.neonBlue)
           else if (prevMargin > 0)
-            _buildCompactComparison('${prevMargin.toStringAsFixed(1)}%', marginGrowth, isPositive)
+            _buildCompactComparison(
+                '${prevMargin.toStringAsFixed(1)}%', marginGrowth, isPositive)
           else if (margin > 0)
             _buildMiniStatusBadge('NUEVO', AppColors.neonBlue)
           else
@@ -593,23 +723,32 @@ class SalesSummaryHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildCompactComparison(String prevText, double growth, bool isPositive) {
+  Widget _buildCompactComparison(
+      String prevText, double growth, bool isPositive) {
     if (isJefeVentas) {
-      final growthText = '${isPositive ? '+' : ''}${growth.toStringAsFixed(0)}%';
+      final growthText =
+          '${isPositive ? '+' : ''}${growth.toStringAsFixed(0)}%';
       return Text(
         '$growthText vs $prevText',
-        style: TextStyle(color: isPositive ? AppColors.success : AppColors.error, fontSize: 9, fontWeight: FontWeight.w500),
+        style: TextStyle(
+            color: isPositive ? AppColors.success : AppColors.error,
+            fontSize: 9,
+            fontWeight: FontWeight.w500),
         overflow: TextOverflow.ellipsis,
       );
     } else {
-      return Text('Ant: $prevText', style: const TextStyle(color: Colors.white38, fontSize: 9));
+      return Text('Ant: $prevText',
+          style: const TextStyle(color: Colors.white38, fontSize: 9));
     }
   }
 
-  Widget _buildMarginCard(double margin, double prevMargin, double marginGrowth) {
+  Widget _buildMarginCard(
+      double margin, double prevMargin, double marginGrowth) {
     final isPositive = marginGrowth >= 0;
-    final marginColor = margin >= 15 ? AppTheme.success : (margin >= 10 ? AppTheme.warning : AppTheme.error);
-    
+    final marginColor = margin >= 15
+        ? AppTheme.success
+        : (margin >= 10 ? AppTheme.warning : AppTheme.error);
+
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -623,31 +762,35 @@ class SalesSummaryHeader extends StatelessWidget {
           // Header
           Row(
             children: [
-              const Icon(Icons.show_chart, color: AppTheme.neonPurple, size: 14),
+              const Icon(Icons.show_chart,
+                  color: AppTheme.neonPurple, size: 14),
               const SizedBox(width: 6),
               Text(
-                'MARGEN', 
+                'MARGEN',
                 style: TextStyle(
-                  color: AppTheme.neonPurple.withValues(alpha: 0.9), 
-                  fontWeight: FontWeight.w600, 
-                  fontSize: 9, 
+                  color: AppTheme.neonPurple.withValues(alpha: 0.9),
+                  fontWeight: FontWeight.w600,
+                  fontSize: 9,
                   letterSpacing: 0.5,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 10),
-          
+
           // Value
           Text(
             '${margin.toStringAsFixed(1)}%',
-            style: TextStyle(color: marginColor, fontSize: 20, fontWeight: FontWeight.bold),
+            style: TextStyle(
+                color: marginColor, fontSize: 20, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 6),
-          
+
           // Comparison
           if (prevMargin > 0)
-            _buildMetricComparison('${prevMargin.toStringAsFixed(1)}%', marginGrowth, isPositive, isMargin: true)
+            _buildMetricComparison(
+                '${prevMargin.toStringAsFixed(1)}%', marginGrowth, isPositive,
+                isMargin: true)
           else if (margin > 0)
             _buildMiniStatusBadge('NUEVO', AppColors.neonBlue),
         ],
@@ -655,23 +798,26 @@ class SalesSummaryHeader extends StatelessWidget {
     );
   }
 
-  Widget _buildMetricComparison(String prevText, double growth, bool isPositive, {bool isMargin = false}) {
+  Widget _buildMetricComparison(String prevText, double growth, bool isPositive,
+      {bool isMargin = false}) {
     if (isJefeVentas) {
       // Jefe: muestra % crecimiento vs valor anterior
-      final growthText = '${isPositive ? '+' : ''}${growth.toStringAsFixed(1)}%';
+      final growthText =
+          '${isPositive ? '+' : ''}${growth.toStringAsFixed(1)}%';
       return Row(
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
             decoration: BoxDecoration(
-              color: (isPositive ? AppColors.success : AppColors.error).withValues(alpha: 0.15),
+              color: (isPositive ? AppColors.success : AppColors.error)
+                  .withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
               growthText,
               style: TextStyle(
-                color: isPositive ? AppColors.success : AppColors.error, 
-                fontWeight: FontWeight.bold, 
+                color: isPositive ? AppColors.success : AppColors.error,
+                fontWeight: FontWeight.bold,
                 fontSize: 10,
               ),
             ),
@@ -704,8 +850,12 @@ class SalesSummaryHeader extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(
-        text, 
-        style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 10, letterSpacing: 0.5),
+        text,
+        style: TextStyle(
+            color: color,
+            fontWeight: FontWeight.bold,
+            fontSize: 10,
+            letterSpacing: 0.5),
       ),
     );
   }
@@ -717,7 +867,9 @@ class SalesSummaryHeader extends StatelessWidget {
         color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(text, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 9)),
+      child: Text(text,
+          style: TextStyle(
+              color: color, fontWeight: FontWeight.bold, fontSize: 9)),
     );
   }
 
@@ -734,14 +886,15 @@ class SalesSummaryHeader extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            isPositive ? Icons.trending_up : Icons.trending_down, 
-            color: color, 
+            isPositive ? Icons.trending_up : Icons.trending_down,
+            color: color,
             size: 14,
           ),
           const SizedBox(width: 4),
           Text(
             '${isPositive ? '+' : ''}${growth.toStringAsFixed(1)}%',
-            style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 11),
+            style: TextStyle(
+                color: color, fontWeight: FontWeight.bold, fontSize: 11),
           ),
         ],
       ),
@@ -749,11 +902,13 @@ class SalesSummaryHeader extends StatelessWidget {
   }
 
   String _formatCurrency(double value) {
-    return NumberFormat.currency(locale: 'es_ES', symbol: '€', decimalDigits: 0).format(value);
+    return NumberFormat.currency(locale: 'es_ES', symbol: '€', decimalDigits: 0)
+        .format(value);
   }
 
   String _formatCurrencyDecimals(double value) {
-    return NumberFormat.currency(locale: 'es_ES', symbol: '€', decimalDigits: 2).format(value);
+    return NumberFormat.currency(locale: 'es_ES', symbol: '€', decimalDigits: 2)
+        .format(value);
   }
 
   String _formatCompact(double value) {
@@ -765,7 +920,8 @@ class SalesSummaryHeader extends StatelessWidget {
     var formatted = '';
     var count = 0;
     for (var i = intPart.length - 1; i >= 0; i--) {
-      if (count > 0 && count % 3 == 0 && intPart[i] != '-') formatted = '.$formatted';
+      if (count > 0 && count % 3 == 0 && intPart[i] != '-')
+        formatted = '.$formatted';
       formatted = intPart[i] + formatted;
       count++;
     }

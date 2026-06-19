@@ -8,14 +8,13 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 /// Estado de entrega de un item individual
 enum ItemDeliveryStatus {
-  pending,    // Pendiente (gris)
-  delivered,  // Entregado (verde)
+  pending, // Pendiente (gris)
+  delivered, // Entregado (verde)
   notDelivered, // No entregado (rojo)
 }
 
 /// Modelo de item de entrega
 class DeliveryItem {
-
   DeliveryItem({
     required this.id,
     required this.code,
@@ -46,9 +45,10 @@ typedef OnItemStatusChanged = void Function(
 
 /// Widget de lista de items de entrega
 class DeliveryItemList extends StatefulWidget {
-
   const DeliveryItemList({
-    required this.items, required this.onItemChanged, super.key,
+    required this.items,
+    required this.onItemChanged,
+    super.key,
     this.readOnly = false,
   });
   final List<DeliveryItem> items;
@@ -80,7 +80,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
 
   void _toggleItemStatus(DeliveryItem item) {
     if (widget.readOnly) return;
-    
+
     setState(() {
       // Ciclo: pending -> delivered -> notDelivered -> pending
       switch (item.status) {
@@ -104,7 +104,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
   Future<void> _showObservationsDialog(DeliveryItem item) async {
     final controller = _getObsController(item);
     controller.clear();
-    
+
     final result = await showDialog<String?>(
       context: context,
       barrierDismissible: false,
@@ -119,7 +119,8 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                 color: AppTheme.error.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.warning_amber, color: AppTheme.error, size: 20),
+              child: const Icon(Icons.warning_amber,
+                  color: AppTheme.error, size: 20),
             ),
             const SizedBox(width: 12),
             const Expanded(
@@ -136,7 +137,8 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
           children: [
             Text(
               '${item.code} - ${item.description}',
-              style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+              style:
+                  const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -145,7 +147,8 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
               maxLines: 3,
               decoration: InputDecoration(
                 hintText: 'Ingrese el motivo de la no entrega...',
-                hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5)),
+                hintStyle: TextStyle(
+                    color: AppTheme.textSecondary.withValues(alpha: 0.5)),
                 filled: true,
                 fillColor: AppTheme.darkBase,
                 border: OutlineInputBorder(
@@ -162,7 +165,8 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
             const SizedBox(height: 8),
             Text(
               '* Las observaciones son obligatorias',
-              style: TextStyle(color: AppTheme.error.withValues(alpha: 0.7), fontSize: 11),
+              style: TextStyle(
+                  color: AppTheme.error.withValues(alpha: 0.7), fontSize: 11),
             ),
           ],
         ),
@@ -174,7 +178,8 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
               item.quantityDelivered = item.quantityOrdered;
               Navigator.of(ctx).pop();
             },
-            child: const Text('Cancelar', style: TextStyle(color: AppTheme.textSecondary)),
+            child: const Text('Cancelar',
+                style: TextStyle(color: AppTheme.textSecondary)),
           ),
           ElevatedButton(
             onPressed: () {
@@ -220,7 +225,8 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.inventory_2_outlined, size: 48, color: AppTheme.textSecondary.withValues(alpha: 0.5)),
+            Icon(Icons.inventory_2_outlined,
+                size: 48, color: AppTheme.textSecondary.withValues(alpha: 0.5)),
             const SizedBox(height: 12),
             const Text(
               'Sin items para entregar',
@@ -292,7 +298,7 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                   child: Icon(statusIcon, color: statusColor, size: 20),
                 ),
                 const SizedBox(width: 12),
-                
+
                 // Item info
                 Expanded(
                   child: Column(
@@ -301,7 +307,8 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
                               color: AppTheme.neonBlue.withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(4),
@@ -340,11 +347,12 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                     ],
                   ),
                 ),
-                
+
                 // Quantity badge
                 Container(
                   margin: const EdgeInsets.only(left: 12),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: AppTheme.darkBase,
                     borderRadius: BorderRadius.circular(8),
@@ -361,16 +369,18 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                       ),
                       const Text(
                         'uds',
-                        style: TextStyle(fontSize: 9, color: AppTheme.textSecondary),
+                        style: TextStyle(
+                            fontSize: 9, color: AppTheme.textSecondary),
                       ),
                     ],
                   ),
                 ),
               ],
             ),
-            
+
             // Observations (if not delivered)
-            if (item.status == ItemDeliveryStatus.notDelivered && item.observations != null) ...[
+            if (item.status == ItemDeliveryStatus.notDelivered &&
+                item.observations != null) ...[
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,
@@ -378,12 +388,14 @@ class _DeliveryItemListState extends State<DeliveryItemList> {
                 decoration: BoxDecoration(
                   color: AppTheme.error.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.error.withValues(alpha: 0.2)),
+                  border:
+                      Border.all(color: AppTheme.error.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.note_alt, color: AppTheme.error.withValues(alpha: 0.7), size: 14),
+                    Icon(Icons.note_alt,
+                        color: AppTheme.error.withValues(alpha: 0.7), size: 14),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(

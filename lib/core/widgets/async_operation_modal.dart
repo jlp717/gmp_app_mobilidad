@@ -6,10 +6,10 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 /// ⏳ ASYNC OPERATION MODAL
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-/// 
+///
 /// Modal centrado y bloqueante para operaciones asíncronas.
 /// Estados: loading → success (auto-cierre) | error (reintentar/cerrar)
-/// 
+///
 /// Incluye:
 /// - Timeout de seguridad configurable (default 45s)
 /// - Botón cancelar visible tras 5s en estado loading
@@ -27,8 +27,9 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 enum _ModalState { loading, success, error }
 
 class AsyncOperationModalController {
-
-  AsyncOperationModalController(this._context, String initialText, {
+  AsyncOperationModalController(
+    this._context,
+    String initialText, {
     Duration timeout = const Duration(seconds: 45),
     Duration showCancelAfter = const Duration(seconds: 5),
   }) {
@@ -105,7 +106,6 @@ class AsyncOperationModalController {
 }
 
 class AsyncOperationModal extends StatelessWidget {
-
   const AsyncOperationModal({required this.controller, super.key});
   final AsyncOperationModalController controller;
 
@@ -152,7 +152,8 @@ class AsyncOperationModal extends StatelessWidget {
       key: ValueKey(state),
       width: Responsive.clampWidth(context, 320),
       // Responsive padding
-      padding: EdgeInsets.all(Responsive.padding(context, small: 20, large: 28)),
+      padding:
+          EdgeInsets.all(Responsive.padding(context, small: 20, large: 28)),
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
         borderRadius: BorderRadius.circular(20),
@@ -186,7 +187,8 @@ class AsyncOperationModal extends StatelessWidget {
                     onPressed: controller.close,
                     style: TextButton.styleFrom(
                       foregroundColor: AppTheme.textSecondary,
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 8),
                     ),
                     child: const Text('Cancelar'),
                   ),
@@ -235,7 +237,8 @@ class AsyncOperationModal extends StatelessWidget {
             color: AppTheme.success.withValues(alpha: 0.15),
             border: Border.all(color: AppTheme.success, width: 2),
           ),
-          child: const Icon(Icons.check_rounded, color: AppTheme.success, size: 32),
+          child: const Icon(Icons.check_rounded,
+              color: AppTheme.success, size: 32),
         );
       case _ModalState.error:
         return Container(
@@ -246,7 +249,8 @@ class AsyncOperationModal extends StatelessWidget {
             color: AppTheme.error.withValues(alpha: 0.15),
             border: Border.all(color: AppTheme.error, width: 2),
           ),
-          child: const Icon(Icons.error_outline_rounded, color: AppTheme.error, size: 32),
+          child: const Icon(Icons.error_outline_rounded,
+              color: AppTheme.error, size: 32),
         );
     }
   }

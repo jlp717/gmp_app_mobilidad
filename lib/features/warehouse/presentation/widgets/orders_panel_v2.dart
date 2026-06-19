@@ -214,7 +214,8 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
           ],
         ),
         child: TextField(
-          onChanged: (v) => setState(() => _searchQuery = v.toLowerCase().trim()),
+          onChanged: (v) =>
+              setState(() => _searchQuery = v.toLowerCase().trim()),
           style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary),
           decoration: InputDecoration(
             hintText: 'Buscar artículo, cliente, pedido...',
@@ -273,7 +274,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                   ? () => _confirmBulkAction(
                         context,
                         'Quitar todas las cajas del camion?',
-                        () => ref.read(loadPlannerProvider.notifier).excludeAllOrders(),
+                        () => ref
+                            .read(loadPlannerProvider.notifier)
+                            .excludeAllOrders(),
                       )
                   : null,
             ),
@@ -285,7 +288,8 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
               label: 'Añadir todo',
               color: AppTheme.neonGreen,
               onPressed: planner.overflowBoxes.isNotEmpty
-                  ? () => ref.read(loadPlannerProvider.notifier).includeAllOrders()
+                  ? () =>
+                      ref.read(loadPlannerProvider.notifier).includeAllOrders()
                   : null,
             ),
           ),
@@ -315,7 +319,8 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
               Navigator.pop(ctx);
               action();
             },
-            child: const Text('Confirmar', style: TextStyle(color: AppTheme.error)),
+            child: const Text('Confirmar',
+                style: TextStyle(color: AppTheme.error)),
           ),
         ],
       ),
@@ -407,7 +412,8 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
                   child: Text('N° Pedido'),
                 ),
               ],
-              onChanged: (v) => setState(() => _sortMode = v ?? BoxSortMode.none),
+              onChanged: (v) =>
+                  setState(() => _sortMode = v ?? BoxSortMode.none),
             ),
           ),
         ],
@@ -420,7 +426,8 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
   // ═══════════════════════════════════════════════════════════════════════════
 
   List<MapEntry<int, List<LoadBox>>> _sortOrders(
-      List<MapEntry<int, List<LoadBox>>> orders,) {
+    List<MapEntry<int, List<LoadBox>>> orders,
+  ) {
     switch (_sortMode) {
       case BoxSortMode.weightDesc:
         orders.sort((a, b) {
@@ -442,7 +449,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
         });
       case BoxSortMode.client:
         orders.sort(
-            (a, b) => a.value.first.clientCode.compareTo(b.value.first.clientCode),);
+          (a, b) =>
+              a.value.first.clientCode.compareTo(b.value.first.clientCode),
+        );
       case BoxSortMode.order:
         orders.sort((a, b) => a.key.compareTo(b.key));
       case BoxSortMode.none:
@@ -472,7 +481,9 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
         return _ClientRow(
           summary: s,
           truck: planner.truck,
-          onExclude: () => ref.read(loadPlannerProvider.notifier).excludeByClient(s.clientCode),
+          onExclude: () => ref
+              .read(loadPlannerProvider.notifier)
+              .excludeByClient(s.clientCode),
         );
       },
     );
@@ -520,8 +531,7 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
         final entry = orders[i];
         final isExcluded = planner.isOrderExcluded(entry.key);
         final firstBox = entry.value.first;
-        final totalWeight =
-            entry.value.fold<double>(0, (s, b) => s + b.weight);
+        final totalWeight = entry.value.fold<double>(0, (s, b) => s + b.weight);
 
         return _OrderRow(
           orderNumber: entry.key,
@@ -638,7 +648,6 @@ class _OrdersPanelV2State extends State<OrdersPanelV2>
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class _MiniActionButton extends StatelessWidget {
-
   const _MiniActionButton({
     required this.icon,
     required this.label,
@@ -689,7 +698,9 @@ class _MiniActionButton extends StatelessWidget {
             Icon(
               icon,
               size: 13,
-              color: isEnabled ? color : AppTheme.textTertiary.withValues(alpha: 0.3),
+              color: isEnabled
+                  ? color
+                  : AppTheme.textTertiary.withValues(alpha: 0.3),
             ),
             const SizedBox(width: 4),
             Text(
@@ -697,8 +708,9 @@ class _MiniActionButton extends StatelessWidget {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w600,
-                color:
-                    isEnabled ? color : AppTheme.textTertiary.withValues(alpha: 0.3),
+                color: isEnabled
+                    ? color
+                    : AppTheme.textTertiary.withValues(alpha: 0.3),
                 letterSpacing: 0.2,
               ),
             ),
@@ -710,7 +722,6 @@ class _MiniActionButton extends StatelessWidget {
 }
 
 class _FilterChip extends StatelessWidget {
-
   const _FilterChip({
     required this.label,
     required this.selected,
@@ -764,7 +775,6 @@ class _FilterChip extends StatelessWidget {
 }
 
 class _ClientRow extends StatelessWidget {
-
   const _ClientRow({required this.summary, this.truck, this.onExclude});
   final ClientSummary summary;
   final TruckDimensions? truck;
@@ -858,9 +868,7 @@ class _ClientRow extends StatelessWidget {
                       minHeight: 3,
                       backgroundColor: AppTheme.darkCard,
                       valueColor: AlwaysStoppedAnimation(
-                        weightPct > 30
-                            ? AppTheme.warning
-                            : AppTheme.neonBlue,
+                        weightPct > 30 ? AppTheme.warning : AppTheme.neonBlue,
                       ),
                     ),
                   ),
@@ -892,7 +900,6 @@ class _ClientRow extends StatelessWidget {
 }
 
 class _OrderRow extends StatelessWidget {
-
   const _OrderRow({
     required this.orderNumber,
     required this.label,

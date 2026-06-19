@@ -4,9 +4,9 @@ import 'package:gmp_app_mobilidad/features/entregas/providers/entregas_provider.
 
 /// Tarjeta de albarán en la lista de entregas
 class EntregaCard extends StatelessWidget {
-
   const EntregaCard({
-    required this.albaran, super.key,
+    required this.albaran,
+    super.key,
     this.onTap,
   });
   final AlbaranEntrega albaran;
@@ -34,7 +34,8 @@ class EntregaCard extends StatelessWidget {
                   // Badge CTR
                   if (albaran.esCTR)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       margin: const EdgeInsets.only(right: 8),
                       decoration: BoxDecoration(
                         color: Colors.amber.shade100,
@@ -44,7 +45,8 @@ class EntregaCard extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.euro, size: 12, color: Colors.amber.shade900),
+                          Icon(Icons.euro,
+                              size: 12, color: Colors.amber.shade900),
                           const SizedBox(width: 4),
                           Text(
                             'CTR',
@@ -57,7 +59,7 @@ class EntregaCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                  
+
                   // Número de albarán
                   Text(
                     'Alb. ${albaran.numeroAlbaran}${albaran.horaPrevista != null ? " (${albaran.horaPrevista})" : ""}',
@@ -70,12 +72,13 @@ class EntregaCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  
+
                   const Spacer(),
-                  
+
                   // Estado
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                     decoration: BoxDecoration(
                       color: albaran.estado.color.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(20),
@@ -83,8 +86,11 @@ class EntregaCard extends StatelessWidget {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(albaran.estado.icon, 
-                             size: 14, color: albaran.estado.color,),
+                        Icon(
+                          albaran.estado.icon,
+                          size: 14,
+                          color: albaran.estado.color,
+                        ),
                         const SizedBox(width: 4),
                         Text(
                           albaran.estado.label,
@@ -99,11 +105,11 @@ class EntregaCard extends StatelessWidget {
                   ),
                 ],
               ),
-              
+
               const SizedBox(height: 12),
               const Divider(height: 1),
               const SizedBox(height: 12),
-              
+
               // Info cliente
               Row(
                 children: [
@@ -122,7 +128,7 @@ class EntregaCard extends StatelessWidget {
                   ),
                 ],
               ),
-              
+
               if (albaran.direccion.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Row(
@@ -143,16 +149,17 @@ class EntregaCard extends StatelessWidget {
                   ],
                 ),
               ],
-              
+
               const SizedBox(height: 12),
-              
+
               // Footer con importe y ruta
               Row(
                 children: [
                   // Ruta
                   if (albaran.ruta.isNotEmpty)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.blue.shade50,
                         borderRadius: BorderRadius.circular(6),
@@ -160,7 +167,8 @@ class EntregaCard extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.route, size: 12, color: Colors.blue.shade700),
+                          Icon(Icons.route,
+                              size: 12, color: Colors.blue.shade700),
                           const SizedBox(width: 4),
                           Text(
                             albaran.ruta,
@@ -172,12 +180,13 @@ class EntregaCard extends StatelessWidget {
                         ],
                       ),
                     ),
-                  
+
                   // Vendedor
                   if (albaran.codigoVendedor.isNotEmpty) ...[
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.purple.shade50,
                         borderRadius: BorderRadius.circular(6),
@@ -185,7 +194,8 @@ class EntregaCard extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.person, size: 12, color: Colors.purple.shade700),
+                          Icon(Icons.person,
+                              size: 12, color: Colors.purple.shade700),
                           const SizedBox(width: 4),
                           Text(
                             'Com. ${albaran.codigoVendedor}',
@@ -198,21 +208,23 @@ class EntregaCard extends StatelessWidget {
                       ),
                     ),
                   ],
-                  
+
                   const Spacer(),
-                  
+
                   // Importe
                   Text(
                     '${albaran.importeTotal.toStringAsFixed(2)}€',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: albaran.esCTR ? Colors.amber.shade800 : Colors.black87,
+                      color: albaran.esCTR
+                          ? Colors.amber.shade800
+                          : Colors.black87,
                     ),
                   ),
                 ],
               ),
-              
+
               // Indicador de toque
               const SizedBox(height: 8),
               Row(
@@ -226,8 +238,11 @@ class EntregaCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  Icon(Icons.chevron_right, 
-                       size: 16, color: Colors.grey.shade500,),
+                  Icon(
+                    Icons.chevron_right,
+                    size: 16,
+                    color: Colors.grey.shade500,
+                  ),
                 ],
               ),
             ],

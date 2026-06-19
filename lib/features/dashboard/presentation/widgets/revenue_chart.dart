@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 
 class RevenueChart extends StatelessWidget {
-  
   const RevenueChart({required this.data, super.key});
   final List<double> data;
 
@@ -20,7 +19,11 @@ class RevenueChart extends StatelessWidget {
         minY: 0,
         lineBarsData: [
           LineChartBarData(
-            spots: data.asMap().entries.map((e) => FlSpot(e.key.toDouble(), e.value)).toList(),
+            spots: data
+                .asMap()
+                .entries
+                .map((e) => FlSpot(e.key.toDouble(), e.value))
+                .toList(),
             isCurved: true,
             color: AppColors.primary,
             barWidth: 3,

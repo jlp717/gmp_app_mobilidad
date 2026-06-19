@@ -7,9 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class DeleteLineDialog extends StatelessWidget {
-
   const DeleteLineDialog({
-    required this.productName, super.key,
+    required this.productName,
+    super.key,
   });
   final String productName;
 
@@ -34,8 +34,10 @@ class DeleteLineDialog extends StatelessWidget {
           Icon(Icons.delete_outline, color: AppTheme.error, size: 24),
           SizedBox(width: 8),
           Expanded(
-            child: Text('Borrar linea',
-                style: TextStyle(color: Colors.white, fontSize: 18),),
+            child: Text(
+              'Borrar linea',
+              style: TextStyle(color: Colors.white, fontSize: 18),
+            ),
           ),
         ],
       ),
@@ -46,13 +48,17 @@ class DeleteLineDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context, false),
-          child: const Text('Cancelar',
-              style: TextStyle(color: Colors.white54),),
+          child: const Text(
+            'Cancelar',
+            style: TextStyle(color: Colors.white54),
+          ),
         ),
         TextButton(
           onPressed: () => Navigator.pop(context, true),
-          child: const Text('Borrar',
-              style: TextStyle(color: AppTheme.error),),
+          child: const Text(
+            'Borrar',
+            style: TextStyle(color: AppTheme.error),
+          ),
         ),
       ],
     );

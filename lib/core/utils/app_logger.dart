@@ -59,8 +59,12 @@ class AppLogger {
     }
   }
 
-  static void error(String message,
-      {String? tag, Object? error, StackTrace? stackTrace,}) {
+  static void error(
+    String message, {
+    String? tag,
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
     if (_shouldLog(LogLevel.error)) {
       final prefix = tag != null ? '[$tag] ' : '';
       debugPrint('$prefix$message');
@@ -73,11 +77,16 @@ class AppLogger {
     }
   }
 
-  static void http(String method, String url,
-      {int? statusCode, int? durationMs,}) {
+  static void http(
+    String method,
+    String url, {
+    int? statusCode,
+    int? durationMs,
+  }) {
     if (_shouldLog(LogLevel.info)) {
       debugPrint(
-          '[HTTP] $method $url ${statusCode != null ? '-> $statusCode' : ''} ${durationMs != null ? '(${durationMs}ms)' : ''}',);
+        '[HTTP] $method $url ${statusCode != null ? '-> $statusCode' : ''} ${durationMs != null ? '(${durationMs}ms)' : ''}',
+      );
     }
   }
 }

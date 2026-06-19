@@ -256,6 +256,82 @@ function buildClientVendorParamFilter(vendorCodes, clientAlias = 'CLI') {
 }
 
 /**
+ * Expand vendor codes for SQL IN clauses (01 vs 1, leading zeros).
+ */
+function expandVendorCodesForSql(vendorCodes) {
+    const values = Array.isArray(vendorCodes) ? vendorCodes : String(vendorCodes || '').split(',');
+    const set = new Set();
+    for (const raw of values) {
+        const code = String(raw || '').trim();
+        if (!code || !/^[a-zA-Z0-9]{1,10}$/.test(code)) continue;
+        set.add(code);
+        const unpadded = code.replace(/^0+/, '') || '0';
+        set.add(unpadded);
+        if (unpadded.length <= 2) set.add(unpadded.padStart(2, '0'));
+    }
+    return Array.from(set);
+}
+
+/**
+ * Vendor scope for CVC debt queries — aligned with clients list (CLP + LACLAE).
+ * Fixes summary=0 when CLP.VENDEDORCOMERCIAL is empty but LACLAE has sales history.
+ */
+function buildCvcVendorScopeFilter(vendorCodes) {
+    const codes = expandVendorCodesForSql(vendorCodes);
+    if (codes.length === 0) {
+        return { clause: '', params: [] };
+    }
+
+    const { getClientCodesFromCache } = require('../services/laclae');
+    const cachedClientCodes = getClientCodesFromCache(codes.join(','));
+    if (cachedClientCodes && cachedClientCodes.length > 0) {
+        const MAX_PARAMS = 50;
+        if (cachedClientCodes.length <= MAX_PARAMS) {
+            return {
+                clause: `AND TRIM(CVC.CODIGOCLIENTEALBARAN) IN (${cachedClientCodes.map(() => '?').join(',')})`,
+                params: cachedClientCodes,
+            };
+        }
+        const safeCodes = cachedClientCodes
+            .filter((c) => /^[A-Za-z0-9]{1,20}$/.test(String(c || '').trim()))
+            .map((c) => `'${String(c).trim().replace(/'/g, "''")}'`)
+            .join(',');
+        if (safeCodes) {
+            return {
+                clause: `AND TRIM(CVC.CODIGOCLIENTEALBARAN) IN (${safeCodes})`,
+                params: [],
+            };
+        }
+    }
+
+    const laclaeVendorCol = getVendorColumnExpr('LAC');
+    const placeholders = codes.map(() => '?').join(',');
+    return {
+        clause: `AND (
+            EXISTS (
+                SELECT 1
+                  FROM DSEDAC.CLP CLP
+                 WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+                   AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${placeholders})
+            )
+            OR EXISTS (
+                SELECT 1
+                  FROM DSED.LACLAE LAC
+                 WHERE TRIM(LAC.LCCDCL) = TRIM(CVC.CODIGOCLIENTEALBARAN)
+                   AND LAC.LCAADC >= ${MIN_YEAR}
+                   AND LAC.TPDC = 'LAC'
+                   AND LAC.LCTPVT IN ('CC', 'VC')
+                   AND LAC.LCCLLN IN ('AB', 'VT')
+                   AND LAC.LCSRAB NOT IN ('N', 'Z')
+                   AND TRIM(${laclaeVendorCol}) IN (${placeholders})
+                FETCH FIRST 1 ROW ONLY
+            )
+        )`,
+        params: [...codes, ...codes],
+    };
+}
+
+/**
  * Query-side client discovery for vendor-scoped lists (no LACLAE full scan).
  * Uses CLP.VENDEDORCOMERCIAL; LACLAE only as EXISTS with FETCH FIRST 1.
  */
@@ -693,6 +769,8 @@ module.exports = {
     getVendorVisibilityScope,
     buildClientVendorParamFilter,
     buildClientListVendorSqlFilter,
+    buildCvcVendorScopeFilter,
+    expandVendorCodesForSql,
     buildLaclaeBoundedClientCodesSql,
     lookupClientAssignedVendorCodes,
     getBSales,

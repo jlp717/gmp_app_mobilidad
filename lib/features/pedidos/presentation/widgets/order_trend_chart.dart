@@ -8,7 +8,6 @@ import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class TrendDataPoint {
-
   const TrendDataPoint({
     required this.date,
     required this.orders,
@@ -20,9 +19,9 @@ class TrendDataPoint {
 }
 
 class OrderTrendChart extends StatelessWidget {
-
   const OrderTrendChart({
-    required this.data, super.key,
+    required this.data,
+    super.key,
     this.height = 80,
   });
   final List<TrendDataPoint> data;
@@ -53,7 +52,6 @@ class OrderTrendChart extends StatelessWidget {
 }
 
 class _TrendChartPainter extends CustomPainter {
-
   _TrendChartPainter(this.data);
   final List<TrendDataPoint> data;
 
@@ -149,7 +147,9 @@ class _TrendChartPainter extends CustomPainter {
       labelPaint.text = TextSpan(text: dateStr, style: labelStyle);
       labelPaint.layout();
       labelPaint.paint(
-          canvas, Offset(x - labelPaint.width / 2, size.height - 14),);
+        canvas,
+        Offset(x - labelPaint.width / 2, size.height - 14),
+      );
     }
   }
 

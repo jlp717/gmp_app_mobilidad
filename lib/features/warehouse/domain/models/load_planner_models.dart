@@ -19,7 +19,6 @@ enum SaveState { saved, saving, unsaved, error }
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class LoadBox {
-
   const LoadBox({
     required this.id,
     required this.label,
@@ -112,7 +111,6 @@ class LoadBox {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class TruckDimensions {
-
   const TruckDimensions({
     required this.code,
     required this.description,
@@ -152,7 +150,6 @@ class TruckDimensions {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class PlannerMetrics {
-
   const PlannerMetrics({
     required this.totalBoxes,
     required this.placedCount,
@@ -229,17 +226,15 @@ class PlannerMetrics {
       totalBoxes: (json['totalBoxes'] as int?) ?? 0,
       placedCount: (json['placedCount'] as int?) ?? 0,
       overflowCount: (json['overflowCount'] as int?) ?? 0,
-      containerVolumeCm3:
-          ((json['containerVolumeCm3'] ?? 0) as num).toDouble(),
+      containerVolumeCm3: ((json['containerVolumeCm3'] ?? 0) as num).toDouble(),
       usedVolumeCm3: ((json['usedVolumeCm3'] ?? 0) as num).toDouble(),
       volumePct: ((json['volumeOccupancyPct'] ?? json['volumePct'] ?? 0) as num)
           .toDouble(),
       totalWeightKg: ((json['totalWeightKg'] ?? 0) as num).toDouble(),
       overflowWeightKg: ((json['overflowWeightKg'] ?? 0) as num).toDouble(),
       maxPayloadKg: ((json['maxPayloadKg'] ?? 0) as num).toDouble(),
-      weightPct:
-          ((json['weightOccupancyPct'] ?? json['weightPct'] ?? 0) as num)
-              .toDouble(),
+      weightPct: ((json['weightOccupancyPct'] ?? json['weightPct'] ?? 0) as num)
+          .toDouble(),
       status: status,
     );
   }
@@ -275,7 +270,6 @@ class PlannerMetrics {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class DragState {
-
   const DragState({
     required this.boxIndex,
     required this.startX,
@@ -303,9 +297,11 @@ class DragState {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class ManualLayout {
-
   const ManualLayout({
-    required this.vehicleCode, required this.date, required this.boxes, this.id,
+    required this.vehicleCode,
+    required this.date,
+    required this.boxes,
+    this.id,
     this.excludedOrders = const [],
     this.metrics = const {},
   });
@@ -341,7 +337,6 @@ class ManualLayout {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class ClientSummary {
-
   const ClientSummary({
     required this.clientCode,
     required this.boxCount,

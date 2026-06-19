@@ -15,7 +15,8 @@ import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_m
 /// UBICACIÓN: Entre gráficas y Accesos Rápidos
 class SummaryStatsWidget extends StatelessWidget {
   const SummaryStatsWidget({
-    required this.metrics, super.key,
+    required this.metrics,
+    super.key,
   });
 
   final DashboardMetrics metrics;
@@ -23,21 +24,22 @@ class SummaryStatsWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Calcular estadísticas derivadas
-    final totalRevenue = metrics.vencimientos.totalAmount + 
-                        metrics.cobros.totalAmount + 
-                        metrics.pedidos.totalAmount;
+    final totalRevenue = metrics.vencimientos.totalAmount +
+        metrics.cobros.totalAmount +
+        metrics.pedidos.totalAmount;
     final totalDocuments = metrics.vencimientos.pendingCount +
-                          metrics.cobros.realizedCount +
-                          metrics.pedidos.pendingCount;
-    
+        metrics.cobros.realizedCount +
+        metrics.pedidos.pendingCount;
+
     // Calcular promedio de ventas diarias
     final dailyData = metrics.salesSummary.dailyData;
     final avgDailySales = dailyData.isNotEmpty
-        ? dailyData.fold<double>(0, (sum, day) => sum + day.sales) / dailyData.length
+        ? dailyData.fold<double>(0, (sum, day) => sum + day.sales) /
+            dailyData.length
         : 0.0;
-    
+
     // Determinar tendencia (simplificado)
-    final isGrowing = dailyData.length >= 2 
+    final isGrowing = dailyData.length >= 2
         ? dailyData.last.sales > dailyData.first.sales
         : false;
 
@@ -72,23 +74,24 @@ class SummaryStatsWidget extends StatelessWidget {
                       Text(
                         'Resumen Ejecutivo',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
+                              fontWeight: FontWeight.w800,
+                            ),
                       ),
                       Text(
                         'Visión general del período',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: AppTheme.textSecondary,
-                        ),
+                              color: AppTheme.textSecondary,
+                            ),
                       ),
                     ],
                   ),
                 ),
                 // Indicador de tendencia
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: isGrowing 
+                    color: isGrowing
                         ? AppTheme.successColor.withValues(alpha: 0.1)
                         : AppTheme.errorColor.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
@@ -98,14 +101,18 @@ class SummaryStatsWidget extends StatelessWidget {
                     children: [
                       Icon(
                         isGrowing ? Icons.trending_up : Icons.trending_down,
-                        color: isGrowing ? AppTheme.successColor : AppTheme.errorColor,
+                        color: isGrowing
+                            ? AppTheme.successColor
+                            : AppTheme.errorColor,
                         size: 18,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         isGrowing ? 'Creciendo' : 'Decreciendo',
                         style: TextStyle(
-                          color: isGrowing ? AppTheme.successColor : AppTheme.errorColor,
+                          color: isGrowing
+                              ? AppTheme.successColor
+                              : AppTheme.errorColor,
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
                         ),
@@ -175,8 +182,9 @@ class SummaryStatsWidget extends StatelessWidget {
                     context,
                     icon: Icons.schedule,
                     label: 'Pendientes',
-                    value: (metrics.vencimientos.pendingCount + 
-                           metrics.pedidos.pendingCount).toString(),
+                    value: (metrics.vencimientos.pendingCount +
+                            metrics.pedidos.pendingCount)
+                        .toString(),
                     color: AppTheme.errorColor,
                   ),
                 ),
@@ -242,26 +250,26 @@ class SummaryStatsWidget extends StatelessWidget {
           Text(
             label,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: AppTheme.textSecondary,
-              fontWeight: FontWeight.w600,
-            ),
+                  color: AppTheme.textSecondary,
+                  fontWeight: FontWeight.w600,
+                ),
           ),
           const SizedBox(height: 4),
           // Valor
           Text(
             value,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: AppTheme.textPrimary,
-            ),
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
+                ),
           ),
           if (subtitle != null) ...[
             const SizedBox(height: 4),
             Text(
               subtitle,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: AppTheme.textTertiary,
-              ),
+                    color: AppTheme.textTertiary,
+                  ),
             ),
           ],
         ],
@@ -298,17 +306,17 @@ class SummaryStatsWidget extends StatelessWidget {
           Text(
             value,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w800,
-              color: color,
-            ),
+                  fontWeight: FontWeight.w800,
+                  color: color,
+                ),
           ),
           const SizedBox(height: 2),
           Text(
             label,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: AppTheme.textSecondary,
-              fontSize: 10,
-            ),
+                  color: AppTheme.textSecondary,
+                  fontSize: 10,
+                ),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -320,12 +328,12 @@ class SummaryStatsWidget extends StatelessWidget {
   /// Calcula la tasa de realización de tareas
   String _calculateCompletionRate(DashboardMetrics metrics) {
     final completed = metrics.cobros.realizedCount;
-    final total = completed + 
-                  metrics.vencimientos.pendingCount + 
-                  metrics.pedidos.pendingCount;
-    
+    final total = completed +
+        metrics.vencimientos.pendingCount +
+        metrics.pedidos.pendingCount;
+
     if (total == 0) return '0%';
-    
+
     final rate = (completed / total * 100).toStringAsFixed(0);
     return '$rate%';
   }

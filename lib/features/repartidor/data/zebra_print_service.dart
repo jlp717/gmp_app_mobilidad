@@ -170,9 +170,7 @@ class ZebraPrintService {
       final frame = await codec.getNextFrame();
       final image = frame.image;
 
-      final byteData = await image.toByteData(
-        
-      );
+      final byteData = await image.toByteData();
       if (byteData == null) return null;
 
       final pixels = byteData.buffer.asUint8List();
@@ -292,7 +290,8 @@ class ZebraPrintService {
     if (albaran.ordenPreparacion != null) {
       buf.writeln('^CF0,18');
       buf.writeln(
-          '^FO$_xLeft,$y^FDOrden Prep.: ${albaran.ordenPreparacion!}^FS',);
+        '^FO$_xLeft,$y^FDOrden Prep.: ${albaran.ordenPreparacion!}^FS',
+      );
       y += 24;
     }
 

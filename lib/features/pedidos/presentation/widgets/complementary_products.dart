@@ -9,9 +9,10 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 class ComplementaryProducts extends StatelessWidget {
-
   const ComplementaryProducts({
-    required this.products, required this.onAdd, super.key,
+    required this.products,
+    required this.onAdd,
+    super.key,
   });
   final List<Map<String, dynamic>> products;
   final void Function(String code, String name) onAdd;
@@ -27,7 +28,8 @@ class ComplementaryProducts extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
           child: Row(
             children: [
-              const Icon(Icons.auto_awesome, color: AppTheme.neonPurple, size: 16),
+              const Icon(Icons.auto_awesome,
+                  color: AppTheme.neonPurple, size: 16),
               const SizedBox(width: 6),
               Text(
                 'Productos complementarios',
@@ -65,24 +67,41 @@ class ComplementaryProducts extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: AppTheme.darkCard,
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppTheme.neonPurple.withValues(alpha: 0.3), width: 0.5),
+                      border: Border.all(
+                          color: AppTheme.neonPurple.withValues(alpha: 0.3),
+                          width: 0.5),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(name, style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500),
-                            maxLines: 1, overflow: TextOverflow.ellipsis,),
+                        Text(
+                          name,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                         const SizedBox(height: 2),
-                        Text(code, style: TextStyle(color: AppTheme.neonPurple.withValues(alpha: 0.7), fontSize: 9)),
+                        Text(code,
+                            style: TextStyle(
+                                color:
+                                    AppTheme.neonPurple.withValues(alpha: 0.7),
+                                fontSize: 9)),
                         const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Icon(Icons.link, color: Colors.white38, size: 10),
+                            const Icon(Icons.link,
+                                color: Colors.white38, size: 10),
                             const SizedBox(width: 3),
-                            Text('$cooc pedidos juntos', style: const TextStyle(color: Colors.white38, fontSize: 9)),
+                            Text('$cooc pedidos juntos',
+                                style: const TextStyle(
+                                    color: Colors.white38, fontSize: 9)),
                             const Spacer(),
-                            const Icon(Icons.add_circle, color: AppTheme.neonPurple, size: 16),
+                            const Icon(Icons.add_circle,
+                                color: AppTheme.neonPurple, size: 16),
                           ],
                         ),
                       ],

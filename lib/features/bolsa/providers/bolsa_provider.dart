@@ -116,8 +116,9 @@ class BolsaProvider with ChangeNotifier {
       ]);
       if (generation != _loadGeneration || _currentVendor != code) return;
       _status = results[0] as BolsaStatus;
-      _movements =
-          (results[1] as List<BolsaMovimiento>).toList(growable: false);
+      _movements = _dedupeMovements(
+        (results[1] as List<BolsaMovimiento>).toList(growable: false),
+      );
       _history =
           (results[2] as List<BolsaMonthlyPoint>).toList(growable: false);
       _error = null;
@@ -159,5 +160,20 @@ class BolsaProvider with ChangeNotifier {
   Future<void> refresh() async {
     if (_currentVendor == null) return;
     await load(_currentVendor!, force: true);
+  }
+
+  /// Evita duplicados si el backend reenvía el mismo movimiento (id o idempotencyKey).
+  static List<BolsaMovimiento> _dedupeMovements(List<BolsaMovimiento> raw) {
+    final seen = <String>{};
+    final out = <BolsaMovimiento>[];
+    for (final movement in raw) {
+      final key = movement.idempotencyKey?.trim();
+      final dedupeKey =
+          (key != null && key.isNotEmpty) ? key : 'id:${movement.id}';
+      if (seen.add(dedupeKey)) {
+        out.add(movement);
+      }
+    }
+    return out;
   }
 }

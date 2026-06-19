@@ -9,9 +9,9 @@ import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart
 import 'package:intl/intl.dart';
 
 class EntregaDetailSheet extends StatelessWidget {
-
   const EntregaDetailSheet({
-    required this.albaran, super.key,
+    required this.albaran,
+    super.key,
     this.onComplete,
   });
   final Albaran albaran;
@@ -20,7 +20,7 @@ class EntregaDetailSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: '€');
-    
+
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
       decoration: const BoxDecoration(
@@ -39,15 +39,17 @@ class EntregaDetailSheet extends StatelessWidget {
               borderRadius: BorderRadius.circular(2),
             ),
           ),
-          
+
           // Header
           Padding(
-            padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
+            padding: EdgeInsets.all(
+                Responsive.padding(context, small: 12, large: 20)),
             child: Row(
               children: [
                 // Número albarán
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [AppTheme.neonBlue, AppTheme.neonPurple],
@@ -65,24 +67,28 @@ class EntregaDetailSheet extends StatelessWidget {
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: Responsive.fontSize(context, small: 14, large: 16),
+                      fontSize:
+                          Responsive.fontSize(context, small: 14, large: 16),
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(width: 12),
-                
+
                 // Estado
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: albaran.estado.color.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: albaran.estado.color.withValues(alpha: 0.3)),
+                    border: Border.all(
+                        color: albaran.estado.color.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     children: [
-                      Icon(albaran.estado.icon, color: albaran.estado.color, size: 16),
+                      Icon(albaran.estado.icon,
+                          color: albaran.estado.color, size: 16),
                       const SizedBox(width: 6),
                       Text(
                         albaran.estado.label,
@@ -95,13 +101,15 @@ class EntregaDetailSheet extends StatelessWidget {
                     ],
                   ),
                 ),
-                
+
                 if (albaran.esCTR) ...[
                   const SizedBox(width: 12),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(colors: [Colors.red, Colors.red.shade700]),
+                      gradient: LinearGradient(
+                          colors: [Colors.red, Colors.red.shade700]),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Row(
@@ -120,30 +128,32 @@ class EntregaDetailSheet extends StatelessWidget {
                     ),
                   ),
                 ],
-                
+
                 const Spacer(),
-                
+
                 // Importe
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     const Text(
                       'Total',
-                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                      style: TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 11),
                     ),
                     Text(
                       currencyFormat.format(albaran.importeTotal),
                       style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontWeight: FontWeight.bold,
-                        fontSize: Responsive.fontSize(context, small: 18, large: 22),
+                        fontSize:
+                            Responsive.fontSize(context, small: 18, large: 22),
                       ),
                     ),
                   ],
                 ),
-                
+
                 const SizedBox(width: 16),
-                
+
                 // Cerrar
                 IconButton(
                   onPressed: () => Navigator.pop(context),
@@ -152,12 +162,14 @@ class EntregaDetailSheet extends StatelessWidget {
               ],
             ),
           ),
-          
+
           const Divider(color: Colors.white10),
-          
+
           // Cliente info
           Padding(
-            padding: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 20), vertical: 12),
+            padding: EdgeInsets.symmetric(
+                horizontal: Responsive.padding(context, small: 12, large: 20),
+                vertical: 12),
             child: Row(
               children: [
                 Container(
@@ -166,7 +178,8 @@ class EntregaDetailSheet extends StatelessWidget {
                     color: AppTheme.neonGreen.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: const Icon(Icons.store, color: AppTheme.neonGreen, size: 24),
+                  child: const Icon(Icons.store,
+                      color: AppTheme.neonGreen, size: 24),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -178,19 +191,24 @@ class EntregaDetailSheet extends StatelessWidget {
                         style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontWeight: FontWeight.w600,
-                          fontSize: Responsive.fontSize(context, small: 14, large: 16),
+                          fontSize: Responsive.fontSize(context,
+                              small: 14, large: 16),
                         ),
                       ),
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          Icon(Icons.location_on, color: AppTheme.textSecondary.withValues(alpha: 0.5), size: 14),
+                          Icon(Icons.location_on,
+                              color:
+                                  AppTheme.textSecondary.withValues(alpha: 0.5),
+                              size: 14),
                           const SizedBox(width: 4),
                           Expanded(
                             child: Text(
                               albaran.direccion,
                               style: TextStyle(
-                                color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                                color: AppTheme.textSecondary
+                                    .withValues(alpha: 0.7),
                                 fontSize: 13,
                               ),
                             ),
@@ -220,15 +238,16 @@ class EntregaDetailSheet extends StatelessWidget {
                       color: Colors.green.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.phone, color: Colors.green, size: 20),
+                    child:
+                        const Icon(Icons.phone, color: Colors.green, size: 20),
                   ),
                 ),
               ],
             ),
           ),
-          
+
           const Divider(color: Colors.white10),
-          
+
           // Lista de items
           Expanded(
             child: albaran.items.isEmpty
@@ -236,11 +255,16 @@ class EntregaDetailSheet extends StatelessWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.inventory_2, size: 48, color: AppTheme.textSecondary.withValues(alpha: 0.3)),
+                        Icon(Icons.inventory_2,
+                            size: 48,
+                            color:
+                                AppTheme.textSecondary.withValues(alpha: 0.3)),
                         const SizedBox(height: 12),
                         Text(
                           'Sin productos detallados',
-                          style: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5)),
+                          style: TextStyle(
+                              color: AppTheme.textSecondary
+                                  .withValues(alpha: 0.5)),
                         ),
                       ],
                     ),
@@ -254,13 +278,14 @@ class EntregaDetailSheet extends StatelessWidget {
                     },
                   ),
           ),
-          
+
           // Footer con acciones
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: AppTheme.darkBase,
-              border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+              border: Border(
+                  top: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
             ),
             child: Row(
               children: [
@@ -271,9 +296,9 @@ class EntregaDetailSheet extends StatelessWidget {
                   color: AppTheme.neonPurple,
                   onTap: () {},
                 ),
-                
+
                 const SizedBox(width: 12),
-                
+
                 // Botón firma
                 _buildActionButton(
                   icon: Icons.draw,
@@ -281,9 +306,9 @@ class EntregaDetailSheet extends StatelessWidget {
                   color: AppTheme.neonBlue,
                   onTap: () {},
                 ),
-                
+
                 const SizedBox(width: 12),
-                
+
                 // Botón incidencia
                 _buildActionButton(
                   icon: Icons.report_problem,
@@ -291,9 +316,9 @@ class EntregaDetailSheet extends StatelessWidget {
                   color: Colors.orange,
                   onTap: () {},
                 ),
-                
+
                 const Spacer(),
-                
+
                 // Botón completar entrega
                 if (!albaran.completo && onComplete != null)
                   Material(
@@ -302,7 +327,8 @@ class EntregaDetailSheet extends StatelessWidget {
                       onTap: onComplete,
                       borderRadius: BorderRadius.circular(16),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 32, vertical: 16),
                         decoration: BoxDecoration(
                           gradient: const LinearGradient(
                             colors: [Colors.green, Color(0xFF2E7D32)],
@@ -366,9 +392,9 @@ class EntregaDetailSheet extends StatelessWidget {
             ),
             child: Icon(item.estado.icon, color: item.estado.color, size: 18),
           ),
-          
+
           const SizedBox(width: 14),
-          
+
           // Info del producto
           Expanded(
             child: Column(
@@ -395,7 +421,7 @@ class EntregaDetailSheet extends StatelessWidget {
               ],
             ),
           ),
-          
+
           // Cantidad
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -408,7 +434,9 @@ class EntregaDetailSheet extends StatelessWidget {
                 Text(
                   '${item.cantidadEntregada}',
                   style: TextStyle(
-                    color: item.cantidadEntregada > 0 ? Colors.green : AppTheme.textSecondary,
+                    color: item.cantidadEntregada > 0
+                        ? Colors.green
+                        : AppTheme.textSecondary,
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                   ),

@@ -5,9 +5,11 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 /// Smart Sync Header — V2 Premium.
 /// Modern header with refined gradients, border radius, and subtle interactions.
 class SmartSyncHeader extends StatelessWidget {
-
   const SmartSyncHeader({
-    required this.title, required this.subtitle, required this.onSync, super.key,
+    required this.title,
+    required this.subtitle,
+    required this.onSync,
+    super.key,
     this.lastSync,
     this.isLoading = false,
     this.onMonthTap,
@@ -63,9 +65,11 @@ class SmartSyncHeader extends StatelessWidget {
                   AppTheme.neonPurple.withValues(alpha: 0.12),
                 ],
               ),
-              borderRadius: BorderRadius.circular(isCompact ? AppTheme.radiusSm : AppTheme.radiusMd),
+              borderRadius: BorderRadius.circular(
+                  isCompact ? AppTheme.radiusSm : AppTheme.radiusMd),
             ),
-            child: Icon(Icons.local_shipping_outlined, color: AppTheme.neonBlue, size: iconSize),
+            child: Icon(Icons.local_shipping_outlined,
+                color: AppTheme.neonBlue, size: iconSize),
           ),
           SizedBox(width: compact ? 8 : 12),
           Expanded(
@@ -97,7 +101,9 @@ class SmartSyncHeader extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          Icon(Icons.arrow_drop_down, color: AppTheme.neonBlue, size: isCompact ? 14 : 16),
+                          Icon(Icons.arrow_drop_down,
+                              color: AppTheme.neonBlue,
+                              size: isCompact ? 14 : 16),
                         ],
                       ),
                     )
@@ -132,7 +138,8 @@ class SmartSyncHeader extends StatelessWidget {
                         color: AppTheme.neonBlue,
                       ),
                     )
-                  : Icon(Icons.sync_rounded, color: AppTheme.neonBlue, size: isCompact ? 20 : 22),
+                  : Icon(Icons.sync_rounded,
+                      color: AppTheme.neonBlue, size: isCompact ? 20 : 22),
             ),
           ),
         ],

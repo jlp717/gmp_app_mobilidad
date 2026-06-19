@@ -11,9 +11,12 @@ import 'package:intl/intl.dart';
 /// - Progress bar with energy charging effect
 /// - Gesture controls for rapid navigation
 class FuturisticWeekNavigator extends StatefulWidget {
-
   const FuturisticWeekNavigator({
-    required this.selectedDate, required this.weekDays, required this.onDaySelected, required this.onWeekChange, super.key,
+    required this.selectedDate,
+    required this.weekDays,
+    required this.onDaySelected,
+    required this.onWeekChange,
+    super.key,
     this.isLoading = false,
     this.totalClients = 0,
   });
@@ -25,7 +28,8 @@ class FuturisticWeekNavigator extends StatefulWidget {
   final int totalClients;
 
   @override
-  State<FuturisticWeekNavigator> createState() => _FuturisticWeekNavigatorState();
+  State<FuturisticWeekNavigator> createState() =>
+      _FuturisticWeekNavigatorState();
 }
 
 class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
@@ -34,40 +38,40 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
   late AnimationController _progressController;
   late Animation<double> _pulseAnimation;
   late Animation<double> _progressAnimation;
-  
+
   // Swipe detection
   double _dragStartX = 0;
-  
+
   @override
   void initState() {
     super.initState();
     _initAnimations();
   }
-  
+
   void _initAnimations() {
     // Pulse animation for selected day
     _pulseController = AnimationController(
       duration: AppTheme.animPulse,
       vsync: this,
     )..repeat(reverse: true);
-    
+
     _pulseAnimation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-    
+
     // Progress animation
     _progressController = AnimationController(
       duration: AppTheme.animSlow,
       vsync: this,
     );
-    
+
     _progressAnimation = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(parent: _progressController, curve: Curves.easeOutCubic),
     );
-    
+
     _progressController.forward();
   }
-  
+
   @override
   void didUpdateWidget(FuturisticWeekNavigator oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -76,7 +80,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
       _progressController.forward();
     }
   }
-  
+
   @override
   void dispose() {
     _pulseController.dispose();
@@ -89,21 +93,21 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     final days = date.difference(firstDayOfYear).inDays;
     return ((days + firstDayOfYear.weekday) / 7).ceil();
   }
-  
+
   double _calculateWeekProgress() {
     if (widget.weekDays.isEmpty) return 0;
-    
+
     var totalDeliveries = 0;
     var completedDeliveries = 0;
-    
+
     for (final day in widget.weekDays) {
       final clients = day['clients'] ?? 0;
       final done = day['completed'] ?? 0; // Use new backend field
-      
+
       if (clients is int) totalDeliveries += clients;
       if (done is int) completedDeliveries += done;
     }
-    
+
     return totalDeliveries > 0 ? completedDeliveries / totalDeliveries : 0.0;
   }
 
@@ -115,7 +119,8 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     );
     final weekEnd = weekStart.add(const Duration(days: 6));
     final dateFormat = DateFormat('d MMM', 'es_ES');
-    final weekRange = '${dateFormat.format(weekStart)} - ${dateFormat.format(weekEnd)}';
+    final weekRange =
+        '${dateFormat.format(weekStart)} - ${dateFormat.format(weekEnd)}';
     final progress = _calculateWeekProgress();
 
     return GestureDetector(
@@ -145,10 +150,10 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
           children: [
             // Week header with navigation
             _buildWeekHeader(weekNum, weekRange),
-            
+
             // Day strip
             _buildDayStrip(),
-            
+
             // Progress bar
             if (!Responsive.isLandscapeCompact(context))
               _buildProgressBar(progress),
@@ -161,9 +166,9 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
   Widget _buildWeekHeader(int weekNum, String weekRange) {
     return Container(
       padding: EdgeInsets.symmetric(
-        horizontal: 16, 
-        vertical: Responsive.isLandscapeCompact(context) 
-            ? 2 
+        horizontal: 16,
+        vertical: Responsive.isLandscapeCompact(context)
+            ? 2
             : 8 * Responsive.landscapeScale(context),
       ),
       child: Row(
@@ -176,7 +181,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
               widget.onWeekChange(-1);
             },
           ),
-          
+
           // Week info
           Expanded(
             child: Column(
@@ -185,7 +190,8 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 4),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
@@ -233,7 +239,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
               ],
             ),
           ),
-          
+
           // Next week button
           _buildNavButton(
             icon: Icons.chevron_right,
@@ -242,18 +248,18 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
               widget.onWeekChange(1);
             },
           ),
-          
+
           const SizedBox(width: 12),
-          
+
           // Client count badge
-          if (!Responsive.isLandscapeCompact(context))
-            _buildClientBadge(),
+          if (!Responsive.isLandscapeCompact(context)) _buildClientBadge(),
         ],
       ),
     );
   }
 
-  Widget _buildNavButton({required IconData icon, required VoidCallback onTap}) {
+  Widget _buildNavButton(
+      {required IconData icon, required VoidCallback onTap}) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -286,8 +292,10 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                AppTheme.neonBlue.withValues(alpha: 0.15 + _pulseAnimation.value * 0.05),
-                AppTheme.neonCyan.withValues(alpha: 0.1 + _pulseAnimation.value * 0.05),
+                AppTheme.neonBlue
+                    .withValues(alpha: 0.15 + _pulseAnimation.value * 0.05),
+                AppTheme.neonCyan
+                    .withValues(alpha: 0.1 + _pulseAnimation.value * 0.05),
               ],
             ),
             borderRadius: BorderRadius.circular(16),
@@ -296,7 +304,8 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
             ),
             boxShadow: [
               BoxShadow(
-                color: AppTheme.neonBlue.withValues(alpha: 0.1 + _pulseAnimation.value * 0.1),
+                color: AppTheme.neonBlue
+                    .withValues(alpha: 0.1 + _pulseAnimation.value * 0.1),
                 blurRadius: 8,
                 spreadRadius: 1,
               ),
@@ -348,8 +357,8 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
           ? 32
           : Responsive.value(context, phone: 55, desktop: 60),
       padding: EdgeInsets.symmetric(
-          horizontal: 6, 
-          vertical: Responsive.isLandscapeCompact(context) ? 2 : 4,
+        horizontal: 6,
+        vertical: Responsive.isLandscapeCompact(context) ? 2 : 4,
       ),
       child: Row(
         children: widget.weekDays.asMap().entries.map((entry) {
@@ -369,14 +378,15 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     final isToday = DateUtils.isSameDay(date, DateTime.now());
     final count = (dayData['clients'] as int?) ?? 0;
     final status = (dayData['status'] as String?) ?? 'none';
-    
+
     // Determine colors based on status
     var statusColor = AppTheme.textSecondary;
     if (status == 'good') {
       statusColor = AppTheme.success;
-    } else if (status == 'bad') statusColor = AppTheme.error;
+    } else if (status == 'bad')
+      statusColor = AppTheme.error;
     else if (count > 0) statusColor = AppTheme.neonBlue;
-    
+
     final dayNames = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
     final dayLetter = dayNames[date.weekday - 1];
 
@@ -390,7 +400,7 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
         animation: _pulseAnimation,
         builder: (context, child) {
           final glowIntensity = isSelected ? _pulseAnimation.value * 0.3 : 0.0;
-          
+
           return AnimatedContainer(
             duration: AppTheme.animNormal,
             margin: const EdgeInsets.symmetric(horizontal: 3),
@@ -407,20 +417,25 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                   : null,
               color: isSelected
                   ? null
-                  : (count > 0 ? AppTheme.darkCard : AppTheme.darkBase.withValues(alpha: 0.5)),
+                  : (count > 0
+                      ? AppTheme.darkCard
+                      : AppTheme.darkBase.withValues(alpha: 0.5)),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
                 color: isSelected
                     ? AppTheme.neonCyan
                     : isToday
                         ? AppTheme.neonBlue.withValues(alpha: 0.5)
-                        : (count > 0 ? statusColor.withValues(alpha: 0.3) : Colors.transparent),
+                        : (count > 0
+                            ? statusColor.withValues(alpha: 0.3)
+                            : Colors.transparent),
                 width: isSelected || isToday ? 2 : 1,
               ),
               boxShadow: isSelected
                   ? [
                       BoxShadow(
-                        color: AppTheme.neonBlue.withValues(alpha: 0.4 + glowIntensity),
+                        color: AppTheme.neonBlue
+                            .withValues(alpha: 0.4 + glowIntensity),
                         blurRadius: 12,
                         spreadRadius: 2,
                       ),
@@ -436,7 +451,8 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                   style: TextStyle(
                     fontSize: Responsive.isSmall(context) ? 8 : 10,
                     fontWeight: FontWeight.bold,
-                    color: isSelected ? AppTheme.darkBase : AppTheme.textSecondary,
+                    color:
+                        isSelected ? AppTheme.darkBase : AppTheme.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -474,7 +490,8 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
                 if (isToday && !isSelected)
                   Container(
                     margin: const EdgeInsets.only(top: 2),
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
                     decoration: BoxDecoration(
                       color: AppTheme.neonBlue.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(4),
@@ -573,14 +590,15 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
     );
   }
 
-  void _showDayTooltip(BuildContext context, Map<String, dynamic> dayData, DateTime date) {
+  void _showDayTooltip(
+      BuildContext context, Map<String, dynamic> dayData, DateTime date) {
     final status = (dayData['status'] as String?) ?? 'none';
     final count = (dayData['clients'] as int?) ?? 0;
-    
+
     var statusText = 'Sin entregas programadas';
     var statusIcon = Icons.event_busy;
     var statusColor = AppTheme.textSecondary;
-    
+
     if (count > 0) {
       if (status == 'good') {
         statusText = '✓ Todas las entregas completadas';
@@ -596,9 +614,9 @@ class _FuturisticWeekNavigatorState extends State<FuturisticWeekNavigator>
         statusColor = AppTheme.neonBlue;
       }
     }
-    
+
     HapticFeedback.mediumImpact();
-    
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(

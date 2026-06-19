@@ -153,8 +153,7 @@ class AuthNotifier extends AsyncNotifier<AuthState> {
       final ts = timestamp is int
           ? timestamp
           : int.tryParse(timestamp.toString()) ?? 0;
-      const ttlMs =
-          86400000; // 24 hours — matches server JWT_ACCESS_EXPIRES
+      const ttlMs = 86400000; // 24 hours — matches server JWT_ACCESS_EXPIRES
       return DateTime.now().millisecondsSinceEpoch - ts > ttlMs;
     } catch (_) {
       return true; // can't decode → treat as expired

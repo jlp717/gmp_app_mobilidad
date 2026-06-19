@@ -8,9 +8,10 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 class CobrosFilters extends StatefulWidget {
-
   const CobrosFilters({
-    required this.onEstadoChanged, required this.onClienteChanged, super.key,
+    required this.onEstadoChanged,
+    required this.onClienteChanged,
+    super.key,
     this.estadoActual = 'todos',
   });
   final Function(String) onEstadoChanged;
@@ -41,7 +42,8 @@ class _CobrosFiltersState extends State<CobrosFilters> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
+      padding:
+          EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
       decoration: BoxDecoration(
         color: AppTheme.surfaceColor,
         borderRadius: BorderRadius.circular(16),
@@ -69,9 +71,9 @@ class _CobrosFiltersState extends State<CobrosFilters> {
               ),
             ],
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Buscador
           Container(
             decoration: BoxDecoration(
@@ -84,21 +86,23 @@ class _CobrosFiltersState extends State<CobrosFilters> {
               style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13),
               decoration: InputDecoration(
                 hintText: 'Buscar cliente...',
-                hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5)),
+                hintStyle: TextStyle(
+                    color: AppTheme.textSecondary.withValues(alpha: 0.5)),
                 prefixIcon: Icon(
                   Icons.search,
                   color: AppTheme.textSecondary.withValues(alpha: 0.5),
                   size: 18,
                 ),
                 border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
               ),
               onChanged: widget.onClienteChanged,
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Estados
           const Text(
             'Estado',
@@ -109,7 +113,7 @@ class _CobrosFiltersState extends State<CobrosFilters> {
             ),
           ),
           const SizedBox(height: 8),
-          
+
           Wrap(
             spacing: 6,
             runSpacing: 6,
@@ -119,7 +123,8 @@ class _CobrosFiltersState extends State<CobrosFilters> {
                 onTap: () => widget.onEstadoChanged(estado['value']! as String),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
                     color: isSelected
                         ? AppTheme.neonPurple.withValues(alpha: 0.2)
@@ -149,7 +154,8 @@ class _CobrosFiltersState extends State<CobrosFilters> {
                               ? AppTheme.neonPurple
                               : AppTheme.textSecondary,
                           fontSize: 11,
-                          fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                          fontWeight:
+                              isSelected ? FontWeight.w600 : FontWeight.normal,
                         ),
                       ),
                     ],

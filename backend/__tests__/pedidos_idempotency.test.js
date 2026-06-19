@@ -248,4 +248,18 @@ describe('pedidos create idempotency', () => {
       expect.objectContaining({ idempotencyKey: 'offline-sync-key-002' }),
     );
   });
+
+  test('createOrder persists a server-side BORRADOR draft without confirmation', async () => {
+    setupCreateMocks();
+
+    const result = await pedidosService.createOrder({
+      ...baseCreatePayload,
+      clientRequestId: 'offline-sync-key-003',
+    });
+
+    expect(result.idempotent).toBeUndefined();
+    expect(result.header).toMatchObject({ id: 77, estado: 'BORRADOR' });
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT INTO\s+JAVIER\.PEDIDOS_CAB/i.test(sql))).toBe(true);
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql))).toBe(false);
+  });
 });

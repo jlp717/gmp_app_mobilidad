@@ -5,8 +5,12 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 /// KPI Dashboard widget for Rutero tab
 /// Shows deliveries completed, pending payments, and weekly progress
 class RuteroKpiDashboard extends StatelessWidget {
-
-  const RuteroKpiDashboard({required this.totalEntregas, required this.entregasCompletadas, required this.montoACobrar, required this.montoOpcional, required this.totalMonto, // New field, super.key,, super.key,, super.key,, super.key,
+  const RuteroKpiDashboard({
+    required this.totalEntregas,
+    required this.entregasCompletadas,
+    required this.montoACobrar,
+    required this.montoOpcional,
+    required this.totalMonto, // New field, super.key,, super.key,, super.key,, super.key,
     this.montoCobrado = 0,
     this.isLoading = false,
   });
@@ -20,13 +24,14 @@ class RuteroKpiDashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final progresoEntregas = totalEntregas > 0 
-        ? entregasCompletadas / totalEntregas 
-        : 0.0;
+    final progresoEntregas =
+        totalEntregas > 0 ? entregasCompletadas / totalEntregas : 0.0;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 4), // Reduced vertical margin
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12), // Reduced padding
+      margin: const EdgeInsets.symmetric(
+          horizontal: 12, vertical: 4), // Reduced vertical margin
+      padding: const EdgeInsets.symmetric(
+          horizontal: 12, vertical: 12), // Reduced padding
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
         borderRadius: BorderRadius.circular(16),
@@ -65,7 +70,7 @@ class RuteroKpiDashboard extends StatelessWidget {
                   ),
                 ),
                 Container(width: 1, height: 40, color: AppTheme.borderColor),
-                
+
                 // Total Load
                 Expanded(
                   flex: 2,
@@ -76,7 +81,7 @@ class RuteroKpiDashboard extends StatelessWidget {
                     icon: Icons.functions,
                   ),
                 ),
-                
+
                 // A Cobrar
                 Expanded(
                   flex: 2,
@@ -87,7 +92,7 @@ class RuteroKpiDashboard extends StatelessWidget {
                     icon: Icons.payment_outlined,
                   ),
                 ),
-                
+
                 // Opcional
                 Expanded(
                   flex: 2,
@@ -184,7 +189,6 @@ class RuteroKpiDashboard extends StatelessWidget {
 
 /// Custom painter for circular progress indicator
 class _CircularProgressPainter extends CustomPainter {
-
   _CircularProgressPainter({
     required this.progress,
     required this.color,
@@ -198,23 +202,23 @@ class _CircularProgressPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2 - 4;
-    
+
     // Background arc
     final bgPaint = Paint()
       ..color = backgroundColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4
       ..strokeCap = StrokeCap.round;
-    
+
     canvas.drawCircle(center, radius, bgPaint);
-    
+
     // Progress arc
     final progressPaint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4
       ..strokeCap = StrokeCap.round;
-    
+
     canvas.drawArc(
       Rect.fromCircle(center: center, radius: radius),
       -math.pi / 2, // Start from top

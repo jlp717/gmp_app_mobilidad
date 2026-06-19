@@ -12,19 +12,22 @@ import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
 class RecommendationsSection extends ConsumerStatefulWidget {
-
   const RecommendationsSection({
-    required this.onProductTap, super.key,
+    required this.onProductTap,
+    super.key,
   });
+
   /// Callback al tocar una recomendacion. Recibe el Recommendation completo
   /// con todos los datos enriquecidos (stock, precios, unidades, etc.).
   final void Function(Recommendation item) onProductTap;
 
   @override
-  ConsumerState<RecommendationsSection> createState() => _RecommendationsSectionState();
+  ConsumerState<RecommendationsSection> createState() =>
+      _RecommendationsSectionState();
 }
 
-class _RecommendationsSectionState extends ConsumerState<RecommendationsSection> {
+class _RecommendationsSectionState
+    extends ConsumerState<RecommendationsSection> {
   bool _isExpanded = false;
 
   @override
@@ -32,7 +35,8 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
     final provider = ref.watch(pedidosProvider);
     final hasHistory = provider.clientHistory.isNotEmpty;
     final hasSimilar = provider.similarClients.isNotEmpty;
-    final canSeeMargin = ref.watch(pedidosProvider.select((p) => p.isMarginVisible));
+    final canSeeMargin =
+        ref.watch(pedidosProvider.select((p) => p.isMarginVisible));
 
     if (!hasHistory && !hasSimilar) return const SizedBox.shrink();
 
@@ -61,22 +65,28 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
                       ],
                     ),
                     borderRadius: BorderRadius.circular(8),
-                    border:
-                        Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.3)),
+                    border: Border.all(
+                        color: AppTheme.neonBlue.withValues(alpha: 0.3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.recommend,
-                          color: AppTheme.neonBlue, size: 16,),
+                      const Icon(
+                        Icons.recommend,
+                        color: AppTheme.neonBlue,
+                        size: 16,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         'Recomendaciones ($totalCount)',
                         style: TextStyle(
                           color: AppTheme.neonBlue,
                           fontWeight: FontWeight.w600,
-                          fontSize: Responsive.fontSize(context,
-                              small: 12, large: 14,),
+                          fontSize: Responsive.fontSize(
+                            context,
+                            small: 12,
+                            large: 14,
+                          ),
                         ),
                       ),
                     ],
@@ -129,7 +139,11 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
       children: [
         Padding(
           padding: EdgeInsets.only(
-              left: pad.left, right: pad.right, top: 4, bottom: 4,),
+            left: pad.left,
+            right: pad.right,
+            top: 4,
+            bottom: 4,
+          ),
           child: Row(
             children: [
               Icon(icon, color: Colors.white54, size: 14),
@@ -139,15 +153,14 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
                 style: TextStyle(
                   color: Colors.white54,
                   fontWeight: FontWeight.w500,
-                  fontSize:
-                      Responsive.fontSize(context, small: 11, large: 12),
+                  fontSize: Responsive.fontSize(context, small: 11, large: 12),
                 ),
               ),
             ],
           ),
         ),
         SizedBox(
-          height: 110,
+          height: 124,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
             padding: EdgeInsets.symmetric(horizontal: pad.left),
@@ -164,7 +177,10 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
   }
 
   Widget _buildRecoCard(
-      BuildContext context, Recommendation item, bool canSeeMargin,) {
+    BuildContext context,
+    Recommendation item,
+    bool canSeeMargin,
+  ) {
     final hasStock = item.hasStock;
     final isDual = item.unitsPerBox > 1;
     final unitLabel = item.unitMeasure.isNotEmpty
@@ -189,7 +205,7 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
       onTap: () => widget.onProductTap(item),
       borderRadius: BorderRadius.circular(10),
       child: Container(
-        width: 180,
+        width: 168,
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
           color: AppTheme.darkCard,
@@ -220,8 +236,7 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w500,
-                fontSize:
-                    Responsive.fontSize(context, small: 10, large: 11),
+                fontSize: Responsive.fontSize(context, small: 10, large: 11),
               ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -252,7 +267,9 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
             ),
             const SizedBox(height: 2),
             // Badges row
-            Row(
+            Wrap(
+              spacing: 4,
+              runSpacing: 2,
               children: [
                 // Main badge (suggested qty / frequency / client count)
                 Container(
@@ -293,7 +310,9 @@ class _RecommendationsSectionState extends ConsumerState<RecommendationsSection>
                     ),
                   ),
                 // Margin badge (jefes de ventas)
-                if (canSeeMargin && item.precioTarifa1 > 0 && item.precioCliente > 0)
+                if (canSeeMargin &&
+                    item.precioTarifa1 > 0 &&
+                    item.precioCliente > 0)
                   Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 4, vertical: 1),

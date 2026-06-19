@@ -10,9 +10,9 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 /// Shimmer effect widget for loading states
 class ShimmerLoading extends StatefulWidget {
-
   const ShimmerLoading({
-    required this.child, super.key,
+    required this.child,
+    super.key,
     this.isLoading = true,
   });
   final Widget child;
@@ -81,7 +81,6 @@ class _ShimmerLoadingState extends State<ShimmerLoading>
 
 /// Skeleton placeholder for list items (cards)
 class SkeletonCard extends StatelessWidget {
-
   const SkeletonCard({
     super.key,
     this.height = 120,
@@ -97,14 +96,17 @@ class SkeletonCard extends StatelessWidget {
     return Container(
       height: height,
       width: width,
-      margin: EdgeInsets.symmetric(horizontal: Responsive.padding(context, small: 12, large: 20), vertical: 8),
+      margin: EdgeInsets.symmetric(
+          horizontal: Responsive.padding(context, small: 12, large: 20),
+          vertical: 8),
       decoration: BoxDecoration(
         color: AppTheme.darkCard,
         borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
       ),
       child: Padding(
-        padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
+        padding:
+            EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -189,7 +191,6 @@ class SkeletonCard extends StatelessWidget {
 
 /// Skeleton list - shows multiple skeleton cards
 class SkeletonList extends StatelessWidget {
-
   const SkeletonList({
     super.key,
     this.itemCount = 5,
@@ -219,8 +220,10 @@ class SkeletonSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     return ShimmerLoading(
       child: Container(
-        margin: EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
-        padding: EdgeInsets.all(Responsive.padding(context, small: 16, large: 24)),
+        margin:
+            EdgeInsets.all(Responsive.padding(context, small: 12, large: 20)),
+        padding:
+            EdgeInsets.all(Responsive.padding(context, small: 16, large: 24)),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,

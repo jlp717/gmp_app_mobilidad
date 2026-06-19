@@ -1,0 +1,58 @@
+{
+  "ts": "2026-06-19T06:17:21.485Z",
+  "appSchema": "JAVIER",
+  "erpSchema": "DSEDAC",
+  "apply": false,
+  "statementsCount": 0,
+  "details": [
+    {
+      "feature": "PEDIDOS_COMERCIAL_CAB",
+      "source": "DSEDAC.CPC",
+      "target": "JAVIER.PEDIDOS_CAB",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": [],
+      "altered": []
+    },
+    {
+      "feature": "PEDIDOS_COMERCIAL_LIN",
+      "source": "DSEDAC.LPC",
+      "target": "JAVIER.PEDIDOS_LIN",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": [],
+      "altered": []
+    },
+    {
+      "feature": "COBROS_COMERCIAL",
+      "source": "DSEDAC.CRC",
+      "target": "JAVIER.COBROS",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": [],
+      "altered": []
+    },
+    {
+      "feature": "COBROS_REPARTIDOR",
+      "source": "DSEDAC.CRCA",
+      "target": "JAVIER.REPARTIDOR_COBROS",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": [],
+      "altered": []
+    },
+    {
+      "feature": "RUTERO_DELIVERY_STATUS",
+      "source": "DSEDAC.CPC",
+      "target": "JAVIER.DELIVERY_STATUS",
+      "sourceExists": true,
+      "targetExists": true,
+      "added": [],
+      "altered": []
+    }
+  ],
+  "notes": [
+    "COBROS_COMERCIAL: skipped ID by rule"
+  ],
+  "applied": []
+}

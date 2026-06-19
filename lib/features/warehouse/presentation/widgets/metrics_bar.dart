@@ -6,9 +6,10 @@ import 'package:gmp_app_mobilidad/features/warehouse/domain/models/load_planner_
 
 /// Premium metrics bar with circular gauges, animated counters and glow accents.
 class MetricsBar extends StatelessWidget {
-
   const MetricsBar({
-    required this.metrics, required this.saveState, super.key,
+    required this.metrics,
+    required this.saveState,
+    super.key,
   });
   final PlannerMetrics? metrics;
   final SaveState saveState;
@@ -87,7 +88,6 @@ class MetricsBar extends StatelessWidget {
 // =============================================================================
 
 class _CircularGaugeCard extends StatelessWidget {
-
   const _CircularGaugeCard({
     required this.label,
     required this.value,
@@ -202,7 +202,6 @@ class _CircularGaugeCard extends StatelessWidget {
 // =============================================================================
 
 class _ArcPainter extends CustomPainter {
-
   _ArcPainter({
     required this.progress,
     required this.color,
@@ -226,7 +225,7 @@ class _ArcPainter extends CustomPainter {
     canvas.drawArc(
       rect,
       -math.pi * 0.75, // start at 7 o'clock
-      math.pi * 1.5,    // sweep 270 degrees
+      math.pi * 1.5, // sweep 270 degrees
       false,
       Paint()
         ..style = PaintingStyle.stroke
@@ -304,8 +303,16 @@ class _PremiumStatusBadgeState extends State<_PremiumStatusBadge>
   @override
   Widget build(BuildContext context) {
     final (label, color, icon) = switch (widget.status) {
-      LoadStatus.seguro => ('SEGURO', AppTheme.success, Icons.check_circle_rounded),
-      LoadStatus.optimo => ('OPTIMO', AppTheme.warning, Icons.trending_up_rounded),
+      LoadStatus.seguro => (
+          'SEGURO',
+          AppTheme.success,
+          Icons.check_circle_rounded
+        ),
+      LoadStatus.optimo => (
+          'OPTIMO',
+          AppTheme.warning,
+          Icons.trending_up_rounded
+        ),
       LoadStatus.exceso => ('EXCESO', AppTheme.error, Icons.warning_rounded),
     };
 
@@ -418,10 +425,26 @@ class _PremiumSaveIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (icon, color, tip) = switch (state) {
-      SaveState.saved => (Icons.cloud_done_rounded, AppTheme.success, 'Guardado'),
-      SaveState.saving => (Icons.cloud_upload_rounded, AppTheme.neonBlue, 'Guardando...'),
-      SaveState.unsaved => (Icons.cloud_off_rounded, AppTheme.warning, 'Sin guardar'),
-      SaveState.error => (Icons.cloud_off_rounded, AppTheme.error, 'Error al guardar'),
+      SaveState.saved => (
+          Icons.cloud_done_rounded,
+          AppTheme.success,
+          'Guardado'
+        ),
+      SaveState.saving => (
+          Icons.cloud_upload_rounded,
+          AppTheme.neonBlue,
+          'Guardando...'
+        ),
+      SaveState.unsaved => (
+          Icons.cloud_off_rounded,
+          AppTheme.warning,
+          'Sin guardar'
+        ),
+      SaveState.error => (
+          Icons.cloud_off_rounded,
+          AppTheme.error,
+          'Error al guardar'
+        ),
     };
 
     return Tooltip(

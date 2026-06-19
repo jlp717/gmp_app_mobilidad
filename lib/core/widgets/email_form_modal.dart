@@ -21,7 +21,6 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class EmailFormResult {
-
   const EmailFormResult({
     required this.email,
     required this.subject,
@@ -33,7 +32,6 @@ class EmailFormResult {
 }
 
 class EmailFormModal extends StatefulWidget {
-
   const EmailFormModal({
     super.key,
     this.defaultSubject = '',
@@ -113,7 +111,8 @@ class _EmailFormModalState extends State<EmailFormModal> {
       backgroundColor: Colors.transparent,
       child: Container(
         width: Responsive.clampWidth(context, 420),
-        padding: EdgeInsets.all(Responsive.padding(context, small: 16, large: 24)),
+        padding:
+            EdgeInsets.all(Responsive.padding(context, small: 16, large: 24)),
         decoration: BoxDecoration(
           color: AppTheme.darkSurface,
           borderRadius: BorderRadius.circular(20),
@@ -141,7 +140,8 @@ class _EmailFormModalState extends State<EmailFormModal> {
                       color: AppTheme.neonBlue.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.email_rounded, color: AppTheme.neonBlue, size: 22),
+                    child: const Icon(Icons.email_rounded,
+                        color: AppTheme.neonBlue, size: 22),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -149,13 +149,15 @@ class _EmailFormModalState extends State<EmailFormModal> {
                       'Enviar por Email',
                       style: TextStyle(
                         color: AppTheme.textPrimary,
-                        fontSize: Responsive.fontSize(context, small: 16, large: 20),
+                        fontSize:
+                            Responsive.fontSize(context, small: 16, large: 20),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: AppTheme.textSecondary, size: 20),
+                    icon: const Icon(Icons.close,
+                        color: AppTheme.textSecondary, size: 20),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -170,7 +172,8 @@ class _EmailFormModalState extends State<EmailFormModal> {
                 keyboardType: TextInputType.emailAddress,
                 validator: _validateEmail,
                 autofocus: true,
-                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                style:
+                    const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 decoration: _inputDecoration(
                   hint: 'email@ejemplo.com',
                   icon: Icons.alternate_email,
@@ -183,7 +186,8 @@ class _EmailFormModalState extends State<EmailFormModal> {
               const SizedBox(height: 6),
               TextFormField(
                 controller: _subjectController,
-                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                style:
+                    const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 decoration: _inputDecoration(
                   hint: 'Asunto del email',
                   icon: Icons.subject,
@@ -197,7 +201,8 @@ class _EmailFormModalState extends State<EmailFormModal> {
               TextFormField(
                 controller: _bodyController,
                 maxLines: 3,
-                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                style:
+                    const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 decoration: _inputDecoration(
                   hint: 'Escriba un mensaje personalizado...',
                   icon: Icons.message_outlined,
@@ -213,7 +218,8 @@ class _EmailFormModalState extends State<EmailFormModal> {
                     onPressed: () => Navigator.pop(context),
                     style: TextButton.styleFrom(
                       foregroundColor: AppTheme.textSecondary,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 12),
                     ),
                     child: const Text('Cancelar'),
                   ),
@@ -225,7 +231,8 @@ class _EmailFormModalState extends State<EmailFormModal> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.neonBlue,
                       foregroundColor: AppTheme.darkBase,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -252,21 +259,25 @@ class _EmailFormModalState extends State<EmailFormModal> {
     );
   }
 
-  InputDecoration _inputDecoration({required String hint, required IconData icon}) {
+  InputDecoration _inputDecoration(
+      {required String hint, required IconData icon}) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5), fontSize: 13),
+      hintStyle: TextStyle(
+          color: AppTheme.textSecondary.withValues(alpha: 0.5), fontSize: 13),
       prefixIcon: Icon(icon, color: AppTheme.textSecondary, size: 18),
       filled: true,
       fillColor: AppTheme.darkBase,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.5)),
+        borderSide:
+            BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.5)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.3)),
+        borderSide:
+            BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.3)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),

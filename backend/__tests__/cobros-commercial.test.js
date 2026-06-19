@@ -59,9 +59,39 @@ beforeEach(() => {
   mockConnClose.mockReset();
 });
 
+function mockRepoPendingSummaryDb({
+  pageRows = [],
+  portfolioRows = null,
+  pageCobros = [],
+  pageRepartidor = [],
+  portfolioCobros = [],
+  portfolioRepartidor = [],
+} = {}) {
+  const portfolio = portfolioRows == null ? pageRows : portfolioRows;
+  const routeSql = async (sql) => {
+    if (/WITH\s+PAGE_DOCS/i.test(sql)) {
+      if (/\.COBROS/i.test(sql)) return pageCobros;
+      if (/REPARTIDOR_COBROS/i.test(sql)) return pageRepartidor;
+      return [];
+    }
+    if (/FROM\s+JAVIER\.COBROS\s+C/i.test(sql) && /EXISTS/i.test(sql)) return portfolioCobros;
+    if (/REPARTIDOR_COBROS\s+R/i.test(sql) && /EXISTS/i.test(sql)) return portfolioRepartidor;
+    if (/OFFSET\s+\d+\s+ROWS/i.test(sql)) return pageRows;
+    if (/FROM\s+DSEDAC\.CVC\s+CVC/i.test(sql)) return portfolio;
+    return [];
+  };
+  mockQuery.mockImplementation(routeSql);
+  mockQueryWithParams.mockImplementation(routeSql);
+}
+
+function findRepoSqlCall(matcher) {
+  const call = [...mockQuery.mock.calls, ...mockQueryWithParams.mock.calls].find(([sql]) => matcher(sql));
+  return call ? call[0] : '';
+}
+
 describe('commercial cobros hardening', () => {
   test('getPendingSummary for manager ALL aggregates CVC without joining CLP', async () => {
-    mockQuery.mockResolvedValueOnce([
+    const pageRows = [
       {
         CLIENTE: ' C001 ',
         NOMBRE: 'Cliente Uno',
@@ -78,9 +108,8 @@ describe('commercial cobros hardening', () => {
         TOTAL_PENDIENTE: '25.50',
         TOTAL_VENCIDO: '0.00',
       },
-    ])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
+    ];
+    mockRepoPendingSummaryDb({ pageRows, portfolioRows: pageRows });
     const repo = new Db2CobrosRepository();
 
     const result = await repo.getPendingSummary('ALL', {
@@ -89,7 +118,7 @@ describe('commercial cobros hardening', () => {
       isJefeVentas: true,
     });
 
-    const sql = mockQuery.mock.calls[0][0];
+    const sql = findRepoSqlCall((candidate) => /OFFSET\s+\d+\s+ROWS/i.test(candidate));
     expect(sql).toMatch(/FROM\s+DSEDAC\.CVC\s+CVC/i);
     expect(sql).not.toMatch(/LEFT\s+JOIN\s+DSEDAC\.CLP/i);
     expect(sql).not.toMatch(/\bJOIN\s+DSEDAC\.CLP/i);
@@ -108,12 +137,11 @@ describe('commercial cobros hardening', () => {
   });
 
   test('getPendingSummary applies bounded page/offset and page-doc adjustment scope for ALL', async () => {
-    mockQuery
-      .mockResolvedValueOnce([
+    mockRepoPendingSummaryDb({
+      pageRows: [
         { CLIENTE: 'C001', NOMBRE: 'Cliente Uno', SERIE_DOCUMENTO: 'M', NUMERO_DOCUMENTO: 1, TOTAL_PENDIENTE: '100.00', TOTAL_VENCIDO: '0.00' },
-      ])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
+      ],
+    });
     const repo = new Db2CobrosRepository();
 
     const result = await repo.getPendingSummary('ALL', {
@@ -125,22 +153,28 @@ describe('commercial cobros hardening', () => {
     });
 
     expect(result.pagination).toEqual({ limit: 25, page: 3, offset: 50, returnedDocuments: 1 });
-    const summarySql = mockQuery.mock.calls[0][0];
+    const summarySql = findRepoSqlCall((candidate) => /OFFSET\s+50\s+ROWS/i.test(candidate));
     expect(summarySql).toMatch(/ORDER BY\s+TOTAL_PENDIENTE\s+DESC,\s+CLIENTE\s+ASC,\s+SERIE_DOCUMENTO\s+ASC,\s+NUMERO_DOCUMENTO\s+ASC/i);
     expect(summarySql).toMatch(/OFFSET\s+50\s+ROWS\s+FETCH\s+FIRST\s+25\s+ROWS\s+ONLY/i);
-    const adjustmentSql = mockQuery.mock.calls[1][0];
-    expect(adjustmentSql).toMatch(/WITH\s+PAGE_DOCS/i);
+    const adjustmentSql = findRepoSqlCall((candidate) => /WITH\s+PAGE_DOCS/i.test(candidate));
     expect(adjustmentSql).toMatch(/VALUES\s+\('C001',\s*'M',\s*'1',\s*'M-1'\)/i);
+    const portfolioSql = findRepoSqlCall((candidate) => (
+      /FROM\s+DSEDAC\.CVC\s+CVC/i.test(candidate) && !/OFFSET\s+\d+\s+ROWS/i.test(candidate)
+    ));
+    expect(portfolioSql).toBeTruthy();
+    expect(portfolioSql).not.toMatch(/FETCH FIRST/i);
   });
 
   test('getPendingSummary derives page from explicit offset and skips blank client rows', async function () {
-    mockQuery
-      .mockResolvedValueOnce([
+    mockRepoPendingSummaryDb({
+      pageRows: [
         { CLIENTE: '   ', NOMBRE: '', SERIE_DOCUMENTO: 'O', NUMERO_DOCUMENTO: 999, TOTAL_PENDIENTE: '999999.99', TOTAL_VENCIDO: '999999.99' },
         { CLIENTE: 'C001', NOMBRE: 'Cliente Uno', SERIE_DOCUMENTO: 'M', NUMERO_DOCUMENTO: 1, TOTAL_PENDIENTE: '100.00', TOTAL_VENCIDO: '0.00' },
-      ])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([]);
+      ],
+      portfolioRows: [
+        { CLIENTE: 'C001', SERIE_DOCUMENTO: 'M', NUMERO_DOCUMENTO: 1, TOTAL_PENDIENTE: '100.00', TOTAL_VENCIDO: '0.00' },
+      ],
+    });
     const repo = new Db2CobrosRepository();
 
     const result = await repo.getPendingSummary('ALL', {
@@ -156,32 +190,35 @@ describe('commercial cobros hardening', () => {
     expect(result.summary.C001).toEqual({ nombre: 'Cliente Uno', total: 100, vencido: 0, count: 1, estado: 'PENDIENTE' });
     expect(result.grandTotal).toBe(100);
     expect(result.grandTotalVencido).toBe(0);
-    const summarySql = mockQuery.mock.calls[0][0];
+    const summarySql = findRepoSqlCall((candidate) => /OFFSET\s+50\s+ROWS/i.test(candidate));
     expect(summarySql).toMatch(/OFFSET\s+50\s+ROWS\s+FETCH\s+FIRST\s+25\s+ROWS\s+ONLY/i);
   });
 
   test('getPendingSummary subtracts app-side payments only from the matching document', async () => {
-    mockQuery
-      .mockResolvedValueOnce([
-        {
-          CLIENTE: 'C001',
-          NOMBRE: 'Cliente Uno',
-          SERIE_DOCUMENTO: 'M',
-          NUMERO_DOCUMENTO: 1,
-          TOTAL_PENDIENTE: '100.00',
-          TOTAL_VENCIDO: '100.00',
-        },
-        {
-          CLIENTE: 'C001',
-          NOMBRE: 'Cliente Uno',
-          SERIE_DOCUMENTO: 'M',
-          NUMERO_DOCUMENTO: 2,
-          TOTAL_PENDIENTE: '50.00',
-          TOTAL_VENCIDO: '0.00',
-        },
-      ])
-      .mockResolvedValueOnce([{ CLIENTE: 'C001', REF: 'CVC:M-2', TOTAL_APP: '50.00' }])
-      .mockResolvedValueOnce([]);
+    const pageRows = [
+      {
+        CLIENTE: 'C001',
+        NOMBRE: 'Cliente Uno',
+        SERIE_DOCUMENTO: 'M',
+        NUMERO_DOCUMENTO: 1,
+        TOTAL_PENDIENTE: '100.00',
+        TOTAL_VENCIDO: '100.00',
+      },
+      {
+        CLIENTE: 'C001',
+        NOMBRE: 'Cliente Uno',
+        SERIE_DOCUMENTO: 'M',
+        NUMERO_DOCUMENTO: 2,
+        TOTAL_PENDIENTE: '50.00',
+        TOTAL_VENCIDO: '0.00',
+      },
+    ];
+    mockRepoPendingSummaryDb({
+      pageRows,
+      portfolioRows: pageRows,
+      pageCobros: [{ CLIENTE: 'C001', REF: 'CVC:M-2', TOTAL_APP: '50.00' }],
+      portfolioCobros: [{ CLIENTE: 'C001', REF: 'CVC:M-2', TOTAL_APP: '50.00' }],
+    });
     const repo = new Db2CobrosRepository();
 
     const result = await repo.getPendingSummary('ALL', {
@@ -202,8 +239,36 @@ describe('commercial cobros hardening', () => {
     });
   });
 
+  test('getPendingSummary grandTotal aggregates full portfolio across pagination', async () => {
+    mockRepoPendingSummaryDb({
+      pageRows: [
+        { CLIENTE: 'C001', NOMBRE: 'Cliente Uno', SERIE_DOCUMENTO: 'M', NUMERO_DOCUMENTO: 1, TOTAL_PENDIENTE: '100.00', TOTAL_VENCIDO: '0.00' },
+      ],
+      portfolioRows: [
+        { CLIENTE: 'C001', SERIE_DOCUMENTO: 'M', NUMERO_DOCUMENTO: 1, TOTAL_PENDIENTE: '100.00', TOTAL_VENCIDO: '0.00' },
+        { CLIENTE: 'C002', SERIE_DOCUMENTO: 'M', NUMERO_DOCUMENTO: 2, TOTAL_PENDIENTE: '200.00', TOTAL_VENCIDO: '50.00' },
+      ],
+    });
+    const repo = new Db2CobrosRepository();
+
+    const result = await repo.getPendingSummary('ALL', {
+      userId: '98',
+      userRole: 'JEFE_VENTAS',
+      isJefeVentas: true,
+      limit: 1,
+      page: 1,
+    });
+
+    expect(result.summary).toEqual({
+      C001: { nombre: 'Cliente Uno', total: 100, vencido: 0, count: 1, estado: 'PENDIENTE' },
+    });
+    expect(result.grandTotal).toBe(300);
+    expect(result.grandTotalVencido).toBe(50);
+    expect(result.clientCount).toBe(2);
+  });
+
   test('getPendingSummary treats documents due today as vencido', async () => {
-    mockQuery.mockResolvedValueOnce([]);
+    mockRepoPendingSummaryDb();
     const repo = new Db2CobrosRepository();
 
     await repo.getPendingSummary('ALL', {
@@ -212,12 +277,12 @@ describe('commercial cobros hardening', () => {
       isJefeVentas: true,
     });
 
-    const sql = mockQuery.mock.calls[0][0];
+    const sql = findRepoSqlCall((candidate) => /FROM\s+DSEDAC\.CVC\s+CVC/i.test(candidate));
     expect(sql).toMatch(/<=\s*\(YEAR\(CURRENT_DATE\) \* 10000 \+ MONTH\(CURRENT_DATE\) \* 100 \+ DAY\(CURRENT_DATE\)\)/i);
   });
 
   test('getPendingSummary for manager ALL scopes to visible vendorCodes', async () => {
-    mockQueryWithParams.mockResolvedValueOnce([]);
+    mockRepoPendingSummaryDb();
     const repo = new Db2CobrosRepository();
 
     await repo.getPendingSummary('ALL', {
@@ -227,10 +292,10 @@ describe('commercial cobros hardening', () => {
       vendorCodes: ['01', '02'],
     });
 
-    const [sql, params] = mockQueryWithParams.mock.calls[0];
-    expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\(\?,\?\)/i);
+    const [sql, params] = mockQueryWithParams.mock.calls.find(([candidate]) => /OFFSET\s+\d+\s+ROWS/i.test(candidate));
+    expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\(/i);
     expect(sql).not.toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s*<>\s*''/i);
-    expect(params).toEqual(['01', '02']);
+    expect(params).toEqual(['01', '1', '02', '2', '01', '1', '02', '2']);
   });
 
   test('getPendingSummary rejects manager selected vendor outside visible scope', async () => {
@@ -248,9 +313,11 @@ describe('commercial cobros hardening', () => {
   });
 
   test('getPendingSummary for manager selected vendors filters CVC with CLP semi-join', async () => {
-    mockQueryWithParams.mockResolvedValueOnce([
-      { CLIENTE: 'C002', TOTAL_PENDIENTE: '80.00', TOTAL_VENCIDO: '0.00', NUM_DOCS: '1' },
-    ]);
+    mockRepoPendingSummaryDb({
+      pageRows: [
+        { CLIENTE: 'C002', NOMBRE: 'Cliente Dos', SERIE_DOCUMENTO: 'M', NUMERO_DOCUMENTO: 1, TOTAL_PENDIENTE: '80.00', TOTAL_VENCIDO: '0.00' },
+      ],
+    });
     const repo = new Db2CobrosRepository();
 
     await repo.getPendingSummary('01,02', {
@@ -259,13 +326,13 @@ describe('commercial cobros hardening', () => {
       isJefeVentas: true,
     });
 
-    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    const [sql, params] = mockQueryWithParams.mock.calls.find(([candidate]) => /OFFSET\s+\d+\s+ROWS/i.test(candidate));
     expect(sql).toMatch(/FROM\s+DSEDAC\.CVC\s+CVC/i);
     expect(sql).toMatch(/EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+DSEDAC\.CLP\s+CLP/i);
     expect(sql).toMatch(/TRIM\(CLP\.CODIGOCLIENTE\)\s*=\s*TRIM\(CVC\.CODIGOCLIENTEALBARAN\)/i);
-    expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\(\?,\?\)/i);
+    expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\(/i);
     expect(sql).not.toMatch(/LEFT\s+JOIN\s+DSEDAC\.CLP/i);
-    expect(params).toEqual(['01', '02']);
+    expect(params).toEqual(['01', '1', '02', '2', '01', '1', '02', '2']);
   });
 
   test('getPendingSummary forbids COMERCIAL from ALL and another vendor', async () => {
@@ -493,17 +560,18 @@ describe('commercial cobros hardening', () => {
     })).rejects.toMatchObject({ code: 'FORBIDDEN_CLIENT_VENDOR' });
   });
 
-  test('getAppSideCobrosByDoc groups REPARTIDOR_COBROS by raw columns for DB2 prepare', async () => {
+  test('getAppSideCobrosByDoc groups COBROS by normalized document reference', async () => {
     mockQueryWithParams.mockResolvedValueOnce([
-      { SERIE: 'M', NUMERO: 123, TOTAL: '30.00' },
+      { REF: 'CVC:M-123', TOTAL: '30.00' },
     ]);
     const repo = new Db2CobrosRepository();
 
     const adjustments = await repo.getAppSideCobrosByDoc('C001');
 
-    const [sql] = mockQueryWithParams.mock.calls[0];
-    expect(sql).toMatch(/GROUP BY SERIEDOCUMENTO, NUMERODOCUMENTO/i);
-    expect(sql).not.toMatch(/TRIM\(CAST\(NUMERODOCUMENTO AS VARCHAR/i);
+    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    expect(sql).toMatch(/FROM JAVIER\.COBROS/i);
+    expect(sql).toMatch(/GROUP BY TRIM\(REFERENCIA\)/i);
+    expect(params).toEqual(['C001']);
     expect(adjustments.get('M-123')).toBe(30);
   });
 

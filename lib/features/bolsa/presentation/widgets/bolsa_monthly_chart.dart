@@ -15,15 +15,25 @@ class BolsaMonthlyChart extends StatelessWidget {
   final List<BolsaMonthlyPoint> history;
 
   static const _monthsAbbr = [
-    'E', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D',
+    'E',
+    'F',
+    'M',
+    'A',
+    'M',
+    'J',
+    'J',
+    'A',
+    'S',
+    'O',
+    'N',
+    'D',
   ];
 
   @override
   Widget build(BuildContext context) {
     if (history.isEmpty) return const SizedBox.shrink();
     final maxVal = history.fold<double>(0, (acc, p) {
-      final localMax =
-          p.acumulado > p.consumido ? p.acumulado : p.consumido;
+      final localMax = p.acumulado > p.consumido ? p.acumulado : p.consumido;
       return localMax > acc ? localMax : acc;
     });
     if (maxVal <= 0) return const SizedBox.shrink();
@@ -55,8 +65,11 @@ class BolsaMonthlyChart extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Icon(Icons.show_chart,
-                  color: AppTheme.neonBlue, size: 18,),
+              const Icon(
+                Icons.show_chart,
+                color: AppTheme.neonBlue,
+                size: 18,
+              ),
               const SizedBox(width: 6),
               const Text(
                 'Histórico 12 meses',
@@ -152,7 +165,8 @@ class BolsaMonthlyChart extends StatelessWidget {
     );
   }
 
-  Widget _bar({required double height, required Color color, bool glow = false}) {
+  Widget _bar(
+      {required double height, required Color color, bool glow = false}) {
     final h = height.isFinite && height > 0 ? height : 0.0;
     return Container(
       width: 6,
@@ -172,7 +186,8 @@ class BolsaMonthlyChart extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 8, height: 8,
+          width: 8,
+          height: 8,
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 4),
@@ -232,8 +247,8 @@ class BolsaMonthlyChart extends StatelessWidget {
 
   static String _eur(double v) {
     return '${v.toStringAsFixed(0).replaceAllMapped(
-      RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
-      (m) => '${m[1]}.',
-    )}€';
+          RegExp(r'(\d)(?=(\d{3})+(?!\d))'),
+          (m) => '${m[1]}.',
+        )}€';
   }
 }

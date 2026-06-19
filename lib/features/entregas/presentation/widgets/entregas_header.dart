@@ -16,7 +16,8 @@ class EntregasHeader extends ConsumerWidget {
     final importeCTR = state.importeTotalCTR;
 
     return Container(
-      padding: EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
+      padding:
+          EdgeInsets.all(Responsive.padding(context, small: 12, large: 16)),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -32,8 +33,11 @@ class EntregasHeader extends ConsumerWidget {
           // Título con Selector de Fecha
           Row(
             children: [
-              Icon(Icons.local_shipping,
-                         color: Colors.white, size: Responsive.iconSize(context, phone: 24, desktop: 28),),
+              Icon(
+                Icons.local_shipping,
+                color: Colors.white,
+                size: Responsive.iconSize(context, phone: 24, desktop: 28),
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -42,9 +46,9 @@ class EntregasHeader extends ConsumerWidget {
                     Text(
                       'Entregas del Día',
                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
                     ),
                     InkWell(
                       onTap: () async {
@@ -65,7 +69,9 @@ class EntregasHeader extends ConsumerWidget {
                           },
                         );
                         if (fecha != null) {
-                          ref.read(entregasProvider.notifier).seleccionarFecha(fecha);
+                          ref
+                              .read(entregasProvider.notifier)
+                              .seleccionarFecha(fecha);
                         }
                       },
                       child: Row(
@@ -81,7 +87,8 @@ class EntregasHeader extends ConsumerWidget {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          const Icon(Icons.calendar_today, color: Colors.white, size: 14),
+                          const Icon(Icons.calendar_today,
+                              color: Colors.white, size: 14),
                         ],
                       ),
                     ),
@@ -161,7 +168,8 @@ class EntregasHeader extends ConsumerWidget {
     );
   }
 
-  Widget _buildStatCard(BuildContext context, {
+  Widget _buildStatCard(
+    BuildContext context, {
     required IconData icon,
     required String label,
     required String value,
@@ -170,8 +178,8 @@ class EntregasHeader extends ConsumerWidget {
     return Expanded(
       child: Container(
         padding: EdgeInsets.symmetric(
-            vertical: 12 * Responsive.landscapeScale(context),
-            horizontal: 8 * Responsive.landscapeScale(context),
+          vertical: 12 * Responsive.landscapeScale(context),
+          horizontal: 8 * Responsive.landscapeScale(context),
         ),
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.15),
@@ -203,8 +211,29 @@ class EntregasHeader extends ConsumerWidget {
   }
 
   String _formatFecha(DateTime fecha) {
-    final dias = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
-    final meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    final dias = [
+      'Lunes',
+      'Martes',
+      'Miércoles',
+      'Jueves',
+      'Viernes',
+      'Sábado',
+      'Domingo'
+    ];
+    final meses = [
+      'Ene',
+      'Feb',
+      'Mar',
+      'Abr',
+      'May',
+      'Jun',
+      'Jul',
+      'Ago',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dic'
+    ];
     return '${dias[fecha.weekday - 1]}, ${fecha.day} ${meses[fecha.month - 1]} ${fecha.year}';
   }
 }

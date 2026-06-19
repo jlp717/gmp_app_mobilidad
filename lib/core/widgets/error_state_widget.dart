@@ -5,9 +5,9 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 /// Shared error state widget — V2 Premium.
 /// Displays an error icon, message, and optional retry button with modern styling.
 class ErrorStateWidget extends StatelessWidget {
-
   const ErrorStateWidget({
-    required this.message, super.key,
+    required this.message,
+    super.key,
     this.onRetry,
     this.retryLabel = 'Reintentar',
     this.iconSize = 48,
@@ -31,7 +31,8 @@ class ErrorStateWidget extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: AppTheme.error.withValues(alpha: 0.08),
-                border: Border.all(color: AppTheme.error.withValues(alpha: 0.15)),
+                border:
+                    Border.all(color: AppTheme.error.withValues(alpha: 0.15)),
                 boxShadow: [
                   BoxShadow(
                     color: AppTheme.error.withValues(alpha: 0.1),
@@ -45,7 +46,10 @@ class ErrorStateWidget extends StatelessWidget {
                 color: AppTheme.error,
                 size: iconSize,
               ),
-            ).animate().fadeIn(duration: 400.ms).scale(begin: const Offset(0.8, 0.8)),
+            )
+                .animate()
+                .fadeIn(duration: 400.ms)
+                .scale(begin: const Offset(0.8, 0.8)),
             const SizedBox(height: 16),
             Text(
               message,
@@ -65,10 +69,12 @@ class ErrorStateWidget extends StatelessWidget {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppTheme.error.withValues(alpha: 0.15),
                   foregroundColor: AppTheme.error,
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-                    side: BorderSide(color: AppTheme.error.withValues(alpha: 0.3)),
+                    side: BorderSide(
+                        color: AppTheme.error.withValues(alpha: 0.3)),
                   ),
                   elevation: 0,
                 ),

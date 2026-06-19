@@ -17,9 +17,11 @@ import 'package:gmp_app_mobilidad/features/warehouse/presentation/widgets/planne
 /// Layout: Header → Toolbar → MetricsBar → [Canvas (70%) | Panel (30%)]
 /// Responsive: tablet = side-by-side, phone = canvas + bottom sheet.
 class LoadPlannerV2Page extends ConsumerStatefulWidget {
-
   const LoadPlannerV2Page({
-    required this.vehicleCode, required this.vehicleName, required this.date, super.key,
+    required this.vehicleCode,
+    required this.vehicleName,
+    required this.date,
+    super.key,
   });
   final String vehicleCode;
   final String vehicleName;
@@ -287,8 +289,8 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
               Text(
                 'Calculando carga...',
                 style: TextStyle(
-                  color: AppTheme.textSecondary.withValues(alpha: 
-                    0.5 + (_shimmerCtrl.value * 0.5),
+                  color: AppTheme.textSecondary.withValues(
+                    alpha: 0.5 + (_shimmerCtrl.value * 0.5),
                   ),
                   fontSize: 14,
                   fontWeight: FontWeight.w500,
@@ -589,7 +591,6 @@ class _LoadPlannerV2PageState extends ConsumerState<LoadPlannerV2Page>
 // =============================================================================
 
 class _GlassIconButton extends StatelessWidget {
-
   const _GlassIconButton({
     required this.icon,
     required this.onPressed,

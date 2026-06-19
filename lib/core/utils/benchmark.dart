@@ -2,50 +2,49 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 /// Benchmark Utility V3 Performance Optimization
-/// 
+///
 /// Use this to measure performance improvements before and after optimization.
-/// 
+///
 /// Usage:
 /// ```dart
 /// // Start benchmark
 /// final benchmark = Benchmark('Dashboard Load');
 /// benchmark.start();
-/// 
+///
 /// // Your code here
 /// await fetchDashboardData();
-/// 
+///
 /// // End benchmark
 /// benchmark.end();
 /// benchmark.printResults();
 /// ```
-/// 
+///
 /// Advanced usage with memory tracking:
 /// ```dart
 /// final benchmark = Benchmark('Cart Operations')
 ///   ..trackMemory = true
 ///   ..start();
-/// 
+///
 /// for (int i = 0; i < 100; i++) {
 ///   cart.addItem(product);
 /// }
-/// 
+///
 /// benchmark.end();
 /// benchmark.printResults();
 /// ```
 class Benchmark {
-  
   Benchmark(this.name);
   final String name;
   DateTime? _startTime;
   DateTime? _endTime;
   int _iterations = 1;
   bool trackMemory = false;
-  
+
   int? _startMemory;
   int? _endMemory;
-  
+
   static final List<BenchmarkResult> _results = [];
-  
+
   /// Start the benchmark
   void start() {
     _startTime = DateTime.now();
@@ -54,14 +53,14 @@ class Benchmark {
     }
     debugPrint('[Benchmark] $name: Starting...');
   }
-  
+
   /// End the benchmark
   void end() {
     _endTime = DateTime.now();
     if (trackMemory) {
       _endMemory = _getMemoryUsage();
     }
-    
+
     final result = BenchmarkResult(
       name: name,
       duration: duration,
@@ -69,16 +68,16 @@ class Benchmark {
       startMemory: _startMemory,
       endMemory: _endMemory,
     );
-    
+
     _results.add(result);
     debugPrint('[Benchmark] $name: Completed in ${result.formattedDuration}');
   }
-  
+
   /// Set number of iterations (for averaging)
   void setIterations(int iterations) {
     _iterations = iterations;
   }
-  
+
   /// Get duration in milliseconds
   Duration get duration {
     if (_startTime == null || _endTime == null) {
@@ -86,23 +85,23 @@ class Benchmark {
     }
     return _endTime!.difference(_startTime!);
   }
-  
+
   /// Get average duration per iteration
   Duration get averageDuration {
     return duration ~/ _iterations;
   }
-  
+
   /// Get memory difference in KB
   int? get memoryDifference {
     if (_startMemory == null || _endMemory == null) return null;
     return _endMemory! - _startMemory!;
   }
-  
+
   /// Print results to console
   void printResults() {
     final durationMs = duration.inMilliseconds;
     final avgMs = averageDuration.inMilliseconds;
-    
+
     debugPrint('''
 ╔═══════════════════════════════════════════════════════════╗
 ║  BENCHMARK RESULTS: ${name.padRight(36)}║
@@ -114,7 +113,7 @@ ${trackMemory && memoryDifference != null ? '║  Memory Delta:    ${memoryDiffe
 ╚═══════════════════════════════════════════════════════════╝
 ''');
   }
-  
+
   /// Get approximate memory usage (platform-dependent)
   int? _getMemoryUsage() {
     // Note: Dart doesn't provide direct memory access
@@ -122,18 +121,18 @@ ${trackMemory && memoryDifference != null ? '║  Memory Delta:    ${memoryDiffe
     // or implement via MethodChannel for Flutter
     return null;
   }
-  
+
   /// Print all recorded results
   static void printAllResults() {
     if (_results.isEmpty) {
       debugPrint('[Benchmark] No results recorded');
       return;
     }
-    
+
     debugPrint('\n${'=' * 60}');
     debugPrint('ALL BENCHMARK RESULTS (${_results.length} tests)');
     debugPrint('${'=' * 60}\n');
-    
+
     for (final result in _results) {
       debugPrint('${result.name}:');
       debugPrint('  Duration: ${result.formattedDuration}');
@@ -146,13 +145,15 @@ ${trackMemory && memoryDifference != null ? '║  Memory Delta:    ${memoryDiffe
       debugPrint('');
     }
   }
-  
+
   /// Compare two benchmarks
   static void compare(String label, Duration before, Duration after) {
-    final improvement = ((before.inMilliseconds - after.inMilliseconds) / 
-                        before.inMilliseconds * 100).toStringAsFixed(1);
+    final improvement = ((before.inMilliseconds - after.inMilliseconds) /
+            before.inMilliseconds *
+            100)
+        .toStringAsFixed(1);
     final speedup = before.inMilliseconds / after.inMilliseconds;
-    
+
     debugPrint('''
 ╔═══════════════════════════════════════════════════════════╗
 ║  PERFORMANCE COMPARISON: ${label.padRight(32)}║
@@ -165,7 +166,7 @@ ${trackMemory && memoryDifference != null ? '║  Memory Delta:    ${memoryDiffe
 ╚═══════════════════════════════════════════════════════════╝
 ''');
   }
-  
+
   /// Clear all results
   static void clear() {
     _results.clear();
@@ -174,7 +175,6 @@ ${trackMemory && memoryDifference != null ? '║  Memory Delta:    ${memoryDiffe
 
 /// Benchmark result data class
 class BenchmarkResult {
-  
   BenchmarkResult({
     required this.name,
     required this.duration,
@@ -187,9 +187,9 @@ class BenchmarkResult {
   final int iterations;
   final int? startMemory;
   final int? endMemory;
-  
+
   String get formattedDuration => '${duration.inMilliseconds} ms';
-  
+
   String get formattedAverage {
     final avg = duration.inMilliseconds ~/ iterations;
     return '$avg ms/iter';
@@ -199,7 +199,7 @@ class BenchmarkResult {
 /// Performance profiler for measuring specific operations
 class PerformanceProfiler {
   final Map<String, List<Duration>> _measurements = {};
-  
+
   /// Profile a function execution
   T profile<T>(String label, T Function() fn) {
     final start = DateTime.now();
@@ -210,7 +210,7 @@ class PerformanceProfiler {
       _measurements.putIfAbsent(label, () => []).add(duration);
     }
   }
-  
+
   /// Profile async function execution
   Future<T> profileAsync<T>(String label, Future<T> Function() fn) async {
     final start = DateTime.now();
@@ -221,15 +221,15 @@ class PerformanceProfiler {
       _measurements.putIfAbsent(label, () => []).add(duration);
     }
   }
-  
+
   /// Get statistics for a label
   ProfileStats? getStats(String label) {
     final measurements = _measurements[label];
     if (measurements == null || measurements.isEmpty) return null;
-    
+
     final sorted = List<Duration>.from(measurements)..sort();
     final total = sorted.reduce((a, b) => a + b);
-    
+
     return ProfileStats(
       label: label,
       count: sorted.length,
@@ -241,13 +241,13 @@ class PerformanceProfiler {
       p99: sorted[(sorted.length * 0.99).floor()],
     );
   }
-  
+
   /// Print all statistics
   void printStats() {
     debugPrint('\n${'=' * 60}');
     debugPrint('PERFORMANCE PROFILE STATISTICS');
     debugPrint('${'=' * 60}\n');
-    
+
     for (final entry in _measurements.entries) {
       final stats = getStats(entry.key);
       if (stats != null) {
@@ -255,7 +255,7 @@ class PerformanceProfiler {
       }
     }
   }
-  
+
   /// Clear all measurements
   void clear() {
     _measurements.clear();
@@ -264,7 +264,6 @@ class PerformanceProfiler {
 
 /// Profile statistics
 class ProfileStats {
-  
   ProfileStats({
     required this.label,
     required this.count,
@@ -283,7 +282,7 @@ class ProfileStats {
   final Duration median;
   final Duration p95;
   final Duration p99;
-  
+
   @override
   String toString() {
     return '''$label:
@@ -309,25 +308,25 @@ class LoadTester {
     final start = DateTime.now();
     var completed = 0;
     var failed = 0;
-    
+
     final tasks = <Future<void>>[];
-    
+
     for (var i = 0; i < totalTasks; i += concurrentTasks) {
       final batch = <Future<void>>[];
-      
+
       for (var j = 0; j < concurrentTasks && (i + j) < totalTasks; j++) {
         batch.add(
           task().catchError((_) => failed++),
         );
       }
-      
+
       await Future.wait(batch);
       completed += batch.length;
     }
-    
+
     final duration = DateTime.now().difference(start);
     final tasksPerSecond = totalTasks / (duration.inMilliseconds / 1000);
-    
+
     return LoadTestResult(
       name: name,
       totalTasks: totalTasks,
@@ -341,7 +340,6 @@ class LoadTester {
 
 /// Load test result
 class LoadTestResult {
-  
   LoadTestResult({
     required this.name,
     required this.totalTasks,
@@ -356,7 +354,7 @@ class LoadTestResult {
   final int failed;
   final Duration duration;
   final double tasksPerSecond;
-  
+
   @override
   String toString() {
     final successRate = (completed / totalTasks * 100).toStringAsFixed(1);

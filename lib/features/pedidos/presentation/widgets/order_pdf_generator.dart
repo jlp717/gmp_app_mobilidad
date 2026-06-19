@@ -13,8 +13,8 @@ class OrderPdfGenerator {
   static const _lightGray = '#E8E8E8';
   static const _ultraLight = '#f8f9fa';
 
-  static Future<void> generateAndShare(
-      BuildContext context, OrderDetail order, {bool isMarginVisible = true}) async {
+  static Future<void> generateAndShare(BuildContext context, OrderDetail order,
+      {bool isMarginVisible = true}) async {
     final pdf = pw.Document();
     final header = order.header;
     final lines = order.lines;
@@ -33,8 +33,10 @@ class OrderPdfGenerator {
           _buildTotals(header, lines, isMarginVisible: isMarginVisible),
           if (header.tipoVenta.isNotEmpty) ...[
             pw.SizedBox(height: 12),
-            pw.Text('Tipo de venta: ${_saleTypeLabel(header.tipoVenta)}',
-                style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),),
+            pw.Text(
+              'Tipo de venta: ${_saleTypeLabel(header.tipoVenta)}',
+              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+            ),
           ],
         ],
       ),
@@ -53,16 +55,28 @@ class OrderPdfGenerator {
         children: [
           pw.Divider(color: PdfColor.fromHex(_lightGray)),
           pw.SizedBox(height: 4),
-          pw.Text('MARI PEPA - Food & Frozen',
-              style: pw.TextStyle(
-                  fontSize: 7, color: PdfColor.fromHex(_mediumGray),),),
-          pw.Text('Congelados y refrigerados para hostelería',
-              style: pw.TextStyle(
-                  fontSize: 6, color: PdfColor.fromHex(_mediumGray),),),
+          pw.Text(
+            'MARI PEPA - Food & Frozen',
+            style: pw.TextStyle(
+              fontSize: 7,
+              color: PdfColor.fromHex(_mediumGray),
+            ),
+          ),
+          pw.Text(
+            'Congelados y refrigerados para hostelería',
+            style: pw.TextStyle(
+              fontSize: 6,
+              color: PdfColor.fromHex(_mediumGray),
+            ),
+          ),
           pw.SizedBox(height: 2),
-          pw.Text('Página ${ctx.pageNumber} de ${ctx.pagesCount}',
-              style: pw.TextStyle(
-                  fontSize: 7, color: PdfColor.fromHex(_mediumGray),),),
+          pw.Text(
+            'Página ${ctx.pageNumber} de ${ctx.pagesCount}',
+            style: pw.TextStyle(
+              fontSize: 7,
+              color: PdfColor.fromHex(_mediumGray),
+            ),
+          ),
         ],
       ),
     );
@@ -85,21 +99,31 @@ class OrderPdfGenerator {
             pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text('MARI PEPA',
-                    style: pw.TextStyle(
-                        fontSize: 28,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColor.fromHex(_primaryColor),),),
+                pw.Text(
+                  'MARI PEPA',
+                  style: pw.TextStyle(
+                    fontSize: 28,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColor.fromHex(_primaryColor),
+                  ),
+                ),
                 pw.SizedBox(height: 2),
-                pw.Text('Food & Frozen',
-                    style: pw.TextStyle(
-                        fontSize: 12,
-                        color: PdfColor.fromHex(_darkGray),
-                        fontWeight: pw.FontWeight.bold,),),
+                pw.Text(
+                  'Food & Frozen',
+                  style: pw.TextStyle(
+                    fontSize: 12,
+                    color: PdfColor.fromHex(_darkGray),
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
                 pw.SizedBox(height: 2),
-                pw.Text('Congelados y refrigerados para hostelería',
-                    style: pw.TextStyle(
-                        fontSize: 8, color: PdfColor.fromHex(_mediumGray),),),
+                pw.Text(
+                  'Congelados y refrigerados para hostelería',
+                  style: pw.TextStyle(
+                    fontSize: 8,
+                    color: PdfColor.fromHex(_mediumGray),
+                  ),
+                ),
               ],
             ),
             pw.Column(
@@ -107,23 +131,31 @@ class OrderPdfGenerator {
               children: [
                 pw.Container(
                   padding: const pw.EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 6,),
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: pw.BoxDecoration(
                     color: PdfColor.fromHex(_secondaryColor),
                     borderRadius: pw.BorderRadius.circular(4),
                   ),
-                  child: pw.Text('PEDIDO',
-                      style: pw.TextStyle(
-                          fontSize: 10,
-                          color: PdfColors.white,
-                          fontWeight: pw.FontWeight.bold,),),
+                  child: pw.Text(
+                    'PEDIDO',
+                    style: pw.TextStyle(
+                      fontSize: 10,
+                      color: PdfColors.white,
+                      fontWeight: pw.FontWeight.bold,
+                    ),
+                  ),
                 ),
                 pw.SizedBox(height: 4),
-                pw.Text('#${header.numeroPedido}',
-                    style: pw.TextStyle(
-                        fontSize: 18,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColor.fromHex(_darkGray),),),
+                pw.Text(
+                  '#${header.numeroPedido}',
+                  style: pw.TextStyle(
+                    fontSize: 18,
+                    fontWeight: pw.FontWeight.bold,
+                    color: PdfColor.fromHex(_darkGray),
+                  ),
+                ),
               ],
             ),
           ],
@@ -132,9 +164,13 @@ class OrderPdfGenerator {
         pw.Row(
           mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
           children: [
-            pw.Text('Fecha: ${header.fecha}',
-                style: pw.TextStyle(
-                    fontSize: 10, color: PdfColor.fromHex(_mediumGray),),),
+            pw.Text(
+              'Fecha: ${header.fecha}',
+              style: pw.TextStyle(
+                fontSize: 10,
+                color: PdfColor.fromHex(_mediumGray),
+              ),
+            ),
             pw.Container(
               padding:
                   const pw.EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -142,11 +178,14 @@ class OrderPdfGenerator {
                 color: _statusColor(header.estado),
                 borderRadius: pw.BorderRadius.circular(4),
               ),
-              child: pw.Text(_statusLabel(header.estado),
-                  style: pw.TextStyle(
-                      fontSize: 10,
-                      color: PdfColors.white,
-                      fontWeight: pw.FontWeight.bold,),),
+              child: pw.Text(
+                _statusLabel(header.estado),
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  color: PdfColors.white,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
             ),
           ],
         ),
@@ -169,24 +208,40 @@ class OrderPdfGenerator {
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                pw.Text('Cliente',
-                    style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),),
-                pw.Text(header.clienteName,
-                    style: pw.TextStyle(
-                        fontSize: 12, fontWeight: pw.FontWeight.bold,),),
-                pw.Text(header.clienteCode,
-                    style: const pw.TextStyle(
-                        fontSize: 10, color: PdfColors.grey700,),),
+                pw.Text(
+                  'Cliente',
+                  style:
+                      const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+                ),
+                pw.Text(
+                  header.clienteName,
+                  style: pw.TextStyle(
+                    fontSize: 12,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.Text(
+                  header.clienteCode,
+                  style: const pw.TextStyle(
+                    fontSize: 10,
+                    color: PdfColors.grey700,
+                  ),
+                ),
               ],
             ),
           ),
           pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.end,
             children: [
-              pw.Text('Vendedor',
-                  style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),),
-              pw.Text(header.vendedorCode,
-                  style: const pw.TextStyle(fontSize: 10),),
+              pw.Text(
+                'Vendedor',
+                style:
+                    const pw.TextStyle(fontSize: 8, color: PdfColors.grey600),
+              ),
+              pw.Text(
+                header.vendedorCode,
+                style: const pw.TextStyle(fontSize: 10),
+              ),
             ],
           ),
         ],
@@ -197,7 +252,10 @@ class OrderPdfGenerator {
   static pw.Widget _buildLinesTable(List<OrderLine> lines) {
     return pw.TableHelper.fromTextArray(
       headerStyle: pw.TextStyle(
-          fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.white,),
+        fontSize: 9,
+        fontWeight: pw.FontWeight.bold,
+        color: PdfColors.white,
+      ),
       headerDecoration: pw.BoxDecoration(color: PdfColor.fromHex('#003d7a')),
       cellStyle: const pw.TextStyle(fontSize: 9),
       cellPadding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -211,19 +269,31 @@ class OrderPdfGenerator {
       },
       headers: ['Codigo', 'Producto', 'Cajas', 'Uds', 'Precio', 'Total'],
       data: lines
-          .map((l) => [
-                l.codigoArticulo,
-                if (l.descripcion.length > 25) '${l.descripcion.substring(0, 25)}...' else l.descripcion,
-                if (l.cantidadEnvases > 0) l.cantidadEnvases.toStringAsFixed(0) else '-',
-                if (l.cantidadUnidades > 0) l.cantidadUnidades.toStringAsFixed(0) else '-',
-                _money(l.precioVenta, decimals: 3),
-                _money(l.importeVenta),
-              ],)
+          .map(
+            (l) => [
+              l.codigoArticulo,
+              if (l.descripcion.length > 25)
+                '${l.descripcion.substring(0, 25)}...'
+              else
+                l.descripcion,
+              if (l.cantidadEnvases > 0)
+                l.cantidadEnvases.toStringAsFixed(0)
+              else
+                '-',
+              if (l.cantidadUnidades > 0)
+                l.cantidadUnidades.toStringAsFixed(0)
+              else
+                '-',
+              _money(l.precioVenta, decimals: 3),
+              _money(l.importeVenta),
+            ],
+          )
           .toList(),
     );
   }
 
-  static pw.Widget _buildTotals(OrderSummary header, List<OrderLine> lines, {bool isMarginVisible = true}) {
+  static pw.Widget _buildTotals(OrderSummary header, List<OrderLine> lines,
+      {bool isMarginVisible = true}) {
     final totalVenta = lines.fold<double>(0, (s, l) => s + l.importeVenta);
     final totalMargen = lines.fold<double>(0, (s, l) => s + l.importeMargen);
     final pctMargen = totalVenta > 0 ? (totalMargen / totalVenta * 100) : 0;
@@ -244,31 +314,46 @@ class OrderPdfGenerator {
             _totalRow('Lineas:', '${lines.length}'),
             _totalRow('Cajas:', totalEnvases.toStringAsFixed(0)),
             pw.Divider(color: PdfColors.grey300),
-            _totalRow('Total:', _money(totalVenta),
-                bold: true, color: PdfColor.fromHex('#003d7a'),),
+            _totalRow(
+              'Total:',
+              _money(totalVenta),
+              bold: true,
+              color: PdfColor.fromHex('#003d7a'),
+            ),
             if (isMarginVisible)
-              _totalRow('Margen:',
-                  '${_money(totalMargen)} (${pctMargen.toStringAsFixed(1)}%)',),
+              _totalRow(
+                'Margen:',
+                '${_money(totalMargen)} (${pctMargen.toStringAsFixed(1)}%)',
+              ),
           ],
         ),
       ),
     );
   }
 
-  static pw.Widget _totalRow(String label, String value,
-      {bool bold = false, PdfColor? color,}) {
+  static pw.Widget _totalRow(
+    String label,
+    String value, {
+    bool bold = false,
+    PdfColor? color,
+  }) {
     return pw.Padding(
       padding: const pw.EdgeInsets.symmetric(vertical: 2),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(label,
-              style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),),
-          pw.Text(value,
-              style: pw.TextStyle(
-                  fontSize: bold ? 12 : 10,
-                  fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
-                  color: color ?? PdfColors.black,),),
+          pw.Text(
+            label,
+            style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+          ),
+          pw.Text(
+            value,
+            style: pw.TextStyle(
+              fontSize: bold ? 12 : 10,
+              fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
+              color: color ?? PdfColors.black,
+            ),
+          ),
         ],
       ),
     );

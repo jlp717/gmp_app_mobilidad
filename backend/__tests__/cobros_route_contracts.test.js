@@ -122,9 +122,15 @@ describe('legacy cobros route DB2 contracts', () => {
   });
 
   test('GET /pending-summary/ALL applies limit/page offset and returns pagination contract', async () => {
-    mockQuery.mockResolvedValueOnce([
-      { CLIENTE: 'C001', SERIE_DOCUMENTO: 'M', NUMERO_DOCUMENTO: 1, TOTAL_PENDIENTE: '100.00', TOTAL_VENCIDO: '0.00', NOMBRE_ALT: 'Cliente Uno', NOMBRE_CLI: 'Cliente Uno' },
-    ]);
+    mockQuery.mockImplementation(async (sql) => {
+      if (/OFFSET\s+50\s+ROWS/i.test(sql)) {
+        return [{ CLIENTE: 'C001', SERIE_DOCUMENTO: 'M', NUMERO_DOCUMENTO: 1, TOTAL_PENDIENTE: '100.00', TOTAL_VENCIDO: '0.00', NOMBRE_ALT: 'Cliente Uno', NOMBRE_CLI: 'Cliente Uno' }];
+      }
+      if (/FROM\s+DSEDAC\.CVC\s+CVC/i.test(sql)) {
+        return [{ CLIENTE: 'C001', SERIE_DOCUMENTO: 'M', NUMERO_DOCUMENTO: 1, TOTAL_PENDIENTE: '100.00', TOTAL_VENCIDO: '0.00' }];
+      }
+      return [];
+    });
     mockQueryWithParams.mockResolvedValue([]);
 
     const res = await request(makeApp({ code: '98', role: 'JEFE_VENTAS', isJefeVentas: true }))
@@ -256,5 +262,115 @@ describe('legacy cobros route DB2 contracts', () => {
     expect(res.status).toBe(409);
     expect(res.body.code).toBe('COBRO_ALREADY_COLLECTED_BY_REPARTIDOR');
     expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT\s+INTO\s+JAVIER\.COBROS/i.test(sql))).toBe(false);
+  });
+
+  test('GET /:cliente/pendientes flags cobradoPorRepartidor for CTR and REPARTIDOR_COBROS', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
+        return [
+          {
+            SERIE_DOCUMENTO: 'M',
+            NUMERO_DOCUMENTO: 10,
+            XDE: 1,
+            IMPORTE_TOTAL: 100,
+            IMPORTE_COBRADO: 0,
+            IMPORTE_PENDIENTE: 100,
+            ANO_DOCUMENTO: 2026,
+            MES_DOCUMENTO: 6,
+            DIA_DOCUMENTO: 1,
+            ANO_VENCIMIENTO: 2026,
+            MES_VENCIMIENTO: 6,
+            DIA_VENCIMIENTO: 30,
+            TIPO_DOCUMENTO: 'FAC',
+            FORMA_PAGO: '01',
+          },
+          {
+            SERIE_DOCUMENTO: 'M',
+            NUMERO_DOCUMENTO: 11,
+            XDE: 1,
+            IMPORTE_TOTAL: 50,
+            IMPORTE_COBRADO: 0,
+            IMPORTE_PENDIENTE: 50,
+            ANO_DOCUMENTO: 2026,
+            MES_DOCUMENTO: 6,
+            DIA_DOCUMENTO: 1,
+            ANO_VENCIMIENTO: 2026,
+            MES_VENCIMIENTO: 6,
+            DIA_VENCIMIENTO: 30,
+            TIPO_DOCUMENTO: 'FAC',
+            FORMA_PAGO: '02',
+          },
+        ];
+      }
+      if (/FROM\s+JAVIER\.REPARTIDOR_COBROS/i.test(sql)) {
+        return [{ DOC_KEY: 'M-11', TOTAL: 50 }];
+      }
+      if (/FROM\s+JAVIER\.COBROS/i.test(sql)) return [];
+      return [];
+    });
+
+    const res = await request(makeApp()).get('/C001/pendientes');
+
+    expect(res.status).toBe(200);
+    const ctrDoc = res.body.cobros.find((c) => c.referencia === 'M-10');
+    const repDoc = res.body.cobros.find((c) => c.referencia === 'M-11');
+    expect(ctrDoc).toMatchObject({
+      cobradoPorRepartidor: true,
+      esCTR: true,
+      responsabilidad: 'REPARTIDOR',
+    });
+    expect(repDoc).toMatchObject({
+      cobradoPorRepartidor: true,
+      estado: 'COBRADO',
+      importePendiente: 0,
+    });
+  });
+
+  test('GET /:cliente/historico returns JAVIER.COBROS rows with pagination contract', async () => {
+    const fecha = new Date('2026-06-10T12:30:00.000Z');
+    mockQueryWithParams.mockImplementation(async (sql, params) => {
+      if (/FROM\s+JAVIER\.COBROS\s+C/i.test(sql)) {
+        expect(params).toEqual(['C001']);
+        return [{
+          ID: 'CBR-1',
+          CODIGO_CLIENTE: 'C001',
+          IMPORTE: 25.5,
+          FORMA_PAGO: '02',
+          REFERENCIA: 'M-100',
+          OBSERVACIONES: 'Cobro app',
+          FECHA: fecha,
+        }];
+      }
+      return [];
+    });
+
+    const res = await request(makeApp()).get('/C001/historico?limit=10&offset=0');
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.historico).toHaveLength(1);
+    expect(res.body.historico[0]).toMatchObject({
+      id: 'CBR-1',
+      codigoCliente: 'C001',
+      importe: 25.5,
+      formaPago: '02',
+      referencia: 'M-100',
+      observaciones: 'Cobro app',
+      fecha: fecha.toISOString(),
+      IMPORTE: 25.5,
+      REFERENCIA: 'M-100',
+    });
+    const historicoSql = mockQueryWithParams.mock.calls.find(([sql]) => /FROM\s+JAVIER\.COBROS\s+C/i.test(sql))[0];
+    expect(historicoSql).toMatch(/OFFSET\s+0\s+ROWS\s+FETCH\s+FIRST\s+10\s+ROWS\s+ONLY/i);
+  });
+
+  test('GET /:cliente/historico rejects COMERCIAL outside assigned client scope before DB reads', async () => {
+    const res = await request(makeApp({ id: '01', code: '01', role: 'COMERCIAL', clientCodes: ['C001'] }))
+      .get('/C999/historico');
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockCachedQuery).not.toHaveBeenCalled();
+    expect(mockQueryWithParams).not.toHaveBeenCalled();
   });
 });

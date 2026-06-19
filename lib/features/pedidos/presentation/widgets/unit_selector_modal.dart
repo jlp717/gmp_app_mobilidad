@@ -17,6 +17,7 @@ class UnitSelectorModal extends StatefulWidget {
     this.availableUnits = const ['CAJAS'],
     this.product,
     this.initialPrice,
+    this.qtyAlreadyInCart = 0,
   });
   final String? initialUnit;
   final double? initialQuantity;
@@ -24,6 +25,9 @@ class UnitSelectorModal extends StatefulWidget {
   final Product? product;
   // Override price per displayUnit (from TarifaSelectorModal). null = use product.bestPrice
   final double? initialPrice;
+
+  /// Units of this product already in the cart (same unit family) for stock checks.
+  final double qtyAlreadyInCart;
 
   /// Show the modal as a centered dialog and return { 'unit': String, 'quantity': double } or null
   static Future<Map<String, dynamic>?> show(
@@ -33,6 +37,7 @@ class UnitSelectorModal extends StatefulWidget {
     List<String>? availableUnits,
     Product? product,
     double? initialPrice,
+    double qtyAlreadyInCart = 0,
   }) {
     final units = availableUnits ??
         product?.availableUnits ??
@@ -47,6 +52,7 @@ class UnitSelectorModal extends StatefulWidget {
         availableUnits: units,
         product: product,
         initialPrice: initialPrice,
+        qtyAlreadyInCart: qtyAlreadyInCart,
       ),
     );
   }
@@ -222,7 +228,10 @@ class _UnitSelectorModalState extends State<UnitSelectorModal> {
     final p = widget.product;
     if (p == null) return double.infinity;
     final normalized = unit.toUpperCase();
-    return normalized == 'CAJAS' ? p.stockEnvases : p.stockForUnit(normalized);
+    final raw =
+        normalized == 'CAJAS' ? p.stockEnvases : p.stockForUnit(normalized);
+    final reserved = widget.qtyAlreadyInCart > 0 ? widget.qtyAlreadyInCart : 0;
+    return (raw - reserved).clamp(0, double.infinity);
   }
 
   void _acceptSelection() {

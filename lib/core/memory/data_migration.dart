@@ -20,7 +20,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// - Validación de datos migrados
 /// - Logging detallado
 class DataMigrationService {
-
   DataMigrationService(this._memoryLayer);
   final UnifiedMemoryLayer _memoryLayer;
   final MigrationLogger _logger = MigrationLogger();
@@ -433,10 +432,12 @@ class DataMigrationService {
     // Limpiar SharedPreferences legacy
     try {
       final prefs = await SharedPreferences.getInstance();
-      final legacyKeys = prefs.getKeys().where((k) =>
-          k.startsWith('repartidor_') ||
-          k == 'global_filter_vendor' ||
-          k == 'isDarkMode',);
+      final legacyKeys = prefs.getKeys().where(
+            (k) =>
+                k.startsWith('repartidor_') ||
+                k == 'global_filter_vendor' ||
+                k == 'isDarkMode',
+          );
 
       for (final key in legacyKeys) {
         await prefs.remove(key);
@@ -451,7 +452,6 @@ class DataMigrationService {
 // ==================== MODELOS ====================
 
 class MigrationResult {
-
   MigrationResult({
     required this.success,
     required this.steps,
@@ -473,7 +473,6 @@ class MigrationResult {
 }
 
 class MigrationStepResult {
-
   MigrationStepResult({
     required this.step,
     this.success = false,
@@ -489,7 +488,6 @@ class MigrationStepResult {
 }
 
 class MigrationStatus {
-
   MigrationStatus({
     required this.hasLegacyData,
     required this.hasNewData,
@@ -536,14 +534,14 @@ class MigrationLogger {
     onLog?.call(entry);
 
     // Debug output
-    developer.log('[${entry.timestamp.toIso8601String()}] $level: $message', name: 'data_migration');
+    developer.log('[${entry.timestamp.toIso8601String()}] $level: $message',
+        name: 'data_migration');
   }
 
   List<LogEntry> get logs => List.unmodifiable(_logs);
 }
 
 class LogEntry {
-
   LogEntry({
     required this.timestamp,
     required this.level,

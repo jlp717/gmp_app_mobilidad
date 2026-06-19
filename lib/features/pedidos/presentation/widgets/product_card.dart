@@ -21,6 +21,7 @@ class ProductCard extends StatefulWidget {
     super.key,
     this.isFavorite = false,
     this.promo,
+    this.extraPromoCount = 0,
     this.onToggleFavorite,
     this.cartQty = 0,
     this.cartQtySuffix = 'c',
@@ -30,6 +31,7 @@ class ProductCard extends StatefulWidget {
   final VoidCallback onTap;
   final bool isFavorite;
   final PromotionItem? promo;
+  final int extraPromoCount;
   final VoidCallback? onToggleFavorite;
   final double cartQty;
   final String cartQtySuffix;
@@ -262,9 +264,12 @@ class _ProductCardState extends State<ProductCard> {
                                   const SizedBox(width: 2),
                                 ],
                                 Text(
-                                  widget.promo!.isGift
-                                      ? widget.promo!.giftLabel
-                                      : widget.promo!.promoDesc,
+                                  (widget.promo!.isGift
+                                          ? widget.promo!.giftLabel
+                                          : widget.promo!.promoDesc) +
+                                      (widget.extraPromoCount > 0
+                                          ? ' +${widget.extraPromoCount}'
+                                          : ''),
                                   style: TextStyle(
                                     color: promoColor,
                                     fontSize: 9,

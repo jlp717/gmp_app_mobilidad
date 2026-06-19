@@ -11,7 +11,10 @@ import 'package:gmp_app_mobilidad/features/dashboard/domain/entities/dashboard_m
 /// - Pedidos (33 pendientes, 2,613.77 €)
 class MetricsCards extends StatelessWidget {
   const MetricsCards({
-    required this.vencimientos, required this.cobros, required this.pedidos, super.key,
+    required this.vencimientos,
+    required this.cobros,
+    required this.pedidos,
+    super.key,
   });
 
   final VencimientosMetrics vencimientos;
@@ -100,11 +103,13 @@ class _MetricCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           // Responsive padding and icon sizing
-          padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
+          padding:
+              EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
           child: Row(
             children: [
               Container(
-                padding: EdgeInsets.all(Responsive.padding(context, small: 8, large: 12)),
+                padding: EdgeInsets.all(
+                    Responsive.padding(context, small: 8, large: 12)),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
@@ -116,7 +121,8 @@ class _MetricCard extends StatelessWidget {
                 ),
               ),
 
-              SizedBox(width: Responsive.padding(context, small: 10, large: 16)),
+              SizedBox(
+                  width: Responsive.padding(context, small: 10, large: 16)),
 
               // Información
               Expanded(

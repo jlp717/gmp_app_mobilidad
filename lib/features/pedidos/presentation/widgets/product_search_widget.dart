@@ -11,14 +11,15 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
 class ProductSearchWidget extends ConsumerStatefulWidget {
-
   const ProductSearchWidget({
-    required this.vendedorCodes, super.key,
+    required this.vendedorCodes,
+    super.key,
   });
   final String vendedorCodes;
 
   @override
-  ConsumerState<ProductSearchWidget> createState() => _ProductSearchWidgetState();
+  ConsumerState<ProductSearchWidget> createState() =>
+      _ProductSearchWidgetState();
 }
 
 class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
@@ -47,7 +48,8 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
 
   void _onFamilySelected(PedidosProvider provider, String? family) {
     provider.setFamilyFilter(
-        provider.selectedFamily == family ? null : family,);
+      provider.selectedFamily == family ? null : family,
+    );
     provider.loadProducts(
       vendedorCodes: widget.vendedorCodes,
       search: _searchController.text.isEmpty ? null : _searchController.text,
@@ -81,12 +83,15 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
               decoration: InputDecoration(
                 hintText: 'Buscar producto...',
                 hintStyle: const TextStyle(color: Colors.white38),
-                prefixIcon:
-                    const Icon(Icons.search, color: AppTheme.neonBlue, size: 20),
+                prefixIcon: const Icon(Icons.search,
+                    color: AppTheme.neonBlue, size: 20),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
-                        icon: const Icon(Icons.clear,
-                            color: Colors.white38, size: 18,),
+                        icon: const Icon(
+                          Icons.clear,
+                          color: Colors.white38,
+                          size: 18,
+                        ),
                         onPressed: () {
                           _searchController.clear();
                           _onSearchChanged('');
@@ -126,18 +131,25 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                     avatar: Icon(
                       Icons.inventory_2_outlined,
                       size: 14,
-                      color: provider.onlyWithStock ? AppTheme.neonGreen : Colors.white54,
+                      color: provider.onlyWithStock
+                          ? AppTheme.neonGreen
+                          : Colors.white54,
                     ),
                     label: const Text('Solo con stock'),
                     selected: provider.onlyWithStock,
                     selectedColor: AppTheme.neonGreen.withValues(alpha: 0.2),
                     backgroundColor: AppTheme.darkCard,
                     labelStyle: TextStyle(
-                      color: provider.onlyWithStock ? AppTheme.neonGreen : Colors.white70,
-                      fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                      color: provider.onlyWithStock
+                          ? AppTheme.neonGreen
+                          : Colors.white70,
+                      fontSize:
+                          Responsive.fontSize(context, small: 11, large: 13),
                     ),
                     side: BorderSide(
-                      color: provider.onlyWithStock ? AppTheme.neonGreen : AppTheme.borderColor,
+                      color: provider.onlyWithStock
+                          ? AppTheme.neonGreen
+                          : AppTheme.borderColor,
                     ),
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     visualDensity: VisualDensity.compact,
@@ -145,7 +157,9 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                       provider.setStockFilter(!provider.onlyWithStock);
                       provider.loadProducts(
                         vendedorCodes: widget.vendedorCodes,
-                        search: _searchController.text.isEmpty ? null : _searchController.text,
+                        search: _searchController.text.isEmpty
+                            ? null
+                            : _searchController.text,
                         reset: true,
                       );
                     },
@@ -211,10 +225,12 @@ class _ProductSearchWidgetState extends ConsumerState<ProductSearchWidget> {
                       backgroundColor: AppTheme.darkCard,
                       labelStyle: TextStyle(
                         color: selected ? AppTheme.neonBlue : Colors.white70,
-                        fontSize: Responsive.fontSize(context, small: 11, large: 13),
+                        fontSize:
+                            Responsive.fontSize(context, small: 11, large: 13),
                       ),
                       side: BorderSide(
-                        color: selected ? AppTheme.neonBlue : AppTheme.borderColor,
+                        color:
+                            selected ? AppTheme.neonBlue : AppTheme.borderColor,
                       ),
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       visualDensity: VisualDensity.compact,

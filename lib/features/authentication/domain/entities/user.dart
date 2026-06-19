@@ -1,7 +1,6 @@
 /// Domain entity representing a user for dashboard display purposes.
 /// This is distinct from UserModel (core/models) which handles auth concerns.
 class User {
-
   const User({
     required this.id,
     required this.name,

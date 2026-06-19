@@ -7,7 +7,7 @@ import 'package:flutter/scheduler.dart';
 
 /// SafeLazyBuilder - Optimized FutureBuilder with Isolate support and jank detection
 /// ==================================================================================
-/// 
+///
 /// Features:
 /// - Automatic fallback to original builder on jank detection
 /// - Isolate-based computation for heavy operations
@@ -23,9 +23,10 @@ import 'package:flutter/scheduler.dart';
 /// )
 /// ```
 class SafeLazyBuilder<T> extends StatefulWidget {
-
   const SafeLazyBuilder({
-    required this.future, required this.builder, super.key,
+    required this.future,
+    required this.builder,
+    super.key,
     this.placeholder,
     this.errorBuilder,
     this.useIsolate = false,
@@ -36,40 +37,41 @@ class SafeLazyBuilder<T> extends StatefulWidget {
     this.cacheKey,
     this.onLoadComplete,
   }) : assert(
-         !useIsolate || isolateCompute != null,
-         'isolateCompute is required when useIsolate is true',
-       );
+          !useIsolate || isolateCompute != null,
+          'isolateCompute is required when useIsolate is true',
+        );
+
   /// Function that returns the Future to execute
   final Future<T> Function() future;
-  
+
   /// Builder for the loaded data
   final Widget Function(BuildContext context, T data) builder;
-  
+
   /// Widget to show while loading
   final Widget? placeholder;
-  
+
   /// Widget to show on error
   final Widget Function(BuildContext context, Object error)? errorBuilder;
-  
+
   /// Whether to use Isolate for computation (only for compute-heavy tasks)
   final bool useIsolate;
-  
+
   /// Isolate compute function (required if useIsolate is true)
   /// Must be a top-level function or static method
   final T Function(dynamic message)? isolateCompute;
-  
+
   /// Message to pass to isolate compute function
   final dynamic isolateMessage;
-  
+
   /// Enable jank detection and fallback
   final bool enableJankDetection;
-  
+
   /// Threshold for jank detection (fps below this triggers fallback)
   final int jankThresholdFps;
-  
+
   /// Cache key for memoization (if null, no caching)
   final String? cacheKey;
-  
+
   /// Callback when load completes (for metrics)
   final void Function(Duration loadTime)? onLoadComplete;
 
@@ -83,12 +85,12 @@ class _SafeLazyBuilderState<T> extends State<SafeLazyBuilder<T>>
   bool _isLoading = true;
   T? _data;
   Object? _error;
-  
+
   // Performance monitoring
   final Stopwatch _loadStopwatch = Stopwatch();
   int _frameDrops = 0;
   bool _useFallback = false;
-  
+
   // Cache
   static final Map<String, dynamic> _cache = {};
 
@@ -117,14 +119,14 @@ class _SafeLazyBuilderState<T> extends State<SafeLazyBuilder<T>>
   void _checkForJank() {
     SchedulerBinding.instance.addPostFrameCallback((timeStamp) {
       if (!_isLoading) return;
-      
+
       final frameDuration = SchedulerBinding.instance.currentFrameTimeStamp;
       const targetDuration = Duration(milliseconds: 16); // 60fps
-      
+
       if (frameDuration != null) {
         // Simple jank detection: if frame takes too long
         _frameDrops++;
-        
+
         if (_frameDrops > 5 && !_useFallback) {
           debugPrint('[SafeLazyBuilder] ⚠️ Jank detected, using fallback');
           _useFallback = true;
@@ -136,7 +138,7 @@ class _SafeLazyBuilderState<T> extends State<SafeLazyBuilder<T>>
   /// Load data with performance monitoring
   Future<void> _loadData() async {
     _loadStopwatch.start();
-    
+
     // Check cache first
     if (widget.cacheKey != null && _cache.containsKey(widget.cacheKey)) {
       _data = _cache[widget.cacheKey] as T;
@@ -147,10 +149,10 @@ class _SafeLazyBuilderState<T> extends State<SafeLazyBuilder<T>>
       debugPrint('[SafeLazyBuilder] 📦 Cache hit: ${widget.cacheKey}');
       return;
     }
-    
+
     try {
       T result;
-      
+
       if (widget.useIsolate && widget.isolateCompute != null) {
         // Use Isolate for heavy computation
         result = await _computeInIsolate();
@@ -158,25 +160,26 @@ class _SafeLazyBuilderState<T> extends State<SafeLazyBuilder<T>>
         // Regular future execution
         result = await widget.future();
       }
-      
+
       // Cache result
       if (widget.cacheKey != null) {
         _cache[widget.cacheKey!] = result;
       }
-      
+
       _data = result;
       _isLoading = false;
       _loadStopwatch.stop();
-      
+
       widget.onLoadComplete?.call(_loadStopwatch.elapsed);
-      debugPrint('[SafeLazyBuilder] ✅ Loaded in ${_loadStopwatch.elapsedMilliseconds}ms');
+      debugPrint(
+          '[SafeLazyBuilder] ✅ Loaded in ${_loadStopwatch.elapsedMilliseconds}ms');
     } catch (e, stack) {
       _error = e;
       _isLoading = false;
       _loadStopwatch.stop();
       debugPrint('[SafeLazyBuilder] ❌ Error: $e\n$stack');
     }
-    
+
     if (mounted) setState(() {});
   }
 
@@ -200,16 +203,16 @@ class _SafeLazyBuilderState<T> extends State<SafeLazyBuilder<T>>
     if (_isLoading) {
       return widget.placeholder ?? _buildDefaultPlaceholder();
     }
-    
+
     if (_error != null) {
       return widget.errorBuilder?.call(context, _error!) ??
-             _buildDefaultError(_error!);
+          _buildDefaultError(_error!);
     }
-    
+
     if (_data != null) {
       return widget.builder(context, _data as T);
     }
-    
+
     return _buildDefaultPlaceholder();
   }
 

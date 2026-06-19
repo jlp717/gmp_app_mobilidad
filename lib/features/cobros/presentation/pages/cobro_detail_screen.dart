@@ -80,10 +80,13 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _provider.cargarCobrosPendientes(
-        widget.codigoCliente,
-        forceRefresh: true,
-      );
+      await Future.wait([
+        _provider.cargarCobrosPendientes(
+          widget.codigoCliente,
+          forceRefresh: true,
+        ),
+        _provider.cargarHistoricoCobros(widget.codigoCliente),
+      ]);
     });
   }
 
@@ -97,7 +100,11 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   }
 
   Map<String, CobroPendiente> _payableById(List<CobroPendiente> pendientes) {
-    return _pendientesById(cobrosPayableItems(pendientes));
+    return _pendientesById(
+      cobrosPayableItems(
+        pendientes.where((c) => !c.cobradoPorRepartidor),
+      ),
+    );
   }
 
   double _calcularTotalACobrar() {
@@ -336,9 +343,13 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     final cobros = ref
         .watch(cobrosProvider(CobrosParams(employeeCode: widget.employeeCode)));
     final pendientes = cobros.cobrosPendientes;
-    final payableCobros = cobrosPayableItems(pendientes);
+    final payableCobros = cobrosPayableItems(
+      pendientes.where((c) => !c.cobradoPorRepartidor),
+    );
     final settledCobros = cobrosNonPayableItems(pendientes);
+    final historico = cobros.historicoCobros;
     final totalAbonar = _calcularTotalACobrar();
+    final summaryPending = cobros.pendingForClient(widget.codigoCliente);
 
     // Calcular resumen del cliente solo con documentos cobrables.
     double totalPendiente = 0;
@@ -349,6 +360,10 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       numDocs++;
       if (c.isVencido) totalVencido += c.importePendiente;
     }
+
+    final summaryMismatch = summaryPending > 0 &&
+        cobros.hasPendingSummaryForClient(widget.codigoCliente) &&
+        (summaryPending - totalPendiente).abs() > 0.05;
 
     return Scaffold(
       backgroundColor: AppTheme.darkBase,
@@ -372,10 +387,18 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () => cobros.cargarCobrosPendientes(
-              widget.codigoCliente,
-              forceRefresh: true,
-            ),
+            onPressed: () async {
+              await Future.wait([
+                cobros.cargarCobrosPendientes(
+                  widget.codigoCliente,
+                  forceRefresh: true,
+                ),
+                cobros.cargarHistoricoCobros(
+                  widget.codigoCliente,
+                  forceRefresh: true,
+                ),
+              ]);
+            },
             tooltip: 'Actualizar',
           ),
         ],
@@ -383,10 +406,18 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       body: cobros.isLoading && pendientes.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: () => cobros.cargarCobrosPendientes(
-                widget.codigoCliente,
-                forceRefresh: true,
-              ),
+              onRefresh: () async {
+                await Future.wait([
+                  cobros.cargarCobrosPendientes(
+                    widget.codigoCliente,
+                    forceRefresh: true,
+                  ),
+                  cobros.cargarHistoricoCobros(
+                    widget.codigoCliente,
+                    forceRefresh: true,
+                  ),
+                ]);
+              },
               color: AppTheme.neonBlue,
               child: Column(
                 children: [
@@ -408,6 +439,40 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                             child: Text(
                               cobros.error!,
                               style: const TextStyle(color: Colors.white),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  // Aviso si el resumen de lista y el detalle no cuadran (paginación ERP, etc.)
+                  if (summaryMismatch)
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.warning.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: AppTheme.warning.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.info_outline,
+                            color: AppTheme.warning,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Resumen lista: ${_currencyFormat.format(summaryPending)} · '
+                              'Detalle cobrable: ${_currencyFormat.format(totalPendiente)}. '
+                              'Puede haber más documentos en ERP.',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 11,
+                              ),
                             ),
                           ),
                         ],
@@ -541,12 +606,23 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                                 const SizedBox(height: 8),
                                 _buildSectionHeader(
                                   'Al dia / no cobrables',
-                                  'No se pueden seleccionar para evitar duplicados',
+                                  'Incluye cobros ya registrados por repartidor',
                                   Icons.verified_outlined,
                                   AppTheme.success,
                                 ),
                                 const SizedBox(height: 8),
                                 ...settledCobros.map(_buildSettledCobroTile),
+                              ],
+                              if (historico.isNotEmpty) ...[
+                                const SizedBox(height: 16),
+                                _buildSectionHeader(
+                                  'Historial de cobros',
+                                  'Registros comerciales en DB2',
+                                  Icons.history,
+                                  AppTheme.neonBlue,
+                                ),
+                                const SizedBox(height: 8),
+                                ...historico.map(_buildHistoricoTile),
                               ],
                             ],
                           ),
@@ -643,6 +719,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   }
 
   Widget _buildSettledCobroTile(CobroPendiente cobro) {
+    final settledLabel =
+        cobro.isSettledByRepartidor ? 'Cobrado por repartidor' : 'No cobrable';
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       color: AppTheme.surfaceColor.withValues(alpha: 0.55),
@@ -678,11 +756,57 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
               ),
             ),
             const SizedBox(height: 2),
-            const Text(
-              'No cobrable',
-              style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+            Text(
+              settledLabel,
+              style: TextStyle(
+                color: cobro.isSettledByRepartidor
+                    ? AppTheme.neonBlue
+                    : AppTheme.textSecondary,
+                fontSize: 11,
+                fontWeight: cobro.isSettledByRepartidor
+                    ? FontWeight.w600
+                    : FontWeight.normal,
+              ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistoricoTile(CobroHistorico cobro) {
+    final fecha = DateFormat('dd/MM/yyyy').format(cobro.fecha);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 8),
+      color: AppTheme.darkSurface.withValues(alpha: 0.7),
+      child: ListTile(
+        dense: true,
+        leading: const Icon(Icons.payments, color: AppTheme.neonBlue, size: 20),
+        title: Text(
+          cobro.referencia.isNotEmpty ? cobro.referencia : 'Cobro #${cobro.id}',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
+          ),
+        ),
+        subtitle: Text(
+          [
+            fecha,
+            if (cobro.formaPago != null && cobro.formaPago!.isNotEmpty)
+              cobro.formaPago!,
+            if (cobro.observaciones.isNotEmpty) cobro.observaciones,
+          ].join(' · '),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+        ),
+        trailing: Text(
+          _currencyFormat.format(cobro.importe),
+          style: const TextStyle(
+            color: AppTheme.neonGreen,
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
     );

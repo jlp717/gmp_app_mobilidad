@@ -452,8 +452,10 @@ class RepartidorVencimientosPage extends ConsumerWidget {
                     dropdownColor: AppTheme.surfaceColor,
                     style: const TextStyle(color: AppTheme.textPrimary),
                     items: const [
-                      DropdownMenuItem(value: 'EFECTIVO', child: Text('Efectivo')),
-                      DropdownMenuItem(value: 'TARJETA', child: Text('Tarjeta')),
+                      DropdownMenuItem(
+                          value: 'EFECTIVO', child: Text('Efectivo')),
+                      DropdownMenuItem(
+                          value: 'TARJETA', child: Text('Tarjeta')),
                       DropdownMenuItem(value: 'BIZUM', child: Text('Bizum')),
                       DropdownMenuItem(value: 'CHEQUE', child: Text('Cheque')),
                     ],
@@ -479,9 +481,8 @@ class RepartidorVencimientosPage extends ConsumerWidget {
               ),
               actions: [
                 TextButton(
-                  onPressed: saving
-                      ? null
-                      : () => Navigator.of(contentContext).pop(),
+                  onPressed:
+                      saving ? null : () => Navigator.of(contentContext).pop(),
                   child: const Text('Cancelar'),
                 ),
                 ElevatedButton.icon(

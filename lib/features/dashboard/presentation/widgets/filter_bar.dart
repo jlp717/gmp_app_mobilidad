@@ -3,11 +3,12 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 /// Search filter bar with debounced input
 class FilterBar extends StatefulWidget {
-  
   const FilterBar({
-    required this.onFiltersChanged, super.key,
+    required this.onFiltersChanged,
+    super.key,
   });
-  final Function(String? productCode, String? productName, String? clientName) onFiltersChanged;
+  final Function(String? productCode, String? productName, String? clientName)
+      onFiltersChanged;
 
   @override
   State<FilterBar> createState() => _FilterBarState();
@@ -17,7 +18,7 @@ class _FilterBarState extends State<FilterBar> {
   final _productCodeController = TextEditingController();
   final _productNameController = TextEditingController();
   final _clientNameController = TextEditingController();
-  
+
   String? _activeProductCode;
   String? _activeProductName;
   String? _activeClientName;
@@ -31,20 +32,29 @@ class _FilterBarState extends State<FilterBar> {
   }
 
   void _handleFilterChange() {
-    final productCode = _productCodeController.text.trim().isEmpty ? null : _productCodeController.text.trim();
-    final productName = _productNameController.text.trim().isEmpty ? null : _productNameController.text.trim();
-    final clientName = _clientNameController.text.trim().isEmpty ? null : _clientNameController.text.trim();
-    
-    if (productCode != _activeProductCode || productName != _activeProductName || clientName != _activeClientName) {
+    final productCode = _productCodeController.text.trim().isEmpty
+        ? null
+        : _productCodeController.text.trim();
+    final productName = _productNameController.text.trim().isEmpty
+        ? null
+        : _productNameController.text.trim();
+    final clientName = _clientNameController.text.trim().isEmpty
+        ? null
+        : _clientNameController.text.trim();
+
+    if (productCode != _activeProductCode ||
+        productName != _activeProductName ||
+        clientName != _activeClientName) {
       setState(() {
         _activeProductCode = productCode;
         _activeProductName = productName;
         _activeClientName = clientName;
       });
-      
+
       // Debounce: wait 500ms before applying
       Future.delayed(const Duration(milliseconds: 500), () {
-        if (productCode == _productCodeController.text.trim() || _productCodeController.text.trim().isEmpty) {
+        if (productCode == _productCodeController.text.trim() ||
+            _productCodeController.text.trim().isEmpty) {
           widget.onFiltersChanged(productCode, productName, clientName);
         }
       });
@@ -63,7 +73,10 @@ class _FilterBarState extends State<FilterBar> {
     widget.onFiltersChanged(null, null, null);
   }
 
-  bool get _hasActiveFilters => _activeProductCode != null || _activeProductName != null || _activeClientName != null;
+  bool get _hasActiveFilters =>
+      _activeProductCode != null ||
+      _activeProductName != null ||
+      _activeClientName != null;
 
   @override
   Widget build(BuildContext context) {
@@ -83,14 +96,19 @@ class _FilterBarState extends State<FilterBar> {
               const SizedBox(width: 8),
               const Text(
                 'Filtros de Búsqueda',
-                style: TextStyle(color: AppTheme.neonBlue, fontSize: 14, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: AppTheme.neonBlue,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold),
               ),
               const Spacer(),
               if (_hasActiveFilters)
                 TextButton.icon(
                   onPressed: _clearAll,
-                  icon: const Icon(Icons.clear, size: 16, color: Colors.redAccent),
-                  label: const Text('Limpiar', style: TextStyle(color: Colors.redAccent, fontSize: 12)),
+                  icon: const Icon(Icons.clear,
+                      size: 16, color: Colors.redAccent),
+                  label: const Text('Limpiar',
+                      style: TextStyle(color: Colors.redAccent, fontSize: 12)),
                 ),
             ],
           ),

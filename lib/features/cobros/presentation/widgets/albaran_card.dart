@@ -9,9 +9,9 @@ import 'package:gmp_app_mobilidad/features/cobros/data/models/cobros_models.dart
 import 'package:intl/intl.dart';
 
 class AlbaranCard extends StatelessWidget {
-
   const AlbaranCard({
-    required this.albaran, super.key,
+    required this.albaran,
+    super.key,
     this.onTap,
     this.onQuickComplete,
   });
@@ -22,12 +22,13 @@ class AlbaranCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final currencyFormat = NumberFormat.currency(locale: 'es_ES', symbol: '€');
-    
+
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
+        padding:
+            EdgeInsets.all(Responsive.padding(context, small: 10, large: 16)),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
@@ -65,7 +66,8 @@ class AlbaranCard extends StatelessWidget {
               children: [
                 // Número de albarán
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: AppTheme.neonBlue.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(10),
@@ -79,12 +81,13 @@ class AlbaranCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                
+
                 const SizedBox(width: 10),
-                
+
                 // Estado badge
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
                     color: albaran.estado.color.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(8),
@@ -112,12 +115,13 @@ class AlbaranCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                
+
                 // CTR Badge
                 if (albaran.esCTR) ...[
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [Colors.red, Colors.red.shade700],
@@ -147,9 +151,9 @@ class AlbaranCard extends StatelessWidget {
                     ),
                   ),
                 ],
-                
+
                 const Spacer(),
-                
+
                 // Importe
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
@@ -159,7 +163,8 @@ class AlbaranCard extends StatelessWidget {
                       style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontWeight: FontWeight.bold,
-                        fontSize: Responsive.fontSize(context, small: 14, large: 18),
+                        fontSize:
+                            Responsive.fontSize(context, small: 14, large: 18),
                       ),
                     ),
                     if (albaran.formaPago != null)
@@ -174,9 +179,9 @@ class AlbaranCard extends StatelessWidget {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Cliente
             Row(
               children: [
@@ -212,7 +217,8 @@ class AlbaranCard extends StatelessWidget {
                         children: [
                           Icon(
                             Icons.location_on,
-                            color: AppTheme.textSecondary.withValues(alpha: 0.5),
+                            color:
+                                AppTheme.textSecondary.withValues(alpha: 0.5),
                             size: 12,
                           ),
                           const SizedBox(width: 4),
@@ -220,7 +226,8 @@ class AlbaranCard extends StatelessWidget {
                             child: Text(
                               albaran.direccion,
                               style: TextStyle(
-                                color: AppTheme.textSecondary.withValues(alpha: 0.7),
+                                color: AppTheme.textSecondary
+                                    .withValues(alpha: 0.7),
                                 fontSize: 12,
                               ),
                               maxLines: 1,
@@ -234,9 +241,9 @@ class AlbaranCard extends StatelessWidget {
                 ),
               ],
             ),
-            
+
             const SizedBox(height: 16),
-            
+
             // Progress bar (si tiene items)
             if (albaran.items.isNotEmpty) ...[
               Row(
@@ -251,14 +258,17 @@ class AlbaranCard extends StatelessWidget {
                             Text(
                               '${albaran.itemsEntregados}/${albaran.totalItems} productos',
                               style: TextStyle(
-                                color: AppTheme.textSecondary.withValues(alpha: 0.8),
+                                color: AppTheme.textSecondary
+                                    .withValues(alpha: 0.8),
                                 fontSize: 11,
                               ),
                             ),
                             Text(
                               '${(albaran.porcentajeCompletado * 100).toInt()}%',
                               style: TextStyle(
-                                color: albaran.completo ? Colors.green : AppTheme.neonBlue,
+                                color: albaran.completo
+                                    ? Colors.green
+                                    : AppTheme.neonBlue,
                                 fontWeight: FontWeight.w600,
                                 fontSize: 11,
                               ),
@@ -270,9 +280,12 @@ class AlbaranCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(4),
                           child: LinearProgressIndicator(
                             value: albaran.porcentajeCompletado,
-                            backgroundColor: Colors.white.withValues(alpha: 0.1),
+                            backgroundColor:
+                                Colors.white.withValues(alpha: 0.1),
                             valueColor: AlwaysStoppedAnimation(
-                              albaran.completo ? Colors.green : AppTheme.neonBlue,
+                              albaran.completo
+                                  ? Colors.green
+                                  : AppTheme.neonBlue,
                             ),
                             minHeight: 6,
                           ),
@@ -280,7 +293,6 @@ class AlbaranCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  
                   if (!albaran.completo && onQuickComplete != null) ...[
                     const SizedBox(width: 16),
                     // Botón de completar rápido
@@ -290,7 +302,8 @@ class AlbaranCard extends StatelessWidget {
                         onTap: onQuickComplete,
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 10),
                           decoration: BoxDecoration(
                             gradient: const LinearGradient(
                               colors: [Colors.green, Color(0xFF2E7D32)],

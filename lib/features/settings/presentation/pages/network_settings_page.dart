@@ -54,7 +54,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ Servidor detectado: ${NetworkService.activeServer?.name ?? 'N/A'}'),
+            content: Text(
+                '✅ Servidor detectado: ${NetworkService.activeServer?.name ?? 'N/A'}'),
             backgroundColor: Colors.green,
           ),
         );
@@ -137,7 +138,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
       body: _isLoading && _diagnostics == null
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
-              padding: EdgeInsets.all(Responsive.padding(context, small: 16, large: 24)),
+              padding: EdgeInsets.all(
+                  Responsive.padding(context, small: 16, large: 24)),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -175,7 +177,9 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     shape: BoxShape.circle,
                     boxShadow: [
                       BoxShadow(
-                        color: (activeServer != null ? Colors.green : Colors.red).withValues(alpha: 0.5),
+                        color:
+                            (activeServer != null ? Colors.green : Colors.red)
+                                .withValues(alpha: 0.5),
                         blurRadius: 8,
                       ),
                     ],
@@ -185,7 +189,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 Text(
                   'Servidor Activo',
                   style: TextStyle(
-                    fontSize: Responsive.fontSize(context, small: 16, large: 20),
+                    fontSize:
+                        Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -225,7 +230,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     icon: const Icon(Icons.copy, size: 18),
                     color: Colors.grey[400],
                     onPressed: () {
-                      Clipboard.setData(ClipboardData(text: activeServer.baseUrl));
+                      Clipboard.setData(
+                          ClipboardData(text: activeServer.baseUrl));
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('URL copiada')),
                       );
@@ -259,7 +265,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 Text(
                   'Detección Automática',
                   style: TextStyle(
-                    fontSize: Responsive.fontSize(context, small: 16, large: 20),
+                    fontSize:
+                        Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -283,7 +290,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.search),
-                label: Text(_isDetecting ? 'Detectando...' : 'Detectar Servidor'),
+                label:
+                    Text(_isDetecting ? 'Detectando...' : 'Detectar Servidor'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF22D3EE),
                   foregroundColor: Colors.black,
@@ -315,7 +323,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 Text(
                   'Servidores Disponibles',
                   style: TextStyle(
-                    fontSize: Responsive.fontSize(context, small: 16, large: 20),
+                    fontSize:
+                        Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -328,22 +337,27 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(
-                  color: isActive ? const Color(0xFF22D3EE).withValues(alpha: 0.1) : Colors.transparent,
+                  color: isActive
+                      ? const Color(0xFF22D3EE).withValues(alpha: 0.1)
+                      : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
-                    color: isActive ? const Color(0xFF22D3EE) : Colors.grey[700]!,
+                    color:
+                        isActive ? const Color(0xFF22D3EE) : Colors.grey[700]!,
                   ),
                 ),
                 child: ListTile(
                   leading: Icon(
                     server.isSecure ? Icons.lock : Icons.public,
-                    color: isActive ? const Color(0xFF22D3EE) : Colors.grey[400],
+                    color:
+                        isActive ? const Color(0xFF22D3EE) : Colors.grey[400],
                   ),
                   title: Text(
                     server.name,
                     style: TextStyle(
                       color: isActive ? const Color(0xFF22D3EE) : Colors.white,
-                      fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+                      fontWeight:
+                          isActive ? FontWeight.bold : FontWeight.normal,
                     ),
                   ),
                   subtitle: Text(
@@ -358,7 +372,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                       ? const Chip(
                           label: Text('ACTIVO'),
                           backgroundColor: Color(0xFF22D3EE),
-                          labelStyle: TextStyle(color: Colors.black, fontSize: 10),
+                          labelStyle:
+                              TextStyle(color: Colors.black, fontSize: 10),
                         )
                       : TextButton(
                           onPressed: () => _setServer(server.baseUrl),
@@ -388,7 +403,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                 Text(
                   'Servidor Personalizado',
                   style: TextStyle(
-                    fontSize: Responsive.fontSize(context, small: 16, large: 20),
+                    fontSize:
+                        Responsive.fontSize(context, small: 16, large: 20),
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
                   ),
@@ -417,7 +433,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                       ),
                       prefixIcon: const Icon(Icons.link, color: Colors.grey),
                     ),
-                    style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
+                    style: const TextStyle(
+                        color: Colors.white, fontFamily: 'monospace'),
                     onSubmitted: (_) => _addCustomServer(),
                   ),
                 ),
@@ -427,7 +444,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFF472B6),
                     foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 24, vertical: 20),
                   ),
                   child: const Text('Probar'),
                 ),
@@ -459,7 +477,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                     Text(
                       'Diagnóstico de Red',
                       style: TextStyle(
-                        fontSize: Responsive.fontSize(context, small: 16, large: 20),
+                        fontSize:
+                            Responsive.fontSize(context, small: 16, large: 20),
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
@@ -470,7 +489,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                   icon: const Icon(Icons.copy_all),
                   color: Colors.grey[400],
                   onPressed: () {
-                    Clipboard.setData(ClipboardData(text: _diagnostics.toString()));
+                    Clipboard.setData(
+                        ClipboardData(text: _diagnostics.toString()));
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(content: Text('Diagnóstico copiado')),
                     );
@@ -489,13 +509,17 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _diagRow('Plataforma', (_diagnostics!['platform'] as String?) ?? 'N/A'),
-                  _diagRow('Inicializado', _diagnostics!['isInitialized']?.toString() ?? 'N/A'),
-                  _diagRow('Servidor Activo', (_diagnostics!['activeServer'] as String?) ?? 'N/A'),
+                  _diagRow('Plataforma',
+                      (_diagnostics!['platform'] as String?) ?? 'N/A'),
+                  _diagRow('Inicializado',
+                      _diagnostics!['isInitialized']?.toString() ?? 'N/A'),
+                  _diagRow('Servidor Activo',
+                      (_diagnostics!['activeServer'] as String?) ?? 'N/A'),
                   const Divider(color: Colors.grey),
                   const Text(
                     'Test de Conectividad:',
-                    style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                        color: Colors.white70, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   if (_diagnostics!['servers'] != null)
@@ -506,7 +530,9 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                         child: Row(
                           children: [
                             Icon(
-                              status == 'OK' ? Icons.check_circle : Icons.cancel,
+                              status == 'OK'
+                                  ? Icons.check_circle
+                                  : Icons.cancel,
                               color: status == 'OK' ? Colors.green : Colors.red,
                               size: 16,
                             ),
@@ -515,14 +541,17 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
                               child: Text(
                                 (s['name'] as String?) ?? '',
                                 style: TextStyle(
-                                  color: s['isActive'] == true ? const Color(0xFF22D3EE) : Colors.white70,
+                                  color: s['isActive'] == true
+                                      ? const Color(0xFF22D3EE)
+                                      : Colors.white70,
                                 ),
                               ),
                             ),
                             Text(
                               status,
                               style: TextStyle(
-                                color: status == 'OK' ? Colors.green : Colors.red,
+                                color:
+                                    status == 'OK' ? Colors.green : Colors.red,
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
@@ -555,7 +584,8 @@ class _NetworkSettingsPageState extends State<NetworkSettingsPage> {
           Expanded(
             child: Text(
               value,
-              style: const TextStyle(color: Colors.white, fontFamily: 'monospace'),
+              style:
+                  const TextStyle(color: Colors.white, fontFamily: 'monospace'),
             ),
           ),
         ],

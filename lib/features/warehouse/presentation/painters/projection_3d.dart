@@ -11,7 +11,6 @@ import 'package:gmp_app_mobilidad/features/warehouse/data/warehouse_data_service
 // ═══════════════════════════════════════════════════════════════════════════════
 
 class Projection3D {
-
   Projection3D({
     required this.rotX,
     required this.rotY,
@@ -46,13 +45,20 @@ class Projection3D {
 
   /// Batch project 8 corners of a box — returns [fbl, fbr, bbl, bbr, ftl, ftr, btl, btr]
   List<Offset> projectBox(
-      double bx, double by, double bz, double w, double d, double h, Size size,) {
+    double bx,
+    double by,
+    double bz,
+    double w,
+    double d,
+    double h,
+    Size size,
+  ) {
     return [
-      project(bx, by, bz, size),         // 0: front-bottom-left
-      project(bx + w, by, bz, size),     // 1: front-bottom-right
-      project(bx, by + d, bz, size),     // 2: back-bottom-left
+      project(bx, by, bz, size), // 0: front-bottom-left
+      project(bx + w, by, bz, size), // 1: front-bottom-right
+      project(bx, by + d, bz, size), // 2: back-bottom-left
       project(bx + w, by + d, bz, size), // 3: back-bottom-right
-      project(bx, by, bz + h, size),     // 4: front-top-left
+      project(bx, by, bz + h, size), // 4: front-top-left
       project(bx + w, by, bz + h, size), // 5: front-top-right
       project(bx, by + d, bz + h, size), // 6: back-top-left
       project(bx + w, by + d, bz + h, size), // 7: back-top-right
@@ -104,11 +110,11 @@ class Lighting3D {
   }
 
   /// Face-specific intensity presets for quick lookup
-  static const double topLight = 1;     // Brightest — facing light
-  static const double frontLight = 0.75;  // Medium
-  static const double rightLight = 0.55;  // Darker side
-  static const double leftLight = 0.45;   // Darkest side
-  static const double backLight = 0.35;   // Very dark
+  static const double topLight = 1; // Brightest — facing light
+  static const double frontLight = 0.75; // Medium
+  static const double rightLight = 0.55; // Darker side
+  static const double leftLight = 0.45; // Darkest side
+  static const double backLight = 0.35; // Very dark
   static const double bottomLight = 0.30; // Darkest
 
   /// Apply lighting to a base color with alpha
@@ -123,8 +129,8 @@ class Lighting3D {
   /// Create a gradient-like effect on a face (top → bottom darkening)
   static List<Color> faceGradient(Color base, double light, double alpha) {
     return [
-      applyLight(base, light * 1.15, alpha),  // Top of face — brighter
-      applyLight(base, light * 0.85, alpha),  // Bottom of face — darker
+      applyLight(base, light * 1.15, alpha), // Top of face — brighter
+      applyLight(base, light * 0.85, alpha), // Bottom of face — darker
     ];
   }
 }
@@ -155,9 +161,14 @@ class PolyHelper {
     double light, {
     double alpha = 1.0,
   }) {
-    final offsets = pts3d.map((p) => proj.project(p[0], p[1], p[2], size)).toList();
+    final offsets =
+        pts3d.map((p) => proj.project(p[0], p[1], p[2], size)).toList();
     final color = Lighting3D.applyLight(base, light, alpha);
-    canvas.drawPath(pathOf(offsets), Paint()..color = color..style = PaintingStyle.fill);
+    canvas.drawPath(
+        pathOf(offsets),
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.fill);
   }
 
   /// Fill a face from pre-projected 2D offsets
@@ -171,7 +182,9 @@ class PolyHelper {
     final color = Lighting3D.applyLight(base, light, alpha);
     canvas.drawPath(
       pathOf(pts),
-      Paint()..color = color..style = PaintingStyle.fill,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.fill,
     );
   }
 
@@ -319,11 +332,14 @@ class CargoColors {
   static Color byWeight(double weight, double maxWeight) {
     final t = maxWeight > 0 ? (weight / maxWeight).clamp(0.0, 1.0) : 0.5;
     if (t < 0.33) {
-      return Color.lerp(const Color(0xFF4D96FF), const Color(0xFF6BCB77), t / 0.33)!;
+      return Color.lerp(
+          const Color(0xFF4D96FF), const Color(0xFF6BCB77), t / 0.33)!;
     } else if (t < 0.66) {
-      return Color.lerp(const Color(0xFF6BCB77), const Color(0xFFFFE66D), (t - 0.33) / 0.33)!;
+      return Color.lerp(
+          const Color(0xFF6BCB77), const Color(0xFFFFE66D), (t - 0.33) / 0.33)!;
     } else {
-      return Color.lerp(const Color(0xFFFFE66D), const Color(0xFFFF6B6B), (t - 0.66) / 0.34)!;
+      return Color.lerp(
+          const Color(0xFFFFE66D), const Color(0xFFFF6B6B), (t - 0.66) / 0.34)!;
     }
   }
 
@@ -382,7 +398,9 @@ class AxleBalanceHelper {
   /// Calculate front/rear weight distribution (percentage)
   /// containerLength is the total length of the container in cm
   static Map<String, double> axleDistribution(
-      List<PlacedBox> boxes, double containerLength,) {
+    List<PlacedBox> boxes,
+    double containerLength,
+  ) {
     if (boxes.isEmpty || containerLength <= 0) {
       return {'frontPct': 50, 'rearPct': 50};
     }
@@ -400,7 +418,9 @@ class AxleBalanceHelper {
 
   /// Calculate left/right weight distribution (percentage)
   static Map<String, double> lateralDistribution(
-      List<PlacedBox> boxes, double containerWidth,) {
+    List<PlacedBox> boxes,
+    double containerWidth,
+  ) {
     if (boxes.isEmpty || containerWidth <= 0) {
       return {'leftPct': 50, 'rightPct': 50};
     }

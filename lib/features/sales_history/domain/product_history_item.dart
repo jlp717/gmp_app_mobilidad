@@ -1,5 +1,4 @@
 class ProductHistoryItem {
-
   ProductHistoryItem({
     required this.date,
     required this.year,
@@ -74,4 +73,3 @@ class ProductHistoryItem {
   String fichaUrl(String baseUrl) =>
       '$baseUrl/products/${Uri.encodeComponent(productCode.trim())}/ficha';
 }
-

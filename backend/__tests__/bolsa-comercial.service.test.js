@@ -157,7 +157,7 @@ describe('BolsaComercial Service', () => {
                 }])
                 .mockResolvedValueOnce([
                     { ID: 1, TIPO: 'ACUMULACION  ', IMPORTE: 50, SALDO_ANTERIOR: 100, SALDO_POSTERIOR: 150,
-                      CODIGO_ARTICULO: '', DESCRIPCION: 'test', PEDIDO_ID: 42, CREATED_AT: new Date(),
+                      CODIGO_ARTICULO: '', DESCRIPCION: 'test', PEDIDO_ID: 42, CREATED_AT: '2026-06-09T23:36:39.000Z',
                       LINEA_ID: 7, PRECIO_MINIMO_CONGELADO: 10, PRECIO_VENTA: 12, CANTIDAD: 3,
                       UNIDAD_MEDIDA: 'CAJAS  ', IDEMPOTENCY_KEY: 'pedido-42-line-7-over-min  ' }
                 ]);
@@ -174,7 +174,34 @@ describe('BolsaComercial Service', () => {
                 cantidad: 3,
                 unidadMedida: 'CAJAS',
                 idempotencyKey: 'pedido-42-line-7-over-min',
+                pedidoId: 42,
+                fecha: '2026-06-09T23:36:39.000Z',
             });
+        });
+
+        test('should serialize movement fecha as ISO string and numeric pedidoId/lineId', async () => {
+            mockQuery
+                .mockResolvedValueOnce([{
+                    ID: 1, CODIGOVENDEDOR: '10  ', EJERCICIO: 2026, MES: 5,
+                    LIMITE_PCT: 3, SALDO_DISPONIBLE: 100,
+                    CONSUMIDO: 0, ACUMULADO: 0
+                }])
+                .mockResolvedValueOnce([
+                    { ID: 2, TIPO: 'CONSUMO  ', IMPORTE: 3, SALDO_ANTERIOR: 100, SALDO_POSTERIOR: 97,
+                      CODIGO_ARTICULO: 'ART-1', DESCRIPCION: 'under min', PEDIDO_ID: '42', CREATED_AT: '2026-06-09 23:36:39',
+                      LINEA_ID: '7', PRECIO_MINIMO_CONGELADO: 10, PRECIO_VENTA: 7, CANTIDAD: 2,
+                      UNIDAD_MEDIDA: 'CAJAS  ', IDEMPOTENCY_KEY: 'pedido-42-line-7-under-min  ' }
+                ]);
+
+            const movs = await bolsaService.getMovimientos('10', 2026, 5);
+
+            expect(movs[0]).toMatchObject({
+                pedidoId: 42,
+                lineId: 7,
+                cantidad: 2,
+                importe: 3,
+            });
+            expect(movs[0].fecha).toMatch(/^2026-06-09T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
         });
     });
 

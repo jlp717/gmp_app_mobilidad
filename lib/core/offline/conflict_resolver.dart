@@ -2,22 +2,23 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/memory/agent_database.dart';
-import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart' as sync_service; // Using prefix to avoid conflict
+import 'package:gmp_app_mobilidad/core/offline/sync_queue_service.dart'
+    as sync_service; // Using prefix to avoid conflict
 
 /// Estrategia de resolución de conflictos
 enum ConflictResolutionStrategy {
   /// El último cambio gana (útil para campos como notas o comentarios)
   lastWriteWins,
-  
+
   /// El primer cambio gana (útil para operaciones críticas como confirmaciones)
   firstWriteWins,
-  
+
   /// Fusionar cambios (útil para objetos complejos con múltiples campos)
   mergeChanges,
-  
+
   /// Manual - requiere intervención del usuario
   manualResolution,
-  
+
   /// Aplicar ambos cambios si son complementarios
   applyBoth,
 }
@@ -26,13 +27,13 @@ enum ConflictResolutionStrategy {
 enum ConflictType {
   /// Conflicto de versión - el servidor tiene datos diferentes
   versionConflict,
-  
+
   /// Conflicto de recursos - se intenta crear un recurso duplicado
   resourceConflict,
-  
+
   /// Conflicto de dependencias - el recurso dependiente cambió
   dependencyConflict,
-  
+
   /// Conflicto de estado - se intenta cambiar el estado de forma incompatible
   stateConflict,
 }
@@ -113,20 +114,23 @@ class ConflictResolver {
 
   /// Procesa conflictos detectados durante la sincronización
   Future<ConflictResolutionResult> resolveConflicts(
-    List<sync_service.SyncOperation> pendingOperations,  // Using prefixed import
+    List<sync_service.SyncOperation> pendingOperations, // Using prefixed import
   ) async {
-    debugPrint('[ConflictResolver] Processing ${pendingOperations.length} pending operations');
+    debugPrint(
+        '[ConflictResolver] Processing ${pendingOperations.length} pending operations');
 
     final conflicts = <SyncConflict>[];
-    final resolvedOperations = <sync_service.SyncOperation>[];  // Using prefixed import
-    final failedOperations = <sync_service.SyncOperation>[];    // Using prefixed import
+    final resolvedOperations =
+        <sync_service.SyncOperation>[]; // Using prefixed import
+    final failedOperations =
+        <sync_service.SyncOperation>[]; // Using prefixed import
 
     for (final operation in pendingOperations) {
       try {
         final conflict = await _detectConflict(operation);
         if (conflict != null) {
           conflicts.add(conflict);
-          
+
           // Resolver el conflicto basado en estrategia
           final resolution = await _resolveSingleConflict(conflict);
           if (resolution.resolved) {
@@ -139,7 +143,8 @@ class ConflictResolver {
           resolvedOperations.add(operation);
         }
       } catch (e) {
-        debugPrint('[ConflictResolver] Error processing operation ${operation.id}: $e');
+        debugPrint(
+            '[ConflictResolver] Error processing operation ${operation.id}: $e');
         failedOperations.add(operation);
       }
     }
@@ -148,12 +153,15 @@ class ConflictResolver {
       conflicts: conflicts,
       resolvedOperations: resolvedOperations,
       failedOperations: failedOperations,
-      success: conflicts.isEmpty || resolvedOperations.length == pendingOperations.length,
+      success: conflicts.isEmpty ||
+          resolvedOperations.length == pendingOperations.length,
     );
   }
 
   /// Detecta si una operación tiene conflicto con el estado actual del servidor
-  Future<SyncConflict?> _detectConflict(sync_service.SyncOperation operation) async {  // Using prefixed import
+  Future<SyncConflict?> _detectConflict(
+      sync_service.SyncOperation operation) async {
+    // Using prefixed import
     try {
       // Determinar tipo de conflicto basado en operación
       switch (operation.method) {
@@ -168,21 +176,24 @@ class ConflictResolver {
           return null;
       }
     } catch (e) {
-      debugPrint('[ConflictResolver] Error detecting conflict for ${operation.id}: $e');
+      debugPrint(
+          '[ConflictResolver] Error detecting conflict for ${operation.id}: $e');
       return null;
     }
   }
 
   /// Detecta conflictos de versión (datos modificados desde que se realizó offline)
-  Future<SyncConflict?> _detectVersionConflict(sync_service.SyncOperation operation) async {  // Using prefixed import
+  Future<SyncConflict?> _detectVersionConflict(
+      sync_service.SyncOperation operation) async {
+    // Using prefixed import
     try {
       // Extraer entidad y ID del endpoint
       final entityInfo = _extractEntityInfo(operation.endpoint);
       if (entityInfo == null) return null;
 
       // Obtener estado actual del servidor
-      final currentServerData = await ApiClient.get(entityInfo.$1)
-          .catchError((_) => null);
+      final currentServerData =
+          await ApiClient.get(entityInfo.$1).catchError((_) => null);
 
       if (currentServerData != null) {
         // Comparar con los datos locales que se intentan aplicar
@@ -215,7 +226,9 @@ class ConflictResolver {
   }
 
   /// Detecta conflictos de recursos (intentar crear algo que ya existe)
-  Future<SyncConflict?> _detectResourceConflict(sync_service.SyncOperation operation) async {  // Using prefixed import
+  Future<SyncConflict?> _detectResourceConflict(
+      sync_service.SyncOperation operation) async {
+    // Using prefixed import
     try {
       // Para operaciones POST, verificar si el recurso ya existe
       if (operation.method != 'POST') return null;
@@ -232,7 +245,7 @@ class ConflictResolver {
             entityInfo.$1,
             uniqueKey,
           );
-          
+
           if (existingResource != null) {
             return SyncConflict(
               id: 'conflict_${DateTime.now().millisecondsSinceEpoch}_${operation.id}',
@@ -260,7 +273,9 @@ class ConflictResolver {
   }
 
   /// Detecta conflictos de dependencias (recurso dependiente cambiado)
-  Future<SyncConflict?> _detectDependencyConflict(sync_service.SyncOperation operation) async {  // Using prefixed import
+  Future<SyncConflict?> _detectDependencyConflict(
+      sync_service.SyncOperation operation) async {
+    // Using prefixed import
     // Para DELETE, verificar si el recurso aún existe o si tiene dependencias
     if (operation.method != 'DELETE') return null;
 
@@ -269,8 +284,8 @@ class ConflictResolver {
 
     try {
       // Intentar obtener el recurso - si no existe, podría ser un conflicto
-      final currentResource = await ApiClient.get(entityInfo.$1)
-          .catchError((_) => null);
+      final currentResource =
+          await ApiClient.get(entityInfo.$1).catchError((_) => null);
 
       if (currentResource == null) {
         // El recurso ya no existe, probablemente fue eliminado por otro cliente
@@ -288,16 +303,18 @@ class ConflictResolver {
         );
       }
     } catch (e) {
-      debugPrint('[ConflictResolver] Error in dependency conflict detection: $e');
+      debugPrint(
+          '[ConflictResolver] Error in dependency conflict detection: $e');
     }
 
     return null;
   }
 
   /// Resuelve un único conflicto basado en estrategia
-  Future<ConflictResolution> _resolveSingleConflict(SyncConflict conflict) async {
+  Future<ConflictResolution> _resolveSingleConflict(
+      SyncConflict conflict) async {
     final strategy = _determineResolutionStrategy(conflict);
-    
+
     switch (strategy) {
       case ConflictResolutionStrategy.lastWriteWins:
         // Aplicar el cambio local (el más reciente)
@@ -305,18 +322,20 @@ class ConflictResolver {
           resolved: true,
           operations: [_createUpdatedOperation(conflict)],
         );
-        
+
       case ConflictResolutionStrategy.firstWriteWins:
         // Mantener el cambio del servidor, descartar local
         return ConflictResolution(
           resolved: true,
           operations: [], // No aplicar operación local
         );
-        
+
       case ConflictResolutionStrategy.mergeChanges:
         // Fusionar cambios locales con los del servidor
-        final mergedPayload = _mergeChanges(conflict.localChanges, conflict.serverData ?? {});
-        final mergedOp = sync_service.SyncOperation(  // Using prefixed import
+        final mergedPayload =
+            _mergeChanges(conflict.localChanges, conflict.serverData ?? {});
+        final mergedOp = sync_service.SyncOperation(
+          // Using prefixed import
           id: '${conflict.operationId}_merged',
           type: conflict.entityType,
           endpoint: conflict.endpoint,
@@ -328,7 +347,7 @@ class ConflictResolver {
           resolved: true,
           operations: [mergedOp],
         );
-        
+
       case ConflictResolutionStrategy.applyBoth:
         // Aplicar ambos cambios si son complementarios
         final serverOp = _createServerOperation(conflict);
@@ -337,7 +356,7 @@ class ConflictResolver {
           resolved: true,
           operations: serverOp != null ? [serverOp, localOp] : [localOp],
         );
-        
+
       case ConflictResolutionStrategy.manualResolution:
         // Registrar conflicto para resolución manual
         await _storeManualConflict(conflict);
@@ -349,28 +368,30 @@ class ConflictResolver {
   }
 
   /// Determina la estrategia de resolución basada en el tipo de conflicto y entidad
-  ConflictResolutionStrategy _determineResolutionStrategy(SyncConflict conflict) {
+  ConflictResolutionStrategy _determineResolutionStrategy(
+      SyncConflict conflict) {
     // Reglas específicas por tipo de entidad
     switch (conflict.entityType) {
       case 'pedido':
         // Para pedidos, priorizar últimos cambios excepto para estado crítico
-        if (conflict.localChanges.containsKey('estado') && 
+        if (conflict.localChanges.containsKey('estado') &&
             conflict.localChanges['estado'] == 'CONFIRMADO') {
           return ConflictResolutionStrategy.lastWriteWins;
         }
         return ConflictResolutionStrategy.mergeChanges;
-        
+
       case 'cliente':
         // Para clientes, fusionar cambios menores, mantener último para críticos
-        if (conflict.localChanges.keys.any((k) => ['nombre', 'direccion', 'telefono'].contains(k))) {
+        if (conflict.localChanges.keys
+            .any((k) => ['nombre', 'direccion', 'telefono'].contains(k))) {
           return ConflictResolutionStrategy.lastWriteWins;
         }
         return ConflictResolutionStrategy.mergeChanges;
-        
+
       case 'cobro':
         // Para cobros, usar el último cambio
         return ConflictResolutionStrategy.lastWriteWins;
-        
+
       default:
         // Por defecto, fusionar cambios
         return ConflictResolutionStrategy.mergeChanges;
@@ -383,7 +404,7 @@ class ConflictResolver {
     Map<String, dynamic> serverData,
   ) {
     final merged = Map<String, dynamic>.from(serverData);
-    
+
     for (final entry in localChanges.entries) {
       // Reglas específicas de fusión
       if (_shouldOverwriteField(entry.key)) {
@@ -399,7 +420,7 @@ class ConflictResolver {
         }
       }
     }
-    
+
     return merged;
   }
 
@@ -413,22 +434,23 @@ class ConflictResolver {
       'activo',
       'bloqueado',
     };
-    
+
     return overwriteFields.contains(fieldName);
   }
 
   /// Extrae información de entidad del endpoint
-  (String endpoint, String entityType, String entityId)? _extractEntityInfo(String endpoint) {
+  (String endpoint, String entityType, String entityId)? _extractEntityInfo(
+      String endpoint) {
     // Patrones comunes: /clientes/C001, /pedidos/P001/edit, etc.
     final regExp = RegExp(r'^\/(\w+)\/([^\/]+)(?:\/.*)?$');
     final match = regExp.firstMatch(endpoint);
-    
+
     if (match != null && match.groupCount >= 2) {
       final entityType = match.group(1)!;
       final entityId = match.group(2)!;
       return (endpoint, entityType, entityId);
     }
-    
+
     return null;
   }
 
@@ -447,22 +469,24 @@ class ConflictResolver {
   }
 
   /// Busca recurso existente por clave única
-  Future<Map<String, dynamic>?> _findExistingResource(String endpoint, String uniqueKey) async {
+  Future<Map<String, dynamic>?> _findExistingResource(
+      String endpoint, String uniqueKey) async {
     try {
       // Esta implementación dependería de la API específica
       // Por ahora, simplemente intentamos obtener el endpoint base con el ID
-      final baseEndpoint = endpoint.split('/')[1]; // Extraer base (ej: 'clientes')
+      final baseEndpoint =
+          endpoint.split('/')[1]; // Extraer base (ej: 'clientes')
       final response = await ApiClient.get('/$baseEndpoint');
-      
+
       if (response is Map && response.containsKey('data')) {
         final data = response['data'];
         if (data is List) {
           // Buscar en la lista
           for (final item in data) {
             if (item is Map<String, dynamic>) {
-              final id = item['id']?.toString() ?? 
-                         item['codigoCliente']?.toString() ?? 
-                         item['numeroPedido']?.toString();
+              final id = item['id']?.toString() ??
+                  item['codigoCliente']?.toString() ??
+                  item['numeroPedido']?.toString();
               if (id == uniqueKey) {
                 return item;
               }
@@ -473,12 +497,13 @@ class ConflictResolver {
     } catch (e) {
       debugPrint('[ConflictResolver] Error finding existing resource: $e');
     }
-    
+
     return null;
   }
 
   /// Compara si hay cambios significativos entre dos conjuntos de datos
-  bool _hasSignificantChanges(Map<String, dynamic> serverData, Map<String, dynamic> localChanges) {
+  bool _hasSignificantChanges(
+      Map<String, dynamic> serverData, Map<String, dynamic> localChanges) {
     for (final entry in localChanges.entries) {
       final serverValue = serverData[entry.key];
       if (!_valuesEqual(serverValue, entry.value)) {
@@ -491,7 +516,7 @@ class ConflictResolver {
   /// Compara dos valores para igualdad
   bool _valuesEqual(dynamic a, dynamic b) {
     if (a.runtimeType != b.runtimeType) return false;
-    
+
     if (a is Map && b is Map) {
       return mapEquals(a, b);
     } else if (a is List && b is List) {
@@ -502,8 +527,10 @@ class ConflictResolver {
   }
 
   /// Crea una operación actualizada con la estrategia ganadora
-  sync_service.SyncOperation _createUpdatedOperation(SyncConflict conflict) {  // Using prefixed import
-    return sync_service.SyncOperation(  // Using prefixed import
+  sync_service.SyncOperation _createUpdatedOperation(SyncConflict conflict) {
+    // Using prefixed import
+    return sync_service.SyncOperation(
+      // Using prefixed import
       id: '${conflict.operationId}_resolved',
       type: conflict.entityType,
       endpoint: conflict.endpoint,
@@ -514,10 +541,12 @@ class ConflictResolver {
   }
 
   /// Crea operación con datos del servidor (para first-write-wins)
-  sync_service.SyncOperation? _createServerOperation(SyncConflict conflict) {  // Using prefixed import
+  sync_service.SyncOperation? _createServerOperation(SyncConflict conflict) {
+    // Using prefixed import
     if (conflict.serverData == null) return null;
-    
-    return sync_service.SyncOperation(  // Using prefixed import
+
+    return sync_service.SyncOperation(
+      // Using prefixed import
       id: '${conflict.operationId}_server',
       type: conflict.entityType,
       endpoint: conflict.endpoint,
@@ -535,8 +564,9 @@ class ConflictResolver {
         value: conflict.toJson(),
         type: MemoryType.draft,
       );
-      
-      debugPrint('[ConflictResolver] Stored conflict ${conflict.id} for manual resolution');
+
+      debugPrint(
+          '[ConflictResolver] Stored conflict ${conflict.id} for manual resolution');
     } catch (e) {
       debugPrint('[ConflictResolver] Error storing manual conflict: $e');
     }
@@ -545,7 +575,7 @@ class ConflictResolver {
   /// Obtiene conflictos pendientes de resolución manual
   Future<List<SyncConflict>> getManualConflicts() async {
     final conflicts = <SyncConflict>[];
-    
+
     // Buscar en AgentDB todos los conflictos marcados para resolución manual
     // Esta es una implementación simplificada
     try {
@@ -554,21 +584,22 @@ class ConflictResolver {
     } catch (e) {
       debugPrint('[ConflictResolver] Error getting manual conflicts: $e');
     }
-    
+
     return conflicts;
   }
 
   /// Resuelve un conflicto manualmente
-  Future<bool> resolveManualConflict(String conflictId, Map<String, dynamic> resolvedData) async {
+  Future<bool> resolveManualConflict(
+      String conflictId, Map<String, dynamic> resolvedData) async {
     try {
       // En una implementación completa:
       // 1. Obtener conflicto por ID
       // 2. Aplicar resolución manual
       // 3. Eliminar conflicto de la cola
       // 4. Añadir operación resuelta a la cola de sincronización
-      
+
       await AgentDatabase.instance.deletePersistent('conflict:$conflictId');
-      
+
       debugPrint('[ConflictResolver] Manual conflict $conflictId resolved');
       return true;
     } catch (e) {
@@ -581,7 +612,7 @@ class ConflictResolver {
 /// Resultado de resolución de conflictos
 class ConflictResolution {
   final bool resolved;
-  final List<sync_service.SyncOperation> operations;  // Using prefixed import
+  final List<sync_service.SyncOperation> operations; // Using prefixed import
 
   const ConflictResolution({
     required this.resolved,
@@ -592,8 +623,10 @@ class ConflictResolution {
 /// Resultado del proceso de resolución de conflictos
 class ConflictResolutionResult {
   final List<SyncConflict> conflicts;
-  final List<sync_service.SyncOperation> resolvedOperations;  // Using prefixed import
-  final List<sync_service.SyncOperation> failedOperations;    // Using prefixed import
+  final List<sync_service.SyncOperation>
+      resolvedOperations; // Using prefixed import
+  final List<sync_service.SyncOperation>
+      failedOperations; // Using prefixed import
   final bool success;
 
   const ConflictResolutionResult({

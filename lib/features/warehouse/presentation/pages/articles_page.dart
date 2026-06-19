@@ -44,16 +44,18 @@ class _ArticlesPageState extends State<ArticlesPage> {
   }
 
   Future<void> _search(String q) async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final arts = await WarehouseDataService.getArticles(
         search: q.isEmpty ? null : q,
         onlyWithDimensions: _onlyWithDims ? true : null,
       );
       if (mounted) {
-        final filtered = _onlyRecent
-            ? arts.where((a) => a.inRecentOrders).toList()
-            : arts;
+        final filtered =
+            _onlyRecent ? arts.where((a) => a.inRecentOrders).toList() : arts;
         setState(() {
           _articles = filtered;
           _totalCount = arts.length;
@@ -63,7 +65,11 @@ class _ArticlesPageState extends State<ArticlesPage> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted)
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
     }
   }
 
@@ -78,17 +84,22 @@ class _ArticlesPageState extends State<ArticlesPage> {
       final result = await WarehouseDataService.bulkEstimateDimensions();
       if (mounted) {
         final estimated = result['estimated'] ?? 0;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('$estimated articulos estimados automaticamente'),
-          backgroundColor: AppTheme.neonGreen,
-        ),);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$estimated articulos estimados automaticamente'),
+            backgroundColor: AppTheme.neonGreen,
+          ),
+        );
         _search(_searchC.text);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error: $e'), backgroundColor: Colors.redAccent,
-        ),);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _bulkEstimating = false);
@@ -101,24 +112,35 @@ class _ArticlesPageState extends State<ArticlesPage> {
       builder: (dCtx) => AlertDialog(
         backgroundColor: AppTheme.darkCard,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('RESETEAR TODAS las dimensiones',
-            style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text(
-            'Esto eliminara TODAS las dimensiones reales guardadas ($_withDimsCount articulos). '
-            'Todos los articulos volveran a usar dimensiones estimadas automaticamente.',
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Esta accion NO se puede deshacer.',
-            style: TextStyle(color: Colors.redAccent, fontSize: 12, fontWeight: FontWeight.w700),
-          ),
-        ],),
+        title: const Text(
+          'RESETEAR TODAS las dimensiones',
+          style: TextStyle(
+              color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Esto eliminara TODAS las dimensiones reales guardadas ($_withDimsCount articulos). '
+              'Todos los articulos volveran a usar dimensiones estimadas automaticamente.',
+              style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.7), fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Esta accion NO se puede deshacer.',
+              style: TextStyle(
+                  color: Colors.redAccent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dCtx, false),
-            child: const Text('CANCELAR', style: TextStyle(color: Colors.white54)),
+            child:
+                const Text('CANCELAR', style: TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(dCtx, true),
@@ -126,7 +148,8 @@ class _ArticlesPageState extends State<ArticlesPage> {
               backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
               foregroundColor: Colors.redAccent,
             ),
-            child: const Text('RESETEAR TODO', style: TextStyle(fontWeight: FontWeight.w700)),
+            child: const Text('RESETEAR TODO',
+                style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
       ),
@@ -137,17 +160,22 @@ class _ArticlesPageState extends State<ArticlesPage> {
       final result = await WarehouseDataService.resetAllDimensions();
       if (mounted) {
         final deleted = result['deleted'] ?? 0;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('$deleted dimensiones reales eliminadas'),
-          backgroundColor: Colors.amber,
-        ),);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('$deleted dimensiones reales eliminadas'),
+            backgroundColor: Colors.amber,
+          ),
+        );
         _search(_searchC.text);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('Error: $e'), backgroundColor: Colors.redAccent,
-        ),);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _bulkResetting = false);
@@ -157,85 +185,142 @@ class _ArticlesPageState extends State<ArticlesPage> {
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Column(children: [
-        _buildHeader(),
-        _buildStatsRow(),
-        _buildSearchBar(),
-        Expanded(child: _loading
-            ? const Center(child: CircularProgressIndicator(color: AppTheme.neonBlue))
-            : _error != null
-                ? Center(child: Text(_error!, style: const TextStyle(color: Colors.white54)))
-                : _articles.isEmpty
-                    ? Center(child: Text(
-                        _searchC.text.isEmpty ? 'Cargando articulos...' : 'Sin resultados',
-                        style: const TextStyle(color: Colors.white30, fontSize: 13),),)
-                    : RefreshIndicator(
-                        onRefresh: () => _search(_searchC.text),
-                        color: AppTheme.neonBlue,
-                        child: ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          itemCount: _articles.length,
-                          itemBuilder: (_, i) => _articleCard(_articles[i]),
-                        ),
-                      ),),
-      ],),
+      child: Column(
+        children: [
+          _buildHeader(),
+          _buildStatsRow(),
+          _buildSearchBar(),
+          Expanded(
+            child: _loading
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppTheme.neonBlue))
+                : _error != null
+                    ? Center(
+                        child: Text(_error!,
+                            style: const TextStyle(color: Colors.white54)))
+                    : _articles.isEmpty
+                        ? Center(
+                            child: Text(
+                              _searchC.text.isEmpty
+                                  ? 'Cargando articulos...'
+                                  : 'Sin resultados',
+                              style: const TextStyle(
+                                  color: Colors.white30, fontSize: 13),
+                            ),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: () => _search(_searchC.text),
+                            color: AppTheme.neonBlue,
+                            child: ListView.builder(
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 12),
+                              itemCount: _articles.length,
+                              itemBuilder: (_, i) => _articleCard(_articles[i]),
+                            ),
+                          ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildHeader() {
     return Container(
       padding: EdgeInsets.fromLTRB(
-          Responsive.padding(context, small: 12, large: 16), 12,
-          Responsive.padding(context, small: 12, large: 16), 4,),
-      child: Row(children: [
-        Container(
-          padding: EdgeInsets.all(Responsive.padding(context, small: 6, large: 8)),
-          decoration: BoxDecoration(
-            color: AppTheme.neonGreen.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(10),),
-          child: Icon(Icons.inventory_2_rounded, color: AppTheme.neonGreen,
-              size: Responsive.iconSize(context, phone: 18, desktop: 22),),
-        ),
-        const SizedBox(width: 12),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('CATALOGO DE ARTICULOS', style: TextStyle(
-              color: Colors.white,
-              fontSize: Responsive.fontSize(context, small: 13, large: 16),
-              fontWeight: FontWeight.w800, letterSpacing: 1,),),
-          Text('Dimensiones para el planificador 3D',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 10),),
-        ],),),
-        if (_withDimsCount > 0)
-          _bulkResetting
-            ? const SizedBox(width: 20, height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.redAccent),)
-            : IconButton(
-                icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent, size: 20),
-                tooltip: 'Resetear TODAS las dimensiones reales',
-                onPressed: _bulkReset,
-              ),
-        if (_bulkEstimating) const SizedBox(width: 20, height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonGreen),) else IconButton(
-              icon: const Icon(Icons.auto_fix_high_rounded, color: AppTheme.neonGreen, size: 20),
+        Responsive.padding(context, small: 12, large: 16),
+        12,
+        Responsive.padding(context, small: 12, large: 16),
+        4,
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding:
+                EdgeInsets.all(Responsive.padding(context, small: 6, large: 8)),
+            decoration: BoxDecoration(
+              color: AppTheme.neonGreen.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(
+              Icons.inventory_2_rounded,
+              color: AppTheme.neonGreen,
+              size: Responsive.iconSize(context, phone: 18, desktop: 22),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'CATALOGO DE ARTICULOS',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize:
+                        Responsive.fontSize(context, small: 13, large: 16),
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1,
+                  ),
+                ),
+                Text(
+                  'Dimensiones para el planificador 3D',
+                  style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.4), fontSize: 10),
+                ),
+              ],
+            ),
+          ),
+          if (_withDimsCount > 0)
+            _bulkResetting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: Colors.redAccent),
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.delete_sweep_rounded,
+                        color: Colors.redAccent, size: 20),
+                    tooltip: 'Resetear TODAS las dimensiones reales',
+                    onPressed: _bulkReset,
+                  ),
+          if (_bulkEstimating)
+            const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: AppTheme.neonGreen),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.auto_fix_high_rounded,
+                  color: AppTheme.neonGreen, size: 20),
               tooltip: 'Auto-estimar dimensiones',
               onPressed: _bulkEstimate,
             ),
-      ],),
+        ],
+      ),
     );
   }
 
   Widget _buildStatsRow() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
-      child: Row(children: [
-        _statBadge('$_totalCount total', Colors.white24),
-        const SizedBox(width: 6),
-        _statBadge('$_withDimsCount con medidas',
-            AppTheme.neonGreen.withValues(alpha: 0.3),),
-        const SizedBox(width: 6),
-        _statBadge('$_recentCount en pedidos',
-            AppTheme.neonBlue.withValues(alpha: 0.3),),
-      ],),
+      child: Row(
+        children: [
+          _statBadge('$_totalCount total', Colors.white24),
+          const SizedBox(width: 6),
+          _statBadge(
+            '$_withDimsCount con medidas',
+            AppTheme.neonGreen.withValues(alpha: 0.3),
+          ),
+          const SizedBox(width: 6),
+          _statBadge(
+            '$_recentCount en pedidos',
+            AppTheme.neonBlue.withValues(alpha: 0.3),
+          ),
+        ],
+      ),
     );
   }
 
@@ -243,80 +328,106 @@ class _ArticlesPageState extends State<ArticlesPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-          color: color, borderRadius: BorderRadius.circular(6),),
-      child: Text(text,
-          style: const TextStyle(
-              color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w600,),),
+        color: color,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white70,
+          fontSize: 9,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
     );
   }
 
   Widget _buildSearchBar() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 6),
-      child: Column(children: [
-        TextField(
-          controller: _searchC,
-          onChanged: _onSearchChanged,
-          style: const TextStyle(color: Colors.white, fontSize: 13),
-          decoration: InputDecoration(
-            hintText: 'Buscar por codigo o nombre...',
-            hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.25)),
-            prefixIcon: const Icon(Icons.search_rounded, color: Colors.white30, size: 20),
-            suffixIcon: _searchC.text.isNotEmpty
-                ? IconButton(
-                    icon: const Icon(Icons.clear_rounded, size: 18, color: Colors.white30),
-                    onPressed: () { _searchC.clear(); _search(''); },)
-                : null,
-            filled: true, fillColor: AppTheme.darkCard,
-            border: OutlineInputBorder(
+      child: Column(
+        children: [
+          TextField(
+            controller: _searchC,
+            onChanged: _onSearchChanged,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Buscar por codigo o nombre...',
+              hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.25)),
+              prefixIcon: const Icon(Icons.search_rounded,
+                  color: Colors.white30, size: 20),
+              suffixIcon: _searchC.text.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear_rounded,
+                          size: 18, color: Colors.white30),
+                      onPressed: () {
+                        _searchC.clear();
+                        _search('');
+                      },
+                    )
+                  : null,
+              filled: true,
+              fillColor: AppTheme.darkCard,
+              border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
-                borderSide: BorderSide.none,),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                borderSide: BorderSide.none,
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            ),
           ),
-        ),
-        const SizedBox(height: 6),
-        Row(children: [
-          FilterChip(
-            selected: _onlyWithDims,
-            label: const Text('Con medidas', style: TextStyle(fontSize: 10)),
-            onSelected: (v) {
-              setState(() => _onlyWithDims = v);
-              _search(_searchC.text);
-            },
-            selectedColor: AppTheme.neonGreen.withValues(alpha: 0.2),
-            backgroundColor: AppTheme.darkCard,
-            checkmarkColor: AppTheme.neonGreen,
-            labelStyle: TextStyle(
-                color: _onlyWithDims ? AppTheme.neonGreen : Colors.white38,),
-            side: BorderSide(
-                color: _onlyWithDims
-                    ? AppTheme.neonGreen.withValues(alpha: 0.3)
-                    : Colors.transparent,),
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            visualDensity: VisualDensity.compact,
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              FilterChip(
+                selected: _onlyWithDims,
+                label:
+                    const Text('Con medidas', style: TextStyle(fontSize: 10)),
+                onSelected: (v) {
+                  setState(() => _onlyWithDims = v);
+                  _search(_searchC.text);
+                },
+                selectedColor: AppTheme.neonGreen.withValues(alpha: 0.2),
+                backgroundColor: AppTheme.darkCard,
+                checkmarkColor: AppTheme.neonGreen,
+                labelStyle: TextStyle(
+                  color: _onlyWithDims ? AppTheme.neonGreen : Colors.white38,
+                ),
+                side: BorderSide(
+                  color: _onlyWithDims
+                      ? AppTheme.neonGreen.withValues(alpha: 0.3)
+                      : Colors.transparent,
+                ),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+              const SizedBox(width: 6),
+              FilterChip(
+                selected: _onlyRecent,
+                label: const Text('En pedidos recientes',
+                    style: TextStyle(fontSize: 10)),
+                onSelected: (v) {
+                  setState(() => _onlyRecent = v);
+                  _search(_searchC.text);
+                },
+                selectedColor: AppTheme.neonBlue.withValues(alpha: 0.2),
+                backgroundColor: AppTheme.darkCard,
+                checkmarkColor: AppTheme.neonBlue,
+                labelStyle: TextStyle(
+                  color: _onlyRecent ? AppTheme.neonBlue : Colors.white38,
+                ),
+                side: BorderSide(
+                  color: _onlyRecent
+                      ? AppTheme.neonBlue.withValues(alpha: 0.3)
+                      : Colors.transparent,
+                ),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+            ],
           ),
-          const SizedBox(width: 6),
-          FilterChip(
-            selected: _onlyRecent,
-            label: const Text('En pedidos recientes', style: TextStyle(fontSize: 10)),
-            onSelected: (v) {
-              setState(() => _onlyRecent = v);
-              _search(_searchC.text);
-            },
-            selectedColor: AppTheme.neonBlue.withValues(alpha: 0.2),
-            backgroundColor: AppTheme.darkCard,
-            checkmarkColor: AppTheme.neonBlue,
-            labelStyle: TextStyle(
-                color: _onlyRecent ? AppTheme.neonBlue : Colors.white38,),
-            side: BorderSide(
-                color: _onlyRecent
-                    ? AppTheme.neonBlue.withValues(alpha: 0.3)
-                    : Colors.transparent,),
-            materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            visualDensity: VisualDensity.compact,
-          ),
-        ],),
-      ],),
+        ],
+      ),
     );
   }
 
@@ -329,9 +440,11 @@ class _ArticlesPageState extends State<ArticlesPage> {
 
     String dimText;
     if (hasReal) {
-      dimText = '${a.largoCm?.toStringAsFixed(0)}x${a.anchoCm?.toStringAsFixed(0)}x${a.altoCm?.toStringAsFixed(0)} cm';
+      dimText =
+          '${a.largoCm?.toStringAsFixed(0)}x${a.anchoCm?.toStringAsFixed(0)}x${a.altoCm?.toStringAsFixed(0)} cm';
     } else if (hasDims) {
-      dimText = '~${a.estLargoCm?.toStringAsFixed(0)}x${a.estAnchoCm?.toStringAsFixed(0)}x${a.estAltoCm?.toStringAsFixed(0)} cm';
+      dimText =
+          '~${a.estLargoCm?.toStringAsFixed(0)}x${a.estAnchoCm?.toStringAsFixed(0)}x${a.estAltoCm?.toStringAsFixed(0)} cm';
     } else {
       dimText = 'Sin medidas';
     }
@@ -341,355 +454,516 @@ class _ArticlesPageState extends State<ArticlesPage> {
       decoration: BoxDecoration(
         color: AppTheme.darkCard,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: dimColor.withValues(alpha: 0.08)),),
+        border: Border.all(color: dimColor.withValues(alpha: 0.08)),
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(10),
         onTap: () => _showEditSheet(a),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          child: Row(children: [
-            Container(
-              width: 6, height: 44,
-              decoration: BoxDecoration(
-                color: dimColor.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(3),),
-            ),
-            const SizedBox(width: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppTheme.neonBlue.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                    color: AppTheme.neonBlue.withValues(alpha: 0.15),),),
-              child: Text(a.code,
-                  style: const TextStyle(
-                    color: AppTheme.neonBlue, fontSize: 11,
-                    fontWeight: FontWeight.w800, fontFamily: 'monospace',
-                    letterSpacing: 0.5,),),
-            ),
-            const SizedBox(width: 10),
-            Expanded(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text(a.name.isNotEmpty ? a.name : a.code,
-                  style: const TextStyle(
-                      color: Colors.white, fontSize: 12,
-                      fontWeight: FontWeight.w600,),
-                  maxLines: 1, overflow: TextOverflow.ellipsis,),
-              const SizedBox(height: 2),
-              Row(children: [
-                _infoChip('${a.weight.toStringAsFixed(1)} kg/ud',
-                    Icons.scale_rounded,),
-                const SizedBox(width: 6),
-                _infoChip('${a.unitsPerBox} ud/caja',
-                    Icons.all_inbox_rounded,),
-                if (a.inRecentOrders) ...[
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 1,),
-                    decoration: BoxDecoration(
-                      color: AppTheme.neonBlue.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(3),),
-                    child: const Text('RECIENTE',
-                        style: TextStyle(
-                            color: AppTheme.neonBlue, fontSize: 7,
-                            fontWeight: FontWeight.w800,),),
+          child: Row(
+            children: [
+              Container(
+                width: 6,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: dimColor.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(3),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonBlue.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: AppTheme.neonBlue.withValues(alpha: 0.15),
                   ),
-                ],
-              ],),
-            ],),),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: dimColor.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(6),),
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Text(dimText, style: TextStyle(
-                    color: dimColor, fontSize: 9, fontWeight: FontWeight.w700,),),
-                Text(hasReal ? 'REAL' : (hasDims ? 'ESTIMADO' : ''),
-                    style: TextStyle(
+                ),
+                child: Text(
+                  a.code,
+                  style: const TextStyle(
+                    color: AppTheme.neonBlue,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'monospace',
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      a.name.isNotEmpty ? a.name : a.code,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        _infoChip(
+                          '${a.weight.toStringAsFixed(1)} kg/ud',
+                          Icons.scale_rounded,
+                        ),
+                        const SizedBox(width: 6),
+                        _infoChip(
+                          '${a.unitsPerBox} ud/caja',
+                          Icons.all_inbox_rounded,
+                        ),
+                        if (a.inRecentOrders) ...[
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: const Text(
+                              'RECIENTE',
+                              style: TextStyle(
+                                color: AppTheme.neonBlue,
+                                fontSize: 7,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: dimColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      dimText,
+                      style: TextStyle(
+                        color: dimColor,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      hasReal ? 'REAL' : (hasDims ? 'ESTIMADO' : ''),
+                      style: TextStyle(
                         color: dimColor.withValues(alpha: 0.6),
-                        fontSize: 7, fontWeight: FontWeight.w800,),),
-              ],),
-            ),
-          ],),
+                        fontSize: 7,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
   Widget _infoChip(String text, IconData icon) {
-    return Row(mainAxisSize: MainAxisSize.min, children: [
-      Icon(icon, size: 10, color: Colors.white24),
-      const SizedBox(width: 2),
-      Text(text, style: TextStyle(
-          color: Colors.white.withValues(alpha: 0.4), fontSize: 10,),),
-    ],);
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 10, color: Colors.white24),
+        const SizedBox(width: 2),
+        Text(
+          text,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.4),
+            fontSize: 10,
+          ),
+        ),
+      ],
+    );
   }
 
   void _showEditSheet(ArticleDimension a) {
     final largoC = TextEditingController(
-        text: a.hasRealDimensions
-            ? a.largoCm?.toStringAsFixed(0) ?? ''
-            : '',);
+      text: a.hasRealDimensions ? a.largoCm?.toStringAsFixed(0) ?? '' : '',
+    );
     final anchoC = TextEditingController(
-        text: a.hasRealDimensions
-            ? a.anchoCm?.toStringAsFixed(0) ?? ''
-            : '',);
+      text: a.hasRealDimensions ? a.anchoCm?.toStringAsFixed(0) ?? '' : '',
+    );
     final altoC = TextEditingController(
-        text: a.hasRealDimensions
-            ? a.altoCm?.toStringAsFixed(0) ?? ''
-            : '',);
+      text: a.hasRealDimensions ? a.altoCm?.toStringAsFixed(0) ?? '' : '',
+    );
     final pesoC = TextEditingController(
-        text: a.pesoOverrideKg?.toStringAsFixed(1) ?? '',);
+      text: a.pesoOverrideKg?.toStringAsFixed(1) ?? '',
+    );
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: AppTheme.darkCard,
       shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
       builder: (ctx) => Padding(
         padding: EdgeInsets.fromLTRB(
-            Responsive.padding(ctx, small: 14, large: 20), 16,
-            Responsive.padding(ctx, small: 14, large: 20),
-            MediaQuery.of(ctx).viewInsets.bottom + 20,),
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Container(width: 40, height: 4, decoration: BoxDecoration(
-              color: Colors.white24, borderRadius: BorderRadius.circular(2),),),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.neonBlue.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                  color: AppTheme.neonBlue.withValues(alpha: 0.2),),),
-            child: Text(a.code,
-                style: const TextStyle(
-                    color: AppTheme.neonBlue, fontSize: 14,
-                    fontWeight: FontWeight.w800, fontFamily: 'monospace',
-                    letterSpacing: 1,),),
-          ),
-          const SizedBox(height: 8),
-          Text(a.name.isNotEmpty ? a.name : a.code,
-              style: const TextStyle(
-                  color: Colors.white, fontSize: 15,
-                  fontWeight: FontWeight.w700,),
-              maxLines: 2, overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.center,),
-          const SizedBox(height: 4),
-          Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Text('${a.weight.toStringAsFixed(2)} kg/ud',
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.4),
-                    fontSize: 11,),),
-            const SizedBox(width: 12),
-            Text('${a.unitsPerBox} ud/caja',
-                style: TextStyle(
-                    color: Colors.white.withValues(alpha: 0.4),
-                    fontSize: 11,),),
-          ],),
-          // Status badge: REAL vs ESTIMADO
-          Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          Responsive.padding(ctx, small: 14, large: 20),
+          16,
+          Responsive.padding(ctx, small: 14, large: 20),
+          MediaQuery.of(ctx).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
               decoration: BoxDecoration(
-                color: a.hasRealDimensions
-                    ? AppTheme.neonGreen.withValues(alpha: 0.12)
-                    : (a.estLargoCm != null
-                        ? Colors.amber.withValues(alpha: 0.12)
-                        : Colors.white.withValues(alpha: 0.05)),
-                borderRadius: BorderRadius.circular(6),
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.neonBlue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
                 border: Border.all(
-                  color: a.hasRealDimensions
-                      ? AppTheme.neonGreen.withValues(alpha: 0.3)
-                      : (a.estLargoCm != null
-                          ? Colors.amber.withValues(alpha: 0.3)
-                          : Colors.white.withValues(alpha: 0.1)),
+                  color: AppTheme.neonBlue.withValues(alpha: 0.2),
                 ),
               ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                Icon(
-                  a.hasRealDimensions ? Icons.verified_rounded : Icons.auto_fix_high_rounded,
-                  size: 12,
-                  color: a.hasRealDimensions ? AppTheme.neonGreen : Colors.amber,
+              child: Text(
+                a.code,
+                style: const TextStyle(
+                  color: AppTheme.neonBlue,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w800,
+                  fontFamily: 'monospace',
+                  letterSpacing: 1,
                 ),
-                const SizedBox(width: 4),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              a.name.isNotEmpty ? a.name : a.code,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
                 Text(
-                  a.hasRealDimensions
-                      ? 'DIMENSIONES REALES: ${a.largoCm?.toStringAsFixed(0)}x${a.anchoCm?.toStringAsFixed(0)}x${a.altoCm?.toStringAsFixed(0)} cm'
-                      : (a.estLargoCm != null
-                          ? 'ESTIMADO: ~${a.estLargoCm?.toStringAsFixed(0)}x${a.estAnchoCm?.toStringAsFixed(0)}x${a.estAltoCm?.toStringAsFixed(0)} cm'
-                          : 'SIN MEDIDAS'),
+                  '${a.weight.toStringAsFixed(2)} kg/ud',
                   style: TextStyle(
-                    color: a.hasRealDimensions ? AppTheme.neonGreen : Colors.amber,
-                    fontSize: 9,
-                    fontWeight: FontWeight.w700,
+                    color: Colors.white.withValues(alpha: 0.4),
+                    fontSize: 11,
                   ),
                 ),
-              ],),
-            ),
-          ),
-          if (!a.hasRealDimensions && a.estLargoCm != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(
-                  'Introduce medidas reales verificadas con cinta metrica',
+                const SizedBox(width: 12),
+                Text(
+                  '${a.unitsPerBox} ud/caja',
                   style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.3),
-                      fontSize: 10,),
-                  textAlign: TextAlign.center,),
+                    color: Colors.white.withValues(alpha: 0.4),
+                    fontSize: 11,
+                  ),
+                ),
+              ],
             ),
-          const SizedBox(height: 16),
-          Row(children: [
-            Expanded(child: _field(largoC, 'Largo (cm)')),
-            const SizedBox(width: 10),
-            Expanded(child: _field(anchoC, 'Ancho (cm)')),
-            const SizedBox(width: 10),
-            Expanded(child: _field(altoC, 'Alto (cm)')),
-          ],),
-          const SizedBox(height: 12),
-          _field(pesoC, 'Peso por caja (kg) - opcional'),
-          const SizedBox(height: 16),
-          SizedBox(width: double.infinity, height: 44,
-              child: ElevatedButton.icon(
-            onPressed: () async {
-              final largo = double.tryParse(largoC.text);
-              final ancho = double.tryParse(anchoC.text);
-              final alto = double.tryParse(altoC.text);
-              if (largo == null || ancho == null || alto == null) {
-                ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(
-                    content: Text('Introduce las 3 dimensiones'),
-                    backgroundColor: Colors.amber,),);
-                return;
-              }
-              // Confirmation dialog
-              final confirm = await showDialog<bool>(
-                context: ctx,
-                builder: (dCtx) => AlertDialog(
-                  backgroundColor: AppTheme.darkCard,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  title: const Text('Confirmar dimensiones REALES',
-                      style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),),
-                  content: Column(mainAxisSize: MainAxisSize.min, children: [
+            // Status badge: REAL vs ESTIMADO
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: a.hasRealDimensions
+                      ? AppTheme.neonGreen.withValues(alpha: 0.12)
+                      : (a.estLargoCm != null
+                          ? Colors.amber.withValues(alpha: 0.12)
+                          : Colors.white.withValues(alpha: 0.05)),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(
+                    color: a.hasRealDimensions
+                        ? AppTheme.neonGreen.withValues(alpha: 0.3)
+                        : (a.estLargoCm != null
+                            ? Colors.amber.withValues(alpha: 0.3)
+                            : Colors.white.withValues(alpha: 0.1)),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      a.hasRealDimensions
+                          ? Icons.verified_rounded
+                          : Icons.auto_fix_high_rounded,
+                      size: 12,
+                      color: a.hasRealDimensions
+                          ? AppTheme.neonGreen
+                          : Colors.amber,
+                    ),
+                    const SizedBox(width: 4),
                     Text(
-                      'Estas guardando ${largo.toStringAsFixed(0)} x ${ancho.toStringAsFixed(0)} x ${alto.toStringAsFixed(0)} cm como dimensiones REALES verificadas.',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Estas medidas se usaran en el planificador 3D. Asegurate de haberlas medido fisicamente.',
-                      style: TextStyle(color: Colors.amber.withValues(alpha: 0.8), fontSize: 11),
-                    ),
-                  ],),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(dCtx, false),
-                      child: const Text('CANCELAR', style: TextStyle(color: Colors.white54)),
-                    ),
-                    ElevatedButton(
-                      onPressed: () => Navigator.pop(dCtx, true),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.2),
-                        foregroundColor: AppTheme.neonGreen,
+                      a.hasRealDimensions
+                          ? 'DIMENSIONES REALES: ${a.largoCm?.toStringAsFixed(0)}x${a.anchoCm?.toStringAsFixed(0)}x${a.altoCm?.toStringAsFixed(0)} cm'
+                          : (a.estLargoCm != null
+                              ? 'ESTIMADO: ~${a.estLargoCm?.toStringAsFixed(0)}x${a.estAnchoCm?.toStringAsFixed(0)}x${a.estAltoCm?.toStringAsFixed(0)} cm'
+                              : 'SIN MEDIDAS'),
+                      style: TextStyle(
+                        color: a.hasRealDimensions
+                            ? AppTheme.neonGreen
+                            : Colors.amber,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
                       ),
-                      child: const Text('CONFIRMAR', style: TextStyle(fontWeight: FontWeight.w700)),
                     ),
                   ],
                 ),
-              );
-              if (confirm != true) return;
-              try {
-                await WarehouseDataService.updateArticleDimensions(
-                  code: a.code, largoCm: largo, anchoCm: ancho, altoCm: alto,
-                  pesoCajaKg: double.tryParse(pesoC.text),
-                );
-                if (ctx.mounted) Navigator.pop(ctx);
-                _search(_searchC.text);
-              } catch (e) {
-                if (ctx.mounted) {
-                  ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                      content: Text('Error: $e'),
-                      backgroundColor: Colors.redAccent,),);
-                }
-              }
-            },
-            icon: const Icon(Icons.save_rounded, size: 18),
-            label: const Text('GUARDAR COMO REAL',
-                style: TextStyle(
-                    fontWeight: FontWeight.w700, letterSpacing: 0.5,),),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.2),
-              foregroundColor: AppTheme.neonGreen,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),),),
-          ),),
-          // Undo button: delete real dimensions
-          if (a.hasRealDimensions) ...[
-            const SizedBox(height: 8),
-            SizedBox(width: double.infinity, height: 40,
-                child: OutlinedButton.icon(
-              onPressed: () async {
-                final confirm = await showDialog<bool>(
-                  context: ctx,
-                  builder: (dCtx) => AlertDialog(
-                    backgroundColor: AppTheme.darkCard,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    title: const Text('Eliminar dimensiones reales',
-                        style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),),
-                    content: Text(
-                      'Se eliminaran las dimensiones reales guardadas y el articulo volvera a usar dimensiones estimadas automaticamente.',
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 13),
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(dCtx, false),
-                        child: const Text('CANCELAR', style: TextStyle(color: Colors.white54)),
-                      ),
-                      ElevatedButton(
-                        onPressed: () => Navigator.pop(dCtx, true),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
-                          foregroundColor: Colors.redAccent,
-                        ),
-                        child: const Text('ELIMINAR', style: TextStyle(fontWeight: FontWeight.w700)),
-                      ),
-                    ],
+              ),
+            ),
+            if (!a.hasRealDimensions && a.estLargoCm != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'Introduce medidas reales verificadas con cinta metrica',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.3),
+                    fontSize: 10,
                   ),
-                );
-                if (confirm != true) return;
-                try {
-                  await WarehouseDataService.deleteArticleDimensions(a.code);
-                  if (ctx.mounted) Navigator.pop(ctx);
-                  _search(_searchC.text);
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                      content: Text('Dimensiones reales eliminadas, vuelve a estimado'),
-                      backgroundColor: Colors.amber,
-                    ),);
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(child: _field(largoC, 'Largo (cm)')),
+                const SizedBox(width: 10),
+                Expanded(child: _field(anchoC, 'Ancho (cm)')),
+                const SizedBox(width: 10),
+                Expanded(child: _field(altoC, 'Alto (cm)')),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _field(pesoC, 'Peso por caja (kg) - opcional'),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  final largo = double.tryParse(largoC.text);
+                  final ancho = double.tryParse(anchoC.text);
+                  final alto = double.tryParse(altoC.text);
+                  if (largo == null || ancho == null || alto == null) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(
+                        content: Text('Introduce las 3 dimensiones'),
+                        backgroundColor: Colors.amber,
+                      ),
+                    );
+                    return;
                   }
-                } catch (e) {
-                  if (ctx.mounted) {
-                    ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-                        content: Text('Error: $e'),
-                        backgroundColor: Colors.redAccent,),);
+                  // Confirmation dialog
+                  final confirm = await showDialog<bool>(
+                    context: ctx,
+                    builder: (dCtx) => AlertDialog(
+                      backgroundColor: AppTheme.darkCard,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                      title: const Text(
+                        'Confirmar dimensiones REALES',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700),
+                      ),
+                      content: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Estas guardando ${largo.toStringAsFixed(0)} x ${ancho.toStringAsFixed(0)} x ${alto.toStringAsFixed(0)} cm como dimensiones REALES verificadas.',
+                            style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.7),
+                                fontSize: 13),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Estas medidas se usaran en el planificador 3D. Asegurate de haberlas medido fisicamente.',
+                            style: TextStyle(
+                                color: Colors.amber.withValues(alpha: 0.8),
+                                fontSize: 11),
+                          ),
+                        ],
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(dCtx, false),
+                          child: const Text('CANCELAR',
+                              style: TextStyle(color: Colors.white54)),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(dCtx, true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                AppTheme.neonGreen.withValues(alpha: 0.2),
+                            foregroundColor: AppTheme.neonGreen,
+                          ),
+                          child: const Text('CONFIRMAR',
+                              style: TextStyle(fontWeight: FontWeight.w700)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm != true) return;
+                  try {
+                    await WarehouseDataService.updateArticleDimensions(
+                      code: a.code,
+                      largoCm: largo,
+                      anchoCm: ancho,
+                      altoCm: alto,
+                      pesoCajaKg: double.tryParse(pesoC.text),
+                    );
+                    if (ctx.mounted) Navigator.pop(ctx);
+                    _search(_searchC.text);
+                  } catch (e) {
+                    if (ctx.mounted) {
+                      ScaffoldMessenger.of(ctx).showSnackBar(
+                        SnackBar(
+                          content: Text('Error: $e'),
+                          backgroundColor: Colors.redAccent,
+                        ),
+                      );
+                    }
                   }
-                }
-              },
-              icon: const Icon(Icons.undo_rounded, size: 16),
-              label: const Text('VOLVER A ESTIMADO',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.redAccent,
-                side: BorderSide(color: Colors.redAccent.withValues(alpha: 0.3)),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),),),
-            ),),
+                },
+                icon: const Icon(Icons.save_rounded, size: 18),
+                label: const Text(
+                  'GUARDAR COMO REAL',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.neonGreen.withValues(alpha: 0.2),
+                  foregroundColor: AppTheme.neonGreen,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ),
+            // Undo button: delete real dimensions
+            if (a.hasRealDimensions) ...[
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                height: 40,
+                child: OutlinedButton.icon(
+                  onPressed: () async {
+                    final confirm = await showDialog<bool>(
+                      context: ctx,
+                      builder: (dCtx) => AlertDialog(
+                        backgroundColor: AppTheme.darkCard,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16)),
+                        title: const Text(
+                          'Eliminar dimensiones reales',
+                          style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700),
+                        ),
+                        content: Text(
+                          'Se eliminaran las dimensiones reales guardadas y el articulo volvera a usar dimensiones estimadas automaticamente.',
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              fontSize: 13),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(dCtx, false),
+                            child: const Text('CANCELAR',
+                                style: TextStyle(color: Colors.white54)),
+                          ),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(dCtx, true),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  Colors.redAccent.withValues(alpha: 0.2),
+                              foregroundColor: Colors.redAccent,
+                            ),
+                            child: const Text('ELIMINAR',
+                                style: TextStyle(fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm != true) return;
+                    try {
+                      await WarehouseDataService.deleteArticleDimensions(
+                          a.code);
+                      if (ctx.mounted) Navigator.pop(ctx);
+                      _search(_searchC.text);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                                'Dimensiones reales eliminadas, vuelve a estimado'),
+                            backgroundColor: Colors.amber,
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      if (ctx.mounted) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(
+                            content: Text('Error: $e'),
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.undo_rounded, size: 16),
+                  label: const Text(
+                    'VOLVER A ESTIMADO',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.redAccent,
+                    side: BorderSide(
+                        color: Colors.redAccent.withValues(alpha: 0.3)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
-        ],),
+        ),
       ),
     );
   }
@@ -702,13 +976,19 @@ class _ArticlesPageState extends State<ArticlesPage> {
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(
-            color: Colors.white.withValues(alpha: 0.4), fontSize: 11,),
-        filled: true, fillColor: AppTheme.darkBase,
+          color: Colors.white.withValues(alpha: 0.4),
+          fontSize: 11,
+        ),
+        filled: true,
+        fillColor: AppTheme.darkBase,
         border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: BorderSide.none,),
+          borderRadius: BorderRadius.circular(10),
+          borderSide: BorderSide.none,
+        ),
         contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12, vertical: 10,),
+          horizontal: 12,
+          vertical: 10,
+        ),
       ),
     );
   }

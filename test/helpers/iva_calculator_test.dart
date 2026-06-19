@@ -52,7 +52,7 @@ void main() {
       const base2 = 40.61;
       const iva2 = 8.53;
       const netoSum = base1 + base2; // 338.36
-      const ivaSum = iva1 + iva2;    // 38.31
+      const ivaSum = iva1 + iva2; // 38.31
       expect(calculateTotal(netoSum, ivaSum), 376.67);
     });
 
@@ -91,9 +91,9 @@ void main() {
 
     test('CPC.IMPORTEBRUTO != CPC.IMPORTETOTAL proves wrong field used', () {
       // Client 4300039982 (DELEGACION ALMERIA)
-      const cpcBruto = 574.87;  // What repartidor currently sees
-      const cpcTotal = 570.39;  // What it should show
-      const cacTotal = 105.53;  // Factura total (different client scope)
+      const cpcBruto = 574.87; // What repartidor currently sees
+      const cpcTotal = 570.39; // What it should show
+      const cacTotal = 105.53; // Factura total (different client scope)
 
       expect(cpcBruto, isNot(equals(cpcTotal)));
       expect(cpcBruto - cpcTotal, closeTo(4.48, 0.01));

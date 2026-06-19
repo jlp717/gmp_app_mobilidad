@@ -1,7 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 // Provider para manejar datos de cliente pendientes
-final pendingClientProvider = StateNotifierProvider<PendingClientNotifier, Map<String, dynamic>?>(
+final pendingClientProvider =
+    StateNotifierProvider<PendingClientNotifier, Map<String, dynamic>?>(
   (ref) => PendingClientNotifier(),
 );
 

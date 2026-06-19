@@ -2,13 +2,33 @@
 class DateFormatter {
   // Spanish month names
   static const List<String> monthNames = [
-    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-    'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre',
   ];
 
   static const List<String> monthNamesShort = [
-    'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
-    'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic',
+    'Ene',
+    'Feb',
+    'Mar',
+    'Abr',
+    'May',
+    'Jun',
+    'Jul',
+    'Ago',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dic',
   ];
 
   /// Get Spanish month name from number (1-12)
@@ -18,7 +38,8 @@ class DateFormatter {
   }
 
   /// Format week: "Semana 12 (20-26 Mar)"
-  static String formatWeek(int week, {int? weekStart, int? weekEnd, int? month}) {
+  static String formatWeek(int week,
+      {int? weekStart, int? weekEnd, int? month}) {
     if (weekStart != null && weekEnd != null && month != null) {
       final monthShort = getMonthName(month, short: true);
       return 'Semana $week ($weekStart-$weekEnd $monthShort)';

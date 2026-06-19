@@ -34,7 +34,8 @@ void main() {
 
         // Assert
         expect(embedding1.length, ReasoningBank.embeddingDimension);
-        expect(embedding1, equals(embedding2)); // Mismos inputs = mismos outputs
+        expect(
+            embedding1, equals(embedding2)); // Mismos inputs = mismos outputs
       });
 
       test('should generate different embeddings for different products', () {
@@ -78,7 +79,7 @@ void main() {
       test('should weight purchase higher than view', () async {
         // Arrange
         const userId = 'test_user_2';
-        
+
         // Act - View
         await reasoningBank.recordUserInteraction(
           userId: userId,
@@ -97,7 +98,8 @@ void main() {
         // Assert
         final profile = reasoningBank.getUserProfile(userId);
         final viewScore = profile?['productScores']?['product_view'] ?? 0;
-        final purchaseScore = profile?['productScores']?['product_purchase'] ?? 0;
+        final purchaseScore =
+            profile?['productScores']?['product_purchase'] ?? 0;
 
         expect(purchaseScore, greaterThan(viewScore));
       });
@@ -118,7 +120,7 @@ void main() {
       test('should return recommendations after interactions', () async {
         // Arrange
         const userId = 'rec_test_user';
-        
+
         // Record some interactions
         await reasoningBank.recordUserInteraction(
           userId: userId,
@@ -126,7 +128,7 @@ void main() {
           type: InteractionType.purchase,
           quantity: 2,
         );
-        
+
         await reasoningBank.recordUserInteraction(
           userId: userId,
           productCode: 'prod_2',
@@ -207,7 +209,7 @@ void main() {
         // Arrange
         const userId = 'pattern_user';
         final orderId = 'order_${DateTime.now().millisecondsSinceEpoch}';
-        
+
         final items = [
           OrderItem(productCode: 'item1', quantity: 2, price: 50),
           OrderItem(productCode: 'item2', quantity: 1, price: 100),
@@ -228,7 +230,7 @@ void main() {
       test('should learn frequently bought together', () async {
         // Arrange
         const userId = 'combo_user';
-        
+
         // Analyze multiple orders with same combination
         for (var i = 0; i < 3; i++) {
           await reasoningBank.analyzeOrderPattern(
@@ -242,7 +244,8 @@ void main() {
         }
 
         // Act
-        final frequentlyBoughtTogether = reasoningBank.getFrequentlyBoughtTogether(
+        final frequentlyBoughtTogether =
+            reasoningBank.getFrequentlyBoughtTogether(
           userId: userId,
           productCode: 'product_A',
         );
@@ -256,7 +259,7 @@ void main() {
       test('should learn and retrieve patterns', () async {
         // Arrange
         const userId = 'learn_user';
-        
+
         // Record multiple interactions of same type
         for (var i = 0; i < 5; i++) {
           await reasoningBank.recordUserInteraction(
@@ -284,7 +287,7 @@ void main() {
       test('should clear specific user data', () async {
         // Arrange
         const userId = 'clear_user';
-        
+
         await reasoningBank.recordUserInteraction(
           userId: userId,
           productCode: 'product',

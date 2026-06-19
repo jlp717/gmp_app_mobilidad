@@ -34,7 +34,8 @@ class SecureStorage {
     try {
       final value = await _storage.read(key: key);
       if (kDebugMode) {
-        debugPrint('[SecureStorage] Read: $key = ${value != null ? "exists" : "null"}');
+        debugPrint(
+            '[SecureStorage] Read: $key = ${value != null ? "exists" : "null"}');
       }
       return value;
     } catch (e) {

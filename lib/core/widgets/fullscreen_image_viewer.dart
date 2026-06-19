@@ -105,7 +105,7 @@ class FullscreenImageViewer extends StatelessWidget {
                     fit: BoxFit.contain,
                     borderRadius: BorderRadius.zero,
                     headers: _effectiveHeaders,
-                    forceRetry: true,  // Forzar reintento en pantalla completa
+                    forceRetry: true, // Forzar reintento en pantalla completa
                   ),
                 ),
               ),

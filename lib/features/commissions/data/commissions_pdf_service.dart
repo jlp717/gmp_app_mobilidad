@@ -81,7 +81,8 @@ class CommissionsPdfService {
           if (vendorCode.isNotEmpty) 'vendorCode': vendorCode,
           if (year != null) 'year': year.toString(),
           if (months != null) 'months': months, // New: comma-separated months
-          if (range != null && months == null) 'range': range, // Fallback for old API
+          if (range != null && months == null)
+            'range': range, // Fallback for old API
         },
       );
 

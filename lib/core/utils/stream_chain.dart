@@ -3,15 +3,15 @@ import 'package:flutter/foundation.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service_optimized.dart';
 
 /// Stream-Chain Utility V3
-/// 
+///
 /// Provides stream-based caching and chaining operations for efficient data flow.
-/// 
+///
 /// Features:
 /// - Automatic caching of stream emissions
 /// - Debouncing and throttling
 /// - Memory-efficient transformations
 /// - ReplayCache for late subscribers
-/// 
+///
 /// Usage:
 /// ```dart
 /// // Cache stream emissions
@@ -20,13 +20,13 @@ import 'package:gmp_app_mobilidad/core/cache/cache_service_optimized.dart';
 ///   keyPrefix: 'orders_',
 ///   ttl: Duration(minutes: 5),
 /// );
-/// 
+///
 /// // Debounced stream (wait for pause in emissions)
 /// final debounced = StreamChain.debounce(
 ///   searchStream,
 ///   Duration(milliseconds: 300),
 /// );
-/// 
+///
 /// // Throttled stream (max 1 emission per duration)
 /// final throttled = StreamChain.throttle(
 ///   scrollStream,
@@ -34,7 +34,6 @@ import 'package:gmp_app_mobilidad/core/cache/cache_service_optimized.dart';
 /// );
 /// ```
 class StreamChain<T> {
-  
   StreamChain._(this._stream, this._cacheKey, this._cacheTTL);
   final Stream<T> _stream;
   final String? _cacheKey;
@@ -58,14 +57,14 @@ class StreamChain<T> {
     final cachedStream = _stream.map((value) {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final key = '$keyPrefix$timestamp';
-      
+
       CacheServiceOptimized.set(
         key,
         value,
         ttl: ttl,
         quantize: quantize,
       );
-      
+
       return value;
     });
 
@@ -211,7 +210,6 @@ class StreamChain<T> {
 
 /// ReplayCache - Cache last N emissions for late subscribers
 class ReplayCache<T> {
-
   ReplayCache({int maxSize = 1}) : _maxSize = maxSize;
   final int _maxSize;
   final List<T> _buffer = [];
@@ -274,7 +272,6 @@ class ReplayCache<T> {
 }
 
 class _ReplayTransformer<T> extends StreamTransformerBase<T, T> {
-
   _ReplayTransformer(this._replayValues);
   final List<T> _replayValues;
 
@@ -307,14 +304,14 @@ class StreamCache {
     return stream.map((value) {
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final key = '$keyPrefix$timestamp';
-      
+
       CacheServiceOptimized.set(
         key,
         value,
         ttl: ttl,
         quantize: quantize,
       );
-      
+
       return value;
     });
   }

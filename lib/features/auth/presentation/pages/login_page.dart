@@ -83,7 +83,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   Future<void> _tryAutoLogin() async {
-    final authState = ProviderScope.containerOf(context).read(authProvider).value;
+    final authState =
+        ProviderScope.containerOf(context).read(authProvider).value;
     if (authState?.isAuthenticated ?? false) {
       if (mounted) context.go('/dashboard');
     }
@@ -106,18 +107,17 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     final ref = ProviderScope.containerOf(context);
 
     final success = await ref.read(authProvider.notifier).login(
-      _usernameController.text.trim(),
-      _passwordController.text,
-    );
+          _usernameController.text.trim(),
+          _passwordController.text,
+        );
 
     if (!mounted) return;
 
     if (success) {
       final user = ref.read(authProvider).value?.user;
 
-      final isJefe = user?.isJefeVentas ?? false ||
-          user?.role == 'JEFE_VENTAS' ||
-          user?.role == 'JEFE';
+      final isJefe = user?.isJefeVentas ??
+          false || user?.role == 'JEFE_VENTAS' || user?.role == 'JEFE';
 
       if (isJefe) {
         if (!mounted) return;
@@ -135,10 +135,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     } else {
       setState(() {
         _hasError = true;
-        final rawError = ref.read(authProvider).value?.error ?? 'Credenciales incorrectas';
+        final rawError =
+            ref.read(authProvider).value?.error ?? 'Credenciales incorrectas';
 
-        if (rawError.contains('Demasiados intentos') || rawError.contains('429')) {
-          _errorMessage = 'Demasiados intentos. Espera unos minutos antes de intentar de nuevo.';
+        if (rawError.contains('Demasiados intentos') ||
+            rawError.contains('429')) {
+          _errorMessage =
+              'Demasiados intentos. Espera unos minutos antes de intentar de nuevo.';
         } else if (rawError.contains('ROLE_SELECTION')) {
           _errorMessage = rawError;
         } else {
@@ -162,24 +165,30 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                   color: AppTheme.error.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.error_outline, color: AppTheme.error, size: 20),
+                child: const Icon(Icons.error_outline,
+                    color: AppTheme.error, size: 20),
               ),
               const SizedBox(width: 12),
-              const Text('Error de acceso', style: TextStyle(color: AppTheme.error)),
+              const Text('Error de acceso',
+                  style: TextStyle(color: AppTheme.error)),
             ],
           ),
           content: Text(
-            _errorMessage ?? 'Credenciales incorrectas. Por favor, inténtalo de nuevo.',
+            _errorMessage ??
+                'Credenciales incorrectas. Por favor, inténtalo de nuevo.',
             style: const TextStyle(color: Colors.white),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
               style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
-              child: const Text('Entendido', style: TextStyle(color: AppTheme.neonBlue)),
+              child: const Text('Entendido',
+                  style: TextStyle(color: AppTheme.neonBlue)),
             ),
           ],
         ),
@@ -261,7 +270,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               final offset = math.sin(_orbController1.value * 2 * math.pi) * 20;
               return Transform.translate(
                 offset: Offset(offset, offset * 0.5),
-                child: _buildOrb(300, AppTheme.neonBlue.withValues(alpha: 0.12)),
+                child:
+                    _buildOrb(300, AppTheme.neonBlue.withValues(alpha: 0.12)),
               );
             },
           ),
@@ -276,7 +286,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               final offset = math.cos(_orbController2.value * 2 * math.pi) * 15;
               return Transform.translate(
                 offset: Offset(offset, -offset * 0.7),
-                child: _buildOrb(380, AppTheme.neonPurple.withValues(alpha: 0.1)),
+                child:
+                    _buildOrb(380, AppTheme.neonPurple.withValues(alpha: 0.1)),
               );
             },
           ),
@@ -427,7 +438,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     return AnimatedBuilder(
       animation: _logoController,
       builder: (context, _) {
-        final scale = 1.0 + math.sin(_logoController.value * 2 * math.pi) * 0.03;
+        final scale =
+            1.0 + math.sin(_logoController.value * 2 * math.pi) * 0.03;
         return Transform.scale(
           scale: scale,
           child: Container(
@@ -438,7 +450,11 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               gradient: const LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF3B82F6), Color(0xFF8B5CF6), Color(0xFFEC4899)],
+                colors: [
+                  Color(0xFF3B82F6),
+                  Color(0xFF8B5CF6),
+                  Color(0xFFEC4899)
+                ],
               ),
               boxShadow: [
                 BoxShadow(
@@ -560,7 +576,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(AppTheme.radiusMd),
                   color: AppTheme.error.withValues(alpha: 0.08),
-                  border: Border.all(color: AppTheme.error.withValues(alpha: 0.2)),
+                  border:
+                      Border.all(color: AppTheme.error.withValues(alpha: 0.2)),
                 ),
                 child: Row(
                   children: [
@@ -570,7 +587,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         shape: BoxShape.circle,
                         color: AppTheme.error.withValues(alpha: 0.15),
                       ),
-                      child: const Icon(Icons.error_outline, color: AppTheme.error, size: 18),
+                      child: const Icon(Icons.error_outline,
+                          color: AppTheme.error, size: 18),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -601,7 +619,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                       borderRadius: BorderRadius.circular(8),
                       child: const Padding(
                         padding: EdgeInsets.all(4),
-                        child: Icon(Icons.close, size: 16, color: AppTheme.error),
+                        child:
+                            Icon(Icons.close, size: 16, color: AppTheme.error),
                       ),
                     ),
                   ],
@@ -639,7 +658,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               validator: (v) =>
                   (v?.isEmpty ?? false) ? 'Ingresa tu contraseña' : null,
               suffix: InkWell(
-                onTap: () => setState(() => _obscurePassword = !_obscurePassword),
+                onTap: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
                   padding: const EdgeInsets.all(8),
@@ -682,13 +702,15 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                                   Color(0xFFEC4899),
                                 ],
                               ),
-                        color: isLoading ? Colors.white.withValues(alpha: 0.08) : null,
+                        color: isLoading
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : null,
                         boxShadow: isLoading
                             ? []
                             : [
                                 BoxShadow(
-                                  color: const Color(0xFF3B82F6)
-                                      .withValues(alpha: _isButtonHovered ? 0.4 : 0.25),
+                                  color: const Color(0xFF3B82F6).withValues(
+                                      alpha: _isButtonHovered ? 0.4 : 0.25),
                                   blurRadius: _isButtonHovered ? 30 : 20,
                                   offset: Offset(0, _isButtonHovered ? 12 : 8),
                                 ),
@@ -798,7 +820,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w500,
-            color: isFocused ? AppTheme.neonBlue : Colors.white.withValues(alpha: 0.4),
+            color: isFocused
+                ? AppTheme.neonBlue
+                : Colors.white.withValues(alpha: 0.4),
             letterSpacing: 0.3,
           ),
           child: Text(label),
@@ -846,7 +870,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               ),
               suffixIcon: suffix,
               filled: false,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
               border: InputBorder.none,
               errorStyle: const TextStyle(fontSize: 11, height: 0.8),
             ),

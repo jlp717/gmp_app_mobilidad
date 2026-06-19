@@ -47,4 +47,3 @@ class CurrencyFormatter {
     return format(value);
   }
 }
-

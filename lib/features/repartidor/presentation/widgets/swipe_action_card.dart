@@ -5,9 +5,9 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 /// Left swipe: Mark as collected (green action)
 /// Right swipe: Add note (blue action)
 class SwipeActionCard extends StatefulWidget {
-
   const SwipeActionCard({
-    required this.child, super.key,
+    required this.child,
+    super.key,
     this.onSwipeLeft,
     this.onSwipeRight,
     this.leftLabel = 'Cobrado',
@@ -37,7 +37,7 @@ class _SwipeActionCardState extends State<SwipeActionCard>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   double _dragExtent = 0;
-  
+
   static const double _swipeThreshold = 80;
   static const double _maxSwipe = 120;
 
@@ -58,7 +58,7 @@ class _SwipeActionCardState extends State<SwipeActionCard>
 
   void _handleDragUpdate(DragUpdateDetails details) {
     if (!widget.enabled) return;
-    
+
     setState(() {
       _dragExtent += details.primaryDelta ?? 0;
       _dragExtent = _dragExtent.clamp(-_maxSwipe, _maxSwipe);
@@ -77,7 +77,7 @@ class _SwipeActionCardState extends State<SwipeActionCard>
         widget.onSwipeRight!();
       }
     }
-    
+
     // Animate back to center
     _animateToCenter();
   }
@@ -111,7 +111,8 @@ class _SwipeActionCardState extends State<SwipeActionCard>
                 color: actionColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
-              alignment: isLeftSwipe ? Alignment.centerRight : Alignment.centerLeft,
+              alignment:
+                  isLeftSwipe ? Alignment.centerRight : Alignment.centerLeft,
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: AnimatedOpacity(
                 opacity: progress,
@@ -147,7 +148,7 @@ class _SwipeActionCardState extends State<SwipeActionCard>
               ),
             ),
           ),
-        
+
         // Main content
         GestureDetector(
           onHorizontalDragUpdate: _handleDragUpdate,
@@ -164,9 +165,9 @@ class _SwipeActionCardState extends State<SwipeActionCard>
 
 /// Mini bar chart for weekly visualization
 class WeeklyMiniChart extends StatelessWidget {
-
   const WeeklyMiniChart({
-    required this.dailyCounts, super.key,
+    required this.dailyCounts,
+    super.key,
     this.maxValue = 0,
     this.selectedIndex = -1,
     this.onDayTap,
@@ -178,10 +179,10 @@ class WeeklyMiniChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveMax = maxValue > 0 
-        ? maxValue 
+    final effectiveMax = maxValue > 0
+        ? maxValue
         : dailyCounts.fold<int>(0, (max, v) => v > max ? v : max);
-    
+
     if (effectiveMax == 0) return const SizedBox.shrink();
 
     return Container(
@@ -193,7 +194,7 @@ class WeeklyMiniChart extends StatelessWidget {
           final count = dailyCounts[index];
           final height = effectiveMax > 0 ? (count / effectiveMax) * 24 : 0.0;
           final isSelected = index == selectedIndex;
-          
+
           return Expanded(
             child: GestureDetector(
               onTap: () => onDayTap?.call(index),
@@ -208,10 +209,19 @@ class WeeklyMiniChart extends StatelessWidget {
                       begin: Alignment.bottomCenter,
                       end: Alignment.topCenter,
                       colors: isSelected
-                          ? [AppTheme.neonBlue, AppTheme.neonBlue.withValues(alpha: 0.6)]
+                          ? [
+                              AppTheme.neonBlue,
+                              AppTheme.neonBlue.withValues(alpha: 0.6)
+                            ]
                           : count > 0
-                              ? [AppTheme.neonBlue.withValues(alpha: 0.5), AppTheme.neonBlue.withValues(alpha: 0.2)]
-                              : [AppTheme.borderColor, AppTheme.borderColor.withValues(alpha: 0.5)],
+                              ? [
+                                  AppTheme.neonBlue.withValues(alpha: 0.5),
+                                  AppTheme.neonBlue.withValues(alpha: 0.2)
+                                ]
+                              : [
+                                  AppTheme.borderColor,
+                                  AppTheme.borderColor.withValues(alpha: 0.5)
+                                ],
                     ),
                     borderRadius: BorderRadius.circular(4),
                     boxShadow: isSelected

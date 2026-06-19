@@ -812,9 +812,8 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             tooltip: 'Clonar pedido',
           ),
           const Spacer(),
-          // Confirm button
-          if (header.estado == 'BORRADOR' ||
-              header.estado == 'PENDIENTE_APROBACION') ...[
+          // Confirm button — solo borradores reales; PENDIENTE_APROBACION ya está en ERP
+          if (header.estado == 'BORRADOR') ...[
             Expanded(
               child: ElevatedButton.icon(
                 onPressed: _isConfirming ? null : _confirmOrder,
@@ -878,7 +877,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
       case 'BORRADOR':
         return Colors.orange;
       case 'PENDIENTE_APROBACION':
-        return Colors.amber;
+        return AppTheme.neonBlue;
       case 'CONFIRMANDO':
         return AppTheme.neonBlue;
       case 'CONFIRMADO':

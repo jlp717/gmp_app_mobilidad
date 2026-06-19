@@ -5,7 +5,6 @@ import 'package:gmp_app_mobilidad/features/sales_history/domain/product_history_
 // ── State ────────────────────────────────────────────────────────────────────
 
 class SalesHistoryState {
-
   const SalesHistoryState({
     this.items = const [],
     this.summary,
@@ -43,15 +42,22 @@ class SalesHistoryState {
   }) {
     return SalesHistoryState(
       items: items ?? this.items,
-      summary: summary == _sentinel ? this.summary : summary as Map<String, dynamic>?,
+      summary: summary == _sentinel
+          ? this.summary
+          : summary as Map<String, dynamic>?,
       isLoading: isLoading ?? this.isLoading,
       error: error == _sentinel ? this.error : error as String?,
       totalCount: totalCount ?? this.totalCount,
-      clientCode: clientCode == _sentinel ? this.clientCode : clientCode as String?,
-      productSearch: productSearch == _sentinel ? this.productSearch : productSearch as String?,
+      clientCode:
+          clientCode == _sentinel ? this.clientCode : clientCode as String?,
+      productSearch: productSearch == _sentinel
+          ? this.productSearch
+          : productSearch as String?,
       startDate: startDate == _sentinel ? this.startDate : startDate as String?,
       endDate: endDate == _sentinel ? this.endDate : endDate as String?,
-      vendedorCodes: vendedorCodes == _sentinel ? this.vendedorCodes : vendedorCodes as String?,
+      vendedorCodes: vendedorCodes == _sentinel
+          ? this.vendedorCodes
+          : vendedorCodes as String?,
     );
   }
 
@@ -127,7 +133,8 @@ class SalesHistoryNotifier extends Notifier<SalesHistoryState> {
 // ── Provider ─────────────────────────────────────────────────────────────────
 
 final salesHistoryProvider =
-    NotifierProvider<SalesHistoryNotifier, SalesHistoryState>(SalesHistoryNotifier.new);
+    NotifierProvider<SalesHistoryNotifier, SalesHistoryState>(
+        SalesHistoryNotifier.new);
 
 // ── Selectors ────────────────────────────────────────────────────────────────
 

@@ -16,7 +16,6 @@ import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_fo
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
 
 class PromotionsBanner extends StatefulWidget {
-
   const PromotionsBanner({
     super.key,
     this.onProductTap,
@@ -57,7 +56,9 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
 
   Future<void> _loadPromotions() async {
     try {
-      setState(() { _hasError = false; });
+      setState(() {
+        _hasError = false;
+      });
       final provider = Provider.of<PedidosProvider>(context, listen: false);
       final clientCode = provider.clientCode;
       if (clientCode == null || clientCode.isEmpty) {
@@ -92,7 +93,11 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
   }
 
   Future<void> _retry() async {
-    if (mounted) setState(() { _isLoading = true; _hasError = false; });
+    if (mounted)
+      setState(() {
+        _isLoading = true;
+        _hasError = false;
+      });
     await _loadPromotions();
   }
 
@@ -110,9 +115,12 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.warning_amber_rounded, color: AppTheme.warning, size: 18),
+            const Icon(Icons.warning_amber_rounded,
+                color: AppTheme.warning, size: 18),
             const SizedBox(width: 8),
-            const Expanded(child: Text('No se pudieron cargar las ofertas', style: TextStyle(fontSize: 13))),
+            const Expanded(
+                child: Text('No se pudieron cargar las ofertas',
+                    style: TextStyle(fontSize: 13))),
             TextButton(
               onPressed: _retry,
               child: const Text('Reintentar', style: TextStyle(fontSize: 12)),
@@ -145,21 +153,28 @@ class _PromotionsBannerState extends State<PromotionsBanner> {
                     ),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                        color: AppTheme.neonGreen.withValues(alpha: 0.4),),
+                      color: AppTheme.neonGreen.withValues(alpha: 0.4),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.local_offer,
-                          color: AppTheme.neonGreen, size: 16,),
+                      const Icon(
+                        Icons.local_offer,
+                        color: AppTheme.neonGreen,
+                        size: 16,
+                      ),
                       const SizedBox(width: 6),
                       Text(
                         'Ofertas activas (${_promotions.length})',
                         style: TextStyle(
                           color: AppTheme.neonGreen,
                           fontWeight: FontWeight.w600,
-                          fontSize: Responsive.fontSize(context,
-                              small: 12, large: 14,),
+                          fontSize: Responsive.fontSize(
+                            context,
+                            small: 12,
+                            large: 14,
+                          ),
                         ),
                       ),
                     ],

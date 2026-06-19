@@ -28,7 +28,8 @@ class SalesHistoryService {
       final queryParams = <String, dynamic>{
         if (vendedorCodes != null) 'vendedorCodes': vendedorCodes,
         if (clientCode != null) 'clientCode': clientCode,
-        if (productSearch != null && productSearch.isNotEmpty) 'productSearch': productSearch,
+        if (productSearch != null && productSearch.isNotEmpty)
+          'productSearch': productSearch,
         if (startDate != null) 'startDate': startDate,
         if (endDate != null) 'endDate': endDate,
         'limit': limit.toString(),
@@ -36,7 +37,8 @@ class SalesHistoryService {
       };
 
       // Generate cache key from params
-      final cacheKey = 'sales_history_${vendedorCodes ?? 'all'}_${clientCode ?? 'all'}_${startDate ?? ''}_${endDate ?? ''}_${limit}_$offset';
+      final cacheKey =
+          'sales_history_${vendedorCodes ?? 'all'}_${clientCode ?? 'all'}_${startDate ?? ''}_${endDate ?? ''}_${limit}_$offset';
 
       final response = await ApiClient.get(
         '/sales-history',
@@ -46,9 +48,12 @@ class SalesHistoryService {
       );
 
       final rowsJson = (response['rows'] as List?) ?? [];
-      final items = rowsJson.map((json) => ProductHistoryItem.fromJson(json as Map<String, dynamic>)).toList();
+      final items = rowsJson
+          .map((json) =>
+              ProductHistoryItem.fromJson(json as Map<String, dynamic>))
+          .toList();
       final count = response['count'] as int? ?? 0;
-      
+
       return {
         'items': items,
         'count': count,
@@ -71,12 +76,14 @@ class SalesHistoryService {
       final queryParams = <String, dynamic>{
         if (vendedorCodes != null) 'vendedorCodes': vendedorCodes,
         if (clientCode != null) 'clientCode': clientCode,
-        if (productSearch != null && productSearch.isNotEmpty) 'productSearch': productSearch,
+        if (productSearch != null && productSearch.isNotEmpty)
+          'productSearch': productSearch,
         if (startDate != null) 'startDate': startDate,
         if (endDate != null) 'endDate': endDate,
       };
 
-      final cacheKey = 'sales_history_summary_${vendedorCodes ?? 'all'}_${clientCode ?? 'all'}_${startDate ?? ''}_${endDate ?? ''}';
+      final cacheKey =
+          'sales_history_summary_${vendedorCodes ?? 'all'}_${clientCode ?? 'all'}_${startDate ?? ''}_${endDate ?? ''}';
 
       return await ApiClient.get(
         '/sales-history/summary',

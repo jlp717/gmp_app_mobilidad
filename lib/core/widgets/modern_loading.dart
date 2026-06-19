@@ -5,7 +5,6 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 /// Modern loading indicator — V2 Premium.
 /// Futuristic spinner with layered animations and subtle glow effects.
 class ModernLoading extends StatelessWidget {
-
   const ModernLoading({
     super.key,
     this.message,
@@ -45,8 +44,11 @@ class ModernLoading extends StatelessWidget {
                       ),
                     ],
                   ),
-                ).animate(onPlay: (c) => c.repeat(reverse: true))
-                 .scaleXY(begin: 0.92, end: 1.08, duration: 1.8.seconds, curve: Curves.easeInOut),
+                ).animate(onPlay: (c) => c.repeat(reverse: true)).scaleXY(
+                    begin: 0.92,
+                    end: 1.08,
+                    duration: 1.8.seconds,
+                    curve: Curves.easeInOut),
 
                 // Rotating Arc — outer
                 SizedBox(
@@ -57,8 +59,11 @@ class ModernLoading extends StatelessWidget {
                     strokeWidth: 2.5,
                     backgroundColor: AppTheme.neonBlue.withValues(alpha: 0.06),
                   ),
-                ).animate(onPlay: (c) => c.repeat())
-                 .rotate(begin: 0, end: 1, duration: 2.seconds, curve: Curves.linear),
+                ).animate(onPlay: (c) => c.repeat()).rotate(
+                    begin: 0,
+                    end: 1,
+                    duration: 2.seconds,
+                    curve: Curves.linear),
 
                 // Rotating Arc — inner (counter-rotate)
                 SizedBox(
@@ -67,10 +72,14 @@ class ModernLoading extends StatelessWidget {
                   child: CircularProgressIndicator(
                     color: AppTheme.neonPurple.withValues(alpha: 0.4),
                     strokeWidth: 2,
-                    backgroundColor: AppTheme.neonPurple.withValues(alpha: 0.04),
+                    backgroundColor:
+                        AppTheme.neonPurple.withValues(alpha: 0.04),
                   ),
-                ).animate(onPlay: (c) => c.repeat())
-                 .rotate(begin: 1, end: 0, duration: 1.5.seconds, curve: Curves.linear),
+                ).animate(onPlay: (c) => c.repeat()).rotate(
+                    begin: 1,
+                    end: 0,
+                    duration: 1.5.seconds,
+                    curve: Curves.linear),
 
                 // Inner Pulse
                 Container(
@@ -86,8 +95,11 @@ class ModernLoading extends StatelessWidget {
                       ),
                     ],
                   ),
-                ).animate(onPlay: (c) => c.repeat(reverse: true))
-                 .fade(begin: 0.2, end: 0.7, duration: 1.2.seconds, curve: Curves.easeInOut),
+                ).animate(onPlay: (c) => c.repeat(reverse: true)).fade(
+                    begin: 0.2,
+                    end: 0.7,
+                    duration: 1.2.seconds,
+                    curve: Curves.easeInOut),
               ],
             ),
           ),
@@ -102,9 +114,9 @@ class ModernLoading extends StatelessWidget {
                 fontWeight: FontWeight.w500,
                 letterSpacing: 0.8,
               ),
-            ).animate()
-             .fadeIn(duration: 500.ms)
-             .shimmer(duration: 2.5.seconds, color: Colors.white.withValues(alpha: 0.3)),
+            ).animate().fadeIn(duration: 500.ms).shimmer(
+                duration: 2.5.seconds,
+                color: Colors.white.withValues(alpha: 0.3)),
           ],
         ],
       ),

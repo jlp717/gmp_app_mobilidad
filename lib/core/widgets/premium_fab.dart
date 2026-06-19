@@ -25,10 +25,12 @@ class PremiumFloatingActionButton extends StatefulWidget {
   final double size;
 
   @override
-  State<PremiumFloatingActionButton> createState() => _PremiumFloatingActionButtonState();
+  State<PremiumFloatingActionButton> createState() =>
+      _PremiumFloatingActionButtonState();
 }
 
-class _PremiumFloatingActionButtonState extends State<PremiumFloatingActionButton>
+class _PremiumFloatingActionButtonState
+    extends State<PremiumFloatingActionButton>
     with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
 
@@ -97,12 +99,14 @@ class _PremiumFloatingActionButtonState extends State<PremiumFloatingActionButto
                 highlightColor: Colors.transparent,
                 child: isExtended
                     ? Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 14),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (widget.icon != null) ...[
-                              Icon(widget.icon, size: 20, color: AppTheme.darkBase),
+                              Icon(widget.icon,
+                                  size: 20, color: AppTheme.darkBase),
                               const SizedBox(width: 8),
                             ],
                             Text(

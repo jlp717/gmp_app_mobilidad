@@ -10,9 +10,11 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 
 class TarifaSelectorModal extends StatefulWidget {
-
   const TarifaSelectorModal({
-    required this.product, required this.tariffs, required this.codigoTarifaCliente, super.key,
+    required this.product,
+    required this.tariffs,
+    required this.codigoTarifaCliente,
+    super.key,
     this.initialPrice,
   });
   final Product product;
@@ -57,8 +59,7 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
             orElse: () => null,
           );
 
-  bool get _showPU =>
-      widget.product.unitsPerBox > 1 && _clientTariff != null;
+  bool get _showPU => widget.product.unitsPerBox > 1 && _clientTariff != null;
 
   @override
   void initState() {
@@ -89,15 +90,26 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
 
   String _unitAbbr(String unit) {
     switch (unit.toUpperCase()) {
-      case 'CAJAS': return 'cj';
-      case 'KILOGRAMOS': return 'kg';
-      case 'LITROS': return 'L';
-      case 'BANDEJAS': return 'band';
-      case 'ESTUCHES': case 'ESTUCHE': return 'est';
-      case 'BOLSAS': case 'BOLSA': return 'bol';
-      case 'UNIDADES': return 'uds';
-      case 'PIEZAS': return 'pzs';
-      default: return unit.toLowerCase();
+      case 'CAJAS':
+        return 'cj';
+      case 'KILOGRAMOS':
+        return 'kg';
+      case 'LITROS':
+        return 'L';
+      case 'BANDEJAS':
+        return 'band';
+      case 'ESTUCHES':
+      case 'ESTUCHE':
+        return 'est';
+      case 'BOLSAS':
+      case 'BOLSA':
+        return 'bol';
+      case 'UNIDADES':
+        return 'uds';
+      case 'PIEZAS':
+        return 'pzs';
+      default:
+        return unit.toLowerCase();
     }
   }
 
@@ -175,13 +187,15 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: Responsive.fontSize(context, small: 15, large: 17),
+                      fontSize:
+                          Responsive.fontSize(context, small: 15, large: 17),
                     ),
                   ),
                 ),
                 IconButton(
                   onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close, color: Colors.white54, size: 20),
+                  icon:
+                      const Icon(Icons.close, color: Colors.white54, size: 20),
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),
@@ -208,7 +222,8 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                   children: [
                     Icon(Icons.info_outline, color: Colors.white38, size: 18),
                     SizedBox(width: 8),
-                    Text('Sin tarifa disponible', style: TextStyle(color: Colors.white54, fontSize: 13)),
+                    Text('Sin tarifa disponible',
+                        style: TextStyle(color: Colors.white54, fontSize: 13)),
                   ],
                 ),
               ),
@@ -249,7 +264,10 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                         children: [
                           Text(
                             _abbreviate(ct.description),
-                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -263,7 +281,9 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                     if (p.unitsPerBox > 1)
                       Text(
                         '(${_fmt(ct.precioUnitario)} €/$unitAbbr)',
-                        style: TextStyle(color: orange.withValues(alpha: 0.75), fontSize: 11),
+                        style: TextStyle(
+                            color: orange.withValues(alpha: 0.75),
+                            fontSize: 11),
                       ),
                   ],
                 ),
@@ -324,13 +344,15 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                         children: [
                           Text(
                             _abbreviate(t.description),
-                            style: const TextStyle(color: Colors.white70, fontSize: 12),
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 12),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
                             '${_fmt(t.price)} €/cj',
-                            style: const TextStyle(color: Colors.white54, fontSize: 11),
+                            style: const TextStyle(
+                                color: Colors.white54, fontSize: 11),
                           ),
                         ],
                       ),
@@ -338,7 +360,8 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                     if (p.unitsPerBox > 1)
                       Text(
                         '(${_fmt(t.precioUnitario)} €/$unitAbbr)',
-                        style: const TextStyle(color: Colors.white38, fontSize: 11),
+                        style: const TextStyle(
+                            color: Colors.white38, fontSize: 11),
                       ),
                   ],
                 ),
@@ -356,7 +379,8 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white54,
                   side: const BorderSide(color: AppTheme.borderColor),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10)),
                 ),
                 child: const Text('CANCELAR', style: TextStyle(fontSize: 13)),
               ),
@@ -368,16 +392,19 @@ class _TarifaSelectorModalState extends State<TarifaSelectorModal> {
                 width: double.infinity,
                 height: 46,
                 child: ElevatedButton.icon(
-                  onPressed: () => Navigator.pop(context, _priceForSelection(_selected)),
+                  onPressed: () =>
+                      Navigator.pop(context, _priceForSelection(_selected)),
                   icon: const Icon(Icons.check, size: 18),
                   label: Text(
                     'ACEPTAR  ${_fmt(_priceForSelection(_selected))} €/${_unitAbbr(p.displayUnit)}',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.bold),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.warning,
                     foregroundColor: AppTheme.darkBase,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
                   ),
                 ),
               ),

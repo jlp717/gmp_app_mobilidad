@@ -4,9 +4,11 @@ import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 
 class RuteroReorderModal extends StatefulWidget {
-
   const RuteroReorderModal({
-    required this.clients, required this.employeeCode, required this.day, super.key,
+    required this.clients,
+    required this.employeeCode,
+    required this.day,
+    super.key,
   });
   final List<Map<String, dynamic>> clients;
   final String employeeCode;
@@ -85,7 +87,7 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
   }
 
   void _moveToTop(int index) {
-     setState(() {
+    setState(() {
       final item = _orderedClients.removeAt(index);
       _orderedClients.insert(0, item);
       _searchQuery = '';
@@ -94,7 +96,7 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
   }
 
   void _moveToBottom(int index) {
-     setState(() {
+    setState(() {
       final item = _orderedClients.removeAt(index);
       _orderedClients.add(item);
       _searchQuery = '';
@@ -105,21 +107,21 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
   @override
   Widget build(BuildContext context) {
     // Filter for display BUT actions must map back to original list indices
-    // This is tricky with ReorderableListView. 
+    // This is tricky with ReorderableListView.
     // ReorderableListView usually requires the full list to be rendered or handled carefully.
     // If we filter, we can't drag "into" hidden items.
-    // Strategy: 
+    // Strategy:
     // 1. If searching, show a standard ListView with "Move to Top/Bottom" actions.
     // 2. If NOT searching, show ReorderableListView.
-    
+
     final isSearching = _searchQuery.isNotEmpty;
-    
-    final displayList = isSearching 
+
+    final displayList = isSearching
         ? _orderedClients.where((c) {
             final code = (c['code'] ?? '').toString().toLowerCase();
             final name = (c['name'] ?? '').toString().toLowerCase();
             return code.contains(_searchQuery) || name.contains(_searchQuery);
-          }).toList() 
+          }).toList()
         : _orderedClients;
 
     return Scaffold(
@@ -127,18 +129,27 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('Ordenar Rutero', style: TextStyle(fontWeight: FontWeight.bold)),
+        title: const Text('Ordenar Rutero',
+            style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           if (_isSaving)
-            const Center(child: Padding(
-              padding: EdgeInsets.only(right: 16),
-              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonPink)),
-            ),)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.only(right: 16),
+                child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppTheme.neonPink)),
+              ),
+            )
           else
             TextButton.icon(
               onPressed: _saveOrder,
               icon: const Icon(Icons.save, color: AppTheme.neonPink),
-              label: const Text('Guardar', style: TextStyle(color: AppTheme.neonPink, fontWeight: FontWeight.bold)),
+              label: const Text('Guardar',
+                  style: TextStyle(
+                      color: AppTheme.neonPink, fontWeight: FontWeight.bold)),
             ),
         ],
       ),
@@ -155,13 +166,14 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
                 textAlign: TextAlign.center,
               ),
             ),
-            
+
           // Search Bar
           Padding(
             padding: const EdgeInsets.all(16),
             child: TextField(
               controller: _searchController,
-              onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
+              onChanged: (val) =>
+                  setState(() => _searchQuery = val.toLowerCase()),
               style: const TextStyle(color: Colors.white),
               decoration: InputDecoration(
                 hintText: 'Buscar cliente para mover...',
@@ -169,20 +181,22 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
                 prefixIcon: const Icon(Icons.search, color: Colors.grey),
                 filled: true,
                 fillColor: AppTheme.surfaceColor,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                suffixIcon: isSearching 
-                  ? IconButton(
-                      icon: const Icon(Icons.clear, color: Colors.grey),
-                      onPressed: () => setState(() {
-                        _searchController.clear();
-                        _searchQuery = '';
-                      }),
-                    ) 
-                  : null,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide.none),
+                suffixIcon: isSearching
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, color: Colors.grey),
+                        onPressed: () => setState(() {
+                          _searchController.clear();
+                          _searchQuery = '';
+                        }),
+                      )
+                    : null,
               ),
             ),
           ),
-          
+
           if (isSearching)
             const Padding(
               padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -190,44 +204,47 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
                 children: [
                   Icon(Icons.info_outline, color: AppTheme.neonBlue, size: 16),
                   SizedBox(width: 8),
-                  Expanded(child: Text(
-                    'Limpia la búsqueda para arrastrar y soltar.',
-                    style: TextStyle(color: AppTheme.neonBlue, fontSize: 12),
-                  ),),
+                  Expanded(
+                    child: Text(
+                      'Limpia la búsqueda para arrastrar y soltar.',
+                      style: TextStyle(color: AppTheme.neonBlue, fontSize: 12),
+                    ),
+                  ),
                 ],
               ),
             ),
 
           Expanded(
-            child: isSearching 
-              ? ListView.builder(
-                  itemCount: displayList.length,
-                  itemBuilder: (context, index) {
-                    final client = displayList[index];
-                    // Find actual index in main list
-                    final realIndex = _orderedClients.indexOf(client);
-                    
-                    return _buildListItem(client, realIndex, false);
-                  },
-                )
-              : ReorderableListView.builder(
-                  itemCount: _orderedClients.length,
-                  onReorder: _moveClient,
-                  itemBuilder: (context, index) {
-                     final client = _orderedClients[index];
-                     return _buildListItem(client, index, true);
-                  },
-                ),
+            child: isSearching
+                ? ListView.builder(
+                    itemCount: displayList.length,
+                    itemBuilder: (context, index) {
+                      final client = displayList[index];
+                      // Find actual index in main list
+                      final realIndex = _orderedClients.indexOf(client);
+
+                      return _buildListItem(client, realIndex, false);
+                    },
+                  )
+                : ReorderableListView.builder(
+                    itemCount: _orderedClients.length,
+                    onReorder: _moveClient,
+                    itemBuilder: (context, index) {
+                      final client = _orderedClients[index];
+                      return _buildListItem(client, index, true);
+                    },
+                  ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildListItem(Map<String, dynamic> client, int index, bool isReorderable) {
+  Widget _buildListItem(
+      Map<String, dynamic> client, int index, bool isReorderable) {
     // Unique key is critical for ReorderableListView
     final key = ValueKey(client['code']);
-    
+
     return Container(
       key: key,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -241,13 +258,15 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
         leading: CircleAvatar(
           backgroundColor: AppTheme.neonPink.withValues(alpha: 0.1),
           child: Text(
-            '${index + 1}', 
-            style: const TextStyle(color: AppTheme.neonPink, fontWeight: FontWeight.bold),
+            '${index + 1}',
+            style: const TextStyle(
+                color: AppTheme.neonPink, fontWeight: FontWeight.bold),
           ),
         ),
         title: Text(
           (client['name'] as String?) ?? 'Sin Nombre',
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+          style:
+              const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -255,25 +274,25 @@ class _RuteroReorderModalState extends State<RuteroReorderModal> {
           (client['code'] as String?) ?? '',
           style: TextStyle(color: Colors.grey.shade400),
         ),
-        trailing: isReorderable 
-          ? const Icon(Icons.drag_handle, color: Colors.grey)
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.vertical_align_top),
-                  color: AppTheme.neonBlue,
-                  tooltip: 'Mover al inicio',
-                  onPressed: () => _moveToTop(index),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.vertical_align_bottom),
-                  color: AppTheme.neonBlue,
-                  tooltip: 'Mover al final',
-                  onPressed: () => _moveToBottom(index),
-                ),
-              ],
-            ),
+        trailing: isReorderable
+            ? const Icon(Icons.drag_handle, color: Colors.grey)
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.vertical_align_top),
+                    color: AppTheme.neonBlue,
+                    tooltip: 'Mover al inicio',
+                    onPressed: () => _moveToTop(index),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.vertical_align_bottom),
+                    color: AppTheme.neonBlue,
+                    tooltip: 'Mover al final',
+                    onPressed: () => _moveToBottom(index),
+                  ),
+                ],
+              ),
       ),
     );
   }

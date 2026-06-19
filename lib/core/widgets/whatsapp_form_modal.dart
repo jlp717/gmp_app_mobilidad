@@ -24,7 +24,6 @@ import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 /// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 class WhatsAppFormResult {
-
   const WhatsAppFormResult({
     required this.phone,
     required this.message,
@@ -34,7 +33,6 @@ class WhatsAppFormResult {
 }
 
 class WhatsAppFormModal extends StatefulWidget {
-
   const WhatsAppFormModal({
     super.key,
     this.defaultMessage = '',
@@ -90,7 +88,8 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
 
   void _submit() {
     if (_formKey.currentState?.validate() ?? false) {
-      final cleanPhone = _phoneController.text.replaceAll(RegExp(r'[\s\-\(\)]'), '');
+      final cleanPhone =
+          _phoneController.text.replaceAll(RegExp(r'[\s\-\(\)]'), '');
       Navigator.pop(
         context,
         WhatsAppFormResult(
@@ -137,7 +136,8 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                       color: whatsAppGreen.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Icon(Icons.chat, color: whatsAppGreen, size: 22),
+                    child:
+                        const Icon(Icons.chat, color: whatsAppGreen, size: 22),
                   ),
                   const SizedBox(width: 14),
                   const Expanded(
@@ -151,7 +151,8 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: AppTheme.textSecondary, size: 20),
+                    icon: const Icon(Icons.close,
+                        color: AppTheme.textSecondary, size: 20),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
@@ -177,7 +178,8 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                 inputFormatters: [
                   FilteringTextInputFormatter.allow(RegExp(r'[\d\+\s\-\(\)]')),
                 ],
-                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                style:
+                    const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 decoration: _inputDecoration(
                   hint: '+34 612 345 678',
                   icon: Icons.phone,
@@ -192,7 +194,8 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
               TextFormField(
                 controller: _messageController,
                 maxLines: 3,
-                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                style:
+                    const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 decoration: _inputDecoration(
                   hint: 'Escriba un mensaje...',
                   icon: Icons.message_outlined,
@@ -209,7 +212,8 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                     onPressed: () => Navigator.pop(context),
                     style: TextButton.styleFrom(
                       foregroundColor: AppTheme.textSecondary,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 12),
                     ),
                     child: const Text('Cancelar'),
                   ),
@@ -221,7 +225,8 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: whatsAppGreen,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 24, vertical: 12),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -255,18 +260,21 @@ class _WhatsAppFormModalState extends State<WhatsAppFormModal> {
   }) {
     return InputDecoration(
       hintText: hint,
-      hintStyle: TextStyle(color: AppTheme.textSecondary.withValues(alpha: 0.5), fontSize: 13),
+      hintStyle: TextStyle(
+          color: AppTheme.textSecondary.withValues(alpha: 0.5), fontSize: 13),
       prefixIcon: Icon(icon, color: AppTheme.textSecondary, size: 18),
       filled: true,
       fillColor: AppTheme.darkBase,
       contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.5)),
+        borderSide:
+            BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.5)),
       ),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.3)),
+        borderSide:
+            BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.3)),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),

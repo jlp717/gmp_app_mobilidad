@@ -148,7 +148,7 @@ class PedidosProvider with ChangeNotifier {
   // ── Complementary Products & Promotions ──
   List<Map<String, dynamic>> _complementaryProducts = [];
   final List<PromotionItem> _activePromotionsList = [];
-  final Map<String, PromotionItem> _activePromotions = {};
+  final Map<String, List<PromotionItem>> _promotionsByProduct = {};
 
   // ── Analytics ──
   Map<String, dynamic> _analytics = {};
@@ -267,7 +267,20 @@ class PedidosProvider with ChangeNotifier {
   Set<String> get favoriteProductCodes => _favoriteProductCodes;
   List<Map<String, dynamic>> get complementaryProducts =>
       _complementaryProducts;
-  PromotionItem? getPromo(String productCode) => _activePromotions[productCode];
+  PromotionItem? getPromo(String productCode) {
+    final list = _promotionsByProduct[productCode];
+    if (list == null || list.isEmpty) return null;
+    for (final promo in list) {
+      if (promo.isGift) return promo;
+    }
+    return list.first;
+  }
+
+  List<PromotionItem> getPromosForProduct(String productCode) =>
+      List.unmodifiable(_promotionsByProduct[productCode] ?? const []);
+
+  int getPromoCount(String productCode) =>
+      _promotionsByProduct[productCode]?.length ?? 0;
   List<PromotionItem> get activePromotionsList =>
       List.unmodifiable(_activePromotionsList);
   Map<String, dynamic> get analytics => _analytics;
@@ -434,6 +447,28 @@ class PedidosProvider with ChangeNotifier {
   bool get hasClient => _clientCode != null && _clientCode!.isNotEmpty;
   bool get hasLines => _lines.isNotEmpty;
   int get lineCount => _lines.length;
+
+  /// Total sellable units in cart (envases when present, else unidades per line).
+  double get cartDisplayQty {
+    var total = 0.0;
+    for (final line in _lines) {
+      if (line.cantidadEnvases > 0) {
+        total += line.cantidadEnvases;
+      } else {
+        total += line.cantidadUnidades;
+      }
+    }
+    return total;
+  }
+
+  String get cartDisplayQtyLabel {
+    final qty = cartDisplayQty;
+    if (qty == qty.truncateToDouble()) {
+      return qty.toInt().toString();
+    }
+    return qty.toStringAsFixed(2);
+  }
+
   double get totalEnvases =>
       _lines.fold(0.0, (sum, l) => sum + l.cantidadEnvases);
   double get totalUnidades =>
@@ -478,7 +513,7 @@ class PedidosProvider with ChangeNotifier {
     if (clearCart) {
       _lines.clear();
       _activePromotionsList.clear();
-      _activePromotions.clear();
+      _promotionsByProduct.clear();
       _complementaryProducts.clear();
       _clientHistory.clear();
       _similarClients.clear();
@@ -505,7 +540,7 @@ class PedidosProvider with ChangeNotifier {
     _clientName = null;
     _lines.clear();
     _activePromotionsList.clear();
-    _activePromotions.clear();
+    _promotionsByProduct.clear();
     _complementaryProducts.clear();
     _clientHistory.clear();
     _similarClients.clear();
@@ -1097,15 +1132,23 @@ class PedidosProvider with ChangeNotifier {
   }
 
   void _syncGiftPromotionLines(String productCode, {Product? product}) {
-    final promo = _activePromotions[productCode];
-    if (promo == null ||
-        !promo.isGift ||
-        promo.minQty <= 0 ||
-        promo.giftQty <= 0) {
+    final giftPromos =
+        (_promotionsByProduct[productCode] ?? const <PromotionItem>[])
+            .where((p) => p.isGift && p.minQty > 0 && p.giftQty > 0)
+            .toList();
+    if (giftPromos.isEmpty) {
       _removeAutoGiftLines(productCode);
       return;
     }
 
+    _removeAutoGiftLines(productCode);
+    for (final promo in giftPromos) {
+      _applyGiftPromotionLine(productCode, promo, product: product);
+    }
+  }
+
+  void _applyGiftPromotionLine(String productCode, PromotionItem promo,
+      {Product? product}) {
     final promotionCode = _promotionKey(promo);
     final saleLine = _firstManualSaleLine(productCode);
     final saleQty = _manualSaleQuantity(productCode);
@@ -1160,7 +1203,7 @@ class PedidosProvider with ChangeNotifier {
   void _syncAllGiftPromotionLines() {
     final productCodes = <String>{
       for (final line in _lines) line.codigoArticulo,
-      ..._activePromotions.keys,
+      ..._promotionsByProduct.keys,
     };
     for (final code in productCodes) {
       _syncGiftPromotionLines(code);
@@ -1694,7 +1737,7 @@ class PedidosProvider with ChangeNotifier {
   Future<void> loadPromotions() async {
     if (!hasClient) {
       _activePromotionsList.clear();
-      _activePromotions.clear();
+      _promotionsByProduct.clear();
       notifyListeners();
       return;
     }
@@ -1708,7 +1751,7 @@ class PedidosProvider with ChangeNotifier {
       );
       final list = response['promotions'] as List? ?? [];
       _activePromotionsList.clear();
-      _activePromotions.clear();
+      _promotionsByProduct.clear();
       final seen = <String>{};
       for (final p in list) {
         final item = PromotionItem.fromJson(p as Map<String, dynamic>);
@@ -1721,8 +1764,7 @@ class PedidosProvider with ChangeNotifier {
         final productCode = _promotionProductCode(item);
         if (productCode.isNotEmpty && seen.add(key)) {
           _activePromotionsList.add(item);
-          // Store ALL promotions per product (not just the first one)
-          _activePromotions.putIfAbsent(productCode, () => item);
+          (_promotionsByProduct[productCode] ??= []).add(item);
         }
       }
       _syncAllGiftPromotionLines();
@@ -1852,13 +1894,12 @@ class PedidosProvider with ChangeNotifier {
     _activePromotionsList
       ..clear()
       ..addAll(promotions);
-    _activePromotions.clear();
-    final seen = <String>{};
+    _promotionsByProduct.clear();
     for (final promo in promotions) {
       final productCode =
           promo.productCode.isNotEmpty ? promo.productCode : promo.code;
-      if (productCode.isNotEmpty && seen.add(productCode)) {
-        _activePromotions[productCode] = promo;
+      if (productCode.isNotEmpty) {
+        (_promotionsByProduct[productCode] ??= []).add(promo);
       }
     }
     _syncAllGiftPromotionLines();

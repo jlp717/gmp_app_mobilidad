@@ -15,7 +15,6 @@ import 'package:gmp_app_mobilidad/core/memory/vector_store_hnsw.dart';
 /// - Pattern mining de pedidos
 /// - Adaptive ranking de productos
 class ReasoningBank {
-
   ReasoningBank(this._db);
   final AgentDatabase _db;
 
@@ -131,12 +130,14 @@ class ReasoningBank {
     return results
         .where((r) => r.id != 'product:$productCode')
         .where((r) => r.metadata?['type'] == 'product')
-        .map((r) => ProductSimilarityResult(
-              productCode: r.metadata?['code'] ?? r.id,
-              productName: r.metadata?['name'] ?? '',
-              similarity: r.distance,
-              metadata: r.metadata,
-            ),)
+        .map(
+          (r) => ProductSimilarityResult(
+            productCode: r.metadata?['code'] ?? r.id,
+            productName: r.metadata?['name'] ?? '',
+            similarity: r.distance,
+            metadata: r.metadata,
+          ),
+        )
         .toList();
   }
 
@@ -253,11 +254,13 @@ class ReasoningBank {
       final finalScore = baseScore * _featureWeights['user_preference']! +
           recencyScore * _featureWeights['recency']!;
 
-      scoredProducts.add(RecommendationResult(
-        productCode: productCode,
-        score: finalScore,
-        reasons: ['Basado en tu historial'],
-      ),);
+      scoredProducts.add(
+        RecommendationResult(
+          productCode: productCode,
+          score: finalScore,
+          reasons: ['Basado en tu historial'],
+        ),
+      );
     }
 
     // Ordenar por score
@@ -319,8 +322,10 @@ class ReasoningBank {
   }
 
   /// Obtiene patrones aprendidos
-  List<PatternData> getLearnedPatterns(
-      {String? userId, InteractionType? type,}) {
+  List<PatternData> getLearnedPatterns({
+    String? userId,
+    InteractionType? type,
+  }) {
     return _learnedPatterns.values
         .where((p) => userId == null || p.userId == userId)
         .where((p) => type == null || p.patternType == type.name)
@@ -380,7 +385,9 @@ class ReasoningBank {
 
     // Aprender combinaciones frecuentes
     await _learnFrequentCombinations(
-        userId, items.map((i) => i.productCode).toList(),);
+      userId,
+      items.map((i) => i.productCode).toList(),
+    );
   }
 
   Future<void> _learnFrequentCombinations(
@@ -554,10 +561,12 @@ class ReasoningBank {
   }
 
   List<double> _normalizeVector(List<double> vector) {
-    final magnitude = sqrt(vector.fold<double>(
-      0,
-      (sum, v) => sum + v * v,
-    ),);
+    final magnitude = sqrt(
+      vector.fold<double>(
+        0,
+        (sum, v) => sum + v * v,
+      ),
+    );
 
     if (magnitude == 0) return vector;
 
@@ -594,7 +603,6 @@ enum InteractionType {
 }
 
 class ProductSimilarityResult {
-
   ProductSimilarityResult({
     required this.productCode,
     required this.productName,
@@ -608,7 +616,6 @@ class ProductSimilarityResult {
 }
 
 class RecommendationResult {
-
   RecommendationResult({
     required this.productCode,
     required this.score,
@@ -620,7 +627,6 @@ class RecommendationResult {
 }
 
 class PatternData {
-
   PatternData({
     required this.userId,
     required this.patternType,
@@ -653,10 +659,11 @@ class PatternData {
 }
 
 class OrderItem {
-
   OrderItem({
     required this.productCode,
-    required this.quantity, required this.price, this.category,
+    required this.quantity,
+    required this.price,
+    this.category,
   });
   final String productCode;
   final String? category;
@@ -665,7 +672,6 @@ class OrderItem {
 }
 
 class OrderPattern {
-
   OrderPattern({
     required this.orderId,
     required this.userId,

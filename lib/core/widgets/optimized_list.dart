@@ -11,9 +11,10 @@ import 'package:flutter/material.dart';
 
 /// Optimized ListView.builder with performance settings
 class OptimizedListView extends StatelessWidget {
-
   const OptimizedListView({
-    required this.itemCount, required this.itemBuilder, super.key,
+    required this.itemCount,
+    required this.itemBuilder,
+    super.key,
     this.controller,
     this.padding,
     this.physics,
@@ -49,9 +50,10 @@ class OptimizedListView extends StatelessWidget {
 
 /// Optimized SliverList for use in CustomScrollView
 class OptimizedSliverList extends StatelessWidget {
-
   const OptimizedSliverList({
-    required this.itemCount, required this.itemBuilder, super.key,
+    required this.itemCount,
+    required this.itemBuilder,
+    super.key,
   });
   final int itemCount;
   final Widget Function(BuildContext, int) itemBuilder;
@@ -73,8 +75,8 @@ class OptimizedSliverList extends StatelessWidget {
 
 /// Mixin for keeping tab state alive
 /// Usage: Add to StatefulWidget that contains tabs
-/// 
-/// class MyTabState extends State<MyTab> 
+///
+/// class MyTabState extends State<MyTab>
 ///     with AutomaticKeepAliveClientMixin, TabKeepAliveMixin {
 ///   @override
 ///   Widget build(BuildContext context) {
@@ -82,7 +84,8 @@ class OptimizedSliverList extends StatelessWidget {
 ///     return ...;
 ///   }
 /// }
-mixin TabKeepAliveMixin<T extends StatefulWidget> on AutomaticKeepAliveClientMixin<T> {
+mixin TabKeepAliveMixin<T extends StatefulWidget>
+    on AutomaticKeepAliveClientMixin<T> {
   @override
   bool get wantKeepAlive => true;
 }
@@ -90,7 +93,6 @@ mixin TabKeepAliveMixin<T extends StatefulWidget> on AutomaticKeepAliveClientMix
 /// Optimized container with RepaintBoundary
 /// Use for heavy widgets that re-render independently
 class IsolatedWidget extends StatelessWidget {
-
   const IsolatedWidget({required this.child, super.key});
   final Widget child;
 
@@ -103,7 +105,6 @@ class IsolatedWidget extends StatelessWidget {
 /// Debounced callback wrapper
 /// Prevents callback from firing more than once per duration
 class DebouncedCallback {
-
   DebouncedCallback({this.duration = const Duration(milliseconds: 300)});
   final Duration duration;
   DateTime? _lastCall;

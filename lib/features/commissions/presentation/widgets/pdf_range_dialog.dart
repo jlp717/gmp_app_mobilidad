@@ -16,9 +16,18 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
   bool _dropdownExpanded = false;
 
   final Map<int, String> _monthNames = {
-    1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
-    5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
-    9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre',
+    1: 'Enero',
+    2: 'Febrero',
+    3: 'Marzo',
+    4: 'Abril',
+    5: 'Mayo',
+    6: 'Junio',
+    7: 'Julio',
+    8: 'Agosto',
+    9: 'Septiembre',
+    10: 'Octubre',
+    11: 'Noviembre',
+    12: 'Diciembre',
   };
 
   @override
@@ -70,7 +79,9 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
   Future<void> _generatePdf() async {
     if (_selectedMonths.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Selecciona al menos un mes'), backgroundColor: Colors.orange),
+        const SnackBar(
+            content: Text('Selecciona al menos un mes'),
+            backgroundColor: Colors.orange),
       );
       return;
     }
@@ -87,7 +98,9 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
         setState(() => _isLoading = false);
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('PDF generado correctamente'), backgroundColor: Colors.green),
+          const SnackBar(
+              content: Text('PDF generado correctamente'),
+              backgroundColor: Colors.green),
         );
       },
       onError: (e) {
@@ -111,7 +124,9 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
         children: [
           Icon(Icons.picture_as_pdf_rounded, color: AppTheme.success, size: 24),
           SizedBox(width: 8),
-          Expanded(child: Text('Generar Informe PDF', style: TextStyle(color: AppTheme.neonBlue, fontSize: 16))),
+          Expanded(
+              child: Text('Generar Informe PDF',
+                  style: TextStyle(color: AppTheme.neonBlue, fontSize: 16))),
         ],
       ),
       content: SizedBox(
@@ -134,13 +149,15 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                 children: [
                   // Header del dropdown ( siempre visible )
                   InkWell(
-                    onTap: () => setState(() => _dropdownExpanded = !_dropdownExpanded),
+                    onTap: () =>
+                        setState(() => _dropdownExpanded = !_dropdownExpanded),
                     borderRadius: BorderRadius.circular(12),
                     child: Padding(
                       padding: const EdgeInsets.all(14),
                       child: Row(
                         children: [
-                          const Icon(Icons.calendar_month, color: AppTheme.neonBlue, size: 20),
+                          const Icon(Icons.calendar_month,
+                              color: AppTheme.neonBlue, size: 20),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
@@ -148,7 +165,8 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                               children: [
                                 const Text(
                                   'Seleccionar meses',
-                                  style: TextStyle(color: Colors.white70, fontSize: 11),
+                                  style: TextStyle(
+                                      color: Colors.white70, fontSize: 11),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
@@ -167,7 +185,9 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                             duration: const Duration(milliseconds: 200),
                             child: Icon(
                               Icons.expand_more,
-                              color: _dropdownExpanded ? AppTheme.neonBlue : Colors.white54,
+                              color: _dropdownExpanded
+                                  ? AppTheme.neonBlue
+                                  : Colors.white54,
                             ),
                           ),
                         ],
@@ -184,9 +204,11 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                           children: [
                             // Botones de acción rápida
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 8),
                               child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceEvenly,
                                 children: [
                                   _QuickActionButton(
                                     label: 'Este mes',
@@ -213,7 +235,9 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                                     onTap: () {
                                       setState(() {
                                         _selectedMonths.clear();
-                                        for (int i = 1; i <= currentMonth; i++) {
+                                        for (int i = 1;
+                                            i <= currentMonth;
+                                            i++) {
                                           _selectedMonths.add(i);
                                         }
                                       });
@@ -226,15 +250,20 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                             // Lista de meses con checkboxes
                             ...List.generate(currentMonth, (index) {
                               final month = index + 1;
-                              final isSelected = _selectedMonths.contains(month);
+                              final isSelected =
+                                  _selectedMonths.contains(month);
                               return CheckboxListTile(
                                 value: isSelected,
                                 onChanged: (_) => _toggleMonth(month),
                                 title: Text(
                                   '${_monthNames[month]} $currentYear',
                                   style: TextStyle(
-                                    color: isSelected ? AppTheme.neonBlue : Colors.white,
-                                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                                    color: isSelected
+                                        ? AppTheme.neonBlue
+                                        : Colors.white,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w600
+                                        : FontWeight.normal,
                                   ),
                                 ),
                                 subtitle: Text(
@@ -247,7 +276,8 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                                 activeColor: AppTheme.success,
                                 checkColor: Colors.black,
                                 dense: true,
-                                controlAffinity: ListTileControlAffinity.leading,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
                               );
                             }),
                           ],
@@ -266,11 +296,13 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                 decoration: BoxDecoration(
                   color: AppTheme.success.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppTheme.success.withValues(alpha: 0.3)),
+                  border: Border.all(
+                      color: AppTheme.success.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.check_circle, color: AppTheme.success, size: 18),
+                    const Icon(Icons.check_circle,
+                        color: AppTheme.success, size: 18),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Column(
@@ -278,21 +310,28 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
                         children: [
                           Text(
                             '${_selectedMonths.length} mes(es) seleccionado(s)',
-                            style: const TextStyle(color: AppTheme.success, fontSize: 12, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                                color: AppTheme.success,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             () {
                               final sorted = _selectedMonths.toList()..sort();
-                              return sorted.map((m) => _monthNames[m]).join(', ');
+                              return sorted
+                                  .map((m) => _monthNames[m])
+                                  .join(', ');
                             }(),
-                            style: const TextStyle(color: AppTheme.success, fontSize: 10),
+                            style: const TextStyle(
+                                color: AppTheme.success, fontSize: 10),
                           ),
                         ],
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.clear, color: Colors.white54, size: 18),
+                      icon: const Icon(Icons.clear,
+                          color: Colors.white54, size: 18),
                       onPressed: _clearAll,
                       tooltip: 'Limpiar selección',
                       padding: EdgeInsets.zero,
@@ -329,7 +368,8 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
       actions: [
         TextButton(
           onPressed: _isLoading ? null : () => Navigator.pop(context),
-          child: const Text('CANCELAR', style: TextStyle(color: Colors.red, fontSize: 13)),
+          child: const Text('CANCELAR',
+              style: TextStyle(color: Colors.red, fontSize: 13)),
         ),
         ElevatedButton(
           onPressed: _isLoading ? null : _generatePdf,
@@ -338,8 +378,16 @@ class _PdfRangeDialogState extends State<PdfRangeDialog> {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           ),
           child: _isLoading
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-              : const Text('GENERAR PDF', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13)),
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.black))
+              : const Text('GENERAR PDF',
+                  style: TextStyle(
+                      color: Colors.black,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13)),
         ),
       ],
     );

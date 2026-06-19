@@ -44,7 +44,8 @@ class _WarehouseShellPageState extends State<WarehouseShellPage> {
           color: AppTheme.darkCard,
           border: Border(
             top: BorderSide(
-                color: AppTheme.neonBlue.withValues(alpha: 0.15),),
+              color: AppTheme.neonBlue.withValues(alpha: 0.15),
+            ),
           ),
         ),
         child: BottomNavigationBar(
@@ -55,7 +56,10 @@ class _WarehouseShellPageState extends State<WarehouseShellPage> {
           selectedItemColor: AppTheme.neonBlue,
           unselectedItemColor: Colors.white38,
           selectedLabelStyle: const TextStyle(
-              fontWeight: FontWeight.w700, fontSize: 10, letterSpacing: 0.3,),
+            fontWeight: FontWeight.w700,
+            fontSize: 10,
+            letterSpacing: 0.3,
+          ),
           unselectedLabelStyle:
               const TextStyle(fontSize: 9, letterSpacing: 0.2),
           type: BottomNavigationBarType.fixed,

@@ -8,9 +8,10 @@ import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 
 class SaleTypeSelector extends StatelessWidget {
-
   const SaleTypeSelector({
-    required this.value, required this.onChanged, super.key,
+    required this.value,
+    required this.onChanged,
+    super.key,
   });
   final String value;
   final ValueChanged<String> onChanged;
@@ -47,8 +48,7 @@ class SaleTypeSelector extends StatelessWidget {
                 opt['label']!,
                 style: TextStyle(
                   color: Colors.white,
-                  fontSize:
-                      Responsive.fontSize(context, small: 12, large: 14),
+                  fontSize: Responsive.fontSize(context, small: 12, large: 14),
                 ),
               ),
             );

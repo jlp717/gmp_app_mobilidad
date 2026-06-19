@@ -28,10 +28,10 @@ class OrderStatusConfig {
       label: 'Borrador',
     ),
     'PENDIENTE_APROBACION': OrderTheme(
-      primary: Color(0xFFFACC15),
-      gradient: [Color(0xFF1E293B), Color(0xFF332A05)],
-      icon: Icons.pending_actions,
-      label: 'Pendiente aprobacion',
+      primary: Color(0xFF3B82F6),
+      gradient: [Color(0xFF1E293B), Color(0xFF0C1A3A)],
+      icon: Icons.hourglass_top,
+      label: 'Pendiente ERP',
     ),
     'CONFIRMANDO': OrderTheme(
       primary: Color(0xFF38BDF8),

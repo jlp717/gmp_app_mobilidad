@@ -35,7 +35,10 @@ class MatrixNode {
 
   static List<MatrixNode> fromJsonList(dynamic data) {
     if (data == null) return [];
-    if (data is List) return data.map((e) => MatrixNode.fromJson(e as Map<String, dynamic>)).toList();
+    if (data is List)
+      return data
+          .map((e) => MatrixNode.fromJson(e as Map<String, dynamic>))
+          .toList();
     return [];
   }
 
