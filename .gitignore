@@ -185,6 +185,12 @@ backend/*.json
 backend/*.txt
 backend/*.log
 
+# Certification / probe scratch (never commit)
+backend/_cert-patch*.js
+backend/_jv.out
+backend/scripts/_*.js
+chief-sessions.json
+
 # Backend scripts temp
 backend/scripts/debug_*.js
 backend/scripts/test_*.js

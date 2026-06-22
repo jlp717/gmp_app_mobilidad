@@ -43,8 +43,8 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.maripepa.gmp_mobilidad"
-        applicationIdSuffix = ".test"
+        // Play Console test track package name (must match app registration).
+        applicationId = "com.gmp_movilidad_pedidos_test"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
