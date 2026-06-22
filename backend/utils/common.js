@@ -286,28 +286,9 @@ function buildCvcVendorScopeFilter(vendorCodes) {
         return { clause: '', params: [] };
     }
 
-    const { getClientCodesFromCache } = require('../services/laclae');
-    const cachedClientCodes = getClientCodesFromCache(codes.join(','));
-    if (cachedClientCodes && cachedClientCodes.length > 0) {
-        const MAX_PARAMS = 50;
-        if (cachedClientCodes.length <= MAX_PARAMS) {
-            return {
-                clause: `AND TRIM(CVC.CODIGOCLIENTEALBARAN) IN (${cachedClientCodes.map(() => '?').join(',')})`,
-                params: cachedClientCodes,
-            };
-        }
-        const safeCodes = cachedClientCodes
-            .filter((c) => /^[A-Za-z0-9]{1,20}$/.test(String(c || '').trim()))
-            .map((c) => `'${String(c).trim().replace(/'/g, "''")}'`)
-            .join(',');
-        if (safeCodes) {
-            return {
-                clause: `AND TRIM(CVC.CODIGOCLIENTEALBARAN) IN (${safeCodes})`,
-                params: [],
-            };
-        }
-    }
-
+    // Always use CLP + LACLAE semi-join for CVC debt scope. The LACLAE client-code
+    // cache can be a strict subset of CLP-assigned clients and under-report portfolio
+    // totals (cert audit: API ~261k vs DB2 ~359k for vendor 02).
     const laclaeVendorCol = getVendorColumnExpr('LAC');
     const placeholders = codes.map(() => '?').join(',');
     return {

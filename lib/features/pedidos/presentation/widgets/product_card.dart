@@ -506,7 +506,7 @@ class _ProductCardState extends State<ProductCard> {
                 ],
               ),
               // Quick add button
-              if (widget.onQuickAdd != null && widget.product.hasStock) ...[
+              if (widget.onQuickAdd != null) ...[
                 const SizedBox(width: 4),
                 GestureDetector(
                   onTap: widget.onQuickAdd,

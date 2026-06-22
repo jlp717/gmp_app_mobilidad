@@ -247,7 +247,7 @@ function buildCobroInsert({
     if (includeErpColumns) {
         const now = new Date();
         columns.push(
-            'SUBEMPRESARECIBO', 'EJERCICIORECIBO', 'SERIERECIBO', 'TERMINALRECIBO',
+            'SUBEMPRESARECIBO', 'EJERCICIORECIBO', 'SERIERECIBO', 'TERMINALRECIBO', 'NUMERORECIBO',
             'CODIGOCLIENTEFACTURA', 'CODIGOVENDEDOR', 'TIPORECIBO',
             'DIADOCUMENTO', 'MESDOCUMENTO', 'ANODOCUMENTO', 'HORADOCUMENTO',
             'IMPORTECOBRADO', 'IDMARCALIQUIDACION',
@@ -257,6 +257,7 @@ function buildCobroInsert({
             now.getFullYear(),
             String(process.env.PEDIDOS_SYSTEM_SERIE || 'R').substring(0, 1),
             parseInt(process.env.PEDIDOS_SYSTEM_TERMINAL || '10', 10),
+            0, // NUMERORECIBO — allocated at DSEDAC export; 0 = pending in JAVIER buffer
             String(codigoCliente || '').padEnd(10).slice(0, 10),
             String(codigoUsuario || '').padEnd(2).slice(0, 2),
             'C',
@@ -425,6 +426,24 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         }
         logger.info(`[COBROS] Obteniendo pendientes para cliente: ${codigoCliente}`);
 
+        const tipoDocumento = req.query.tipoDocumento
+            ? String(req.query.tipoDocumento).trim().toUpperCase()
+            : '';
+        const fechaDesde = req.query.fechaDesde ? String(req.query.fechaDesde).trim() : '';
+        const fechaHasta = req.query.fechaHasta ? String(req.query.fechaHasta).trim() : '';
+
+        const parseYmdInt = (isoDate) => {
+            const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(isoDate || '').trim());
+            if (!match) return null;
+            const y = parseInt(match[1], 10);
+            const m = parseInt(match[2], 10);
+            const d = parseInt(match[3], 10);
+            if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+            return y * 10000 + m * 100 + d;
+        };
+        const desdeInt = parseYmdInt(fechaDesde);
+        const hastaInt = parseYmdInt(fechaHasta);
+
         const context = getCobrosContext(req);
         const vendorCodes = normalizeCodeList(context.vendorCodes);
         let vendorClause = '';
@@ -443,6 +462,21 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         // DB2 metadata verified: the active CVC layout uses long business names,
         // not legacy CV* aliases. Do not fall back to app orders unless CVC itself
         // is unavailable in an old environment.
+        const sqlParams = [codigoCliente];
+        let docFilterSql = '';
+        if (tipoDocumento) {
+            docFilterSql += ' AND TRIM(C.TIPODOCUMENTO) = ?';
+            sqlParams.push(tipoDocumento);
+        }
+        if (desdeInt != null) {
+            docFilterSql += ' AND (C.ANOEMISION * 10000 + C.MESEMISION * 100 + C.DIAEMISION) >= ?';
+            sqlParams.push(desdeInt);
+        }
+        if (hastaInt != null) {
+            docFilterSql += ' AND (C.ANOEMISION * 10000 + C.MESEMISION * 100 + C.DIAEMISION) <= ?';
+            sqlParams.push(hastaInt);
+        }
+
         const sql = `
             SELECT
                 TRIM(C.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
@@ -465,14 +499,15 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
             WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
               AND C.IMPORTEPENDIENTE > 0.01
               AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')
+              ${docFilterSql}
             ORDER BY C.ANOVENCIMIENTO ASC, C.MESVENCIMIENTO ASC, C.DIAVENCIMIENTO ASC
             FETCH FIRST 100 ROWS ONLY`;
 
-        const cacheKey = `cobros:pendientes:cvc:${codigoCliente}`;
+        const cacheKey = `cobros:pendientes:cvc:${codigoCliente}:${tipoDocumento}:${fechaDesde}:${fechaHasta}`;
         let resultado;
         try {
             resultado = await cachedQuery(
-                (sql) => queryWithParams(sql, [codigoCliente]),
+                (sqlText) => queryWithParams(sqlText, sqlParams),
                 sql,
                 cacheKey,
                 TTL.MEDIUM
@@ -988,6 +1023,19 @@ router.post('/:codigoCliente/registrar', registrarCobroLimiter, async (req, res)
         // Invalida cache de pendientes para que la siguiente consulta vea el nuevo cobro
         invalidateCobrosCache(codigoCliente);
 
+        try {
+            const dsedacExports = require('../services/dsedac-exports.service');
+            await dsedacExports.exportCobroToSystem({
+                IDEMPOTENCY_TOKEN: normalizedIdempotencyToken,
+                CODIGO_CLIENTE: codigoCliente,
+                CODIGOVENDEDOR: codigoUsuarioTrim,
+                IMPORTE: importeNum,
+                CODIGO_USUARIO: codigoUsuarioTrim,
+            });
+        } catch (exportErr) {
+            logger.warn('[COBROS] DSEDAC export best-effort fail: ' + exportErr.message);
+        }
+
         res.json({ success: true, mensaje: 'Cobro registrado correctamente', id: paymentId });
 
     } catch (error) {
@@ -1200,11 +1248,22 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
             portfolioAdjustments,
         );
 
+        let cvcGrandTotal = 0;
+        let cvcGrandTotalVencido = 0;
+        for (const row of portfolioRows || []) {
+            cvcGrandTotal += parseFloat(row.TOTAL_PENDIENTE) || 0;
+            cvcGrandTotalVencido += parseFloat(row.TOTAL_VENCIDO) || 0;
+        }
+        const appAdjustmentsTotal = Math.max(0, cvcGrandTotal - grandTotal);
+
         res.json({
             success: true,
             summary,
             grandTotal,
             grandTotalVencido,
+            cvcGrandTotal: Math.round(cvcGrandTotal * 100) / 100,
+            cvcGrandTotalVencido: Math.round(cvcGrandTotalVencido * 100) / 100,
+            appAdjustmentsTotal: Math.round(appAdjustmentsTotal * 100) / 100,
             clientCount,
             source: 'CVC',
             pagination: {

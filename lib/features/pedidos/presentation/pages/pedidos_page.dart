@@ -933,9 +933,56 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               onPressed: () => _showCartSheet(),
               backgroundColor: AppTheme.neonBlue,
               foregroundColor: AppTheme.darkBase,
-              icon: Icon(lineCount > 0 ? Icons.shopping_cart : Icons.receipt),
+              icon: SizedBox(
+                width: 30,
+                height: 30,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  alignment: Alignment.center,
+                  children: [
+                    Icon(
+                      lineCount > 0
+                          ? Icons.shopping_cart_outlined
+                          : Icons.receipt_outlined,
+                      size: 22,
+                    ),
+                    if (lineCount > 0)
+                      Positioned(
+                        right: -4,
+                        top: -4,
+                        child: Container(
+                          constraints: const BoxConstraints(
+                            minWidth: 16,
+                            minHeight: 16,
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 4,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.darkBase,
+                            border: Border.all(
+                              color: AppTheme.neonBlue,
+                              width: 1.5,
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            cartLabel,
+                            style: const TextStyle(
+                              color: AppTheme.neonBlue,
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                              height: 1.1,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
               label: Text(
-                '$cartLabel | ${PedidosFormatters.money(cartTotal)}',
+                PedidosFormatters.money(cartTotal),
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -1466,6 +1513,15 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             unawaited(HapticFeedback.lightImpact());
             final messenger = ScaffoldMessenger.of(context);
             messenger.hideCurrentSnackBar();
+
+            if (!product.hasStock) {
+              await showStockAlternativesSheet(
+                context: context,
+                outOfStockProduct: product,
+                provider: provider,
+              );
+              return;
+            }
 
             // Simple product (only CAJAS, not dual) – quick add 1 caja
             // Multi-unit or dual product – open UnitSelectorModal

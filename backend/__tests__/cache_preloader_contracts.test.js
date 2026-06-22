@@ -31,7 +31,7 @@ jest.mock('../utils/common', () => ({
 }));
 
 jest.mock('../services/redis-cache', () => ({
-  TTL: { SHORT: 60, MEDIUM: 300, LONG: 1800, STATIC: 3600 },
+  TTL: { SHORT: 60, MEDIUM: 300, LONG: 86400, STATIC: 3600 },
 }));
 
 const cachePreloader = require('../services/cache-preloader');
@@ -59,5 +59,24 @@ describe('cache preloader DB2 contracts', () => {
     expect(params).toEqual([2024, 2024, 7]);
     expect(mockQueryWithParams).toHaveBeenCalledWith(sql, [2024, 2024, 7], false);
     expect(mockQuery).not.toHaveBeenCalledWith(expect.any(String), expect.any(Array));
+  });
+
+  test('warmUpClientsAll uses v6 CTE cache keys for JV defaults', async () => {
+    mockQuery.mockResolvedValue([{ CODE: '4300001091' }]);
+
+    await cachePreloader._internal.warmUpClientsAll();
+
+    expect(mockCachedQuery).toHaveBeenCalledTimes(2);
+    const keys = mockCachedQuery.mock.calls.map((call) => call[2]);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        'clients:list:v6:ALL:none:50:0',
+        'clients:list:v6:ALL:none:100:0',
+      ]),
+    );
+    const sql = mockCachedQuery.mock.calls[0][1];
+    expect(sql).toContain('LACLAE_SCOPED');
+    expect(sql).toContain('ROW_NUMBER()');
+    expect(sql).not.toContain('LATERAL');
   });
 });

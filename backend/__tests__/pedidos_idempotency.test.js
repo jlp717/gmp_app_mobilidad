@@ -206,6 +206,7 @@ describe('pedidos create idempotency', () => {
     const request = require('supertest');
     const express = require('express');
     const mockService = {
+      ensurePedidoIdempotencyKeyFromRequest: jest.fn().mockReturnValue('offline-sync-key-002'),
       extractIdempotencyKeyFromRequest: jest.fn().mockReturnValue('offline-sync-key-002'),
       createOrder: jest.fn().mockResolvedValue({
         header: { id: 88, estado: 'BORRADOR' },

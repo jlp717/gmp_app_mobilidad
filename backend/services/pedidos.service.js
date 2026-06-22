@@ -197,6 +197,29 @@ function isDuplicateKeyError(err) {
     return /DUPLICATE|PRIMARY|UNIQUE|SQL0803/i.test(msg);
 }
 
+const IVA_RATE_BY_CODE = Object.freeze({
+    '1': 0.10,
+    '2': 0.21,
+    '3': 0.04,
+    '4': 0.0,
+    '5': 0.10,
+});
+
+function resolveIvaFromCodigo(codigoIva) {
+    const code = String(codigoIva || '').trim();
+    if (!code || code === '0') {
+        return { codigoIva: '2', ivaRate: 0.21 };
+    }
+    if (Object.prototype.hasOwnProperty.call(IVA_RATE_BY_CODE, code)) {
+        return { codigoIva: code, ivaRate: IVA_RATE_BY_CODE[code] };
+    }
+    return { codigoIva: '2', ivaRate: 0.21 };
+}
+
+function generatePedidoIdempotencyKey() {
+    return crypto.randomBytes(12).toString('hex');
+}
+
 function normalizePedidoIdempotencyKey(rawToken) {
     const token = String(rawToken || '').trim();
     if (!/^[A-Za-z0-9_.:-]{8,128}$/.test(token)) {
@@ -215,6 +238,24 @@ function extractIdempotencyKeyFromRequest(req) {
     const raw = header || bodyKey;
     if (!raw) return null;
     return normalizePedidoIdempotencyKey(raw);
+}
+
+function ensurePedidoIdempotencyKeyFromRequest(req) {
+    const header = req?.headers?.['idempotency-key'] || req?.headers?.['Idempotency-Key'];
+    const bodyKey = req?.body?.clientRequestId || req?.body?.idempotencyKey;
+    const raw = header || bodyKey;
+    if (!raw || !String(raw).trim()) {
+        return generatePedidoIdempotencyKey();
+    }
+    try {
+        return normalizePedidoIdempotencyKey(raw);
+    } catch (err) {
+        if (err.code === 'INVALID_IDEMPOTENCY_KEY') {
+            logger.warn(`[PEDIDOS] Invalid idempotency key replaced with server-generated token`);
+            return generatePedidoIdempotencyKey();
+        }
+        throw err;
+    }
 }
 
 function buildCreateOrderPayloadHash({
@@ -1045,7 +1086,6 @@ async function withPedidosTransaction(callback) {
 }
 
 async function nextSystemPedidoNumber(conn, target, ejercicio) {
-    await conn.query(`LOCK TABLE ${target.tables.cab} IN EXCLUSIVE MODE`);
     const rows = await conn.query(`
         SELECT COALESCE(MAX(NUMEROPEDIDO), 0) + 1 AS NEXT_NUMERO
         FROM ${target.tables.cab}
@@ -1056,6 +1096,12 @@ async function nextSystemPedidoNumber(conn, target, ejercicio) {
         [target.subempresa, ejercicio, target.serie, target.terminal]
     );
     return integerValue(rows?.[0]?.NEXT_NUMERO) || 1;
+}
+
+function isRetriableCpcExportError(err) {
+    if (isDuplicateKeyError(err)) return true;
+    const codes = (err?.odbcErrors || []).map((row) => Number(row.code));
+    return codes.some((code) => code === -913 || code === -803 || code === -911);
 }
 
 function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCode, saleType, userId, vehicleCode, driverCode }) {
@@ -1205,21 +1251,29 @@ async function exportCommercialOrderToSystem(conn, { header, lines, deliveryPlan
     }
 
     const ejercicio = integerValue(header.EJERCICIO) || deliveryPlan.date.year || new Date().getFullYear();
-    const numero = await nextSystemPedidoNumber(conn, target, ejercicio);
-    const systemRef = {
-        subempresa: target.subempresa,
-        ejercicio,
-        serie: target.serie,
-        terminal: target.terminal,
-        numero,
-    };
-
-    const cab = buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCode, saleType, userId, vehicleCode, driverCode });
-    try {
-        await conn.query(cab.sql, cab.params);
-    } catch (e) {
-        logger.error(`[PEDIDOS] CPC insert failed cols=${cab.params?.length} sql=${cab.sql?.slice(0, 200)} err=${e.message} ${JSON.stringify(e.odbcErrors || [])}`);
-        throw e;
+    let systemRef = null;
+    let cab = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        const numero = await nextSystemPedidoNumber(conn, target, ejercicio);
+        systemRef = {
+            subempresa: target.subempresa,
+            ejercicio,
+            serie: target.serie,
+            terminal: target.terminal,
+            numero,
+        };
+        cab = buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCode, saleType, userId, vehicleCode, driverCode });
+        try {
+            await conn.query(cab.sql, cab.params);
+            break;
+        } catch (e) {
+            if (isRetriableCpcExportError(e) && attempt < 2) {
+                logger.warn(`[PEDIDOS] CPC insert retriable error numero=${systemRef?.numero}, retry ${attempt + 1}: ${e.message}`);
+                continue;
+            }
+            logger.error(`[PEDIDOS] CPC insert failed cols=${cab.params?.length} sql=${cab.sql?.slice(0, 200)} err=${e.message} ${JSON.stringify(e.odbcErrors || [])}`);
+            throw e;
+        }
     }
 
     for (const line of lines || []) {
@@ -1481,6 +1535,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, limit
             COALESCE(T2.PRECIOTARIFA, 0) AS precioMinimo,
             COALESCE(TC.PRECIOTARIFA, 0) AS precioCliente,
             COALESCE(LC.PRECIOCOSTO, 0) AS precioCosto,
+            TRIM(COALESCE(NULLIF(TRIM(A.CODIGOIVA), ''), '2')) AS codigoIva,
             TRIM(COALESCE(A.FORMATO, '')) AS formato,
             COALESCE(A.PRODUCTOPESADOSN, '') AS productoPesado,
             COALESCE(PH.SALES_THIS_YEAR, 0) AS salesThisYear,
@@ -1584,6 +1639,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, limit
                 precioMinimo: parseFloat(r.PRECIOMINIMO) || 0,
                 precioCliente: parseFloat(r.PRECIOCLIENTE) || 0,
                 precioCosto: parseFloat(r.PRECIOCOSTO) || 0,
+                ...resolveIvaFromCodigo((r.CODIGOIVA || '2').toString().trim()),
                 formato: (r.FORMATO || '').trim(),
                 productoPesado: (r.PRODUCTOPESADO || '').trim() === 'S',
                 unitType: unitType,
@@ -1734,6 +1790,7 @@ async function getProductDetailRaw(code, clientCode) {
             categoria: (raw.CATEGORIA || '').trim(),
             gama: (raw.GAMA || '').trim(),
             codigoIva: (raw.CODIGOIVA || '0').toString().trim(),
+            ...resolveIvaFromCodigo((raw.CODIGOIVA || '0').toString().trim()),
             pesoNeto: parseFloat(raw.PESONETO) || 0,
             volumen: parseFloat(raw.VOLUMEN) || 0,
             grados: (raw.GRADOS || '').trim(),
@@ -2243,7 +2300,9 @@ async function createOrder({
 
     const normalizedIdempotencyKey = idempotencyKey
         ? normalizePedidoIdempotencyKey(idempotencyKey)
-        : (clientRequestId ? normalizePedidoIdempotencyKey(clientRequestId) : null);
+        : (clientRequestId
+            ? normalizePedidoIdempotencyKey(clientRequestId)
+            : generatePedidoIdempotencyKey());
 
     const idempotencyT0 = Date.now();
     const idempotencyState = await resolveIdempotentCreateOrder({
@@ -2506,11 +2565,11 @@ async function createOrder({
 // GET ORDERS
 // ============================================================================
 
-async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo, search, minAmount, maxAmount, sortBy, sortOrder, limit = 50, offset = 0 }) {
+async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo, search, minAmount, maxAmount, sortBy, sortOrder, limit = 20, offset = 0 }) {
     if (!vendedorCodes) throw new Error('vendedorCodes is required');
 
     const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
-    const safeLimit = clampInt(limit, 1, 500, 50);
+    const safeLimit = clampInt(limit, 1, 500, 20);
     const safeOffset = clampInt(offset, 0, Number.MAX_SAFE_INTEGER, 0);
 
     // Req #7: Si IMPORTETOTAL viene a 0 (borradores sin recalcular), calcular fallback
@@ -5385,7 +5444,10 @@ async function searchProductsWithStock(searchTerm, limit = 20) {
 module.exports = {
     initPedidosTables,
     extractIdempotencyKeyFromRequest,
+    ensurePedidoIdempotencyKeyFromRequest,
+    generatePedidoIdempotencyKey,
     normalizePedidoIdempotencyKey,
+    resolveIvaFromCodigo,
     buildCreateOrderPayloadHash,
     getProducts,
     searchProducts,

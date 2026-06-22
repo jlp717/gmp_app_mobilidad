@@ -75,16 +75,134 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   final Map<String, double> _partialAmounts = {};
   final Map<String, String> _partialErrors = {};
   bool _isSubmitting = false;
+  String? _tipoDocumento;
+  DateTime? _fechaDesde;
+  DateTime? _fechaHasta;
+
+  static const _tipoDocumentoOptions = <String?, String>{
+    null: 'Todos',
+    'FAC': 'Factura',
+    'ALB': 'Albarán',
+    'CAC': 'Albarán cobro',
+  };
+
+  String? _formatDate(DateTime? value) {
+    if (value == null) return null;
+    final y = value.year.toString().padLeft(4, '0');
+    final m = value.month.toString().padLeft(2, '0');
+    final d = value.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  Future<void> _reloadPendientes({bool forceRefresh = true}) async {
+    await _provider.cargarCobrosPendientes(
+      widget.codigoCliente,
+      tipoDocumento: _tipoDocumento,
+      fechaDesde: _formatDate(_fechaDesde),
+      fechaHasta: _formatDate(_fechaHasta),
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  Future<void> _pickDate({
+    required bool isDesde,
+  }) async {
+    final initial = isDesde
+        ? (_fechaDesde ?? DateTime.now())
+        : (_fechaHasta ?? DateTime.now());
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: DateTime(2015),
+      lastDate: DateTime.now().add(const Duration(days: 365)),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: AppTheme.neonBlue,
+            surface: AppTheme.darkSurface,
+          ),
+        ),
+        child: child ?? const SizedBox.shrink(),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    setState(() {
+      if (isDesde) {
+        _fechaDesde = picked;
+      } else {
+        _fechaHasta = picked;
+      }
+    });
+    await _reloadPendientes();
+  }
+
+  Widget _buildCobrosFilters() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          DropdownButton<String?>(
+            value: _tipoDocumento,
+            dropdownColor: AppTheme.darkSurface,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            hint: const Text('Tipo documento', style: TextStyle(color: Colors.white54)),
+            items: _tipoDocumentoOptions.entries
+                .map(
+                  (e) => DropdownMenuItem<String?>(
+                    value: e.key,
+                    child: Text(e.value),
+                  ),
+                )
+                .toList(),
+            onChanged: (value) async {
+              setState(() => _tipoDocumento = value);
+              await _reloadPendientes();
+            },
+          ),
+          OutlinedButton.icon(
+            onPressed: () => _pickDate(isDesde: true),
+            icon: const Icon(Icons.calendar_today, size: 16),
+            label: Text(
+              _fechaDesde == null
+                  ? 'Desde'
+                  : DateFormat('dd/MM/yy').format(_fechaDesde!),
+            ),
+          ),
+          OutlinedButton.icon(
+            onPressed: () => _pickDate(isDesde: false),
+            icon: const Icon(Icons.event, size: 16),
+            label: Text(
+              _fechaHasta == null
+                  ? 'Hasta'
+                  : DateFormat('dd/MM/yy').format(_fechaHasta!),
+            ),
+          ),
+          if (_tipoDocumento != null || _fechaDesde != null || _fechaHasta != null)
+            TextButton(
+              onPressed: () async {
+                setState(() {
+                  _tipoDocumento = null;
+                  _fechaDesde = null;
+                  _fechaHasta = null;
+                });
+                await _reloadPendientes();
+              },
+              child: const Text('Limpiar'),
+            ),
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Future.wait([
-        _provider.cargarCobrosPendientes(
-          widget.codigoCliente,
-          forceRefresh: true,
-        ),
+        _reloadPendientes(forceRefresh: true),
         _provider.cargarHistoricoCobros(widget.codigoCliente),
       ]);
     });
@@ -391,6 +509,9 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
               await Future.wait([
                 cobros.cargarCobrosPendientes(
                   widget.codigoCliente,
+                  tipoDocumento: _tipoDocumento,
+                  fechaDesde: _formatDate(_fechaDesde),
+                  fechaHasta: _formatDate(_fechaHasta),
                   forceRefresh: true,
                 ),
                 cobros.cargarHistoricoCobros(
@@ -410,6 +531,9 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                 await Future.wait([
                   cobros.cargarCobrosPendientes(
                     widget.codigoCliente,
+                    tipoDocumento: _tipoDocumento,
+                    fechaDesde: _formatDate(_fechaDesde),
+                    fechaHasta: _formatDate(_fechaHasta),
                     forceRefresh: true,
                   ),
                   cobros.cargarHistoricoCobros(
@@ -421,6 +545,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
               color: AppTheme.neonBlue,
               child: Column(
                 children: [
+                  _buildCobrosFilters(),
                   if (cobros.error != null)
                     Container(
                       padding: const EdgeInsets.all(12),

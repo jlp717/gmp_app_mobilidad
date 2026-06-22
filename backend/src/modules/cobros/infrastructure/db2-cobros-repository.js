@@ -147,7 +147,7 @@ function buildCobroInsert({
   if (includeErpColumns) {
     const now = new Date();
     columns.push(
-      'SUBEMPRESARECIBO', 'EJERCICIORECIBO', 'SERIERECIBO', 'TERMINALRECIBO',
+      'SUBEMPRESARECIBO', 'EJERCICIORECIBO', 'SERIERECIBO', 'TERMINALRECIBO', 'NUMERORECIBO',
       'CODIGOCLIENTEFACTURA', 'CODIGOVENDEDOR', 'TIPORECIBO',
       'DIADOCUMENTO', 'MESDOCUMENTO', 'ANODOCUMENTO', 'HORADOCUMENTO',
       'IMPORTECOBRADO', 'IDMARCALIQUIDACION',
@@ -157,6 +157,7 @@ function buildCobroInsert({
       now.getFullYear(),
       String(process.env.PEDIDOS_SYSTEM_SERIE || 'R').substring(0, 1),
       parseInt(process.env.PEDIDOS_SYSTEM_TERMINAL || '10', 10),
+      0,
       String(normalizedClient || '').padEnd(10).slice(0, 10),
       String(codigoUsuario || '').padEnd(2).slice(0, 2),
       'C',
@@ -751,9 +752,27 @@ class Db2CobrosRepository extends CobrosRepository {
     const runQuery = queryParams.length > 0
       ? (sql) => queryWithParams(sql, queryParams, [])
       : (sql) => query(sql, false);
-    const [rows, totalRows] = await Promise.all([
+
+    const cvcRawSql = `
+      SELECT COALESCE(SUM(T.TOTAL_PENDIENTE), 0) AS CVC_GRAND_TOTAL,
+             COALESCE(SUM(T.TOTAL_VENCIDO), 0) AS CVC_GRAND_TOTAL_VENCIDO
+        FROM (
+          SELECT SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
+                 SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
+                     <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
+                      THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
+            FROM DSEDAC.CVC CVC
+           WHERE CVC.IMPORTEPENDIENTE <> 0
+             AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+             ${emptyClientFilter}
+             ${vendorClause}
+           GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CVC.SERIEDOCUMENTO), CVC.NUMERODOCUMENTO
+        ) T`;
+
+    const [rows, totalRows, cvcRawRows] = await Promise.all([
       runQuery(pageSql),
       runQuery(totalsSql),
+      runQuery(cvcRawSql),
     ]);
 
     const pageAdjustments = await this.getAppSideCobrosByDocForSummary(rows || []);
@@ -787,14 +806,21 @@ class Db2CobrosRepository extends CobrosRepository {
     }
 
     const totals = totalRows?.[0] || {};
+    const cvcRaw = cvcRawRows?.[0] || {};
     const grandTotal = parseFloat(totals.GRAND_TOTAL) || 0;
     const grandTotalVencido = parseFloat(totals.GRAND_TOTAL_VENCIDO) || 0;
     const clientCount = parseInt(totals.CLIENT_COUNT, 10) || 0;
+    const cvcGrandTotal = parseFloat(cvcRaw.CVC_GRAND_TOTAL) || 0;
+    const cvcGrandTotalVencido = parseFloat(cvcRaw.CVC_GRAND_TOTAL_VENCIDO) || 0;
+    const appAdjustmentsTotal = Math.max(0, cvcGrandTotal - grandTotal);
 
     return {
       summary,
-      grandTotal,
-      grandTotalVencido,
+      grandTotal: Math.round(grandTotal * 100) / 100,
+      grandTotalVencido: Math.round(grandTotalVencido * 100) / 100,
+      cvcGrandTotal: Math.round(cvcGrandTotal * 100) / 100,
+      cvcGrandTotalVencido: Math.round(cvcGrandTotalVencido * 100) / 100,
+      appAdjustmentsTotal: Math.round(appAdjustmentsTotal * 100) / 100,
       clientCount,
       source: 'CVC',
       pagination: {

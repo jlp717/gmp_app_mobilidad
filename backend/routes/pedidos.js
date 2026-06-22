@@ -839,6 +839,12 @@ router.get('/', async (req, res) => {
         }
         const effectiveVendedorCodes = vendorScope.codes.length > 0 ? vendorScope.codes.join(',') : 'ALL';
 
+        const page = Math.max(parseIntSafe(req.query.page, 1), 1);
+        const limit = parseIntSafe(req.query.limit, 20);
+        const offset = req.query.offset != null
+            ? parseIntSafe(req.query.offset, 0)
+            : (page - 1) * limit;
+
         const result = await pedidosService.getOrders({
             vendedorCodes: effectiveVendedorCodes,
             status: status ? String(status).trim() : undefined,
@@ -851,12 +857,22 @@ router.get('/', async (req, res) => {
             maxAmount: maxAmount ? parseFloat(maxAmount) : undefined,
             sortBy: sortBy ? String(sortBy).trim() : 'fecha',
             sortOrder: (sortOrder || 'DESC').toUpperCase(),
-            limit: parseIntSafe(req.query.limit, 50),
-            offset: parseIntSafe(req.query.offset, 0),
+            limit,
+            offset,
         });
 
         const orders = result.orders.map(o => stripMarginFromOrder(o, req.user));
-        res.json({ success: true, orders, count: result.count });
+        res.json({
+            success: true,
+            orders,
+            count: result.count,
+            pagination: {
+                page,
+                limit,
+                offset,
+                total: result.count,
+            },
+        });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
@@ -1227,9 +1243,28 @@ router.get('/:id', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Invalid order id' });
         }
 
+        const requestedVendorRaw = req.query.vendedorCode || req.query.vendedorCodes;
+        if (requestedVendorRaw) {
+            const requestedVendor = normalizePedidoCode(String(requestedVendorRaw).split(',')[0]);
+            const vendorAccess = authorizePedidoVendorCode(req, requestedVendor, 'consultar');
+            if (!vendorAccess.ok) {
+                return res.status(vendorAccess.status).json(vendorAccess.body);
+            }
+        }
+
         const ownership = await authorizePedidoAccess(req, id, 'consultar');
         if (!ownership.ok) {
             return res.status(ownership.status).json(ownership.body);
+        }
+
+        if (requestedVendorRaw) {
+            const requestedVendor = normalizePedidoCode(String(requestedVendorRaw).split(',')[0]);
+            const orderVendor = normalizePedidoCode(ownership.ownership?.vendedorCode);
+            if (!pedidoCodesMatch(orderVendor, requestedVendor)) {
+                return res.status(403).json(
+                    pedidoForbiddenBody('FORBIDDEN_VENDOR', 'vendedorCode no coincide con el pedido solicitado'),
+                );
+            }
         }
 
         const order = await pedidosService.getOrderDetail(id);
@@ -1294,7 +1329,7 @@ router.post('/create', async (req, res) => {
             return res.status(clientAccess.status).json(clientAccess.body);
         }
 
-        const idempotencyKey = pedidosService.extractIdempotencyKeyFromRequest(req);
+        const idempotencyKey = pedidosService.ensurePedidoIdempotencyKeyFromRequest(req);
         const createOrderT0 = Date.now();
         let order;
         try {
@@ -1656,6 +1691,82 @@ router.put('/:id/status', async (req, res) => {
         const status = error.message.includes('not found') ? 404
             : error.message.includes('no válido') ? 400 : 500;
         res.status(status).json({ success: false, error: error.message });
+    }
+});
+
+// =============================================================================
+// QUICK ACTIONS (stock check + alternatives)
+// =============================================================================
+
+router.post('/acciones-rapidas', async (req, res) => {
+    try {
+        const {
+            codigoArticulo,
+            cantidadEnvases = 0,
+            cantidadUnidades = 0,
+            unidadMedida = 'CAJAS',
+            almacen = 1,
+        } = req.body || {};
+        const code = String(codigoArticulo || '').trim();
+        if (!code) {
+            return res.status(400).json({ success: false, error: 'codigoArticulo is required' });
+        }
+
+        const stock = await pedidosService.getProductStock(code, parseInt(almacen, 10) || 1);
+        const unit = String(unidadMedida || 'CAJAS').trim().toUpperCase();
+        const reqEnvases = parseFloat(cantidadEnvases) || 0;
+        const reqUnidades = parseFloat(cantidadUnidades) || 0;
+        const stockWarnings = [];
+        let outOfStock = false;
+
+        if (unit === 'CAJAS' && reqEnvases > 0) {
+            const available = parseFloat(stock?.envases) || 0;
+            if (reqEnvases > available) {
+                stockWarnings.push({
+                    product: code,
+                    requested: reqEnvases,
+                    available,
+                    unit: 'envases',
+                });
+                if (available <= 0) outOfStock = true;
+            }
+        } else if (reqUnidades > 0) {
+            const available = parseFloat(stock?.unidades) || 0;
+            if (reqUnidades > available) {
+                stockWarnings.push({
+                    product: code,
+                    requested: reqUnidades,
+                    available,
+                    unit: 'unidades',
+                });
+                if (available <= 0) outOfStock = true;
+            }
+        } else if ((parseFloat(stock?.envases) || 0) <= 0 && (parseFloat(stock?.unidades) || 0) <= 0) {
+            outOfStock = true;
+            stockWarnings.push({
+                product: code,
+                requested: 1,
+                available: 0,
+                unit: 'envases',
+            });
+        }
+
+        let alternatives = [];
+        if (outOfStock) {
+            alternatives = await pedidosService.getSimilarProducts(code);
+        }
+
+        res.json({
+            success: true,
+            codigoArticulo: code,
+            stock,
+            sufficient: stockWarnings.length === 0,
+            stockWarnings,
+            alternatives,
+        });
+    } catch (error) {
+        logger.error(`[PEDIDOS] Error in POST /acciones-rapidas: ${error.message}`);
+        res.status(500).json({ success: false, error: error.message });
     }
 });
 

@@ -120,67 +120,83 @@ async function warmUpDashboardQueries() {
     }
 }
 
+function buildClientsListV6Sql({ limit, offset, laclaeScopeFilter = '', clientCodesFilter = '', vendorScopedCliFilter = '', searchFilter = '' }) {
+    return `
+      WITH LACLAE_SCOPED AS (
+        SELECT LCCDCL, LCIMVT, LCIMCT, LCAADC, LCMMDC, LCDDDC, LCCDVD
+          FROM DSED.LACLAE
+         WHERE LCAADC >= ${MIN_YEAR}
+           AND TPDC = 'LAC'
+           AND LCTPVT IN ('CC', 'VC')
+           AND LCCLLN IN ('AB', 'VT')
+           AND LCSRAB NOT IN ('N', 'Z')
+           ${laclaeScopeFilter}
+      ),
+      LACLAE_AGG AS (
+        SELECT
+          LCCDCL AS CLIENT_CODE,
+          SUM(LCIMVT) AS TOTAL_PURCHASES,
+          SUM(LCIMVT - LCIMCT) AS TOTAL_MARGIN,
+          COUNT(DISTINCT LCAADC || LCMMDC || LCDDDC) AS NUM_ORDERS,
+          MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) AS LAST_PURCHASE_DATE
+        FROM LACLAE_SCOPED
+        GROUP BY LCCDCL
+      ),
+      LACLAE_LAST AS (
+        SELECT CLIENT_CODE, LAST_VENDOR FROM (
+          SELECT
+            LCCDCL AS CLIENT_CODE,
+            LCCDVD AS LAST_VENDOR,
+            ROW_NUMBER() OVER (
+              PARTITION BY LCCDCL
+              ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC
+            ) AS RN
+          FROM LACLAE_SCOPED
+        ) X
+        WHERE RN = 1
+      )
+      SELECT
+        C.CODIGOCLIENTE as code,
+        COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE)) as name,
+        C.NIF as nif,
+        C.DIRECCION as address, C.POBLACION as city, C.PROVINCIA as province,
+        C.CODIGOPOSTAL as postalCode, C.TELEFONO1 as phone, C.TELEFONO2 as phone2,
+        C.CODIGORUTA as route, C.PERSONACONTACTO as contactPerson,
+        COALESCE(S.TOTAL_PURCHASES, 0) as totalPurchases,
+        COALESCE(S.NUM_ORDERS, 0) as numOrders,
+        COALESCE(S.LAST_PURCHASE_DATE, 0) as lastDateInt,
+        COALESCE(S.TOTAL_MARGIN, 0) as totalMargin,
+        C.ANOBAJA as yearInactive,
+        TRIM(V.NOMBREVENDEDOR) as vendorName,
+        LV.LAST_VENDOR as vendorCode
+      FROM DSEDAC.CLI C
+      LEFT JOIN LACLAE_AGG S ON C.CODIGOCLIENTE = S.CLIENT_CODE
+      LEFT JOIN LACLAE_LAST LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE
+      LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
+      WHERE C.ANOBAJA = 0
+        ${clientCodesFilter || vendorScopedCliFilter}
+        ${searchFilter}
+      ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
+      OFFSET ${parseInt(offset, 10)} ROWS
+      FETCH FIRST ${parseInt(limit, 10)} ROWS ONLY
+    `;
+}
+
+async function warmUpClientsList(vendedorCodes = 'ALL', limit = 100, offset = 0) {
+    const cacheKey = `clients:list:v6:${vendedorCodes}:none:${limit}:${offset}`;
+    const clientsSQL = buildClientsListV6Sql({ limit, offset });
+    const start = Date.now();
+    await cachedQuery(query, clientsSQL, cacheKey, TTL.LONG);
+    logger.info(`[CachePreWarmer] Clients ${vendedorCodes} limit=${limit} warmed in ${Date.now() - start}ms (${TTL.LONG}s TTL)`);
+}
+
 async function warmUpClientsAll() {
     try {
-        // Pre-warm clients list for ALL vendors (JEFE_VENTAS default view)
-        const { query } = require('../config/db');
-        const logger = require('../middleware/logger');
-
-        const clientsSQL = `
-            SELECT
-                C.CODIGOCLIENTE as code,
-                COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE)) as name,
-                C.NIF as nif,
-                C.DIRECCION as address, C.POBLACION as city, C.PROVINCIA as province,
-                C.CODIGOPOSTAL as postalCode, C.TELEFONO1 as phone, C.TELEFONO2 as phone2,
-                C.CODIGORUTA as route, C.PERSONACONTACTO as contactPerson,
-                COALESCE(S.TOTAL_PURCHASES, 0) as totalPurchases,
-                COALESCE(S.NUM_ORDERS, 0) as numOrders,
-                COALESCE(S.LAST_PURCHASE_DATE, 0) as lastDateInt,
-                COALESCE(S.TOTAL_MARGIN, 0) as totalMargin,
-                C.ANOBAJA as yearInactive,
-                TRIM(V.NOMBREVENDEDOR) as vendorName,
-                LV.LAST_VENDOR as vendorCode
-            FROM DSEDAC.CLI C
-            LEFT JOIN (
-                SELECT
-                    LCCDCL as CLIENT_CODE,
-                    SUM(LCIMVT) as TOTAL_PURCHASES,
-                    SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
-                    COUNT(DISTINCT LCAADC || LCMMDC || LCDDDC) as NUM_ORDERS,
-                    MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE
-                FROM DSED.LACLAE
-                WHERE LCAADC >= ${MIN_YEAR}
-                    AND TPDC = 'LAC'
-                    AND LCTPVT IN ('CC', 'VC')
-                    AND LCCLLN IN ('AB', 'VT')
-                    AND LCSRAB NOT IN ('N', 'Z')
-                GROUP BY LCCDCL
-            ) S ON C.CODIGOCLIENTE = S.CLIENT_CODE
-            LEFT JOIN LATERAL (
-                SELECT LCCDVD as LAST_VENDOR
-                FROM DSED.LACLAE
-                WHERE LCCDCL = C.CODIGOCLIENTE
-                    AND LCAADC >= ${MIN_YEAR}
-                    AND TPDC = 'LAC'
-                    AND LCTPVT IN ('CC', 'VC')
-                    AND LCCLLN IN ('AB', 'VT')
-                    AND LCSRAB NOT IN ('N', 'Z')
-                ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC
-                FETCH FIRST 1 ROWS ONLY
-            ) LV ON 1=1
-            LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
-            WHERE C.ANOBAJA = 0 AND LV.LAST_VENDOR IS NOT NULL
-            ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
-            FETCH FIRST 1000 ROWS ONLY
-        `;
-
-        // Use LONG TTL since this is expensive and rarely changes
-        const clientsTTL = 3600; // 1 hour for clients list
-
-        await cachedQuery(query, clientsSQL, `clients:list:v5:ALL:none:1000:0`, clientsTTL);
-        logger.info(`[CachePreWarmer] Clients ALL list warmed (1hr TTL)`);
-
+        // JEFE_VENTAS: dashboard uses limit=50; browse tabs often use 100
+        await Promise.all([
+            warmUpClientsList('ALL', 50, 0),
+            warmUpClientsList('ALL', 100, 0),
+        ]);
     } catch (e) {
         logger.warn(`[CachePreWarmer] Clients pre-warm error (non-fatal): ${e.message}`);
     }
@@ -211,12 +227,12 @@ async function preloadCache(port = 3000) {
     logger.info('🚀 Starting System Preload...');
 
     try {
-        // 0. Invalidate stale Redis query caches from previous session
+        // 0. Invalidate only rutero caches on startup — clients list is expensive (~2min cold).
+        // Preserving clients:v6 keys avoids JEFE_VENTAS cold-start penalty after pm2 restart.
         try {
             const { deleteCachePattern } = require('./redis-cache');
-            await deleteCachePattern('clients:*');
             await deleteCachePattern('rutero:*');
-            logger.info('🧹 Stale Redis query caches invalidated on startup');
+            logger.info('🧹 Stale rutero Redis caches invalidated on startup');
         } catch (redisErr) {
             logger.warn(`Redis invalidation on startup failed (non-blocking): ${redisErr.message}`);
         }
@@ -234,13 +250,11 @@ async function preloadCache(port = 3000) {
             warmUpEvolutionAll().catch(e => logger.warn(`Evolution warmup error: ${e.message}`));
         }, 4000);
 
-        // 3. Clients list pre-warm DISABLED — query joins DSED.LACLAE (millions of rows)
-        //    + LATERAL subquery = 30-60s execution. Not suitable for startup.
-        //    The first real request will cache the result with 1hr TTL.
-        //    Subsequent requests are instant from cache.
-        //    If eager pre-warm is needed, create a materialized summary table
-        //    (e.g., JAVIER.CLIENT_SALES_SUMMARY) updated via nightly cron.
-        logger.info('[CachePreWarmer] Clients pre-warm skipped (heavy LACLAE query — lazy cached on first request)');
+        // 3. Background warm clients ALL (v6 CTE) — ~2min DB2 but non-blocking.
+        //    Dashboard JV default limit=50 + common browse limit=100.
+        setTimeout(() => {
+            warmUpClientsAll().catch((e) => logger.warn(`Clients warmup error: ${e.message}`));
+        }, 3000);
 
         // 4. Pre-warm commissions ALL (non-blocking, 5s delay, runs only if needed)
         setTimeout(() => {
@@ -294,4 +308,4 @@ async function warmUpEvolutionAll() {
     }
 }
 
-module.exports = { preloadCache, _internal: { warmUpEvolutionAll } };
+module.exports = { preloadCache, _internal: { warmUpEvolutionAll, warmUpClientsAll, warmUpClientsList, buildClientsListV6Sql } };

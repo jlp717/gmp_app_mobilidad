@@ -1395,6 +1395,8 @@ class PedidosProvider with ChangeNotifier {
       var orders = await PedidosService.getOrders(
         vendedorCodes: vendedorCodes,
         status: apiStatus,
+        limit: 20,
+        page: 1,
         forceRefresh: forceRefresh,
         dateFrom: dateFrom,
         dateTo: dateTo,

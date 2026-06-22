@@ -408,15 +408,34 @@ class CobrosProvider extends ChangeNotifier {
 
   Future<void> cargarCobrosPendientes(
     String codigoCliente, {
+    String? tipoDocumento,
+    String? fechaDesde,
+    String? fechaHasta,
     bool forceRefresh = false,
   }) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
     try {
+      final params = <String, String>{};
+      if (tipoDocumento != null && tipoDocumento.trim().isNotEmpty) {
+        params['tipoDocumento'] = tipoDocumento.trim();
+      }
+      if (fechaDesde != null && fechaDesde.trim().isNotEmpty) {
+        params['fechaDesde'] = fechaDesde.trim();
+      }
+      if (fechaHasta != null && fechaHasta.trim().isNotEmpty) {
+        params['fechaHasta'] = fechaHasta.trim();
+      }
+      final query = params.entries
+          .map((e) => '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}')
+          .join('&');
+      final endpoint = query.isEmpty
+          ? '/cobros/$codigoCliente/pendientes'
+          : '/cobros/$codigoCliente/pendientes?$query';
       final response = await ApiClient.get(
-        '/cobros/$codigoCliente/pendientes',
-        cacheKey: 'cobros:pendientes:$codigoCliente',
+        endpoint,
+        cacheKey: 'cobros:pendientes:$codigoCliente:${params.entries.map((e) => '${e.key}=${e.value}').join(':')}',
         cacheTTL: const Duration(minutes: 1),
         forceRefresh: forceRefresh,
       );

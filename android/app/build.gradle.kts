@@ -44,10 +44,12 @@ android {
 
     defaultConfig {
         applicationId = "com.maripepa.gmp_mobilidad"
+        applicationIdSuffix = ".test"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        versionNameSuffix = "-test"
         multiDexEnabled = true
     }
 

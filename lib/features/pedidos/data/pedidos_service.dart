@@ -1843,7 +1843,8 @@ class PedidosService {
     String? status,
     int? year,
     int? month,
-    int limit = 50,
+    int limit = 20,
+    int page = 1,
     int offset = 0,
     bool forceRefresh = false,
     String? dateFrom,
@@ -1857,6 +1858,7 @@ class PedidosService {
     final params = <String, dynamic>{
       'vendedorCodes': vendedorCodes,
       'limit': limit.toString(),
+      'page': page.toString(),
       'offset': offset.toString(),
       'sortBy': sortBy,
       'sortOrder': sortOrder,
@@ -1888,6 +1890,7 @@ class PedidosService {
           sortBy,
           sortOrder,
           limit,
+          page,
           offset,
         ].join(':'),
         cacheTTL: const Duration(minutes: 2),
@@ -2258,7 +2261,6 @@ class PedidosService {
 /// Mapeo verificado DSEDAC/LFC (2026-06-11): {1:10%, 2:21%, 3:4%, 4:0%, 5:10%}.
 /// No usar DSEDAC.IVA (tabla pre-2010 desactualizada).
 const Map<String, double> kIvaRatesByCode = {
-  '0': 0.0,
   '1': 0.10,
   '2': 0.21,
   '3': 0.04,
@@ -2270,7 +2272,7 @@ const double kIvaRateDefault = 0.21;
 
 double ivaRateFromCode(String? code) {
   final normalized = (code ?? '').trim();
-  if (normalized.isEmpty) return kIvaRateDefault;
+  if (normalized.isEmpty || normalized == '0') return kIvaRateDefault;
   return kIvaRatesByCode[normalized] ?? kIvaRateDefault;
 }
 

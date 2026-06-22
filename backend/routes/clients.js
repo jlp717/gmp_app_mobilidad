@@ -114,7 +114,7 @@ const getClientsHandler = async (req, res) => {
         : buildLaclaeBoundedClientCodesSql(vendedorCodes);
 
     // Generate Cache Key (v5 = optimized with pre-filtered client codes)
-    const cacheKey = `clients:list:v5:${vendedorCodes || 'ALL'}:${safeSearch || 'none'}:${limit}:${offset}`;
+    const cacheKey = `clients:list:v6:${vendedorCodes || 'ALL'}:${safeSearch || 'none'}:${limit}:${offset}`;
     // OPTIMIZATION: Longer TTL for ALL vendors (JEFE_VENTAS default)
     const isAllVendors = !vendedorCodes || vendedorCodes === 'ALL';
     const cacheTTL = isSearchQuery ? TTL.MEDIUM : (isAllVendors ? TTL.LONG : TTL.MEDIUM);
@@ -123,8 +123,42 @@ const getClientsHandler = async (req, res) => {
     logger.info(`[CLIENTS] Starting query for vendor ${vendedorCodes || 'all'}, search: ${search || 'none'}`);
     const queryStart = Date.now();
 
-    // SIMPLIFIED QUERY v3: Single LACLAE scan with pre-filtered client codes
+    // v6: single LACLAE CTE (one pass for stats + last vendor) — cert target p95 < 3s
+    const laclaeScopeFilter = laclaeBoundedFilter || vendedorFilter.replace(/L\./g, '');
     const clients = await cachedQuery(query, `
+      WITH LACLAE_SCOPED AS (
+        SELECT LCCDCL, LCIMVT, LCIMCT, LCAADC, LCMMDC, LCDDDC, LCCDVD
+          FROM DSED.LACLAE
+         WHERE LCAADC >= ${MIN_YEAR}
+           AND TPDC = 'LAC'
+           AND LCTPVT IN ('CC', 'VC')
+           AND LCCLLN IN ('AB', 'VT')
+           AND LCSRAB NOT IN ('N', 'Z')
+           ${laclaeScopeFilter}
+      ),
+      LACLAE_AGG AS (
+        SELECT
+          LCCDCL AS CLIENT_CODE,
+          SUM(LCIMVT) AS TOTAL_PURCHASES,
+          SUM(LCIMVT - LCIMCT) AS TOTAL_MARGIN,
+          COUNT(DISTINCT LCAADC || LCMMDC || LCDDDC) AS NUM_ORDERS,
+          MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) AS LAST_PURCHASE_DATE
+        FROM LACLAE_SCOPED
+        GROUP BY LCCDCL
+      ),
+      LACLAE_LAST AS (
+        SELECT CLIENT_CODE, LAST_VENDOR FROM (
+          SELECT
+            LCCDCL AS CLIENT_CODE,
+            LCCDVD AS LAST_VENDOR,
+            ROW_NUMBER() OVER (
+              PARTITION BY LCCDCL
+              ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC
+            ) AS RN
+          FROM LACLAE_SCOPED
+        ) X
+        WHERE RN = 1
+      )
       SELECT
         C.CODIGOCLIENTE as code,
         COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE)) as name,
@@ -140,45 +174,8 @@ const getClientsHandler = async (req, res) => {
         TRIM(V.NOMBREVENDEDOR) as vendorName,
         LV.LAST_VENDOR as vendorCode
       FROM DSEDAC.CLI C
-      LEFT JOIN (
-        SELECT
-          LCCDCL as CLIENT_CODE,
-          SUM(LCIMVT) as TOTAL_PURCHASES,
-          SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
-          COUNT(DISTINCT LCAADC || LCMMDC || LCDDDC) as NUM_ORDERS,
-          MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE
-        FROM DSED.LACLAE
-        WHERE LCAADC >= ${MIN_YEAR}
-          AND TPDC = 'LAC'
-          AND LCTPVT IN ('CC', 'VC')
-          AND LCCLLN IN ('AB', 'VT')
-          AND LCSRAB NOT IN ('N', 'Z')
-          ${laclaeBoundedFilter || vendedorFilter.replace(/L\./g, '')}
-        GROUP BY LCCDCL
-      ) S ON C.CODIGOCLIENTE = S.CLIENT_CODE
-      -- FIX 2026-05-15: el LATERAL JOIN original ejecutaba 1 sub-query por
-      -- cada cliente (2246 sub-queries) y hacia que la respuesta tardara 46s.
-      -- Lo sustituyo por una sola pasada con ROW_NUMBER OVER PARTITION BY
-      -- LCCDCL: DB2 for i materializa esto una sola vez y el JOIN con C es O(N).
-      LEFT JOIN (
-        SELECT CLIENT_CODE, LAST_VENDOR FROM (
-          SELECT
-            LCCDCL AS CLIENT_CODE,
-            LCCDVD AS LAST_VENDOR,
-            ROW_NUMBER() OVER (
-              PARTITION BY LCCDCL
-              ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC
-            ) AS RN
-          FROM DSED.LACLAE
-          WHERE LCAADC >= ${MIN_YEAR}
-            AND TPDC = 'LAC'
-            AND LCTPVT IN ('CC', 'VC')
-            AND LCCLLN IN ('AB', 'VT')
-            AND LCSRAB NOT IN ('N', 'Z')
-            ${laclaeBoundedFilter}
-        ) X
-        WHERE RN = 1
-      ) LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE
+      LEFT JOIN LACLAE_AGG S ON C.CODIGOCLIENTE = S.CLIENT_CODE
+      LEFT JOIN LACLAE_LAST LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE
       LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
       WHERE C.ANOBAJA = 0
         ${clientCodesFilter || vendorScopedCliFilter}

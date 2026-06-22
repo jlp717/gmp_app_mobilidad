@@ -55,7 +55,7 @@ const FREQUENTLY_ACCESSED_KEYS = new Set([
     'dashboard:metrics:*:*:ALL:curr',
     'dashboard:metrics:*:*:ALL:prev',
     'dashboard:evolution:*',
-    'clients:list:v5:ALL:',
+    'clients:list:v6:ALL:',
     'master:vendedores:*',
     'master:products:*'
 ]);

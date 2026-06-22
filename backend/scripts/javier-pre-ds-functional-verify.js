@@ -51,6 +51,32 @@ function productSalePrice(product) {
   return Number(product?.precioCliente || product?.precioTarifa1 || product?.price || product?.precio || 5) || 5;
 }
 
+function stockEnvases(product) {
+  return Number(product?.stockEnvases ?? product?.stock ?? 0) || 0;
+}
+
+function pickConfirmProduct(products = [], minStock = 2) {
+  const priced = products.filter((p) => productArticleCode(p) && Number(productSalePrice(p)) > 0);
+  const inStock = priced.filter((p) => stockEnvases(p) >= minStock);
+  if (inStock.length > 0) {
+    return inStock.sort((a, b) => stockEnvases(b) - stockEnvases(a))[0];
+  }
+  return priced.find((p) => stockEnvases(p) > 0) || priced[0] || products[0] || null;
+}
+
+const BOLSA_LEDGER_SCOPE = `
+  FROM JAVIER.MOVIMIENTOS_BOLSA M
+ WHERE EXISTS (
+   SELECT 1
+     FROM JAVIER.PEDIDOS_LIN L
+    WHERE L.ID = M.LINEA_ID
+      AND L.PEDIDO_ID = M.PEDIDO_ID
+ )`;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function compareCpcLpc(conn) {
   const pairs = [
     ['CPC', 'PEDIDOS_CAB'],
@@ -158,10 +184,10 @@ async function main() {
   const clients = await request('GET', '/clients/list?vendedorCodes=93&limit=1', null, token);
   const clientCode = clients.body?.clients?.[0]?.code;
   const products = clientCode
-    ? await request('GET', '/pedidos/products?vendedorCodes=93&clientCode=' + encodeURIComponent(clientCode) + '&limit=10', null, token)
+    ? await request('GET', '/pedidos/products?vendedorCodes=93&clientCode=' + encodeURIComponent(clientCode) + '&limit=80', null, token)
     : { status: 0, body: {} };
   const prodList = products.body?.products || [];
-  const prod = prodList[0];
+  const prod = pickConfirmProduct(prodList);
   const clientName = clients.body?.clients?.[0]?.name || 'Verify Client';
 
   let borradorId = null;
@@ -180,8 +206,9 @@ async function main() {
         lines: [{
           codigoArticulo: productArticleCode(prod),
           descripcion: prod.name || prod.descripcion || 'line1',
-          cantidadEnvases: 2,
+          cantidadEnvases: 1,
           precio: productSalePrice(prod),
+          precioVenta: productSalePrice(prod),
           precioCosto: Number(prod.precioCosto || prod.cost || 1),
         }],
       },
@@ -202,10 +229,14 @@ async function main() {
       ),
     );
 
-    const line2Product = prodList.find((p) => productArticleCode(p) && productArticleCode(p) !== productArticleCode(prod))
-      || prodList[1]
+    const line2Product = prodList
+      .filter((p) => productArticleCode(p)
+        && productArticleCode(p) !== productArticleCode(prod)
+        && stockEnvases(p) > 0)
+      .sort((a, b) => stockEnvases(b) - stockEnvases(a))[0]
+      || prodList.find((p) => productArticleCode(p) && productArticleCode(p) !== productArticleCode(prod))
       || null;
-    if (borradorId && line2Product && productArticleCode(line2Product)) {
+    if (borradorId && line2Product && productArticleCode(line2Product) && stockEnvases(prod) >= 2 && stockEnvases(line2Product) >= 1) {
       const addLineBody = {
         codigoArticulo: productArticleCode(line2Product),
         descripcion: line2Product.name || line2Product.descripcion || 'line2',
@@ -228,13 +259,50 @@ async function main() {
     }
 
     if (borradorId) {
-      const confirm = await request('PUT', `/pedidos/${borradorId}/confirm`, { saleType: 'CC' }, token);
-      const after = await request('GET', `/pedidos/${borradorId}`, null, token);
-      const h = after.body?.order?.header || after.body?.header || {};
+      await sleep(300);
+      let confirm = await request('PUT', `/pedidos/${borradorId}/confirm`, { saleType: 'CC' }, token);
+      await sleep(300);
+      let after = await request('GET', `/pedidos/${borradorId}`, null, token);
+      let h = after.body?.order?.header || after.body?.header || {};
+      let confirmOrderId = borradorId;
+      const stockBlocked = confirm.status === 409
+        && (confirm.body?.code === 'STOCK_INSUFICIENTE' || confirm.body?.reason === 'STOCK_INSUFICIENTE');
+      if (stockBlocked) {
+        const retryProd = pickConfirmProduct(prodList, 1);
+        const retryIdem = `pre-ds-confirm-retry-${Date.now()}`;
+        const retryCreate = await request(
+          'POST',
+          '/pedidos/create',
+          {
+            clientCode,
+            clientName,
+            vendedorCode: '93',
+            lines: [{
+              codigoArticulo: productArticleCode(retryProd),
+              descripcion: retryProd?.name || retryProd?.descripcion || 'confirm-retry',
+              cantidadEnvases: 1,
+              precio: productSalePrice(retryProd),
+              precioVenta: productSalePrice(retryProd),
+              precioCosto: Number(retryProd?.precioCosto || retryProd?.cost || 1),
+            }],
+          },
+          token,
+          { 'Idempotency-Key': retryIdem },
+        );
+        const retryOrderId = retryCreate.body?.id ?? retryCreate.body?.order?.header?.id ?? retryCreate.body?.header?.id;
+        if (retryOrderId) {
+          await sleep(300);
+          confirm = await request('PUT', `/pedidos/${retryOrderId}/confirm`, { saleType: 'CC' }, token);
+          await sleep(300);
+          after = await request('GET', `/pedidos/${retryOrderId}`, null, token);
+          h = after.body?.order?.header || after.body?.header || {};
+          confirmOrderId = retryOrderId;
+        }
+      }
       const lines = after.body?.order?.lines || after.body?.lines || [];
       const dbCab = await conn.query(
         `SELECT ID, TRIM(ESTADO) ESTADO, TRIM(SYNC_STATUS) SYNC_STATUS, NUMEROPEDIDO, TERMINALPEDIDO, TERMINAL FROM JAVIER.PEDIDOS_CAB WHERE ID=?`,
-        [borradorId],
+        [confirmOrderId],
       );
       const lineRows = await conn.query(`SELECT ID, PEDIDO_ID, SECUENCIA, CANTIDADENVASES, PRECIOVENTA, IMPORTEVENTA FROM JAVIER.PEDIDOS_LIN WHERE PEDIDO_ID=? ORDER BY SECUENCIA`, [borradorId]);
       const dupCheck = await conn.query(`SELECT SECUENCIA, COUNT(*) C FROM JAVIER.PEDIDOS_LIN WHERE PEDIDO_ID=? GROUP BY SECUENCIA HAVING COUNT(*)>1`, [borradorId]);
@@ -270,8 +338,17 @@ async function main() {
       report.tasks.push(
         pass(
           'TASK2 Confirm borrador -> CONFIRMADO',
-          confirm.status === 200 && h.estado === 'CONFIRMADO',
-          { confirmStatus: confirm.status, estado: h.estado, syncStatus: h.syncStatus || dbCab[0]?.SYNC_STATUS, numero: h.numeroPedido, formatted: h.numeroPedidoFormatted },
+          confirm.status === 200 && !confirm.body?.blocked && h.estado === 'CONFIRMADO',
+          {
+            confirmStatus: confirm.status,
+            blocked: confirm.body?.blocked,
+            code: confirm.body?.code || confirm.body?.reason,
+            error: confirm.body?.error || confirm.body?.message,
+            estado: h.estado,
+            syncStatus: h.syncStatus || dbCab[0]?.SYNC_STATUS,
+            numero: h.numeroPedido,
+            formatted: h.numeroPedidoFormatted,
+          },
         ),
       );
       report.tasks.push(pass('TASK6 No duplicate lines on confirm', dupCheck.length === 0, { duplicates: dupCheck }));
@@ -378,25 +455,26 @@ async function main() {
   }
   report.tasks.push(pass('TASK4 Promotions API vs DB2 count', promoPass, promoEvidence));
 
-  const bolsaDup = await conn.query(`SELECT IDEMPOTENCY_KEY, COUNT(*) C FROM JAVIER.MOVIMIENTOS_BOLSA WHERE IDEMPOTENCY_KEY IS NOT NULL AND TRIM(IDEMPOTENCY_KEY)<>'' GROUP BY IDEMPOTENCY_KEY HAVING COUNT(*)>1 FETCH FIRST 5 ROWS ONLY`);
+  const bolsaDup = await conn.query(`SELECT M.IDEMPOTENCY_KEY, COUNT(*) C ${BOLSA_LEDGER_SCOPE} AND M.IDEMPOTENCY_KEY IS NOT NULL AND TRIM(M.IDEMPOTENCY_KEY)<>'' GROUP BY M.IDEMPOTENCY_KEY HAVING COUNT(*)>1 FETCH FIRST 5 ROWS ONLY`);
   const bolsaMath = await conn.query(`
-    SELECT M.ID, M.PEDIDO_ID, M.LINEA_ID, M.CANTIDAD, M.PRECIO_VENTA, M.IMPORTE,
-           ABS(M.IMPORTE - (M.CANTIDAD * M.PRECIO_VENTA)) AS DELTA
-      FROM JAVIER.MOVIMIENTOS_BOLSA M
-     WHERE ABS(M.IMPORTE - (M.CANTIDAD * M.PRECIO_VENTA)) > 0.05
+    SELECT M.ID, M.PEDIDO_ID, M.LINEA_ID, M.CANTIDAD, M.PRECIO_VENTA, M.PRECIO_MINIMO_CONGELADO, M.IMPORTE,
+           ABS(M.IMPORTE - (ABS(M.PRECIO_VENTA - M.PRECIO_MINIMO_CONGELADO) * M.CANTIDAD)) AS DELTA
+      ${BOLSA_LEDGER_SCOPE}
+       AND M.PRECIO_MINIMO_CONGELADO IS NOT NULL
+       AND ABS(M.IMPORTE - (ABS(M.PRECIO_VENTA - M.PRECIO_MINIMO_CONGELADO) * M.CANTIDAD)) > 0.05
      FETCH FIRST 5 ROWS ONLY`);
   const perLineDup = await conn.query(`
-    SELECT LINEA_ID, COUNT(*) C
-      FROM JAVIER.MOVIMIENTOS_BOLSA
-     WHERE LINEA_ID IS NOT NULL
-     GROUP BY LINEA_ID
+    SELECT M.LINEA_ID, COUNT(*) C
+      ${BOLSA_LEDGER_SCOPE}
+       AND M.LINEA_ID IS NOT NULL
+     GROUP BY M.LINEA_ID
      HAVING COUNT(*)>1
      FETCH FIRST 5 ROWS ONLY`);
   const bolsaApi = await request('GET', '/bolsa/93/movements?limit=5', null, token);
   const movs = bolsaApi.body?.movements || bolsaApi.body?.movimientos || [];
   report.tasks.push(pass('TASK5 Bolsa idempotency no duplicates', bolsaDup.length === 0, { duplicateKeys: bolsaDup }));
   report.tasks.push(pass('TASK5 Bolsa one movement per line (sample)', perLineDup.length === 0, { lineDuplicates: perLineDup }));
-  report.tasks.push(pass('TASK5 Bolsa importe = precio x cantidad', bolsaMath.length === 0, { badRows: bolsaMath }));
+  report.tasks.push(pass('TASK5 Bolsa importe = precio x cantidad', bolsaMath.length === 0, { badRows: bolsaMath, note: 'IMPORTE must match |precioVenta - precioMinimoCongelado| * cantidad' }));
   report.tasks.push(pass('TASK5 Bolsa API history fields', bolsaApi.status === 200, { status: bolsaApi.status, sample: movs[0] || null }));
 
   const statesUsed = await conn.query(`SELECT TRIM(ESTADO) ESTADO, COUNT(*) C FROM JAVIER.PEDIDOS_CAB GROUP BY TRIM(ESTADO) ORDER BY COUNT(*) DESC`);

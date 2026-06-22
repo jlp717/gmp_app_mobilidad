@@ -998,6 +998,64 @@ function createPedidosRoutes() {
     }
   });
 
+  // POST /api/pedidos/acciones-rapidas
+  router.post('/acciones-rapidas', async (req, res) => {
+    try {
+      const {
+        codigoArticulo,
+        cantidadEnvases = 0,
+        cantidadUnidades = 0,
+        unidadMedida = 'CAJAS',
+        almacen = 1,
+      } = req.body || {};
+      const code = String(codigoArticulo || '').trim();
+      if (!code) {
+        return res.status(400).json({ success: false, error: 'codigoArticulo is required' });
+      }
+      const pedidosService = require('../../../services/pedidos.service');
+      const stock = await pedidosService.getProductStock(code, parseInt(almacen, 10) || 1);
+      const unit = String(unidadMedida || 'CAJAS').trim().toUpperCase();
+      const reqEnvases = parseFloat(cantidadEnvases) || 0;
+      const reqUnidades = parseFloat(cantidadUnidades) || 0;
+      const stockWarnings = [];
+      let outOfStock = false;
+
+      if (unit === 'CAJAS' && reqEnvases > 0) {
+        const available = parseFloat(stock?.envases) || 0;
+        if (reqEnvases > available) {
+          stockWarnings.push({ product: code, requested: reqEnvases, available, unit: 'envases' });
+          if (available <= 0) outOfStock = true;
+        }
+      } else if (reqUnidades > 0) {
+        const available = parseFloat(stock?.unidades) || 0;
+        if (reqUnidades > available) {
+          stockWarnings.push({ product: code, requested: reqUnidades, available, unit: 'unidades' });
+          if (available <= 0) outOfStock = true;
+        }
+      } else if ((parseFloat(stock?.envases) || 0) <= 0 && (parseFloat(stock?.unidades) || 0) <= 0) {
+        outOfStock = true;
+        stockWarnings.push({ product: code, requested: 1, available: 0, unit: 'envases' });
+      }
+
+      let alternatives = [];
+      if (outOfStock) {
+        alternatives = await pedidosService.getSimilarProducts(code);
+      }
+
+      res.json({
+        success: true,
+        codigoArticulo: code,
+        stock,
+        sufficient: stockWarnings.length === 0,
+        stockWarnings,
+        alternatives: (alternatives || []).map((product) => stripMarginFromProduct(product, req.user)),
+      });
+    } catch (error) {
+      logger.error(`[DDD-PEDIDOS] Error in POST /acciones-rapidas: ${error.message}`);
+      sendInternalServerError(res);
+    }
+  });
+
   // GET /api/pedidos/similar-products/:code
   router.get('/similar-products/:code', async (req, res) => {
     try {
@@ -1401,13 +1459,18 @@ function createPedidosRoutes() {
         return res.status(403).json({ success: false, error: 'No autorizado para consultar esos vendedores', code: 'FORBIDDEN_VENDOR' });
       }
       const requestedStatus = status || estado;
-      const cacheKey = `ddd:orders-list:${userId}:${limit || 20}:${offset || 0}:${requestedStatus || 'all'}:${search || ''}:${dateFrom || ''}:${dateTo || ''}`;
+      const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+      const safeLimit = parseInt(limit, 10) || 20;
+      const safeOffset = offset != null
+        ? parseInt(offset, 10) || 0
+        : (page - 1) * safeLimit;
+      const cacheKey = `ddd:orders-list:${userId}:${safeLimit}:${safeOffset}:${requestedStatus || 'all'}:${search || ''}:${dateFrom || ''}:${dateTo || ''}`;
       await withCache(cache, cacheKey, TTL_MS.ORDER_HISTORY, async () => {
         const pedidosService = require('../../../services/pedidos.service');
         const result = await pedidosService.getOrders({
           vendedorCodes: requestedVendedorCodes,
-          limit: parseInt(limit) || 50,
-          offset: parseInt(offset) || 0,
+          limit: safeLimit,
+          offset: safeOffset,
           status: requestedStatus ? String(requestedStatus).trim() : undefined,
           dateFrom: dateFrom ? String(dateFrom).trim() : undefined,
           dateTo: dateTo ? String(dateTo).trim() : undefined,
@@ -1498,8 +1561,23 @@ function createPedidosRoutes() {
   router.get('/:id([0-9]+)', async (req, res) => {
     try {
       const { id } = req.params;
+      const requestedVendorRaw = req.query.vendedorCode || req.query.vendedorCodes;
+      if (requestedVendorRaw) {
+        const requestedVendor = normalizePedidoCode(String(requestedVendorRaw).split(',')[0]);
+        const vendorAccess = authorizePedidoVendorCode(req, requestedVendor, 'consultar');
+        if (!vendorAccess.ok) return res.status(vendorAccess.status).json(vendorAccess.body);
+      }
       const ownership = await authorizePedidoMutation(req, id, 'consultar');
       if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
+      if (requestedVendorRaw) {
+        const requestedVendor = normalizePedidoCode(String(requestedVendorRaw).split(',')[0]);
+        const orderVendor = normalizePedidoCode(ownership.ownership?.vendedorCode);
+        if (!salesCodesMatch(orderVendor, requestedVendor)) {
+          return res.status(403).json(
+            dddForbiddenBody('FORBIDDEN_VENDOR', 'vendedorCode no coincide con el pedido solicitado'),
+          );
+        }
+      }
       const order = await repo.getOrderById(id);
       if (!order) return res.status(404).json({ success: false, error: 'Order not found' });
       res.json({ success: true, order: stripMarginFromOrder(order, req.user) });
@@ -1533,7 +1611,7 @@ function createPedidosRoutes() {
       if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
 
       const pedidosService = require('../../../services/pedidos.service');
-      const idempotencyKey = pedidosService.extractIdempotencyKeyFromRequest(req);
+      const idempotencyKey = pedidosService.ensurePedidoIdempotencyKeyFromRequest(req);
       const result = await pedidosService.createOrder({
         clientCode: clientAccess.clientCode,
         clientName: clientName ? String(clientName).trim() : '',
@@ -2335,7 +2413,7 @@ function createRuteroRoutes() {
 function createClientsRoutes() {
   const router = express.Router();
 
-  router.get('/', async (req, res) => {
+  const listClientsHandler = async (req, res) => {
     try {
       let { vendedorCodes, search, limit = 100, offset = 0 } = req.query;
       const vendorScope = resolvePedidoVendorScope(req, vendedorCodes || 'ALL');
@@ -2343,7 +2421,7 @@ function createClientsRoutes() {
       vendedorCodes = vendorScope.codes.length > 0 ? vendorScope.codes.join(',') : 'ALL';
       const isAllQuery = vendedorCodes === 'ALL' || !vendedorCodes;
       const cacheScope = buildCacheSecurityScope(req, { includeMargin: true });
-      const cacheKey = `ddd:clients:v1:${cacheScope}:${vendedorCodes || 'all'}:${search || 'none'}:${limit}:${offset}`;
+      const cacheKey = `ddd:clients:v2:${cacheScope}:${vendedorCodes || 'all'}:${search || 'none'}:${limit}:${offset}`;
       const role = req?.user?.role || 'COMERCIAL';
       const ttlSec = performanceCache.getTTL(role, isAllQuery);
 
@@ -2379,8 +2457,33 @@ function createClientsRoutes() {
         const laclaeBoundedFilter = clientCodesFilter
           ? clientCodesFilter.replace(/C\.CODIGOCLIENTE/g, 'LCCDCL')
           : buildLaclaeBoundedClientCodesSql(vendedorCodes);
+        const laclaeScopeFilter = laclaeBoundedFilter || vendorFilter.replace(/L\./g, '');
 
         const clients = await cachedQuery(query, `
+          WITH LACLAE_SCOPED AS (
+            SELECT LCCDCL, LCIMVT, LCIMCT, LCAADC, LCMMDC, LCDDDC, LCCDVD
+              FROM DSED.LACLAE
+             WHERE LCAADC >= ${MIN_YEAR} AND TPDC = 'LAC'
+               AND LCTPVT IN ('CC', 'VC') AND LCCLLN IN ('AB', 'VT')
+               AND LCSRAB NOT IN ('N', 'Z')
+               ${laclaeScopeFilter}
+          ),
+          LACLAE_AGG AS (
+            SELECT LCCDCL AS CLIENT_CODE,
+              SUM(LCIMVT) AS TOTAL_PURCHASES,
+              SUM(LCIMVT - LCIMCT) AS TOTAL_MARGIN,
+              COUNT(DISTINCT LCAADC || LCMMDC || LCDDDC) AS NUM_ORDERS,
+              MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) AS LAST_PURCHASE_DATE
+            FROM LACLAE_SCOPED
+            GROUP BY LCCDCL
+          ),
+          LACLAE_LAST AS (
+            SELECT CLIENT_CODE, LAST_VENDOR FROM (
+              SELECT LCCDCL AS CLIENT_CODE, LCCDVD AS LAST_VENDOR,
+                ROW_NUMBER() OVER (PARTITION BY LCCDCL ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC) AS RN
+              FROM LACLAE_SCOPED
+            ) X WHERE RN = 1
+          )
           SELECT
             C.CODIGOCLIENTE as code,
             COALESCE(NULLIF(TRIM(C.NOMBREALTERNATIVO), ''), TRIM(C.NOMBRECLIENTE)) as name,
@@ -2396,35 +2499,8 @@ function createClientsRoutes() {
             TRIM(V.NOMBREVENDEDOR) as vendorName,
             LV.LAST_VENDOR as vendorCode
           FROM DSEDAC.CLI C
-          LEFT JOIN (
-            SELECT LCCDCL as CLIENT_CODE, SUM(LCIMVT) as TOTAL_PURCHASES,
-              SUM(LCIMVT - LCIMCT) as TOTAL_MARGIN,
-              COUNT(DISTINCT LCAADC || LCMMDC || LCDDDC) as NUM_ORDERS,
-              MAX(LCAADC * 10000 + LCMMDC * 100 + LCDDDC) as LAST_PURCHASE_DATE
-            FROM DSED.LACLAE
-            WHERE LCAADC >= ${MIN_YEAR} AND TPDC = 'LAC'
-              AND LCTPVT IN ('CC', 'VC') AND LCCLLN IN ('AB', 'VT')
-              AND LCSRAB NOT IN ('N', 'Z')
-              ${laclaeBoundedFilter || vendorFilter.replace(/L\./g, '')}
-            GROUP BY LCCDCL
-          ) S ON C.CODIGOCLIENTE = S.CLIENT_CODE
-          LEFT JOIN (
-            SELECT CLIENT_CODE, LAST_VENDOR FROM (
-              SELECT
-                LCCDCL AS CLIENT_CODE,
-                LCCDVD AS LAST_VENDOR,
-                ROW_NUMBER() OVER (
-                  PARTITION BY LCCDCL
-                  ORDER BY LCAADC DESC, LCMMDC DESC, LCDDDC DESC
-                ) AS RN
-              FROM DSED.LACLAE
-              WHERE LCAADC >= ${MIN_YEAR} AND TPDC = 'LAC'
-                AND LCTPVT IN ('CC', 'VC') AND LCCLLN IN ('AB', 'VT')
-                AND LCSRAB NOT IN ('N', 'Z')
-                ${laclaeBoundedFilter}
-            ) X
-            WHERE RN = 1
-          ) LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE
+          LEFT JOIN LACLAE_AGG S ON C.CODIGOCLIENTE = S.CLIENT_CODE
+          LEFT JOIN LACLAE_LAST LV ON LV.CLIENT_CODE = C.CODIGOCLIENTE
           LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
           WHERE C.ANOBAJA = 0 ${clientCodesFilter || vendorScopedCliFilter} ${searchFilter}
           ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
@@ -2461,7 +2537,10 @@ function createClientsRoutes() {
       logger.error(`[DDD-CLIENTS] Error: ${error.message}`);
       sendInternalServerError(res);
     }
-  });
+  };
+
+  router.get('/', listClientsHandler);
+  router.get('/list', listClientsHandler);
 
   return router;
 }

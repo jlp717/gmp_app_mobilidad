@@ -1,5 +1,5 @@
 /**
- * NEXUS AI chatbot moderation contracts.
+ * Asistente GMP chatbot moderation contracts.
  */
 
 'use strict';

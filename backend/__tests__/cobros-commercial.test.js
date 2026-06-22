@@ -98,6 +98,13 @@ function mockRepoPendingSummaryDb({
       if (/REPARTIDOR_COBROS/i.test(sql)) return pageRepartidor;
       return [];
     }
+    if (/CVC_GRAND_TOTAL/i.test(sql)) {
+      const row = aggregate[0] || {};
+      return [{
+        CVC_GRAND_TOTAL: row.GRAND_TOTAL ?? row.CVC_GRAND_TOTAL ?? 0,
+        CVC_GRAND_TOTAL_VENCIDO: row.GRAND_TOTAL_VENCIDO ?? row.CVC_GRAND_TOTAL_VENCIDO ?? 0,
+      }];
+    }
     if (/WITH\s+CVC_DOCS/i.test(sql)) return aggregate;
     if (/OFFSET\s+\d+\s+ROWS/i.test(sql)) return pageRows;
     return [];
@@ -152,6 +159,9 @@ describe('commercial cobros hardening', () => {
       },
       grandTotal: 125.5,
       grandTotalVencido: 25.5,
+      cvcGrandTotal: 125.5,
+      cvcGrandTotalVencido: 25.5,
+      appAdjustmentsTotal: 0,
       clientCount: 1,
       source: 'CVC',
       pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 2 },
@@ -251,6 +261,9 @@ describe('commercial cobros hardening', () => {
       },
       grandTotal: 100,
       grandTotalVencido: 100,
+      cvcGrandTotal: 100,
+      cvcGrandTotalVencido: 100,
+      appAdjustmentsTotal: 0,
       clientCount: 1,
       source: 'CVC',
       pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 2 },
@@ -282,10 +295,12 @@ describe('commercial cobros hardening', () => {
     expect(result.grandTotal).toBe(300);
     expect(result.grandTotalVencido).toBe(50);
     expect(result.clientCount).toBe(2);
-    const unboundedPortfolioSql = findRepoSqlCall((candidate) => (
-      /FROM\s+DSEDAC\.CVC\s+CVC/i.test(candidate) && !/WITH\s+CVC_DOCS/i.test(candidate) && !/OFFSET\s+\d+\s+ROWS/i.test(candidate)
-    ));
-    expect(unboundedPortfolioSql).toBeFalsy();
+    expect(result.cvcGrandTotal).toBe(300);
+    expect(result.cvcGrandTotalVencido).toBe(50);
+    const cvcRawSql = findRepoSqlCall((candidate) => /CVC_GRAND_TOTAL/i.test(candidate));
+    expect(cvcRawSql).toMatch(/FROM\s+DSEDAC\.CVC\s+CVC/i);
+    const portfolioTotalsSql = findRepoSqlCall((candidate) => /WITH\s+CVC_DOCS/i.test(candidate));
+    expect(portfolioTotalsSql).toBeTruthy();
   });
 
   test('getPendingSummary uses aggregate-only totals query across pagination', async () => {
