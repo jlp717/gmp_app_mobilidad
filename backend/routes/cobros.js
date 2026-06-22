@@ -12,7 +12,7 @@ const logger = require('../middleware/logger');
 const { v4: uuidv4 } = require('uuid');
 const { db2QualifiedTable, db2InsertSql } = require('../utils/db2-identifiers');
 const { getDb2WriteSchema } = require('../utils/db2-schemas');
-const { buildCvcVendorScopeFilter } = require('../utils/common');
+const { buildCvcVendorScopeFilter, buildClientVendorParamFilter } = require('../utils/common');
 const crypto = require('crypto');
 
 const APP_SCHEMA = getDb2WriteSchema();
@@ -302,29 +302,57 @@ function forbiddenVendor(res, message) {
     });
 }
 
-function authorizeCobrosClientScope(req, codigoCliente, action = 'consultar') {
+async function authorizeCobrosClientScope(req, codigoCliente, action = 'consultar') {
     const context = getCobrosContext(req);
     if (context.isJefeVentas) return { ok: true };
 
     const user = req.user || {};
     const hasClientScope = Object.prototype.hasOwnProperty.call(user, 'clientCodes')
         || Object.prototype.hasOwnProperty.call(user, 'clienteCodes');
-    if (!hasClientScope) return { ok: true };
-
-    const allowedClientCodes = normalizeCodeList(context.clientCodes);
-    if (allowedClientCodes.some((clientCode) => codesMatch(clientCode, codigoCliente))) {
-        return { ok: true };
+    if (hasClientScope) {
+        const allowedClientCodes = normalizeCodeList(context.clientCodes);
+        if (allowedClientCodes.some((clientCode) => codesMatch(clientCode, codigoCliente))) {
+            return { ok: true };
+        }
+        return {
+            ok: false,
+            status: 403,
+            body: {
+                success: false,
+                code: 'FORBIDDEN_CLIENT_VENDOR',
+                error: 'No autorizado para ' + action + ' este cliente',
+            },
+        };
     }
 
-    return {
-        ok: false,
-        status: 403,
-        body: {
-            success: false,
-            code: 'FORBIDDEN_CLIENT_VENDOR',
-            error: 'No autorizado para ' + action + ' este cliente',
-        },
-    };
+    const role = String(context.userRole || '').toUpperCase();
+    if (role !== 'COMERCIAL') return { ok: true };
+
+    const userId = sanitizeCode(context.userId);
+    if (!userId) return { ok: true };
+
+    const client = sanitizeCode(codigoCliente).substring(0, 10);
+    const clientVendorFilter = buildClientVendorParamFilter([userId], 'CLI');
+    const rows = await queryWithParams(
+        `SELECT 1
+           FROM DSEDAC.CLI CLI
+          WHERE TRIM(CLI.CODIGOCLIENTE) = ?
+            ${clientVendorFilter.clause}
+          FETCH FIRST 1 ROW ONLY`,
+        [client, ...clientVendorFilter.params],
+    );
+    if (!rows || rows.length === 0) {
+        return {
+            ok: false,
+            status: 403,
+            body: {
+                success: false,
+                code: 'FORBIDDEN_CLIENT_VENDOR',
+                error: 'No autorizado para ' + action + ' este cliente',
+            },
+        };
+    }
+    return { ok: true };
 }
 
 // Req #15: Calcula estado VENCIDO/PENDIENTE/AL_DIA a partir de fecha vencimiento.
@@ -391,11 +419,25 @@ function computeEstadoVencimiento(fechaVencimientoIso, fechaDocumentoIso) {
 router.get('/:codigoCliente/pendientes', async (req, res) => {
     try {
         const codigoCliente = sanitizeCode(req.params.codigoCliente);
-        const clientScope = authorizeCobrosClientScope(req, codigoCliente, 'consultar cobros');
+        const clientScope = await authorizeCobrosClientScope(req, codigoCliente, 'consultar cobros');
         if (!clientScope.ok) {
             return res.status(clientScope.status).json(clientScope.body);
         }
         logger.info(`[COBROS] Obteniendo pendientes para cliente: ${codigoCliente}`);
+
+        const context = getCobrosContext(req);
+        const vendorCodes = normalizeCodeList(context.vendorCodes);
+        let vendorClause = '';
+        let vendorParams = [];
+        if (vendorCodes.length > 0) {
+            const scoped = buildCvcVendorScopeFilter(vendorCodes);
+            vendorClause = scoped.clause.replace(/CVC/g, 'C');
+            vendorParams = scoped.params;
+        }
+        const portfolioVendorClause = vendorCodes.length > 0 ? buildCvcVendorScopeFilter(vendorCodes).clause : '';
+        const portfolioAdjustmentsForPendientes = portfolioVendorClause
+            ? await getAppSideCobrosByDocForVendorScope(portfolioVendorClause, vendorParams)
+            : null;
 
         // Req #15: Read real debt from DSEDAC.CVC (ERP unpaid invoices).
         // DB2 metadata verified: the active CVC layout uses long business names,
@@ -516,9 +558,13 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
                 const fechaVencimiento = toIsoDate(row.ANO_VENCIMIENTO, row.MES_VENCIMIENTO, row.DIA_VENCIMIENTO);
                 const estado = computeEstadoVencimiento(fechaVencimiento, fechaDoc);
                 // H4: descuenta cobros app-side aun no propagados al ERP.
-                const docKey = `${serie}-${numero}`;
-                const appPaid = appCobrosByDoc.get(docKey) || 0;
-                const repartidorPaid = appRepartidorByDoc.get(docKey) || 0;
+                const docKey = sanitizeCode(serie) + '-' + numero;
+                const scopedKey = sanitizeCode(codigoCliente) + '|' + docKey;
+                const scopedPaid = portfolioAdjustmentsForPendientes
+                    ? (portfolioAdjustmentsForPendientes.get(scopedKey) || 0)
+                    : null;
+                const appPaid = scopedPaid !== null ? scopedPaid : (appCobrosByDoc.get(docKey) || 0);
+                const repartidorPaid = scopedPaid !== null ? 0 : (appRepartidorByDoc.get(docKey) || 0);
                 const erpPendiente = parseFloat(row.IMPORTE_PENDIENTE) || 0;
                 const erpCobrado = parseFloat(row.IMPORTE_COBRADO) || 0;
                 const importePendienteAjustado = Math.max(0, erpPendiente - appPaid);
@@ -610,7 +656,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
 router.get('/:codigoCliente/historico', async (req, res) => {
     try {
         const codigoCliente = sanitizeCode(req.params.codigoCliente);
-        const clientScope = authorizeCobrosClientScope(req, codigoCliente, 'consultar historico de cobros');
+        const clientScope = await authorizeCobrosClientScope(req, codigoCliente, 'consultar historico de cobros');
         if (!clientScope.ok) {
             return res.status(clientScope.status).json(clientScope.body);
         }
@@ -648,7 +694,7 @@ router.get('/:codigoCliente/historico', async (req, res) => {
 router.get('/:codigoCliente/estado', async (req, res) => {
     try {
         const codigoCliente = sanitizeCode(req.params.codigoCliente);
-        const clientScope = authorizeCobrosClientScope(req, codigoCliente, 'consultar estado de cliente');
+        const clientScope = await authorizeCobrosClientScope(req, codigoCliente, 'consultar estado de cliente');
         if (!clientScope.ok) {
             return res.status(clientScope.status).json(clientScope.body);
         }
@@ -772,7 +818,7 @@ function isSameCobroPayload(row, expected) {
 router.post('/:codigoCliente/registrar', registrarCobroLimiter, async (req, res) => {
     try {
         const codigoCliente = sanitizeCode(req.params.codigoCliente);
-        const clientScope = authorizeCobrosClientScope(req, codigoCliente, 'registrar cobros');
+        const clientScope = await authorizeCobrosClientScope(req, codigoCliente, 'registrar cobros');
         if (!clientScope.ok) {
             return res.status(clientScope.status).json(clientScope.body);
         }
@@ -1119,21 +1165,28 @@ router.get('/pending-summary/:vendedorCode', async (req, res) => {
         }
 
         const portfolioAdjustments = await getAppSideCobrosByDocForVendorScope(vendorClause, vendorParams);
-
-        const summary = {};
-        (rows || []).forEach(r => {
-            const applied = applyPendingSummaryDocTotals(r, appAdjustments);
-            if (!applied) return;
-            const code = applied.code;
+        const nameHints = new Map();
+        (rows || []).forEach((r) => {
+            const code = sanitizeCode(r.CLIENTE);
+            if (!code) return;
             const nombreAlt = (r.NOMBRE_ALT || '').trim();
             const nombreCli = (r.NOMBRE_CLI || '').trim();
+            if (!nameHints.has(code) && (nombreAlt || nombreCli)) {
+                nameHints.set(code, nombreAlt || nombreCli);
+            }
+        });
+        const summary = {};
+        (portfolioRows || []).forEach((r) => {
+            const applied = applyPendingSummaryDocTotals(r, portfolioAdjustments);
+            if (!applied) return;
+            const code = applied.code;
             if (!summary[code]) {
                 summary[code] = {
                     total: 0,
                     vencido: 0,
                     count: 0,
                     estado: 'AL_DIA',
-                    nombre: nombreAlt || nombreCli || null,
+                    nombre: nameHints.get(code) || null,
                 };
             }
             summary[code].total += applied.total;

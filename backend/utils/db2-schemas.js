@@ -4,8 +4,9 @@
  * Central DB2 read/write schema resolution.
  *
  * - ERP reads (CLI, CVC, ART, deuda, etc.) always use DB2_READ_SCHEMA (default DSEDAC).
- * - App writes (pedidos, cobros, bolsa) use DB2_WRITE_SCHEMA (default JAVIER).
- * - DSEDAC writes require PEDIDOS_DSEDAC_STORAGE_APPROVED=true (safety gate).
+ * - App buffers (pedidos, cobros, bolsa) use DB2_WRITE_SCHEMA (default JAVIER).
+ * - DB2_WRITE_SCHEMA=DSEDAC is ignored for app buffers unless ALLOW_DSEDAC_APP_BUFFERS=true.
+ * - DSEDAC ERP export uses its own flags; it does not require app buffers in DSEDAC.
  *
  * Legacy env vars PEDIDOS_CONFIRMATION_SCHEMA / PEDIDOS_ERP_SCHEMA are fallbacks
  * when DB2_WRITE_SCHEMA is unset.
@@ -51,13 +52,25 @@ function isDsedacWriteApproved() {
   return normalizeBool(process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED);
 }
 
+function isDsedacAppBuffersAllowed() {
+  return normalizeBool(process.env.ALLOW_DSEDAC_APP_BUFFERS);
+}
+
+function getDb2WriteSchemaDiagnostic() {
+  const requested = getDb2WriteSchemaRequested();
+  if (requested === 'DSEDAC' && !isDsedacAppBuffersAllowed()) {
+    return '[DB2] DB2_WRITE_SCHEMA=DSEDAC ignored for app buffers; using JAVIER. Set ALLOW_DSEDAC_APP_BUFFERS=true only after verifying real DSEDAC app-buffer tables.';
+  }
+  return null;
+}
+
 /**
- * Effective schema for INSERT/UPDATE/DELETE on app tables (PEDIDOS_*, COBROS, BOLSA_*).
- * Falls back to JAVIER when DSEDAC is requested without explicit approval.
+ * Effective schema for INSERT/UPDATE/DELETE on app buffer tables (PEDIDOS_*, COBROS, BOLSA_*).
+ * Falls back to JAVIER when DSEDAC is requested without explicit app-buffer override.
  */
 function getDb2WriteSchema() {
   const requested = getDb2WriteSchemaRequested();
-  if (requested === 'DSEDAC' && !isDsedacWriteApproved()) {
+  if (requested === 'DSEDAC' && !isDsedacAppBuffersAllowed()) {
     return 'JAVIER';
   }
   return requested;
@@ -97,6 +110,8 @@ module.exports = {
   getDb2WriteSchema,
   getDb2WriteSchemaRequested,
   isDsedacWriteApproved,
+  isDsedacAppBuffersAllowed,
+  getDb2WriteSchemaDiagnostic,
   db2WriteTable,
   db2ErpTable,
   assertMoneyFitsErpNumeric10_2,

@@ -141,7 +141,7 @@ function normalizePedidoCode(value) {
 }
 
 function normalizePedidoCodeList(value) {
-    return sanitizeCodeListForParams(String(value || ''), 10);
+    return sanitizeCodeListForParams(String(value || ''), 2);
 }
 
 function pedidoCodesMatch(left, right) {
@@ -231,7 +231,7 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
     let rows = await queryWithParams(
         `SELECT 1
            FROM DSEDAC.CLI CLI
-          WHERE TRIM(CLI.CODIGOCLIENTE) = ?
+          WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
             ${clientVendorFilter.clause}
           FETCH FIRST 1 ROW ONLY`,
         [client, ...clientVendorFilter.params],
@@ -244,7 +244,7 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
             rows = await queryWithParams(
                 `SELECT 1
                    FROM DSEDAC.CLI CLI
-                  WHERE TRIM(CLI.CODIGOCLIENTE) = ?
+                  WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
                     ${retryFilter.clause}
                   FETCH FIRST 1 ROW ONLY`,
                 [client, ...retryFilter.params],
@@ -292,9 +292,17 @@ function buildLaclaeVendorParamFilter(vendorCodes, alias = 'L') {
         return { clause: '', params: [] };
     }
     const vendorColumn = getVendorColumnExpr(alias);
+    const safeCodes = vendorCodes
+        .map((code) => String(code || '').trim())
+        .filter((code) => /^[a-zA-Z0-9]+$/.test(code))
+        .map((code) => code.substring(0, 2))
+        .filter(Boolean);
+    if (safeCodes.length === 0) {
+        return { clause: '', params: [] };
+    }
     return {
-        clause: `AND TRIM(${vendorColumn}) IN (${vendorCodes.map(() => '?').join(',')})`,
-        params: vendorCodes,
+        clause: `AND TRIM(${vendorColumn}) IN (${safeCodes.map(() => 'CAST(? AS VARCHAR(2))').join(',')})`,
+        params: safeCodes,
     };
 }
 
@@ -353,8 +361,8 @@ router.get('/products', async (req, res) => {
  */
 router.get('/products/:code', async (req, res) => {
     try {
-        const code = String(req.params.code).trim();
-        const clientCode = req.query.clientCode ? String(req.query.clientCode).trim() : undefined;
+        const code = String(req.params.code).trim().substring(0, 10);
+        const clientCode = req.query.clientCode ? String(req.query.clientCode).trim().substring(0, 10) : undefined;
 
         if (clientCode) {
             const clientAccess = await authorizePedidoClientScope(
@@ -502,7 +510,7 @@ router.get('/draft-status/:vendedorCode', async (req, res) => {
         if (!vendorAccess.ok) {
             return res.status(vendorAccess.status).json(vendorAccess.body);
         }
-        const result = await pedidosService.checkDraftAccumulation(code);
+        const result = await pedidosService.checkDraftAccumulation(vendorAccess.vendedorCode);
         res.json({ success: true, ...result });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in GET /draft-status: ${error.message}`);
@@ -517,7 +525,7 @@ router.post('/draft-status/:vendedorCode/auto-confirm', async (req, res) => {
         if (!vendorAccess.ok) {
             return res.status(vendorAccess.status).json(vendorAccess.body);
         }
-        const result = await pedidosService.checkDraftAccumulation(code, {
+        const result = await pedidosService.checkDraftAccumulation(vendorAccess.vendedorCode, {
             autoConfirm: true,
             options: { userId: req.user?.codigo || req.user?.userId || 'API' },
         });
@@ -810,7 +818,7 @@ router.get('/promotions', async (req, res) => {
 });
 
 // =============================================================================
-// ORDERS  CRUD
+// ORDERS CRUD
 // =============================================================================
 
 /**
@@ -1105,7 +1113,7 @@ router.get('/product-comparative/:productCode', async (req, res) => {
  */
 router.get('/client-evolution/:clientCode', async (req, res) => {
     try {
-        const clientCode = String(req.params.clientCode || '').trim();
+        const clientCode = String(req.params.clientCode || '').trim().substring(0, 10);
         const vendedorCodes = req.query.vendedorCodes || req.query.vendorCodes || 'ALL';
         
         if (!clientCode) {
@@ -1125,7 +1133,7 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
         // Verify client belongs to vendor scope
         const clientCheckQuery = `
             SELECT 1 FROM DSEDAC.CLI CLI
-            WHERE TRIM(CLI.CODIGOCLIENTE) = ?
+            WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
               ${clientVendorFilter.clause}
             FETCH FIRST 1 ROWS ONLY
         `;
@@ -1149,7 +1157,7 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
             SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
                    SUM(L.LCIMVT) AS SALES, SUM(L.LCCTUD) AS UNITS
             FROM DSED.LACLAE L
-            WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
+            WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ?
               AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
               ${laclaeVendorFilter.clause}
             GROUP BY L.LCAADC, L.LCMMDC
@@ -1165,7 +1173,7 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
                    SUM(L.LCIMVT) AS TOTAL_SALES, SUM(L.LCCTUD) AS TOTAL_UNITS
             FROM DSED.LACLAE L
             LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
-            WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
+            WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ?
               AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)
               ${laclaeVendorFilter.clause}
             GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
@@ -1183,7 +1191,7 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
                    SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT
             FROM DSED.LACLAE L
             LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO
-            WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ?
+            WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ?
               AND (L.LCSRAB = 'D' OR L.LCTPVT = 'DV')
               ${laclaeVendorFilter.clause}
             GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)
@@ -1242,6 +1250,18 @@ router.get('/:id', async (req, res) => {
  * Create a new order with lines
  */
 router.post('/create', async (req, res) => {
+    const routeT0 = Date.now();
+    const lineCount = Array.isArray(req.body?.lines) ? req.body.lines.length : 0;
+    const logRouteTotal = (statusPath, pedidoId) => {
+        const parts = [
+            '[PEDIDOS] POST /create stage=route_total',
+            `lineCount=${lineCount}`,
+            `statusPath=${statusPath}`,
+            `totalMs=${Date.now() - routeT0}`,
+        ];
+        if (pedidoId !== undefined && pedidoId !== null) parts.push(`pedidoId=${pedidoId}`);
+        logger.info(parts.join(' '));
+    };
     try {
         const {
             clientCode, clientName, vendedorCode,
@@ -1251,40 +1271,53 @@ router.post('/create', async (req, res) => {
 
         // Validation
         if (!clientCode) {
+            logRouteTotal('validation_error');
             return res.status(400).json({ success: false, error: 'clientCode is required' });
         }
         if (!vendedorCode) {
+            logRouteTotal('validation_error');
             return res.status(400).json({ success: false, error: 'vendedorCode is required' });
         }
         if (!lines || !Array.isArray(lines) || lines.length === 0) {
+            logRouteTotal('validation_error');
             return res.status(400).json({ success: false, error: 'At least 1 order line is required' });
         }
 
         const vendorAccess = authorizePedidoVendorCode(req, vendedorCode, 'crear pedidos para');
         if (!vendorAccess.ok) {
+            logRouteTotal('auth_denied');
             return res.status(vendorAccess.status).json(vendorAccess.body);
         }
         const clientAccess = await authorizePedidoClientScope(req, clientCode, vendorAccess.vendedorCode, 'crear pedidos para');
         if (!clientAccess.ok) {
+            logRouteTotal('auth_denied');
             return res.status(clientAccess.status).json(clientAccess.body);
         }
 
         const idempotencyKey = pedidosService.extractIdempotencyKeyFromRequest(req);
-        const order = await pedidosService.createOrder({
-            clientCode: clientAccess.clientCode,
-            clientName: clientName ? String(clientName).trim() : '',
-            vendedorCode: vendorAccess.vendedorCode,
-            tipoventa: tipoventa ? String(tipoventa).trim() : undefined,
-            almacen: almacen ? String(almacen).trim() : undefined,
-            tarifa: tarifa ? String(tarifa).trim() : undefined,
-            descuentoGlobal: descuentoGlobal ? parseFloat(descuentoGlobal) : 0,
-            observaciones: observaciones ? String(observaciones).trim() : '',
-            lines,
-            userId: req.user?.code || req.user?.codigo || req.user?.vendedorCode || undefined,
-            idempotencyKey,
-        });
+        const createOrderT0 = Date.now();
+        let order;
+        try {
+            order = await pedidosService.createOrder({
+                clientCode: clientAccess.clientCode,
+                clientName: clientName ? String(clientName).trim() : '',
+                vendedorCode: vendorAccess.vendedorCode,
+                tipoventa: tipoventa ? String(tipoventa).trim() : undefined,
+                almacen: almacen ? String(almacen).trim() : undefined,
+                tarifa: tarifa ? String(tarifa).trim() : undefined,
+                descuentoGlobal: descuentoGlobal ? parseFloat(descuentoGlobal) : 0,
+                observaciones: observaciones ? String(observaciones).trim() : '',
+                lines,
+                userId: req.user?.code || req.user?.codigo || req.user?.vendedorCode || undefined,
+                idempotencyKey,
+            });
+        } finally {
+            logger.info(`[PEDIDOS] POST /create stage=createOrder lineCount=${lineCount} durationMs=${Date.now() - createOrderT0}`);
+        }
 
+        const pedidoId = order?.header?.id ?? null;
         if (order.idempotent) {
+            logRouteTotal('idempotent_replay', pedidoId);
             return res.status(200).json({
                 success: true,
                 idempotent: true,
@@ -1292,14 +1325,18 @@ router.post('/create', async (req, res) => {
             });
         }
 
+        logRouteTotal('created', pedidoId);
         res.status(201).json({ success: true, order: stripMarginFromOrder(order, req.user) });
     } catch (error) {
         if (error.code === 'INVALID_IDEMPOTENCY_KEY') {
+            logRouteTotal('invalid_idempotency');
             return res.status(400).json({ success: false, code: error.code, error: error.message });
         }
         if (error.code === 'IDEMPOTENCY_CONFLICT') {
+            logRouteTotal('idempotency_conflict');
             return res.status(409).json({ success: false, code: error.code, error: error.message });
         }
+        logRouteTotal('error');
         logger.error(`[PEDIDOS] Error in POST /create: ${error.message}`);
         res.status(500).json({ success: false, error: error.message });
     }

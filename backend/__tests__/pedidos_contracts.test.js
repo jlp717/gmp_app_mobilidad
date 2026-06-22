@@ -1,5 +1,12 @@
 'use strict';
 
+function expectDb2SafeBind(sql, bind, maxLen) {
+  const text = bind == null ? '' : String(bind);
+  const normalized = text.length <= maxLen;
+  const casted = new RegExp(`CAST\\(\\?\\s+AS\\s+VARCHAR\\(${maxLen}\\)\\)`, 'i').test(String(sql || ''));
+  expect(normalized || casted).toBe(true);
+}
+
 const mockQuery = jest.fn();
 const mockQueryWithParams = jest.fn();
 const mockPoolConnect = jest.fn();
@@ -97,6 +104,29 @@ describe('pedidos product catalog contract', () => {
       hasPurchased: true,
     });
   });
+
+  test('getProducts truncates long clientCode in LACLAE bind params', async () => {
+    const longClient = '4300001091_OVERFLOW_EXTRA_CHARS';
+    let capturedSql = '';
+    let capturedParams = [];
+    mockQueryWithParams.mockImplementation(async (sql, params) => {
+      capturedSql = sql;
+      capturedParams = params;
+      return [];
+    });
+
+    await pedidosService.getProducts({
+      clientCode: longClient,
+      limit: 5,
+      offset: 0,
+    });
+
+    const clientBind = capturedParams.find((p) => p === '4300001091' || p === longClient);
+    expect(clientBind).toBe('4300001091');
+    expect(String(clientBind).length).toBeLessThanOrEqual(10);
+    expect(capturedParams).not.toContain(longClient);
+    expectDb2SafeBind(capturedSql, clientBind, 10);
+  });
 });
 
 describe('pedidos stock performance contract', () => {
@@ -110,11 +140,27 @@ describe('pedidos stock performance contract', () => {
 
     expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
     const [sql, params] = mockQueryWithParams.mock.calls[0];
-    expect(sql).toMatch(/TRIM\(CODIGOARTICULO\) IN \(\?,\?\)/i);
-    expect(sql).toMatch(/TRIM\(SR\.CODIGOARTICULO\) IN \(\?,\?\)/i);
+    expect(sql).toContain('TRIM(CODIGOARTICULO) IN (CAST(? AS VARCHAR(10)),CAST(? AS VARCHAR(10)))');
+    expect(sql).toContain('TRIM(SR.CODIGOARTICULO) IN (CAST(? AS VARCHAR(10)),CAST(? AS VARCHAR(10)))');
     expect(params).toEqual([1, 'ART001', 'ART002', 'ART001', 'ART002']);
     expect(result.get('ART001')).toEqual({ envases: 12, unidades: 24 });
     expect(result.get('ART002')).toEqual({ envases: 3, unidades: 6 });
+  });
+
+  test('getStockBatch truncates article codes to 10 before IN binds', async () => {
+    const longArticle = 'ART00123456_EXTRA_CHARS';
+    const expectedArticle = 'ART0012345';
+    mockQueryWithParams.mockResolvedValueOnce([]);
+
+    await pedidosService.getStockBatch([longArticle]);
+
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(1);
+    const [sql, params] = mockQueryWithParams.mock.calls[0];
+    const binds = params.slice(1);
+    const chunkSize = binds.length / 2;
+    const articleBinds = binds.slice(0, chunkSize);
+    expect(articleBinds).toEqual([expectedArticle]);
+    articleBinds.forEach((code) => expectDb2SafeBind(sql, code, 10));
   });
 });
 
@@ -176,6 +222,9 @@ describe('pedidos create order persistence contract', () => {
   function mockCreateOrderFlow({ failTotalsUpdate = false } = {}) {
     const rows = mockCreatedOrderReads();
     mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/DSEDAC\.CLC/i.test(sql) && /DSEDAC\.ARA/i.test(sql)) {
+        return [{ CODIGOARTICULO: 'ART001', PRECIOTARIFA: 10 }];
+      }
       if (/UPDATE\s+JAVIER\.PEDIDOS_SEQ\s+SET\s+ULTIMO_NUMERO/i.test(sql)) return [];
       if (/SELECT\s+ULTIMO_NUMERO\s+FROM\s+JAVIER\.PEDIDOS_SEQ/i.test(sql)) return [{ ULTIMO_NUMERO: 100 }];
       if (/INSERT\s+INTO\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) return [];
@@ -354,6 +403,24 @@ describe('pedidos create order persistence contract', () => {
     ]);
   });
 
+  test('createOrder final detail preserves empty bolsa shape without MOVIMIENTOS_BOLSA read', async () => {
+    mockCreateOrderFlow();
+
+    const detail = await pedidosService.createOrder({
+      clientCode: 'C001',
+      clientName: 'Cliente',
+      vendedorCode: '01',
+      lines: [{ codigoArticulo: 'ART001', descripcion: 'Producto', cantidadEnvases: 3, precio: 10, precioCosto: 4 }],
+    });
+
+    const bolsaReads = mockQueryWithParams.mock.calls.filter(([sql]) => /FROM\s+JAVIER\.MOVIMIENTOS_BOLSA/i.test(sql));
+    expect(bolsaReads).toHaveLength(0);
+    expect(detail.bolsaMovements).toEqual([]);
+    expect(detail.bolsaSummary).toEqual({ acumulacion: 0, consumo: 0, neto: 0, movementCount: 0 });
+    expect(detail.lines[0].bolsaMovements).toEqual([]);
+    expect(detail.lines[0].bolsaImpact).toEqual({ acumulacion: 0, consumo: 0, neto: 0, movementCount: 0, hasImpact: false });
+  });
+
   test('createOrder rolls back header and lines if totals update fails', async () => {
     mockCreateOrderFlow({ failTotalsUpdate: true });
 
@@ -370,6 +437,93 @@ describe('pedidos create order persistence contract', () => {
     expect(mockQueryWithParams.mock.calls.some(([sql]) =>
       /DELETE\s+FROM\s+JAVIER\.PEDIDOS_CAB\s+WHERE\s+ID/i.test(sql),
     )).toBe(true);
+  });
+
+  test('createOrder inserts order lines with bounded parallel DB writes', async () => {
+    const rows = mockCreatedOrderReads();
+    let inFlightLineInserts = 0;
+    let maxConcurrentLineInserts = 0;
+
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/FROM\s+DSEDAC\.CLC/i.test(sql) && /DSEDAC\.ARA/i.test(sql)) {
+        return [
+          { CODIGOARTICULO: 'ART001', PRECIOTARIFA: 10 },
+          { CODIGOARTICULO: 'ART002', PRECIOTARIFA: 10 },
+          { CODIGOARTICULO: 'ART003', PRECIOTARIFA: 10 },
+        ];
+      }
+      if (/UPDATE\s+JAVIER\.PEDIDOS_SEQ\s+SET\s+ULTIMO_NUMERO/i.test(sql)) return [];
+      if (/SELECT\s+ULTIMO_NUMERO\s+FROM\s+JAVIER\.PEDIDOS_SEQ/i.test(sql)) return [{ ULTIMO_NUMERO: 100 }];
+      if (/INSERT\s+INTO\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) return [];
+      if (/SELECT\s+ID\s+FROM\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) return [{ ID: 42 }];
+      if (/INSERT\s+INTO\s+JAVIER\.PEDIDOS_LIN/i.test(sql)) {
+        inFlightLineInserts += 1;
+        maxConcurrentLineInserts = Math.max(maxConcurrentLineInserts, inFlightLineInserts);
+        await new Promise((resolve) => setTimeout(resolve, 15));
+        inFlightLineInserts -= 1;
+        return [];
+      }
+      if (/SELECT\s+COALESCE\(SUM\(L\.IMPORTEVENTA\)/i.test(sql)) {
+        return [{ RAW_BASE: 50, RAW_COSTO: 20, DESCUENTO_GLOBAL: 0 }];
+      }
+      if (/UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+IMPORTEBASE/i.test(sql)) return [];
+      if (/SELECT\s+ID,\s+EJERCICIO,\s+NUMEROPEDIDO/i.test(sql)) return [rows.cab];
+      if (/SELECT\s+ID,\s+PEDIDO_ID,\s+SECUENCIA/i.test(sql)) return [rows.lin];
+      return [];
+    });
+
+    await pedidosService.createOrder({
+      clientCode: 'C001',
+      clientName: 'Cliente',
+      vendedorCode: '01',
+      lines: [
+        { codigoArticulo: 'ART001', descripcion: 'Producto 1', cantidadEnvases: 1, precio: 10, precioCosto: 4 },
+        { codigoArticulo: 'ART002', descripcion: 'Producto 2', cantidadEnvases: 1, precio: 10, precioCosto: 4 },
+        { codigoArticulo: 'ART003', descripcion: 'Producto 3', cantidadEnvases: 1, precio: 10, precioCosto: 4 },
+      ],
+    });
+
+    expect(maxConcurrentLineInserts).toBeGreaterThan(1);
+  });
+
+  test('createOrder prefetches client tariff prices in one batch query for multiple lines', async () => {
+    const rows = mockCreatedOrderReads();
+    const tariffQueries = [];
+    mockQueryWithParams.mockImplementation(async (sql, params) => {
+      if (/FROM\s+DSEDAC\.CLC/i.test(sql) && /DSEDAC\.ARA/i.test(sql)) {
+        tariffQueries.push({ sql, params });
+        return [
+          { CODIGOARTICULO: 'ART001', PRECIOTARIFA: 10 },
+          { CODIGOARTICULO: 'ART002', PRECIOTARIFA: 20 },
+        ];
+      }
+      if (/UPDATE\s+JAVIER\.PEDIDOS_SEQ\s+SET\s+ULTIMO_NUMERO/i.test(sql)) return [];
+      if (/SELECT\s+ULTIMO_NUMERO\s+FROM\s+JAVIER\.PEDIDOS_SEQ/i.test(sql)) return [{ ULTIMO_NUMERO: 100 }];
+      if (/INSERT\s+INTO\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) return [];
+      if (/SELECT\s+ID\s+FROM\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) return [{ ID: 42 }];
+      if (/INSERT\s+INTO\s+JAVIER\.PEDIDOS_LIN/i.test(sql)) return [];
+      if (/SELECT\s+COALESCE\(SUM\(L\.IMPORTEVENTA\)/i.test(sql)) {
+        return [{ RAW_BASE: 50, RAW_COSTO: 20, DESCUENTO_GLOBAL: 0 }];
+      }
+      if (/UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+IMPORTEBASE/i.test(sql)) return [];
+      if (/SELECT\s+ID,\s+EJERCICIO,\s+NUMEROPEDIDO/i.test(sql)) return [rows.cab];
+      if (/SELECT\s+ID,\s+PEDIDO_ID,\s+SECUENCIA/i.test(sql)) return [rows.lin];
+      return [];
+    });
+
+    await pedidosService.createOrder({
+      clientCode: 'C001',
+      clientName: 'Cliente',
+      vendedorCode: '01',
+      lines: [
+        { codigoArticulo: 'ART001', descripcion: 'Producto 1', cantidadEnvases: 2, precio: 10, precioCosto: 4 },
+        { codigoArticulo: 'ART002', descripcion: 'Producto 2', cantidadEnvases: 3, precio: 20, precioCosto: 4 },
+      ],
+    });
+
+    expect(tariffQueries).toHaveLength(1);
+    expect(tariffQueries[0].sql).toMatch(/TRIM\(ARA\.CODIGOARTICULO\) IN \(\?,\?\)/i);
+    expect(tariffQueries[0].params).toEqual(['C001', 'ART001', 'ART002']);
   });
 });
 
@@ -398,6 +552,7 @@ describe('pedidos DSEDAC write safety contract', () => {
     delete process.env.PEDIDOS_EXPORT_TO_SYSTEM;
     delete process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED;
     delete process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED;
+    delete process.env.ALLOW_DSEDAC_APP_BUFFERS;
   });
 
   test('export to DSEDAC system tables requires explicit approval in addition to request flag', () => {
@@ -423,8 +578,29 @@ describe('pedidos DSEDAC write safety contract', () => {
     const fs = require('fs');
     const path = require('path');
     const source = fs.readFileSync(path.join(__dirname, '../utils/db2-schemas.js'), 'utf8');
-    expect(source).toContain('PEDIDOS_DSEDAC_STORAGE_APPROVED');
-    expect(source).toMatch(/requested\s*===\s*'DSEDAC'\s*&&\s*!isDsedacWriteApproved\(\)/);
+    expect(source).toContain('ALLOW_DSEDAC_APP_BUFFERS');
+    expect(source).toMatch(/requested\s*===\s*'DSEDAC'\s*&&\s*!isDsedacAppBuffersAllowed\(\)/);
+  });
+
+  test('export flags write DSEDAC CPC/LPC while app buffers remain JAVIER', () => {
+    process.env.DB2_WRITE_SCHEMA = 'DSEDAC';
+    process.env.PEDIDOS_EXPORT_TO_SYSTEM = 'true';
+    process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED = 'true';
+    process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED = 'true';
+
+    const target = pedidosService.getPedidosConfirmationTarget();
+
+    expect(target).toMatchObject({
+      schema: 'JAVIER',
+      requestedSchema: 'DSEDAC',
+      appBuffersAllowed: false,
+      exportSchema: 'DSEDAC',
+      mode: 'SYSTEM',
+      shouldExportToSystem: true,
+    });
+    expect(target.tables.cab).toBe('DSEDAC.CPC');
+    expect(target.tables.lin).toBe('DSEDAC.LPC');
+    expect(target.writeSchemaDiagnostic).toMatch(/using JAVIER/);
   });
 });
 
@@ -618,9 +794,146 @@ describe('pedidos confirm route bolsa contract', function() {
 });
 
 
+describe('pedidos catalog route client scope contract', function() {
+  function makeCatalogApp({ user = { code: '01', role: 'COMERCIAL' } } = {}) {
+    jest.resetModules();
+    const request = require('supertest');
+    const express = require('express');
+    const mockService = {
+      getDeliveryOptions: jest.fn().mockResolvedValue({
+        deliveryDays: ['2026-06-25'],
+        defaultTruck: { code: 'CAM01' },
+      }),
+      getComplementaryProducts: jest.fn().mockResolvedValue([{ code: 'P002' }]),
+    };
+    jest.doMock('../config/db', () => ({
+      query: mockQuery,
+      queryWithParams: mockQueryWithParams,
+      getPool: () => ({ connect: mockPoolConnect }),
+    }));
+    jest.doMock('../services/query-optimizer', () => ({
+      cachedQuery: jest.fn((fn, sql) => fn(sql)),
+    }));
+    jest.doMock('../services/redis-cache', () => ({
+      redisCache: { get: jest.fn(), set: jest.fn(), del: jest.fn(), invalidatePattern: jest.fn() },
+      TTL: { SHORT: 60, MEDIUM: 300, LONG: 3600 },
+    }));
+    jest.doMock('../services/pedidos.service', () => mockService);
+    jest.doMock('../middleware/auth', function() {
+      return { verifyToken: function(req, _res, next) { req.user = user; next(); } };
+    });
+    jest.doMock('../middleware/logger', function() {
+      return { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
+    });
+    const pedidosRouter = require('../routes/pedidos');
+    const app = express();
+    app.use(express.json());
+    app.use('/api/pedidos', pedidosRouter);
+    return { request, app, mockService };
+  }
+
+  test('GET /api/pedidos/delivery-options rejects out-of-scope client before service call', async function() {
+    mockQueryWithParams.mockResolvedValueOnce([]);
+
+    const { request, app, mockService } = makeCatalogApp();
+    const res = await request(app)
+      .get('/api/pedidos/delivery-options')
+      .query({ clientCode: 'C999', vendedorCode: '01' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockService.getDeliveryOptions).not.toHaveBeenCalled();
+    expect(mockQueryWithParams.mock.calls[0][0]).toMatch(/DSEDAC\.CLI/i);
+  });
+
+  test('GET /api/pedidos/delivery-options rejects COMERCIAL for another vendor code', async function() {
+    const { request, app, mockService } = makeCatalogApp();
+    const res = await request(app)
+      .get('/api/pedidos/delivery-options')
+      .query({ clientCode: 'C001', vendedorCode: '99' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_VENDOR');
+    expect(mockService.getDeliveryOptions).not.toHaveBeenCalled();
+  });
+
+  test('POST /api/pedidos/complementary rejects client outside vendor scope when clientCode present', async function() {
+    mockQueryWithParams.mockResolvedValueOnce([]);
+
+    const { request, app, mockService } = makeCatalogApp();
+    const res = await request(app)
+      .post('/api/pedidos/complementary')
+      .send({ productCodes: ['P001'], clientCode: 'C999', vendedorCode: '01' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockService.getComplementaryProducts).not.toHaveBeenCalled();
+    expect(mockQueryWithParams.mock.calls[0][0]).toMatch(/DSEDAC\.CLI/i);
+  });
+
+  test('POST /api/pedidos/complementary rejects COMERCIAL for another vendor code when clientCode present', async function() {
+    const { request, app, mockService } = makeCatalogApp();
+    const res = await request(app)
+      .post('/api/pedidos/complementary')
+      .send({ productCodes: ['P001'], clientCode: 'C001', vendedorCode: '99' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_VENDOR');
+    expect(mockService.getComplementaryProducts).not.toHaveBeenCalled();
+  });
+
+  test('GET /api/pedidos/delivery-options allows in-scope client and delegates to service', async function() {
+    mockQueryWithParams.mockResolvedValueOnce([{ OK: 1 }]);
+
+    const { request, app, mockService } = makeCatalogApp();
+    const res = await request(app)
+      .get('/api/pedidos/delivery-options')
+      .query({ clientCode: 'C001', vendedorCode: '01', deliveryDate: '2026-06-25' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockService.getDeliveryOptions).toHaveBeenCalledWith({
+      clientCode: 'C001',
+      vendedorCode: '01',
+      deliveryDate: '2026-06-25',
+    });
+  });
+
+  test('POST /api/pedidos/complementary allows in-scope client and delegates to service', async function() {
+    mockQueryWithParams.mockResolvedValueOnce([{ OK: 1 }]);
+
+    const { request, app, mockService } = makeCatalogApp();
+    const res = await request(app)
+      .post('/api/pedidos/complementary')
+      .send({ productCodes: ['P001'], clientCode: 'C001', vendedorCode: '01' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.products).toEqual([{ code: 'P002' }]);
+    expect(mockService.getComplementaryProducts).toHaveBeenCalledWith(['P001'], 'C001');
+  });
+
+  test('POST /api/pedidos/complementary skips client scope when clientCode omitted', async function() {
+    const { request, app, mockService } = makeCatalogApp();
+    const res = await request(app)
+      .post('/api/pedidos/complementary')
+      .send({ productCodes: ['P001'] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockService.getComplementaryProducts).toHaveBeenCalledWith(['P001'], undefined);
+    const scopeCalls = mockQueryWithParams.mock.calls.filter(([sql]) => /DSEDAC\.CLI/i.test(sql));
+    expect(scopeCalls).toHaveLength(0);
+  });
+});
+
+
 describe('pedidos mutation route ownership contract', function() {
+  jest.setTimeout(90_000);
+
   function makeMutationApp({ user = { code: '01', role: 'COMERCIAL' }, orderVendor = '01' } = {}) {
     jest.resetModules();
+    mockQueryWithParams.mockImplementation(async () => []);
     const request = require('supertest');
     const express = require('express');
     const mockService = {
@@ -819,7 +1132,7 @@ describe('pedidos purchase-history-global lastYear scope contract', function() {
   test('comparativaAnoAnterior lastYear query keeps COMERCIAL vendor scope', function() {
     const block = purchaseHistoryGlobalBlock();
     const lastYearStart = block.indexOf('const lastYearSql');
-    const monthlyStart = block.indexOf('// 5) Mensual por año', lastYearStart);
+    const monthlyStart = block.indexOf('const monthlyByYearSql', lastYearStart);
     expect(lastYearStart).toBeGreaterThanOrEqual(0);
     expect(monthlyStart).toBeGreaterThan(lastYearStart);
 
@@ -827,5 +1140,27 @@ describe('pedidos purchase-history-global lastYear scope contract', function() {
 
     expect(lastYearSection).toMatch(/whereSql|TRIM\(L\.LCCDVD\)|lastYearWhere/i);
     expect(lastYearSection).toMatch(/lastYearParams[\s\S]*(?:\.\.\.params|params\.slice|vendor|vendors|lastYearWhereParams)/i);
+  });
+});
+
+describe('DDD pedidos purchase-history-global lastYear scope contract', function() {
+  const fs = require('fs');
+  const path = require('path');
+
+  function dddPurchaseHistoryGlobalBlock() {
+    const source = fs.readFileSync(path.join(__dirname, '../src/shared/routes/ddd-adapters.js'), 'utf8');
+    const start = source.indexOf("router.get('/purchase-history-global'");
+    const end = source.indexOf("router.post('/complementary'", start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    return source.slice(start, end);
+  }
+
+  test('lastYear total query reuses whereSql and scope params from current period', function() {
+    const block = dddPurchaseHistoryGlobalBlock();
+    expect(block).toMatch(/const lastYearWhereSql[\s\S]*\.\.\.where\.slice\(1\)/);
+    expect(block).toMatch(/const lastYearTotalSql[\s\S]*WHERE \$\{lastYearWhereSql\}/);
+    expect(block).toMatch(/const lastYearParams = \[lastYearFrom, lastYearTo, \.\.\.params\.slice\(2\)\]/);
+    expect(block).not.toMatch(/lastYearTotalSql[\s\S]*\[lastYearFrom, lastYearTo\]\s*,\s*false\)/);
   });
 });

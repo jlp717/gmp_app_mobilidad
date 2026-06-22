@@ -31,7 +31,13 @@
 
 const { queryWithParams } = require('../config/db');
 const logger = require('../middleware/logger');
-const { getDb2WriteSchema, getDb2WriteSchemaRequested, isDsedacWriteApproved } = require('../utils/db2-schemas');
+const {
+  getDb2WriteSchema,
+  getDb2WriteSchemaRequested,
+  getDb2WriteSchemaDiagnostic,
+  isDsedacWriteApproved,
+  isDsedacAppBuffersAllowed,
+} = require('../utils/db2-schemas');
 
 const CRC_EXISTING_BY_TOKEN_SQL = 'SELECT 1 FROM DSEDAC.CRC WHERE IDMARCALIQUIDACION = ? FETCH FIRST 1 ROW ONLY';
 const CRC_NEXT_NUMERO_SQL = 'SELECT COALESCE(NUMERORECIBO, 0) AS N FROM DSEDAC.CRC WHERE SUBEMPRESARECIBO = ? AND EJERCICIORECIBO = ? ORDER BY NUMERORECIBO DESC FETCH FIRST 1 ROW ONLY';
@@ -88,13 +94,19 @@ function exportGate() {
   const effectiveSchema = getDb2WriteSchema();
   const requestedSchema = getDb2WriteSchemaRequested();
   const storageApproved = isDsedacWriteApproved();
-  const exportEnabled = String(process.env.PEDIDOS_EXPORT_TO_SYSTEM || 'false').toLowerCase() === 'true';
-  const exportApproved = String(process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED || 'false').toLowerCase() === 'true';
+  const exportEnabled = String(process.env.PEDIDOS_EXPORT_TO_SYSTEM || 'false').trim().toLowerCase() === 'true';
+  const exportApproved = String(process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED || 'false').trim().toLowerCase() === 'true';
+  // ponytail: flag-gated export only. upgrade: extra gates if ERP policy needs write-schema coupling.
+  // Export to DSEDAC.CRC/CLV/CAC is independent of local write schema (JAVIER.COBROS, etc.).
+  const enabled = storageApproved && exportEnabled && exportApproved;
   return {
-    enabled: effectiveSchema === 'DSEDAC' && requestedSchema === 'DSEDAC' && storageApproved && exportEnabled && exportApproved,
+    enabled: storageApproved && exportEnabled && exportApproved,
     effectiveSchema,
     requestedSchema,
+    exportSchema: 'DSEDAC',
     storageApproved,
+    appBuffersAllowed: isDsedacAppBuffersAllowed(),
+    writeSchemaDiagnostic: getDb2WriteSchemaDiagnostic(),
     exportEnabled,
     exportApproved,
   };
@@ -119,7 +131,7 @@ function logSkip(tag, reason) {
  */
 async function exportCobroToSystem(cobroRow) {
   if (!isEnabled()) {
-    logSkip('exportCobroToSystem', 'export disabled, approval missing, effective schema!=DSEDAC, or requested schema!=DSEDAC');
+    logSkip('exportCobroToSystem', 'export disabled or approval missing');
     return { exported: false, reason: 'disabled' };
   }
   if (!cobroRow || !cobroRow.IDEMPOTENCY_TOKEN) {
@@ -178,7 +190,7 @@ async function exportCobroToSystem(cobroRow) {
 
 async function exportLiquidacionToSystem(liquidacionRow) {
   if (!isEnabled()) {
-    logSkip('exportLiquidacionToSystem', 'export disabled, approval missing, effective schema!=DSEDAC, or requested schema!=DSEDAC');
+    logSkip('exportLiquidacionToSystem', 'export disabled or approval flags missing');
     return { exported: false, reason: 'disabled' };
   }
   if (!liquidacionRow || !liquidacionRow.IDEMPOTENCY_TOKEN) {
@@ -245,7 +257,7 @@ async function exportLiquidacionToSystem(liquidacionRow) {
 
 async function exportEntregaToSystem(entregaHeader, entregaLineas = []) {
   if (!isEnabled()) {
-    logSkip('exportEntregaToSystem', 'export disabled, approval missing, effective schema!=DSEDAC, or requested schema!=DSEDAC');
+    logSkip('exportEntregaToSystem', 'export disabled or approval flags missing');
     return { exported: false, reason: 'disabled' };
   }
   if (!entregaHeader || !entregaHeader.IDEMPOTENCY_TOKEN) {

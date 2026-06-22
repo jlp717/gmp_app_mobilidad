@@ -101,7 +101,8 @@ async function withBolsaTransaction(callback) {
         if (pool && typeof pool.connect === 'function') {
             const conn = await pool.connect();
             try {
-                await conn.query('BEGIN WORK');
+                // IBM i ODBC rejects BEGIN WORK (-104); mirror pedidos export transaction pattern.
+                await conn.query('SET TRANSACTION ISOLATION LEVEL READ COMMITTED');
                 await conn.query(LOCK_BOLSA_COMERCIAL_SQL);
                 await conn.query(LOCK_MOVIMIENTOS_BOLSA_SQL);
                 const result = await callback((sql, params) => runQuery(conn.query.bind(conn), sql, params));
@@ -296,6 +297,13 @@ async function consumirBolsa(vendedorCode, pedidoId, importeConsumo, codigoArtic
 
 // -- Validate order lines against bolsa -------------------------------
 
+function toDb2Timestamp(value) {
+    const date = value instanceof Date ? value : new Date(value || Date.now());
+    if (Number.isNaN(date.getTime())) return toDb2Timestamp(new Date());
+    const pad = (n, w = 2) => String(n).padStart(w, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}.${pad(date.getMilliseconds(), 3)}`;
+}
+
 function toMoney(value) {
     const n = Number.parseFloat(value) || 0;
     return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -342,7 +350,7 @@ function normalizeBolsaMovements(input, tipo, totalImporte, legacyValue, pedidoI
         const amount = movement.importe === undefined || movement.importe === null ? (source.length === 1 ? totalImporte : 0) : movement.importe;
         return {
             importe: toMoney(amount),
-            timestamp: movement.timestamp || new Date().toISOString(),
+            timestamp: toDb2Timestamp(movement.timestamp || new Date()),
             lineId: movement.lineId ?? null,
             codigoArticulo: String(movement.codigoArticulo || (typeof legacyValue === 'string' && tipo === 'CONSUMO' ? legacyValue : '')).trim(),
             descripcion: String(movement.descripcion || (typeof legacyValue === 'string' && tipo === 'ACUMULACION' ? legacyValue : '')).trim(),
@@ -386,19 +394,33 @@ function insertBolsaMovements(tipo, movements, bolsaId, vendedorCode, pedidoId, 
     for (const movement of movements) {
         const saldoAnterior = runningSaldo;
         runningSaldo = tipo === 'CONSUMO' ? toMoney(runningSaldo - movement.importe) : toMoney(runningSaldo + movement.importe);
-        params.push(bolsaId, movement.timestamp, String(vendedorCode || '').trim(), pedidoId, movement.lineId, tipo, movement.importe, saldoAnterior, runningSaldo, movement.codigoArticulo, movement.descripcion, movement.precioMinimoCongelado, movement.precioVenta, movement.cantidad, movement.unidadMedida, movement.idempotencyKey);
+        params.push(bolsaId, toDb2Timestamp(movement.timestamp), String(vendedorCode || '').trim(), pedidoId, movement.lineId, tipo, movement.importe, saldoAnterior, runningSaldo, movement.codigoArticulo, movement.descripcion, movement.precioMinimoCongelado, movement.precioVenta, movement.cantidad, movement.unidadMedida, movement.idempotencyKey);
     }
     if (Math.abs(runningSaldo - toMoney(saldoFinal)) > 0.01) throw new Error('Saldo posterior de movimientos ' + tipo + ' no cuadra con bolsa');
     return runQuery(queryFn, sql, params);
 }
 
-function buildBolsaLineMovement(line, tipo, importe) {
+function resolveBolsaReferencePrice(line) {
+    const clientTariff = Number.parseFloat(line.precioTarifaCliente ?? line.PRECIOTARIFACLIENTE) || 0;
+    const catalogTariff = Number.parseFloat(line.precioTarifa ?? line.PRECIOTARIFA) || 0;
+    const legacyMin = Number.parseFloat(line.precioMinimo ?? line.PRECIOMINIMO) || 0;
+    if (clientTariff > 0) return clientTariff;
+    if (catalogTariff > 0) return catalogTariff;
+    return legacyMin;
+}
+
+function resolveConfiguredMinFloor(line) {
+    return Number.parseFloat(line.precioMinimo ?? line.PRECIOMINIMO) || 0;
+}
+
+function buildBolsaLineMovement(line, tipo, importe, referenceTariff) {
+    const ref = referenceTariff ?? resolveBolsaReferencePrice(line);
     return {
         tipo,
         importe: toMoney(importe),
         codigoArticulo: String(line.codigoArticulo ?? line.CODIGOARTICULO ?? '').trim(),
         lineId: line.lineId ?? line.ID ?? null,
-        precioMinimoCongelado: Number.parseFloat(line.precioMinimo ?? line.PRECIOMINIMO) || 0,
+        precioMinimoCongelado: ref,
         precioVenta: Number.parseFloat(line.precioVenta ?? line.PRECIOVENTA) || 0,
         cantidad: getLineQuantity(line),
         unidadMedida: String(line.unidadMedida ?? line.UNIDADMEDIDA ?? '').trim(),
@@ -418,20 +440,40 @@ async function validateOrderWithBolsa(vendedorCode, lines) {
     const lineMovements = [];
 
     for (const line of lines || []) {
-        const precioMinimo = Number.parseFloat(line.precioMinimo ?? line.PRECIOMINIMO) || 0;
+        const referenceTariff = resolveBolsaReferencePrice(line);
+        const configuredMin = resolveConfiguredMinFloor(line);
         const precioVenta = Number.parseFloat(line.precioVenta ?? line.PRECIOVENTA) || 0;
         const qty = getLineQuantity(line);
-        if (precioMinimo <= 0 || qty <= 0) continue;
-        if (precioVenta < precioMinimo) {
-            const diff = toMoney((precioMinimo - precioVenta) * qty);
+        if (referenceTariff <= 0 || qty <= 0) continue;
+
+        const belowClientTariff = referenceTariff > 0 && precioVenta + 0.0001 < referenceTariff;
+        if (configuredMin > 0 && precioVenta + 0.0001 < configuredMin && !belowClientTariff) {
+            return {
+                valid: false,
+                reason: 'PRECIO_DEBAJO_MINIMO',
+                code: line.CODIGOARTICULO || line.codigoArticulo,
+                precioVenta,
+                precioMinimo: configuredMin,
+                precioTarifa: referenceTariff,
+                message: `Precio ${precioVenta} por debajo del minimo configurado ${configuredMin}`,
+                consumo: totalConsumo,
+                acumulacion: totalAcumulacion,
+                saldo: saldoDisponible,
+                warnings,
+                lineMovements,
+            };
+        }
+
+        if (precioVenta + 0.0001 < referenceTariff) {
+            const diff = toMoney((referenceTariff - precioVenta) * qty);
             totalConsumo = toMoney(totalConsumo + diff);
-            const movement = buildBolsaLineMovement(line, 'CONSUMO', diff);
+            const movement = buildBolsaLineMovement(line, 'CONSUMO', diff, referenceTariff);
             lineMovements.push(movement);
             warnings.push({ code: movement.codigoArticulo, deficit: diff });
-        } else if (precioVenta > precioMinimo) {
-            const diff = toMoney((precioVenta - precioMinimo) * qty);
+        } else if (precioVenta > referenceTariff + 0.0001) {
+            const diff = toMoney((precioVenta - referenceTariff) * qty);
             totalAcumulacion = toMoney(totalAcumulacion + diff);
-            lineMovements.push(buildBolsaLineMovement(line, 'ACUMULACION', diff));
+            lineMovements.push(buildBolsaLineMovement(line, 'ACUMULACION', diff, referenceTariff));
         }
     }
 
@@ -618,6 +660,9 @@ module.exports = {
     acumularBolsa,
     consumirBolsa,
     validateOrderWithBolsa,
+    resolveBolsaReferencePrice,
+    resolveConfiguredMinFloor,
+    toDb2Timestamp,
     getMovimientos,
     getHistorialMensual,
     updateBolsaConfig,
