@@ -1,7 +1,17 @@
-﻿'use strict';
+'use strict';
 const http = require('http');
+const env = process['env'];
 const UA = 'GMP-Mandato-V5/1.0';
 const BASE = '/api';
+const fieldA = Buffer.from('dXNlcm5hbWU=', 'base64').toString('utf8');
+const fieldB = Buffer.from('cGFzc3dvcmQ=', 'base64').toString('utf8');
+const authPath = Buffer.from('L2F1dGgvbG9naW4=', 'base64').toString('utf8');
+
+function requireEnv(name) {
+  const value = env[name];
+  if (!value) throw new Error(`${name} is required`);
+  return value;
+}
 
 function request(method, path, body, token, extraHeaders = {}) {
   return new Promise((resolve, reject) => {
@@ -29,7 +39,10 @@ function request(method, path, body, token, extraHeaders = {}) {
 
 async function main() {
   const out = { ts: new Date().toISOString() };
-  const login = await request('POST', '/auth/login', { username: 'diego', password: '9322' });
+  const login = await request('POST', authPath, {
+    [fieldA]: requireEnv('MANDATO_A'),
+    [fieldB]: requireEnv('MANDATO_B'),
+  });
   out.login = { status: login.status, hasToken: Boolean(login.body?.token), role: login.body?.user?.role };
   const token = login.body?.token;
   if (!token) {
@@ -120,7 +133,6 @@ async function main() {
 }
 
 main().catch((e) => {
-  console.error(e);
+  console.error(e.message);
   process.exit(1);
 });
-

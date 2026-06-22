@@ -5,6 +5,12 @@ const { WarehouseRepository } = require('../domain/warehouse-repository');
 const { WarehouseStock, WarehouseMovement } = require('../domain/warehouse');
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 
+function clampInt(value, defaultValue, min, max) {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n)) return defaultValue;
+  return Math.min(Math.max(n, min), max);
+}
+
 class Db2WarehouseRepository extends WarehouseRepository {
   constructor(dbPool) {
     super();
@@ -94,7 +100,9 @@ class Db2WarehouseRepository extends WarehouseRepository {
     }));
   }
 
-  async getLowStock(threshold = 10) {
+  async getLowStock(threshold = 10, limit = 100, offset = 0) {
+    const safeLimit = clampInt(limit, 100, 1, 500);
+    const safeOffset = Math.max(parseInt(offset, 10) || 0, 0);
     const sql = `
       SELECT 
         ARO.CODIGOARTICULO AS CODIGO,
@@ -107,10 +115,11 @@ class Db2WarehouseRepository extends WarehouseRepository {
       WHERE COALESCE(ARO.UNIDADESDISPONIBLES, 0) <= ?
         AND ART.ANOBAJA IS NULL
         AND ART.BLOQUEADOSN = 'N'
-      ORDER BY STOCK ASC
+      ORDER BY STOCK ASC, ART.DESCRIPCIONARTICULO ASC, ARO.CODIGOARTICULO ASC, ARO.CODIGOALMACEN ASC
+      FETCH FIRST ? ROWS ONLY OFFSET ? ROWS
     `;
 
-    const result = await this._db.executeParams(sql, [threshold]);
+    const result = await this._db.executeParams(sql, [threshold, safeLimit, safeOffset]);
     return (result || []).map(row => WarehouseStock.fromDbRow(row));
   }
 

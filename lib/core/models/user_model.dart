@@ -54,6 +54,7 @@ class UserModel extends Equatable {
     switch (role.toUpperCase()) {
       case 'JEFE':
       case 'JEFE_VENTAS':
+      case 'GERENTE':
       case 'ADMIN':
         return UserRole.jefe;
       case 'REPARTIDOR':

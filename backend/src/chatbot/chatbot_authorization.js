@@ -22,6 +22,8 @@ function isSupervisor(userContext = {}) {
   return (
     Boolean(userContext.isJefeVentas) ||
     role === "JEFE_VENTAS" ||
+    role === "JEFE" ||
+    role === "GERENTE" ||
     role === "ADMIN"
   );
 }
@@ -133,12 +135,17 @@ function buildAuthorizationSafeResponse(code) {
 }
 function createChatbotUserContext(user = {}) {
   const role = normalizeCode(user.role || user.rol);
+  const supervisorRole =
+    role === "JEFE_VENTAS" ||
+    role === "JEFE" ||
+    role === "GERENTE" ||
+    role === "ADMIN";
   return {
     userCode: normalizeCode(
       user.code || user.userCode || user.vendedor || user.CODIGOVENDEDOR,
     ),
     role,
-    isJefeVentas: Boolean(user.isJefeVentas) || role === "JEFE_VENTAS",
+    isJefeVentas: Boolean(user.isJefeVentas) || supervisorRole,
   };
 }
 module.exports = {

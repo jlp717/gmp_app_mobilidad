@@ -9,6 +9,10 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
 import 'package:gmp_app_mobilidad/core/offline/offline_aware_api.dart';
 
+void _debugLog(String message) {
+  if (kDebugMode) debugPrint(message);
+}
+
 // ─── MODELS ──────────────────────────────────────────────────
 
 /// Product in catalog list
@@ -727,6 +731,13 @@ class PromotionItem {
   String get giftLabel => minQty > 0 && giftQty > 0
       ? '${minQty.toInt()}+${giftQty.toInt()} gratis'
       : promoDesc;
+
+  /// Regalo fijado por promoción: no se puede elegir otro artículo.
+  bool get hasFixedGiftProduct =>
+      isGift &&
+      (noGiftBought ||
+          productCode.isNotEmpty ||
+          (code.isNotEmpty && !noGiftBought));
 }
 
 /// Full product detail
@@ -1152,6 +1163,8 @@ class OrderSummary {
     this.saldoPendiente,
     this.importeVencido,
     this.deudaEstado = '',
+    this.bolsaGenerada,
+    this.bolsaNeto = 0,
   });
 
   factory OrderSummary.fromJson(Map<String, dynamic> json) {
@@ -1207,8 +1220,40 @@ class OrderSummary {
               '')
           .toString()
           .trim(),
+      bolsaGenerada: _parseBolsaGenerada(json),
+      bolsaNeto: _parseBolsaNeto(json),
     );
   }
+
+  static bool? _parseBolsaGenerada(Map<String, dynamic> json) {
+    if (json['bolsaGenerada'] == true) return true;
+    if (json['bolsaGenerada'] == false) return false;
+    final summary = json['bolsaSummary'];
+    if (summary is Map) {
+      final impact = OrderBolsaImpact.fromJson(
+        Map<String, dynamic>.from(summary),
+      );
+      if (impact.hasImpact) return true;
+      if (impact.movementCount == 0 &&
+          !impact.hasImpact &&
+          summary['hasImpact'] == false) {
+        return false;
+      }
+    }
+    return null;
+  }
+
+  static double _parseBolsaNeto(Map<String, dynamic> json) {
+    if (json['bolsaNeto'] != null) {
+      return _toDouble(json['bolsaNeto']);
+    }
+    final summary = json['bolsaSummary'];
+    if (summary is Map) {
+      return _toDouble(summary['neto']);
+    }
+    return 0;
+  }
+
   final int id;
   final int numeroPedido;
   final String clienteCode;
@@ -1242,6 +1287,10 @@ class OrderSummary {
   final double? saldoPendiente;
   final double? importeVencido;
   final String deudaEstado;
+
+  /// null = desconocido en listado (ver detalle); true/false cuando API lo envía.
+  final bool? bolsaGenerada;
+  final double bolsaNeto;
 }
 
 /// Delivery date + provisional truck options before confirming an order.
@@ -1625,7 +1674,7 @@ class PedidosService {
           .map((p) => Product.fromJson(p as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      debugPrint('[PedidosService] Error getProducts: $e');
+      _debugLog('[PedidosService] Error getProducts: $e');
       rethrow;
     }
   }
@@ -1650,7 +1699,7 @@ class PedidosService {
       );
       final detail = ProductDetail.fromJson(response);
       // Debug: trace if critical fields arrive as zeros
-      debugPrint(
+      _debugLog(
         '[PedidosService] getProductDetail($trimmedCode): '
         'stockEnvases=${detail.product.stockEnvases} '
         'stockUnidades=${detail.product.stockUnidades} '
@@ -1662,7 +1711,7 @@ class PedidosService {
       );
       return detail;
     } catch (e) {
-      debugPrint('[PedidosService] Error getProductDetail: $e');
+      _debugLog('[PedidosService] Error getProductDetail: $e');
       rethrow;
     }
   }
@@ -1680,7 +1729,7 @@ class PedidosService {
         'unidades': _toDouble(stock['unidades']),
       };
     } catch (e) {
-      debugPrint('[PedidosService] Error getStock: $e');
+      _debugLog('[PedidosService] Error getStock: $e');
       rethrow;
     }
   }
@@ -1711,7 +1760,7 @@ class PedidosService {
         });
       });
     } catch (e) {
-      debugPrint('[PedidosService] Error getStockBatch: $e');
+      _debugLog('[PedidosService] Error getStockBatch: $e');
       rethrow;
     }
   }
@@ -1727,7 +1776,7 @@ class PedidosService {
           .map((f) => f.toString())
           .toList();
     } catch (e) {
-      debugPrint('[PedidosService] Error getFamilies: $e');
+      _debugLog('[PedidosService] Error getFamilies: $e');
       return [];
     }
   }
@@ -1743,7 +1792,7 @@ class PedidosService {
           .map((b) => b.toString())
           .toList();
     } catch (e) {
-      debugPrint('[PedidosService] Error getBrands: $e');
+      _debugLog('[PedidosService] Error getBrands: $e');
       return [];
     }
   }
@@ -1784,7 +1833,7 @@ class PedidosService {
       CacheService.invalidateByPrefix('pedidos:orders:');
       return _normalizeOrderResponse(response);
     } catch (e) {
-      debugPrint('[PedidosService] Error createOrder: $e');
+      _debugLog('[PedidosService] Error createOrder: $e');
       rethrow;
     }
   }
@@ -1849,7 +1898,7 @@ class PedidosService {
           .map((o) => OrderSummary.fromJson(o as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      debugPrint('[PedidosService] Error getOrders: $e');
+      _debugLog('[PedidosService] Error getOrders: $e');
       rethrow;
     }
   }
@@ -1875,7 +1924,7 @@ class PedidosService {
       );
       return OrderStats.fromJson(response['stats'] as Map<String, dynamic>);
     } catch (e) {
-      debugPrint('[PedidosService] Error getOrderStats: $e');
+      _debugLog('[PedidosService] Error getOrderStats: $e');
       rethrow;
     }
   }
@@ -1904,7 +1953,7 @@ class PedidosService {
       final raw = response['options'] as Map? ?? {};
       return OrderDeliveryOptions.fromJson(Map<String, dynamic>.from(raw));
     } catch (e) {
-      debugPrint('[PedidosService] Error getDeliveryOptions: $e');
+      _debugLog('[PedidosService] Error getDeliveryOptions: $e');
       rethrow;
     }
   }
@@ -1920,7 +1969,7 @@ class PedidosService {
           .map((v) => Map<String, dynamic>.from(v as Map))
           .toList();
     } catch (e) {
-      debugPrint('[PedidosService] Error getAvailableVehicles: $e');
+      _debugLog('[PedidosService] Error getAvailableVehicles: $e');
       return [];
     }
   }
@@ -1936,7 +1985,7 @@ class PedidosService {
           .map((a) => Map<String, dynamic>.from(a as Map))
           .toList();
     } catch (e) {
-      debugPrint('[PedidosService] Error getOrderAlbaran: $e');
+      _debugLog('[PedidosService] Error getOrderAlbaran: $e');
       return [];
     }
   }
@@ -1950,7 +1999,7 @@ class PedidosService {
       );
       return OrderDetail.fromJson(response['order'] as Map<String, dynamic>);
     } catch (e) {
-      debugPrint('[PedidosService] Error getOrderDetail: $e');
+      _debugLog('[PedidosService] Error getOrderDetail: $e');
       rethrow;
     }
   }
@@ -1965,7 +2014,7 @@ class PedidosService {
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
     } catch (e) {
-      debugPrint('[PedidosService] Error addLine: $e');
+      _debugLog('[PedidosService] Error addLine: $e');
       rethrow;
     }
   }
@@ -1984,7 +2033,7 @@ class PedidosService {
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
     } catch (e) {
-      debugPrint('[PedidosService] Error updateLine: $e');
+      _debugLog('[PedidosService] Error updateLine: $e');
       rethrow;
     }
   }
@@ -1998,7 +2047,7 @@ class PedidosService {
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
     } catch (e) {
-      debugPrint('[PedidosService] Error deleteLine: $e');
+      _debugLog('[PedidosService] Error deleteLine: $e');
       rethrow;
     }
   }
@@ -2039,7 +2088,7 @@ class PedidosService {
       return _normalizeOrderResponse(response);
     } on OfflineException {
       // Offline: return optimistic result (queued)
-      debugPrint('[PedidosService] Order confirm queued for offline sync');
+      _debugLog('[PedidosService] Order confirm queued for offline sync');
       return {
         'blocked': false,
         'queued': true,
@@ -2057,17 +2106,17 @@ class PedidosService {
         };
       }
       if (e.statusCode == 409 && e.message.toLowerCase().contains('stock')) {
-        debugPrint('[PedidosService] Order blocked due to stock: ${e.message}');
+        _debugLog('[PedidosService] Order blocked due to stock: ${e.message}');
         return {
           'blocked': true,
           'message': e.message,
           'statusCode': e.statusCode,
         };
       }
-      debugPrint('[PedidosService] Error confirmOrder: $e');
+      _debugLog('[PedidosService] Error confirmOrder: $e');
       rethrow;
     } catch (e) {
-      debugPrint('[PedidosService] Error confirmOrder: $e');
+      _debugLog('[PedidosService] Error confirmOrder: $e');
       rethrow;
     }
   }
@@ -2081,7 +2130,7 @@ class PedidosService {
       CacheService.invalidate('pedidos:order:$orderId');
       CacheService.invalidateByPrefix('pedidos:orders:');
     } catch (e) {
-      debugPrint('[PedidosService] Error cancelOrder: $e');
+      _debugLog('[PedidosService] Error cancelOrder: $e');
       rethrow;
     }
   }
@@ -2100,7 +2149,7 @@ class PedidosService {
       CacheService.invalidateByPrefix('pedidos:orders:');
       return response;
     } catch (e) {
-      debugPrint('[PedidosService] Error updateOrderStatus: $e');
+      _debugLog('[PedidosService] Error updateOrderStatus: $e');
       rethrow;
     }
   }
@@ -2129,7 +2178,7 @@ class PedidosService {
         'similarClients': similarClients,
       };
     } catch (e) {
-      debugPrint('[PedidosService] Error getRecommendations: $e');
+      _debugLog('[PedidosService] Error getRecommendations: $e');
       return {'clientHistory': [], 'similarClients': []};
     }
   }
@@ -2146,7 +2195,7 @@ class PedidosService {
       );
       return response['balance'] as Map<String, dynamic>? ?? {};
     } catch (e) {
-      debugPrint('[PedidosService] Error getClientBalance: $e');
+      _debugLog('[PedidosService] Error getClientBalance: $e');
       return {
         'balanceStatus': 'error',
         'loadError': true,
@@ -2165,7 +2214,7 @@ class PedidosService {
       );
       return response['order'] as Map<String, dynamic>? ?? {};
     } catch (e) {
-      debugPrint('[PedidosService] Error cloneOrder: $e');
+      _debugLog('[PedidosService] Error cloneOrder: $e');
       rethrow;
     }
   }
@@ -2182,7 +2231,7 @@ class PedidosService {
       });
       return (response['products'] as List? ?? []).cast<Map<String, dynamic>>();
     } catch (e) {
-      debugPrint('[PedidosService] Error getComplementaryProducts: $e');
+      _debugLog('[PedidosService] Error getComplementaryProducts: $e');
       return [];
     }
   }
@@ -2198,7 +2247,7 @@ class PedidosService {
       );
       return response['analytics'] as Map<String, dynamic>? ?? {};
     } catch (e) {
-      debugPrint('[PedidosService] Error getAnalytics: $e');
+      _debugLog('[PedidosService] Error getAnalytics: $e');
       return {};
     }
   }

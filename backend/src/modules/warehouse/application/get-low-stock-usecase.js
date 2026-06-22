@@ -9,8 +9,8 @@ class GetLowStockUseCase extends UseCase {
     this._repository = warehouseRepository;
   }
 
-  async execute({ threshold = 10 }) {
-    const lowStock = await this._repository.getLowStock(threshold);
+  async execute({ threshold = 10, limit = 100, offset = 0 } = {}) {
+    const lowStock = await this._repository.getLowStock(threshold, limit, offset);
 
     return lowStock;
   }

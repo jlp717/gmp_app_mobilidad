@@ -22,13 +22,17 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(find.byType(ChatbotPage), findsOneWidget);
-    expect(find.text('NEXUS AI'), findsOneWidget);
+    expect(find.text('Asistente'), findsWidgets);
     expect(find.text('Asistente Comercial Inteligente'), findsOneWidget);
     expect(find.byIcon(Icons.sync_rounded), findsOneWidget);
     expect(find.text('Navegación'), findsWidgets);
     expect(find.text('Facturas'), findsWidgets);
     expect(find.text('Pedidos'), findsWidgets);
     expect(find.text('Evaluar'), findsWidgets);
+    expect(find.text('Comisiones'), findsWidgets);
+    expect(find.text('Asistente de Ventas'), findsOneWidget);
+    expect(find.textContaining('stock'), findsWidgets);
+    expect(find.textContaining('estrategias comerciales'), findsWidgets);
 
     final input = tester.widget<TextField>(find.byType(TextField));
     expect(input.maxLines, 5);

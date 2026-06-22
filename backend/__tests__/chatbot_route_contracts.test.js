@@ -1,5 +1,5 @@
 /**
- * NEXUS AI chatbot route contracts.
+ * Asistente GMP chatbot route contracts.
  */
 
 'use strict';

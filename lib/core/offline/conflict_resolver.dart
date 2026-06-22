@@ -192,8 +192,12 @@ class ConflictResolver {
       if (entityInfo == null) return null;
 
       // Obtener estado actual del servidor
-      final currentServerData =
-          await ApiClient.get(entityInfo.$1).catchError((_) => null);
+      final Map<String, dynamic> currentServerData;
+      try {
+        currentServerData = await ApiClient.get(entityInfo.$1);
+      } catch (_) {
+        return null;
+      }
 
       if (currentServerData != null) {
         // Comparar con los datos locales que se intentan aplicar
@@ -284,8 +288,12 @@ class ConflictResolver {
 
     try {
       // Intentar obtener el recurso - si no existe, podría ser un conflicto
-      final currentResource =
-          await ApiClient.get(entityInfo.$1).catchError((_) => null);
+      Map<String, dynamic>? currentResource;
+      try {
+        currentResource = await ApiClient.get(entityInfo.$1);
+      } catch (_) {
+        currentResource = null;
+      }
 
       if (currentResource == null) {
         // El recurso ya no existe, probablemente fue eliminado por otro cliente

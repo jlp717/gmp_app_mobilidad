@@ -125,7 +125,7 @@ describe('BolsaComercial Service', () => {
             }]);
 
             const result = await bolsaService.validateOrderWithBolsa('10', [
-                { precioMinimo: 10, precioVenta: 12, cantidadEnvases: 1 }
+                { precioTarifaCliente: 10, precioVenta: 12, cantidadEnvases: 1 }
             ]);
 
             expect(result.valid).toBe(true);
@@ -139,11 +139,78 @@ describe('BolsaComercial Service', () => {
             }]);
 
             const result = await bolsaService.validateOrderWithBolsa('10', [
-                { precioMinimo: 100, precioVenta: 50, cantidadEnvases: 1 }
+                { precioTarifaCliente: 100, precioVenta: 50, cantidadEnvases: 1 }
             ]);
 
             expect(result.valid).toBe(false);
             expect(result.reason).toBe('BOLSA_INSUFICIENTE');
+        });
+
+        test('movement importe equals (precioVenta - precioTarifa) x qty', async () => {
+            mockQuery.mockResolvedValueOnce([{
+                ID: 1, CODIGOVENDEDOR: '10  ', EJERCICIO: 2026, MES: 5,
+                LIMITE_PCT: 3, LIMITE_IMPORTE: 0, SALDO_DISPONIBLE: 100,
+                CONSUMIDO: 0, ACUMULADO: 0
+            }]);
+
+            const result = await bolsaService.validateOrderWithBolsa('10', [
+                { ID: 7, precioTarifaCliente: 10, precioVenta: 13, cantidadEnvases: 2 }
+            ]);
+
+            expect(result.valid).toBe(true);
+            expect(result.lineMovements).toHaveLength(1);
+            expect(result.lineMovements[0].importe).toBe(6);
+            expect(result.lineMovements[0].precioMinimoCongelado).toBe(10);
+        });
+
+        test('allows below-tarifa bolsa consumo even when under configured min floor', async () => {
+            mockQuery.mockResolvedValueOnce([{
+                ID: 1, CODIGOVENDEDOR: '10  ', EJERCICIO: 2026, MES: 5,
+                LIMITE_PCT: 3, LIMITE_IMPORTE: 0, SALDO_DISPONIBLE: 100,
+                CONSUMIDO: 0, ACUMULADO: 0
+            }]);
+
+            const result = await bolsaService.validateOrderWithBolsa('10', [
+                { precioTarifaCliente: 10, precioMinimo: 12, precioVenta: 9, cantidadEnvases: 1 }
+            ]);
+
+            expect(result.valid).toBe(true);
+            expect(result.consumo).toBe(1);
+            expect(result.lineMovements[0].tipo).toBe('CONSUMO');
+        });
+
+        test('blocks sale below configured min floor even with bolsa balance', async () => {
+            mockQuery.mockResolvedValueOnce([{
+                ID: 1, CODIGOVENDEDOR: '10  ', EJERCICIO: 2026, MES: 5,
+                LIMITE_PCT: 3, LIMITE_IMPORTE: 0, SALDO_DISPONIBLE: 1000,
+                CONSUMIDO: 0, ACUMULADO: 0
+            }]);
+
+            const result = await bolsaService.validateOrderWithBolsa('10', [
+                { precioTarifaCliente: 10, precioMinimo: 12, precioVenta: 11, cantidadEnvases: 1 }
+            ]);
+
+            expect(result.valid).toBe(false);
+            expect(result.reason).toBe('PRECIO_DEBAJO_MINIMO');
+        });
+    });
+
+    describe('resolveBolsaReferencePrice', () => {
+        test('prefers client tariff over catalog tariff and legacy min', () => {
+            expect(bolsaService.resolveBolsaReferencePrice({
+                precioTarifaCliente: 8.5,
+                precioTarifa: 9,
+                precioMinimo: 7,
+            })).toBe(8.5);
+        });
+    });
+
+    describe('toDb2Timestamp', () => {
+        test('formats timestamps for DB2 ODBC binding (no ISO T/Z)', () => {
+            const ts = bolsaService.toDb2Timestamp(new Date('2026-06-19T10:15:30.123Z'));
+            expect(ts).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}$/);
+            expect(ts).not.toContain('T');
+            expect(ts).not.toContain('Z');
         });
     });
 
@@ -233,28 +300,28 @@ describe("bolsa comercial business rules", () => {
   beforeEach(() => { jest.resetModules(); q = require("../config/db").queryWithParams; q.mockReset(); svc = require("../services/bolsa-comercial.service"); });
   test("allows exactly 300.00 under-min consumption and blocks 300.01", async () => {
     q.mockResolvedValueOnce([row(300)]).mockResolvedValueOnce([row(300)]);
-    const allowed = await svc.validateOrderWithBolsa("10", [{ codigoArticulo: "ART300", precioMinimo: 10, precioVenta: 0, cantidadEnvases: 30 }]);
-    const blocked = await svc.validateOrderWithBolsa("10", [{ codigoArticulo: "ART301", precioMinimo: 10, precioVenta: 0, cantidadEnvases: 30.001 }]);
+    const allowed = await svc.validateOrderWithBolsa("10", [{ codigoArticulo: "ART300", precioTarifaCliente: 10, precioVenta: 0, cantidadEnvases: 30 }]);
+    const blocked = await svc.validateOrderWithBolsa("10", [{ codigoArticulo: "ART301", precioTarifaCliente: 10, precioVenta: 0, cantidadEnvases: 30.001 }]);
     expect(allowed).toMatchObject({ valid: true, consumo: 300, saldo: 0 });
     expect(blocked).toMatchObject({ valid: false, reason: "BOLSA_INSUFICIENTE", saldo: 300 });
     expect(blocked.deficit).toBeCloseTo(0.01, 2);
   });
-  test("calculates over-min accumulation as sale-minus-min times quantity", async () => {
+  test("calculates over-min accumulation as sale-minus-tariff times quantity", async () => {
     q.mockResolvedValueOnce([row(300)]);
-    const result = await svc.validateOrderWithBolsa("10", [{ codigoArticulo: "ART-OVER", precioMinimo: 10, precioVenta: 12, cantidadEnvases: 3, unidadMedida: "CAJAS" }]);
+    const result = await svc.validateOrderWithBolsa("10", [{ codigoArticulo: "ART-OVER", precioTarifaCliente: 10, precioVenta: 12, cantidadEnvases: 3, unidadMedida: "CAJAS" }]);
     expect(result).toMatchObject({ valid: true, acumulacion: 6 });
     expect(result.lineMovements).toEqual(expect.arrayContaining([expect.objectContaining({ tipo: "ACUMULACION", importe: 6, codigoArticulo: "ART-OVER", precioMinimoCongelado: 10, precioVenta: 12, cantidad: 3, unidadMedida: "CAJAS" })]));
   });
-  test("calculates under-min consumption as min-minus-sale times quantity", async () => {
+  test("calculates under-min consumption as tariff-minus-sale times quantity", async () => {
     q.mockResolvedValueOnce([row(300)]);
-    const result = await svc.validateOrderWithBolsa("10", [{ codigoArticulo: "ART-UNDER", precioMinimo: 10, precioVenta: 7, cantidadEnvases: 2, unidadMedida: "CAJAS" }]);
+    const result = await svc.validateOrderWithBolsa("10", [{ codigoArticulo: "ART-UNDER", precioTarifaCliente: 10, precioMinimo: 5, precioVenta: 7, cantidadEnvases: 2, unidadMedida: "CAJAS" }]);
     expect(result).toMatchObject({ valid: true, consumo: 6, saldo: 294 });
   });
   test("does not double-count equivalent units for cajas lines", async () => {
     q.mockResolvedValueOnce([row(300)]);
     const result = await svc.validateOrderWithBolsa("10", [{
       codigoArticulo: "ART-EQUIV",
-      precioMinimo: 10,
+      precioTarifaCliente: 10,
       precioVenta: 12,
       cantidadEnvases: 2,
       cantidadUnidades: 24,
@@ -268,7 +335,7 @@ describe("bolsa comercial business rules", () => {
     q.mockResolvedValueOnce([row(300)]);
     const result = await svc.validateOrderWithBolsa("10", [{
       codigoArticulo: "ART-PARTIAL",
-      precioMinimo: 10,
+      precioTarifaCliente: 10,
       precioVenta: 12,
       cantidadEnvases: 2,
       cantidadUnidades: 3,
@@ -368,7 +435,7 @@ describe('bolsa ledger per-line persistence', () => {
     const conn = { query: jest.fn(), close: jest.fn().mockResolvedValue(undefined) };
     db.getPool.mockReturnValue({ connect: jest.fn().mockResolvedValue(conn) });
     conn.query.mockImplementation(async (sql) => {
-      if (/^BEGIN WORK$/i.test(sql)) return [];
+      if (/SET TRANSACTION ISOLATION LEVEL READ COMMITTED/i.test(sql)) return [];
       if (/^LOCK TABLE JAVIER\.(BOLSA_COMERCIAL|MOVIMIENTOS_BOLSA) IN EXCLUSIVE MODE$/i.test(sql)) return [];
       if (/SELECT\s+ID,\s+CODIGOVENDEDOR/i.test(sql)) {
         return [{ ID: 1, CODIGOVENDEDOR: '10  ', EJERCICIO: 2026, MES: 6, LIMITE_PCT: 3, LIMITE_IMPORTE: 0, SALDO_DISPONIBLE: 300, CONSUMIDO: 0, ACUMULADO: 0 }];
@@ -386,7 +453,7 @@ describe('bolsa ledger per-line persistence', () => {
     ])).rejects.toThrow(/ledger insert failed/);
 
     const sqls = conn.query.mock.calls.map(([sql]) => sql).join('\n');
-    expect(sqls).toMatch(/BEGIN WORK/);
+    expect(sqls).toMatch(/SET TRANSACTION ISOLATION LEVEL READ COMMITTED/);
     expect(sqls).toMatch(/LOCK TABLE JAVIER\.BOLSA_COMERCIAL IN EXCLUSIVE MODE/);
     expect(sqls).toMatch(/UPDATE\s+JAVIER\.BOLSA_COMERCIAL/);
     expect(sqls).toMatch(/INSERT\s+INTO\s+JAVIER\.MOVIMIENTOS_BOLSA/);

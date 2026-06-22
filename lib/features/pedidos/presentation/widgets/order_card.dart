@@ -39,6 +39,8 @@ class OrderCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = OrderStatusConfig.getTheme(order.estado);
     final marginColor = _marginColor(order.margen);
+    final displayEstado =
+        OrderStatusConfig.canonicalDisplayStatus(order.estado);
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -71,7 +73,7 @@ class OrderCard extends StatelessWidget {
                 // Top row: status + date
                 Row(
                   children: [
-                    OrderStatusBadge(estado: order.estado, fontSize: 10),
+                    OrderStatusBadge(estado: displayEstado, fontSize: 10),
                     const Spacer(),
                     Icon(
                       Icons.calendar_today_outlined,
@@ -185,6 +187,8 @@ class OrderCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                const SizedBox(height: 8),
+                _buildBolsaChip(displayEstado),
                 // Actions row (if available)
                 if (onDuplicate != null ||
                     onCancel != null ||
@@ -305,5 +309,77 @@ class OrderCard extends StatelessWidget {
     if (margin >= 15) return AppTheme.neonGreen;
     if (margin >= 5) return Colors.orange;
     return AppTheme.error;
+  }
+
+  Widget _buildBolsaChip(String displayEstado) {
+    if (displayEstado == 'BORRADOR') {
+      return _bolsaStatusChip(
+        Icons.account_balance_wallet_outlined,
+        'Bolsa: pendiente de confirmar',
+        Colors.white38,
+      );
+    }
+    if (displayEstado == 'ANULADO') {
+      return _bolsaStatusChip(
+        Icons.block,
+        'Bolsa: no aplica',
+        Colors.white38,
+      );
+    }
+
+    final generada = order.bolsaGenerada;
+    if (generada == true) {
+      final neto = order.bolsaNeto;
+      final netoLabel = neto != 0
+          ? ' (${neto > 0 ? '+' : ''}${PedidosFormatters.money(neto)})'
+          : '';
+      return _bolsaStatusChip(
+        Icons.account_balance_wallet,
+        'Bolsa generada$netoLabel',
+        AppTheme.neonGreen,
+      );
+    }
+    if (generada == false) {
+      return _bolsaStatusChip(
+        Icons.account_balance_wallet_outlined,
+        'Bolsa: sin impacto',
+        Colors.white54,
+      );
+    }
+    return _bolsaStatusChip(
+      Icons.info_outline,
+      'Bolsa: ver detalle del pedido',
+      AppTheme.warning,
+    );
+  }
+
+  Widget _bolsaStatusChip(IconData icon, String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 14),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

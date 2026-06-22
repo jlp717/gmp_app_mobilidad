@@ -32,6 +32,10 @@ jest.mock('../middleware/logger', () => ({
 
 const cobrosRouter = require('../routes/cobros');
 
+function mockVendorClientScopeHit(sql) {
+  return /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql);
+}
+
 function makeApp(user = { code: '01', role: 'COMERCIAL' }) {
   const app = express();
   app.use(express.json());
@@ -56,6 +60,7 @@ beforeEach(() => {
 describe('legacy cobros route DB2 contracts', () => {
   test('GET /:cliente/pendientes reads real CVC long-column layout', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
+      if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
       if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
         return [{
           SERIE_DOCUMENTO: 'M',
@@ -102,6 +107,7 @@ describe('legacy cobros route DB2 contracts', () => {
 
   test('GET /:cliente/estado sums real CVC pending amount without CV aliases', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
+      if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
       if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) return [{ TOTAL_PENDIENTE: 75, NUM_DOCS: 2 }];
       if (/FROM\s+JAVIER\.COBROS/i.test(sql)) return [{ TOTAL_APP: 10 }];
       if (/FROM\s+JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: 5 }];
@@ -153,6 +159,7 @@ describe('legacy cobros route DB2 contracts', () => {
 
   test('POST /:cliente/registrar writes ERP-compatible payment columns when available', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
+      if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
       if (/FROM\s+JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: 0 }];
       if (/FROM\s+JAVIER\.COBROS\s+WHERE\s+ID\s+=\s+\?/i.test(sql)) return [];
       if (/INSERT\s+INTO\s+JAVIER\.COBROS/i.test(sql)) return [];
@@ -186,6 +193,7 @@ describe('legacy cobros route DB2 contracts', () => {
     const normalized = crypto.createHash('sha256').update(raw).digest('hex');
     const expectedId = paymentIdForTest(normalized);
     mockQueryWithParams.mockImplementation(async (sql) => {
+      if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
       if (/FROM\s+JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: 0 }];
       if (new RegExp('FROM\\s+JAVIER\\.COBROS\\s+WHERE\\s+ID\\s+=\\s+\\?\\s+OR\\s+IDEMPOTENCY_TOKEN\\s+=\\s+\\?', 'i').test(sql)) return [];
       if (/INSERT\s+INTO\s+JAVIER\.COBROS/i.test(sql)) return [];
@@ -212,6 +220,7 @@ describe('legacy cobros route DB2 contracts', () => {
     const raw = 'B'.repeat(64);
     const expectedId = paymentIdForTest(raw);
     mockQueryWithParams.mockImplementation(async (sql) => {
+      if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
       if (/FROM\s+JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: 0 }];
       if (/FROM\s+JAVIER\.COBROS\s+WHERE\s+ID\s+=\s+\?/i.test(sql)) {
         return [{ ID: expectedId, CODIGO_CLIENTE: 'C001', REFERENCIA: 'M-123', IMPORTE: '60.00', FORMA_PAGO: '02', CODIGO_USUARIO: '01' }];
@@ -233,6 +242,7 @@ describe('legacy cobros route DB2 contracts', () => {
     const raw = 'C'.repeat(64);
     const expectedId = paymentIdForTest(raw);
     mockQueryWithParams.mockImplementation(async (sql) => {
+      if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
       if (/FROM\s+JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: 0 }];
       if (/FROM\s+JAVIER\.COBROS\s+WHERE\s+ID\s+=\s+\?/i.test(sql)) {
         return [{ ID: expectedId, CODIGO_CLIENTE: 'C001', REFERENCIA: 'M-123', IMPORTE: '61.00', FORMA_PAGO: '02', CODIGO_USUARIO: '01' }];
@@ -250,6 +260,7 @@ describe('legacy cobros route DB2 contracts', () => {
 
   test('POST /:cliente/registrar preserves repartidor double-payment prevention', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
+      if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
       if (/FROM\s+JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [{ TOTAL_REP: 60 }];
       if (/INSERT\s+INTO\s+JAVIER\.COBROS/i.test(sql)) return [];
       return [];
@@ -266,6 +277,7 @@ describe('legacy cobros route DB2 contracts', () => {
 
   test('GET /:cliente/pendientes flags cobradoPorRepartidor for CTR and REPARTIDOR_COBROS', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
+      if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
       if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
         return [
           {
@@ -329,6 +341,7 @@ describe('legacy cobros route DB2 contracts', () => {
   test('GET /:cliente/historico returns JAVIER.COBROS rows with pagination contract', async () => {
     const fecha = new Date('2026-06-10T12:30:00.000Z');
     mockQueryWithParams.mockImplementation(async (sql, params) => {
+      if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
       if (/FROM\s+JAVIER\.COBROS\s+C/i.test(sql)) {
         expect(params).toEqual(['C001']);
         return [{
@@ -372,5 +385,99 @@ describe('legacy cobros route DB2 contracts', () => {
     expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
     expect(mockCachedQuery).not.toHaveBeenCalled();
     expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+});
+
+describe('legacy cobros vendor-scope fallback without clientCodes', () => {
+  function mockVendorClientScopeMiss() {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/FROM\s+DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
+        return [];
+      }
+      return [];
+    });
+  }
+
+  test('GET /:cliente/pendientes rejects COMERCIAL outside vendor client scope before debt reads', async () => {
+    mockVendorClientScopeMiss();
+
+    const res = await request(makeApp({ id: '01', code: '01', role: 'COMERCIAL' }))
+      .get('/C999/pendientes');
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockCachedQuery).not.toHaveBeenCalled();
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /FROM\s+DSEDAC\.CVC/i.test(sql))).toBe(false);
+  });
+
+  test('GET /:cliente/pendientes blocks PEDIDOS_CAB fallback for out-of-scope client', async () => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/FROM\s+DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
+        return [];
+      }
+      if (/FROM\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) {
+        return [{
+          ID: 99,
+          NUMEROPEDIDO: 1,
+          SERIEPEDIDO: 'M',
+          IMPORTETOTAL: 120,
+          ESTADO: 'CONFIRMADO',
+        }];
+      }
+      return [];
+    });
+    mockCachedQuery.mockImplementationOnce(async () => {
+      throw new Error('CVC unavailable');
+    });
+
+    const res = await request(makeApp({ id: '01', code: '01', role: 'COMERCIAL' }))
+      .get('/C999/pendientes');
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /PEDIDOS_CAB/i.test(sql))).toBe(false);
+  });
+
+  test('GET /:cliente/estado rejects COMERCIAL outside vendor client scope before debt reads', async () => {
+    mockVendorClientScopeMiss();
+
+    const res = await request(makeApp({ id: '01', code: '01', role: 'COMERCIAL' }))
+      .get('/C999/estado');
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockCachedQuery).not.toHaveBeenCalled();
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /FROM\s+DSEDAC\.CVC/i.test(sql))).toBe(false);
+  });
+
+  test('Db2CobrosRepository ensureCobrosTable rejects COBROS_TABLE_UNAVAILABLE without CREATE TABLE', async () => {
+    const { Db2CobrosRepository } = require('../src/modules/cobros/infrastructure/db2-cobros-repository');
+    mockQuery.mockRejectedValueOnce(new Error('SQL0204 Table JAVIER.COBROS not found'));
+
+    const repo = new Db2CobrosRepository();
+    await expect(repo.ensureCobrosTable()).rejects.toMatchObject({
+      code: 'COBROS_TABLE_UNAVAILABLE',
+      status: 503,
+      message: 'Servicio de cobros no disponible: tabla de cobros no configurada',
+    });
+    expect(mockQuery.mock.calls.some(([sql]) => /CREATE\s+TABLE/i.test(String(sql)))).toBe(false);
+  });
+
+  test('POST /:cliente/registrar rejects cross-client payment before JAVIER.COBROS insert', async () => {
+    mockVendorClientScopeMiss();
+
+    const res = await request(makeApp({ id: '01', code: '01', role: 'COMERCIAL' }))
+      .post('/C999/registrar')
+      .send({
+        referencia: 'M-1',
+        importe: 10,
+        formaPago: 'CONTADO',
+        idempotencyToken: 'legacy-route-vendor-scope-001',
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT\s+INTO\s+JAVIER\.COBROS/i.test(sql))).toBe(false);
+    expect(mockQueryWithParams.mock.calls[0][0]).toMatch(/DSEDAC\.CLI|DSEDAC\.CLP/i);
   });
 });

@@ -100,7 +100,7 @@ class _ChatbotPageState extends ConsumerState<ChatbotPage>
       body: Column(
         children: [
           SmartSyncHeader(
-            title: isJefe ? 'NEXUS AI (Supervisor)' : 'NEXUS AI',
+            title: isJefe ? 'Asistente (Supervisor)' : 'Asistente',
             subtitle: 'Asistente Comercial Inteligente',
             lastSync: DateTime.now(),
             isLoading: chatbotState.isLoading,

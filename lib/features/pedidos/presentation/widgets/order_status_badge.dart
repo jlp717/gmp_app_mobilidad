@@ -20,6 +20,7 @@ class OrderTheme {
 }
 
 class OrderStatusConfig {
+  /// Estados visibles para comerciales: Borrador, Pendiente ERP, Confirmado (+ Anulado).
   static const Map<String, OrderTheme> themes = {
     'BORRADOR': OrderTheme(
       primary: Color(0xFFF97316),
@@ -33,29 +34,11 @@ class OrderStatusConfig {
       icon: Icons.hourglass_top,
       label: 'Pendiente ERP',
     ),
-    'CONFIRMANDO': OrderTheme(
-      primary: Color(0xFF38BDF8),
-      gradient: [Color(0xFF1E293B), Color(0xFF082F49)],
-      icon: Icons.sync,
-      label: 'Confirmando',
-    ),
     'CONFIRMADO': OrderTheme(
-      primary: Color(0xFF3B82F6),
-      gradient: [Color(0xFF1E293B), Color(0xFF0C1A3A)],
-      icon: Icons.check_circle,
-      label: 'Confirmado',
-    ),
-    'ENVIADO': OrderTheme(
       primary: Color(0xFF22C55E),
       gradient: [Color(0xFF1E293B), Color(0xFF0A2E1A)],
-      icon: Icons.local_shipping,
-      label: 'Enviado',
-    ),
-    'FACTURADO': OrderTheme(
-      primary: Color(0xFFA855F7),
-      gradient: [Color(0xFF1E293B), Color(0xFF1A0A2E)],
-      icon: Icons.receipt_long,
-      label: 'Facturado',
+      icon: Icons.check_circle,
+      label: 'Confirmado',
     ),
     'ANULADO': OrderTheme(
       primary: Color(0xFFEF4444),
@@ -65,8 +48,30 @@ class OrderStatusConfig {
     ),
   };
 
+  /// Colapsa estados intermedios/legacy a los 3 estados comerciales + anulado.
+  static String canonicalDisplayStatus(String? estado) {
+    switch ((estado ?? '').trim().toUpperCase()) {
+      case 'PENDIENTE_APROBACION':
+      case 'PEND_APROB':
+      case 'CONFIRMANDO':
+        return 'PENDIENTE_APROBACION';
+      case 'CONFIRMADO':
+      case 'ENVIADO':
+      case 'FACTURADO':
+        return 'CONFIRMADO';
+      case 'ANULADO':
+        return 'ANULADO';
+      case 'BORRADOR':
+      case 'PENDIENTE':
+        return 'BORRADOR';
+      default:
+        return 'BORRADOR';
+    }
+  }
+
   static OrderTheme getTheme(String? estado) {
-    return themes[estado?.toUpperCase()] ??
+    final key = canonicalDisplayStatus(estado);
+    return themes[key] ??
         const OrderTheme(
           primary: Color(0xFF9CA3AF),
           gradient: [Color(0xFF1E293B), Color(0xFF1E293B)],

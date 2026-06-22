@@ -299,6 +299,7 @@ class _PromotionsListPageState extends State<PromotionsListPage> {
                       onAddGift: widget.onAddGift,
                       hasStockResolver: widget.hasStockResolver,
                       qtyInOrderResolver: widget.qtyInOrderResolver,
+                      giftSelectionLocked: group.hasFixedGift,
                     ),
                   ),
                 );
@@ -626,6 +627,10 @@ class _PromotionGroup {
   double get minQty => items.first.minQty;
   double get giftQty => items.first.giftQty;
   bool get cumulative => items.first.cumulative;
+
+  /// Regalo fijado por promoción (mismo producto o SKU explícito).
+  bool get hasFixedGift =>
+      promoType == 'GIFT' && items.every((item) => item.hasFixedGiftProduct);
 
   double get discountPct {
     if (regularPrice <= 0 || promoPrice <= 0 || promoPrice >= regularPrice) {

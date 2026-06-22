@@ -3,17 +3,25 @@
 const request = require('supertest');
 const express = require('express');
 
+function expectDb2SafeBind(sql, bind, maxLen) {
+  const text = bind == null ? '' : String(bind);
+  const normalized = text.length <= maxLen;
+  const casted = new RegExp(`CAST\\(\\?\\s+AS\\s+VARCHAR\\(${maxLen}\\)\\)`, 'i').test(String(sql || ''));
+  expect(normalized || casted).toBe(true);
+}
+
 const mockGetStockBatch = jest.fn();
+const mockSearchProducts = jest.fn();
+const mockGetProductDetail = jest.fn();
 
 jest.mock('../services/pedidos.service', () => ({
   getStockBatch: mockGetStockBatch,
+  searchProducts: mockSearchProducts,
+  getProductDetail: (...args) => mockGetProductDetail(...args),
 }));
 
 jest.mock('../middleware/auth', () => ({
-  verifyToken: (req, _res, next) => {
-    req.user = { code: '01', role: 'COMERCIAL' };
-    next();
-  },
+  verifyToken: (req, _res, next) => next(),
 }));
 
 jest.mock('../config/db', () => ({
@@ -39,9 +47,13 @@ jest.mock('../middleware/logger', () => ({
 const pedidosRouter = require('../routes/pedidos');
 const { queryWithParams: mockQueryWithParams } = require('../config/db');
 
-function makeApp() {
+function makeApp(user = { code: '01', role: 'COMERCIAL' }) {
   const app = express();
   app.use(express.json());
+  app.use((req, _res, next) => {
+    req.user = user;
+    next();
+  });
   app.use('/', pedidosRouter);
   return app;
 }
@@ -83,6 +95,68 @@ describe('pedidos stock batch route contract', () => {
         ART002: { envases: 3, unidades: 6 },
       },
     });
+  });
+
+  test('POST /products/stock-batch truncates long article codes before getStockBatch', async () => {
+    mockGetStockBatch.mockResolvedValueOnce(new Map());
+    const longCode = 'ART00123456_EXTRA';
+
+    const res = await request(makeApp())
+      .post('/products/stock-batch')
+      .send({ codes: [longCode] });
+
+    expect(res.status).toBe(200);
+    expect(mockGetStockBatch).toHaveBeenCalledWith(['ART0012345'], 1);
+  });
+});
+
+describe('pedidos products route contract', () => {
+  test('GET /products truncates long clientCode before scope SQL and searchProducts', async () => {
+    mockSearchProducts.mockResolvedValueOnce({ products: [], count: 0 });
+    mockQueryWithParams.mockResolvedValue([{ OK: 1 }]);
+    const longClient = '4300001091_OVERFLOW_EXTRA_CHARS';
+
+    const res = await request(makeApp())
+      .get('/products')
+      .query({ vendedorCodes: '01', clientCode: longClient });
+
+    expect(res.status).toBe(200);
+    const [scopeSql, scopeParams] = mockQueryWithParams.mock.calls[0];
+    expect(scopeParams[0]).toBe('4300001091');
+    expectDb2SafeBind(scopeSql, scopeParams[0], 10);
+    expect(mockSearchProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ clientCode: '4300001091' }),
+    );
+  });
+
+  test('GET /products truncates long vendedorCodes in scope SQL binds', async () => {
+    mockSearchProducts.mockResolvedValueOnce({ products: [], count: 0 });
+    mockQueryWithParams.mockResolvedValue([{ OK: 1 }]);
+
+    const res = await request(makeApp({ code: '80', role: 'JEFE_VENTAS', isJefeVentas: true }))
+      .get('/products')
+      .query({ vendedorCodes: '0199', clientCode: '4300001091' });
+
+    expect(res.status).toBe(200);
+    const [scopeSql, scopeParams] = mockQueryWithParams.mock.calls[0];
+    scopeParams.slice(1).forEach((code) => {
+      if (typeof code === 'string' && /^[A-Za-z0-9]+$/.test(code)) {
+        expectDb2SafeBind(scopeSql, code, 2);
+      }
+    });
+  });
+
+  test('GET /products/:code truncates long article path before getProductDetail', async () => {
+    mockGetProductDetail.mockResolvedValueOnce({ code: 'ART0012345', name: 'Prod' });
+    mockQueryWithParams.mockResolvedValue([{ OK: 1 }]);
+    const longArticle = 'ART0012345_EXTRA_LONG_SUFFIX';
+
+    const res = await request(makeApp())
+      .get(`/products/${encodeURIComponent(longArticle)}`)
+      .query({ vendedorCodes: '01', clientCode: 'C001' });
+
+    expect(res.status).toBe(200);
+    expect(mockGetProductDetail).toHaveBeenCalledWith('ART0012345', 'C001');
   });
 });
 
@@ -141,5 +215,44 @@ describe('pedidos client evolution route contract', () => {
     expect(monthlyCall[1]).toEqual(
       expect.arrayContaining(['C001', startYear, 'CC', 'VC', 'AB', 'VT', '01']),
     );
+  });
+
+  test('GET /client-evolution/:clientCode truncates long path client in all DB binds', async () => {
+    const longClient = '4300001091_OVERFLOW_EXTRA_CHARS';
+    mockQueryWithParams
+      .mockResolvedValueOnce([{ OK: 1 }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    const res = await request(makeApp())
+      .get(`/client-evolution/${encodeURIComponent(longClient)}`)
+      .query({ vendedorCodes: '01' });
+
+    expect(res.status).toBe(200);
+    for (const [sql, params] of mockQueryWithParams.mock.calls) {
+      expect(params[0]).toBe('4300001091');
+      expectDb2SafeBind(sql, params[0], 10);
+    }
+  });
+
+  test('GET /client-evolution/:clientCode truncates long vendor codes in scope binds', async () => {
+    mockQueryWithParams
+      .mockResolvedValueOnce([{ OK: 1 }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    const res = await request(makeApp({ code: '80', role: 'JEFE_VENTAS', isJefeVentas: true }))
+      .get('/client-evolution/C001')
+      .query({ vendedorCodes: '0199' });
+
+    expect(res.status).toBe(200);
+    const [scopeSql, scopeParams] = mockQueryWithParams.mock.calls[0];
+    scopeParams.slice(1).forEach((code) => {
+      if (typeof code === 'string' && /^[A-Za-z0-9]+$/.test(code)) {
+        expectDb2SafeBind(scopeSql, code, 2);
+      }
+    });
   });
 });

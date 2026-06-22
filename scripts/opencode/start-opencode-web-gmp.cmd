@@ -114,13 +114,25 @@ set "INITIAL_ATTEMPT=0"
 set /a "INITIAL_ATTEMPT+=1"
 call :log "inicio inicial intento=%INITIAL_ATTEMPT%"
 cd /d "%PROJECT_DIR%"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%STARTER%" -Project gmp -RestartWeb -SkipFallbackRuntime
+if !INITIAL_ATTEMPT! EQU 1 (
+  echo Arrancando OpenCode Web ^(intento 1, reinicio limpio^)...
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%STARTER%" -Project gmp -RestartWeb -NoTelegram
+) else (
+  echo Esperando OpenCode Web ^(intento !INITIAL_ATTEMPT!, sin matar proceso^)...
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%STARTER%" -Project gmp -NoTelegram
+)
 if errorlevel 1 (
-  set "DELAY=10"
-  if !INITIAL_ATTEMPT! gtr 4 set "DELAY=20"
-  if !INITIAL_ATTEMPT! gtr 7 set "DELAY=30"
+  set "DELAY=15"
+  if !INITIAL_ATTEMPT! gtr 3 set "DELAY=20"
+  if !INITIAL_ATTEMPT! gtr 6 set "DELAY=30"
   call :log "fallo inicial, esperando !DELAY!s antes de reintentar"
+  echo Reintento en !DELAY!s ^(no se reinicia la web para no interrumpir el arranque^)...
   timeout /t !DELAY! /nobreak >nul
+  if !INITIAL_ATTEMPT! GEQ 12 (
+    call :log "inicio inicial fallido tras 12 intentos"
+    echo ERROR: OpenCode Web no respondio tras varios intentos. Revisa .opencode\logs\opencode-web-fast-*.err.log
+    exit /b 1
+  )
   goto :start_web_attempt
 )
 call :log "inicio inicial correcto"
@@ -174,7 +186,7 @@ powershell -NoProfile -Command "$lock = '%SUPERVISOR_LOCK%'; if (Test-Path $lock
 exit /b 0
 
 :acquire_lock
-for /f "tokens=* delims=" %%P in ('powershell -NoProfile -Command "$lock = '%SUPERVISOR_LOCK%'; if (Test-Path $lock) { $age = (Get-Date) - (Get-Item $lock).LastWriteTime; if ($age.TotalSeconds -lt 120) { exit 10 } } [System.IO.File]::WriteAllText($lock, (Get-Date -Format o)); Write-Output 'ok'"') do set "LOCK_ACQUIRED=%%P"
+for /f "tokens=* delims=" %%P in ('powershell -NoProfile -Command "$lock = '%SUPERVISOR_LOCK%'; if (Test-Path $lock) { $age = (Get-Date) - (Get-Item $lock).LastWriteTime; if ($age.TotalSeconds -lt 120) { exit 10 } if ($age.TotalSeconds -gt 300) { Remove-Item $lock -Force; exit 0 } } [System.IO.File]::WriteAllText($lock, (Get-Date -Format o)); Write-Output 'ok'"') do set "LOCK_ACQUIRED=%%P"
 if errorlevel 10 (
   call :log "supervisor ya activo (lock=%SUPERVISOR_LOCK%)"
   exit /b 1

@@ -27,6 +27,10 @@ jest.mock('../middleware/logger', () => ({
 
 const cobrosRouter = require('../routes/cobros');
 
+function mockVendorClientScopeHit(sql) {
+  return /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql);
+}
+
 function makeApp(user) {
   const app = express();
   app.use(express.json());
@@ -155,7 +159,10 @@ describe('legacy cobros route hardening', () => {
   });
 
   test('registrar derives codigoUsuario from authenticated user when present', async () => {
-    mockQueryWithParams.mockResolvedValue([]);
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
+      return [];
+    });
 
     const res = await request(makeApp({ id: '01', code: '01', role: 'COMERCIAL' }))
       .post('/C001/registrar')
@@ -327,8 +334,9 @@ describe('legacy cobros route hardening', () => {
     })).get('/pending-summary/ALL?limit=1&page=1');
 
     expect(res.status).toBe(200);
-    expect(Object.keys(res.body.summary)).toEqual(['C001']);
+    expect(Object.keys(res.body.summary).sort()).toEqual(['C001', 'C002']);
     expect(res.body.summary.C001.total).toBeCloseTo(100, 1);
+    expect(res.body.summary.C002.total).toBeCloseTo(200, 1);
     expect(res.body.grandTotal).toBeCloseTo(300, 1);
     expect(res.body.grandTotalVencido).toBeCloseTo(50, 1);
     expect(res.body.clientCount).toBe(2);
@@ -374,5 +382,88 @@ describe('legacy cobros client scope AppSec red tests', function() {
     expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
     expect(mockQuery).not.toHaveBeenCalled();
     expect(mockQueryWithParams).not.toHaveBeenCalled();
+  });
+});
+
+describe('legacy cobros vendor client scope when clientCodes absent', function() {
+  function mockVendorClientScopeMiss() {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/FROM\s+DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
+        return [];
+      }
+      return [];
+    });
+  }
+
+  test('GET /:codigoCliente/pendientes rejects COMERCIAL outside vendor client scope before debt reads', async function() {
+    mockVendorClientScopeMiss();
+
+    const res = await request(makeApp({ id: '01', code: '01', role: 'COMERCIAL' }))
+      .get('/C999/pendientes');
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockCachedQuery).not.toHaveBeenCalled();
+    expect(mockQuery).not.toHaveBeenCalled();
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /FROM\s+DSEDAC\.CVC/i.test(sql))).toBe(false);
+    expect(mockQueryWithParams.mock.calls[0][0]).toMatch(/DSEDAC\.CLI|DSEDAC\.CLP|DSED\.LACLAE/i);
+    expect(mockQueryWithParams.mock.calls[0][1]).toEqual(expect.arrayContaining(['C999']));
+  });
+
+  test('GET /:codigoCliente/pendientes blocks PEDIDOS_CAB fallback for out-of-scope client', async function() {
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/FROM\s+DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
+        return [];
+      }
+      if (/FROM\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) {
+        return [{
+          ID: 99,
+          NUMEROPEDIDO: 1,
+          SERIEPEDIDO: 'M',
+          IMPORTETOTAL: 120,
+          ESTADO: 'CONFIRMADO',
+        }];
+      }
+      return [];
+    });
+    mockCachedQuery.mockImplementationOnce(async () => {
+      throw new Error('CVC unavailable');
+    });
+
+    const res = await request(makeApp({ id: '01', code: '01', role: 'COMERCIAL' }))
+      .get('/C999/pendientes');
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /PEDIDOS_CAB/i.test(sql))).toBe(false);
+  });
+
+  test('GET /:codigoCliente/estado rejects COMERCIAL outside vendor client scope before debt reads', async function() {
+    mockVendorClientScopeMiss();
+
+    const res = await request(makeApp({ id: '01', code: '01', role: 'COMERCIAL' }))
+      .get('/C999/estado');
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockCachedQuery).not.toHaveBeenCalled();
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /FROM\s+DSEDAC\.CVC/i.test(sql))).toBe(false);
+  });
+
+  test('POST /:codigoCliente/registrar rejects COMERCIAL outside vendor client scope before writes', async function() {
+    mockVendorClientScopeMiss();
+
+    const res = await request(makeApp({ id: '01', code: '01', role: 'COMERCIAL' }))
+      .post('/C999/registrar')
+      .send({
+        referencia: 'M-1',
+        importe: 10,
+        formaPago: 'CONTADO',
+        idempotencyToken: 'legacy-token-vendor-scope-001',
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT\s+INTO\s+JAVIER\.COBROS/i.test(sql))).toBe(false);
   });
 });

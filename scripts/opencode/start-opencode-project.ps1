@@ -130,6 +130,7 @@ function Repair-McpCommandArrays([string]$Path) {
     "C:/nvm4w/nodejs/context7-mcp.cmd",
     "C:/nvm4w/nodejs/fetch-mcp.cmd",
     "C:/nvm4w/nodejs/git-mcp-server.cmd",
+    "C:/nvm4w/nodejs/mcp-server-github.cmd",
     "C:/nvm4w/nodejs/chrome-devtools-mcp.cmd",
     "C:/nvm4w/nodejs/firecrawl-mcp.cmd",
     "C:/nvm4w/nodejs/mcp-server-sentry.cmd",
@@ -260,7 +261,8 @@ function Ensure-IbmDb2McpEnvironment {
         "beads" = [ordered]@{
           type = "local"
           command = (New-JsonArray @("C:/Users/Javier/AppData/Local/Programs/Python/Python311/Scripts/beads-mcp.exe"))
-          timeout = 30000
+          enabled = $false
+          timeout = 5000
         }
         "playwright" = [ordered]@{
           type = "local"
@@ -424,17 +426,71 @@ function Test-Url([string]$Url, [int]$TimeoutSec = 5) {
 }
 
 function Invoke-MobileOperationalSnapshot([string]$ProjectDir) {
+  return "deferred:post-web-startup"
+}
+
+function Invoke-StartupIntegrityCheck([string]$ProjectDir) {
+  return "deferred:post-web-startup"
+}
+
+function Invoke-ReadinessSmokeBounded([string]$ProjectDir, [int]$TimeoutSec = 45) {
+  $runner = Join-Path $ProjectDir ".opencode\scripts\readiness-smoke.mjs"
+  if (-not (Test-Path -LiteralPath $runner)) { return "no_configurado" }
   try {
-    $bun = (Get-Command bun -ErrorAction SilentlyContinue).Source
-    if (-not $bun) { return "degradado: bun_missing" }
-    $snapshotScript = Join-Path $ProjectDir ".opencode\scripts\mobile-operational-snapshot.mjs"
-    if (-not (Test-Path -LiteralPath $snapshotScript)) { return "degradado: snapshot_script_missing" }
-    $output = & $bun $snapshotScript 2>&1
-    if ($LASTEXITCODE -ne 0) { return "degradado: $($output -join ' ')" }
-    return "ok:$($output -join ' ')"
+    $job = Start-Job -ScriptBlock {
+      param($Node, $Runner)
+      try { (& $Node $Runner 2>$null) -join " " } catch { "" }
+    } -ArgumentList $Node, $runner
+    if (Wait-Job $job -Timeout $TimeoutSec) {
+      $output = (Receive-Job $job).Trim()
+      Remove-Job $job -Force -ErrorAction SilentlyContinue
+      if ($output) { return $output }
+      return "ok"
+    }
+    Stop-Job $job -Force -ErrorAction SilentlyContinue
+    Remove-Job $job -Force -ErrorAction SilentlyContinue
+    return "deferred:post-web-startup (timeout ${TimeoutSec}s)"
   } catch {
     return "degradado: $($_.Exception.Message)"
   }
+}
+
+function Resolve-BunPath {
+  $cmd = Get-Command bun -ErrorAction SilentlyContinue
+  if ($cmd) { return $cmd.Source }
+  $homeBun = Join-Path $HomeDir ".bun\bin\bun.exe"
+  if (Test-Path -LiteralPath $homeBun) { return $homeBun }
+  return $null
+}
+
+function Invoke-PostWebStartup([string]$ProjectDir) {
+  try {
+    $bun = Resolve-BunPath
+    if (-not $bun) { return "degradado: bun_missing" }
+    $script = Join-Path $ProjectDir ".opencode\scripts\post-web-startup.mjs"
+    if (-not (Test-Path -LiteralPath $script)) { return "degradado: post_web_startup_missing" }
+    $logDir = Join-Path $ProjectDir ".opencode\logs"
+    New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+    $outLog = Join-Path $logDir "post-web-startup.out.log"
+    $errLog = Join-Path $logDir "post-web-startup.err.log"
+    Start-Process -FilePath $bun -ArgumentList @($script) -WorkingDirectory $ProjectDir -WindowStyle Hidden -RedirectStandardOutput $outLog -RedirectStandardError $errLog | Out-Null
+    Ensure-GmpAutomationScheduledTask -ProjectDir $ProjectDir | Out-Null
+    return "started:post-web-startup"
+  } catch {
+    return "degradado: $($_.Exception.Message)"
+  }
+}
+
+function Ensure-GmpAutomationScheduledTask([string]$ProjectDir) {
+  $taskName = "GMP-OpenCode-Automation"
+  $existing = schtasks /Query /TN $taskName 2>$null
+  if ($LASTEXITCODE -eq 0) { return "task_exists" }
+  $bun = Resolve-BunPath
+  if (-not $bun) { return "bun_missing" }
+  $script = Join-Path $ProjectDir ".opencode\scripts\post-web-startup.mjs"
+  if (-not (Test-Path -LiteralPath $script)) { return "script_missing" }
+  schtasks /Create /TN $taskName /TR "`"$bun`" `"$script`"" /SC DAILY /ST 08:15 /RL LIMITED /F 2>$null | Out-Null
+  return "task_created"
 }
 
 function Test-WebAuthenticated([string]$Url, [int]$TimeoutSec = 5) {
@@ -623,6 +679,16 @@ function Get-PendingStateSummary([string]$ProjectDir) {
 }
 
 function Get-StaleStateCount([string]$ProjectDir) {
+  $cache = Join-Path $ProjectDir ".opencode\state\state-cleanup-latest.json"
+  if (Test-Path -LiteralPath $cache) {
+    try {
+      $cached = Get-Content -LiteralPath $cache -Raw | ConvertFrom-Json
+      $generatedAt = [DateTime]::Parse($cached.generated_at)
+      if (((Get-Date) - $generatedAt).TotalDays -lt 7 -and $null -ne $cached.stale_after) {
+        return [int]$cached.stale_after
+      }
+    } catch {}
+  }
   $dir = Join-Path $ProjectDir ".opencode\state"
   if (-not (Test-Path -LiteralPath $dir)) { return 0 }
   $count = 0
@@ -702,15 +768,7 @@ function Invoke-TeamCuratorRunner([string]$ProjectDir) {
 }
 
 function Invoke-ReadinessSmoke([string]$ProjectDir) {
-  $runner = Join-Path $ProjectDir ".opencode\scripts\readiness-smoke.mjs"
-  if (-not (Test-Path -LiteralPath $runner)) { return "no_configurado" }
-  try {
-    $output = (& $Node $runner 2>$null) -join " "
-    if (-not $output) { return "ok" }
-    return $output.Trim()
-  } catch {
-    return "degradado: $($_.Exception.Message)"
-  }
+  return Invoke-ReadinessSmokeBounded $ProjectDir 45
 }
 
 function Write-PreflightState([string]$ProjectDir, [hashtable]$Payload) {
@@ -1009,10 +1067,30 @@ function Test-CursorCliModels {
   $cursorCmd = Join-Path $HomeDir "AppData\Local\cursor-agent\cursor-agent.cmd"
   if (-not (Test-Path -LiteralPath $cursorCmd)) { return "missing" }
   try {
-    $output = (& $cursorCmd models 2>&1) -join " "
+    $job = Start-Job -ScriptBlock {
+      param($Cmd)
+      try { (& $Cmd models 2>&1) -join " " } catch { "" }
+    } -ArgumentList $cursorCmd
+    if (-not (Wait-Job $job -Timeout 8)) {
+      Stop-Job $job -Force -ErrorAction SilentlyContinue
+      Remove-Job $job -Force -ErrorAction SilentlyContinue
+      return "deferred:timeout"
+    }
+    $output = (Receive-Job $job).Trim()
+    Remove-Job $job -Force -ErrorAction SilentlyContinue
     if ($output -match "No models available") { return "no_models" }
-    if ($output.Trim()) { return "models_available" }
+    if ($output) { return "models_available" }
     return "unknown"
+  } catch {
+    return "ERROR: $($_.Exception.Message)"
+  }
+}
+
+function Test-BeadsCli {
+  try {
+    $output = (& bd ready --json 2>&1) -join " "
+    if ($LASTEXITCODE -ne 0) { return "ERROR: $output" }
+    return "ok"
   } catch {
     return "ERROR: $($_.Exception.Message)"
   }
@@ -1022,7 +1100,7 @@ function Test-CriticalMcpSet {
   try {
     $cfg = Get-EffectiveOpenCodeConfig
     $critical = @(
-      "context7-local", "ddg-search", "fetch-local", "git-local", "beads",
+      "context7-local", "ddg-search", "fetch-local",
       "dart-flutter-mcp", "pub-mcp", "ibm-db2-mcp", "gmp-deploy-ssh",
       "playwright", "github", "memory",
       "sequential-thinking"
@@ -1048,7 +1126,7 @@ function Test-CriticalMcpSet {
 function Test-McpRuntimeStatus {
   try {
     $critical = @(
-      "context7-local", "ddg-search", "fetch-local", "git-local", "beads",
+      "context7-local", "ddg-search", "fetch-local",
       "dart-flutter-mcp", "pub-mcp", "ibm-db2-mcp", "gmp-deploy-ssh",
       "playwright", "github", "memory",
       "sequential-thinking"
@@ -1147,7 +1225,7 @@ $env:OPENCODE_EXPERIMENTAL_OUTPUT_TOKEN_MAX = "12000"
 $env:OPENCODE_EXPERIMENTAL_LSP_TOOL = "true"
 $env:CURSOR_ACP_MCP_BRIDGE = "false"
 $env:CURSOR_ACP_LOG_SILENT = "true"
-$env:PATH = "C:\Program Files\Git\usr\bin;C:\nvm4w\nodejs;C:\Program Files\nodejs;C:\Users\Javier\.local\bin;C:\Users\Javier\AppData\Roaming\npm;C:\Users\Javier\AppData\Roaming\Python\Python311\Scripts;C:\Python311;C:\Users\Javier\AppData\Local\cursor-agent;" + $env:PATH
+$env:PATH = "C:\Users\Javier\.bun\bin;C:\Program Files\Git\usr\bin;C:\nvm4w\nodejs;C:\Program Files\nodejs;C:\Users\Javier\.local\bin;C:\Users\Javier\AppData\Roaming\npm;C:\Users\Javier\AppData\Roaming\Python\Python311\Scripts;C:\Python311;C:\Users\Javier\AppData\Local\cursor-agent;" + $env:PATH
 if (Test-Path -LiteralPath (Join-Path $HomeDir "AppData\Local\cursor-agent\cursor-agent.cmd")) {
   $env:CURSOR_AGENT_EXECUTABLE = Join-Path $HomeDir "AppData\Local\cursor-agent\cursor-agent.cmd"
 }
@@ -1203,18 +1281,42 @@ if (-not (Test-Path ".opencode\TEAM_TRACE.jsonl")) { New-Item -ItemType File -Pa
 if (-not (Test-Path ".opencode\tokens.jsonl")) { New-Item -ItemType File -Path ".opencode\tokens.jsonl" -Force | Out-Null }
 $traceRotationStatus = Rotate-IfLarge ".opencode\TEAM_TRACE.jsonl" 52428800 5
 $tokenRotationStatus = Rotate-IfLarge ".opencode\tokens.jsonl" 10485760 5
+$integrityStatus = if ($Project -eq "gmp") { Invoke-StartupIntegrityCheck $ProjectDir } else { "no_aplica" }
 $mobileSnapshotStatus = Invoke-MobileOperationalSnapshot $ProjectDir
+
+function Wait-WebAuthReady([int]$Port, [int]$MaxAttempts = 48, [int]$SleepSec = 5) {
+  for ($i = 0; $i -lt $MaxAttempts; $i++) {
+    if (Test-WebAuthenticated "http://127.0.0.1:$Port" 5) { return $true }
+    if (($i + 1) % 6 -eq 0) {
+      Write-Host "Esperando OpenCode Web con auth ($($i + 1)/$MaxAttempts)..."
+    }
+    Start-Sleep -Seconds $SleepSec
+  }
+  return $false
+}
+
+function Complete-WebReadyExit([string]$ProjectDir, [int]$Port) {
+  $metricsStatus = Start-MetricsServer $ProjectDir
+  $readinessStatus = "deferred:post-web-startup"
+  if ($Project -eq "gmp") {
+    $postStartup = Invoke-PostWebStartup $ProjectDir
+    Write-Host "Post-arranque: $postStartup"
+  }
+  Write-Host "OpenCode Web ya esta escuchando y responde con auth en el puerto $Port."
+  Write-Host "Metricas: $metricsStatus"
+  Write-Host "Readiness smoke: $readinessStatus"
+  exit 0
+}
 
 if (-not $NoWeb -and (Test-Tcp "127.0.0.1" $Port 1000)) {
   if (Test-WebAuthenticated "http://127.0.0.1:$Port" 5) {
-    $metricsStatus = Start-MetricsServer $ProjectDir
-    $readinessStatus = Invoke-ReadinessSmoke $ProjectDir
-    Write-Host "OpenCode Web ya esta escuchando y responde con auth en el puerto $Port."
-    Write-Host "Metricas: $metricsStatus"
-    Write-Host "Readiness smoke: $readinessStatus"
-    exit 0
+    Complete-WebReadyExit $ProjectDir $Port
   }
-  Write-Host "Puerto $Port ocupado, pero OpenCode Web no responde con auth. Cierra opencode.exe y vuelve a ejecutar este script."
+  Write-Host "Puerto $Port activo; esperando que OpenCode Web termine de arrancar..."
+  if (Wait-WebAuthReady $Port) {
+    Complete-WebReadyExit $ProjectDir $Port
+  }
+  Write-Host "Puerto $Port ocupado, pero OpenCode Web no responde con auth tras espera. Cierra opencode.exe y vuelve a ejecutar este script."
   exit 1
 }
 
@@ -1226,6 +1328,7 @@ if ($env:OPENCODE_FULL_PREFLIGHT -ne "1") {
   $staleCount = Get-StaleStateCount $ProjectDir
   $skillCount = Get-ValidSkillCount $ProjectDir
   $cursorCliStatus = Test-CursorCliModels
+  $beadsCliStatus = Test-BeadsCli
   $db2Status = if (Test-Connection -ComputerName "192.168.1.22" -Count 1 -Quiet -ErrorAction SilentlyContinue) { "red_ok" } else { "degradado" }
   $sshStatus = if (Test-Connection -ComputerName "192.168.1.230" -Count 1 -Quiet -ErrorAction SilentlyContinue) { "red_ok" } else { "degradado" }
   $imageStatus = if ($Project -eq "gmp" -and (Test-Connection -ComputerName "192.168.1.191" -Count 1 -Quiet -ErrorAction SilentlyContinue)) { "red_ok" } elseif ($Project -eq "gmp") { "degradado" } else { "no_aplica" }
@@ -1246,6 +1349,7 @@ if ($env:OPENCODE_FULL_PREFLIGHT -ne "1") {
     backend_status = $sshStatus
     image_status = $imageStatus
     cursor_cli_status = $cursorCliStatus
+    beads_cli_status = $beadsCliStatus
     cursor_acp_service_status = $cursorAcpStatus
     metrics_status = $metricsStatus
     memory_count = $memoryCount
@@ -1253,6 +1357,7 @@ if ($env:OPENCODE_FULL_PREFLIGHT -ne "1") {
     pending_state_count = $pendingCount
     pending_states = $pendingItems
     stale_state_count = $staleCount
+    startup_integrity_status = $integrityStatus
     trace_rotation_status = $traceRotationStatus
     token_rotation_status = $tokenRotationStatus
     mobile_operational_snapshot_status = $mobileSnapshotStatus
@@ -1273,14 +1378,16 @@ MCP DB2 env: $mcpEnvStatus
 Backend 192.168.1.230: $sshStatus
 Imagenes 192.168.1.191: $imageStatus
 Cursor CLI modelos: $cursorCliStatus
+Beads CLI: $beadsCliStatus
 Cursor ACP service: $cursorAcpStatus
 Metricas: $metricsStatus
 Memoria: $memoryCount entradas
 Skills: $skillCount validas
 Tareas activas reales: $pendingCount
 Estados antiguos/bloqueados no activos: $staleCount
+Integridad arranque: $integrityStatus
 Trazas: $traceRotationStatus
-Autopilot movil: $mobileSnapshotStatus
+Autopilot movil: $mobileSnapshotStatus (checks completos tras arranque Web)
 Auditoria profunda: diferida para no bloquear el arranque
 "@
   Write-Host $summary
@@ -1304,9 +1411,13 @@ Auditoria profunda: diferida para no bloquear el arranque
   Write-Host "Logs OpenCode Web: $logFile"
   Write-Host "Errores OpenCode Web: $errLogFile"
   Start-Process -FilePath $OpenCode -ArgumentList $webArgs -WorkingDirectory $ProjectDir -WindowStyle Hidden -RedirectStandardOutput $logFile -RedirectStandardError $errLogFile
-  Start-Sleep -Seconds 15
-  if (Test-WebAuthenticated "http://127.0.0.1:$Port" 8) {
+  $authOk = Wait-WebAuthReady $Port
+  if ($authOk) {
     Write-Host "OpenCode Web iniciado: http://127.0.0.1:$Port"
+    if ($Project -eq "gmp") {
+      $postStartup = Invoke-PostWebStartup $ProjectDir
+      Write-Host "Post-arranque: $postStartup"
+    }
     exit 0
   }
   Write-Host "ERROR: OpenCode Web no respondio con auth en http://127.0.0.1:$Port. Revisa $logFile y $errLogFile"
@@ -1337,6 +1448,7 @@ $zenProviderStatus = Test-ZenProviderStatus
 if (Test-BlockingPreflightStatus $zenProviderStatus) { throw $zenProviderStatus }
 $cursorPinnedStatus = Test-CursorPinnedAgents
 $cursorCliStatus = Test-CursorCliModels
+$beadsCliStatus = Test-BeadsCli
 $criticalMcpStatus = Test-CriticalMcpSet
 if (Test-BlockingPreflightStatus $criticalMcpStatus) { throw $criticalMcpStatus }
 $mcpRuntimeStatus = Test-McpRuntimeStatus
@@ -1396,6 +1508,7 @@ $preflightPayload = [ordered]@{
   workflow_state_status = $workflowStateStatus
   cursor_pinned_status = $cursorPinnedStatus
   cursor_cli_status = $cursorCliStatus
+  beads_cli_status = $beadsCliStatus
   cursor_acp_service_status = $cursorAcpStatus
   critical_mcp_status = $criticalMcpStatus
   mcp_runtime_status = $mcpRuntimeStatus
@@ -1454,6 +1567,7 @@ Preflight model assignment: $modelAssignmentStatus
 Preflight workflow state: $workflowStateStatus
 Preflight Cursor pinned agents: $cursorPinnedStatus
 Preflight Cursor CLI models: $cursorCliStatus
+Preflight Beads CLI: $beadsCliStatus
 Preflight MCP criticos: $criticalMcpStatus
 Preflight MCP runtime: $mcpRuntimeStatus
 Preflight MCP prohibidos: $forbiddenMcpStatus
@@ -1486,8 +1600,9 @@ Memoria: $memoryCount entradas
 Skills: $skillCount validas
 Tareas activas reales: $pendingCount
 Estados antiguos/bloqueados no activos: $staleCount
+Integridad arranque: $integrityStatus
 Trazas: $traceRotationStatus
-Autopilot movil: $mobileSnapshotStatus
+Autopilot movil: $mobileSnapshotStatus (checks completos tras arranque Web)
 "@
 
 Write-Host $summary

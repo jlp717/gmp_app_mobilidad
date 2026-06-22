@@ -333,6 +333,9 @@ class CobrosProvider extends ChangeNotifier {
   Future<void> cargarPendingSummary(
     String? vendedorCode, {
     List<String>? vendedorCodes,
+    int limit = 100,
+    int page = 1,
+    int offset = 0,
     bool forceRefresh = false,
   }) async {
     _isLoading = true;
@@ -353,6 +356,10 @@ class CobrosProvider extends ChangeNotifier {
         _lastSummaryVendorCodes = null;
         endpoint = '/cobros/pending-summary/ALL';
       }
+      final safeLimit = limit < 1 ? 1 : (limit > 100 ? 100 : limit);
+      final safeOffset = offset < 0 ? 0 : offset;
+      final safePage = page < 1 ? 1 : page;
+      endpoint = '$endpoint?limit=$safeLimit&page=$safePage&offset=$safeOffset';
       final response = await ApiClient.get(
         endpoint,
         cacheKey: 'cobros:pending-summary:$endpoint',
@@ -433,10 +440,49 @@ class CobrosProvider extends ChangeNotifier {
   }
 
   List<CobroPendiente> _parseCobrosPendientes(dynamic raw) {
-    return (raw as List<dynamic>?)
+    final parsed = (raw as List<dynamic>?)
             ?.map((e) => CobroPendiente.fromJson(e as Map<String, dynamic>))
             .toList() ??
         [];
+    return _dedupeCobrosPendientes(parsed);
+  }
+
+  static List<CobroPendiente> _dedupeCobrosPendientes(
+    List<CobroPendiente> items,
+  ) {
+    final seen = <String>{};
+    final out = <CobroPendiente>[];
+    for (final item in items) {
+      final docKey = item.docKey;
+      final key = docKey != null && docKey.isNotEmpty
+          ? docKey.entries.map((e) => '${e.key}:${e.value}').join('|')
+          : [
+              item.tipo.name,
+              item.referencia.trim(),
+              item.fecha.toIso8601String().substring(0, 10),
+              item.importePendiente.toStringAsFixed(2),
+            ].join('|');
+      if (seen.add(key)) out.add(item);
+    }
+    return out;
+  }
+
+  static List<CobroHistorico> _dedupeHistoricoCobros(
+    List<CobroHistorico> items,
+  ) {
+    final seen = <String>{};
+    final out = <CobroHistorico>[];
+    for (final item in items) {
+      final key = [
+        item.id.trim(),
+        item.referencia.trim(),
+        item.fecha.toIso8601String().substring(0, 10),
+        item.importe.toStringAsFixed(2),
+        (item.formaPago ?? '').trim(),
+      ].join('|');
+      if (seen.add(key)) out.add(item);
+    }
+    return out;
   }
 
   /// Solo documentos cobrables por el comercial (excluye responsabilidad repartidor).
@@ -460,13 +506,15 @@ class CobrosProvider extends ChangeNotifier {
       );
       if (response['success'] == true) {
         final list = response['historico'] as List? ?? [];
-        _historicoCobros = list
-            .map(
-              (e) => CobroHistorico.fromJson(
-                Map<String, dynamic>.from(e as Map),
-              ),
-            )
-            .toList(growable: false);
+        _historicoCobros = _dedupeHistoricoCobros(
+          list
+              .map(
+                (e) => CobroHistorico.fromJson(
+                  Map<String, dynamic>.from(e as Map),
+                ),
+              )
+              .toList(growable: false),
+        );
         notifyListeners();
       }
     } catch (e) {

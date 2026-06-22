@@ -8,6 +8,8 @@
     "autoupdate":  "notify",
     "snapshot":  false,
     "instructions":  [
+                         ".opencode/config/chief-protocol.yaml",
+                         ".opencode/config/mobile-productivity.yaml",
                          ".opencode/AGENTS.md",
                          "AGENTS.md",
                          "CLAUDE.md"
@@ -124,6 +126,9 @@
                    "./.opencode/plugins/execution-visibility.ts",
                    "./.opencode/plugins/env-protection.ts",
                    "./.opencode/plugins/context-compaction.ts",
+                   "./.opencode/plugins/session-resilience.ts",
+                   "./.opencode/plugins/session-lifecycle.ts",
+                   "./.opencode/plugins/goal-loop-idle-hint.ts",
                    "./.opencode/plugins/task-tracer.ts",
                    "./.opencode/plugins/anti-hallucination-guard.ts",
                    "./.opencode/plugins/rate-limit-handler.ts",
@@ -151,6 +156,8 @@
                   "production-approval-gate":  true,
                   "elite-quality-gate":  true,
                   "decision-router":  true,
+                  "state-manager":  true,
+                  "project-context":  true,
                   "agent-roster-audit":  true,
                   "flow-policy-check":  true,
                   "team-curator-report":  true,
@@ -176,7 +183,13 @@
                   "mobile-briefing":  true,
                   "model-roster-view":  true,
                   "autonomous-capability-audit":  true,
-                  "honors-grade-audit":  true
+                  "honors-grade-audit":  true,
+                  "goal-loop-manager":  true,
+                  "clarification-gate":  true,
+                  "scheduled-automation-runner":  true,
+                  "github-watchlist-sync":  true,
+                  "model-catalog-watch":  true,
+                  "state-cleanup":  true
               },
     "command":  {
                     "quality":  {
@@ -383,20 +396,50 @@
                                            "description":  "Audita que comandos, tools, permisos, MCPs y fallback automatico esten conectados para uso autonomo del Chief.",
                                            "agent":  "team-curator",
                                            "template":  "Ejecuta autonomous-capability-audit fail_on_warn=false. Si hay BLOCK, no iniciar Tier 2/3 hasta corregirlo. Argumentos: $ARGUMENTS"
-                                      },
+                                       },
                     "matricula":  {
                                       "description":  "Auditoria matricula de honor del equipo y paquete de revision externa sin secretos.",
                                       "agent":  "team-curator",
                                       "template":  "Ejecuta honors-grade-audit write_packet=true fail_below=95. Si no llega a SOBRESALIENTE/MATRICULA, lista acciones concretas hasta 100. Argumentos: $ARGUMENTS"
-                                      }
+                                  },
+                    "goal":  {
+                                 "description":  "Define objetivo con criterios verificables y loop hasta completarlo (Claude /goal).",
+                                 "agent":  "chief-engineer-assistant",
+                                 "template":  "Usa skill goal-driven-loop y goal-loop-manager operation=create. Luego itera resume-tick hasta complete o bloqueo. Argumentos: $ARGUMENTS"
+                             },
+                    "loop":  {
+                                 "description":  "Loop iterativo o recurrente hasta cumplir objetivo (Claude /loop + Ralph).",
+                                 "agent":  "chief-engineer-assistant",
+                                 "template":  "Usa skill goal-driven-loop. Parsea intervalo si existe; crea o continua goal; ejecuta primera iteracion ya. Argumentos: $ARGUMENTS"
+                             },
+                    "loop-stop":  {
+                                      "description":  "Detiene un goal-loop activo.",
+                                      "agent":  "chief-engineer-assistant",
+                                      "template":  "Ejecuta goal-loop-manager operation=cancel para el goal indicado o el activo mas reciente. Argumentos: $ARGUMENTS"
+                                  },
+                    "handoff":  {
+                                    "description":  "Cierra sesion con git, beads, verificacion y resumen (session-handoff).",
+                                    "agent":  "chief-engineer-assistant",
+                                    "template":  "Usa skill session-handoff. Ejecuta state-manager list_interrupted, handoff-ledger summarize, git status; crea issues pendientes con bd; commit/push solo si Javier lo pidio explicitamente en ARGUMENTS. Argumentos: $ARGUMENTS"
+                                },
+                    "goals":  {
+                                  "description":  "Lista goals activos y estado de loops.",
+                                  "agent":  "chief-engineer-assistant",
+                                  "template":  "Ejecuta goal-loop-manager operation=list. Resume objetivos activos, iteracion, criterios pendientes y siguiente accion. Argumentos: $ARGUMENTS"
+                              },
+                    "automation":  {
+                                       "description":  "Estado de jobs automaticos (radar, watchlist, modelos, digest).",
+                                       "agent":  "chief-engineer-assistant",
+                                       "template":  "Ejecuta scheduled-automation-runner operation=status. Si ARGUMENTS contiene force, usa operation=force job_id=... Argumentos: $ARGUMENTS"
+                                   }
                 },
     "mcp":  {
                 "context7-local":  {
                                        "enabled":  true,
                                        "type":  "local",
                                        "command":  [
-                                                       "C:/nvm4w/nodejs/context7-mcp.cmd"
-                                                   ],
+                                                   "C:/nvm4w/nodejs/context7-mcp.cmd"
+                                               ],
                                        "timeout":  30000
                                    },
                 "ddg-search":  {
@@ -411,25 +454,25 @@
                                     "enabled":  true,
                                     "type":  "local",
                                     "command":  [
-                                                    "C:/nvm4w/nodejs/fetch-mcp.cmd"
-                                                ],
+                                                   "C:/nvm4w/nodejs/fetch-mcp.cmd"
+                                               ],
                                     "timeout":  30000
                                 },
                 "git-local":  {
                                   "enabled":  false,
                                   "type":  "local",
                                   "command":  [
-                                                  "C:/nvm4w/nodejs/git-mcp-server.cmd"
-                                              ],
+                                                   "C:/nvm4w/nodejs/git-mcp-server.cmd"
+                                               ],
                                   "timeout":  30000
                               },
                 "beads":  {
-                              "enabled":  true,
+                              "enabled":  false,
                               "type":  "local",
                               "command":  [
                                               "C:/Users/Javier/AppData/Local/Programs/Python/Python311/Scripts/beads-mcp.exe"
                                           ],
-                              "timeout":  30000
+                              "timeout":  5000
                           },
                 "memory":  {
                                "enabled":  true,
@@ -507,8 +550,8 @@
                                         "enabled":  true,
                                         "type":  "local",
                                         "command":  [
-                                                        "C:/nvm4w/nodejs/chrome-devtools-mcp.cmd"
-                                                    ],
+                                                   "C:/nvm4w/nodejs/chrome-devtools-mcp.cmd"
+                                               ],
                                         "timeout":  30000
                                     },
                 "github":  {
@@ -526,16 +569,16 @@
                                   "enabled":  false,
                                   "type":  "local",
                                   "command":  [
-                                                  "C:/nvm4w/nodejs/firecrawl-mcp.cmd"
-                                              ],
+                                                   "C:/nvm4w/nodejs/firecrawl-mcp.cmd"
+                                               ],
                                   "timeout":  30000
                               },
                 "sentry":  {
                                "enabled":  false,
                                "type":  "local",
                                "command":  [
-                                               "C:/nvm4w/nodejs/mcp-server-sentry.cmd"
-                                           ],
+                                                   "C:/nvm4w/nodejs/mcp-server-sentry.cmd"
+                                               ],
                                "timeout":  30000
                            },
                 "filesystem":  {
@@ -550,24 +593,24 @@
                                  "enabled":  true,
                                  "type":  "local",
                                  "command":  [
-                                                 "C:/nvm4w/nodejs/context7-mcp.cmd"
-                                             ],
+                                                   "C:/nvm4w/nodejs/context7-mcp.cmd"
+                                               ],
                                  "timeout":  30000
                              },
                 "fetch":  {
                               "enabled":  true,
                               "type":  "local",
                               "command":  [
-                                              "C:/nvm4w/nodejs/fetch-mcp.cmd"
-                                          ],
+                                                   "C:/nvm4w/nodejs/fetch-mcp.cmd"
+                                               ],
                               "timeout":  30000
                           },
                 "git":  {
                             "enabled":  false,
                             "type":  "local",
                             "command":  [
-                                            "C:/nvm4w/nodejs/git-mcp-server.cmd"
-                                        ],
+                                                   "C:/nvm4w/nodejs/git-mcp-server.cmd"
+                                               ],
                             "timeout":  30000
                         },
                 "time":  {
@@ -584,7 +627,9 @@
                 "gh_grep":  {
                                 "enabled":  true,
                                 "type":  "local",
-                                "command":  "C:/nvm4w/nodejs/mcp-server-github.cmd",
+                                "command":  [
+                                                   "C:/nvm4w/nodejs/mcp-server-github.cmd"
+                                               ],
                                 "environment":  {
                                                     "GITHUB_TOKEN":  "${env.GITHUB_TOKEN}"
                                                 },
@@ -641,8 +686,8 @@
                                         "options":  {
                                                         "baseURL":  "http://127.0.0.1:32124/v1",
                                                         "apiKey":  "${env.CURSOR_API_KEY}",
-                                                        "timeout":  60000,
-                                                        "chunkTimeout":  10000
+                                                        "timeout":  240000,
+                                                        "chunkTimeout":  30000
                                                     },
                                         "models":  {
                                                        "auto":  {

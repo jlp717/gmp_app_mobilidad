@@ -5,6 +5,7 @@ library;
 
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -34,6 +35,7 @@ import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_em
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_filters_bar.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/mis_pedidos_yoy_bar.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_kpi_dashboard.dart';
+import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_status_badge.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_summary_widget.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/product_card.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/product_search_widget.dart';
@@ -42,6 +44,10 @@ import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/sale_typ
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/stock_alternatives_sheet.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/unit_selector_modal.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/providers/pedidos_provider.dart';
+
+void _debugLog(String message) {
+  if (kDebugMode) debugPrint(message);
+}
 
 class PedidosPage extends ConsumerStatefulWidget {
   const PedidosPage({
@@ -215,7 +221,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         ref.read(pedidosProvider).initFavorites(favs);
       }
     } catch (e) {
-      debugPrint('[PedidosPage] Favorites init error: $e');
+      _debugLog('[PedidosPage] Favorites init error: $e');
     }
   }
 
@@ -274,7 +280,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         );
       }
     } catch (e) {
-      debugPrint('[PedidosPage] Offline init error: $e');
+      _debugLog('[PedidosPage] Offline init error: $e');
     }
   }
 
@@ -384,7 +390,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         clientCode: provider.clientCode,
       );
       product = detail.product;
-      debugPrint(
+      _debugLog(
         '[pedidos] _openProductByCode: code=$productCode '
         'stockEnvases=${product.stockEnvases} stockUnidades=${product.stockUnidades}',
       );
@@ -393,7 +399,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           product.stockUnidades == 0 &&
           fallbackStockEnvases != null &&
           fallbackStockEnvases > 0) {
-        debugPrint(
+        _debugLog(
           '[pedidos] _openProductByCode: API returned 0 stock, '
           'using fallback from recommendation: '
           'envases=$fallbackStockEnvases uds=$fallbackStockUnidades',
@@ -460,14 +466,14 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         );
       }
     } catch (e) {
-      debugPrint(
+      _debugLog(
         '[pedidos] _openProductByCode: getProductDetail failed for '
         '$productCode, falling back to catalog. Error: $e',
       );
       for (final p in provider.products) {
         if (p.code == productCode) {
           product = p;
-          debugPrint(
+          _debugLog(
             '[pedidos] _openProductByCode: found in catalog, '
             'stockEnvases=${p.stockEnvases} stockUnidades=${p.stockUnidades}',
           );
@@ -574,6 +580,14 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     final productCode = code.trim();
     if (productCode.isEmpty) {
       return 'Codigo de articulo invalido';
+    }
+
+    final fixedGiftPromos = provider
+        .getPromosForProduct(productCode)
+        .where((p) => p.hasFixedGiftProduct)
+        .toList();
+    if (fixedGiftPromos.isNotEmpty) {
+      return 'El regalo de esta promoción se aplica automáticamente al pedido';
     }
 
     for (final line in provider.lines) {
@@ -861,22 +875,23 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   // ── TAB 1: Nuevo Pedido ──
 
   Widget _buildNuevoPedidoTab() {
-    final provider = ref.watch(pedidosProvider);
+    final hasClient = ref.watch(pedidosProvider.select((p) => p.hasClient));
     final isPhone = Responsive.isSmall(context);
 
     if (isPhone) {
-      return _buildPhoneLayout(provider);
+      return _buildPhoneLayout(hasClient);
     }
-    return _buildTabletLayout(provider);
+    return _buildTabletLayout();
   }
 
-  Widget _buildTabletLayout(PedidosProvider provider) {
+  Widget _buildTabletLayout() {
+    final provider = ref.watch(pedidosProvider);
     return Row(
       children: [
         // Left: catalog
         Expanded(
           flex: 3,
-          child: _buildCatalogPanel(provider),
+          child: _buildCatalogPanel(),
         ),
         // Divider
         Container(
@@ -894,23 +909,33 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
   }
 
-  Widget _buildPhoneLayout(PedidosProvider provider) {
+  Widget _buildPhoneLayout(bool hasClient) {
+    final lineCount = ref.watch(pedidosProvider.select((p) => p.lines.length));
+    final cartTotal = ref.watch(
+      pedidosProvider.select(
+        (p) => p.globalDiscountPct > 0 ? p.totalConDescuento : p.totalImporte,
+      ),
+    );
+    final cartLabel = ref.watch(
+      pedidosProvider.select((p) => p.cartDisplayQtyLabel),
+    );
+
     return Stack(
       children: [
-        _buildCatalogPanel(provider),
-        // Floating cart button
-        if (provider.hasLines)
+        _buildCatalogPanel(),
+        if (hasClient)
           Positioned(
             bottom: 16,
             right: 16,
+            left: lineCount > 0 ? null : 16,
             child: FloatingActionButton.extended(
               heroTag: 'cart_fab',
-              onPressed: () => _showCartSheet(provider),
+              onPressed: () => _showCartSheet(),
               backgroundColor: AppTheme.neonBlue,
               foregroundColor: AppTheme.darkBase,
-              icon: const Icon(Icons.shopping_cart),
+              icon: Icon(lineCount > 0 ? Icons.shopping_cart : Icons.receipt),
               label: Text(
-                '${provider.cartDisplayQtyLabel} | ${PedidosFormatters.money(provider.globalDiscountPct > 0 ? provider.totalConDescuento : provider.totalImporte)}',
+                '$cartLabel | ${PedidosFormatters.money(cartTotal)}',
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
@@ -919,7 +944,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
   }
 
-  void _showCartSheet(PedidosProvider provider) {
+  void _showCartSheet() {
+    final provider = ref.read(pedidosProvider);
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -940,7 +966,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
   }
 
-  Widget _buildCatalogPanel(PedidosProvider provider) {
+  Widget _buildCatalogPanel() {
+    final provider = ref.watch(pedidosProvider);
     if (!provider.hasClient) {
       return Column(
         children: [
@@ -1161,6 +1188,44 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
                         child:
                             ClientBalanceBadge(balance: provider.clientBalance),
                       ),
+                    if (provider.hasClient) ...[
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          _orderInfoChip(
+                            Icons.format_list_numbered,
+                            '${provider.lines.length} líneas',
+                            AppTheme.neonBlue,
+                          ),
+                          _orderInfoChip(
+                            Icons.euro,
+                            PedidosFormatters.money(
+                              provider.globalDiscountPct > 0
+                                  ? provider.totalConDescuento
+                                  : provider.totalImporte,
+                            ),
+                            AppTheme.neonGreen,
+                          ),
+                          if (provider.globalDiscountPct > 0)
+                            _orderInfoChip(
+                              Icons.percent,
+                              'Dto. ${provider.globalDiscountPct.toStringAsFixed(1)}%',
+                              AppTheme.warning,
+                            ),
+                          _orderInfoChip(
+                            Icons.edit_note,
+                            provider.hasLines
+                                ? 'Borrador activo'
+                                : 'Sin líneas',
+                            provider.hasLines
+                                ? const Color(0xFFF97316)
+                                : Colors.white38,
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -1171,6 +1236,32 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           SaleTypeSelector(
             value: provider.saleType,
             onChanged: (type) => provider.setSaleType(type),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _orderInfoChip(IconData icon, String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.28)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 12),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -1286,6 +1377,11 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     if (showSeparator) displayList.add('__SEPARATOR__');
     displayList.addAll(nuevos);
 
+    final lineByProductCode = <String, OrderLine>{};
+    for (final line in provider.lines) {
+      lineByProductCode.putIfAbsent(line.codigoArticulo, () => line);
+    }
+
     return ListView.builder(
       controller: _catalogScrollController,
       padding: Responsive.contentPadding(context),
@@ -1347,14 +1443,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           );
         }
         final product = item as Product;
-        // Mejora 1 — cartQty
-        OrderLine? lineInCart;
-        for (final line in provider.lines) {
-          if (line.codigoArticulo == product.code) {
-            lineInCart = line;
-            break;
-          }
-        }
+        final lineInCart = lineByProductCode[product.code];
         final cartQty = lineInCart == null
             ? 0.0
             : (lineInCart.cantidadEnvases > 0
@@ -2259,7 +2348,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               ? () => _cancelOrder(order)
               : null,
           onViewAlbaran:
-              (order.estado == 'ENVIADO' || order.estado == 'FACTURADO')
+              OrderStatusConfig.canonicalDisplayStatus(order.estado) ==
+                      'CONFIRMADO'
                   ? () => _viewAlbaran(order)
                   : null,
           onResend:

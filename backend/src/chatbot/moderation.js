@@ -1,5 +1,5 @@
 /**
- * NEXUS AI — Content Moderation (Production-Grade)
+ * Asistente GMP — Content Moderation (Production-Grade)
  * 
  * Three-layer moderation:
  * 1. Input moderation: blocks politics, religion, SQL injection, off-topic, PII extraction

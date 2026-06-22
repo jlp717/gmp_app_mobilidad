@@ -1,5 +1,5 @@
 /**
- * NEXUS AI — Chatbot Tools (Production-Grade, All App Tabs)
+ * Asistente GMP — Chatbot Tools (Production-Grade, All App Tabs)
  * 
  * Covers ALL data domains visible in the GMP app:
  * - Database Discovery (clients, products)
@@ -23,6 +23,7 @@
  */
 
 const logger = require('../../middleware/logger');
+const { extractPdfContent: runPdfExtraction } = require('./pdf_extractor');
 const {
     buildClientVendorParamFilter,
     getVendorColumnExpr,
@@ -881,6 +882,67 @@ async function fetchCfcInvoiceHeader(conn, ref) {
     return rows[0] || null;
 }
 
+function parseAlbaranRef(albaranNumber) {
+    const raw = String(albaranNumber || '').trim();
+    if (!raw) return null;
+
+    const structured = raw.match(/^(\d{4})[\/\-\s]+([A-Za-z0-9]{1,3})[\/\-\s]+(\d{1,2})[\/\-\s]+(\d{1,8})$/);
+    if (structured) {
+        return {
+            ejercicio: parseInt(structured[1], 10),
+            serie: structured[2].toUpperCase(),
+            terminal: parseInt(structured[3], 10),
+            numero: parseInt(structured[4], 10),
+        };
+    }
+
+    const digitsOnly = raw.replace(/[^\d]/g, '');
+    if (!digitsOnly) return null;
+    return {
+        ejercicio: new Date().getFullYear(),
+        serie: null,
+        terminal: null,
+        numero: parseInt(digitsOnly, 10),
+    };
+}
+
+async function fetchAlbaranHeader(conn, ref) {
+    if (!ref || !Number.isFinite(ref.numero) || ref.numero <= 0) {
+        return null;
+    }
+
+    const params = [ref.numero];
+    let sql = `
+        SELECT CAC.EJERCICIOALBARAN AS EJERCICIO,
+               TRIM(CAC.SERIEALBARAN) AS SERIE,
+               CAC.TERMINALALBARAN AS TERMINAL,
+               CAC.NUMEROALBARAN AS NUMERO,
+               TRIM(CAC.CODIGOCLIENTEALBARAN) AS CLIENTE,
+               COALESCE(CAC.IMPORTETOTAL, 0) AS IMPORTE,
+               CAC.ANODOCUMENTO AS ANO,
+               CAC.MESDOCUMENTO AS MES,
+               CAC.DIADOCUMENTO AS DIA
+        FROM DSEDAC.CAC CAC
+        WHERE CAC.NUMEROALBARAN = ?
+    `;
+    if (Number.isFinite(ref.ejercicio)) {
+        sql += ' AND CAC.EJERCICIOALBARAN = ?';
+        params.push(ref.ejercicio);
+    }
+    if (ref.serie) {
+        sql += ' AND TRIM(CAC.SERIEALBARAN) = ?';
+        params.push(ref.serie);
+    }
+    if (Number.isFinite(ref.terminal)) {
+        sql += ' AND CAC.TERMINALALBARAN = ?';
+        params.push(ref.terminal);
+    }
+    sql += ' ORDER BY CAC.ANODOCUMENTO DESC, CAC.MESDOCUMENTO DESC, CAC.DIADOCUMENTO DESC FETCH FIRST 1 ROW ONLY';
+
+    const rows = await safeQuery(conn, sql, params);
+    return rows[0] || null;
+}
+
 const invoiceTools = {
     async resolveInvoiceClientCode(conn, invoiceNumber) {
         const ref = parseInvoiceRef(invoiceNumber);
@@ -1041,6 +1103,117 @@ const invoiceTools = {
                 status: r.SITUACION?.trim() || 'Pendiente'
             })),
             totalAmount: Math.round(totalAmount * 100) / 100
+        };
+    },
+
+    async getInvoicePdfInfo(conn, invoiceNumber) {
+        const ref = parseInvoiceRef(invoiceNumber);
+        if (!ref) {
+            return { error: `Referencia de factura invalida: ${invoiceNumber}` };
+        }
+
+        const header = await fetchCfcInvoiceHeader(conn, ref);
+        if (!header) {
+            return { error: `Factura ${invoiceNumber} no encontrada o sin permiso` };
+        }
+
+        const serie = String(header.SERIE || ref.serie || '').trim();
+        const numero = header.NUMERO;
+        const ejercicio = header.EJERCICIO;
+
+        return {
+            invoiceNumber: `${serie}/${numero}/${ejercicio}`,
+            serie,
+            numero,
+            ejercicio,
+            clientCode: String(header.CLIENTE || '').trim(),
+            amount: parseFloat(header.IMPORTE) || 0,
+            issueDate: formatDbDate(header.ANO, header.MES, header.DIA),
+            pdfPath: `/api/facturas/${serie}/${numero}/${ejercicio}/pdf`,
+            appHint: 'En la app: Facturas > selecciona la factura > icono PDF.',
+        };
+    },
+
+    async resolveAlbaranClientCode(conn, albaranNumber) {
+        const ref = parseAlbaranRef(albaranNumber);
+        if (!ref) return null;
+        const header = await fetchAlbaranHeader(conn, ref);
+        if (!header?.CLIENTE) return null;
+        return String(header.CLIENTE).trim();
+    },
+
+    async getAlbaranPdfInfo(conn, albaranNumber) {
+        const ref = parseAlbaranRef(albaranNumber);
+        if (!ref) {
+            return { error: `Referencia de albaran invalida: ${albaranNumber}` };
+        }
+
+        const header = await fetchAlbaranHeader(conn, ref);
+        if (!header) {
+            return { error: `Albaran ${albaranNumber} no encontrado` };
+        }
+
+        const ejercicio = header.EJERCICIO;
+        const serie = String(header.SERIE || ref.serie || '').trim();
+        const terminal = header.TERMINAL ?? ref.terminal ?? 0;
+        const numero = header.NUMERO;
+
+        return {
+            albaranNumber: `${ejercicio}/${serie}/${terminal}/${numero}`,
+            ejercicio,
+            serie,
+            terminal,
+            numero,
+            clientCode: String(header.CLIENTE || '').trim(),
+            amount: parseFloat(header.IMPORTE) || 0,
+            issueDate: formatDbDate(header.ANO, header.MES, header.DIA),
+            pdfPath: `/api/repartidor/document/albaran/${ejercicio}/${serie}/${terminal}/${numero}/pdf`,
+            appHint: 'En la app: abre el albaran en Repartidor o Facturas y pulsa Ver PDF.',
+        };
+    },
+
+    async getRecentInvoices(conn, userCode, isJefeVentas, vendorScope, limit = 10) {
+        const vendorFilter = _buildVendorFilter(vendorScope, userCode, 'CFC.CODIGOVENDEDOR');
+        const currentYear = new Date().getFullYear();
+        const currentMonth = new Date().getMonth() + 1;
+        const currentDay = new Date().getDate();
+
+        const rows = await safeQuery(conn, `
+            SELECT TRIM(CFC.SERIEFACTURA) AS SERIE,
+                   CFC.NUMEROFACTURA AS NUMERO,
+                   CFC.EJERCICIOFACTURA AS EJERCICIO,
+                   TRIM(CFC.CODIGOCLIENTE) AS CLIENTE,
+                   CFC.IMPORTETOTAL AS IMPORTE,
+                   CFC.DIADOCUMENTO AS DIA,
+                   CFC.MESDOCUMENTO AS MES,
+                   CFC.ANODOCUMENTO AS ANO
+            FROM DSEDAC.CFC CFC
+            WHERE CFC.ANODOCUMENTO = ?
+              AND CFC.MESDOCUMENTO = ?
+              AND CFC.DIADOCUMENTO = ?
+              AND CFC.NUMEROFACTURA > 0
+              AND CFC.NUMEROFACTURA < 900000
+              ${vendorFilter.sql.replace(/LCCDVD/g, 'CFC.CODIGOVENDEDOR')}
+            ORDER BY CFC.IMPORTETOTAL DESC
+            FETCH FIRST ? ROWS ONLY
+        `, [currentYear, currentMonth, currentDay, ...vendorFilter.params, limit]);
+
+        const totalAmount = rows.reduce((sum, row) => sum + (parseFloat(row.IMPORTE) || 0), 0);
+
+        return {
+            date: formatDbDate(currentYear, currentMonth, currentDay),
+            count: rows.length,
+            totalAmount: Math.round(totalAmount * 100) / 100,
+            invoices: rows.map((row) => ({
+                invoiceNumber: `${String(row.SERIE || '').trim()}/${row.NUMERO}/${row.EJERCICIO}`,
+                serie: String(row.SERIE || '').trim(),
+                numero: row.NUMERO,
+                ejercicio: row.EJERCICIO,
+                clientCode: String(row.CLIENTE || '').trim(),
+                amount: parseFloat(row.IMPORTE) || 0,
+                issueDate: formatDbDate(row.ANO, row.MES, row.DIA),
+                pdfPath: `/api/facturas/${String(row.SERIE || '').trim()}/${row.NUMERO}/${row.EJERCICIO}/pdf`,
+            })),
         };
     }
 };
@@ -2314,6 +2487,475 @@ const crossQueryTools = {
     }
 };
 
+// ============================================================================
+// GENERIC ANALYTICS TOOLS (flexible queries — LACLAE + LAC)
+// ============================================================================
+
+function parseFlexibleDate(dateStr) {
+    if (!dateStr) return null;
+    const raw = String(dateStr).trim();
+    const iso = raw.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (iso) {
+        return { year: parseInt(iso[1], 10), month: parseInt(iso[2], 10), day: parseInt(iso[3], 10) };
+    }
+    const dmy = raw.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (dmy) {
+        return { year: parseInt(dmy[3], 10), month: parseInt(dmy[2], 10), day: parseInt(dmy[1], 10) };
+    }
+    const ym = raw.match(/^(\d{4})-(\d{1,2})$/);
+    if (ym) {
+        return { year: parseInt(ym[1], 10), month: parseInt(ym[2], 10), day: 1 };
+    }
+    return null;
+}
+
+function buildLaclaePeriodFilter(dateFrom, dateTo, alias = 'L') {
+    const from = parseFlexibleDate(dateFrom);
+    const to = parseFlexibleDate(dateTo);
+    if (!from && !to) return { clause: '', params: [] };
+
+    const params = [];
+    let clause = '';
+    if (from) {
+        clause += ` AND (${alias}.LCAADC > ? OR (${alias}.LCAADC = ? AND ${alias}.LCMMDC >= ?))`;
+        params.push(from.year, from.year, from.month);
+    }
+    if (to) {
+        clause += ` AND (${alias}.LCAADC < ? OR (${alias}.LCAADC = ? AND ${alias}.LCMMDC <= ?))`;
+        params.push(to.year, to.year, to.month);
+    }
+    return { clause, params };
+}
+
+function shiftPeriod(dateFrom, dateTo, mode) {
+    const from = parseFlexibleDate(dateFrom);
+    const to = parseFlexibleDate(dateTo);
+    if (!from || !to) return null;
+
+    if (mode === 'prior_year') {
+        return {
+            dateFrom: `${from.year - 1}-${String(from.month).padStart(2, '0')}-01`,
+            dateTo: `${to.year - 1}-${String(to.month).padStart(2, '0')}-28`,
+        };
+    }
+
+    const monthSpan = (to.year - from.year) * 12 + (to.month - from.month) + 1;
+    const priorEnd = new Date(from.year, from.month - 2, 1);
+    const priorStart = new Date(priorEnd.getFullYear(), priorEnd.getMonth() - (monthSpan - 1), 1);
+    return {
+        dateFrom: `${priorStart.getFullYear()}-${String(priorStart.getMonth() + 1).padStart(2, '0')}-01`,
+        dateTo: `${priorEnd.getFullYear()}-${String(priorEnd.getMonth() + 1).padStart(2, '0')}-28`,
+    };
+}
+
+function mapGroupRow(groupBy, row) {
+    if (groupBy === 'quarter') {
+        return {
+            period: `${row.YEAR}-T${row.QUARTER}`,
+            year: parseInt(row.YEAR, 10),
+            quarter: parseInt(row.QUARTER, 10),
+            sales: parseFloat(row.SALES) || 0,
+            cost: parseFloat(row.COST) || 0,
+            units: parseFloat(row.UNITS) || 0,
+            lines: parseInt(row.LINES, 10) || 0,
+        };
+    }
+    if (groupBy === 'year') {
+        return {
+            period: String(row.YEAR),
+            year: parseInt(row.YEAR, 10),
+            sales: parseFloat(row.SALES) || 0,
+            cost: parseFloat(row.COST) || 0,
+            units: parseFloat(row.UNITS) || 0,
+            lines: parseInt(row.LINES, 10) || 0,
+        };
+    }
+    if (groupBy === 'family') {
+        return {
+            period: row.FAMILY || 'Sin familia',
+            family: row.FAMILY || 'Sin familia',
+            sales: parseFloat(row.SALES) || 0,
+            cost: parseFloat(row.COST) || 0,
+            units: parseFloat(row.UNITS) || 0,
+            lines: parseInt(row.LINES, 10) || 0,
+        };
+    }
+    if (groupBy === 'product') {
+        return {
+            period: row.CODE,
+            productCode: row.CODE,
+            productName: row.NAME,
+            sales: parseFloat(row.SALES) || 0,
+            cost: parseFloat(row.COST) || 0,
+            units: parseFloat(row.UNITS) || 0,
+            lines: parseInt(row.LINES, 10) || 0,
+        };
+    }
+    return {
+        period: `${row.YEAR}-${String(row.MONTH).padStart(2, '0')}`,
+        year: parseInt(row.YEAR, 10),
+        month: parseInt(row.MONTH, 10),
+        sales: parseFloat(row.SALES) || 0,
+        cost: parseFloat(row.COST) || 0,
+        units: parseFloat(row.UNITS) || 0,
+        lines: parseInt(row.LINES, 10) || 0,
+    };
+}
+
+async function queryClientLaclaeAggregate(conn, {
+    clientCode,
+    dateFrom,
+    dateTo,
+    groupBy = 'month',
+    familyCode,
+    productCode,
+    userCode,
+    isJefeVentas,
+    vendorScope,
+}) {
+    const vendorFilter = _buildVendorFilter(vendorScope, userCode, 'L.LCCDVD');
+    const periodFilter = buildLaclaePeriodFilter(dateFrom, dateTo, 'L');
+    const params = [clientCode, ...periodFilter.params, ...vendorFilter.params];
+
+    let selectGroup = 'L.LCAADC AS YEAR, L.LCMMDC AS MONTH';
+    let groupClause = 'L.LCAADC, L.LCMMDC';
+    let orderClause = 'YEAR DESC, MONTH DESC';
+
+    if (groupBy === 'quarter') {
+        selectGroup = `L.LCAADC AS YEAR,
+            CASE WHEN L.LCMMDC BETWEEN 1 AND 3 THEN 1 WHEN L.LCMMDC BETWEEN 4 AND 6 THEN 2
+                 WHEN L.LCMMDC BETWEEN 7 AND 9 THEN 3 ELSE 4 END AS QUARTER`;
+        groupClause = `L.LCAADC,
+            CASE WHEN L.LCMMDC BETWEEN 1 AND 3 THEN 1 WHEN L.LCMMDC BETWEEN 4 AND 6 THEN 2
+                 WHEN L.LCMMDC BETWEEN 7 AND 9 THEN 3 ELSE 4 END`;
+        orderClause = 'YEAR DESC, QUARTER DESC';
+    } else if (groupBy === 'year') {
+        selectGroup = 'L.LCAADC AS YEAR';
+        groupClause = 'L.LCAADC';
+        orderClause = 'YEAR DESC';
+    } else if (groupBy === 'family') {
+        selectGroup = 'TRIM(A.CODIGOFAMILIA) AS FAMILY';
+        groupClause = 'TRIM(A.CODIGOFAMILIA)';
+        orderClause = 'SALES DESC';
+    } else if (groupBy === 'product') {
+        selectGroup = 'TRIM(L.LCCDRF) AS CODE, TRIM(MAX(A.DESCRIPCIONARTICULO)) AS NAME';
+        groupClause = 'TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO)';
+        orderClause = 'SALES DESC';
+    }
+
+    let extraFilter = '';
+    if (familyCode) {
+        extraFilter += ' AND TRIM(A.CODIGOFAMILIA) = ?';
+        params.push(String(familyCode).trim());
+    }
+    if (productCode) {
+        extraFilter += ' AND TRIM(L.LCCDRF) = ?';
+        params.push(String(productCode).trim());
+    }
+
+    const sql = `
+        SELECT ${selectGroup},
+               SUM(L.LCIMVT) AS SALES,
+               SUM(L.LCIMCT) AS COST,
+               SUM(L.LCCTUD) AS UNITS,
+               COUNT(*) AS LINES
+        FROM DSED.LACLAE L
+        LEFT JOIN DSEDAC.ART A ON TRIM(L.LCCDRF) = TRIM(A.CODIGOARTICULO)
+        WHERE TRIM(L.LCCDCL) = ?
+          AND L.LCIMVT > 0
+          AND L.TPDC = 'LAC'
+          AND L.LCTPVT IN ('CC', 'VC')
+          AND L.LCCLLN IN ('AB', 'VT')
+          ${periodFilter.clause}
+          ${vendorFilter.sql}
+          ${extraFilter}
+        GROUP BY ${groupClause}
+        ORDER BY ${orderClause}
+        FETCH FIRST 50 ROWS ONLY
+    `;
+
+    const rows = await safeQuery(conn, sql, params);
+    const groups = (rows || []).map((row) => mapGroupRow(groupBy, row));
+    const totals = groups.reduce((acc, g) => ({
+        sales: acc.sales + g.sales,
+        cost: acc.cost + (g.cost || 0),
+        units: acc.units + (g.units || 0),
+        lines: acc.lines + (g.lines || 0),
+    }), { sales: 0, cost: 0, units: 0, lines: 0 });
+
+    return { groups, totals };
+}
+
+const genericAnalyticsTools = {
+    async queryClientSales(conn, clientCode, dateFrom, dateTo, groupBy, compareWith, userCode, isJefeVentas, vendorScope) {
+        if (!clientCode) return { error: 'clientCode requerido' };
+        const current = await queryClientLaclaeAggregate(conn, {
+            clientCode, dateFrom, dateTo, groupBy, userCode, isJefeVentas, vendorScope,
+        });
+
+        let comparison = null;
+        if (compareWith && dateFrom && dateTo) {
+            const shifted = shiftPeriod(dateFrom, dateTo, compareWith);
+            if (shifted) {
+                const prior = await queryClientLaclaeAggregate(conn, {
+                    clientCode,
+                    dateFrom: shifted.dateFrom,
+                    dateTo: shifted.dateTo,
+                    groupBy,
+                    userCode,
+                    isJefeVentas,
+                    vendorScope,
+                });
+                const salesDelta = current.totals.sales - prior.totals.sales;
+                const pct = prior.totals.sales > 0
+                    ? Math.round((salesDelta / prior.totals.sales) * 1000) / 10
+                    : null;
+                comparison = {
+                    mode: compareWith,
+                    period: shifted,
+                    totals: prior.totals,
+                    salesDelta,
+                    salesDeltaPercent: pct,
+                };
+            }
+        }
+
+        return {
+            clientCode,
+            dateFrom: dateFrom || null,
+            dateTo: dateTo || null,
+            groupBy: groupBy || 'month',
+            groups: current.groups,
+            totals: current.totals,
+            comparison,
+            source: 'DSED.LACLAE',
+        };
+    },
+
+    async queryClientProfit(conn, clientCode, dateFrom, dateTo, groupBy, userCode, isJefeVentas, vendorScope) {
+        const result = await this.queryClientSales(
+            conn, clientCode, dateFrom, dateTo, groupBy || 'month', null, userCode, isJefeVentas, vendorScope
+        );
+        if (result.error) return result;
+
+        const profit = result.totals.sales - result.totals.cost;
+        const marginPct = result.totals.sales > 0
+            ? Math.round(((profit / result.totals.sales) * 100) * 10) / 10
+            : 0;
+
+        return {
+            ...result,
+            profit,
+            marginPercent: marginPct,
+            groups: result.groups.map((g) => {
+                const p = g.sales - (g.cost || 0);
+                return {
+                    ...g,
+                    profit: p,
+                    marginPercent: g.sales > 0 ? Math.round((p / g.sales) * 1000) / 10 : 0,
+                };
+            }),
+        };
+    },
+
+    async queryClientPurchases(conn, clientCode, dateFrom, dateTo, familyCode, productCode, limit, userCode, isJefeVentas, vendorScope) {
+        if (!clientCode) return { error: 'clientCode requerido' };
+        const periodFilter = buildLaclaePeriodFilter(dateFrom, dateTo, 'L');
+        const vendorFilter = _buildVendorFilter(vendorScope, userCode, 'L.LCCDVD');
+        const params = [clientCode, ...periodFilter.params, ...vendorFilter.params];
+        let extra = '';
+        if (familyCode) {
+            extra += ' AND TRIM(A.CODIGOFAMILIA) = ?';
+            params.push(String(familyCode).trim());
+        }
+        if (productCode) {
+            extra += ' AND TRIM(L.LCCDRF) = ?';
+            params.push(String(productCode).trim());
+        }
+        params.push(Math.min(parseInt(limit, 10) || 30, 50));
+
+        const rows = await safeQuery(conn, `
+            SELECT TRIM(L.LCCDRF) AS CODE,
+                   TRIM(A.DESCRIPCIONARTICULO) AS NAME,
+                   TRIM(A.CODIGOFAMILIA) AS FAMILY,
+                   L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
+                   SUM(L.LCIMVT) AS SALES,
+                   SUM(L.LCCTUD) AS UNITS,
+                   COUNT(*) AS LINES
+            FROM DSED.LACLAE L
+            LEFT JOIN DSEDAC.ART A ON TRIM(L.LCCDRF) = TRIM(A.CODIGOARTICULO)
+            WHERE TRIM(L.LCCDCL) = ?
+              AND L.LCIMVT > 0
+              ${periodFilter.clause}
+              ${vendorFilter.sql}
+              ${extra}
+            GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO), TRIM(A.CODIGOFAMILIA), L.LCAADC, L.LCMMDC
+            ORDER BY SALES DESC
+            FETCH FIRST ? ROWS ONLY
+        `, params);
+
+        const purchases = (rows || []).map((r) => ({
+            productCode: r.CODE,
+            productName: r.NAME,
+            family: r.FAMILY,
+            period: `${r.YEAR}-${String(r.MONTH).padStart(2, '0')}`,
+            sales: parseFloat(r.SALES) || 0,
+            units: parseFloat(r.UNITS) || 0,
+            lines: parseInt(r.LINES, 10) || 0,
+        }));
+
+        const totalSales = purchases.reduce((s, p) => s + p.sales, 0);
+        return {
+            clientCode,
+            dateFrom: dateFrom || null,
+            dateTo: dateTo || null,
+            familyCode: familyCode || null,
+            productCode: productCode || null,
+            purchaseCount: purchases.length,
+            totalSales,
+            purchases,
+            source: 'DSED.LACLAE',
+        };
+    },
+
+    async comparePeriods(conn, dateFrom, dateTo, compareWith, groupBy, clientCode, userCode, isJefeVentas, vendorScope) {
+        if (!dateFrom || !dateTo) return { error: 'dateFrom y dateTo requeridos' };
+        const mode = compareWith || 'prior_year';
+        const shifted = shiftPeriod(dateFrom, dateTo, mode);
+        if (!shifted) return { error: 'Rango de fechas invalido' };
+
+        const baseArgs = {
+            dateFrom, dateTo, groupBy: groupBy || 'month', userCode, isJefeVentas, vendorScope,
+        };
+        const priorArgs = {
+            dateFrom: shifted.dateFrom,
+            dateTo: shifted.dateTo,
+            groupBy: groupBy || 'month',
+            userCode,
+            isJefeVentas,
+            vendorScope,
+        };
+
+        let current;
+        let prior;
+        if (clientCode) {
+            current = await queryClientLaclaeAggregate(conn, { clientCode, ...baseArgs });
+            prior = await queryClientLaclaeAggregate(conn, { clientCode, ...priorArgs });
+        } else {
+            const vendorFilter = _buildVendorFilter(vendorScope, userCode, 'L.LCCDVD');
+            const buildVendorSql = (period) => {
+                const pf = buildLaclaePeriodFilter(period.dateFrom, period.dateTo, 'L');
+                return safeQuery(conn, `
+                    SELECT SUM(L.LCIMVT) AS SALES, SUM(L.LCIMCT) AS COST,
+                           COUNT(DISTINCT L.LCCDCL) AS CLIENTS
+                    FROM DSED.LACLAE L
+                    WHERE L.LCIMVT > 0 ${pf.clause} ${vendorFilter.sql}
+                `, [...pf.params, ...vendorFilter.params]);
+            };
+            const [curRows, priRows] = await Promise.all([
+                buildVendorSql({ dateFrom, dateTo }),
+                buildVendorSql({ dateFrom: shifted.dateFrom, dateTo: shifted.dateTo }),
+            ]);
+            current = { totals: {
+                sales: parseFloat(curRows[0]?.SALES) || 0,
+                cost: parseFloat(curRows[0]?.COST) || 0,
+                clients: parseInt(curRows[0]?.CLIENTS, 10) || 0,
+            } };
+            prior = { totals: {
+                sales: parseFloat(priRows[0]?.SALES) || 0,
+                cost: parseFloat(priRows[0]?.COST) || 0,
+                clients: parseInt(priRows[0]?.CLIENTS, 10) || 0,
+            } };
+        }
+
+        const salesDelta = current.totals.sales - prior.totals.sales;
+        const pct = prior.totals.sales > 0
+            ? Math.round((salesDelta / prior.totals.sales) * 1000) / 10
+            : null;
+
+        return {
+            clientCode: clientCode || null,
+            currentPeriod: { dateFrom, dateTo, totals: current.totals, groups: current.groups || [] },
+            priorPeriod: { ...shifted, totals: prior.totals, groups: prior.groups || [] },
+            compareWith: mode,
+            salesDelta,
+            salesDeltaPercent: pct,
+            profitDelta: (current.totals.sales - current.totals.cost) - (prior.totals.sales - prior.totals.cost),
+        };
+    },
+
+    async queryClientProfile(conn, clientCode, userCode, isJefeVentas, vendorScope) {
+        if (!clientCode) return { error: 'clientCode requerido' };
+        const [profile, debt, margin, products] = await Promise.all([
+            dbDiscoveryTools.lookupClient(conn, clientCode),
+            riskTools.getClientDebt(conn, clientCode),
+            commercialTools.getMarginByClient(conn, clientCode, userCode, isJefeVentas, vendorScope),
+            crossQueryTools.getClientProductsBought(conn, clientCode, 5),
+        ]);
+
+        if (!profile) return { error: 'Cliente no encontrado' };
+
+        return {
+            clientCode,
+            profile,
+            debt: {
+                total: debt.totalDebt,
+                overdue: debt.overdueDebt,
+                riskLevel: debt.riskLevel,
+            },
+            marginYtd: {
+                sales: margin.sales,
+                profit: margin.profit,
+                marginPercent: margin.marginPercent,
+            },
+            topProducts: products.products || [],
+        };
+    },
+
+    async extractPdfContent(conn, documentType, reference) {
+        if (!reference) return { error: 'reference requerida' };
+
+        let albaranLines;
+        if (String(documentType || '').toLowerCase() === 'albaran') {
+            const ref = parseAlbaranRef(reference);
+            if (ref) {
+                const header = await fetchAlbaranHeader(conn, ref);
+                if (header) {
+                    const lineRows = await safeQuery(conn, `
+                        SELECT TRIM(LAC.CODIGOARTICULO) AS CODIGO,
+                               TRIM(LAC.DESCRIPCION) AS DESCRIPCION,
+                               LAC.CANTIDADUNIDADES AS CANTIDAD,
+                               LAC.PRECIOVENTA AS PRECIO,
+                               LAC.IMPORTEVENTA AS IMPORTE
+                        FROM DSEDAC.CAC CAC
+                        LEFT JOIN DSEDAC.LAC LAC
+                          ON LAC.SUBEMPRESAALBARAN = CAC.SUBEMPRESAALBARAN
+                         AND LAC.EJERCICIOALBARAN = CAC.EJERCICIOALBARAN
+                         AND LAC.SERIEALBARAN = CAC.SERIEALBARAN
+                         AND LAC.TERMINALALBARAN = CAC.TERMINALALBARAN
+                         AND LAC.NUMEROALBARAN = CAC.NUMEROALBARAN
+                        WHERE CAC.EJERCICIOALBARAN = ?
+                          AND TRIM(CAC.SERIEALBARAN) = ?
+                          AND CAC.TERMINALALBARAN = ?
+                          AND CAC.NUMEROALBARAN = ?
+                        ORDER BY LAC.SECUENCIA
+                        FETCH FIRST 40 ROWS ONLY
+                    `, [header.EJERCICIO, String(header.SERIE || ref.serie || '').trim(), header.TERMINAL ?? ref.terminal ?? 0, header.NUMERO]);
+                    albaranLines = (lineRows || []).map((line) => ({
+                        productCode: line.CODIGO,
+                        description: line.DESCRIPCION?.trim(),
+                        quantity: parseFloat(line.CANTIDAD) || 0,
+                        unitPrice: parseFloat(line.PRECIO) || 0,
+                        amount: parseFloat(line.IMPORTE) || 0,
+                    }));
+                }
+            }
+        }
+
+        return runPdfExtraction(conn, invoiceTools, { documentType, reference, albaranLines });
+    },
+};
+
 // ── Exports ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -2333,5 +2975,6 @@ module.exports = {
     repartidorTools,
     warehouseTools,
     summaryTools,
-    crossQueryTools
+    crossQueryTools,
+    genericAnalyticsTools,
 };

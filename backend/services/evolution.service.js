@@ -11,7 +11,7 @@ const { queryWithParams } = require('../config/db');
 const { cachedQuery } = require('./query-optimizer');
 const { redisCache, TTL } = require('./redis-cache');
 const logger = require('../middleware/logger');
-const { LACLAE_SALES_FILTER } = require('../utils/common');
+const { LACLAE_SALES_FILTER, sanitizeCodeListForParams } = require('../utils/common');
 
 /**
  * Get monthly sales evolution for a vendor (or ALL vendors).
@@ -32,20 +32,21 @@ async function getSalesEvolution({ vendedorCodes, clientCode, months = 24 }) {
     let vendorFilter = '';
 
     if (!isAll) {
-        const vendors = vendedorCodes.split(',').map(v => v.trim()).filter(Boolean);
+        const vendors = sanitizeCodeListForParams(vendedorCodes, 2);
         if (vendors.length === 1) {
-            vendorFilter = 'AND TRIM(L.LCCDVD) = ?';
+            vendorFilter = 'AND TRIM(L.LCCDVD) = CAST(? AS VARCHAR(2))';
             params.push(vendors[0]);
         } else if (vendors.length > 1 && vendors.length <= 20) {
-            vendorFilter = `AND TRIM(L.LCCDVD) IN (${vendors.map(() => '?').join(',')})`;
+            vendorFilter = `AND TRIM(L.LCCDVD) IN (${vendors.map(() => 'CAST(? AS VARCHAR(2))').join(',')})`;
             params.push(...vendors);
         }
     }
 
     let clientFilter = '';
     if (clientCode) {
-        clientFilter = 'AND TRIM(L.LCCDCL) = ?';
-        params.push(clientCode.trim());
+        const client = String(clientCode).trim().substring(0, 10);
+        clientFilter = 'AND TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10))';
+        params.push(client);
     }
 
     const sql = `

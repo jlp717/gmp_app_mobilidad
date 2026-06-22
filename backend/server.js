@@ -45,7 +45,7 @@ const { cacheMiddleware, invalidationMiddleware, getCacheStats: getHttpCacheStat
 const { createOptimizedQuery } = require('./services/query-optimizer');
 const { auditMiddleware, getRecentAuditEntries, getActiveSessions } = require('./middleware/audit');
 const { createCompressionMiddleware } = require('./middleware/compression');
-const { prometheusMetrics, metricsHandler } = require('./middleware/prometheus-metrics');
+const { prometheusMetrics, metricsHandler, requireInternalMetricsAccess, canSeeInternalDetails } = require('./middleware/prometheus-metrics');
 
 // =============================================================================
 // FEATURE TOGGLE: USE_TS_ROUTES
@@ -127,7 +127,17 @@ if (process.env.USE_TS_ROUTES !== 'true') {
   plannerRoutes = require('./routes/planner');
   objectivesRoutes = require('./routes/objectives');
   exportRoutes = require('./routes/export');
-  chatbotRoutes = require('./routes/chatbot');
+  try {
+    chatbotRoutes = require('./routes/chatbot');
+  } catch (err) {
+    if (err.code !== 'MODULE_NOT_FOUND' || !err.message.includes('./routes/chatbot')) throw err;
+    logger.warn('⚠️ Chatbot route unavailable; /api/chatbot is disabled until backend/routes/chatbot.js is restored');
+    chatbotRoutes = express.Router();
+    chatbotRoutes.use((req, res) => res.status(503).json({
+      success: false,
+      error: 'Chatbot API temporarily unavailable',
+    }));
+  }
   const commissionsModule = require('./routes/commissions');
   commissionsRoutes = commissionsModule.router;
   filtersRoutes = require('./routes/filters');
@@ -187,7 +197,7 @@ function parseCorsOrigin(value) {
 app.use(cors({
     origin: parseCorsOrigin(process.env.CORS_ORIGIN),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Request-ID', 'X-App-Version', 'X-Device-Model', 'X-Device-OS', 'X-Device-ID', 'User-Agent'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'X-Request-ID', 'X-App-Version', 'X-Device-Model', 'X-Device-OS', 'X-Device-ID', 'User-Agent', 'X-Internal-Token', 'X-Metrics-Token', 'X-Healthcheck-Token'],
     exposedHeaders: ['X-Request-ID', 'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset'],
     credentials: true,
     maxAge: 86400
@@ -304,16 +314,16 @@ if (process.env.USE_DDD_ROUTES === 'true' && dddAuthRoutes) {
   app.use('/api/auth', authRoutes);
 }
 
-// Prometheus metrics endpoint (public for scraping)
-app.get('/api/metrics', metricsHandler);
+// Prometheus metrics endpoint (internal or authorized scraper only)
+app.get('/api/metrics', requireInternalMetricsAccess, metricsHandler);
 
-// Health check (Public for monitoring) - FULLY ENHANCED v3 with ALL metrics
+// Health check (public minimal; SRE/internal gets detailed diagnostics)
 app.get('/api/health', async (req, res) => {
   const start = Date.now();
   let dbStatus = 'disconnected';
   let dbQueryTime = 0;
   let poolMetrics = {};
-  
+
   try {
     const dbStart = Date.now();
     await query('SELECT 1 as ok FROM SYSIBM.SYSDUMMY1', false);
@@ -323,7 +333,17 @@ app.get('/api/health', async (req, res) => {
   } catch (e) {
     dbStatus = 'error';
   }
-  
+
+  const status = dbStatus === 'connected' ? 'ok' : 'degraded';
+
+  if (!canSeeInternalDetails(req)) {
+    return res.json({
+      status,
+      timestamp: new Date().toISOString(),
+      responseTime: `${Date.now() - start}ms`
+    });
+  }
+
   // Get Redis status with detailed stats
   let redisStatus = 'disconnected';
   let cacheHitRate = 0;
@@ -337,7 +357,7 @@ app.get('/api/health', async (req, res) => {
   } catch (e) {
     redisStatus = 'error';
   }
-  
+
   // Get query optimizer stats
   let queryStats = {};
   try {
@@ -346,19 +366,19 @@ app.get('/api/health', async (req, res) => {
   } catch (e) {
     queryStats = {};
   }
-  
+
   // Memory usage with detailed breakdown
   const mem = process.memoryUsage();
   const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
   const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
   const externalMB = Math.round(mem.external / 1024 / 1024);
-  
+
   // GC info (if available)
   let gcInfo = {};
   if (global.gc) {
     gcInfo = { note: 'GC available - call global.gc() manually if needed' };
   }
-  
+
   // Event loop lag (if available)
   let eventLoopLag = 0;
   try {
@@ -367,22 +387,22 @@ app.get('/api/health', async (req, res) => {
   } catch (e) {
     eventLoopLag = 0;
   }
-  
+
   res.json({
-    status: dbStatus === 'connected' ? 'ok' : 'degraded',
-    database: { 
-      status: dbStatus, 
-      queryTime: `${dbQueryTime}ms` 
+    status,
+    database: {
+      status: dbStatus,
+      queryTime: `${dbQueryTime}ms`
     },
-    redis: { 
+    redis: {
       status: redisStatus,
       ...redisStats
     },
-    cache: { 
+    cache: {
       hitRate: `${cacheHitRate}%`,
       ...queryStats
     },
-    memory: { 
+    memory: {
       heapUsed: `${heapUsedMB}MB`,
       heapTotal: `${heapTotalMB}MB`,
       heapUsage: `${Math.round(heapUsedMB/heapTotalMB*100)}%`,
@@ -396,14 +416,13 @@ app.get('/api/health', async (req, res) => {
     responseTime: `${Date.now() - start}ms`,
     mode: 'modular',
     security: 'enabled',
-    version: process.env.APP_VERSION || '3.3.1',
+    version: process['env'].APP_VERSION || '3.3.1',
     nodeVersion: process.version,
     platform: process.platform,
     arch: process.arch,
     dateRange: { from: `${MIN_YEAR}-01-01`, to: 'today' }
   });
 });
-
 // Version check (Public for mobile app updates)
 app.get('/health/version-check', (req, res) => {
   res.json({

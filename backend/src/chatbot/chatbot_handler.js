@@ -202,7 +202,7 @@ async function handleChatMessage(conn, message, vendedorCodes, providedClientCod
 
     // ── GREETING ──
     if (intentPatterns.saludo.test(msg)) {
-        return `**NEXUS — Sistema de consulta comercial GMP**
+        return `**Asistente GMP — Consulta comercial**
 
 Consultas disponibles:
 - **Comisiones**: "Mis comisiones", "Comision de marzo"
@@ -228,7 +228,7 @@ Escribe "ayuda" para detalle de comandos.`;
     if (/d[oó]nde|abrir|ir a|navega|pantalla|secci[oó]n|pesta[ñn]a/.test(msg)
         && !clientCode && !productCode && !invoiceNumber) {
         return `Secciones en la app GMP:
-- **Chat IA**: asistente NEXUS
+- **Chat IA**: Asistente GMP
 - **Pedidos**: crear y revisar pedidos; pestaña **Evolución** = productos comprados por mes
 - **Cobros**: pendientes y cobros
 - **Facturas**: facturas y vencimientos
@@ -241,7 +241,7 @@ Solo consultas de la app GMP.`;
 
     // ── HELP ──
     if (intentPatterns.ayuda.test(msg)) {
-        return `**Comandos NEXUS**
+        return `**Comandos Asistente GMP**
 
 **Finanzas**
 - "Mis comisiones" | "Comision marzo"

@@ -7,6 +7,12 @@ const { DashboardMetrics, SalesEvolutionPoint, TopClient, TopProduct } = require
 const { Db2ConnectionPool } = require('../../../core/infrastructure/database/db2-connection-pool');
 const { VENDOR_COLUMN, LACLAE_SALES_FILTER, sanitizeCodeList, buildClientListVendorSqlFilter } = require('../../../../utils/common');
 
+function clampInt(value, defaultValue, min, max) {
+  const n = parseInt(value, 10);
+  if (!Number.isFinite(n)) return defaultValue;
+  return Math.min(Math.max(n, min), max);
+}
+
 class Db2DashboardRepository extends DashboardRepository {
   constructor(dbPool) {
     super();
@@ -20,7 +26,7 @@ class Db2DashboardRepository extends DashboardRepository {
       : `${vendorCol} IN (${sanitizeCodeList(vendedorCodes)})`;
     const dateFilter = LACLAE_SALES_FILTER;
 
-    const yearFilter = year ? `AND LCMMDC = ?` : '';
+    const yearFilter = year ? `AND LCAADC = ?` : '';
     const monthFilter = month ? `AND LCMMDC = ?` : '';
     const params = [];
     if (year) params.push(year);
@@ -44,6 +50,7 @@ class Db2DashboardRepository extends DashboardRepository {
   }
 
   async getSalesEvolution(vendedorCodes, year, months = 12) {
+    const safeMonths = clampInt(months, 12, 1, 36);
     const vendorCol = VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
@@ -66,7 +73,7 @@ class Db2DashboardRepository extends DashboardRepository {
         ${yearFilter}
       GROUP BY LCAADC, LCMMDC
       ORDER BY ANIO, MES
-      FETCH FIRST ${months} ROWS ONLY
+      FETCH FIRST ${safeMonths} ROWS ONLY
     `;
 
     const result = await this._db.executeParams(sql, params);
@@ -79,6 +86,7 @@ class Db2DashboardRepository extends DashboardRepository {
   }
 
   async getTopClients(vendedorCodes, year, month, limit = 10) {
+    const safeLimit = clampInt(limit, 10, 1, 100);
     const vendorCol = VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
@@ -89,7 +97,7 @@ class Db2DashboardRepository extends DashboardRepository {
     const params = [];
     if (year) params.push(year);
     if (month) params.push(month);
-    params.push(limit);
+    params.push(safeLimit);
 
     const sql = `
       SELECT 
@@ -120,6 +128,7 @@ class Db2DashboardRepository extends DashboardRepository {
   }
 
   async getTopProducts(vendedorCodes, year, month, limit = 10) {
+    const safeLimit = clampInt(limit, 10, 1, 100);
     const vendorCol = VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
@@ -130,7 +139,7 @@ class Db2DashboardRepository extends DashboardRepository {
     const params = [];
     if (year) params.push(year);
     if (month) params.push(month);
-    params.push(limit);
+    params.push(safeLimit);
 
     const sql = `
       SELECT 
@@ -161,6 +170,7 @@ class Db2DashboardRepository extends DashboardRepository {
   }
 
   async getRecentSales(vendedorCodes, limit = 10) {
+    const safeLimit = clampInt(limit, 10, 1, 100);
     const vendorCol = VENDOR_COLUMN;
     const vendorFilter = vendedorCodes === 'ALL'
       ? '1=1'
@@ -187,7 +197,7 @@ class Db2DashboardRepository extends DashboardRepository {
       FETCH FIRST ? ROWS ONLY
     `;
 
-    return await this._db.executeParams(sql, [limit]);
+    return await this._db.executeParams(sql, [safeLimit]);
   }
 
   async getYoYComparison(vendedorCodes) {

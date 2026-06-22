@@ -48,6 +48,17 @@ describe('chatbot client RBAC policy contract', () => {
     expect(result).toMatchObject({ allowed: true });
   });
 
+  test('allows GERENTE to query any resolved client', () => {
+    const authorizeChatbotClientScope = loadAuthorizeChatbotClientScope();
+
+    const result = authorizeChatbotClientScope(
+      { userCode: '01', role: 'GERENTE', isJefeVentas: false },
+      { clientCode: 'C-OTRO', vendorCode: '03' }
+    );
+
+    expect(result).toMatchObject({ allowed: true });
+  });
+
   test('rejects direct clientCode when client owner has not been resolved', () => {
     const authorizeChatbotClientScope = loadAuthorizeChatbotClientScope();
 

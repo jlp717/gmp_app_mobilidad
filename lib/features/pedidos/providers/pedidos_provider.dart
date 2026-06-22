@@ -15,6 +15,10 @@ import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_order_api.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 
+void _debugLog(String message) {
+  if (kDebugMode) debugPrint(message);
+}
+
 /// Chooses the provider-facing result from create + confirm API responses.
 Map<String, dynamic> normalizeConfirmOrderResultForProvider({
   required Map<String, dynamic> createResult,
@@ -290,10 +294,9 @@ class PedidosProvider with ChangeNotifier {
 
   // Req #2: getters de visibilidad por rol.
   bool get isJefeVentas => _isJefeVentas;
-  bool get isMarginVisible {
-    final normalizedCode = _userCode.replaceFirst(RegExp(r'^0+'), '');
-    return _isJefeVentas || normalizedCode == '80';
-  }
+
+  /// Margen visible solo para JEFE_VENTAS / ADMIN — nunca para COMERCIAL.
+  bool get isMarginVisible => _isJefeVentas;
 
   String get userRole => _userRole;
 
@@ -699,7 +702,7 @@ class PedidosProvider with ChangeNotifier {
       _brands = results[1];
       notifyListeners();
     } catch (e) {
-      debugPrint('[PedidosProvider] Error loading filters: $e');
+      _debugLog('[PedidosProvider] Error loading filters: $e');
     }
   }
 
@@ -725,7 +728,7 @@ class PedidosProvider with ChangeNotifier {
       _applyStockToProduct(productCode, stock);
       notifyListeners();
     } catch (e) {
-      debugPrint('[PedidosProvider] refreshStock error: $e');
+      _debugLog('[PedidosProvider] refreshStock error: $e');
     }
   }
 
@@ -1243,7 +1246,7 @@ class PedidosProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      debugPrint('[confirmOrder] Step 1/3: Building lines for submit');
+      _debugLog('[confirmOrder] Step 1/3: Building lines for submit');
       final linesForSubmit = _buildLinesForSubmit();
       final obs = observaciones.trim();
       final discountTag = _globalDiscountPct > 0
@@ -1255,7 +1258,7 @@ class PedidosProvider with ChangeNotifier {
           _newCheckoutClientRequestId(vendedorCode);
 
       // Step 1: Create the order
-      debugPrint(
+      _debugLog(
           '[confirmOrder] Step 2/3: Calling createOrder API (client=$_clientCode, lines=${linesForSubmit.length})');
       final createResult = await _orderApi.createOrder(
         clientCode: _clientCode!,
@@ -1266,7 +1269,7 @@ class PedidosProvider with ChangeNotifier {
         observaciones: fullObservaciones,
         clientRequestId: clientRequestId,
       );
-      debugPrint('[confirmOrder] createOrder result id=${createResult['id']}');
+      _debugLog('[confirmOrder] createOrder result id=${createResult['id']}');
 
       if (createResult['queued'] == true) {
         final pending = Map<String, dynamic>.from(createResult);
@@ -1279,13 +1282,13 @@ class PedidosProvider with ChangeNotifier {
 
       if (createResult['id'] == null) {
         _error = 'Error al crear el pedido';
-        debugPrint('[confirmOrder] FAILED: createOrder returned null id');
+        _debugLog('[confirmOrder] FAILED: createOrder returned null id');
         return null;
       }
 
       // Step 2: Immediately confirm the order (set to CONFIRMADO)
       final orderId = createResult['id'] as int;
-      debugPrint(
+      _debugLog(
           '[confirmOrder] Step 3/3: Calling confirmOrder API (orderId=$orderId, saleType=$_saleType, deliveryDate=$deliveryDate)');
       final confirmedResult = await _orderApi.confirmOrder(
         orderId,
@@ -1295,7 +1298,7 @@ class PedidosProvider with ChangeNotifier {
         driverCode: driverCode,
         routeCode: routeCode,
       );
-      debugPrint(
+      _debugLog(
           '[confirmOrder] confirmOrder result keys=${confirmedResult.keys.toList()}');
 
       final result = normalizeConfirmOrderResultForProvider(
@@ -1324,13 +1327,13 @@ class PedidosProvider with ChangeNotifier {
         await refreshOrdersAndStats();
       }
 
-      debugPrint(
+      _debugLog(
           '[confirmOrder] SUCCESS: order confirmed, result keys=${result.keys.toList()}');
       _activeCheckoutClientRequestId = null;
       return result;
     } catch (e, st) {
-      debugPrint('[confirmOrder] ERROR: $e');
-      debugPrint('[confirmOrder] STACK: $st');
+      _debugLog('[confirmOrder] ERROR: $e');
+      _debugLog('[confirmOrder] STACK: $st');
       _error = e.toString();
       return null;
     } finally {
@@ -1340,6 +1343,33 @@ class PedidosProvider with ChangeNotifier {
   }
 
   // ── Orders List ──
+
+  static bool _isGroupedOrderStatusFilter(String? status) {
+    if (status == null || status.isEmpty) return false;
+    return status == 'CONFIRMADO' || status == 'PENDIENTE_APROBACION';
+  }
+
+  static List<OrderSummary> _filterOrdersByGroupedStatus(
+    List<OrderSummary> orders,
+    String status,
+  ) {
+    switch (status.toUpperCase()) {
+      case 'PENDIENTE_APROBACION':
+        return orders.where((o) {
+          final e = o.estado.toUpperCase();
+          return e == 'PENDIENTE_APROBACION' || e == 'CONFIRMANDO';
+        }).toList(growable: false);
+      case 'CONFIRMADO':
+        return orders.where((o) {
+          final e = o.estado.toUpperCase();
+          return e == 'CONFIRMADO' || e == 'ENVIADO' || e == 'FACTURADO';
+        }).toList(growable: false);
+      default:
+        return orders
+            .where((o) => o.estado.toUpperCase() == status.toUpperCase())
+            .toList(growable: false);
+    }
+  }
 
   Future<void> loadOrders({
     required String vendedorCodes,
@@ -1361,9 +1391,10 @@ class PedidosProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final orders = await PedidosService.getOrders(
+      final apiStatus = _isGroupedOrderStatusFilter(status) ? null : status;
+      var orders = await PedidosService.getOrders(
         vendedorCodes: vendedorCodes,
-        status: status,
+        status: apiStatus,
         forceRefresh: forceRefresh,
         dateFrom: dateFrom,
         dateTo: dateTo,
@@ -1373,6 +1404,11 @@ class PedidosProvider with ChangeNotifier {
         sortBy: sortBy,
         sortOrder: sortOrder,
       );
+      if (status != null &&
+          status.isNotEmpty &&
+          _isGroupedOrderStatusFilter(status)) {
+        orders = _filterOrdersByGroupedStatus(orders, status);
+      }
       if (generation != _ordersLoadGeneration) return;
       _orders = orders;
     } catch (e) {
@@ -1418,7 +1454,7 @@ class PedidosProvider with ChangeNotifier {
         forceRefresh: forceRefresh,
       );
     } catch (e) {
-      debugPrint('[PedidosProvider] loadOrderStats error: $e');
+      _debugLog('[PedidosProvider] loadOrderStats error: $e');
       // FIX 2026-05-15: no dejar _orderStats=null si hay error.
       // Inicializar con stats vacios para que la UI no muestre spinner eterno.
       _orderStats ??= OrderStats(
@@ -1576,7 +1612,7 @@ class PedidosProvider with ChangeNotifier {
       _similarClients = reco['similarClients'] ?? [];
       notifyListeners();
     } catch (e) {
-      debugPrint('[PedidosProvider] Error loading recommendations: $e');
+      _debugLog('[PedidosProvider] Error loading recommendations: $e');
     }
   }
 
@@ -1610,7 +1646,7 @@ class PedidosProvider with ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      debugPrint('[PedidosProvider] saveDraft error: $e');
+      _debugLog('[PedidosProvider] saveDraft error: $e');
     }
   }
 
@@ -1641,7 +1677,7 @@ class PedidosProvider with ChangeNotifier {
       await PedidosOfflineService.deleteDraft(key);
       notifyListeners();
     } catch (e) {
-      debugPrint('[PedidosProvider] deleteDraft error: $e');
+      _debugLog('[PedidosProvider] deleteDraft error: $e');
     }
   }
 
@@ -1706,7 +1742,7 @@ class PedidosProvider with ChangeNotifier {
     unawaited(
       PedidosFavoritesService.toggleFavorite(productCode)
           .catchError((Object e) {
-        debugPrint('[PedidosProvider] toggleFavorite persist error: $e');
+        _debugLog('[PedidosProvider] toggleFavorite persist error: $e');
       }),
     );
     notifyListeners();
@@ -1730,7 +1766,7 @@ class PedidosProvider with ChangeNotifier {
       );
       notifyListeners();
     } catch (e) {
-      debugPrint('[PedidosProvider] loadComplementaryProducts error: $e');
+      _debugLog('[PedidosProvider] loadComplementaryProducts error: $e');
     }
   }
 
@@ -1768,13 +1804,13 @@ class PedidosProvider with ChangeNotifier {
         }
       }
       _syncAllGiftPromotionLines();
-      debugPrint(
+      _debugLog(
           '[PedidosProvider] Loaded ${_activePromotionsList.length} promotions for $_clientCode');
       _invalidateCache();
       notifyListeners();
     } catch (e, stack) {
-      debugPrint('[PedidosProvider] loadPromotions error: $e');
-      debugPrint('[PedidosProvider] loadPromotions stack: $stack');
+      _debugLog('[PedidosProvider] loadPromotions error: $e');
+      _debugLog('[PedidosProvider] loadPromotions stack: $stack');
     }
   }
 
@@ -1785,7 +1821,7 @@ class PedidosProvider with ChangeNotifier {
     try {
       _analytics = await PedidosService.getAnalytics(vendedorCodes);
     } catch (e) {
-      debugPrint('[PedidosProvider] loadAnalytics error: $e');
+      _debugLog('[PedidosProvider] loadAnalytics error: $e');
     } finally {
       _isLoadingAnalytics = false;
       notifyListeners();
@@ -1869,7 +1905,7 @@ class PedidosProvider with ChangeNotifier {
       }
       notifyListeners();
     } catch (e) {
-      debugPrint('[PedidosProvider] refreshCartStock batch error: $e');
+      _debugLog('[PedidosProvider] refreshCartStock batch error: $e');
     }
   }
 
@@ -1884,7 +1920,7 @@ class PedidosProvider with ChangeNotifier {
       if (synced > 0) notifyListeners();
       return synced;
     } catch (e) {
-      debugPrint('[PedidosProvider] syncPendingOrders error: $e');
+      _debugLog('[PedidosProvider] syncPendingOrders error: $e');
       return 0;
     }
   }

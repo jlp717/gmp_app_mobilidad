@@ -9,6 +9,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_models.dart';
 import 'package:gmp_app_mobilidad/features/bolsa/data/bolsa_service.dart';
 
+void _debugLog(String message) {
+  if (kDebugMode) debugPrint(message);
+}
+
 final bolsaProvider = ChangeNotifierProvider<BolsaProvider>(
   (ref) => BolsaProvider(),
 );
@@ -125,7 +129,7 @@ class BolsaProvider with ChangeNotifier {
     } catch (e) {
       if (generation == _loadGeneration) {
         _error = e.toString();
-        debugPrint('[BolsaProvider] load error: $e');
+        _debugLog('[BolsaProvider] load error: $e');
       }
     } finally {
       if (generation == _loadGeneration) {

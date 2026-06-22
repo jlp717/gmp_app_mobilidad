@@ -5,7 +5,7 @@
  * The legacy implementation has proper column names and business logic
  */
 const { CobrosRepository } = require('../domain/cobros-repository');
-const { query, queryWithParams, getPool } = require('../../../../config/db');
+const { query, queryWithParams } = require('../../../../config/db');
 const logger = require('../../../../middleware/logger');
 const { db2QualifiedTable, db2InsertSql } = require('../../../../utils/db2-identifiers');
 const { getDb2WriteSchema } = require('../../../../utils/db2-schemas');
@@ -113,6 +113,7 @@ function currentHhmmss(date = new Date()) {
 
 function buildCobroInsert({
   id,
+  idempotencyToken,
   normalizedClient,
   stableReference,
   amount,
@@ -127,7 +128,7 @@ function buildCobroInsert({
   const columns = [
     'ID', 'CODIGO_CLIENTE', 'REFERENCIA', 'IMPORTE', 'FORMA_PAGO',
     'TIPO_VENTA', 'TIPO_MODO', 'TIPO_USUARIO', 'CODIGO_USUARIO',
-    'OBSERVACIONES',
+    'OBSERVACIONES', 'IDEMPOTENCY_TOKEN',
   ];
   const params = [
     id,
@@ -140,6 +141,7 @@ function buildCobroInsert({
     tipoUsuario,
     codigoUsuario,
     observations,
+    idempotencyToken,
   ];
 
   if (includeErpColumns) {
@@ -200,6 +202,11 @@ function normalizeToken(rawToken) {
   return crypto.createHash('sha256').update(token).digest('hex');
 }
 
+function paymentIdFromIdempotencyToken(token) {
+  const crypto = require('crypto');
+  return `CBR-${crypto.createHash('sha256').update(token).digest('hex').slice(0, 32)}`;
+}
+
 function legacyOrderReference(order) {
   return `${trim(order.SERIEPEDIDO)}-${trim(order.NUMERODOCUMENTO || order.NUMEROPEDIDO)}`;
 }
@@ -247,18 +254,51 @@ function applyPendingSummaryDocTotals(row, appAdjustments) {
   return { code, total, vencido };
 }
 
-function computePendingSummaryPortfolioTotals(rows, appAdjustments) {
-  const clients = new Set();
-  let grandTotal = 0;
-  let grandTotalVencido = 0;
+function resolveDocAppPaid(clientCode, docKey, portfolioAdjustments, appCobrosByDoc, repartidorByDoc) {
+  const scopedKey = trim(clientCode) + '|' + docKey;
+  const portfolioPaid = portfolioAdjustments?.get(scopedKey) || 0;
+  const localPaid = (appCobrosByDoc?.get(docKey) || 0) + (repartidorByDoc?.get(docKey) || 0);
+  return Math.max(portfolioPaid, localPaid);
+}
+
+function computeClientPendingTotalGrouped(rows, clientCode, portfolioAdjustments, appCobrosByDoc, repartidorByDoc) {
+  const rawByDoc = new Map();
   for (const row of rows || []) {
-    const applied = applyPendingSummaryDocTotals(row, appAdjustments);
-    if (!applied) continue;
-    clients.add(applied.code);
-    grandTotal += applied.total;
-    grandTotalVencido += applied.vencido;
+    const docKey = formatRepartidorDocKey(row.SERIE_DOCUMENTO, row.NUMERO_DOCUMENTO);
+    rawByDoc.set(docKey, (rawByDoc.get(docKey) || 0) + (parseFloat(row.IMPORTE_PENDIENTE) || 0));
   }
-  return { grandTotal, grandTotalVencido, clientCount: clients.size };
+  let totalCents = 0;
+  for (const [docKey, rawTotal] of rawByDoc) {
+    const appPaid = resolveDocAppPaid(clientCode, docKey, portfolioAdjustments, appCobrosByDoc, repartidorByDoc);
+    const net = Math.max(0, rawTotal - appPaid);
+    if (toCents(net) > 0) totalCents += toCents(net);
+  }
+  return fromCents(totalCents);
+}
+
+function mapCvcRowsToPendientes(rows, clientCode, appCobrosByDoc, repartidorByDoc, portfolioAdjustments) {
+  const paidBudgetByDoc = new Map();
+  for (const row of rows || []) {
+    const docKey = formatRepartidorDocKey(row.SERIE_DOCUMENTO, row.NUMERO_DOCUMENTO);
+    if (!paidBudgetByDoc.has(docKey)) {
+      paidBudgetByDoc.set(docKey, resolveDocAppPaid(clientCode, docKey, portfolioAdjustments, appCobrosByDoc, repartidorByDoc));
+    }
+  }
+  const paidRemainingByDoc = new Map(paidBudgetByDoc);
+  return (rows || [])
+    .map((row) => {
+      const docKey = formatRepartidorDocKey(row.SERIE_DOCUMENTO, row.NUMERO_DOCUMENTO);
+      const erpPendiente = parseFloat(row.IMPORTE_PENDIENTE) || 0;
+      const remainingPaid = paidRemainingByDoc.get(docKey) || 0;
+      const appPaidThisLine = Math.min(remainingPaid, erpPendiente);
+      paidRemainingByDoc.set(docKey, Math.max(0, remainingPaid - appPaidThisLine));
+      return mapCvcRowToCobro(
+        row,
+        appPaidThisLine,
+        repartidorByDoc.get(docKey) || 0,
+      );
+    })
+    .filter((cobro) => toCents(cobro.importePendiente) > 0);
 }
 
 function parseDocReference(reference) {
@@ -407,7 +447,7 @@ class Db2CobrosRepository extends CobrosRepository {
    * Uses correct column names: DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO, IMPORTETOTAL
    */
   async getPendientes(clientCode, context = {}) {
-    const cobrosTableExists = await this.ensureCobrosTable();
+    await this.ensureCobrosTable();
     const access = buildCvcVendorAccessClause(context, 'C');
     try {
       const cvcSql = `
@@ -437,23 +477,32 @@ class Db2CobrosRepository extends CobrosRepository {
         FETCH FIRST 100 ROWS ONLY`;
 
       const rows = await queryWithParams(cvcSql, [trim(clientCode), ...access.params], []);
-      const appCobrosByDoc = cobrosTableExists
-        ? await this.getAppSideCobrosByDoc(clientCode)
-        : new Map();
-      const repartidorByDoc = cobrosTableExists
-        ? await this.getAppSideRepartidorByDoc(clientCode)
-        : new Map();
-      const cobros = (rows || [])
-        .map((row) => {
-          const docKey = `${trim(row.SERIE_DOCUMENTO)}-${row.NUMERO_DOCUMENTO}`;
-          return mapCvcRowToCobro(
-            row,
-            appCobrosByDoc.get(docKey) || 0,
-            repartidorByDoc.get(docKey) || 0,
-          );
-        })
-        .filter((cobro) => toCents(cobro.importePendiente) > 0);
-      const totalPendiente = cobros.reduce((sum, c) => sum + c.importePendiente, 0);
+      const appCobrosByDoc = await this.getAppSideCobrosByDoc(clientCode);
+      const repartidorByDoc = await this.getAppSideRepartidorByDoc(clientCode);
+      const adjustmentVendorCodes = normalizeVendorCodeList(
+        context.adjustmentVendorCode
+          ? [context.adjustmentVendorCode]
+          : (context.vendorCodes || context.vendedorCodes || []),
+      );
+      let portfolioAdjustments = null;
+      if (adjustmentVendorCodes.length > 0) {
+        const scoped = buildCvcVendorScopeFilter(adjustmentVendorCodes);
+        portfolioAdjustments = await this.getAppSideCobrosByDocForVendorScope(scoped.clause, scoped.params);
+      }
+      const cobros = mapCvcRowsToPendientes(
+        rows,
+        clientCode,
+        appCobrosByDoc,
+        repartidorByDoc,
+        portfolioAdjustments,
+      );
+      const totalPendiente = computeClientPendingTotalGrouped(
+        rows,
+        clientCode,
+        portfolioAdjustments,
+        appCobrosByDoc,
+        repartidorByDoc,
+      );
       const totalVencido = cobros
         .filter((c) => c.estado === 'VENCIDO')
         .reduce((sum, c) => sum + c.importePendiente, 0);
@@ -473,10 +522,10 @@ class Db2CobrosRepository extends CobrosRepository {
       logger.warn(`[COBROS_REPO] CVC pendientes failed for ${clientCode}; using ${APP_SCHEMA}.PEDIDOS_CAB fallback: ${cvcErr.message}`);
     }
 
-    return this.getAppOrderPendientes(clientCode, context, cobrosTableExists);
+    return this.getAppOrderPendientes(clientCode, context);
   }
 
-  async getAppOrderPendientes(clientCode, context = {}, cobrosTableExists = true) {
+  async getAppOrderPendientes(clientCode, context = {}) {
     let origenExists = false;
     try {
       const colCheck = await query(`
@@ -516,9 +565,7 @@ class Db2CobrosRepository extends CobrosRepository {
 
     const orderParams = [trim(clientCode), ...(vendedorFilter ? [userCode] : [])];
     const resultado = await queryWithParams(sql, orderParams, []);
-    const payments = cobrosTableExists
-      ? await this.getPaymentsForClient(clientCode)
-      : [];
+    const payments = await this.getPaymentsForClient(clientCode);
 
     const cobros = (resultado && resultado.length > 0 ? resultado : []).map(row => {
       const referencia = `${trim(row.SERIEPEDIDO)}-${row.NUMEROPEDIDO}`;
@@ -618,20 +665,66 @@ class Db2CobrosRepository extends CobrosRepository {
       : (Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1);
     const pageOffset = hasOffset ? safeOffset : (safePage - 1) * safeLimit;
 
-    const portfolioSql = `
-      SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
-             TRIM(CVC.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
-             CVC.NUMERODOCUMENTO AS NUMERO_DOCUMENTO,
-             SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
-             SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
-                 <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
-                  THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
-       FROM DSEDAC.CVC CVC
-       WHERE CVC.IMPORTEPENDIENTE <> 0
-         AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
-         ${emptyClientFilter}
-         ${vendorClause}
-       GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CVC.SERIEDOCUMENTO), CVC.NUMERODOCUMENTO
+    const totalsSql = `
+      WITH CVC_DOCS AS (
+        SELECT TRIM(CVC.CODIGOCLIENTEALBARAN) AS CLIENTE,
+               TRIM(CVC.SERIEDOCUMENTO) AS SERIE_DOCUMENTO,
+               TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))) AS NUMERO_DOCUMENTO,
+               SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
+               SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
+                   <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
+                    THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
+         FROM DSEDAC.CVC CVC
+         WHERE CVC.IMPORTEPENDIENTE <> 0
+           AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
+           ${emptyClientFilter}
+           ${vendorClause}
+         GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CVC.SERIEDOCUMENTO), TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20)))
+      ), APP_COBROS AS (
+        SELECT D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO,
+               COALESCE(SUM(C.IMPORTE), 0) AS TOTAL_APP
+          FROM CVC_DOCS D
+          JOIN ${APP_SCHEMA}.COBROS C
+            ON TRIM(C.CODIGO_CLIENTE) = D.CLIENTE
+           AND (TRIM(C.REFERENCIA) = D.SERIE_DOCUMENTO || '-' || D.NUMERO_DOCUMENTO
+                OR TRIM(C.REFERENCIA) LIKE ${db2StringLiteral('%:')} || D.SERIE_DOCUMENTO || '-' || D.NUMERO_DOCUMENTO)
+         GROUP BY D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO
+      ), REP_COBROS AS (
+        SELECT D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO,
+               COALESCE(SUM(R.IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
+          FROM CVC_DOCS D
+          JOIN ${APP_SCHEMA}.REPARTIDOR_COBROS R
+            ON TRIM(R.CODIGOCLIENTEALBARAN) = D.CLIENTE
+           AND TRIM(R.SERIEDOCUMENTO) = D.SERIE_DOCUMENTO
+           AND TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20))) = D.NUMERO_DOCUMENTO
+         GROUP BY D.CLIENTE, D.SERIE_DOCUMENTO, D.NUMERO_DOCUMENTO
+      ), DOC_PAID AS (
+        SELECT D.CLIENTE, D.TOTAL_PENDIENTE, D.TOTAL_VENCIDO,
+               COALESCE(A.TOTAL_APP, 0) + COALESCE(R.TOTAL_REP, 0) AS PAID
+          FROM CVC_DOCS D
+          LEFT JOIN APP_COBROS A
+            ON A.CLIENTE = D.CLIENTE
+           AND A.SERIE_DOCUMENTO = D.SERIE_DOCUMENTO
+           AND A.NUMERO_DOCUMENTO = D.NUMERO_DOCUMENTO
+          LEFT JOIN REP_COBROS R
+            ON R.CLIENTE = D.CLIENTE
+           AND R.SERIE_DOCUMENTO = D.SERIE_DOCUMENTO
+           AND R.NUMERO_DOCUMENTO = D.NUMERO_DOCUMENTO
+      ), DOC_NET AS (
+        SELECT CLIENTE,
+               CASE WHEN TOTAL_PENDIENTE - PAID > 0 THEN TOTAL_PENDIENTE - PAID ELSE 0 END AS NET_TOTAL,
+               CASE
+                 WHEN TOTAL_VENCIDO <= 0 OR TOTAL_VENCIDO - PAID <= 0 OR TOTAL_PENDIENTE - PAID <= 0 THEN 0
+                 WHEN TOTAL_VENCIDO - PAID < TOTAL_PENDIENTE - PAID THEN TOTAL_VENCIDO - PAID
+                 ELSE TOTAL_PENDIENTE - PAID
+               END AS NET_VENCIDO
+          FROM DOC_PAID
+      )
+      SELECT COALESCE(SUM(NET_TOTAL), 0) AS GRAND_TOTAL,
+             COALESCE(SUM(NET_VENCIDO), 0) AS GRAND_TOTAL_VENCIDO,
+             COUNT(DISTINCT CLIENTE) AS CLIENT_COUNT
+        FROM DOC_NET
+       WHERE NET_TOTAL > 0
     `;
 
     const pageSql = `
@@ -658,25 +751,29 @@ class Db2CobrosRepository extends CobrosRepository {
     const runQuery = queryParams.length > 0
       ? (sql) => queryWithParams(sql, queryParams, [])
       : (sql) => query(sql, false);
-    const [rows, portfolioRows] = await Promise.all([
+    const [rows, totalRows] = await Promise.all([
       runQuery(pageSql),
-      runQuery(portfolioSql),
+      runQuery(totalsSql),
     ]);
 
-    const [appAdjustments, portfolioAdjustments] = await Promise.all([
-      this.getAppSideCobrosByDocForSummary(rows),
-      this.getAppSideCobrosByDocForVendorScope(vendorClause, queryParams),
-    ]);
+    const pageAdjustments = await this.getAppSideCobrosByDocForSummary(rows || []);
+
+    const nameHints = new Map();
+    for (const r of rows || []) {
+      const code = trim(r.CLIENTE);
+      if (code && trim(r.NOMBRE) && !nameHints.has(code)) {
+        nameHints.set(code, trim(r.NOMBRE));
+      }
+    }
 
     const summary = {};
-
     for (const r of rows || []) {
-      const applied = applyPendingSummaryDocTotals(r, appAdjustments);
+      const applied = applyPendingSummaryDocTotals(r, pageAdjustments);
       if (!applied) continue;
       const code = applied.code;
       if (!summary[code]) {
         summary[code] = {
-          nombre: trim(r.NOMBRE) || code,
+          nombre: nameHints.get(code) || code,
           total: 0,
           vencido: 0,
           count: 0,
@@ -689,10 +786,10 @@ class Db2CobrosRepository extends CobrosRepository {
       summary[code].estado = summary[code].vencido > 0 ? 'VENCIDO' : 'PENDIENTE';
     }
 
-    const { grandTotal, grandTotalVencido, clientCount } = computePendingSummaryPortfolioTotals(
-      portfolioRows,
-      portfolioAdjustments,
-    );
+    const totals = totalRows?.[0] || {};
+    const grandTotal = parseFloat(totals.GRAND_TOTAL) || 0;
+    const grandTotalVencido = parseFloat(totals.GRAND_TOTAL_VENCIDO) || 0;
+    const clientCount = parseInt(totals.CLIENT_COUNT, 10) || 0;
 
     return {
       summary,
@@ -954,7 +1051,8 @@ class Db2CobrosRepository extends CobrosRepository {
     overrideReason = '',
   }) {
     await this.ensureCobrosTable();
-    const id = normalizeToken(idempotencyToken);
+    const normalizedIdempotencyToken = normalizeToken(idempotencyToken);
+    const id = paymentIdFromIdempotencyToken(normalizedIdempotencyToken);
     const normalizedClient = trim(clientCode);
     const normalizedReference = trim(reference);
     const normalizedPaymentMethod = trim(paymentMethod || 'CONTADO') || 'CONTADO';
@@ -964,153 +1062,33 @@ class Db2CobrosRepository extends CobrosRepository {
       throw new CommercialCobrosError('INVALID_PAYMENT_PAYLOAD', 'cliente, referencia e importe positivo requeridos', 400);
     }
 
-    const pool = getPool();
-    const conn = await pool.connect();
-    try {
-      await conn.query('BEGIN WORK');
-      await conn.query(`LOCK TABLE ${APP_SCHEMA}.COBROS IN EXCLUSIVE MODE`);
+    // ponytail: no LOCK TABLE / manual tx — legacy route uses queryWithParams; pool tx fails on IBM i ODBC.
+    const order = await this.findOrderForPayment(normalizedClient, normalizedReference);
+    if (!order) {
+      throw new CommercialCobrosError('ORDER_NOT_FOUND_FOR_PAYMENT', 'Pedido pendiente no encontrado para el cobro', 404);
+    }
 
-      const order = await this.findOrderForPayment(conn, normalizedClient, normalizedReference);
-      if (!order) {
-        throw new CommercialCobrosError('ORDER_NOT_FOUND_FOR_PAYMENT', 'Pedido pendiente no encontrado para el cobro', 404);
-      }
+    const manager = isManagerContext({ userRole, isJefeVentas });
+    if (!manager && !codesMatch(order.CODIGOVENDEDOR, normalizedUserId)) {
+      throw new CommercialCobrosError('FORBIDDEN_CLIENT_VENDOR', 'El comercial no puede cobrar pedidos de otro vendedor', 403);
+    }
 
-      const manager = isManagerContext({ userRole, isJefeVentas });
-      if (!manager && !codesMatch(order.CODIGOVENDEDOR, normalizedUserId)) {
-        throw new CommercialCobrosError('FORBIDDEN_CLIENT_VENDOR', 'El comercial no puede cobrar pedidos de otro vendedor', 403);
-      }
-
-      const stableReference = stableOrderReference(order);
-      const existingRows = await conn.query(
-        `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
-         FROM ${APP_SCHEMA}.COBROS WHERE ID = ?`,
-        [id],
-      );
-      if (existingRows.length > 0) {
-        const existing = existingRows[0];
-        const samePayload = trim(existing.CODIGO_CLIENTE) === normalizedClient &&
-          trim(existing.REFERENCIA) === stableReference &&
-          toCents(existing.IMPORTE) === amountCents &&
-          trim(existing.FORMA_PAGO) === normalizedPaymentMethod &&
-          codesMatch(existing.CODIGO_USUARIO, normalizedUserId);
-        if (!samePayload) {
-          throw new CommercialCobrosError('IDEMPOTENCY_CONFLICT', 'Token de idempotencia reutilizado con otro payload', 409);
-        }
-        await conn.query('COMMIT');
-        return {
-          id,
-          clientCode: normalizedClient,
-          amount: fromCents(amountCents),
-          paymentMethod: normalizedPaymentMethod,
-          reference: stableReference,
-          status: 'REGISTRADO',
-          idempotent: true,
-        };
-      }
-
-      const paidRows = await conn.query(
-        `SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL_COBRADO
-         FROM ${APP_SCHEMA}.COBROS
-         WHERE TRIM(CODIGO_CLIENTE) = ?
-           AND (TRIM(REFERENCIA) = ? OR TRIM(REFERENCIA) = ?)`,
-        [normalizedClient, stableReference, legacyOrderReference(order)],
-      );
-      const paidComercialCents = toCents(paidRows?.[0]?.TOTAL_COBRADO);
-
-      // CROSS-TABLE: tambien restamos cobros REPARTIDOR para el mismo documento.
-      // El comercial NO puede recobrar lo que el repartidor ya cobro al entregar.
-      let paidRepartidorCents = 0;
-      try {
-        const docRef = parseDocReference(legacyOrderReference(order));
-        const repartidorRows = await conn.query(
-          `SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
-             FROM ${APP_SCHEMA}.REPARTIDOR_COBROS
-            WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
-              AND TRIM(SERIEDOCUMENTO) = ?
-              AND NUMERODOCUMENTO = ?`,
-          [normalizedClient, docRef.serie, docRef.numero],
-        );
-        paidRepartidorCents = toCents(repartidorRows?.[0]?.TOTAL_REP);
-        if (paidRepartidorCents > 0) {
-          logger.info(`[COBROS_REPO] Cross-table REPARTIDOR_COBROS ya tiene ${paidRepartidorCents}c para ${normalizedClient}/${legacyOrderReference(order)}`);
-        }
-      } catch (xtableErr) {
-        // Si la tabla no existe en este entorno, log y seguimos sin restar.
-        logger.warn(`[COBROS_REPO] Cross-table REPARTIDOR_COBROS check fallo (continuando): ${xtableErr.message}`);
-      }
-
-      const totalAlreadyPaidCents = paidComercialCents + paidRepartidorCents;
-      const pendingBeforeCents = toCents(order.IMPORTETOTAL) - totalAlreadyPaidCents;
-      if (pendingBeforeCents <= 0) {
-        const source = paidRepartidorCents > 0 ? 'REPARTIDOR' : 'COMERCIAL';
-        throw new CommercialCobrosError(
-          'PAYMENT_ALREADY_REGISTERED',
-          paidRepartidorCents > 0
-            ? `El pedido ya esta cobrado por ${source} (entrega al cliente)`
-            : 'El pedido ya esta cobrado',
-          409,
-        );
-      }
-      const pendingAfterCents = pendingBeforeCents - amountCents;
-      if (pendingAfterCents < 0) {
-        if (!manager || allowOverpay !== true) {
-          throw new CommercialCobrosError('OVERPAY_NOT_ALLOWED', 'El importe supera el pendiente', 409);
-        }
-        if (!trim(overrideReason)) {
-          throw new CommercialCobrosError('OVERRIDE_REASON_REQUIRED', 'Motivo obligatorio para sobrecobro', 400);
-        }
-        logger.warn(`[AUDIT] COMMERCIAL_OVERPAY_APPROVED order=${order.ID} user=${normalizedUserId} amount=${fromCents(amountCents)} pending=${fromCents(pendingBeforeCents)}`);
-      }
-
-      let insert = buildCobroInsert({
-        id,
-        normalizedClient,
-        stableReference,
-        amount: fromCents(amountCents),
-        paymentMethod: normalizedPaymentMethod,
-        tipoVenta: 'CC',
-        tipoModo: pendingAfterCents < 0 ? 'SOBRECOBRO' : 'NORMAL',
-        tipoUsuario: manager ? 'JEFE_VENTAS' : 'COMERCIAL',
-        codigoUsuario: normalizedUserId,
-        observations: trim(observations || overrideReason).substring(0, 500),
-        includeErpColumns: true,
-      });
-      try {
-        await conn.query(insert.sql, insert.params);
-      } catch (erpInsertErr) {
-        if (!isColumnNotFound(erpInsertErr)) throw erpInsertErr;
-        logger.warn(`[COBROS_REPO] ERP-compatible columns missing in ${APP_SCHEMA}.COBROS, using legacy insert`);
-        insert = buildCobroInsert({
-          id,
-          normalizedClient,
-          stableReference,
-          amount: fromCents(amountCents),
-          paymentMethod: normalizedPaymentMethod,
-          tipoVenta: 'CC',
-          tipoModo: pendingAfterCents < 0 ? 'SOBRECOBRO' : 'NORMAL',
-          tipoUsuario: manager ? 'JEFE_VENTAS' : 'COMERCIAL',
-          codigoUsuario: normalizedUserId,
-          observations: trim(observations || overrideReason).substring(0, 500),
-          includeErpColumns: false,
-        });
-        await conn.query(insert.sql, insert.params);
-      }
-
-      await conn.query('COMMIT');
-
-      // EXPORT al ERP DSEDAC (best-effort, no rompe el flujo si falla).
-      // Solo se ejecuta si PEDIDOS_EXPORT_TO_SYSTEM=true en .env.
-      try {
-        const dsedacExports = require('../../../../services/dsedac-exports.service');
-        await dsedacExports.exportCobroToSystem({
-          IDEMPOTENCY_TOKEN: id,
-          CODIGO_CLIENTE: normalizedClient,
-          CODIGOVENDEDOR: order.CODIGOVENDEDOR || normalizedUserId,
-          IMPORTE: fromCents(amountCents),
-          CODIGO_USUARIO: normalizedUserId,
-        });
-      } catch (exportErr) {
-        logger.warn(`[COBROS] dsedac export best-effort fail: ${exportErr.message}`);
+    const stableReference = stableOrderReference(order);
+    const existingRows = await queryWithParams(
+      `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
+         FROM ${APP_SCHEMA}.COBROS WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
+      [id, normalizedIdempotencyToken],
+      [],
+    ) || [];
+    if (existingRows.length > 0) {
+      const existing = existingRows[0];
+      const samePayload = trim(existing.CODIGO_CLIENTE) === normalizedClient &&
+        trim(existing.REFERENCIA) === stableReference &&
+        toCents(existing.IMPORTE) === amountCents &&
+        trim(existing.FORMA_PAGO) === normalizedPaymentMethod &&
+        codesMatch(existing.CODIGO_USUARIO, normalizedUserId);
+      if (!samePayload) {
+        throw new CommercialCobrosError('IDEMPOTENCY_CONFLICT', 'Token de idempotencia reutilizado con otro payload', 409);
       }
       return {
         id,
@@ -1118,45 +1096,199 @@ class Db2CobrosRepository extends CobrosRepository {
         amount: fromCents(amountCents),
         paymentMethod: normalizedPaymentMethod,
         reference: stableReference,
-        status: statusForPendingCents(pendingAfterCents),
-        pendingBefore: fromCents(pendingBeforeCents),
-        pendingAfter: fromCents(pendingAfterCents),
-        idempotent: false,
+        status: 'REGISTRADO',
+        idempotent: true,
       };
-    } catch (error) {
-      try { await conn.query('ROLLBACK'); } catch (_) { /* ignore rollback failures */ }
-      throw error;
-    } finally {
-      if (conn && typeof conn.close === 'function') await conn.close();
+    }
+
+    const paidRows = await queryWithParams(
+      `SELECT COALESCE(SUM(IMPORTE), 0) AS TOTAL_COBRADO
+         FROM ${APP_SCHEMA}.COBROS
+         WHERE TRIM(CODIGO_CLIENTE) = ?
+           AND (TRIM(REFERENCIA) = ? OR TRIM(REFERENCIA) = ?)`,
+      [normalizedClient, stableReference, legacyOrderReference(order)],
+      [],
+    );
+    const paidComercialCents = toCents(paidRows?.[0]?.TOTAL_COBRADO);
+
+    let paidRepartidorCents = 0;
+    try {
+      const docRef = parseDocReference(legacyOrderReference(order));
+      const repartidorRows = await queryWithParams(
+        `SELECT COALESCE(SUM(IMPORTEVENCIMIENTO), 0) AS TOTAL_REP
+           FROM ${APP_SCHEMA}.REPARTIDOR_COBROS
+          WHERE TRIM(CODIGOCLIENTEALBARAN) = ?
+            AND TRIM(SERIEDOCUMENTO) = ?
+            AND NUMERODOCUMENTO = ?`,
+        [normalizedClient, docRef.serie, docRef.numero],
+        [],
+      );
+      paidRepartidorCents = toCents(repartidorRows?.[0]?.TOTAL_REP);
+      if (paidRepartidorCents > 0) {
+        logger.info(`[COBROS_REPO] Cross-table REPARTIDOR_COBROS ya tiene ${paidRepartidorCents}c para ${normalizedClient}/${legacyOrderReference(order)}`);
+      }
+    } catch (xtableErr) {
+      logger.warn(`[COBROS_REPO] Cross-table REPARTIDOR_COBROS check fallo (continuando): ${xtableErr.message}`);
+    }
+
+    const totalAlreadyPaidCents = paidComercialCents + paidRepartidorCents;
+    const pendingBeforeCents = toCents(order.IMPORTETOTAL) - totalAlreadyPaidCents;
+    if (pendingBeforeCents <= 0) {
+      const source = paidRepartidorCents > 0 ? 'REPARTIDOR' : 'COMERCIAL';
+      throw new CommercialCobrosError(
+        'PAYMENT_ALREADY_REGISTERED',
+        paidRepartidorCents > 0
+          ? `El pedido ya esta cobrado por ${source} (entrega al cliente)`
+          : 'El pedido ya esta cobrado',
+        409,
+      );
+    }
+    const pendingAfterCents = pendingBeforeCents - amountCents;
+    if (pendingAfterCents < 0) {
+      if (!manager || allowOverpay !== true) {
+        throw new CommercialCobrosError('OVERPAY_NOT_ALLOWED', 'El importe supera el pendiente', 409);
+      }
+      if (!trim(overrideReason)) {
+        throw new CommercialCobrosError('OVERRIDE_REASON_REQUIRED', 'Motivo obligatorio para sobrecobro', 400);
+      }
+      logger.warn(`[AUDIT] COMMERCIAL_OVERPAY_APPROVED order=${order.ID} user=${normalizedUserId} amount=${fromCents(amountCents)} pending=${fromCents(pendingBeforeCents)}`);
+    }
+
+    const insertPayload = {
+      id,
+      idempotencyToken: normalizedIdempotencyToken,
+      normalizedClient,
+      stableReference,
+      amount: fromCents(amountCents),
+      paymentMethod: normalizedPaymentMethod,
+      tipoVenta: 'CC',
+      tipoModo: pendingAfterCents < 0 ? 'SOBRECOBRO' : 'NORMAL',
+      tipoUsuario: manager ? 'JEFE_VENTAS' : 'COMERCIAL',
+      codigoUsuario: normalizedUserId,
+      observations: trim(observations || overrideReason).substring(0, 255),
+    };
+    try {
+      await this.insertCobroRow({ ...insertPayload, includeErpColumns: true });
+    } catch (insertErr) {
+      const msg = String(insertErr.message || '');
+      if (/DUPLICATE|PRIMARY|UNIQUE|SQL0803/i.test(msg)) {
+        const replayRows = await queryWithParams(
+          `SELECT ID, CODIGO_CLIENTE, REFERENCIA, IMPORTE, FORMA_PAGO, CODIGO_USUARIO
+             FROM ${APP_SCHEMA}.COBROS WHERE ID = ? OR IDEMPOTENCY_TOKEN = ?`,
+          [id, normalizedIdempotencyToken],
+          false,
+          false,
+        ) || [];
+        if (replayRows.length > 0) {
+          const existing = replayRows[0];
+          const samePayload = trim(existing.CODIGO_CLIENTE) === normalizedClient &&
+            trim(existing.REFERENCIA) === stableReference &&
+            toCents(existing.IMPORTE) === amountCents &&
+            trim(existing.FORMA_PAGO) === normalizedPaymentMethod &&
+            codesMatch(existing.CODIGO_USUARIO, normalizedUserId);
+          if (!samePayload) {
+            throw new CommercialCobrosError('IDEMPOTENCY_CONFLICT', 'Token de idempotencia reutilizado con otro payload', 409);
+          }
+          return {
+            id,
+            clientCode: normalizedClient,
+            amount: fromCents(amountCents),
+            paymentMethod: normalizedPaymentMethod,
+            reference: stableReference,
+            status: 'REGISTRADO',
+            idempotent: true,
+          };
+        }
+      }
+      throw insertErr;
+    }
+
+    try {
+      const dsedacExports = require('../../../../services/dsedac-exports.service');
+      await dsedacExports.exportCobroToSystem({
+        IDEMPOTENCY_TOKEN: normalizedIdempotencyToken,
+        CODIGO_CLIENTE: normalizedClient,
+        CODIGOVENDEDOR: order.CODIGOVENDEDOR || normalizedUserId,
+        IMPORTE: fromCents(amountCents),
+        CODIGO_USUARIO: normalizedUserId,
+      });
+    } catch (exportErr) {
+      logger.warn(`[COBROS] dsedac export best-effort fail: ${exportErr.message}`);
+    }
+    return {
+      id,
+      clientCode: normalizedClient,
+      amount: fromCents(amountCents),
+      paymentMethod: normalizedPaymentMethod,
+      reference: stableReference,
+      status: statusForPendingCents(pendingAfterCents),
+      pendingBefore: fromCents(pendingBeforeCents),
+      pendingAfter: fromCents(pendingAfterCents),
+      idempotent: false,
+    };
+  }
+
+  async insertCobroRow({
+    id,
+    idempotencyToken,
+    normalizedClient,
+    stableReference,
+    amount,
+    paymentMethod,
+    tipoVenta,
+    tipoModo,
+    tipoUsuario,
+    codigoUsuario,
+    observations,
+    includeErpColumns,
+  }) {
+    let insert = buildCobroInsert({
+      id,
+      idempotencyToken,
+      normalizedClient,
+      stableReference,
+      amount,
+      paymentMethod,
+      tipoVenta,
+      tipoModo,
+      tipoUsuario,
+      codigoUsuario,
+      observations,
+      includeErpColumns,
+    });
+    try {
+      await queryWithParams(insert.sql, insert.params, false, false);
+    } catch (erpInsertErr) {
+      if (!includeErpColumns || !isColumnNotFound(erpInsertErr)) throw erpInsertErr;
+      logger.warn(`[COBROS_REPO] ERP-compatible columns missing in ${APP_SCHEMA}.COBROS, using legacy insert`);
+      insert = buildCobroInsert({
+        id,
+        idempotencyToken,
+        normalizedClient,
+        stableReference,
+        amount,
+        paymentMethod,
+        tipoVenta,
+        tipoModo,
+        tipoUsuario,
+        codigoUsuario,
+        observations,
+        includeErpColumns: false,
+      });
+      await queryWithParams(insert.sql, insert.params, false, false);
     }
   }
 
   async ensureCobrosTable() {
     try {
       await query(COBROS_HEALTHCHECK_SQL);
-      return true;
-    } catch(e) {
-      try {
-        await query(`
-          CREATE TABLE ${APP_SCHEMA}.COBROS (
-            ID VARCHAR(64) PRIMARY KEY,
-            CODIGO_CLIENTE VARCHAR(20),
-            REFERENCIA VARCHAR(100),
-            IMPORTE DECIMAL(10,2),
-            FORMA_PAGO VARCHAR(50),
-            TIPO_VENTA VARCHAR(20),
-            TIPO_MODO VARCHAR(20),
-            TIPO_USUARIO VARCHAR(20),
-            CODIGO_USUARIO VARCHAR(20),
-            OBSERVACIONES VARCHAR(500),
-            FECHA TIMESTAMP DEFAULT CURRENT TIMESTAMP
-          )
-        `);
-        return true;
-      } catch(createErr) {
-        logger.error(`[COBROS] Error creando tabla ${APP_SCHEMA}.COBROS: ${createErr.message}`);
-        return false;
-      }
+    } catch (error) {
+      logger.error(`[COBROS] Tabla ${APP_SCHEMA}.COBROS no disponible: ${error.message}`);
+      throw new CommercialCobrosError(
+        'COBROS_TABLE_UNAVAILABLE',
+        'Servicio de cobros no disponible: tabla de cobros no configurada',
+        503,
+      );
     }
   }
 
@@ -1177,8 +1309,8 @@ class Db2CobrosRepository extends CobrosRepository {
     `, [], []) || [];
   }
 
-  async findOrderForPayment(conn, clientCode, reference) {
-    const rows = await conn.query(`
+  async findOrderForPayment(clientCode, reference) {
+    const rows = await queryWithParams(`
       SELECT
         PC.ID,
         'PEDIDOS_CAB' AS SOURCE,
@@ -1197,11 +1329,11 @@ class Db2CobrosRepository extends CobrosRepository {
           OR 'PEDIDO:' || TRIM(CAST(PC.ID AS VARCHAR(20))) || ':' || TRIM(PC.SERIEPEDIDO) || '-' || TRIM(CAST(PC.NUMEROPEDIDO AS VARCHAR(20))) = ?
         )
       FETCH FIRST 1 ROW ONLY
-    `, [clientCode, reference, reference]);
+    `, [clientCode, reference, reference], []);
     if (rows?.[0]) return rows[0];
 
     const cvcReference = normalizePaymentOrderReference(reference);
-    const cvcRows = await conn.query(`
+    const cvcRows = await queryWithParams(`
       SELECT
         'CVC:' || TRIM(C.SERIEDOCUMENTO) || '-' || TRIM(CAST(C.NUMERODOCUMENTO AS VARCHAR(20))) AS ID,
         'CVC' AS SOURCE,
@@ -1224,7 +1356,7 @@ class Db2CobrosRepository extends CobrosRepository {
           OR 'CVC:' || TRIM(C.SERIEDOCUMENTO) || '-' || TRIM(CAST(C.NUMERODOCUMENTO AS VARCHAR(20))) = ?
         )
       FETCH FIRST 1 ROW ONLY
-    `, [clientCode, cvcReference, reference]);
+    `, [clientCode, cvcReference, reference], []);
     return cvcRows?.[0] || null;
   }
 
@@ -1232,6 +1364,7 @@ class Db2CobrosRepository extends CobrosRepository {
    * Get payment history for a client
    */
   async getHistorico({ clientCode, limit = 20, offset = 0 }) {
+    await this.ensureCobrosTable();
     // limit/offset llegan saneados desde el adaptador (enteros acotados).
     // Sintaxis DB2 for i: la clausula OFFSET va ANTES de FETCH FIRST.
     const safeLimit = Math.max(1, Math.min(100, parseInt(limit, 10) || 20));

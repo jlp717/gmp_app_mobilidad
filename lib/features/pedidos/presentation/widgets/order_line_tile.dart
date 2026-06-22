@@ -132,6 +132,10 @@ class OrderLineTile extends StatelessWidget {
   // ignore: prefer_expression_function_bodies
   Widget build(BuildContext context) {
     final isGiftLine = line.tipoLinea == 'G' || line.precioVenta <= 0;
+    final belowMinPrice = !isGiftLine &&
+        line.precioMinimo > 0 &&
+        line.precioVenta > 0 &&
+        line.precioVenta < line.precioMinimo;
     final marginColor = line.porcentajeMargen >= 15
         ? AppTheme.neonGreen
         : line.porcentajeMargen >= 5
@@ -456,6 +460,17 @@ class OrderLineTile extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (belowMinPrice) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Bajo mín. ${PedidosFormatters.money(line.precioMinimo, decimals: 3)}',
+                          style: const TextStyle(
+                            color: AppTheme.error,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ],
                   ],
                 ),

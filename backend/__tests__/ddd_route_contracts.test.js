@@ -3,6 +3,13 @@
 const request = require('supertest');
 const express = require('express');
 
+function expectDb2SafeBind(sql, bind, maxLen) {
+  const text = bind == null ? '' : String(bind);
+  const normalized = text.length <= maxLen;
+  const casted = new RegExp(`CAST\\(\\?\\s+AS\\s+VARCHAR\\(${maxLen}\\)\\)`, 'i').test(String(sql || ''));
+  expect(normalized || casted).toBe(true);
+}
+
 const mockPedidosService = {
   getOrders: jest.fn(),
   getAvailableVehicles: jest.fn(),
@@ -18,6 +25,8 @@ const mockPedidosService = {
   generateOrderPdf: jest.fn(),
   getOrderVendorForAuth: jest.fn(),
   addOrderLine: jest.fn(),
+  getDeliveryOptions: jest.fn(),
+  getComplementaryProducts: jest.fn(),
 };
 const mockPedidosRepo = {
   searchProducts: jest.fn(),
@@ -184,7 +193,11 @@ describe('DDD pedidos route contracts', () => {
       });
 
     expect(res.status).toBe(500);
-    expect(res.body).toEqual({ success: false, error: 'Error interno del servidor' });
+    expect(res.body).toEqual({
+      success: false,
+      code: 'INTERNAL_SERVER_ERROR',
+      error: 'Error interno del servidor',
+    });
     expect(JSON.stringify(res.body)).not.toContain('SQL0204');
     expect(JSON.stringify(res.body)).not.toContain('ODBC');
     expect(JSON.stringify(res.body)).not.toContain('Tabla interna');
@@ -305,6 +318,82 @@ describe('DDD pedidos route contracts', () => {
     expect(res.body.products[0].precioVenta).toBe(10);
     expect(res.body.products[0]).not.toHaveProperty('precioCosto');
     expect(res.body.products[0]).not.toHaveProperty('precioMinimo');
+  });
+
+  test('GET /products truncates long clientCode for DB2 binds and catalog search', async () => {
+    const db = require('../config/db');
+    mockPedidosRepo.searchProducts.mockResolvedValue({ products: [], count: 0 });
+    const longClient = '4300001091_OVERFLOW';
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .get('/products')
+      .query({ vendedorCodes: '01', clientCode: longClient });
+
+    expect(res.status).toBe(200);
+    const [scopeSql, scopeParams] = db.queryWithParams.mock.calls[0];
+    expect(scopeParams[0]).toBe('4300001091');
+    expectDb2SafeBind(scopeSql, scopeParams[0], 10);
+    expect(mockPedidosRepo.searchProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ clientCode: '4300001091' }),
+    );
+  });
+
+  test('GET /products truncates long vendedorCodes for DB2 scope binds', async () => {
+    const db = require('../config/db');
+    db.queryWithParams.mockResolvedValue([{ OK: 1 }]);
+    mockPedidosRepo.searchProducts.mockResolvedValue({ products: [], count: 0 });
+    const managerUser = { id: '80', code: '80', role: 'JEFE_VENTAS', isJefeVentas: true };
+
+    const res = await request(makeApp(createPedidosRoutes(), managerUser))
+      .get('/products')
+      .query({ vendedorCodes: '0199', clientCode: '4300001091' });
+
+    expect(res.status).toBe(200);
+    const [scopeSql, scopeParams] = db.queryWithParams.mock.calls[0];
+    scopeParams.slice(1).forEach((code) => {
+      if (typeof code === 'string' && /^[A-Za-z0-9]+$/.test(code)) {
+        expectDb2SafeBind(scopeSql, code, 2);
+      }
+    });
+  });
+
+  test('GET /products/:code truncates long article path before product detail lookup', async () => {
+    mockPedidosRepo.getProductDetail.mockResolvedValue({ code: 'ART0012345', name: 'Prod' });
+    const longArticle = 'ART0012345_EXTRA_LONG_SUFFIX';
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .get(`/products/${encodeURIComponent(longArticle)}`)
+      .query({ vendedorCodes: '01', clientCode: 'C001' });
+
+    expect(res.status).toBe(200);
+    expect(mockPedidosRepo.getProductDetail).toHaveBeenCalledWith(expect.objectContaining({
+      code: 'ART0012345',
+      clientCode: 'C001',
+    }));
+  });
+
+  test('GET /client-evolution/:clientCode truncates long path client and vendor SQL binds', async () => {
+    const db = require('../config/db');
+    db.queryWithParams
+      .mockResolvedValueOnce([{ OK: 1 }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+
+    const longClient = '4300001091_OVERFLOW';
+    const res = await request(makeApp(createPedidosRoutes()))
+      .get(`/client-evolution/${longClient}`)
+      .query({ vendedorCodes: '01' });
+
+    expect(res.status).toBe(200);
+    db.queryWithParams.mock.calls.forEach(([sql, params]) => {
+      expect(params[0]).toBe('4300001091');
+      expectDb2SafeBind(sql, params[0], 10);
+    });
+    db.queryWithParams.mock.calls
+      .flatMap(([, params]) => params)
+      .filter((value) => typeof value === 'string' && /^[A-Za-z0-9]+$/.test(value) && value.length <= 2)
+      .forEach((vendor) => expectDb2SafeBind(db.queryWithParams.mock.calls[0][0], vendor, 2));
   });
 
   test('GET /products and /products/:code cache keys include margin-aware authenticated scope', async function () {
@@ -547,6 +636,133 @@ describe('DDD pedidos route contracts', () => {
     expect(res.status).toBe(410);
     expect(res.body.code).toBe('DIRECT_CONFIRM_DISABLED');
   });
+
+  test('GET /delivery-options rejects COMERCIAL when clientCode is outside vendor scope', async () => {
+    const db = require('../config/db');
+    db.queryWithParams.mockResolvedValueOnce([]);
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .get('/delivery-options')
+      .query({ clientCode: 'C999', vendedorCode: '01' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockPedidosService.getDeliveryOptions).not.toHaveBeenCalled();
+    expect(db.queryWithParams.mock.calls[0][0]).toMatch(/DSEDAC\.CLI/i);
+  });
+
+  test('POST /complementary rejects COMERCIAL when clientCode is outside vendor scope', async () => {
+    const db = require('../config/db');
+    db.queryWithParams.mockResolvedValueOnce([]);
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .post('/complementary')
+      .send({ productCodes: ['P001'], clientCode: 'C999', vendedorCode: '01' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockPedidosService.getComplementaryProducts).not.toHaveBeenCalled();
+    expect(db.queryWithParams.mock.calls[0][0]).toMatch(/DSEDAC\.CLI/i);
+  });
+
+  test('GET /delivery-options rejects COMERCIAL for another vendor code', async () => {
+    const db = require('../config/db');
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .get('/delivery-options')
+      .query({ clientCode: 'C001', vendedorCode: '99' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_VENDOR');
+    expect(mockPedidosService.getDeliveryOptions).not.toHaveBeenCalled();
+    expect(db.queryWithParams).not.toHaveBeenCalled();
+  });
+
+  test('GET /delivery-options allows in-scope client and delegates to service', async () => {
+    mockPedidosService.getDeliveryOptions.mockResolvedValue({
+      deliveryDays: ['2026-06-25'],
+      defaultTruck: { code: 'CAM01' },
+    });
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .get('/delivery-options')
+      .query({ clientCode: 'C001', vendedorCode: '01', deliveryDate: '2026-06-25' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockPedidosService.getDeliveryOptions).toHaveBeenCalledWith({
+      clientCode: 'C001',
+      vendedorCode: '01',
+      deliveryDate: '2026-06-25',
+    });
+  });
+
+  test('POST /complementary rejects COMERCIAL for another vendor code when clientCode present', async () => {
+    const db = require('../config/db');
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .post('/complementary')
+      .send({ productCodes: ['P001'], clientCode: 'C001', vendedorCode: '99' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_VENDOR');
+    expect(mockPedidosService.getComplementaryProducts).not.toHaveBeenCalled();
+    expect(db.queryWithParams).not.toHaveBeenCalled();
+  });
+
+  test('POST /complementary allows in-scope client and delegates to service', async () => {
+    mockPedidosService.getComplementaryProducts.mockResolvedValue([{ code: 'P002' }]);
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .post('/complementary')
+      .send({ productCodes: ['P001'], clientCode: 'C001', vendedorCode: '01' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.products).toEqual([{ code: 'P002' }]);
+    expect(mockPedidosService.getComplementaryProducts).toHaveBeenCalledWith(['P001'], 'C001');
+  });
+
+  test('POST /complementary skips client scope when clientCode omitted', async () => {
+    mockPedidosService.getComplementaryProducts.mockResolvedValue([{ code: 'P002' }]);
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .post('/complementary')
+      .send({ productCodes: ['P001'] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(mockPedidosService.getComplementaryProducts).toHaveBeenCalledWith(['P001'], undefined);
+    const scopeCalls = require('../config/db').queryWithParams.mock.calls.filter(([sql]) => /DSEDAC\.CLI/i.test(sql));
+    expect(scopeCalls).toHaveLength(0);
+  });
+
+  test('GET /purchase-history-global applies COMERCIAL scope filters to lastYear query', async () => {
+    const db = require('../config/db');
+    db.queryWithParams.mockResolvedValue([]);
+
+    const res = await request(makeApp(createPedidosRoutes(), { id: '01', code: '01', role: 'COMERCIAL' }))
+      .get('/purchase-history-global')
+      .query({
+        from: '2026-01-01',
+        to: '2026-01-31',
+        vendedorCode: '99',
+        clientCode: 'C001',
+        productCode: 'P001',
+        familia: 'F01',
+        marca: 'M01',
+      });
+
+    expect(res.status).toBe(200);
+    const lastYearCall = db.queryWithParams.mock.calls.find(([sql]) => /TOTAL_LAST_YEAR/i.test(sql));
+    expect(lastYearCall).toBeDefined();
+    expect(lastYearCall[0]).toMatch(/TRIM\(L\.LCCDVD\) IN \(\?\)/);
+    expect(lastYearCall[0]).toMatch(/TRIM\(L\.LCCDCL\) = \?/);
+    expect(lastYearCall[0]).toMatch(/TRIM\(L\.LCCDRF\) = \?/);
+    expect(lastYearCall[0]).toMatch(/TRIM\(CODIGOFAMILIA\) = \?/);
+    expect(lastYearCall[0]).toMatch(/TRIM\(CODIGOMARCA\) = \?/);
+    expect(lastYearCall[1]).toEqual([20250101, 20250131, '01', 'C001', 'P001', 'F01', 'M01']);
+    expect(lastYearCall[1]).not.toContain('99');
+  });
 });
 
 
@@ -600,7 +816,11 @@ describe('DDD cobros route contracts', () => {
     const res = await request(makeApp(createCobrosRoutes())).get('/C001/pendientes');
 
     expect(res.status).toBe(500);
-    expect(res.body).toEqual({ success: false, error: 'Error interno del servidor' });
+    expect(res.body).toEqual({
+      success: false,
+      code: 'INTERNAL_SERVER_ERROR',
+      error: 'Error interno del servidor',
+    });
     expect(JSON.stringify(res.body)).not.toContain('SQL0802');
     expect(JSON.stringify(res.body)).not.toContain('ODBC');
     expect(JSON.stringify(res.body)).not.toContain('conversion');
@@ -680,6 +900,29 @@ describe('DDD cobros route contracts', () => {
       }),
     );
     expect(res.body.success).toBe(true);
+  });
+
+  test('POST /4300000354/registrar maps the DDD route client before repository insert', async () => {
+    mockCobrosRepo.registerPayment.mockResolvedValue({ id: 'pay-real-client', status: 'REGISTRADO' });
+
+    const res = await request(makeApp(createCobrosRoutes()))
+      .post('/4300000354/registrar')
+      .send({
+        referencia: 'M-1',
+        importe: 42,
+        formaPago: 'CONTADO',
+        idempotencyToken: 'cobro-token-route-real-client-001',
+      });
+
+    expect(res.status).toBe(200);
+    expect(mockCobrosRepo.registerPayment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        clientCode: '4300000354',
+        amount: 42,
+        reference: 'M-1',
+        idempotencyToken: 'cobro-token-route-real-client-001',
+      }),
+    );
   });
 
   test('POST /:codigoCliente/registrar maps idempotency conflicts to 409', async () => {
@@ -791,6 +1034,119 @@ describe('DDD cobros route contracts', () => {
     expect(res.status).toBe(403);
     expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
     expect(mockCobrosRepo.getHistorico).not.toHaveBeenCalled();
+  });
+
+  test('GET /:codigoCliente/pendientes rejects COMERCIAL outside vendor client scope when clientCodes absent', async () => {
+    const db = require('../config/db');
+    mockCobrosRepo.getPendientes.mockResolvedValue({
+      cobros: [{ id: 'leak', referencia: 'M-1' }],
+      resumen: { totalPendiente: 99 },
+    });
+    db.queryWithParams.mockImplementation(async (sql) => {
+      if (/DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
+        return [];
+      }
+      return [{ OK: 1 }];
+    });
+
+    const res = await request(makeApp(createCobrosRoutes(), { id: '01', code: '01', role: 'COMERCIAL' }))
+      .get('/C999/pendientes');
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockCobrosRepo.getPendientes).not.toHaveBeenCalled();
+  });
+
+  test('POST /register rejects COMERCIAL outside vendor client scope before registerPayment', async () => {
+    const db = require('../config/db');
+    db.queryWithParams.mockImplementation(async (sql) => {
+      if (/DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
+        return [];
+      }
+      return [{ OK: 1 }];
+    });
+
+    const res = await request(makeApp(createCobrosRoutes(), { id: '01', code: '01', role: 'COMERCIAL' }))
+      .post('/register')
+      .send({
+        clientCode: 'C999',
+        amount: 10,
+        paymentMethod: 'CONTADO',
+        reference: 'M-1',
+        idempotencyToken: 'ddd-cobros-register-scope-001',
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockCobrosRepo.registerPayment).not.toHaveBeenCalled();
+  });
+
+  test('POST /:codigoCliente/registrar rejects COMERCIAL outside vendor client scope when clientCodes absent', async () => {
+    const db = require('../config/db');
+    db.queryWithParams.mockImplementation(async (sql) => {
+      if (/DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
+        return [];
+      }
+      return [{ OK: 1 }];
+    });
+
+    const res = await request(makeApp(createCobrosRoutes(), { id: '01', code: '01', role: 'COMERCIAL' }))
+      .post('/C999/registrar')
+      .send({
+        referencia: 'M-1',
+        importe: 10,
+        formaPago: 'CONTADO',
+        idempotencyToken: 'ddd-cobros-vendor-scope-001',
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockCobrosRepo.registerPayment).not.toHaveBeenCalled();
+  });
+
+  test('GET /:codigoCliente/estado rejects COMERCIAL outside vendor client scope when clientCodes absent', async () => {
+    const db = require('../config/db');
+    mockCobrosRepo.getPendientes.mockResolvedValue({
+      cobros: [],
+      resumen: { totalPendiente: 50 },
+    });
+    db.queryWithParams.mockImplementation(async (sql) => {
+      if (/DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
+        return [];
+      }
+      return [{ OK: 1 }];
+    });
+
+    const res = await request(makeApp(createCobrosRoutes(), { id: '01', code: '01', role: 'COMERCIAL' }))
+      .get('/C999/estado');
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockCobrosRepo.getPendientes).not.toHaveBeenCalled();
+  });
+
+  test('GET /:codigoCliente/pendientes blocks PEDIDOS_CAB fallback for out-of-scope client when clientCodes absent', async () => {
+    const db = require('../config/db');
+    db.queryWithParams.mockImplementation(async (sql) => {
+      if (/DSEDAC\.CLI/i.test(sql) || /DSEDAC\.CLP/i.test(sql) || /DSED\.LACLAE/i.test(sql)) {
+        return [];
+      }
+      if (/PEDIDOS_CAB/i.test(sql)) {
+        return [{ ID: 99, IMPORTETOTAL: 120, ESTADO: 'CONFIRMADO' }];
+      }
+      return [];
+    });
+    mockCobrosRepo.getPendientes.mockResolvedValueOnce({
+      cobros: [{ id: 'fallback-leak', referencia: 'PED-99' }],
+      resumen: { totalPendiente: 120 },
+    });
+
+    const res = await request(makeApp(createCobrosRoutes(), { id: '01', code: '01', role: 'COMERCIAL' }))
+      .get('/C999/pendientes');
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('FORBIDDEN_CLIENT_VENDOR');
+    expect(mockCobrosRepo.getPendientes).not.toHaveBeenCalled();
   });
 });
 

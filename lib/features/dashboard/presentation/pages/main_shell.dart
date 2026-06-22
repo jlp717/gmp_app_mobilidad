@@ -10,6 +10,7 @@ import 'package:gmp_app_mobilidad/core/services/navigation_config_service.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
 import 'package:gmp_app_mobilidad/features/chatbot/presentation/pages/chatbot_page.dart';
+import 'package:gmp_app_mobilidad/features/chatbot/providers/chatbot_shell_navigation.dart';
 import 'package:gmp_app_mobilidad/core/widgets/lazy_indexed_stack.dart';
 import 'package:gmp_app_mobilidad/core/widgets/modern_loading.dart';
 import 'package:gmp_app_mobilidad/features/clients/presentation/pages/simple_client_list_page.dart';
@@ -389,6 +390,21 @@ class _MainShellState extends ConsumerState<MainShell> {
     final navItems = _getNavItems(navIsJefeVentas, vendedorCodes);
     final safeIndex = _currentIndex.clamp(0, navItems.length - 1);
     final useBottomNav = Responsive.useBottomNav(context);
+
+    ref.listen(chatbotShellNavigationProvider, (previous, next) {
+      if (next == null) return;
+      final targetIdx =
+          navItems.indexWhere((item) => item.label == next.tabLabel);
+      if (targetIdx >= 0) {
+        setState(() {
+          _currentIndex = targetIdx;
+          if (next.clientCode != null && next.clientCode!.isNotEmpty) {
+            _pendingClientId = next.clientCode;
+          }
+        });
+      }
+      ref.read(chatbotShellNavigationProvider.notifier).clear();
+    });
 
     if (useBottomNav) {
       return _buildPhoneLayout(navItems, safeIndex, user, navIsJefeVentas);

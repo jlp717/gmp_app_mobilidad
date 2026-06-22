@@ -40,11 +40,13 @@ jobs:
         uses: anomalyco/opencode/github@77fc88c8ade8e5a620ebbe1197f3a572d29ae91a
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
-          OPENCODE_TIER_A_MODEL: cursor-acp/claude-opus-4-7
+          OPENCODE_TIER_A_MODEL: cursor-acp/composer-2.5
           OPENCODE_TIER_B_MODEL: cursor-acp/composer-2.5
           OPENCODE_TIER_C_MODEL: opencode-go/kimi-k2.6
+          # Ponytail portable: .opencode/skills/ponytail/SKILL.md (no file:// plugin on Linux CI)
+          OPENCODE_SYSTEM_HINT: "GMP Mobilidad. Apply ponytail skill: YAGNI, reuse repo code, stdlib/native first, smallest correct diff. Respect V4 gates; no production without approval."
         with:
-          model: opencode-go/kimi-k2.6
+          model: cursor-acp/composer-2.5
 
       - name: Notify Telegram
         if: always() && secrets.TELEGRAM_BOT_TOKEN != '' && secrets.TELEGRAM_CHAT_ID != ''

@@ -78,6 +78,47 @@ void main() {
       expect(token, contains('01'));
       expect(token, contains('4300030041'));
     });
+
+    test('sends bounded pagination params for pending summary', () async {
+      final paths = <String>[];
+      final interceptor = InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (options.method == 'GET' &&
+              options.path.startsWith('/cobros/pending-summary/')) {
+            paths.add(options.uri.toString());
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                data: const {
+                  'success': true,
+                  'summary': <String, dynamic>{},
+                  'grandTotal': 0,
+                  'grandTotalVencido': 0,
+                },
+              ),
+            );
+            return;
+          }
+          handler.next(options);
+        },
+      );
+      ApiClient.dio.interceptors.add(interceptor);
+      addTearDown(() => ApiClient.dio.interceptors.remove(interceptor));
+
+      final provider = CobrosProvider(employeeCode: '98');
+      await provider.cargarPendingSummary(
+        'ALL',
+        limit: 999,
+        page: 0,
+        offset: -10,
+      );
+
+      expect(paths, hasLength(1));
+      expect(paths.single, contains('/cobros/pending-summary/ALL'));
+      expect(paths.single, contains('limit=100'));
+      expect(paths.single, contains('page=1'));
+      expect(paths.single, contains('offset=0'));
+    });
   });
 
   group('Pending summary status resolver', () {
@@ -193,10 +234,12 @@ void main() {
           }
           if (options.method == 'POST' && options.path == '/entregas/update') {
             mutationBodies.add(options.data);
-            handler.resolve(Response<Map<String, dynamic>>(
-              requestOptions: options,
-              data: const {'success': true},
-            ));
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                data: const {'success': true},
+              ),
+            );
             return;
           }
           handler.next(options);

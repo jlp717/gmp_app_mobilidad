@@ -204,7 +204,9 @@ function sanitizeCodeListForParams(codeString, maxLen = 2) {
     return codeString
         .split(',')
         .map(c => c.trim())
-        .filter(c => /^[a-zA-Z0-9]+$/.test(c) && c.length <= maxLen);
+        .filter(c => /^[a-zA-Z0-9]+$/.test(c))
+        .map(c => c.substring(0, maxLen))
+        .filter(Boolean);
 }
 
 function getVendorVisibilityScope(vendorCode) {
@@ -224,11 +226,13 @@ function buildClientVendorParamFilter(vendorCodes, clientAlias = 'CLI') {
     }
     const safeCodes = vendorCodes
         .map((code) => String(code || '').trim())
-        .filter((code) => /^[a-zA-Z0-9]{1,10}$/.test(code));
+        .filter((code) => /^[a-zA-Z0-9]+$/.test(code))
+        .map((code) => code.substring(0, 2))
+        .filter(Boolean);
     if (safeCodes.length === 0) {
         return { clause: '', params: [] };
     }
-    const placeholders = safeCodes.map(() => '?').join(',');
+    const placeholders = safeCodes.map(() => 'CAST(? AS VARCHAR(2))').join(',');
     const laclaeVendorCol = getVendorColumnExpr('LAC');
     return {
         clause: `
@@ -386,7 +390,7 @@ function buildLaclaeBoundedClientCodesSql(vendorCodes) {
 }
 
 async function lookupClientAssignedVendorCodes(clientCode) {
-    const client = String(clientCode || '').trim();
+    const client = String(clientCode || '').trim().substring(0, 10);
     if (!client) return [];
     const laclaeVendorCol = getVendorColumnExpr('LAC');
     const rows = await queryWithParams(
@@ -394,11 +398,11 @@ async function lookupClientAssignedVendorCodes(clientCode) {
            FROM (
              SELECT TRIM(CLP.VENDEDORCOMERCIAL) AS VENDOR_CODE
                FROM DSEDAC.CLP CLP
-              WHERE TRIM(CLP.CODIGOCLIENTE) = ?
+              WHERE TRIM(CLP.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
              UNION
              SELECT TRIM(${laclaeVendorCol}) AS VENDOR_CODE
                FROM DSED.LACLAE LAC
-              WHERE TRIM(LAC.LCCDCL) = ?
+              WHERE TRIM(LAC.LCCDCL) = CAST(? AS VARCHAR(10))
                 AND LAC.LCAADC >= ?
                 AND LAC.TPDC = 'LAC'
            ) V
@@ -430,7 +434,7 @@ async function chunkedVendorQuery(baseSql, vendorColumn, vendedorCodes, executeF
     if (codes.length === 0) return [];
 
     if (codes.length <= batchSize) {
-        const placeholders = codes.map(() => '?').join(',');
+        const placeholders = codes.map(() => 'CAST(? AS VARCHAR(2))').join(',');
         const sql = baseSql.replace('@VENDOR_IN@', `TRIM(${vendorColumn}) IN (${placeholders})`);
         return executeFn(sql, codes);
     }
@@ -442,7 +446,7 @@ async function chunkedVendorQuery(baseSql, vendorColumn, vendedorCodes, executeF
 
     const results = await Promise.all(
         batches.map(batch => {
-            const placeholders = batch.map(() => '?').join(',');
+            const placeholders = batch.map(() => 'CAST(? AS VARCHAR(2))').join(',');
             const sql = baseSql.replace('@VENDOR_IN@', `TRIM(${vendorColumn}) IN (${placeholders})`);
             return executeFn(sql, batch);
         })

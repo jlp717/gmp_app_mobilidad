@@ -145,89 +145,120 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
       'Dic',
     ];
     final filtered = provider.filteredMovements;
-    return ListView(
+    final monthLabel = months[(status.mes - 1).clamp(0, 11)];
+    final hasChart = provider.history.isNotEmpty;
+    // Header: summary, gap, progress, [chart block], gap, title, filters, gap
+    const headerBase = 7;
+    final headerCount = headerBase + (hasChart ? 2 : 0);
+    final bodyCount = provider.movements.isEmpty
+        ? 1
+        : filtered.isEmpty
+            ? 1
+            : filtered.length;
+    final itemCount = headerCount + bodyCount + 1; // + bottom spacer
+
+    return ListView.builder(
       padding: const EdgeInsets.all(16),
-      children: [
-        _BolsaSummaryCard(
-          status: status,
-          monthLabel: months[(status.mes - 1).clamp(0, 11)],
-        ),
-        const SizedBox(height: 16),
-        _ProgressBar(status: status),
-        if (provider.history.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          BolsaMonthlyChart(history: provider.history),
-        ],
-        const SizedBox(height: 20),
-        Padding(
-          padding: const EdgeInsets.only(left: 4, bottom: 8),
-          child: Row(
-            children: [
-              Text(
-                'Movimientos',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: Responsive.fontSize(context, small: 14, large: 16),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                provider.movements.isEmpty
-                    ? ''
-                    : '(${filtered.length}/${provider.movements.length})',
-                style: const TextStyle(
-                  color: Colors.white54,
-                  fontSize: 12,
-                ),
-              ),
-              const Spacer(),
-              if (provider.tipoFilter != null ||
-                  provider.searchQuery.isNotEmpty)
-                TextButton.icon(
-                  onPressed: provider.clearFilters,
-                  icon: const Icon(Icons.clear, size: 14),
-                  label: const Text('Limpiar', style: TextStyle(fontSize: 11)),
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppTheme.warning,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+      itemCount: itemCount,
+      itemBuilder: (context, index) {
+        if (index < headerCount) {
+          var slot = 0;
+          if (index == slot++) {
+            return _BolsaSummaryCard(status: status, monthLabel: monthLabel);
+          }
+          if (index == slot++) return const SizedBox(height: 16);
+          if (index == slot++) return _ProgressBar(status: status);
+          if (hasChart) {
+            if (index == slot++) return const SizedBox(height: 16);
+            if (index == slot++) {
+              return BolsaMonthlyChart(history: provider.history);
+            }
+          }
+          if (index == slot++) return const SizedBox(height: 20);
+          if (index == slot++) {
+            return Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 8),
+              child: Row(
+                children: [
+                  Text(
+                    'Movimientos',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize:
+                          Responsive.fontSize(context, small: 14, large: 16),
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-            ],
-          ),
-        ),
-        _MovimientosFilters(provider: provider),
-        const SizedBox(height: 8),
-        if (provider.movements.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(20),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppTheme.darkSurface,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Text(
-              'No hay movimientos este mes',
-              style: TextStyle(color: Colors.white54),
-            ),
-          )
-        else if (filtered.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(20),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppTheme.darkSurface,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Text(
-              'Ningún movimiento coincide con los filtros',
-              style: TextStyle(color: Colors.white54),
-            ),
-          )
-        else
-          ...filtered.map((m) => _MovimientoTile(movimiento: m)),
-        const SizedBox(height: 32),
-      ],
+                  const SizedBox(width: 8),
+                  Text(
+                    provider.movements.isEmpty
+                        ? ''
+                        : '(${filtered.length}/${provider.movements.length})',
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const Spacer(),
+                  if (provider.tipoFilter != null ||
+                      provider.searchQuery.isNotEmpty)
+                    TextButton.icon(
+                      onPressed: provider.clearFilters,
+                      icon: const Icon(Icons.clear, size: 14),
+                      label: const Text(
+                        'Limpiar',
+                        style: TextStyle(fontSize: 11),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppTheme.warning,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          }
+          if (index == slot++) {
+            return _MovimientosFilters(provider: provider);
+          }
+          return const SizedBox(height: 8);
+        }
+
+        final bodyIndex = index - headerCount;
+        if (bodyIndex < bodyCount) {
+          if (provider.movements.isEmpty) {
+            return Container(
+              padding: const EdgeInsets.all(20),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppTheme.darkSurface,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'No hay movimientos este mes',
+                style: TextStyle(color: Colors.white54),
+              ),
+            );
+          }
+          if (filtered.isEmpty) {
+            return Container(
+              padding: const EdgeInsets.all(20),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppTheme.darkSurface,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'Ningún movimiento coincide con los filtros',
+                style: TextStyle(color: Colors.white54),
+              ),
+            );
+          }
+          return _MovimientoTile(movimiento: filtered[bodyIndex]);
+        }
+
+        return const SizedBox(height: 32);
+      },
     );
   }
 
@@ -668,7 +699,9 @@ class _MovimientoTile extends StatelessWidget {
         isThreeLine: extraDetail != null || movimiento.descripcion.isNotEmpty,
         leading: Icon(icon, color: color),
         title: Text(
-          movimiento.tipo.label,
+          movimiento.pedidoId != null
+              ? '${movimiento.tipo.label} · Pedido ${movimiento.pedidoId}'
+              : movimiento.tipo.label,
           style: const TextStyle(
             color: Colors.white,
             fontWeight: FontWeight.w600,

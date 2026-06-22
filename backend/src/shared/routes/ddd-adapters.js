@@ -43,6 +43,7 @@ const {
   buildClientListVendorSqlFilter,
   buildLaclaeBoundedClientCodesSql,
   lookupClientAssignedVendorCodes,
+  sanitizeCodeListForParams,
 } = require('../../../utils/common');
 const { getClientCodesFromCache } = require('../../../services/laclae');
 
@@ -54,7 +55,7 @@ function publicErrorMessageForStatus(error, status, fallbackMessage = INTERNAL_S
 }
 
 function sendInternalServerError(res, fallbackMessage = INTERNAL_SERVER_ERROR_MESSAGE) {
-  return res.status(500).json({ success: false, error: fallbackMessage });
+  return res.status(500).json({ success: false, code: 'INTERNAL_SERVER_ERROR', error: fallbackMessage });
 }
 
 const TTL_MS = {
@@ -168,10 +169,7 @@ function normalizePedidoCode(value) {
 }
 
 function normalizePedidoCodeList(value) {
-  return String(value || '')
-    .split(',')
-    .map((code) => normalizePedidoCode(code))
-    .filter((code) => /^[a-zA-Z0-9]{1,10}$/.test(code));
+  return sanitizeCodeListForParams(String(value || ''), 2);
 }
 
 function getPedidoUserContext(req) {
@@ -280,9 +278,17 @@ function buildLaclaeVendorParamFilter(vendorCodes, alias = "L") {
     return { clause: "", params: [] };
   }
   const vendorColumn = getVendorColumnExpr(alias);
+  const safeCodes = vendorCodes
+    .map((code) => String(code || "").trim())
+    .filter((code) => /^[a-zA-Z0-9]+$/.test(code))
+    .map((code) => code.substring(0, 2))
+    .filter(Boolean);
+  if (safeCodes.length === 0) {
+    return { clause: "", params: [] };
+  }
   return {
-    clause: "AND TRIM(" + vendorColumn + ") IN (" + vendorCodes.map(() => "?").join(",") + ")",
-    params: vendorCodes,
+    clause: "AND TRIM(" + vendorColumn + ") IN (" + safeCodes.map(() => "CAST(? AS VARCHAR(2))").join(",") + ")",
+    params: safeCodes,
   };
 }
 
@@ -298,7 +304,7 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
   let rows = await queryWithParams(
     `SELECT 1
        FROM DSEDAC.CLI CLI
-      WHERE TRIM(CLI.CODIGOCLIENTE) = ?
+      WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
         ${clientVendorFilter.clause}
       FETCH FIRST 1 ROW ONLY`,
     [client, ...clientVendorFilter.params],
@@ -311,7 +317,7 @@ async function authorizePedidoClientScope(req, clientCode, vendedorCodes, action
       rows = await queryWithParams(
         `SELECT 1
            FROM DSEDAC.CLI CLI
-          WHERE TRIM(CLI.CODIGOCLIENTE) = ?
+          WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
             ${retryFilter.clause}
           FETCH FIRST 1 ROW ONLY`,
         [client, ...retryFilter.params],
@@ -619,10 +625,10 @@ function createPedidosRoutes() {
 
   router.get('/products/:code', async (req, res) => {
     try {
-      const { code } = req.params;
+      const code = String(req.params.code || '').trim().substring(0, 10);
       const { clientCode, vendedorCodes } = req.query;
       if (!code) return res.status(400).json({ success: false, error: 'Product code required' });
-      let scopedClientCode = clientCode ? String(clientCode).trim() : undefined;
+      let scopedClientCode = clientCode ? String(clientCode).trim().substring(0, 10) : undefined;
       let scopedVendedorCodes = vendedorCodes || 'ALL';
       if (scopedClientCode) {
         const clientAccess = await authorizePedidoClientScope(req, scopedClientCode, vendedorCodes, 'consultar producto para');
@@ -639,7 +645,7 @@ function createPedidosRoutes() {
       const cacheKey = `ddd:product:${cacheSecurityScope}:${code}:${scopedClientCode || ''}:${scopedVendedorCodes}`;
       await withCache(cache, cacheKey, TTL_MS.PRODUCT_DETAIL, async () => {
         const product = await repo.getProductDetail({
-          code: String(code).trim(),
+          code,
           clientCode: scopedClientCode,
           vendedorCodes: scopedVendedorCodes
         });
@@ -1189,8 +1195,10 @@ function createPedidosRoutes() {
   router.post('/draft-status/:vendedorCode/auto-confirm', async (req, res) => {
     try {
       const code = String(req.params.vendedorCode || '').trim();
+      const vendorAccess = authorizePedidoVendorCode(req, code, 'auto-confirmar');
+      if (!vendorAccess.ok) return res.status(vendorAccess.status).json(vendorAccess.body);
       const pedidosService = require('../../../services/pedidos.service');
-      const result = await pedidosService.checkDraftAccumulation(code, {
+      const result = await pedidosService.checkDraftAccumulation(vendorAccess.vendedorCode, {
         autoConfirm: true,
         options: { userId: req.user?.code || req.user?.id || 'API' },
       });
@@ -1312,13 +1320,20 @@ function createPedidosRoutes() {
         FROM DSED.LACLAE L WHERE ${whereSql}
         GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC DESC, L.LCMMDC`;
 
-      const lastYearTotalSql = "SELECT COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_LAST_YEAR FROM DSED.LACLAE L WHERE DECIMAL(TRIM(CHAR(L.LCAADC)) CONCAT RIGHT('00' CONCAT TRIM(CHAR(L.LCMMDC)), 2) CONCAT RIGHT('00' CONCAT TRIM(CHAR(L.LCDDDC)), 2), 8, 0) BETWEEN ? AND ? AND L.LCTPVT IN ('CC','VC') AND L.LCCLLN IN ('VT','AB') AND L.LCSRAB NOT IN ('N','Z','G','D')";
+      const lastYearWhereSql = [
+        `(L.LCAADC * 10000 + L.LCMMDC * 100 + L.LCDDDC) BETWEEN ? AND ?`,
+        ...where.slice(1),
+      ].join(' AND ');
+      const lastYearParams = [lastYearFrom, lastYearTo, ...params.slice(2)];
+      const lastYearTotalSql = `
+        SELECT COALESCE(SUM(L.LCIMVT), 0) AS TOTAL_LAST_YEAR
+        FROM DSED.LACLAE L WHERE ${lastYearWhereSql}`;
 
       const [detail, summary, topProducts, lastYear, monthlyByYear] = await Promise.all([
         queryWithParams(detailSql, params, false),
         queryWithParams(summarySql, params, false),
         queryWithParams(topProductosSql, params, false),
-        queryWithParams(lastYearTotalSql, [lastYearFrom, lastYearTo], false),
+        queryWithParams(lastYearTotalSql, lastYearParams, false),
         queryWithParams(monthlyByYearSql, params, false),
       ]);
 
@@ -1357,8 +1372,16 @@ function createPedidosRoutes() {
       if (!productCodes || !Array.isArray(productCodes) || productCodes.length === 0) {
         return res.status(400).json({ success: false, error: 'productCodes array is required' });
       }
+      let scopedClientCode = clientCode;
+      if (clientCode) {
+        const vendorAccess = authorizePedidoVendorCode(req, req.body.vendedorCode || req.query.vendedorCode || req.user?.code || req.user?.id, 'consultar productos complementarios para');
+        if (!vendorAccess.ok) return res.status(vendorAccess.status).json(vendorAccess.body);
+        const clientAccess = await authorizePedidoClientScope(req, clientCode, vendorAccess.vendedorCode, 'consultar productos complementarios para');
+        if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
+        scopedClientCode = clientAccess.clientCode;
+      }
       const pedidosService = require('../../../services/pedidos.service');
-      const products = await pedidosService.getComplementaryProducts(productCodes, clientCode);
+      const products = await pedidosService.getComplementaryProducts(productCodes, scopedClientCode);
       res.json({ success: true, products });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in POST /complementary: ${error.message}`);
@@ -1415,8 +1438,13 @@ function createPedidosRoutes() {
         return res.status(400).json({ success: false, error: 'clientCode and vendedorCode are required' });
       }
 
+      const vendorAccess = authorizePedidoVendorCode(req, vendedorCode, 'consultar opciones de reparto para');
+      if (!vendorAccess.ok) return res.status(vendorAccess.status).json(vendorAccess.body);
+      const clientAccess = await authorizePedidoClientScope(req, clientCode, vendorAccess.vendedorCode, 'consultar opciones de reparto para');
+      if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
+
       const pedidosService = require('../../../services/pedidos.service');
-      const options = await pedidosService.getDeliveryOptions({ clientCode, vendedorCode, deliveryDate });
+      const options = await pedidosService.getDeliveryOptions({ clientCode: clientAccess.clientCode, vendedorCode: vendorAccess.vendedorCode, deliveryDate });
       res.json({ success: true, options });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in GET /delivery-options: ${error.message}`);
@@ -1440,23 +1468,23 @@ function createPedidosRoutes() {
 
   router.get("/client-evolution/:clientCode", async (req, res) => {
     try {
-      const clientCode = String(req.params.clientCode || "").trim();
+      const clientCode = String(req.params.clientCode || "").trim().substring(0, 10);
       const vendedorCodes = req.query.vendedorCodes || req.query.vendorCodes || "ALL";
       if (!clientCode) return res.status(400).json({ success: false, error: "clientCode requerido" });
       const vendorScope = resolvePedidoVendorScope(req, vendedorCodes);
       if (!vendorScope.ok) return res.status(403).json({ success: false, error: vendorScope.error });
       const clientVendorFilter = buildClientVendorParamFilter(vendorScope.codes, "CLI");
       const laclaeVendorFilter = buildLaclaeVendorParamFilter(vendorScope.codes, "L");
-      const clientCheckSql = ['SELECT 1 FROM DSEDAC.CLI CLI WHERE TRIM(CLI.CODIGOCLIENTE) = ?', clientVendorFilter.clause, 'FETCH FIRST 1 ROWS ONLY'].join(' ');
+      const clientCheckSql = ['SELECT 1 FROM DSEDAC.CLI CLI WHERE TRIM(CLI.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))', clientVendorFilter.clause, 'FETCH FIRST 1 ROWS ONLY'].join(' ');
       const clientCheck = await queryWithParams(clientCheckSql, [clientCode, ...clientVendorFilter.params]);
       if (!clientCheck || clientCheck.length === 0) return res.status(403).json({ success: false, error: "No tienes acceso a este cliente", message: "Cliente no encontrado o no tienes permiso para verlo" });
       const currentYear = new Date().getFullYear();
       const startYear = currentYear - 2;
-      const monthlyDataSql = ['SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, SUM(L.LCIMVT) AS SALES, SUM(L.LCCTUD) AS UNITS FROM DSED.LACLAE L WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)', laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC ASC, L.LCMMDC ASC'].join(' ');
+      const monthlyDataSql = ['SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, SUM(L.LCIMVT) AS SALES, SUM(L.LCCTUD) AS UNITS FROM DSED.LACLAE L WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)', laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC ORDER BY L.LCAADC ASC, L.LCMMDC ASC'].join(' ');
       const monthlyData = await queryWithParams(monthlyDataSql, [clientCode, startYear, "CC", "VC", "AB", "VT", ...laclaeVendorFilter.params]);
-      const topProductsDataSql = ['SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME, SUM(L.LCIMVT) AS TOTAL_SALES, SUM(L.LCCTUD) AS TOTAL_UNITS FROM DSED.LACLAE L LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)', laclaeVendorFilter.clause, 'GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY TOTAL_SALES DESC FETCH FIRST 20 ROWS ONLY'].join(' ');
+      const topProductsDataSql = ['SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME, SUM(L.LCIMVT) AS TOTAL_SALES, SUM(L.LCCTUD) AS TOTAL_UNITS FROM DSED.LACLAE L LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND L.LCTPVT IN (?, ?) AND L.LCCLLN IN (?, ?)', laclaeVendorFilter.clause, 'GROUP BY TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY TOTAL_SALES DESC FETCH FIRST 20 ROWS ONLY'].join(' ');
       const topProductsData = await queryWithParams(topProductsDataSql, [clientCode, currentYear - 1, "CC", "VC", "AB", "VT", ...laclaeVendorFilter.params]);
-      const returnsDataSql = ['SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME, SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT FROM DSED.LACLAE L LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO WHERE TRIM(L.LCCDCL) = ? AND L.LCAADC >= ? AND (L.LCSRAB = ? OR L.LCTPVT = ?)', laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC FETCH FIRST 50 ROWS ONLY'].join(' ');
+      const returnsDataSql = ['SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH, TRIM(L.LCCDRF) AS PRODUCT_CODE, TRIM(A.DESCRIPCIONARTICULO) AS PRODUCT_NAME, SUM(L.LCCTUD) AS UNITS, SUM(L.LCIMVT) AS AMOUNT FROM DSED.LACLAE L LEFT JOIN DSEDAC.ART A ON L.LCCDRF = A.CODIGOARTICULO WHERE TRIM(L.LCCDCL) = CAST(? AS VARCHAR(10)) AND L.LCAADC >= ? AND (L.LCSRAB = ? OR L.LCTPVT = ?)', laclaeVendorFilter.clause, 'GROUP BY L.LCAADC, L.LCMMDC, TRIM(L.LCCDRF), TRIM(A.DESCRIPCIONARTICULO) ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC FETCH FIRST 50 ROWS ONLY'].join(' ');
       const returnsData = await queryWithParams(returnsDataSql, [clientCode, startYear, "D", "DV", ...laclaeVendorFilter.params]);
       res.json({ success: true, years: [startYear, startYear + 1, currentYear], monthlySales: monthlyData.map((r) => ({ year: r.YEAR, month: r.MONTH, sales: parseFloat(r.SALES), units: parseFloat(r.UNITS) })), topProducts: topProductsData.map((r) => ({ code: r.CODE, name: r.NAME, totalSales: parseFloat(r.TOTAL_SALES), totalUnits: parseFloat(r.TOTAL_UNITS) })), returns: returnsData.map((r) => ({ year: r.YEAR, month: r.MONTH, productCode: r.PRODUCT_CODE, productName: r.PRODUCT_NAME, units: parseFloat(r.UNITS), amount: parseFloat(r.AMOUNT) })) });
     } catch (error) {
@@ -1876,10 +1904,17 @@ function createCobrosRoutes() {
     try {
       const { codigoCliente } = req.params;
       if (!codigoCliente) return res.status(400).json({ success: false, error: 'codigoCliente required' });
+      const clientAccess = await authorizePedidoClientScope(
+        req,
+        codigoCliente,
+        req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+        'consultar cobros de',
+      );
+      if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
 
-      const cacheKey = `ddd:cobros:pendientes:${codigoCliente}:${cobrosCacheScope(req)}`;
+      const cacheKey = `ddd:cobros:pendientes:${clientAccess.clientCode}:${cobrosCacheScope(req)}`;
       await withCache(cache, cacheKey, TTL_MS.PENDIENTES, async () => {
-        const pendientes = await repo.getPendientes(String(codigoCliente).trim(), cobrosContext(req));
+        const pendientes = await repo.getPendientes(clientAccess.clientCode, cobrosContext(req));
         const resumen = pendientes.resumen || { totalPendiente: 0 };
         const totalPendiente = parseFloat(resumen.totalPendiente) || 0;
         return {
@@ -1903,13 +1938,20 @@ function createCobrosRoutes() {
     try {
       const { codigoCliente } = req.params;
       if (!codigoCliente) return res.status(400).json({ success: false, error: 'codigoCliente required' });
+      const clientAccess = await authorizePedidoClientScope(
+        req,
+        codigoCliente,
+        req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+        'consultar estado de cobros de',
+      );
+      if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
 
       // Misma caché corta que /pendientes: la consulta CVC por cliente es la
       // misma y en frío puede tardar decenas de segundos (scan con TRIM()).
       // Sin caché, cada /estado repetía esa query completa.
-      const cacheKey = `ddd:cobros:estado:${String(codigoCliente).trim()}:${cobrosCacheScope(req)}`;
+      const cacheKey = `ddd:cobros:estado:${clientAccess.clientCode}:${cobrosCacheScope(req)}`;
       await withCache(cache, cacheKey, TTL_MS.PENDIENTES, async () => {
-        const clientCode = String(codigoCliente).trim();
+        const clientCode = clientAccess.clientCode;
         const pendientes = await repo.getPendientes(clientCode, cobrosContext(req));
         const totalPendiente = parseFloat(pendientes?.resumen?.totalPendiente) || 0;
         const limiteCredito = Number.isFinite(parseFloat(pendientes?.resumen?.limiteCredito))
@@ -1948,9 +1990,16 @@ function createCobrosRoutes() {
       if (!codigoCliente || importe == null || !formaPago) {
         return res.status(400).json({ success: false, error: 'codigoCliente, importe, and formaPago required' });
       }
+      const clientAccess = await authorizePedidoClientScope(
+        req,
+        codigoCliente,
+        req.body.vendedorCodes || req.body.vendedorCode || req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+        'registrar cobros de',
+      );
+      if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
 
       const result = await repo.registerPayment({
-        clientCode: String(codigoCliente).trim(),
+        clientCode: clientAccess.clientCode,
         amount: parseFloat(importe) || 0,
         paymentMethod: formaPago,
         reference: referencia || '',
@@ -1963,9 +2012,9 @@ function createCobrosRoutes() {
         overrideReason: overrideReason || '',
       });
 
-      cache.invalidatePattern(`ddd:cobros:pendientes:${codigoCliente}:`);
-      cache.invalidatePattern(`ddd:cobros:estado:${codigoCliente}:`);
-      cache.invalidatePattern(`ddd:cobros:historico:${codigoCliente}:`);
+      cache.invalidatePattern(`ddd:cobros:pendientes:${clientAccess.clientCode}:`);
+      cache.invalidatePattern(`ddd:cobros:estado:${clientAccess.clientCode}:`);
+      cache.invalidatePattern(`ddd:cobros:historico:${clientAccess.clientCode}:`);
       cache.invalidatePattern('ddd:cobros:pending-summary:');
 
       res.json({ success: true, mensaje: 'Cobro registrado correctamente', payment: result });
@@ -1984,9 +2033,16 @@ function createCobrosRoutes() {
       if (!clientCode || !amount || !paymentMethod) {
         return res.status(400).json({ success: false, error: 'clientCode, amount, and paymentMethod required' });
       }
+      const clientAccess = await authorizePedidoClientScope(
+        req,
+        clientCode,
+        req.body.vendedorCodes || req.body.vendedorCode || req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+        'registrar cobros de',
+      );
+      if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
 
       const result = await repo.registerPayment({
-        clientCode,
+        clientCode: clientAccess.clientCode,
         amount,
         paymentMethod,
         reference,
@@ -2000,9 +2056,9 @@ function createCobrosRoutes() {
       });
 
       // Invalidate cobros caches
-      cache.invalidatePattern(`ddd:cobros:pendientes:${clientCode}:`);
-      cache.invalidatePattern(`ddd:cobros:estado:${clientCode}:`);
-      cache.invalidatePattern(`ddd:cobros:historico:${clientCode}:`);
+      cache.invalidatePattern(`ddd:cobros:pendientes:${clientAccess.clientCode}:`);
+      cache.invalidatePattern(`ddd:cobros:estado:${clientAccess.clientCode}:`);
+      cache.invalidatePattern(`ddd:cobros:historico:${clientAccess.clientCode}:`);
       cache.invalidatePattern('ddd:cobros:pending-summary:');
 
       res.json({ success: true, payment: result });

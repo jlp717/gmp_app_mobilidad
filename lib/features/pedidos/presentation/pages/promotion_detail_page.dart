@@ -19,6 +19,7 @@ class PromotionDetailPage extends StatefulWidget {
     this.onAddGift,
     this.hasStockResolver,
     this.qtyInOrderResolver,
+    this.giftSelectionLocked = false,
   });
   final String promoType;
   final String promoCode;
@@ -34,6 +35,9 @@ class PromotionDetailPage extends StatefulWidget {
       onAddGift;
   final bool? Function(String code)? hasStockResolver;
   final double Function(String code)? qtyInOrderResolver;
+
+  /// Cuando true, el regalo viene fijado por la promoción (no se puede elegir otro).
+  final bool giftSelectionLocked;
 
   @override
   State<PromotionDetailPage> createState() => _PromotionDetailPageState();
@@ -199,50 +203,78 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                   ),
                 if (widget.promoType == 'GIFT') ...[
                   const SizedBox(height: 8),
-                  // How the promo works
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppTheme.neonPurple.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: AppTheme.neonPurple.withValues(alpha: 0.2),
+                  if (widget.giftSelectionLocked) ...[
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.warning.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: AppTheme.warning.withValues(alpha: 0.35),
+                        ),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.lock, color: AppTheme.warning, size: 18),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Esta promoción incluye un regalo fijo. Se aplica automáticamente al añadir el producto al pedido; no puedes elegir otro artículo.',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Como funciona:',
-                          style: TextStyle(
-                            color: AppTheme.neonPurple.withValues(alpha: 0.8),
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Por cada ${widget.minQty.toStringAsFixed(0)} uds que compres de los productos de esta promocion, llévate ${widget.giftQty.toStringAsFixed(0)} gratis.${widget.cumulative ? ' (Se acumula: si compras ${(widget.minQty * 2).toStringAsFixed(0)} uds, llévate ${(widget.giftQty * 2).toStringAsFixed(0)} gratis)' : ''}',
-                          style: const TextStyle(
-                            color: Colors.white70,
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  // Progress bar: how close to min purchase
-                  if (_purchasedQty > 0) ...[
-                    _buildProgressSection(),
                   ] else ...[
-                    Text(
-                      'Añade al menos ${widget.minQty.toStringAsFixed(0)} uds de los productos de esta promocion para poder elegir tus regalos.',
-                      style: const TextStyle(
-                        color: Colors.white54,
-                        fontSize: 11,
+                    // How the promo works
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.neonPurple.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: AppTheme.neonPurple.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Como funciona:',
+                            style: TextStyle(
+                              color: AppTheme.neonPurple.withValues(alpha: 0.8),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Por cada ${widget.minQty.toStringAsFixed(0)} uds que compres de los productos de esta promocion, llévate ${widget.giftQty.toStringAsFixed(0)} gratis.${widget.cumulative ? ' (Se acumula: si compras ${(widget.minQty * 2).toStringAsFixed(0)} uds, llévate ${(widget.giftQty * 2).toStringAsFixed(0)} gratis)' : ''}',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                    const SizedBox(height: 8),
+                    // Progress bar: how close to min purchase
+                    if (_purchasedQty > 0) ...[
+                      _buildProgressSection(),
+                    ] else ...[
+                      Text(
+                        'Añade al menos ${widget.minQty.toStringAsFixed(0)} uds de los productos de esta promocion para poder elegir tus regalos.',
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ],
                 ],
               ],
@@ -394,8 +426,12 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                               ),
                             ),
                           ),
-                          isThreeLine: widget.promoType == 'GIFT',
-                          leading: widget.promoType == 'GIFT'
+                          isThreeLine: widget.promoType == 'GIFT' &&
+                              !widget.giftSelectionLocked &&
+                              widget.onAddGift != null,
+                          leading: widget.promoType == 'GIFT' &&
+                                  !widget.giftSelectionLocked &&
+                                  widget.onAddGift != null
                               ? Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
@@ -441,7 +477,9 @@ class _PromotionDetailPageState extends State<PromotionDetailPage> {
                     },
                   ),
           ),
-          if (widget.promoType == 'GIFT' && widget.onAddGift != null)
+          if (widget.promoType == 'GIFT' &&
+              widget.onAddGift != null &&
+              !widget.giftSelectionLocked)
             SafeArea(
               top: false,
               child: Container(

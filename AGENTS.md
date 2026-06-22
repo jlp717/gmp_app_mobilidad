@@ -41,6 +41,8 @@ Hard rules:
 ## OpenCode V4 Chief Engineer Layer
 
 - Default V4 entry point is chief-engineer-assistant for Javier-facing requests, especially mobile or Telegram sessions.
+- Javier launcher: `C:\Users\Javier\Start_OpenCode_Web_Gmp.cmd` (o `start-opencode-web-gmp.cmd`) → supervisor → OpenCode Web :3090 → post-arranque automatico. `Startup\Encode\web.cmd` solo redirige al launcher de Javier.
+- Every Chief message follows `.opencode/config/chief-protocol.yaml`: prompt-optimizer → decision-router → flow-policy → execute → verify → learn.
 - Layer 1 agents: chief-engineer-assistant, product-ux, Architect-Planner, sre-engineer, appsec-engineer, qa-automation-lead, code-autopilot, tech-radar-agent.
 - Team Curator is the weekly team-health auditor: agent roster, route eval, flow policy, models, metrics, repeated errors, tech radar and Telegram summary.
 - Pillar experts include DB2-Query-Optimizer, Redis-Cache-Specialist, Runtime-Log-Diagnostician, Flutter-Architecture-Specialist, Flutter-Performance-Specialist, API-Contract-Specialist, Visual-Design-Specialist, Technical-Verifier, plus backend, DB2, Flutter, QA and reviewer specialists.
@@ -56,6 +58,10 @@ Hard rules:
 - Model routing source: .opencode/config/model-routing.yaml. OpenAI handles critical reasoning and reliable code work while Cursor exposes no models; Cursor ACP is allowed for code/test implementation with non-GPT models only after a successful probe; OpenCode Go handles low-risk/research/metrics work. OpenCode Zen is manual-only.
 - State machine source: .opencode/config/workflow-state-machine.yaml. Persisted state and gates override agent intuition.
 - Natural-language decision tree source: .opencode/config/orchestrator-decision-tree.yaml. Javier talks to the Chief in natural language; slash commands are internal equivalents, not required user behavior.
+- Goal loops source: .opencode/config/goal-loops.yaml. Objectives iterate via goal-loop-manager until completion_promise or max_iterations; global defaults in ~/.config/opencode/goal-loops-defaults.yaml.
+- Hybrid interaction source: .opencode/config/hybrid-interaction.yaml. Loops pause and ask Javier on ambiguity; natural language remains the only required interface.
+- Background automation: `.opencode/config/automation-schedule.json` runs on `.cmd` startup (non-blocking) and optional Windows Task Scheduler. Providers: OpenAI, Cursor ACP, OpenCode Go — not Claude.
+- GitHub watchlist: `.opencode/config/github-watchlist.yaml` + `github-watchlist-sync` tool.
 - Subagent communication source: `handoff-ledger` and .opencode/state/handoffs/. Tier 2/Tier 3 delegation must record context_packet before handoff and specialist_output after return.
 - Readiness source: .opencode/state/readiness-latest.json. Cursor can only become an automatic primary model when readiness reports Cursor `AVAILABLE`; otherwise it stays fallback/manual.
 - Runtime-health source: .opencode/config/runtime-health.yaml. GMP backend readiness must be checked over SSH on 192.168.1.230 with localhost:3335/api/health, not by direct PC TCP probes alone.

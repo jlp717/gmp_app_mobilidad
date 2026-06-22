@@ -10,11 +10,18 @@ const path = require('path');
 const request = require('supertest');
 const express = require('express');
 
+function expectDb2SafeBind(sql, bind, maxLen) {
+  const text = bind == null ? '' : String(bind);
+  const normalized = text.length <= maxLen;
+  const casted = new RegExp(`CAST\\(\\?\\s+AS\\s+VARCHAR\\(${maxLen}\\)\\)`, 'i').test(String(sql || ''));
+  expect(normalized || casted).toBe(true);
+}
+
 // ---------------------------------------------------------------------------
 // BUG: Products 403 — user 98 + client 4300001091 + vendor mismatch
 // ---------------------------------------------------------------------------
 
-const mockPedidosRepoProducts = { searchProducts: jest.fn() };
+const mockPedidosRepoProducts = { searchProducts: jest.fn(), getProductDetail: jest.fn() };
 const mockCacheProducts = { get: jest.fn(), set: jest.fn(), invalidatePattern: jest.fn() };
 
 jest.mock('../middleware/logger', () => ({
@@ -107,6 +114,8 @@ describe('demo regression: products 403 user 98 + client 4300001091', () => {
   });
 });
 
+// DB2 22001 route guards (/products, /client-evolution): pedidos-db2-22001-param-length.test.js
+
 // ---------------------------------------------------------------------------
 // Remaining bugs — isolated module mocks
 // ---------------------------------------------------------------------------
@@ -152,15 +161,58 @@ describe('demo regression: recommendations ODBC 22001', () => {
       /FROM DSEDAC\.LINDTO L/i.test(sql) && /CODIGOCLIENTEALBARAN/i.test(sql),
     );
     expect(historyCall).toBeDefined();
+    expect(historyCall[0]).toMatch(/CAST\(\?\s+AS\s+VARCHAR\(10\)\)/i);
     expect(historyCall[1][0]).toBe('4300001091');
 
     const similarCall = mockQueryWithParamsRec.mock.calls.find(([sql]) =>
       /CODIGOVENDEDOR/i.test(sql) && /NOT EXISTS/i.test(sql),
     );
     if (similarCall) {
+      expect(similarCall[0]).toMatch(/CAST\(\?\s+AS\s+VARCHAR\(2\)\)/i);
       expect(similarCall[1][0]).toBe('02');
       expect(similarCall[1][0].length).toBeLessThanOrEqual(2);
     }
+  });
+});
+
+describe('demo regression: getProducts ODBC 22001 client binds', () => {
+  const mockQueryWithParamsProducts = jest.fn();
+
+  beforeEach(() => {
+    jest.resetModules();
+    jest.doMock('../config/db', () => ({
+      query: jest.fn(),
+      queryWithParams: (...args) => mockQueryWithParamsProducts(...args),
+      getPool: () => ({ connect: jest.fn() }),
+    }));
+    jest.doMock('../middleware/logger', () => ({
+      info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn(),
+    }));
+    jest.doMock('../services/query-optimizer', () => ({
+      cachedQuery: jest.fn((fn, sql) => fn(sql)),
+      invalidateOnMutation: jest.fn(),
+    }));
+    jest.doMock('../services/redis-cache', () => ({
+      redisCache: { get: jest.fn(), set: jest.fn() },
+      TTL: { SHORT: 60 },
+    }));
+    mockQueryWithParamsProducts.mockReset();
+    mockQueryWithParamsProducts.mockResolvedValue([]);
+  });
+
+  test('getProducts truncates clientCode and uses CAST for LACLAE/CLC binds', async () => {
+    const pedidosService = require('../services/pedidos.service');
+    const longClient = '4300001091_OVERFLOW';
+
+    await pedidosService.getProducts({ clientCode: longClient, limit: 5, offset: 0 });
+
+    expect(mockQueryWithParamsProducts).toHaveBeenCalled();
+    const [sql, params] = mockQueryWithParamsProducts.mock.calls[0];
+    expect(sql).toMatch(/TRIM\(L\.LCCDCL\)\s*=\s*CAST\(\?\s+AS\s+VARCHAR\(10\)\)/i);
+    expect(sql).toMatch(/TRIM\(CLC\.CODIGOCLIENTE\)\s*=\s*CAST\(\?\s+AS\s+VARCHAR\(10\)\)/i);
+    const clientBinds = params.filter((p) => p === '4300001091');
+    expect(clientBinds.length).toBeGreaterThan(0);
+    expect(params).not.toContain(longClient);
   });
 });
 
@@ -211,16 +263,17 @@ describe('demo regression: REPARTIDOR_COBROS GROUP BY raw columns', () => {
     mockQueryWithParamsCobros.mockReset();
   });
 
-  test('getAppSideCobrosByDoc groups by raw SERIEDOCUMENTO/NUMERODOCUMENTO for DB2 prepare', async () => {
-    mockQueryWithParamsCobros.mockResolvedValueOnce([{ SERIE: 'M', NUMERO: 123, TOTAL: '30.00' }]);
+  test('getAppSideCobrosByDoc groups COBROS by normalized document reference', async () => {
+    mockQueryWithParamsCobros.mockResolvedValueOnce([{ REF: 'CVC:M-123', TOTAL: '30.00' }]);
     const { Db2CobrosRepository } = require('../src/modules/cobros/infrastructure/db2-cobros-repository');
     const repo = new Db2CobrosRepository();
 
     const adjustments = await repo.getAppSideCobrosByDoc('C001');
 
-    const [sql] = mockQueryWithParamsCobros.mock.calls[0];
-    expect(sql).toMatch(/GROUP BY SERIEDOCUMENTO, NUMERODOCUMENTO/i);
-    expect(sql).not.toMatch(/TRIM\(CAST\(NUMERODOCUMENTO AS VARCHAR/i);
+    const [sql, params] = mockQueryWithParamsCobros.mock.calls[0];
+    expect(sql).toMatch(/FROM JAVIER\.COBROS/i);
+    expect(sql).toMatch(/GROUP BY TRIM\(REFERENCIA\)/i);
+    expect(params).toEqual(['C001']);
     expect(adjustments.get('M-123')).toBe(30);
   });
 });

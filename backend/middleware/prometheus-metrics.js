@@ -4,6 +4,7 @@
  * Exposes Prometheus-compatible metrics for monitoring
  */
 
+const crypto = require('crypto');
 const logger = require('./logger');
 
 class CircularBuffer {
@@ -73,6 +74,76 @@ const CONFIG = {
     sizeBuckets: [100, 500, 1000, 5000, 10000, 50000, 100000],
 };
 
+function getHeader(req, name) {
+    if (typeof req.get === 'function') return req.get(name);
+    const headers = req.headers || {};
+    return headers[name.toLowerCase()] || headers[name] || '';
+}
+
+function normalizeIp(value = '') {
+    return String(value).replace(/^::ffff:/, '');
+}
+
+function isLoopbackIp(value = '') {
+    const ip = normalizeIp(value);
+    return ip === '::1' || ip === '127.0.0.1' || ip.startsWith('127.');
+}
+
+function configuredInternalTokens() {
+    return [
+        process['env'].INTERNAL_API_TOKEN,
+        process['env'].INTERNAL_METRICS_TOKEN,
+        process['env'].METRICS_TOKEN,
+        process['env'].INTERNAL_HEALTH_TOKEN,
+        process['env'].HEALTHCHECK_TOKEN,
+    ].filter(Boolean);
+}
+
+function safeEquals(a, b) {
+    const left = Buffer.from(String(a));
+    const right = Buffer.from(String(b));
+    return left.length === right.length && crypto.timingSafeEqual(left, right);
+}
+
+function providedInternalToken(req) {
+    const authorization = getHeader(req, 'authorization');
+    const bearer = authorization && authorization.startsWith('Bearer ')
+        ? authorization.slice('Bearer '.length).trim()
+        : '';
+    return getHeader(req, 'x-internal-token')
+        || getHeader(req, 'x-metrics-token')
+        || getHeader(req, 'x-healthcheck-token')
+        || bearer;
+}
+
+function hasInternalToken(req) {
+    const provided = providedInternalToken(req);
+    return Boolean(provided) && configuredInternalTokens().some(token => safeEquals(provided, token));
+}
+
+function isInternalRequest(req) {
+    return isLoopbackIp(req.ip)
+        || isLoopbackIp(req.socket?.remoteAddress)
+        || isLoopbackIp(req.connection?.remoteAddress)
+        || hasInternalToken(req);
+}
+
+function isSreHealthCheck(req) {
+    return getHeader(req, 'user-agent') === 'GMP-SRE-HealthCheck/1.0';
+}
+
+function canSeeInternalDetails(req) {
+    return isSreHealthCheck(req) || isInternalRequest(req);
+}
+
+function requireInternalMetricsAccess(req, res, next) {
+    if (isInternalRequest(req)) return next();
+    return res.status(403).json({
+        success: false,
+        error: 'Metrics endpoint requires internal access',
+        code: 'METRICS_FORBIDDEN',
+    });
+}
 // Periodic cleanup - remove entries older than 1 hour
 const CLEANUP_INTERVAL_MS = 60000;
 const MAX_METRIC_AGE_MS = 3600000;
@@ -393,6 +464,10 @@ module.exports = {
     getPrometheusMetrics,
     getJsonMetrics,
     metricsHandler,
+    requireInternalMetricsAccess,
+    isInternalRequest,
+    isSreHealthCheck,
+    canSeeInternalDetails,
     resetMetrics,
     stopPeriodicCleanup,
 };

@@ -733,6 +733,7 @@ class QueryBatcher {
         this.queue = new Map();
         this.timer = null;
         this.batchDelay = 50;
+        this.maxConcurrentBatches = 4;
     }
 
     /**
@@ -770,53 +771,96 @@ class QueryBatcher {
     }
 
     /**
-     * Process all pending batches
+     * Process all pending batches (snapshot queue so items queued during processing are retained)
      */
     async _processBatches() {
         this.timer = null;
+        const batches = Array.from(this.queue.entries());
+        this.queue.clear();
+        await this._allSettledBounded(
+            batches,
+            this.maxConcurrentBatches,
+            ([batchKey, batch]) => this._processBatch(batchKey, batch)
+        );
+    }
 
-        for (const [batchKey, batch] of this.queue.entries()) {
-            try {
-                // Convert single-ID query to IN-list query
-                const batchedSql = this._createBatchedSQL(batch.sql, batch.ids);
+    /**
+     * Process a single batch entry
+     */
+    async _processBatch(batchKey, batch) {
+        try {
+            const batchedSql = this._createBatchedSQL(batch.sql, batch.ids);
 
-                const start = Date.now();
-                const results = await this.queryFn(batchedSql);
-                const duration = Date.now() - start;
+            const start = Date.now();
+            const results = await this.queryFn(batchedSql);
+            const duration = Date.now() - start;
 
-                logger.info(`[QueryBatcher] ⚡ Batched ${batch.ids.length} queries into 1 (${duration}ms)`);
+            logger.info(`[QueryBatcher] ⚡ Batched ${batch.ids.length} queries into 1 (${duration}ms)`);
 
-                // Distribute results to callbacks
-                for (const { id, resolve, cacheKey } of batch.callbacks) {
-                    const result = results.filter(r => this._matchesId(r, id));
+            const callbackResults = batch.callbacks.map(({ id, resolve, cacheKey }) => ({
+                resolve,
+                cacheKey,
+                result: results.filter(r => this._matchesId(r, id)),
+            }));
 
-                    // Cache individual result
-                    if (cacheKey) {
-                        await redisCache.set('query', cacheKey, result, CACHE_TTL.MEDIUM);
-                    }
+            await Promise.all(
+                callbackResults
+                    .filter(({ cacheKey }) => cacheKey)
+                    .map(({ cacheKey, result }) => redisCache.set('query', cacheKey, result, CACHE_TTL.MEDIUM))
+            );
 
-                    resolve(result);
-                }
-            } catch (error) {
-                // Reject all callbacks
-                for (const { reject } of batch.callbacks) {
-                    reject(error);
-                }
-            }
+            callbackResults.forEach(({ resolve, result }) => resolve(result));
+        } catch (error) {
+            batch.callbacks.forEach(({ reject }) => reject(error));
+        }
+    }
+
+    async _allSettledBounded(items, limit, worker) {
+        if (items.length === 0) {
+            return;
         }
 
-        this.queue.clear();
+        const safeLimit = Math.max(1, Math.min(limit, items.length));
+        let nextIndex = 0;
+
+        const runNext = () => {
+            const current = nextIndex;
+            nextIndex += 1;
+            if (current >= items.length) {
+                return Promise.resolve();
+            }
+            return Promise.resolve(worker(items[current])).then(runNext);
+        };
+
+        await Promise.allSettled(Array.from({ length: safeLimit }, runNext));
+    }
+
+    /**
+     * Escape/guard a single ID for IN-list SQL literals
+     */
+    _toSqlLiteral(id) {
+        if (typeof id === 'number') {
+            if (!Number.isFinite(id)) {
+                throw new Error('Invalid batch id');
+            }
+            return String(id);
+        }
+        if (typeof id === 'string') {
+            if (id.includes('\0')) {
+                throw new Error('Invalid batch id');
+            }
+            return `'${id.replace(/'/g, "''")}'`;
+        }
+        throw new Error('Invalid batch id');
     }
 
     /**
      * Convert single-value query to IN query
      */
     _createBatchedSQL(sql, ids) {
-        // Find pattern like "= 'value'" or "= value"
         const uniqueIds = [...new Set(ids)];
-        const inList = uniqueIds.map(id => typeof id === 'string' ? `'${id}'` : id).join(',');
+        const inList = uniqueIds.map(id => this._toSqlLiteral(id)).join(',');
 
-        // Replace single comparison with IN list
         return sql.replace(/=\s*['"]?[^'")\s]+['"]?(\s|$)/i, `IN (${inList})$1`);
     }
 

@@ -1,17 +1,23 @@
 import 'dart:developer' as developer;
 
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/features/chatbot/data/chatbot_models.dart';
 
-/// ChatbotService — Authenticated API service for NEXUS AI chatbot.
-///
-/// Uses ApiClient which attaches the Bearer token automatically via
-/// the Dio interceptor.
+/// Result from Asistente GMP message endpoint.
+class ChatbotMessageResult {
+  const ChatbotMessageResult({
+    required this.response,
+    this.metadata = const ChatResponseMetadata(),
+  });
+
+  final String response;
+  final ChatResponseMetadata metadata;
+}
+
+/// ChatbotService — Authenticated API service for Asistente GMP.
 class ChatbotService {
   /// Send message to chatbot API with conversation context.
-  ///
-  /// [message] — User's text input.
-  /// [conversationHistory] — Last N messages for context (role + content).
-  Future<String> sendMessage({
+  Future<ChatbotMessageResult> sendMessage({
     required String message,
     List<Map<String, String>>? conversationHistory,
     String? clientCode,
@@ -25,16 +31,15 @@ class ChatbotService {
           'clientCode': clientCode.trim(),
       };
 
-      final response = await ApiClient.post(
-        '/chatbot/message',
-        body,
+      final response = await ApiClient.post('/chatbot/message', body);
+
+      final text = response['response']?.toString() ??
+          'No se recibio respuesta del asistente.';
+      final metadata = ChatResponseMetadata.fromJson(
+        response['metadata'] as Map<String, dynamic>?,
       );
 
-      if (response['response'] != null) {
-        return response['response'] as String;
-      }
-
-      return 'No se recibio respuesta del asistente.';
+      return ChatbotMessageResult(response: text, metadata: metadata);
     } on Exception catch (e) {
       developer.log('Chatbot error: $e', name: 'chatbot');
       throw Exception('Error de conexion: $e');
