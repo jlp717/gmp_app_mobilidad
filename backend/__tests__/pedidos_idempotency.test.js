@@ -171,6 +171,34 @@ describe('pedidos create idempotency', () => {
     );
   });
 
+  test('getNextOrderNumber serializes concurrent sequence allocation', async () => {
+    let activeAllocations = 0;
+    let maxActiveAllocations = 0;
+    let nextSequence = 100;
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      const normalized = String(sql).replace(/\s+/g, ' ').trim();
+      if (/FINAL TABLE\s*\(\s*UPDATE\s+JAVIER\.PEDIDOS_SEQ/i.test(normalized)) {
+        activeAllocations += 1;
+        maxActiveAllocations = Math.max(maxActiveAllocations, activeAllocations);
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 5));
+          nextSequence += 1;
+          return [{ ULTIMO_NUMERO: nextSequence }];
+        } finally {
+          activeAllocations -= 1;
+        }
+      }
+      throw new Error(`Unexpected sequence SQL: ${normalized}`);
+    });
+
+    const values = await Promise.all(
+      Array.from({ length: 6 }, () => pedidosService._private.getNextOrderNumber(2026)),
+    );
+
+    expect(values).toEqual([101, 102, 103, 104, 105, 106]);
+    expect(maxActiveAllocations).toBe(1);
+  });
+
   test('createOrder replays same clientRequestId without creating a duplicate order', async () => {
     const payloadHash = pedidosService.buildCreateOrderPayloadHash(baseCreatePayload);
     setupCreateMocks({

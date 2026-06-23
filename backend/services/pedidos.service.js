@@ -198,6 +198,24 @@ function isDuplicateKeyError(err) {
     return /DUPLICATE|PRIMARY|UNIQUE|SQL0803/i.test(msg);
 }
 
+let orderSequenceTail = Promise.resolve();
+let atomicSequenceUpdateSupported = null;
+
+function withOrderSequenceLock(callback) {
+    const run = orderSequenceTail.then(callback, callback);
+    orderSequenceTail = run.catch(() => {});
+    return run;
+}
+
+function isUnsupportedAtomicSequenceUpdate(err) {
+    const msg = String(err?.message || '');
+    const states = (err?.odbcErrors || []).map((row) => String(row.state || ''));
+    const codes = (err?.odbcErrors || []).map((row) => Number(row.code));
+    return states.some((state) => state === '42601' || state === '42000')
+        || codes.some((code) => code === -104 || code === -199)
+        || /SQL0104|SQL0199|syntax/i.test(msg);
+}
+
 const IVA_RATE_BY_CODE = Object.freeze({
     '1': 0.10,
     '2': 0.21,
@@ -2115,48 +2133,63 @@ async function getStockBatch(codes, almacen = 1) {
 // ORDER SEQUENCE
 // ============================================================================
 
-async function getNextOrderNumber(ejercicio) {
-    // Atomic UPDATE+INSERT pattern (MERGE is not supported on all DB2/i versions)
-    // Step 1: Try UPDATE existing row
-    try {
-        await queryWithParams(
-            `UPDATE ${ERP_SCHEMA}.PEDIDOS_SEQ SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1 WHERE EJERCICIO = ?`,
-            [ejercicio], false
-        );
-    } catch (updErr) {
-        logger.warn(`[PEDIDOS] SEQ UPDATE failed: ${updErr.message}`);
-    }
+async function tryAtomicNextOrderNumber(ejercicio) {
+    if (atomicSequenceUpdateSupported === false) return null;
 
-    // Step 2: Check if row exists after UPDATE
-    const checkRows = await queryWithParams(
+    try {
+        const rows = await queryWithParams(
+            `SELECT ULTIMO_NUMERO FROM FINAL TABLE (
+                UPDATE ${ERP_SCHEMA}.PEDIDOS_SEQ
+                   SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1
+                 WHERE EJERCICIO = ?
+            )`,
+            [ejercicio], false, false
+        );
+        atomicSequenceUpdateSupported = true;
+        return rows?.[0]?.ULTIMO_NUMERO ? integerValue(rows[0].ULTIMO_NUMERO) : null;
+    } catch (err) {
+        if (!isUnsupportedAtomicSequenceUpdate(err)) throw err;
+        atomicSequenceUpdateSupported = false;
+        logger.warn(`[PEDIDOS] SEQ atomic UPDATE unsupported, using serialized fallback: ${err.message}`);
+        return null;
+    }
+}
+
+async function updateAndReadNextOrderNumber(ejercicio) {
+    await queryWithParams(
+        `UPDATE ${ERP_SCHEMA}.PEDIDOS_SEQ SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1 WHERE EJERCICIO = ?`,
+        [ejercicio], false
+    );
+    const rows = await queryWithParams(
         `SELECT ULTIMO_NUMERO FROM ${ERP_SCHEMA}.PEDIDOS_SEQ WHERE EJERCICIO = ?`,
         [ejercicio], false
     );
+    return rows?.[0]?.ULTIMO_NUMERO ? integerValue(rows[0].ULTIMO_NUMERO) : null;
+}
 
-    if (checkRows && checkRows.length > 0) {
-        return checkRows[0].ULTIMO_NUMERO;
-    }
+async function getNextOrderNumber(ejercicio) {
+    return withOrderSequenceLock(async () => {
+        const atomicValue = await tryAtomicNextOrderNumber(ejercicio);
+        if (atomicValue) return atomicValue;
 
-    // Step 3: Row does not exist; INSERT new year
-    try {
-        await queryWithParams(
-            `INSERT INTO ${ERP_SCHEMA}.PEDIDOS_SEQ (EJERCICIO, ULTIMO_NUMERO) VALUES (?, 1)`,
-            [ejercicio], false
-        );
-        return 1;
-    } catch (insErr) {
-        // Concurrent INSERT race: another process created it first, just UPDATE+SELECT
-        logger.warn(`[PEDIDOS] SEQ INSERT race: ${insErr.message}`);
-        await queryWithParams(
-            `UPDATE ${ERP_SCHEMA}.PEDIDOS_SEQ SET ULTIMO_NUMERO = ULTIMO_NUMERO + 1 WHERE EJERCICIO = ?`,
-            [ejercicio], false
-        );
-        const retryRows = await queryWithParams(
-            `SELECT ULTIMO_NUMERO FROM ${ERP_SCHEMA}.PEDIDOS_SEQ WHERE EJERCICIO = ?`,
-            [ejercicio], false
-        );
-        return retryRows[0]?.ULTIMO_NUMERO || 1;
-    }
+        const fallbackValue = await updateAndReadNextOrderNumber(ejercicio);
+        if (fallbackValue) return fallbackValue;
+
+        try {
+            await queryWithParams(
+                `INSERT INTO ${ERP_SCHEMA}.PEDIDOS_SEQ (EJERCICIO, ULTIMO_NUMERO) VALUES (?, 1)`,
+                [ejercicio], false
+            );
+            return 1;
+        } catch (insErr) {
+            if (!isDuplicateKeyError(insErr)) throw insErr;
+            logger.warn(`[PEDIDOS] SEQ INSERT race: ${insErr.message}`);
+            const retryAtomicValue = await tryAtomicNextOrderNumber(ejercicio);
+            if (retryAtomicValue) return retryAtomicValue;
+            const retryFallbackValue = await updateAndReadNextOrderNumber(ejercicio);
+            return retryFallbackValue || 1;
+        }
+    });
 }
 
 // ============================================================================
@@ -5792,4 +5825,7 @@ module.exports = {
     getOrderAlbaran,
     getProductHistory,
     pedidosBreaker,
+    _private: {
+        getNextOrderNumber,
+    },
 };
