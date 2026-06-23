@@ -162,6 +162,7 @@ describe('commercial cobros hardening', () => {
       cvcGrandTotal: 125.5,
       cvcGrandTotalVencido: 25.5,
       appAdjustmentsTotal: 0,
+      appOrdersTotal: 0,
       clientCount: 1,
       source: 'CVC',
       pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 2 },
@@ -264,6 +265,7 @@ describe('commercial cobros hardening', () => {
       cvcGrandTotal: 100,
       cvcGrandTotalVencido: 100,
       appAdjustmentsTotal: 0,
+      appOrdersTotal: 0,
       clientCount: 1,
       source: 'CVC',
       pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 2 },
@@ -297,6 +299,7 @@ describe('commercial cobros hardening', () => {
     expect(result.clientCount).toBe(2);
     expect(result.cvcGrandTotal).toBe(300);
     expect(result.cvcGrandTotalVencido).toBe(50);
+    expect(result.appOrdersTotal).toBe(0);
     const cvcRawSql = findRepoSqlCall((candidate) => /CVC_GRAND_TOTAL/i.test(candidate));
     expect(cvcRawSql).toMatch(/FROM\s+DSEDAC\.CVC\s+CVC/i);
     const portfolioTotalsSql = findRepoSqlCall((candidate) => /WITH\s+CVC_DOCS/i.test(candidate));
@@ -498,7 +501,72 @@ describe('commercial cobros hardening', () => {
       /FROM\s+DSEDAC\.CVC\s+C/i.test(sql),
     );
     expect(cvcSql).toMatch(/DSEDAC\.CLP/);
-    expect(params).toEqual(['C001', '01']);
+    expect(cvcSql).toMatch(/DSED\.LACLAE/);
+    expect(params).toEqual(['C001', '01', '1', '01', '1']);
+  });
+
+  test('getPendientes merges CVC debt with provisional app orders', async () => {
+    mockQuery.mockImplementation(async (sql) => {
+      if (/QSYS2\.SYSCOLUMNS2/i.test(sql)) return [{ COLUMN_NAME: 'ORIGEN' }];
+      return [{ 1: 1 }];
+    });
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
+        return [{
+          SERIE_DOCUMENTO: 'M',
+          NUMERO_DOCUMENTO: 123,
+          XDE: 1,
+          CODIGO_CLIENTE: 'C001',
+          IMPORTE_TOTAL: 40,
+          IMPORTE_COBRADO: 0,
+          IMPORTE_PENDIENTE: 40,
+          ANO_DOCUMENTO: 2026,
+          MES_DOCUMENTO: 6,
+          DIA_DOCUMENTO: 1,
+          ANO_VENCIMIENTO: 2026,
+          MES_VENCIMIENTO: 7,
+          DIA_VENCIMIENTO: 1,
+          SUBEMPRESA: 'GMP',
+          TIPO_DOCUMENTO: 'FAC',
+          FORMA_PAGO: '02',
+        }];
+      }
+      if (/FROM\s+JAVIER\.PEDIDOS_CAB\s+PC/i.test(sql)) {
+        return [{
+          ID: 22,
+          EJERCICIO: 2026,
+          SERIEPEDIDO: 'M',
+          NUMEROPEDIDO: 7,
+          DIADOCUMENTO: 23,
+          MESDOCUMENTO: 6,
+          ANODOCUMENTO: 2026,
+          IMPORTETOTAL: 30,
+          TIPOVENTA: 'CC',
+          ESTADO: 'CONFIRMADO',
+        }];
+      }
+      if (/FROM JAVIER\.REPARTIDOR_COBROS/i.test(sql)) return [];
+      if (/FROM JAVIER\.COBROS/i.test(sql)) return [];
+      return [];
+    });
+    const repo = new Db2CobrosRepository();
+
+    const result = await repo.getPendientes('C001', {
+      userId: '01',
+      userRole: 'COMERCIAL',
+    });
+
+    expect(result.resumen.totalPendiente).toBe(70);
+    expect(result.resumen.source).toBe('CVC+PEDIDOS_CAB');
+    expect(result.resumen.pedidosApp).toEqual({ cantidad: 1, total: 30 });
+    expect(result.cobros.map((cobro) => cobro.tipo)).toEqual(['factura', 'pedido_app']);
+    expect(result.cobros[1]).toMatchObject({
+      id: 'PEDIDO:22:M-7',
+      referencia: 'M-7',
+      provisional: true,
+      importePendiente: 30,
+      docKey: { source: 'PEDIDOS_CAB', id: 22, serie: 'M', numero: 7 },
+    });
   });
 
   test('registerPayment records a partial payment and returns remaining pending amount', async () => {

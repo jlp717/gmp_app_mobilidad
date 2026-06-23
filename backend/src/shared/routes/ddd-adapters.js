@@ -92,9 +92,20 @@ function getCache() {
   return responseCache;
 }
 
+function isForceRefreshRequest(req) {
+  return req?.query?.forceRefresh != null ||
+    req?.query?.refresh != null ||
+    req?.query?._ts != null;
+}
+
 // Cache helper with performance optimization for ALL queries
 async function withCache(cache, key, ttlMs, fetchFn, res, req) {
-  const isAllQuery = req?.query?.vendedorCodes === 'ALL';
+  if (isForceRefreshRequest(req)) {
+    res.set('Cache-Control', 'no-store');
+    return res.json(await fetchFn());
+  }
+
+  const isAllQuery = String(req?.query?.vendedorCodes || '').toUpperCase() === 'ALL';
 
   if (isAllQuery) {
     const perfCacheKey = `ALL:${key}`;
@@ -364,8 +375,7 @@ function authorizedVendorCodesOrOriginal(access, original) {
 
 function canSeePedidoMargin(user) {
   const role = String(user?.role || '').toUpperCase();
-  const code = String(user?.code || user?.id || '').trim().replace(/^0+/, '');
-  return role === 'JEFE_VENTAS' || role === 'ADMIN' || user?.isJefeVentas === true || code === '80';
+  return role === 'JEFE_VENTAS' || role === 'ADMIN' || user?.isJefeVentas === true;
 }
 
 function canUseServerForceConfirm(req, body = {}) {
@@ -1464,7 +1474,8 @@ function createPedidosRoutes() {
       const safeOffset = offset != null
         ? parseInt(offset, 10) || 0
         : (page - 1) * safeLimit;
-      const cacheKey = `ddd:orders-list:${userId}:${safeLimit}:${safeOffset}:${requestedStatus || 'all'}:${search || ''}:${dateFrom || ''}:${dateTo || ''}`;
+      const vendorScopeKey = String(requestedVendedorCodes || '').trim();
+      const cacheKey = `ddd:orders-list:${userId}:${vendorScopeKey}:${safeLimit}:${safeOffset}:${requestedStatus || 'all'}:${search || ''}:${dateFrom || ''}:${dateTo || ''}:${minAmount || ''}:${maxAmount || ''}:${sortBy || ''}:${sortOrder || ''}`;
       await withCache(cache, cacheKey, TTL_MS.ORDER_HISTORY, async () => {
         const pedidosService = require('../../../services/pedidos.service');
         const result = await pedidosService.getOrders({
@@ -1479,6 +1490,7 @@ function createPedidosRoutes() {
           maxAmount: maxAmount != null ? parseFloat(maxAmount) : undefined,
           sortBy: sortBy ? String(sortBy).trim() : undefined,
           sortOrder: sortOrder ? String(sortOrder).trim() : undefined,
+          forceRefresh: isForceRefreshRequest(req),
         });
         const orders = Array.isArray(result) ? result : (result.orders || []);
         const count = Array.isArray(result) ? result.length : (result.count || orders.length);
@@ -1933,12 +1945,13 @@ function createCobrosRoutes() {
   const repo = new Db2CobrosRepository(getDbPool());
   const cache = getCache();
 
-  const cobrosContext = (req) => ({
+  const cobrosContext = (req, scopedVendorCodes = null, extra = {}) => ({
     userId: req.user?.code || req.user?.id,
     userRole: req.user?.role || 'COMERCIAL',
     isJefeVentas: req.user?.isJefeVentas === true || req.user?.role === 'JEFE_VENTAS' || req.user?.role === 'ADMIN',
-    vendedorCodes: req.user?.vendedorCodes || req.user?.vendorCodes,
-    vendorCodes: req.user?.vendorCodes || req.user?.vendedorCodes,
+    vendedorCodes: scopedVendorCodes || req.user?.vendedorCodes || req.user?.vendorCodes,
+    vendorCodes: scopedVendorCodes || req.user?.vendorCodes || req.user?.vendedorCodes,
+    ...extra,
   });
 
   const cobrosCacheScope = (req) => {
@@ -1958,6 +1971,32 @@ function createCobrosRoutes() {
     const requestedPage = parseInt(queryParams.page, 10);
     const page = hasOffset ? Math.floor(offset / limit) + 1 : (Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1);
     return { limit, page, offset: hasOffset ? offset : (page - 1) * limit };
+  };
+
+  const cobrosQueryFilters = (query = {}) => ({
+    tipoDocumento: String(query.tipoDocumento || '').trim(),
+    fechaDesde: String(query.fechaDesde || '').trim(),
+    fechaHasta: String(query.fechaHasta || '').trim(),
+  });
+
+  const cobrosFiltersCacheKey = (filters = {}) => [
+    `tipo=${filters.tipoDocumento || ''}`,
+    `desde=${filters.fechaDesde || ''}`,
+    `hasta=${filters.fechaHasta || ''}`,
+  ].join(':');
+
+  const selectedCobrosVendorScope = (req) =>
+    req.query.vendedorCodes || req.query.vendedorCode || 'ALL';
+
+  const isCobrosForceRefresh = (req) =>
+    req.query.forceRefresh != null || req.query.refresh != null || req.query._ts != null;
+
+  const sendCobrosCached = async (req, res, cacheKey, ttl, fetchFn) => {
+    if (isCobrosForceRefresh(req)) {
+      res.set('Cache-Control', 'no-store');
+      return res.json(await fetchFn());
+    }
+    return withCache(cache, cacheKey, ttl, fetchFn, res);
   };
 
   const sendCobrosError = (res, error) => {
@@ -1982,17 +2021,23 @@ function createCobrosRoutes() {
     try {
       const { codigoCliente } = req.params;
       if (!codigoCliente) return res.status(400).json({ success: false, error: 'codigoCliente required' });
+      const selectedVendorScope = selectedCobrosVendorScope(req);
       const clientAccess = await authorizePedidoClientScope(
         req,
         codigoCliente,
-        req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+        selectedVendorScope,
         'consultar cobros de',
       );
       if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
 
-      const cacheKey = `ddd:cobros:pendientes:${clientAccess.clientCode}:${cobrosCacheScope(req)}`;
-      await withCache(cache, cacheKey, TTL_MS.PENDIENTES, async () => {
-        const pendientes = await repo.getPendientes(clientAccess.clientCode, cobrosContext(req));
+      const filters = cobrosQueryFilters(req.query);
+      const scopeKey = (clientAccess.vendorCodes || []).join(',') || String(selectedVendorScope || 'ALL');
+      const cacheKey = `ddd:cobros:pendientes:${clientAccess.clientCode}:${cobrosCacheScope(req)}:${scopeKey}:${cobrosFiltersCacheKey(filters)}`;
+      await sendCobrosCached(req, res, cacheKey, TTL_MS.PENDIENTES, async () => {
+        const pendientes = await repo.getPendientes(
+          clientAccess.clientCode,
+          cobrosContext(req, clientAccess.vendorCodes, filters),
+        );
         const resumen = pendientes.resumen || { totalPendiente: 0 };
         const totalPendiente = parseFloat(resumen.totalPendiente) || 0;
         return {
@@ -2005,7 +2050,7 @@ function createCobrosRoutes() {
           },
           pendientes
         };
-      }, res);
+      });
     } catch (error) {
       logger.error(`[DDD-COBROS] Error in GET /pendientes: ${error.message}`);
       sendInternalServerError(res);
@@ -2016,10 +2061,11 @@ function createCobrosRoutes() {
     try {
       const { codigoCliente } = req.params;
       if (!codigoCliente) return res.status(400).json({ success: false, error: 'codigoCliente required' });
+      const selectedVendorScope = selectedCobrosVendorScope(req);
       const clientAccess = await authorizePedidoClientScope(
         req,
         codigoCliente,
-        req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+        selectedVendorScope,
         'consultar estado de cobros de',
       );
       if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
@@ -2027,10 +2073,11 @@ function createCobrosRoutes() {
       // Misma caché corta que /pendientes: la consulta CVC por cliente es la
       // misma y en frío puede tardar decenas de segundos (scan con TRIM()).
       // Sin caché, cada /estado repetía esa query completa.
-      const cacheKey = `ddd:cobros:estado:${clientAccess.clientCode}:${cobrosCacheScope(req)}`;
-      await withCache(cache, cacheKey, TTL_MS.PENDIENTES, async () => {
+      const scopeKey = (clientAccess.vendorCodes || []).join(',') || String(selectedVendorScope || 'ALL');
+      const cacheKey = `ddd:cobros:estado:${clientAccess.clientCode}:${cobrosCacheScope(req)}:${scopeKey}`;
+      await sendCobrosCached(req, res, cacheKey, TTL_MS.PENDIENTES, async () => {
         const clientCode = clientAccess.clientCode;
-        const pendientes = await repo.getPendientes(clientCode, cobrosContext(req));
+        const pendientes = await repo.getPendientes(clientCode, cobrosContext(req, clientAccess.vendorCodes));
         const totalPendiente = parseFloat(pendientes?.resumen?.totalPendiente) || 0;
         const limiteCredito = Number.isFinite(parseFloat(pendientes?.resumen?.limiteCredito))
           ? parseFloat(pendientes.resumen.limiteCredito)
@@ -2047,7 +2094,7 @@ function createCobrosRoutes() {
             motivo: totalPendiente > 0 ? 'Tiene cobros pendientes' : null
           }
         };
-      }, res);
+      });
     } catch (error) {
       logger.error(`[DDD-COBROS] Error in GET /estado: ${error.message}`);
       res.status(500).json({
@@ -2154,13 +2201,13 @@ function createCobrosRoutes() {
       logger.info(`[COBROS] Pending summary for vendor: ${vendedorCodeParam}`);
       const pagination = parseCobrosPagination(req.query);
       const cacheKey = `ddd:cobros:pending-summary:${String(vendedorCodeParam || '').trim()}:${cobrosCacheScope(req)}:limit:${pagination.limit}:page:${pagination.page}:offset:${pagination.offset}`;
-      await withCache(cache, cacheKey, TTL_MS.PENDIENTES, async () => {
+      await sendCobrosCached(req, res, cacheKey, TTL_MS.PENDIENTES, async () => {
         const result = await repo.getPendingSummary(vendedorCodeParam, {
           ...cobrosContext(req),
           ...pagination,
         });
         return { success: true, ...result };
-      }, res);
+      });
     } catch (error) {
       logger.error(`[COBROS] Error pending-summary: ${error.message}`);
       sendCobrosError(res, error);
@@ -2173,23 +2220,25 @@ function createCobrosRoutes() {
       const { limit, offset } = req.query;
       const safeLimit = Math.max(1, Math.min(100, parseInt(limit) || 20));
       const safeOffset = Math.max(0, parseInt(offset) || 0);
+      const selectedVendorScope = selectedCobrosVendorScope(req);
       const clientAccess = await authorizePedidoClientScope(
         req,
         codigoCliente,
-        req.query.vendedorCodes || req.query.vendedorCode || 'ALL',
+        selectedVendorScope,
         'consultar historico de cobros de',
       );
       if (!clientAccess.ok) return res.status(clientAccess.status).json(clientAccess.body);
 
-      const cacheKey = `ddd:cobros:historico:${clientAccess.clientCode}:${cobrosCacheScope(req)}:${safeLimit}:${safeOffset}`;
-      await withCache(cache, cacheKey, TTL_MS.COBROS_HISTORICO, async () => {
+      const scopeKey = (clientAccess.vendorCodes || []).join(',') || String(selectedVendorScope || 'ALL');
+      const cacheKey = `ddd:cobros:historico:${clientAccess.clientCode}:${cobrosCacheScope(req)}:${scopeKey}:${safeLimit}:${safeOffset}`;
+      await sendCobrosCached(req, res, cacheKey, TTL_MS.COBROS_HISTORICO, async () => {
         const historico = await repo.getHistorico({
           clientCode: clientAccess.clientCode,
           limit: safeLimit,
           offset: safeOffset
         });
         return { success: true, historico };
-      }, res);
+      });
     } catch (error) {
       logger.error(`[DDD-COBROS] Error in GET /historico: ${error.message}`);
       sendInternalServerError(res);

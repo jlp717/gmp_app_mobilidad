@@ -20,10 +20,15 @@ class BolsaService {
     if (code.isEmpty) {
       throw ArgumentError('vendedorCode is required');
     }
+    final params = <String, dynamic>{};
+    if (forceRefresh) {
+      params['_ts'] = DateTime.now().millisecondsSinceEpoch.toString();
+    }
     final response = await ApiClient.get(
       '$_base/$code/status',
+      queryParameters: params,
       cacheKey: 'bolsa:status:$code',
-      cacheTTL: const Duration(minutes: 2),
+      cacheTTL: CacheService.realtimeTTL,
       forceRefresh: forceRefresh,
     );
     final raw = response['bolsa'];
@@ -43,6 +48,11 @@ class BolsaService {
     int? year,
     int? month,
     int limit = 50,
+    DateTime? dateFrom,
+    DateTime? dateTo,
+    String? documentQuery,
+    String? clientQuery,
+    BolsaMovimientoTipo? tipo,
     bool forceRefresh = false,
   }) async {
     final code = vendedorCode.trim();
@@ -50,13 +60,32 @@ class BolsaService {
     final params = <String, dynamic>{'limit': limit.toString()};
     if (year != null) params['year'] = year.toString();
     if (month != null) params['month'] = month.toString();
+    if (dateFrom != null) params['dateFrom'] = _dateKey(dateFrom);
+    if (dateTo != null) params['dateTo'] = _dateKey(dateTo);
+    final document = documentQuery?.trim();
+    if (document != null && document.isNotEmpty) params['document'] = document;
+    final client = clientQuery?.trim();
+    if (client != null && client.isNotEmpty) params['client'] = client;
+    if (tipo != null) params['tipo'] = _tipoKey(tipo);
+    if (forceRefresh) {
+      params['_ts'] = DateTime.now().millisecondsSinceEpoch.toString();
+    }
+    final filterKey = [
+      year ?? 'all',
+      month ?? 'all',
+      limit,
+      dateFrom == null ? '' : _dateKey(dateFrom),
+      dateTo == null ? '' : _dateKey(dateTo),
+      document ?? '',
+      client ?? '',
+      tipo == null ? '' : _tipoKey(tipo),
+    ].join(':');
     try {
       final response = await ApiClient.get(
         '$_base/$code/movements',
         queryParameters: params,
-        cacheKey:
-            'bolsa:movements:$code:${year ?? 'all'}:${month ?? 'all'}:$limit',
-        cacheTTL: CacheService.shortTTL,
+        cacheKey: 'bolsa:movements:$code:$filterKey',
+        cacheTTL: CacheService.realtimeTTL,
         forceRefresh: forceRefresh,
       );
       final list = response['movements'] as List? ?? [];
@@ -81,12 +110,16 @@ class BolsaService {
   }) async {
     final code = vendedorCode.trim();
     if (code.isEmpty) return [];
+    final params = <String, dynamic>{'months': months.toString()};
+    if (forceRefresh) {
+      params['_ts'] = DateTime.now().millisecondsSinceEpoch.toString();
+    }
     try {
       final response = await ApiClient.get(
         '$_base/$code/history',
-        queryParameters: <String, dynamic>{'months': months.toString()},
+        queryParameters: params,
         cacheKey: 'bolsa:history:$code:$months',
-        cacheTTL: CacheService.defaultTTL,
+        cacheTTL: CacheService.shortTTL,
         forceRefresh: forceRefresh,
       );
       final list = response['points'] as List? ?? [];
@@ -99,7 +132,37 @@ class BolsaService {
     }
   }
 
-  /// PUT /api/bolsa/:vendedorCode/config (JEFE_VENTAS / ADMIN)
+  /// GET /api/bolsa/grouped (JEFE_VENTAS)
+  static Future<BolsaGroupedSummary> getGroupedStatus({
+    int? year,
+    int? month,
+    List<String>? vendedorCodes,
+    bool forceRefresh = false,
+  }) async {
+    final params = <String, dynamic>{};
+    if (year != null) params['year'] = year.toString();
+    if (month != null) params['month'] = month.toString();
+    final codes = (vendedorCodes ?? const <String>[])
+        .map((code) => code.trim())
+        .where((code) => code.isNotEmpty && code.toUpperCase() != 'ALL')
+        .toList(growable: false);
+    if (codes.isNotEmpty) params['vendedorCodes'] = codes.join(',');
+    if (forceRefresh) {
+      params['_ts'] = DateTime.now().millisecondsSinceEpoch.toString();
+    }
+
+    final response = await ApiClient.get(
+      '$_base/grouped',
+      queryParameters: params,
+      cacheKey:
+          'bolsa:grouped:${year ?? 'current'}:${month ?? 'current'}:${codes.join(',')}',
+      cacheTTL: CacheService.realtimeTTL,
+      forceRefresh: forceRefresh,
+    );
+    return BolsaGroupedSummary.fromJson(response);
+  }
+
+  /// PUT /api/bolsa/:vendedorCode/config (JEFE_VENTAS)
   static Future<BolsaStatus> updateConfig(
     String vendedorCode, {
     double? limitePct,
@@ -121,6 +184,7 @@ class BolsaService {
     await CacheService.invalidateByPrefix('bolsa:status:$code');
     await CacheService.invalidateByPrefix('bolsa:movements:$code:');
     await CacheService.invalidateByPrefix('bolsa:history:$code:');
+    await CacheService.invalidateByPrefix('bolsa:grouped:');
     if (response['success'] == true && response['bolsa'] is Map) {
       return BolsaStatus.fromJson(
         Map<String, dynamic>.from(response['bolsa'] as Map),
@@ -129,5 +193,25 @@ class BolsaService {
     throw Exception(
       response['error']?.toString() ?? 'Failed to update bolsa config',
     );
+  }
+
+  static String _dateKey(DateTime date) {
+    final y = date.year.toString().padLeft(4, '0');
+    final m = date.month.toString().padLeft(2, '0');
+    final d = date.day.toString().padLeft(2, '0');
+    return '$y-$m-$d';
+  }
+
+  static String _tipoKey(BolsaMovimientoTipo tipo) {
+    switch (tipo) {
+      case BolsaMovimientoTipo.acumulacion:
+        return 'ACUMULACION';
+      case BolsaMovimientoTipo.consumo:
+        return 'CONSUMO';
+      case BolsaMovimientoTipo.ajuste:
+        return 'AJUSTE';
+      case BolsaMovimientoTipo.desconocido:
+        return '';
+    }
   }
 }

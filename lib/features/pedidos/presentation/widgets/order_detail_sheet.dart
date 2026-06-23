@@ -6,8 +6,12 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gmp_app_mobilidad/core/api/api_client.dart';
+import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
+import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/widgets/order_pdf_generator.dart';
@@ -71,7 +75,10 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
       _error = null;
     });
     try {
-      final detail = await PedidosService.getOrderDetail(widget.orderId);
+      final detail = await PedidosService.getOrderDetail(
+        widget.orderId,
+        forceRefresh: true,
+      );
       if (mounted) {
         setState(() {
           _detail = detail;
@@ -130,6 +137,12 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
         Icons.widgets_outlined,
       ),
     ];
+  }
+
+  String _imageUrl(String code) {
+    final trimmed = code.trim();
+    if (trimmed.isEmpty) return '';
+    return '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(trimmed)}/image';
   }
 
   Future<void> _cancelOrder() async {
@@ -423,6 +436,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             ? Colors.orange
             : AppTheme.error;
 
+    final imageUrl = _imageUrl(line.codigoArticulo);
     return Card(
       color: AppTheme.darkCard,
       margin: const EdgeInsets.only(bottom: 6),
@@ -451,6 +465,32 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                         color: AppTheme.neonBlue,
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => FullscreenImageViewer.show(
+                    context,
+                    imageUrl: imageUrl,
+                    productName: line.descripcion,
+                    productCode: line.codigoArticulo,
+                    headers: ApiClient.authHeaders,
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      color: AppTheme.darkSurface,
+                      child: SmartProductImage(
+                        imageUrl: imageUrl,
+                        productCode: line.codigoArticulo,
+                        productName: line.descripcion,
+                        headers: ApiClient.authHeaders,
+                        fit: BoxFit.contain,
+                        borderRadius: BorderRadius.circular(6),
                       ),
                     ),
                   ),

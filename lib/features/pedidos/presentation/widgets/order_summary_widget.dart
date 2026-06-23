@@ -19,9 +19,11 @@ class OrderSummaryWidget extends ConsumerStatefulWidget {
     required this.vendedorCode,
     super.key,
     this.scrollController,
+    this.onOrderConfirmed,
   });
   final String vendedorCode;
   final ScrollController? scrollController;
+  final ValueChanged<Map<String, dynamic>>? onOrderConfirmed;
 
   @override
   ConsumerState<OrderSummaryWidget> createState() => _OrderSummaryWidgetState();
@@ -1406,14 +1408,17 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
       if (!context.mounted) return;
       if (_handleBlockedOrUnconfirmedResult(context, result)) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Pedido #${result['numeroPedido'] ?? ''} confirmado correctamente',
+      widget.onOrderConfirmed?.call(result);
+      if (widget.onOrderConfirmed == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Pedido #${result['numeroPedido'] ?? ''} confirmado correctamente',
+            ),
+            backgroundColor: AppTheme.neonGreen,
           ),
-          backgroundColor: AppTheme.neonGreen,
-        ),
-      );
+        );
+      }
     });
   }
 }

@@ -510,19 +510,41 @@ class _ProductCardState extends State<ProductCard> {
                 const SizedBox(width: 4),
                 GestureDetector(
                   onTap: widget.onQuickAdd,
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: BoxDecoration(
-                      color: AppTheme.neonBlue.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                          color: AppTheme.neonBlue.withValues(alpha: 0.4)),
-                    ),
-                    child: const Icon(
-                      Icons.add,
-                      color: AppTheme.neonBlue,
-                      size: 18,
+                  child: SizedBox(
+                    width: 42,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppTheme.neonBlue.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: const Icon(
+                            Icons.add,
+                            color: AppTheme.neonBlue,
+                            size: 18,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            'Anadir',
+                            maxLines: 1,
+                            style: TextStyle(
+                              color: AppTheme.neonBlue,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),

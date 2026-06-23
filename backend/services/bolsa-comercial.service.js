@@ -30,13 +30,36 @@ const BOLSA_INSERT_DEFAULT_SQL = [
 ].join(' ');
 
 const MOVIMIENTOS_SELECT_BY_BOLSA_SQL = [
-    'SELECT ID, TIPO, IMPORTE, SALDO_ANTERIOR, SALDO_POSTERIOR,',
-    'CODIGO_ARTICULO, DESCRIPCION, PEDIDO_ID, CREATED_AT, LINEA_ID,',
-    'PRECIO_MINIMO_CONGELADO, PRECIO_VENTA, CANTIDAD, UNIDAD_MEDIDA, IDEMPOTENCY_KEY',
-    'FROM JAVIER.MOVIMIENTOS_BOLSA',
-    'WHERE BOLSA_ID = ?',
-    'ORDER BY CREATED_AT DESC, ID DESC',
+    'SELECT M.ID, M.TIPO, M.IMPORTE, M.SALDO_ANTERIOR, M.SALDO_POSTERIOR,',
+    'M.CODIGO_ARTICULO, M.DESCRIPCION, M.PEDIDO_ID, M.CREATED_AT, M.LINEA_ID,',
+    'M.PRECIO_MINIMO_CONGELADO, M.PRECIO_VENTA, M.CANTIDAD, M.UNIDAD_MEDIDA, M.IDEMPOTENCY_KEY,',
+    'TRIM(COALESCE(M.CODIGOVENDEDOR, B.CODIGOVENDEDOR)) AS CODIGOVENDEDOR,',
+    'B.EJERCICIO AS BOLSA_EJERCICIO, B.MES AS BOLSA_MES,',
+    'TRIM(C.CODIGOCLIENTE) AS CODIGOCLIENTE, TRIM(C.NOMBRECLIENTE) AS NOMBRECLIENTE,',
+    'C.EJERCICIO AS PEDIDO_EJERCICIO, TRIM(C.SERIEPEDIDO) AS SERIEPEDIDO, C.TERMINAL, C.NUMEROPEDIDO,',
+    'TRIM(C.SYSTEM_SERIEPEDIDO) AS SYSTEM_SERIEPEDIDO, C.SYSTEM_TERMINALPEDIDO, C.SYSTEM_NUMEROPEDIDO, C.SYSTEM_EJERCICIOPEDIDO,',
+    'TRIM(C.TARGET_SCHEMA) AS TARGET_SCHEMA, TRIM(C.SYNC_STATUS) AS SYNC_STATUS',
+    'FROM JAVIER.MOVIMIENTOS_BOLSA M',
+    'INNER JOIN JAVIER.BOLSA_COMERCIAL B ON B.ID = M.BOLSA_ID',
+    'LEFT JOIN JAVIER.PEDIDOS_CAB C ON C.ID = M.PEDIDO_ID',
+    'WHERE M.BOLSA_ID = ?',
+    'ORDER BY M.CREATED_AT DESC, M.ID DESC',
     'FETCH FIRST ? ROWS ONLY',
+].join(' ');
+
+const MOVIMIENTOS_SELECT_BASE_SQL = [
+    'SELECT M.ID, M.TIPO, M.IMPORTE, M.SALDO_ANTERIOR, M.SALDO_POSTERIOR,',
+    'M.CODIGO_ARTICULO, M.DESCRIPCION, M.PEDIDO_ID, M.CREATED_AT, M.LINEA_ID,',
+    'M.PRECIO_MINIMO_CONGELADO, M.PRECIO_VENTA, M.CANTIDAD, M.UNIDAD_MEDIDA, M.IDEMPOTENCY_KEY,',
+    'TRIM(COALESCE(M.CODIGOVENDEDOR, B.CODIGOVENDEDOR)) AS CODIGOVENDEDOR,',
+    'B.EJERCICIO AS BOLSA_EJERCICIO, B.MES AS BOLSA_MES,',
+    'TRIM(C.CODIGOCLIENTE) AS CODIGOCLIENTE, TRIM(C.NOMBRECLIENTE) AS NOMBRECLIENTE,',
+    'C.EJERCICIO AS PEDIDO_EJERCICIO, TRIM(C.SERIEPEDIDO) AS SERIEPEDIDO, C.TERMINAL, C.NUMEROPEDIDO,',
+    'TRIM(C.SYSTEM_SERIEPEDIDO) AS SYSTEM_SERIEPEDIDO, C.SYSTEM_TERMINALPEDIDO, C.SYSTEM_NUMEROPEDIDO, C.SYSTEM_EJERCICIOPEDIDO,',
+    'TRIM(C.TARGET_SCHEMA) AS TARGET_SCHEMA, TRIM(C.SYNC_STATUS) AS SYNC_STATUS',
+    'FROM JAVIER.MOVIMIENTOS_BOLSA M',
+    'INNER JOIN JAVIER.BOLSA_COMERCIAL B ON B.ID = M.BOLSA_ID',
+    'LEFT JOIN JAVIER.PEDIDOS_CAB C ON C.ID = M.PEDIDO_ID',
 ].join(' ');
 
 const IDEMPOTENCY_KEYS_SELECT_SQL = Object.freeze({
@@ -64,6 +87,12 @@ const BOLSA_HISTORIAL_MENSUAL_SQL = [
     'WHERE TRIM(CODIGOVENDEDOR) = ?',
     'AND (EJERCICIO > ? OR (EJERCICIO = ? AND MES >= ?))',
     'ORDER BY EJERCICIO ASC, MES ASC',
+].join(' ');
+const BOLSA_GROUPED_STATUS_BASE_SQL = [
+    'SELECT ID, CODIGOVENDEDOR, EJERCICIO, MES, LIMITE_PCT, LIMITE_IMPORTE,',
+    'SALDO_DISPONIBLE, CONSUMIDO, ACUMULADO',
+    'FROM JAVIER.BOLSA_COMERCIAL',
+    'WHERE EJERCICIO = ? AND MES = ?',
 ].join(' ');
 const BOLSA_UPDATE_CONFIG_BOTH_SQL = 'UPDATE JAVIER.BOLSA_COMERCIAL SET LIMITE_PCT = ?, LIMITE_IMPORTE = ?, UPDATED_AT = CURRENT TIMESTAMP WHERE ID = ?';
 const BOLSA_UPDATE_CONFIG_PCT_SQL = 'UPDATE JAVIER.BOLSA_COMERCIAL SET LIMITE_PCT = ?, UPDATED_AT = CURRENT TIMESTAMP WHERE ID = ?';
@@ -527,15 +556,178 @@ function toIsoTimestamp(value) {
     return Number.isFinite(parsed) ? new Date(parsed).toISOString() : String(value);
 }
 
-async function getMovimientos(vendedorCode, year, month, limit = 50) {
-    const bolsa = await getBolsaStatus(vendedorCode, year, month);
-    if (!bolsa.id) return [];
-    const rows = await queryWithParams(
-        selectMovimientosByBolsaSql(),
-        [bolsa.id, limit]
-    );
+function normalizeLikeText(value, maxLength = 80) {
+    if (value === undefined || value === null) return null;
+    const text = String(value).trim().toUpperCase().replace(/[%_]/g, ' ');
+    return text ? text.slice(0, maxLength) : null;
+}
 
-    return (rows || []).map(r => ({
+function normalizeTipoFilter(value) {
+    const text = normalizeLikeText(value, 20);
+    if (!text) return null;
+    return ['ACUMULACION', 'CONSUMO', 'AJUSTE'].includes(text) ? text : null;
+}
+
+function toDb2TimestampOrNull(value, endOfDay = false) {
+    if (value === undefined || value === null || value === '') return null;
+    const raw = String(value).trim();
+    const dateOnly = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (dateOnly) {
+        return `${dateOnly[1]}-${dateOnly[2]}-${dateOnly[3]} ${endOfDay ? '23:59:59.999' : '00:00:00.000'}`;
+    }
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return null;
+    if (endOfDay) parsed.setHours(23, 59, 59, 999);
+    return toDb2Timestamp(parsed);
+}
+
+function parseDocumentReference(value) {
+    const text = normalizeLikeText(value, 40);
+    if (!text) return null;
+    const match = text.match(/^([A-Z])[-\s]*(\d{1,3})[-\s]*(\d{1,6})$/);
+    if (!match) return null;
+    return {
+        serie: match[1],
+        terminal: parseInt(match[2], 10),
+        numero: parseInt(match[3], 10),
+    };
+}
+
+function documentNumberCandidates(value) {
+    const text = normalizeLikeText(value, 40);
+    if (!text) return [];
+    const out = [];
+    const groups = text.match(/\d+/g) || [];
+    for (const group of groups) {
+        const parsed = parseInt(group, 10);
+        if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 999999 && !out.includes(parsed)) {
+            out.push(parsed);
+        }
+    }
+    return out.slice(0, 4);
+}
+
+function appendInvoiceDocumentExists(whereParts, params, docLike, numbers) {
+    const invoiceParts = [
+        'CAST(F.NUMEROFACTURA AS CHAR(20)) LIKE ?',
+        'UPPER(TRIM(F.SERIEFACTURA)) LIKE ?',
+    ];
+    params.push(docLike, docLike);
+    for (const n of numbers) {
+        invoiceParts.push('F.NUMEROFACTURA = ?');
+        params.push(n);
+    }
+    whereParts.push([
+        'EXISTS (SELECT 1',
+        'FROM DSEDAC.CPC P',
+        'INNER JOIN DSEDAC.CAC F',
+        'ON F.EJERCICIOALBARAN = P.EJERCICIOALBARAN',
+        'AND TRIM(F.SERIEALBARAN) = TRIM(P.SERIEALBARAN)',
+        'AND F.TERMINALALBARAN = P.TERMINALALBARAN',
+        'AND F.NUMEROALBARAN = P.NUMEROALBARAN',
+        'WHERE C.SYSTEM_NUMEROPEDIDO > 0',
+        'AND TRIM(P.SUBEMPRESAPEDIDO) = TRIM(C.SYSTEM_SUBEMPRESAPEDIDO)',
+        'AND P.EJERCICIOPEDIDO = C.SYSTEM_EJERCICIOPEDIDO',
+        'AND TRIM(P.SERIEPEDIDO) = TRIM(C.SYSTEM_SERIEPEDIDO)',
+        'AND P.TERMINALPEDIDO = C.SYSTEM_TERMINALPEDIDO',
+        'AND P.NUMEROPEDIDO = C.SYSTEM_NUMEROPEDIDO',
+        `AND (${invoiceParts.join(' OR ')}))`,
+    ].join(' '));
+}
+
+function normalizeMovementFilters(filters = {}) {
+    return {
+        tipo: normalizeTipoFilter(filters.tipo),
+        dateFrom: toDb2TimestampOrNull(filters.dateFrom || filters.fechaDesde, false),
+        dateTo: toDb2TimestampOrNull(filters.dateTo || filters.fechaHasta, true),
+        documentText: normalizeLikeText(filters.document || filters.documento || filters.pedido || filters.numeroPedido || filters.numeroFactura, 40),
+        clientText: normalizeLikeText(filters.client || filters.cliente || filters.codigoCliente, 80),
+    };
+}
+
+function appendMovementFilters(where, params, filters) {
+    if (filters.tipo) {
+        where.push('TRIM(M.TIPO) = ?');
+        params.push(filters.tipo);
+    }
+    if (filters.dateFrom) {
+        where.push('M.CREATED_AT >= ?');
+        params.push(filters.dateFrom);
+    }
+    if (filters.dateTo) {
+        where.push('M.CREATED_AT <= ?');
+        params.push(filters.dateTo);
+    }
+    if (filters.clientText) {
+        const like = `%${filters.clientText}%`;
+        where.push('(UPPER(TRIM(C.CODIGOCLIENTE)) LIKE ? OR UPPER(TRIM(C.NOMBRECLIENTE)) LIKE ?)');
+        params.push(like, like);
+    }
+    if (filters.documentText) {
+        const like = `%${filters.documentText}%`;
+        const numbers = documentNumberCandidates(filters.documentText);
+        const ref = parseDocumentReference(filters.documentText);
+        const parts = [
+            'CAST(M.PEDIDO_ID AS CHAR(20)) LIKE ?',
+            'CAST(C.NUMEROPEDIDO AS CHAR(20)) LIKE ?',
+            'CAST(C.SYSTEM_NUMEROPEDIDO AS CHAR(20)) LIKE ?',
+            'UPPER(TRIM(C.SERIEPEDIDO)) LIKE ?',
+            'UPPER(TRIM(C.SYSTEM_SERIEPEDIDO)) LIKE ?',
+        ];
+        params.push(like, like, like, like, like);
+        for (const n of numbers) {
+            parts.push('M.PEDIDO_ID = ?');
+            parts.push('C.NUMEROPEDIDO = ?');
+            parts.push('C.SYSTEM_NUMEROPEDIDO = ?');
+            params.push(n, n, n);
+        }
+        if (ref) {
+            parts.push('(UPPER(TRIM(C.SERIEPEDIDO)) = ? AND C.TERMINAL = ? AND C.NUMEROPEDIDO = ?)');
+            parts.push('(UPPER(TRIM(C.SYSTEM_SERIEPEDIDO)) = ? AND C.SYSTEM_TERMINALPEDIDO = ? AND C.SYSTEM_NUMEROPEDIDO = ?)');
+            params.push(ref.serie, ref.terminal, ref.numero, ref.serie, ref.terminal, ref.numero);
+        }
+        appendInvoiceDocumentExists(parts, params, like, numbers);
+        where.push(`(${parts.join(' OR ')})`);
+    }
+}
+
+function buildMovimientosQuery(vendedorCode, year, month, limit, filters) {
+    const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 50, 1), 200);
+    const where = ['TRIM(B.CODIGOVENDEDOR) = ?'];
+    const params = [String(vendedorCode || '').trim()];
+    const y = parseInt(year, 10);
+    const m = parseInt(month, 10);
+    const hasDateWindow = Boolean(filters.dateFrom || filters.dateTo);
+    if (!hasDateWindow && Number.isFinite(y) && Number.isFinite(m)) {
+        where.push('B.EJERCICIO = ?');
+        where.push('B.MES = ?');
+        params.push(y, m);
+    }
+    appendMovementFilters(where, params, filters);
+    params.push(safeLimit);
+    return {
+        sql: [
+            MOVIMIENTOS_SELECT_BASE_SQL,
+            `WHERE ${where.join(' AND ')}`,
+            'ORDER BY M.CREATED_AT DESC, M.ID DESC',
+            'FETCH FIRST ? ROWS ONLY',
+        ].join(' '),
+        params,
+    };
+}
+
+function formatPedidoReference(serie, terminal, numero) {
+    const n = nullableInt(numero);
+    if (!n || n <= 0) return null;
+    const serieText = String(serie || 'P').trim() || 'P';
+    const t = nullableInt(terminal) || 0;
+    return `${serieText}-${String(t).padStart(3, '0')}-${String(n).padStart(6, '0')}`;
+}
+
+function mapMovimientoRow(r) {
+    const localPedidoReferencia = formatPedidoReference(r.SERIEPEDIDO, r.TERMINAL, r.NUMEROPEDIDO);
+    const systemPedidoReferencia = formatPedidoReference(r.SYSTEM_SERIEPEDIDO || r.SERIEPEDIDO, r.SYSTEM_TERMINALPEDIDO, r.SYSTEM_NUMEROPEDIDO);
+    return {
         id: r.ID,
         tipo: (r.TIPO || '').trim(),
         importe: parseFloat(r.IMPORTE) || 0,
@@ -551,7 +743,27 @@ async function getMovimientos(vendedorCode, year, month, limit = 50) {
         cantidad: nullableNumber(r.CANTIDAD),
         unidadMedida: nullableTrim(r.UNIDAD_MEDIDA),
         idempotencyKey: nullableTrim(r.IDEMPOTENCY_KEY),
-    }));
+        vendedor: nullableTrim(r.CODIGOVENDEDOR),
+        bolsaEjercicio: nullableInt(r.BOLSA_EJERCICIO),
+        bolsaMes: nullableInt(r.BOLSA_MES),
+        clienteCodigo: nullableTrim(r.CODIGOCLIENTE),
+        clienteNombre: nullableTrim(r.NOMBRECLIENTE),
+        pedidoEjercicio: nullableInt(r.PEDIDO_EJERCICIO),
+        pedidoNumero: nullableInt(r.NUMEROPEDIDO),
+        pedidoReferencia: systemPedidoReferencia || localPedidoReferencia,
+        localPedidoReferencia,
+        systemPedidoReferencia,
+        targetSchema: nullableTrim(r.TARGET_SCHEMA),
+        syncStatus: nullableTrim(r.SYNC_STATUS),
+    };
+}
+
+async function getMovimientos(vendedorCode, year, month, limit = 50, filters = {}) {
+    const normalizedFilters = normalizeMovementFilters(filters);
+    const query = buildMovimientosQuery(vendedorCode, year, month, limit, normalizedFilters);
+    const rows = await queryWithParams(query.sql, query.params);
+
+    return (rows || []).map(mapMovimientoRow);
 }
 
 // -- Get historical monthly summary (last N months) -------------------
@@ -625,6 +837,60 @@ async function getHistorialMensual(vendedorCode, months = 12) {
     };
 }
 
+function mapBolsaStatusRow(row) {
+    return {
+        id: row.ID,
+        vendedor: (row.CODIGOVENDEDOR || '').trim(),
+        ejercicio: parseInt(row.EJERCICIO),
+        mes: parseInt(row.MES),
+        limitePct: parseFloat(row.LIMITE_PCT) || 3.0,
+        limiteImporte: parseFloat(row.LIMITE_IMPORTE) || 0,
+        saldoDisponible: parseFloat(row.SALDO_DISPONIBLE) || 0,
+        consumido: parseFloat(row.CONSUMIDO) || 0,
+        acumulado: parseFloat(row.ACUMULADO) || 0,
+    };
+}
+
+function normalizeVendorCodeList(vendedorCodes) {
+    if (!Array.isArray(vendedorCodes)) return [];
+    return [...new Set(vendedorCodes
+        .map(code => String(code || '').trim())
+        .filter(code => code && code.toUpperCase() !== 'ALL'))].slice(0, 100);
+}
+
+async function getGroupedStatus(vendedorCodes, year, month) {
+    const y = parseInt(year, 10);
+    const m = parseInt(month, 10);
+    const codes = normalizeVendorCodeList(vendedorCodes);
+    const params = [y, m];
+    let sql = BOLSA_GROUPED_STATUS_BASE_SQL;
+    if (codes.length > 0) {
+        sql += ` AND TRIM(CODIGOVENDEDOR) IN (${codes.map(() => '?').join(', ')})`;
+        params.push(...codes);
+    }
+    sql += ' ORDER BY TRIM(CODIGOVENDEDOR) ASC';
+
+    const rows = await queryWithParams(sql, params);
+    const vendedores = (rows || []).map(mapBolsaStatusRow);
+    const totals = vendedores.reduce((acc, item) => {
+        acc.saldoDisponible += item.saldoDisponible;
+        acc.consumido += item.consumido;
+        acc.acumulado += item.acumulado;
+        return acc;
+    }, { saldoDisponible: 0, consumido: 0, acumulado: 0 });
+    totals.saldoDisponible = toMoney(totals.saldoDisponible);
+    totals.consumido = toMoney(totals.consumido);
+    totals.acumulado = toMoney(totals.acumulado);
+    totals.vendedores = vendedores.length;
+
+    return {
+        ejercicio: y,
+        mes: m,
+        vendedores,
+        totals,
+    };
+}
+
 // -- Update configuration (JEFE_VENTAS only) --------------------------
 
 async function updateBolsaConfig(vendedorCode, year, month, { limitePct, limiteImporte }) {
@@ -665,5 +931,6 @@ module.exports = {
     toDb2Timestamp,
     getMovimientos,
     getHistorialMensual,
+    getGroupedStatus,
     updateBolsaConfig,
 };

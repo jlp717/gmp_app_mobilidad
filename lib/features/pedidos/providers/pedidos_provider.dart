@@ -10,6 +10,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/cache/cache_service.dart';
+import 'package:gmp_app_mobilidad/features/bolsa/providers/bolsa_provider.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_favorites_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_offline_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_order_api.dart';
@@ -28,9 +29,13 @@ Map<String, dynamic> normalizeConfirmOrderResultForProvider({
     return Map<String, dynamic>.from(confirmedResult);
   }
 
-  final header = confirmedResult['header'];
+  final order = confirmedResult['order'];
+  final orderMap = order is Map ? Map<String, dynamic>.from(order) : null;
+  final header = confirmedResult['header'] ?? orderMap?['header'] ?? orderMap;
   if (header is Map) {
-    return Map<String, dynamic>.from(header);
+    final normalized = Map<String, dynamic>.from(header);
+    if (orderMap?['lines'] is List) normalized['lines'] = orderMap!['lines'];
+    return normalized;
   }
 
   return Map<String, dynamic>.from(createResult);
@@ -61,8 +66,11 @@ bool isConfirmedOrderResultForProvider(Map<String, dynamic>? result) {
   return status == 'CONFIRMADO' || status == 'ENVIADO';
 }
 
-final pedidosProvider =
-    ChangeNotifierProvider<PedidosProvider>((ref) => PedidosProvider());
+final pedidosProvider = ChangeNotifierProvider<PedidosProvider>(
+  (ref) => PedidosProvider(
+    onOrderMutation: () => unawaited(ref.read(bolsaProvider).refresh()),
+  ),
+);
 
 class PedidosProvider with ChangeNotifier {
   // Req #9: PedidosOrderApi inyectable para testabilidad. Por defecto usa la
@@ -71,11 +79,14 @@ class PedidosProvider with ChangeNotifier {
   PedidosProvider({
     PedidosOrderApi? orderApi,
     bool refreshAfterConfirm = true,
+    VoidCallback? onOrderMutation,
   })  : _orderApi = orderApi ?? const PedidosServiceOrderApi(),
-        _refreshAfterConfirm = refreshAfterConfirm;
+        _refreshAfterConfirm = refreshAfterConfirm,
+        _onOrderMutation = onOrderMutation;
 
   final PedidosOrderApi _orderApi;
   final bool _refreshAfterConfirm;
+  final VoidCallback? _onOrderMutation;
 
   // ── Cart State (current order being built) ──
   final List<OrderLine> _lines = [];
@@ -116,7 +127,7 @@ class PedidosProvider with ChangeNotifier {
   String? _error;
 
   // Req #2: Visibilidad de márgenes / costes según rol.
-  // JEFE_VENTAS, ADMIN y Comercial 80 ven márgenes; COMERCIAL/REPARTIDOR no.
+  // JEFE_VENTAS y ADMIN ven margenes; COMERCIAL/REPARTIDOR no.
   bool _isJefeVentas = false;
   String _userRole = 'COMERCIAL';
   String _userCode = '';
@@ -1326,6 +1337,9 @@ class PedidosProvider with ChangeNotifier {
       if (_refreshAfterConfirm) {
         await refreshOrdersAndStats();
       }
+      if (isConfirmedOrderResultForProvider(result)) {
+        _onOrderMutation?.call();
+      }
 
       _debugLog(
           '[confirmOrder] SUCCESS: order confirmed, result keys=${result.keys.toList()}');
@@ -1387,6 +1401,10 @@ class PedidosProvider with ChangeNotifier {
     _isLoadingOrders = true;
     _orderStatusFilter = status;
     _error = null;
+    if (forceRefresh) {
+      await PedidosService.invalidateOrderCaches();
+      _orders = const <OrderSummary>[];
+    }
     final generation = ++_ordersLoadGeneration;
     notifyListeners();
 
@@ -1447,6 +1465,20 @@ class PedidosProvider with ChangeNotifier {
     bool forceRefresh = false,
   }) async {
     _isLoadingStats = true;
+    if (forceRefresh) {
+      await CacheService.invalidateByPrefix('pedidos:stats:');
+      _orderStats = OrderStats(
+        totalOrders: 0,
+        totalAmount: 0,
+        totalBase: 0,
+        totalIva: 0,
+        avgMargin: 0,
+        avgTicket: 0,
+        byStatus: const <String, int>{},
+        dailyTrend: const <Map<String, dynamic>>[],
+        topClients: const <Map<String, dynamic>>[],
+      );
+    }
     notifyListeners();
     try {
       _orderStats = await PedidosService.getOrderStats(
@@ -1548,6 +1580,7 @@ class PedidosProvider with ChangeNotifier {
       notifyListeners();
     }
     await refreshOrdersAndStats();
+    _onOrderMutation?.call();
     return result;
   }
 

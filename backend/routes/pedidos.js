@@ -55,12 +55,11 @@ const { db2WriteTable } = require('../utils/db2-schemas');
 
 router.use(verifyToken);
 
-// Req #2: Margin visibility — only JEFE_VENTAS / ADMIN / Comercial 80 see cost/margin data
+// Req #2: Margin visibility - only JEFE_VENTAS / ADMIN see cost/margin data.
 const MARGIN_VISIBLE_ROLES = ['JEFE_VENTAS', 'ADMIN'];
 function canSeeMargin(user) {
     const role = (user?.role || '').toUpperCase();
-    const code = (user?.code || '').replace(/^0+/, '');
-    return MARGIN_VISIBLE_ROLES.includes(role) || user?.isJefeVentas === true || code === '80';
+    return MARGIN_VISIBLE_ROLES.includes(role) || user?.isJefeVentas === true;
 }
 
 function canUseServerForceConfirm(req, body = {}) {
@@ -859,6 +858,7 @@ router.get('/', async (req, res) => {
             sortOrder: (sortOrder || 'DESC').toUpperCase(),
             limit,
             offset,
+            forceRefresh: req.query.forceRefresh === 'true' || req.query.refresh === 'true' || Boolean(req.query._ts),
         });
 
         const orders = result.orders.map(o => stripMarginFromOrder(o, req.user));
@@ -1343,7 +1343,7 @@ router.post('/create', async (req, res) => {
                 descuentoGlobal: descuentoGlobal ? parseFloat(descuentoGlobal) : 0,
                 observaciones: observaciones ? String(observaciones).trim() : '',
                 lines,
-                userId: req.user?.code || req.user?.codigo || req.user?.vendedorCode || undefined,
+                userId: vendorAccess.vendedorCode,
                 idempotencyKey,
             });
         } finally {
@@ -1532,7 +1532,7 @@ router.put('/:id/confirm', async (req, res) => {
             forceConfirmReason: String(req.body?.forceConfirmReason || req.body?.auditReason || '').trim(),
             adminOverride: canUseServerForceConfirm(req, req.body),
             userRole: req.user?.role || 'COMERCIAL',
-            userId: req.user?.code || 'SYSTEM',
+            userId: ownership.ownership?.vendedorCode || req.user?.code || req.user?.codigo || req.user?.vendedorCode || req.user?.userId || 'SYSTEM',
             deliveryDate: deliveryDate ? String(deliveryDate).trim() : undefined,
             vehicleCode: vehicleCode ? String(vehicleCode).trim() : undefined,
             driverCode: driverCode ? String(driverCode).trim() : undefined,

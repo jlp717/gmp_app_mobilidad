@@ -42,15 +42,25 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
 
   void _loadIfNeeded() {
     if (!mounted) return;
+    final authState = ref.read(authProvider).value;
+    final user = authState?.user;
     final vendor = _resolveVendor();
     final normalized = vendor?.trim();
-    if (normalized == null ||
-        normalized.isEmpty ||
-        normalized.toUpperCase() == 'ALL') {
-      if (_lastLoadedVendor != null) {
-        _lastLoadedVendor = null;
-        ref.read(bolsaProvider).load(normalized ?? '');
+    if (user?.isJefeVentas == true &&
+        (normalized == null ||
+            normalized.isEmpty ||
+            normalized.toUpperCase() == 'ALL')) {
+      final codes = authState?.vendedorCodes ?? const <String>[];
+      final key = 'GROUPED:${codes.join(',')}';
+      if (_lastLoadedVendor != key) {
+        _lastLoadedVendor = key;
+        ref.read(bolsaProvider).loadGrouped(vendedorCodes: codes);
       }
+      return;
+    }
+    if (normalized == null || normalized.isEmpty) {
+      _lastLoadedVendor = null;
+      ref.read(bolsaProvider).load('');
       return;
     }
     if (normalized != _lastLoadedVendor) {
@@ -128,6 +138,16 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
     }
     final status = provider.status;
     if (status == null) {
+      final grouped = provider.groupedSummary;
+      if (grouped != null) {
+        return _GroupedBolsaView(
+          summary: grouped,
+          onSelectVendor: (code) {
+            ref.read(filterProvider.notifier).setVendor(code);
+            _loadIfNeeded();
+          },
+        );
+      }
       return _EmptyVendorView();
     }
     final months = const [
@@ -201,9 +221,10 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
                   ),
                   const Spacer(),
                   if (provider.tipoFilter != null ||
-                      provider.searchQuery.isNotEmpty)
+                      provider.searchQuery.isNotEmpty ||
+                      provider.hasAdvancedFilters)
                     TextButton.icon(
-                      onPressed: provider.clearFilters,
+                      onPressed: () => provider.clearFilters(),
                       icon: const Icon(Icons.clear, size: 14),
                       label: const Text(
                         'Limpiar',
@@ -441,6 +462,197 @@ class _BolsaSummaryCard extends StatelessWidget {
   }
 }
 
+class _GroupedBolsaView extends StatelessWidget {
+  const _GroupedBolsaView({
+    required this.summary,
+    required this.onSelectVendor,
+  });
+
+  final BolsaGroupedSummary summary;
+  final void Function(String vendedorCode) onSelectVendor;
+
+  @override
+  Widget build(BuildContext context) {
+    final vendedores = summary.vendedores;
+    return ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: vendedores.isEmpty ? 4 : vendedores.length + 3,
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return _GroupedSummaryCard(summary: summary);
+          }
+          if (index == 1) return const SizedBox(height: 16);
+          if (index == 2) {
+            return Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 8),
+              child: Text(
+                'Distribucion por comercial',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: Responsive.fontSize(
+                    context,
+                    small: 14,
+                    large: 16,
+                  ),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            );
+          }
+          if (vendedores.isEmpty) {
+            return Container(
+              padding: const EdgeInsets.all(20),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppTheme.darkSurface,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'No hay movimientos de bolsa este mes',
+                style: TextStyle(color: Colors.white54),
+              ),
+            );
+          }
+          final status = vendedores[index - 3];
+          return _GroupedVendorTile(
+            status: status,
+            onTap: () => onSelectVendor(status.vendedor),
+          );
+        },
+    );
+  }
+}
+
+class _GroupedSummaryCard extends StatelessWidget {
+  const _GroupedSummaryCard({required this.summary});
+  final BolsaGroupedSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: AppTheme.darkSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(
+            children: [
+              Icon(Icons.groups, color: AppTheme.neonBlue, size: 20),
+              SizedBox(width: 8),
+              Text(
+                'Bolsa del equipo',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: _MetricBox(
+                  label: 'Disponible',
+                  value: _bolsaMoney(summary.saldoDisponible),
+                  color: AppTheme.neonGreen,
+                  icon: Icons.account_balance_wallet,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _MetricBox(
+                  label: 'Acumulado',
+                  value: _bolsaMoney(summary.acumulado),
+                  color: AppTheme.neonBlue,
+                  icon: Icons.trending_up,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _MetricBox(
+                  label: 'Consumido',
+                  value: _bolsaMoney(summary.consumido),
+                  color: AppTheme.warning,
+                  icon: Icons.trending_down,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _GroupedVendorTile extends StatelessWidget {
+  const _GroupedVendorTile({required this.status, required this.onTap});
+  final BolsaStatus status;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = status.isDeficit
+        ? AppTheme.error
+        : status.isLow
+            ? Colors.amber
+            : AppTheme.neonGreen;
+    return Card(
+      color: AppTheme.darkSurface,
+      margin: const EdgeInsets.only(bottom: 8),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: color.withValues(alpha: 0.18)),
+      ),
+      child: ListTile(
+        onTap: onTap,
+        leading: CircleAvatar(
+          radius: 17,
+          backgroundColor: color.withValues(alpha: 0.12),
+          child: Text(
+            status.vendedor,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        title: Text(
+          'Comercial ${status.vendedor}',
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        subtitle: Text(
+          'Acum. ${_bolsaMoney(status.acumulado)} · Cons. ${_bolsaMoney(status.consumido)}',
+          style: const TextStyle(color: Colors.white54, fontSize: 11),
+        ),
+        trailing: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Text(
+              _bolsaMoney(status.saldoDisponible),
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.white38, size: 18),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _MetricBox extends StatelessWidget {
   const _MetricBox({
     required this.label,
@@ -531,16 +743,22 @@ class _MovimientosFilters extends StatefulWidget {
 
 class _MovimientosFiltersState extends State<_MovimientosFilters> {
   late final TextEditingController _searchCtrl;
+  late final TextEditingController _documentCtrl;
+  late final TextEditingController _clientCtrl;
 
   @override
   void initState() {
     super.initState();
     _searchCtrl = TextEditingController(text: widget.provider.searchQuery);
+    _documentCtrl = TextEditingController(text: widget.provider.documentFilter);
+    _clientCtrl = TextEditingController(text: widget.provider.clientFilter);
   }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
+    _documentCtrl.dispose();
+    _clientCtrl.dispose();
     super.dispose();
   }
 
@@ -665,7 +883,163 @@ class _MovimientosFiltersState extends State<_MovimientosFilters> {
             ),
           ),
         ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _DateFilterButton(
+              label: 'Desde',
+              value: p.dateFromFilter,
+              onPressed: () => _pickDate(from: true),
+            ),
+            _DateFilterButton(
+              label: 'Hasta',
+              value: p.dateToFilter,
+              onPressed: () => _pickDate(from: false),
+            ),
+            SizedBox(
+              width: 170,
+              child: _FilterTextField(
+                controller: _documentCtrl,
+                icon: Icons.receipt_long,
+                hint: 'Pedido o factura',
+                onSubmitted: p.setDocumentFilter,
+              ),
+            ),
+            SizedBox(
+              width: 190,
+              child: _FilterTextField(
+                controller: _clientCtrl,
+                icon: Icons.storefront,
+                hint: 'Cliente',
+                onSubmitted: p.setClientFilter,
+              ),
+            ),
+          ],
+        ),
       ],
+    );
+  }
+
+  Future<void> _pickDate({required bool from}) async {
+    final provider = widget.provider;
+    final current = from ? provider.dateFromFilter : provider.dateToFilter;
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current ?? now,
+      firstDate: DateTime(now.year - 3),
+      lastDate: DateTime(now.year + 1),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: AppTheme.neonBlue,
+              surface: AppTheme.darkSurface,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked == null) return;
+    if (from) {
+      await provider.setDateRange(picked, provider.dateToFilter);
+    } else {
+      await provider.setDateRange(provider.dateFromFilter, picked);
+    }
+  }
+}
+
+class _DateFilterButton extends StatelessWidget {
+  const _DateFilterButton({
+    required this.label,
+    required this.value,
+    required this.onPressed,
+  });
+
+  final String label;
+  final DateTime? value;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = value == null
+        ? label
+        : '${value!.day.toString().padLeft(2, '0')}/'
+            '${value!.month.toString().padLeft(2, '0')}/'
+            '${value!.year}';
+    return OutlinedButton.icon(
+      onPressed: onPressed,
+      icon: const Icon(Icons.calendar_today, size: 14),
+      label: Text(text, style: const TextStyle(fontSize: 11)),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.white70,
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.18)),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        minimumSize: const Size(0, 34),
+      ),
+    );
+  }
+}
+
+class _FilterTextField extends StatelessWidget {
+  const _FilterTextField({
+    required this.controller,
+    required this.icon,
+    required this.hint,
+    required this.onSubmitted,
+  });
+
+  final TextEditingController controller;
+  final IconData icon;
+  final String hint;
+  final Future<void> Function(String) onSubmitted;
+
+  @override
+  Widget build(BuildContext context) {
+    return TextField(
+      controller: controller,
+      onSubmitted: onSubmitted,
+      style: const TextStyle(color: Colors.white, fontSize: 12),
+      decoration: InputDecoration(
+        isDense: true,
+        prefixIcon: Icon(icon, size: 16, color: Colors.white54),
+        suffixIcon: controller.text.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.close, size: 15),
+                color: Colors.white54,
+                onPressed: () {
+                  controller.clear();
+                  onSubmitted('');
+                },
+              ),
+        hintText: hint,
+        hintStyle: TextStyle(
+          color: Colors.white.withValues(alpha: 0.35),
+          fontSize: 11,
+        ),
+        filled: true,
+        fillColor: AppTheme.darkSurface,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(
+            color: AppTheme.neonBlue.withValues(alpha: 0.5),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -687,6 +1061,8 @@ class _MovimientoTile extends StatelessWidget {
     final extraDetail = _extraDetailText();
     final signedAmount =
         "${isCredit ? '+' : '-'}${_formatMoney(movimiento.importe)}";
+    final pedidoLabel = movimiento.displayPedido;
+    final clienteLabel = movimiento.displayCliente;
 
     return Card(
       color: AppTheme.darkSurface,
@@ -699,8 +1075,8 @@ class _MovimientoTile extends StatelessWidget {
         isThreeLine: extraDetail != null || movimiento.descripcion.isNotEmpty,
         leading: Icon(icon, color: color),
         title: Text(
-          movimiento.pedidoId != null
-              ? '${movimiento.tipo.label} · Pedido ${movimiento.pedidoId}'
+          pedidoLabel.isNotEmpty
+              ? '${movimiento.tipo.label} - $pedidoLabel'
               : movimiento.tipo.label,
           style: const TextStyle(
             color: Colors.white,
@@ -710,6 +1086,13 @@ class _MovimientoTile extends StatelessWidget {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            if (clienteLabel.isNotEmpty)
+              Text(
+                clienteLabel,
+                style: const TextStyle(color: Colors.white70, fontSize: 11),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             if (movimiento.codigoArticulo.isNotEmpty)
               Text(
                 'Art.: ${movimiento.codigoArticulo}',
@@ -767,7 +1150,7 @@ class _MovimientoTile extends StatelessWidget {
 
   String? _extraDetailText() {
     final details = <String>[
-      if (movimiento.pedidoId != null) 'Pedido ${movimiento.pedidoId}',
+      if (movimiento.displayPedido.isNotEmpty) movimiento.displayPedido,
       if (movimiento.lineId != null) 'Línea ${movimiento.lineId}',
       if (movimiento.cantidad != null) 'Cant. ${_formatQuantityWithUnit()}',
       if (movimiento.precioMinimoCongelado != null)
@@ -780,6 +1163,7 @@ class _MovimientoTile extends StatelessWidget {
         _formatCalculation(),
       if (movimiento.idempotencyKey != null)
         'Ref. ${_shortTrace(movimiento.idempotencyKey!)}',
+      if (movimiento.syncStatus != null) movimiento.syncStatus!,
     ];
     if (details.isEmpty) return null;
     return details.join(' · ');

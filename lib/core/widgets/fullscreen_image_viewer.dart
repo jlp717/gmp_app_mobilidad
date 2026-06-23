@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
-import 'package:gmp_app_mobilidad/core/theme/app_colors.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 
 /// Full-screen, zoomable product image viewer.
@@ -66,8 +65,8 @@ class FullscreenImageViewer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const viewerBackground = AppColors.darkBase;
-    const imageSurface = AppColors.darkCard;
+    const viewerBackground = Colors.black;
+    const imageSurface = Color(0xFFF7F8FA);
 
     return Scaffold(
       backgroundColor: viewerBackground,
@@ -88,25 +87,36 @@ class FullscreenImageViewer extends StatelessWidget {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(12),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Container(
-              color: imageSurface,
-              width: double.infinity,
-              height: double.infinity,
-              child: InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 5,
-                child: Center(
-                  child: SmartProductImage(
+          child: Container(
+            color: imageSurface,
+            width: double.infinity,
+            height: double.infinity,
+            child: InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 5,
+              child: Center(
+                child: Image.network(
+                  imageUrl,
+                  headers: _effectiveHeaders,
+                  fit: BoxFit.contain,
+                  filterQuality: FilterQuality.high,
+                  errorBuilder: (ctx, _, __) => SmartProductImage(
                     imageUrl: imageUrl,
                     productCode: productCode ?? '',
                     productName: productName,
                     fit: BoxFit.contain,
                     borderRadius: BorderRadius.zero,
                     headers: _effectiveHeaders,
-                    forceRetry: true, // Forzar reintento en pantalla completa
+                    forceRetry: true,
                   ),
+                  loadingBuilder: (ctx, child, event) {
+                    if (event == null) return child;
+                    return const SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    );
+                  },
                 ),
               ),
             ),

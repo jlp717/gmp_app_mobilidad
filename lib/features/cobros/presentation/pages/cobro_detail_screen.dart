@@ -59,10 +59,12 @@ class CobroDetailScreen extends ConsumerStatefulWidget {
     required this.nombreCliente,
     required this.employeeCode,
     super.key,
+    this.vendedorCodes,
   });
   final String codigoCliente;
   final String nombreCliente;
   final String employeeCode;
+  final String? vendedorCodes;
 
   @override
   ConsumerState<CobroDetailScreen> createState() => _CobroDetailScreenState();
@@ -100,6 +102,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
       tipoDocumento: _tipoDocumento,
       fechaDesde: _formatDate(_fechaDesde),
       fechaHasta: _formatDate(_fechaHasta),
+      vendedorCodes: widget.vendedorCodes,
       forceRefresh: forceRefresh,
     );
   }
@@ -203,7 +206,11 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       await Future.wait([
         _reloadPendientes(forceRefresh: true),
-        _provider.cargarHistoricoCobros(widget.codigoCliente),
+        _provider.cargarHistoricoCobros(
+          widget.codigoCliente,
+          vendedorCodes: widget.vendedorCodes,
+          forceRefresh: true,
+        ),
       ]);
     });
   }
@@ -371,11 +378,12 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
 
       final success = await _provider.registrarCobro(
         codigoCliente: widget.codigoCliente,
-        referencia: cobro.referencia,
+        referencia: cobro.paymentReference,
         importe: importe,
         formaPago: _formaPago,
         tipoVenta: tipoVenta,
         tipoModo: tipoModo,
+        vendedorCodes: widget.vendedorCodes,
         reloadAfter: false,
       );
       if (success) {
@@ -395,10 +403,15 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           _partialErrors.remove(id);
         }
       });
-      await _provider.cargarCobrosPendientes(
-        widget.codigoCliente,
-        forceRefresh: true,
-      );
+      await Future.wait([
+        _reloadPendientes(forceRefresh: true),
+        _provider.cargarHistoricoCobros(
+          widget.codigoCliente,
+          vendedorCodes: widget.vendedorCodes,
+          forceRefresh: true,
+        ),
+        _provider.refreshLoadedPendingSummary(forceRefresh: true),
+      ]);
       if (!mounted) return;
       final retrySelection = nextCobroSelectionAfterSubmit(
         currentSelection: _itemStates,
@@ -512,10 +525,12 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                   tipoDocumento: _tipoDocumento,
                   fechaDesde: _formatDate(_fechaDesde),
                   fechaHasta: _formatDate(_fechaHasta),
+                  vendedorCodes: widget.vendedorCodes,
                   forceRefresh: true,
                 ),
                 cobros.cargarHistoricoCobros(
                   widget.codigoCliente,
+                  vendedorCodes: widget.vendedorCodes,
                   forceRefresh: true,
                 ),
               ]);
@@ -534,10 +549,12 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                     tipoDocumento: _tipoDocumento,
                     fechaDesde: _formatDate(_fechaDesde),
                     fechaHasta: _formatDate(_fechaHasta),
+                    vendedorCodes: widget.vendedorCodes,
                     forceRefresh: true,
                   ),
                   cobros.cargarHistoricoCobros(
                     widget.codigoCliente,
+                    vendedorCodes: widget.vendedorCodes,
                     forceRefresh: true,
                   ),
                 ]);
@@ -731,7 +748,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
                                 const SizedBox(height: 8),
                                 _buildSectionHeader(
                                   'Al dia / no cobrables',
-                                  'Incluye cobros ya registrados por repartidor',
+                                  'Incluye documentos ya registrados o sin saldo',
                                   Icons.verified_outlined,
                                   AppTheme.success,
                                 ),
@@ -940,6 +957,12 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
   Widget _buildCobroCard(CobroPendiente cobro) {
     final state = _itemStates[cobro.id] ?? 'NONE';
     final isPartial = state == 'PARCIAL';
+    final subtitle = [
+      '${cobro.tipo.label} ${cobro.referencia.isNotEmpty ? cobro.referencia : cobro.id}',
+      if (cobro.isPedidoAppProvisional) 'pendiente de ERP',
+      'Vencimiento: ${cobro.fechaVencimiento != null ? DateFormat('dd/MM/yyyy').format(cobro.fechaVencimiento!) : 'N/A'}',
+      if (cobro.isVencido) 'Mora ${cobro.diasMora}d',
+    ].join(' - ');
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -973,6 +996,27 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
               ),
             ),
             // Req #15: badge tricolor según estado del vencimiento.
+            if (cobro.isPedidoAppProvisional) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonBlue.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppTheme.neonBlue.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: const Text(
+                  'APP',
+                  style: TextStyle(
+                    color: AppTheme.neonBlue,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(
@@ -994,9 +1038,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
           ],
         ),
         subtitle: Text(
-          '${cobro.tipo.label} ${cobro.referencia.isNotEmpty ? cobro.referencia : cobro.id}  -  '
-          'Vencimiento: ${cobro.fechaVencimiento != null ? DateFormat('dd/MM/yyyy').format(cobro.fechaVencimiento!) : 'N/A'}'
-          '${cobro.isVencido ? '  ·  Mora ${cobro.diasMora}d' : ''}',
+          subtitle,
           style: TextStyle(
             color: cobro.isVencido
                 ? AppTheme.error.withValues(alpha: 0.9)

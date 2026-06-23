@@ -52,6 +52,32 @@ void main() {
       expect(cobro.descripcion, 'FAC M-123');
       expect(cobro.conceptoVisible, 'FAC M-123');
     });
+
+    test('builds stable payment references by document source', () {
+      final cvc = CobroPendiente.fromJson({
+        'id': 'cvc_M_123_1',
+        'referencia': 'M-123',
+        'tipo': 'factura',
+        'fecha': '2026-06-10T00:00:00.000Z',
+        'importeTotal': 120,
+        'importePendiente': 45,
+        'docKey': {'source': 'CVC', 'serie': 'M', 'numero': 123},
+      });
+      final appOrder = CobroPendiente.fromJson({
+        'id': 'PEDIDO:22:M-7',
+        'referencia': 'M-7',
+        'tipo': 'pedido_app',
+        'fecha': '2026-06-23T00:00:00.000Z',
+        'importeTotal': 30,
+        'importePendiente': 30,
+        'provisional': true,
+        'docKey': {'source': 'PEDIDOS_CAB', 'id': 22},
+      });
+
+      expect(cvc.paymentReference, 'CVC:M-123');
+      expect(appOrder.paymentReference, 'PEDIDO:22:M-7');
+      expect(appOrder.isPedidoAppProvisional, isTrue);
+    });
   });
 
   group('Cobros provider params', () {
@@ -118,6 +144,47 @@ void main() {
       expect(paths.single, contains('limit=100'));
       expect(paths.single, contains('page=1'));
       expect(paths.single, contains('offset=0'));
+    });
+
+    test('adds server cache buster and vendor scope on forced detail refresh',
+        () async {
+      final paths = <String>[];
+      final interceptor = InterceptorsWrapper(
+        onRequest: (options, handler) {
+          if (options.method == 'GET' &&
+              options.path.startsWith('/cobros/C001/pendientes')) {
+            paths.add(options.uri.toString());
+            handler.resolve(
+              Response<Map<String, dynamic>>(
+                requestOptions: options,
+                data: const {
+                  'success': true,
+                  'pendientes': {
+                    'cobros': <dynamic>[],
+                    'resumen': {'totalPendiente': 0},
+                  },
+                },
+              ),
+            );
+            return;
+          }
+          handler.next(options);
+        },
+      );
+      ApiClient.dio.interceptors.add(interceptor);
+      addTearDown(() => ApiClient.dio.interceptors.remove(interceptor));
+
+      final provider = CobrosProvider(employeeCode: '01');
+      await provider.cargarCobrosPendientes(
+        'C001',
+        vendedorCodes: '01',
+        forceRefresh: true,
+      );
+
+      expect(paths, hasLength(1));
+      expect(paths.single, contains('vendedorCodes=01'));
+      expect(paths.single, contains('_ts='));
+      expect(provider.cobrosPendientes, isEmpty);
     });
   });
 

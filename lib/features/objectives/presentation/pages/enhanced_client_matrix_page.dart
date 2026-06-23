@@ -51,10 +51,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   Map<String, dynamic>? _editableNotes;
   Map<String, dynamic> _contactInfo = {};
 
-  Set<int> _selectedYears = {...ApiConfig.availableYears};
+  Set<int> _selectedYears = _defaultYears();
   Set<int> _selectedMonths = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
   // Pending filter state (only apply when user clicks Apply)
-  final Set<int> _pendingYears = {...ApiConfig.availableYears};
+  final Set<int> _pendingYears = _defaultYears();
   Set<int> _pendingMonths = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
   bool _filtersDirty = false; // Track if filters changed
   String _productCodeSearch = '';
@@ -91,6 +91,11 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     'DIC',
   ];
   static List<int> get _years => ApiConfig.availableYears;
+  static Set<int> _defaultYears() {
+    final years = [...ApiConfig.availableYears]..sort((a, b) => b.compareTo(a));
+    if (years.isEmpty) return {DateTime.now().year};
+    return years.take(3).toSet();
+  }
 
   @override
   void initState() {
@@ -2003,6 +2008,35 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
   }
 
   /// Monthly breakdown row - vertical cards with ENE / 820€ / -73% format
+  Color _monthlyTrendColor(double sales, double prevSales) {
+    final currZero = sales.abs() < 0.01;
+    final prevZero = prevSales.abs() < 0.01;
+    if (!currZero && prevZero) return const Color(0xFF2979FF);
+    if (currZero && !prevZero) return AppTheme.error;
+    if (!currZero && !prevZero) {
+      return sales >= prevSales ? AppTheme.success : AppTheme.error;
+    }
+    return AppTheme.textSecondary;
+  }
+
+  Color _monthlyTrendBg(double sales, double prevSales) {
+    final color = _monthlyTrendColor(sales, prevSales);
+    if (color == AppTheme.textSecondary) return Colors.transparent;
+    return color.withValues(alpha: 0.12);
+  }
+
+  String _monthlyTrendSuffix(double sales, double prevSales) {
+    final currZero = sales.abs() < 0.01;
+    final prevZero = prevSales.abs() < 0.01;
+    if (!currZero && prevZero) return 'NUEVO';
+    if (currZero && !prevZero) return '-100%';
+    if (!currZero && !prevZero) {
+      final pct = ((sales - prevSales) / prevSales) * 100;
+      return '${pct >= 0 ? '+' : ''}${pct.toStringAsFixed(0)}%';
+    }
+    return '';
+  }
+
   Widget _buildMonthlyBreakdownRow(
     Map<String, dynamic>? monthlyData, {
     bool compact = false,
@@ -2065,19 +2099,35 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                     final data = _yearData(byYear, year);
                     final sales = _numValue(data, 'sales');
                     final units = _numValue(data, 'units');
-                    final color = sales.abs() < 0.01
-                        ? AppTheme.textSecondary
-                        : Colors.white;
+                    final prevSales =
+                        _numValue(_yearData(byYear, year - 1), 'sales');
+                    final trendColor = _monthlyTrendColor(sales, prevSales);
+                    final trendSuffix = _monthlyTrendSuffix(sales, prevSales);
                     return Padding(
                       padding: const EdgeInsets.only(top: 1),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          '$year ${_formatCompact(sales)} EUR / ${_formatUnits(units)}u',
-                          style: TextStyle(
-                            fontSize: compact ? 7 : 8,
-                            fontWeight: FontWeight.w600,
-                            color: color,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 3,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _monthlyTrendBg(sales, prevSales),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: trendColor.withValues(alpha: 0.35),
+                          ),
+                        ),
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            '$year ${_formatCompact(sales)} EUR / ${_formatUnits(units)}u${trendSuffix.isEmpty ? '' : ' $trendSuffix'}',
+                            style: TextStyle(
+                              fontSize: compact ? 7 : 8,
+                              fontWeight: FontWeight.w600,
+                              color: sales.abs() < 0.01 && prevSales.abs() < 0.01
+                                  ? AppTheme.textSecondary
+                                  : trendColor,
+                            ),
                           ),
                         ),
                       ),

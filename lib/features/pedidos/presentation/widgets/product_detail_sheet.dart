@@ -12,6 +12,7 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
@@ -443,18 +444,27 @@ class _ProductDetailSheetState extends State<ProductDetailSheet> {
       icon: Icons.image_outlined,
       child: Column(
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Container(
-              width: double.infinity,
-              height: 200,
-              color: AppTheme.darkCard,
-              child: SmartProductImage(
-                imageUrl: imageUrl,
-                productCode: code,
-                headers: ApiClient.authHeaders,
-                fit: BoxFit.contain,
-                borderRadius: BorderRadius.circular(8),
+          GestureDetector(
+            onTap: () => FullscreenImageViewer.show(
+              context,
+              imageUrl: imageUrl,
+              productName: widget.productName,
+              productCode: code,
+              headers: ApiClient.authHeaders,
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Container(
+                width: double.infinity,
+                height: 200,
+                color: AppTheme.darkCard,
+                child: SmartProductImage(
+                  imageUrl: imageUrl,
+                  productCode: code,
+                  headers: ApiClient.authHeaders,
+                  fit: BoxFit.contain,
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ),

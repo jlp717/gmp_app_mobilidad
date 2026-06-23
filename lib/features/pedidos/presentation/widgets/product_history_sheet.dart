@@ -10,6 +10,7 @@ import 'package:gmp_app_mobilidad/core/api/api_client.dart';
 import 'package:gmp_app_mobilidad/core/api/api_config.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
 import 'package:gmp_app_mobilidad/core/utils/responsive.dart';
+import 'package:gmp_app_mobilidad/core/widgets/fullscreen_image_viewer.dart';
 import 'package:gmp_app_mobilidad/core/widgets/smart_product_image.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 
@@ -318,18 +319,27 @@ class _ProductHistorySheetState extends State<ProductHistorySheet> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Container(
-                width: 56,
-                height: 56,
-                color: AppTheme.darkCard,
-                child: SmartProductImage(
-                  imageUrl: imageUrl,
-                  productCode: widget.productCode,
-                  productName: widget.productName,
-                  headers: ApiClient.authHeaders,
-                  borderRadius: BorderRadius.circular(10),
+            GestureDetector(
+              onTap: () => FullscreenImageViewer.show(
+                context,
+                imageUrl: imageUrl,
+                productName: widget.productName,
+                productCode: widget.productCode,
+                headers: ApiClient.authHeaders,
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  color: AppTheme.darkCard,
+                  child: SmartProductImage(
+                    imageUrl: imageUrl,
+                    productCode: widget.productCode,
+                    productName: widget.productName,
+                    headers: ApiClient.authHeaders,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
               ),
             ),

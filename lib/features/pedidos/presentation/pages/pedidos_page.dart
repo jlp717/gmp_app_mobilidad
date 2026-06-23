@@ -211,6 +211,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     if (_tabController.index == 0 && mounted) {
       ref.read(pedidosProvider).loadComplementaryProducts();
     }
+    if (mounted) setState(() {});
   }
 
   Future<void> _initFavorites() async {
@@ -249,6 +250,17 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
       }
     }
     return codes;
+  }
+
+  String get _activeOrderVendedorCode {
+    final selectedCodes = _vendedorCodes
+        .split(',')
+        .map((code) => code.trim())
+        .where((code) => code.isNotEmpty && code.toUpperCase() != 'ALL')
+        .toList(growable: false);
+    return selectedCodes.length == 1
+        ? selectedCodes.first
+        : widget.employeeCode;
   }
 
   void _onVendorFilterChanged() {
@@ -669,6 +681,27 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           ),
         ),
         actions: [
+          if (_tabController.index == 1)
+            Consumer(
+              builder: (ctx, ref, _) {
+                final isLoading =
+                    ref.watch(pedidosProvider.select((p) => p.isLoadingOrders));
+                return IconButton(
+                  icon: isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppTheme.neonBlue,
+                          ),
+                        )
+                      : const Icon(Icons.refresh, color: AppTheme.neonBlue),
+                  tooltip: 'Recargar pedidos',
+                  onPressed: isLoading ? null : _refreshMisPedidos,
+                );
+              },
+            ),
           // View Promotions button
           Consumer(
             builder: (ctx, ref, _) {
@@ -902,7 +935,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         Expanded(
           flex: 2,
           child: OrderSummaryWidget(
-            vendedorCode: widget.employeeCode,
+            vendedorCode: _activeOrderVendedorCode,
+            onOrderConfirmed: _handleOrderConfirmed,
           ),
         ),
       ],
@@ -1006,8 +1040,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         maxChildSize: 0.95,
         expand: false,
         builder: (_, scrollCtrl) => OrderSummaryWidget(
-          vendedorCode: widget.employeeCode,
+          vendedorCode: _activeOrderVendedorCode,
           scrollController: scrollCtrl,
+          onOrderConfirmed: _handleOrderConfirmed,
         ),
       ),
     );
@@ -1555,10 +1590,36 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               unidades = qty;
             }
             final price = product.priceForUnit(unit);
-            final err =
-                provider.addLine(product, envases, unidades, unit, price);
+            final err = provider.addLine(
+              product,
+              envases,
+              unidades,
+              unit,
+              price,
+              allowPartial: true,
+            );
             if (err != null) {
-              if (err.contains('Stock insuficiente')) {
+              if (err.startsWith('PARCIAL:')) {
+                final parts = err.substring(8).split('|');
+                final missingQty = double.tryParse(parts[0]) ?? 0;
+                final productName = parts.length > 1 ? parts[1] : product.name;
+                unawaited(provider.loadComplementaryProducts());
+                messenger.showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Se ha anadido el stock disponible. Faltan ${_formatQtyForMessage(missingQty)} de $productName',
+                    ),
+                    backgroundColor: AppTheme.warning,
+                    duration: const Duration(seconds: 3),
+                  ),
+                );
+                await showStockAlternativesSheet(
+                  context: context,
+                  outOfStockProduct: product,
+                  provider: provider,
+                  remainingQty: missingQty,
+                );
+              } else if (err.contains('Stock insuficiente')) {
                 await showStockAlternativesSheet(
                   context: context,
                   outOfStockProduct: product,
@@ -2240,11 +2301,31 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
   }
 
+  Future<void> _refreshMisPedidos() async {
+    final provider = ref.read(pedidosProvider);
+    await Future.wait([
+      provider.loadOrderStats(
+        vendedorCodes: _vendedorCodes,
+        forceRefresh: true,
+      ),
+      _loadOrdersWithFilters(provider, forceRefresh: true),
+      _loadRuteroClientData(forceRefresh: true),
+    ]);
+  }
+
   String? _formatOrderDate(DateTime? date) {
     if (date == null) return null;
     final month = date.month.toString().padLeft(2, '0');
     final day = date.day.toString().padLeft(2, '0');
     return '${date.year}$month$day';
+  }
+
+  String _formatQtyForMessage(double qty) {
+    if (qty == qty.truncateToDouble()) return qty.toStringAsFixed(0);
+    return qty
+        .toStringAsFixed(2)
+        .replaceAll(RegExp(r'0+$'), '')
+        .replaceAll(RegExp(r'\.$'), '');
   }
 
   Future<void> _loadRuteroClientData({bool forceRefresh = false}) async {
@@ -2450,6 +2531,80 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         );
       }
     }
+  }
+
+  Future<void> _showOrderDetailById(int orderId) async {
+    final result = await OrderDetailSheet.show(context, orderId: orderId);
+    if (result == 'cancelled' && mounted) {
+      await _loadOrdersWithFilters(
+        ref.read(pedidosProvider),
+        forceRefresh: true,
+      );
+    }
+  }
+
+  int? _extractConfirmedOrderId(Map<String, dynamic> result) {
+    final direct = result['id'] ?? result['orderId'];
+    final header = result['header'];
+    final nested = header is Map ? header['id'] : null;
+    return int.tryParse('${direct ?? nested ?? ''}');
+  }
+
+  String _extractConfirmedOrderNumber(Map<String, dynamic> result) {
+    final header = result['header'];
+    final nested = header is Map
+        ? (header['numeroPedidoFormatted'] ??
+            header['systemNumeroPedidoFormatted'] ??
+            header['numeroPedido'])
+        : null;
+    return '${result['numeroPedidoFormatted'] ?? result['systemNumeroPedidoFormatted'] ?? nested ?? result['numeroPedido'] ?? ''}';
+  }
+
+  Future<void> _handleOrderConfirmed(Map<String, dynamic> result) async {
+    final orderId = _extractConfirmedOrderId(result);
+    final orderNumber = _extractConfirmedOrderNumber(result);
+    _misPedidosLoaded = true;
+    _tabController.animateTo(1);
+    await _refreshMisPedidos();
+    if (!mounted) return;
+
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkSurface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle_outline,
+                color: AppTheme.neonGreen, size: 22),
+            SizedBox(width: 8),
+            Text('Pedido confirmado', style: TextStyle(color: Colors.white)),
+          ],
+        ),
+        content: Text(
+          orderNumber.isEmpty
+              ? 'El pedido se ha confirmado y Mis Pedidos se ha actualizado.'
+              : 'Pedido #$orderNumber confirmado. Mis Pedidos se ha actualizado.',
+          style: const TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cerrar',
+                style: TextStyle(color: Colors.white54)),
+          ),
+          if (orderId != null)
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                unawaited(_showOrderDetailById(orderId));
+              },
+              icon: const Icon(Icons.receipt_long_outlined, size: 18),
+              label: const Text('Ver pedido'),
+            ),
+        ],
+      ),
+    );
   }
 
   Future<void> _duplicateOrder(OrderSummary order) async {

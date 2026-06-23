@@ -9,7 +9,7 @@ const { query, queryWithParams } = require('../../../../config/db');
 const logger = require('../../../../middleware/logger');
 const { db2QualifiedTable, db2InsertSql } = require('../../../../utils/db2-identifiers');
 const { getDb2WriteSchema } = require('../../../../utils/db2-schemas');
-const { buildCvcVendorScopeFilter } = require('../../../../utils/common');
+const { buildCvcVendorScopeFilter, getVendorColumnExpr, MIN_YEAR } = require('../../../../utils/common');
 
 const APP_SCHEMA = getDb2WriteSchema();
 const COBROS_TABLE = db2QualifiedTable(APP_SCHEMA, 'COBROS');
@@ -189,6 +189,21 @@ function normalizeVendorCodeList(value) {
     .filter((code) => code && code.toUpperCase() !== 'ALL');
 }
 
+function expandVendorCodesForQuery(value) {
+  const out = new Set();
+  for (const raw of normalizeVendorCodeList(value)) {
+    if (!/^[A-Za-z0-9]{1,10}$/.test(raw)) continue;
+    const code = raw.substring(0, 10);
+    out.add(code);
+    if (/^\d+$/.test(code)) {
+      const unpadded = code.replace(/^0+/, '') || '0';
+      out.add(unpadded);
+      if (unpadded.length <= 2) out.add(unpadded.padStart(2, '0'));
+    }
+  }
+  return [...out];
+}
+
 function normalizeToken(rawToken) {
   const token = trim(rawToken);
   if (!/^[A-Za-z0-9_.:-]{8,128}$/.test(token)) {
@@ -353,6 +368,57 @@ function toIsoDate(year, month, day) {
   return `${y}-${format2(m)}-${format2(d)}T00:00:00.000Z`;
 }
 
+function parseYmdInt(isoDate) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trim(isoDate));
+  if (!match) return null;
+  const y = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  const d = parseInt(match[3], 10);
+  if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
+  return y * 10000 + m * 100 + d;
+}
+
+function buildCobrosDocumentFilters(filters = {}, alias = 'C') {
+  const clauses = [];
+  const params = [];
+  const tipoDocumento = trim(filters.tipoDocumento).toUpperCase();
+  if (tipoDocumento) {
+    clauses.push(`AND TRIM(${alias}.TIPODOCUMENTO) = ?`);
+    params.push(tipoDocumento);
+  }
+  const desde = parseYmdInt(filters.fechaDesde);
+  if (desde != null) {
+    clauses.push(`AND (${alias}.ANOEMISION * 10000 + ${alias}.MESEMISION * 100 + ${alias}.DIAEMISION) >= ?`);
+    params.push(desde);
+  }
+  const hasta = parseYmdInt(filters.fechaHasta);
+  if (hasta != null) {
+    clauses.push(`AND (${alias}.ANOEMISION * 10000 + ${alias}.MESEMISION * 100 + ${alias}.DIAEMISION) <= ?`);
+    params.push(hasta);
+  }
+  return { clause: clauses.length ? '\n          ' + clauses.join('\n          ') : '', params };
+}
+
+function buildAppOrderDateFilters(filters = {}, alias = 'PC') {
+  const clauses = [];
+  const params = [];
+  const tipoDocumento = trim(filters.tipoDocumento).toUpperCase();
+  if (tipoDocumento && !['PEDIDO', 'PEDIDO_APP', 'APP'].includes(tipoDocumento)) {
+    return { clause: '\n        AND 1 = 0', params };
+  }
+  const desde = parseYmdInt(filters.fechaDesde);
+  if (desde != null) {
+    clauses.push(`AND (${alias}.ANODOCUMENTO * 10000 + ${alias}.MESDOCUMENTO * 100 + ${alias}.DIADOCUMENTO) >= ?`);
+    params.push(desde);
+  }
+  const hasta = parseYmdInt(filters.fechaHasta);
+  if (hasta != null) {
+    clauses.push(`AND (${alias}.ANODOCUMENTO * 10000 + ${alias}.MESDOCUMENTO * 100 + ${alias}.DIADOCUMENTO) <= ?`);
+    params.push(hasta);
+  }
+  return { clause: clauses.length ? '\n        ' + clauses.join('\n        ') : '', params };
+}
+
 function computeEstadoVencimiento(fechaVencimientoIso) {
   if (!fechaVencimientoIso) return 'PENDIENTE';
   const due = new Date(fechaVencimientoIso);
@@ -377,30 +443,39 @@ function buildCvcVendorAccessClause(context = {}, cvcAlias = 'CVC') {
     .map((v) => v.trim());
   if (safeCodes.length === 0) return { clause: '', params: [] };
 
-  if (safeCodes.length <= 50) {
+  const scoped = buildCvcVendorScopeFilter(safeCodes);
+  return {
+    clause: scoped.clause.replace(/\bCVC\./g, `${cvcAlias}.`),
+    params: scoped.params,
+  };
+}
+
+function buildAppOrderVendorAccessClause(context = {}, alias = 'PC') {
+  const manager = isManagerContext(context);
+  const userCode = trim(context.userId || context.userCode);
+  const visibleCodes = normalizeVendorCodeList(context.vendedorCodes || context.vendorCodes || []);
+  const vendorCodes = !manager && userCode
+    ? [userCode]
+    : (manager && visibleCodes.length > 0 ? visibleCodes : []);
+  const safeCodes = expandVendorCodesForQuery(vendorCodes);
+  if (safeCodes.length === 0) return { clause: '', params: [] };
+  if (safeCodes.length <= 90) {
     return {
-      clause: `
-          AND EXISTS (
-            SELECT 1
-              FROM DSEDAC.CLP CLP
-             WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(${cvcAlias}.CODIGOCLIENTEALBARAN)
-               AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${safeCodes.map(() => '?').join(',')})
-          )`,
+      clause: ` AND TRIM(${alias}.CODIGOVENDEDOR) IN (${safeCodes.map(() => '?').join(',')})`,
       params: safeCodes,
     };
   }
-
   const literalCodes = safeCodes.map((v) => `'${v.replace(/'/g, "''")}'`).join(',');
-  return {
-    clause: `
-          AND EXISTS (
-            SELECT 1
-              FROM DSEDAC.CLP CLP
-             WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(${cvcAlias}.CODIGOCLIENTEALBARAN)
-               AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${literalCodes})
-          )`,
-    params: [],
-  };
+  return { clause: ` AND TRIM(${alias}.CODIGOVENDEDOR) IN (${literalCodes})`, params: [] };
+}
+
+function buildAppOrderGeneratedDocumentFilter(optionalColumns, alias = 'PC') {
+  const clauses = [];
+  if (optionalColumns.has('NUMEROALBARAN')) clauses.push(`COALESCE(${alias}.NUMEROALBARAN, 0) = 0`);
+  if (optionalColumns.has('NUMEROFACTURA')) clauses.push(`COALESCE(${alias}.NUMEROFACTURA, 0) = 0`);
+  if (optionalColumns.has('PROCESADOSN')) clauses.push(`COALESCE(TRIM(${alias}.PROCESADOSN), '') NOT IN ('S', 'F', 'R')`);
+  if (optionalColumns.has('SITUACIONALBARAN')) clauses.push(`COALESCE(TRIM(${alias}.SITUACIONALBARAN), '') NOT IN ('F', 'R')`);
+  return clauses.length ? ` AND ${clauses.join(' AND ')}` : '';
 }
 
 function mapCvcRowToCobro(row, appPaid = 0, repartidorPaid = 0) {
@@ -450,6 +525,7 @@ class Db2CobrosRepository extends CobrosRepository {
   async getPendientes(clientCode, context = {}) {
     await this.ensureCobrosTable();
     const access = buildCvcVendorAccessClause(context, 'C');
+    const docFilters = buildCobrosDocumentFilters(context, 'C');
     try {
       const cvcSql = `
         SELECT
@@ -473,11 +549,12 @@ class Db2CobrosRepository extends CobrosRepository {
         WHERE TRIM(C.CODIGOCLIENTEALBARAN) = ?
           AND C.IMPORTEPENDIENTE > 0.01
           AND (C.ANULADOSN IS NULL OR C.ANULADOSN <> 'S')
+          ${docFilters.clause}
           ${access.clause}
         ORDER BY C.ANOVENCIMIENTO ASC, C.MESVENCIMIENTO ASC, C.DIAVENCIMIENTO ASC
         FETCH FIRST 100 ROWS ONLY`;
 
-      const rows = await queryWithParams(cvcSql, [trim(clientCode), ...access.params], []);
+      const rows = await queryWithParams(cvcSql, [trim(clientCode), ...docFilters.params, ...access.params], []);
       const appCobrosByDoc = await this.getAppSideCobrosByDoc(clientCode);
       const repartidorByDoc = await this.getAppSideRepartidorByDoc(clientCode);
       const adjustmentVendorCodes = normalizeVendorCodeList(
@@ -497,26 +574,41 @@ class Db2CobrosRepository extends CobrosRepository {
         repartidorByDoc,
         portfolioAdjustments,
       );
-      const totalPendiente = computeClientPendingTotalGrouped(
+      const cvcTotalPendiente = computeClientPendingTotalGrouped(
         rows,
         clientCode,
         portfolioAdjustments,
         appCobrosByDoc,
         repartidorByDoc,
       );
-      const totalVencido = cobros
+
+      const appOrders = await this.getAppOrderPendientes(clientCode, context);
+      const mergedCobros = [
+        ...cobros,
+        ...(appOrders.cobros || []),
+      ];
+      const totalPendiente = fromCents(
+        toCents(cvcTotalPendiente) +
+        toCents(appOrders?.resumen?.totalPendiente || 0),
+      );
+      const totalVencido = mergedCobros
         .filter((c) => c.estado === 'VENCIDO')
         .reduce((sum, c) => sum + c.importePendiente, 0);
       return {
-        cobros,
+        cobros: mergedCobros,
         resumen: {
           totalPendiente,
           total: totalPendiente,
           totalVencido,
-          numDocumentos: cobros.length,
-          numVencidos: cobros.filter((c) => c.estado === 'VENCIDO').length,
-          documentos: { cantidad: cobros.length, total: totalPendiente },
-          source: 'CVC',
+          numDocumentos: mergedCobros.length,
+          numVencidos: mergedCobros.filter((c) => c.estado === 'VENCIDO').length,
+          documentos: { cantidad: mergedCobros.length, total: totalPendiente },
+          cvc: { cantidad: cobros.length, total: cvcTotalPendiente },
+          pedidosApp: {
+            cantidad: appOrders?.resumen?.pedidos?.cantidad || 0,
+            total: appOrders?.resumen?.pedidos?.total || 0,
+          },
+          source: (appOrders?.resumen?.pedidos?.cantidad || 0) > 0 ? 'CVC+PEDIDOS_CAB' : 'CVC',
         },
       };
     } catch (cvcErr) {
@@ -526,49 +618,80 @@ class Db2CobrosRepository extends CobrosRepository {
     return this.getAppOrderPendientes(clientCode, context);
   }
 
-  async getAppOrderPendientes(clientCode, context = {}) {
-    let origenExists = false;
+  async getPedidoCabOptionalColumns() {
+    const optionalColumns = new Set();
     try {
-      const colCheck = await query(`
+      const columnRows = await query(`
         SELECT COLUMN_NAME FROM QSYS2.SYSCOLUMNS2
-        WHERE TABLE_SCHEMA = '${APP_SCHEMA}' AND TABLE_NAME = 'PEDIDOS_CAB' AND COLUMN_NAME = 'ORIGEN'
-        FETCH FIRST 1 ROW ONLY
+        WHERE TABLE_SCHEMA = '${APP_SCHEMA}' AND TABLE_NAME = 'PEDIDOS_CAB'
+          AND COLUMN_NAME IN (
+            'ORIGEN', 'NUMEROALBARAN', 'NUMEROFACTURA', 'PROCESADOSN',
+            'SITUACIONALBARAN', 'IMPORTECOBRADO', 'SYSTEM_NUMEROPEDIDO',
+            'SYSTEM_SERIEPEDIDO', 'SYSTEM_TERMINALPEDIDO'
+          )
       `);
-      origenExists = colCheck && colCheck.length > 0;
+      for (const row of columnRows || []) optionalColumns.add(trim(row.COLUMN_NAME).toUpperCase());
     } catch (e) {
-      logger.debug('[COBROS_REPO] ORIGEN column detection skipped', {
+      logger.debug('[COBROS_REPO] PEDIDOS_CAB optional column detection skipped', {
         schema: APP_SCHEMA,
         table: 'PEDIDOS_CAB',
-        column: 'ORIGEN',
         reason: e?.code || e?.message || 'unknown',
       });
     }
+    return optionalColumns;
+  }
 
-    const manager = isManagerContext(context);
-    const userCode = trim(context.userId || context.userCode);
-    const vendedorFilter = !manager && userCode
-      ? ' AND TRIM(PC.CODIGOVENDEDOR) = ?'
-      : '';
+  async getAppOrderPendientes(clientCode, context = {}) {
+    const optionalColumns = await this.getPedidoCabOptionalColumns();
+    const origenExists = optionalColumns.has('ORIGEN');
+    const vendorAccess = buildAppOrderVendorAccessClause(context, 'PC');
     const origenFilter = origenExists ? " AND PC.ORIGEN = 'A'" : '';
+    const appDateFilters = buildAppOrderDateFilters(context, 'PC');
+    const generatedFilter = buildAppOrderGeneratedDocumentFilter(optionalColumns, 'PC');
+    const optionalSelect = {
+      numeroAlbaran: optionalColumns.has('NUMEROALBARAN') ? 'PC.NUMEROALBARAN' : '0',
+      numeroFactura: optionalColumns.has('NUMEROFACTURA') ? 'PC.NUMEROFACTURA' : '0',
+      procesado: optionalColumns.has('PROCESADOSN') ? "TRIM(PC.PROCESADOSN)" : "''",
+      situacionAlbaran: optionalColumns.has('SITUACIONALBARAN') ? "TRIM(PC.SITUACIONALBARAN)" : "''",
+      importeCobrado: optionalColumns.has('IMPORTECOBRADO') ? 'PC.IMPORTECOBRADO' : '0',
+      systemNumero: optionalColumns.has('SYSTEM_NUMEROPEDIDO') ? 'PC.SYSTEM_NUMEROPEDIDO' : '0',
+      systemSerie: optionalColumns.has('SYSTEM_SERIEPEDIDO') ? 'TRIM(PC.SYSTEM_SERIEPEDIDO)' : "''",
+      systemTerminal: optionalColumns.has('SYSTEM_TERMINALPEDIDO') ? 'PC.SYSTEM_TERMINALPEDIDO' : '0',
+    };
     const sql = `
       SELECT
         PC.ID, PC.EJERCICIO, PC.NUMEROPEDIDO, PC.SERIEPEDIDO,
         PC.DIADOCUMENTO, PC.MESDOCUMENTO, PC.ANODOCUMENTO,
-        PC.IMPORTETOTAL, PC.TIPOVENTA, PC.ESTADO
+        PC.IMPORTETOTAL, PC.TIPOVENTA, PC.ESTADO,
+        ${optionalSelect.numeroAlbaran} AS NUMEROALBARAN,
+        ${optionalSelect.numeroFactura} AS NUMEROFACTURA,
+        ${optionalSelect.procesado} AS PROCESADOSN,
+        ${optionalSelect.situacionAlbaran} AS SITUACIONALBARAN,
+        ${optionalSelect.importeCobrado} AS IMPORTECOBRADO,
+        ${optionalSelect.systemNumero} AS SYSTEM_NUMEROPEDIDO,
+        ${optionalSelect.systemSerie} AS SYSTEM_SERIEPEDIDO,
+        ${optionalSelect.systemTerminal} AS SYSTEM_TERMINALPEDIDO
       FROM ${APP_SCHEMA}.PEDIDOS_CAB PC
       WHERE TRIM(PC.CODIGOCLIENTE) = ?
         ${origenFilter}
         AND PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
         AND PC.IMPORTETOTAL > 0
-        ${vendedorFilter}
+        ${generatedFilter}
+        ${appDateFilters.clause}
+        ${vendorAccess.clause}
       ORDER BY PC.ANODOCUMENTO DESC, PC.MESDOCUMENTO DESC, PC.DIADOCUMENTO DESC
       FETCH FIRST 100 ROWS ONLY`;
 
-    const orderParams = [trim(clientCode), ...(vendedorFilter ? [userCode] : [])];
+    const orderParams = [trim(clientCode), ...appDateFilters.params, ...vendorAccess.params];
     const resultado = await queryWithParams(sql, orderParams, []);
     const payments = await this.getPaymentsForClient(clientCode);
 
     const cobros = (resultado && resultado.length > 0 ? resultado : []).map(row => {
+      const hasGeneratedDocument = (parseInt(row.NUMEROALBARAN, 10) || 0) > 0 ||
+        (parseInt(row.NUMEROFACTURA, 10) || 0) > 0 ||
+        ['S', 'F', 'R'].includes(trim(row.PROCESADOSN).toUpperCase()) ||
+        ['F', 'R'].includes(trim(row.SITUACIONALBARAN).toUpperCase());
+      if (hasGeneratedDocument) return null;
       const referencia = `${trim(row.SERIEPEDIDO)}-${row.NUMEROPEDIDO}`;
       const totalCents = toCents(row.IMPORTETOTAL);
       const paidCents = payments
@@ -588,8 +711,18 @@ class Db2CobrosRepository extends CobrosRepository {
         ejercicio: row.EJERCICIO,
         numeroPedido: row.NUMEROPEDIDO,
         seriePedido: row.SERIEPEDIDO,
+        docKey: {
+          source: 'PEDIDOS_CAB',
+          id: row.ID,
+          serie: trim(row.SERIEPEDIDO),
+          numero: row.NUMEROPEDIDO,
+          systemSerie: trim(row.SYSTEM_SERIEPEDIDO),
+          systemTerminal: row.SYSTEM_TERMINALPEDIDO,
+          systemNumero: row.SYSTEM_NUMEROPEDIDO,
+        },
+        provisional: true,
       };
-    }).filter((cobro) => toCents(cobro.importePendiente) > 0);
+    }).filter((cobro) => cobro && toCents(cobro.importePendiente) > 0);
 
     const totalPendiente = cobros.reduce((sum, c) => sum + c.importePendiente, 0);
     return {
@@ -601,6 +734,90 @@ class Db2CobrosRepository extends CobrosRepository {
         source: 'PEDIDOS_CAB',
       },
     };
+  }
+
+  async getAppOrderPendingSummary(context = {}) {
+    const optionalColumns = await this.getPedidoCabOptionalColumns();
+    const vendorAccess = buildAppOrderVendorAccessClause(context, 'PC');
+    const origenFilter = optionalColumns.has('ORIGEN') ? " AND PC.ORIGEN = 'A'" : '';
+    const generatedFilter = buildAppOrderGeneratedDocumentFilter(optionalColumns, 'PC');
+    const appDateFilters = buildAppOrderDateFilters(context, 'PC');
+
+    const sql = `
+      WITH APP_DOCS AS (
+        SELECT
+          TRIM(PC.CODIGOCLIENTE) AS CLIENTE,
+          MIN(TRIM(PC.NOMBRECLIENTE)) AS NOMBRE,
+          PC.ID AS PEDIDO_ID,
+          TRIM(PC.SERIEPEDIDO) || '-' || TRIM(CAST(PC.NUMEROPEDIDO AS VARCHAR(20))) AS DOC_KEY,
+          COALESCE(MAX(PC.IMPORTETOTAL), 0) AS IMPORTE_TOTAL
+        FROM ${APP_SCHEMA}.PEDIDOS_CAB PC
+        WHERE PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
+          AND PC.IMPORTETOTAL > 0
+          AND TRIM(PC.CODIGOCLIENTE) <> ''
+          ${origenFilter}
+          ${generatedFilter}
+          ${appDateFilters.clause}
+          ${vendorAccess.clause}
+        GROUP BY TRIM(PC.CODIGOCLIENTE), PC.ID, TRIM(PC.SERIEPEDIDO), PC.NUMEROPEDIDO
+      ), APP_PAID AS (
+        SELECT D.CLIENTE, D.PEDIDO_ID, D.DOC_KEY, D.NOMBRE, D.IMPORTE_TOTAL,
+               COALESCE(SUM(C.IMPORTE), 0) AS IMPORTE_COBRADO
+          FROM APP_DOCS D
+          LEFT JOIN ${APP_SCHEMA}.COBROS C
+            ON TRIM(C.CODIGO_CLIENTE) = D.CLIENTE
+           AND (
+             TRIM(C.REFERENCIA) = D.DOC_KEY
+             OR TRIM(C.REFERENCIA) = 'PEDIDO:' || TRIM(CAST(D.PEDIDO_ID AS VARCHAR(20))) || ':' || D.DOC_KEY
+           )
+         GROUP BY D.CLIENTE, D.PEDIDO_ID, D.DOC_KEY, D.NOMBRE, D.IMPORTE_TOTAL
+      ), APP_NET AS (
+        SELECT CLIENTE, NOMBRE,
+               CASE WHEN IMPORTE_TOTAL - IMPORTE_COBRADO > 0 THEN IMPORTE_TOTAL - IMPORTE_COBRADO ELSE 0 END AS NET_TOTAL
+          FROM APP_PAID
+      )
+      SELECT CLIENTE,
+             COALESCE(NULLIF(TRIM(MIN(NOMBRE)), ''), CLIENTE) AS NOMBRE,
+             COUNT(*) AS COUNT,
+             COALESCE(SUM(NET_TOTAL), 0) AS TOTAL
+        FROM APP_NET
+       WHERE NET_TOTAL > 0
+       GROUP BY CLIENTE
+       ORDER BY TOTAL DESC, CLIENTE ASC`;
+
+    try {
+      const params = [...appDateFilters.params, ...vendorAccess.params];
+      const rows = params.length > 0
+        ? await queryWithParams(sql, params, [])
+        : await query(sql, false);
+      const summary = {};
+      let total = 0;
+      let clientCount = 0;
+      for (const row of rows || []) {
+        const code = trim(row.CLIENTE);
+        const pending = fromCents(toCents(row.TOTAL));
+        if (!code || toCents(pending) <= 0) continue;
+        summary[code] = {
+          nombre: trim(row.NOMBRE) || code,
+          total: pending,
+          vencido: 0,
+          count: parseInt(row.COUNT, 10) || 0,
+          estado: 'PENDIENTE',
+          source: 'PEDIDOS_CAB',
+        };
+        total += pending;
+        clientCount += 1;
+      }
+      return {
+        summary,
+        grandTotal: fromCents(toCents(total)),
+        grandTotalVencido: 0,
+        clientCount,
+      };
+    } catch (error) {
+      logger.warn(`[COBROS_REPO] App provisional orders summary skipped: ${error.message}`);
+      return { summary: {}, grandTotal: 0, grandTotalVencido: 0, clientCount: 0 };
+    }
   }
 
   /**
@@ -805,14 +1022,44 @@ class Db2CobrosRepository extends CobrosRepository {
       summary[code].estado = summary[code].vencido > 0 ? 'VENCIDO' : 'PENDIENTE';
     }
 
+    const appOrderSummary = await this.getAppOrderPendingSummary({
+      ...context,
+      vendedorCodes: vendorCodes,
+      vendorCodes,
+    });
+    for (const [code, appEntry] of Object.entries(appOrderSummary.summary || {})) {
+      if (!summary[code]) {
+        summary[code] = {
+          nombre: appEntry.nombre || code,
+          total: 0,
+          vencido: 0,
+          count: 0,
+          estado: 'AL_DIA',
+          source: 'PEDIDOS_CAB',
+        };
+      }
+      summary[code].total = fromCents(toCents(summary[code].total) + toCents(appEntry.total));
+      summary[code].vencido = fromCents(toCents(summary[code].vencido) + toCents(appEntry.vencido || 0));
+      summary[code].count += parseInt(appEntry.count, 10) || 0;
+      summary[code].estado = summary[code].vencido > 0 ? 'VENCIDO' : 'PENDIENTE';
+      summary[code].source = summary[code].source === 'PEDIDOS_CAB' ? 'PEDIDOS_CAB' : 'CVC+PEDIDOS_CAB';
+    }
+
     const totals = totalRows?.[0] || {};
     const cvcRaw = cvcRawRows?.[0] || {};
-    const grandTotal = parseFloat(totals.GRAND_TOTAL) || 0;
-    const grandTotalVencido = parseFloat(totals.GRAND_TOTAL_VENCIDO) || 0;
-    const clientCount = parseInt(totals.CLIENT_COUNT, 10) || 0;
+    const cvcNetTotal = parseFloat(totals.GRAND_TOTAL) || 0;
+    const cvcNetVencido = parseFloat(totals.GRAND_TOTAL_VENCIDO) || 0;
+    const appOrdersTotal = parseFloat(appOrderSummary.grandTotal) || 0;
+    const grandTotal = cvcNetTotal + appOrdersTotal;
+    const grandTotalVencido = cvcNetVencido + (parseFloat(appOrderSummary.grandTotalVencido) || 0);
     const cvcGrandTotal = parseFloat(cvcRaw.CVC_GRAND_TOTAL) || 0;
     const cvcGrandTotalVencido = parseFloat(cvcRaw.CVC_GRAND_TOTAL_VENCIDO) || 0;
-    const appAdjustmentsTotal = Math.max(0, cvcGrandTotal - grandTotal);
+    const appAdjustmentsTotal = Math.max(0, cvcGrandTotal - cvcNetTotal);
+    const cvcClientCount = parseInt(totals.CLIENT_COUNT, 10) || 0;
+    const appOnlyClientCount = Object.keys(appOrderSummary.summary || {})
+      .filter((code) => !summary[code])
+      .length;
+    const mergedClientCount = cvcClientCount + appOnlyClientCount;
 
     return {
       summary,
@@ -821,8 +1068,9 @@ class Db2CobrosRepository extends CobrosRepository {
       cvcGrandTotal: Math.round(cvcGrandTotal * 100) / 100,
       cvcGrandTotalVencido: Math.round(cvcGrandTotalVencido * 100) / 100,
       appAdjustmentsTotal: Math.round(appAdjustmentsTotal * 100) / 100,
-      clientCount,
-      source: 'CVC',
+      appOrdersTotal: Math.round(appOrdersTotal * 100) / 100,
+      clientCount: mergedClientCount,
+      source: appOrdersTotal > 0 ? 'CVC+PEDIDOS_CAB' : 'CVC',
       pagination: {
         limit: safeLimit,
         page: safePage,
@@ -1368,6 +1616,15 @@ class Db2CobrosRepository extends CobrosRepository {
           SELECT TRIM(MIN(CLP.VENDEDORCOMERCIAL))
             FROM DSEDAC.CLP CLP
            WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(C.CODIGOCLIENTEALBARAN)
+        ), (
+          SELECT TRIM(MIN(${getVendorColumnExpr('LAC')}))
+            FROM DSED.LACLAE LAC
+           WHERE TRIM(LAC.LCCDCL) = TRIM(C.CODIGOCLIENTEALBARAN)
+             AND LAC.LCAADC >= ${MIN_YEAR}
+             AND LAC.TPDC = 'LAC'
+             AND LAC.LCTPVT IN ('CC', 'VC')
+             AND LAC.LCCLLN IN ('AB', 'VT')
+             AND LAC.LCSRAB NOT IN ('N', 'Z')
         ), '') AS CODIGOVENDEDOR,
         TRIM(C.SERIEDOCUMENTO) AS SERIEPEDIDO,
         C.NUMERODOCUMENTO AS NUMEROPEDIDO,

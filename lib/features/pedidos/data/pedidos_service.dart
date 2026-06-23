@@ -1871,6 +1871,11 @@ class PedidosService {
     if (search != null && search.isNotEmpty) params['search'] = search;
     if (minAmount != null) params['minAmount'] = minAmount.toStringAsFixed(2);
     if (maxAmount != null) params['maxAmount'] = maxAmount.toStringAsFixed(2);
+    if (forceRefresh) {
+      params['forceRefresh'] = 'true';
+      params['_ts'] = DateTime.now().millisecondsSinceEpoch.toString();
+      await invalidateOrderCaches();
+    }
 
     try {
       final response = await ApiClient.get(
@@ -1915,6 +1920,11 @@ class PedidosService {
     final params = <String, dynamic>{'vendedorCodes': vendedorCodes};
     if (dateFrom != null) params['dateFrom'] = dateFrom;
     if (dateTo != null) params['dateTo'] = dateTo;
+    if (forceRefresh) {
+      params['forceRefresh'] = 'true';
+      params['_ts'] = DateTime.now().millisecondsSinceEpoch.toString();
+      await CacheService.invalidateByPrefix('pedidos:stats:');
+    }
 
     try {
       final response = await ApiClient.get(
@@ -1977,12 +1987,19 @@ class PedidosService {
     }
   }
 
-  static Future<List<Map<String, dynamic>>> getOrderAlbaran(int orderId) async {
+  static Future<List<Map<String, dynamic>>> getOrderAlbaran(
+    int orderId, {
+    bool forceRefresh = false,
+  }) async {
     try {
+      if (forceRefresh) {
+        await CacheService.invalidate('pedidos:albaran:$orderId');
+      }
       final response = await ApiClient.get(
         '$_base/$orderId/albaran',
         cacheKey: 'pedidos:albaran:$orderId',
         cacheTTL: const Duration(minutes: 2),
+        forceRefresh: forceRefresh,
       );
       return (response['albaranes'] as List? ?? [])
           .map((a) => Map<String, dynamic>.from(a as Map))
@@ -1993,18 +2010,32 @@ class PedidosService {
     }
   }
 
-  static Future<OrderDetail> getOrderDetail(int orderId) async {
+  static Future<OrderDetail> getOrderDetail(
+    int orderId, {
+    bool forceRefresh = false,
+  }) async {
     try {
+      if (forceRefresh) {
+        await CacheService.invalidate('pedidos:order:$orderId');
+      }
       final response = await ApiClient.get(
         '$_base/$orderId',
         cacheKey: 'pedidos:order:$orderId',
         cacheTTL: const Duration(minutes: 1),
+        forceRefresh: forceRefresh,
       );
       return OrderDetail.fromJson(response['order'] as Map<String, dynamic>);
     } catch (e) {
       _debugLog('[PedidosService] Error getOrderDetail: $e');
       rethrow;
     }
+  }
+
+  static Future<void> invalidateOrderCaches() async {
+    await CacheService.invalidateByPrefix('pedidos:orders:');
+    await CacheService.invalidateByPrefix('pedidos:stats:');
+    await CacheService.invalidateByPrefix('pedidos:order:');
+    await CacheService.invalidateByPrefix('pedidos:albaran:');
   }
 
   static Future<void> addLine(int orderId, OrderLine line) async {
@@ -2081,13 +2112,16 @@ class PedidosService {
         '$_base/$orderId/confirm',
         data: data,
       );
-      CacheService.invalidate('pedidos:order:$orderId');
-      CacheService.invalidate('pedidos:albaran:$orderId');
-      CacheService.invalidateByPrefix('pedidos:orders:');
-      CacheService.invalidateByPrefix('pedidos:delivery:');
-      CacheService.invalidateByPrefix('bolsa:status:');
-      CacheService.invalidateByPrefix('bolsa:movements:');
-      CacheService.invalidateByPrefix('bolsa:history:');
+      await Future.wait([
+        CacheService.invalidate('pedidos:order:$orderId'),
+        CacheService.invalidate('pedidos:albaran:$orderId'),
+        CacheService.invalidateByPrefix('pedidos:orders:'),
+        CacheService.invalidateByPrefix('pedidos:delivery:'),
+        CacheService.invalidateByPrefix('bolsa:status:'),
+        CacheService.invalidateByPrefix('bolsa:movements:'),
+        CacheService.invalidateByPrefix('bolsa:history:'),
+        CacheService.invalidateByPrefix('bolsa:grouped:'),
+      ]);
       return _normalizeOrderResponse(response);
     } on OfflineException {
       // Offline: return optimistic result (queued)

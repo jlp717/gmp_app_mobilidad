@@ -119,6 +119,18 @@ class BolsaMovimiento {
     this.cantidad,
     this.unidadMedida,
     this.idempotencyKey,
+    this.vendedor,
+    this.bolsaEjercicio,
+    this.bolsaMes,
+    this.clienteCodigo,
+    this.clienteNombre,
+    this.pedidoEjercicio,
+    this.pedidoNumero,
+    this.pedidoReferencia,
+    this.localPedidoReferencia,
+    this.systemPedidoReferencia,
+    this.targetSchema,
+    this.syncStatus,
   });
 
   factory BolsaMovimiento.fromJson(Map<String, dynamic> json) {
@@ -163,6 +175,18 @@ class BolsaMovimiento {
       cantidad: nullableNumber(json['cantidad']),
       unidadMedida: nullableText(json['unidadMedida']),
       idempotencyKey: nullableText(json['idempotencyKey']),
+      vendedor: nullableText(json['vendedor']),
+      bolsaEjercicio: nullableInt(json['bolsaEjercicio']),
+      bolsaMes: nullableInt(json['bolsaMes']),
+      clienteCodigo: nullableText(json['clienteCodigo']),
+      clienteNombre: nullableText(json['clienteNombre']),
+      pedidoEjercicio: nullableInt(json['pedidoEjercicio']),
+      pedidoNumero: nullableInt(json['pedidoNumero']),
+      pedidoReferencia: nullableText(json['pedidoReferencia']),
+      localPedidoReferencia: nullableText(json['localPedidoReferencia']),
+      systemPedidoReferencia: nullableText(json['systemPedidoReferencia']),
+      targetSchema: nullableText(json['targetSchema']),
+      syncStatus: nullableText(json['syncStatus']),
     );
   }
 
@@ -194,8 +218,36 @@ class BolsaMovimiento {
   /// Clave idempotente del movimiento para trazabilidad.
   final String? idempotencyKey;
 
+  final String? vendedor;
+  final int? bolsaEjercicio;
+  final int? bolsaMes;
+  final String? clienteCodigo;
+  final String? clienteNombre;
+  final int? pedidoEjercicio;
+  final int? pedidoNumero;
+  final String? pedidoReferencia;
+  final String? localPedidoReferencia;
+  final String? systemPedidoReferencia;
+  final String? targetSchema;
+  final String? syncStatus;
+
   /// Importe con signo: positivo si acumulación, negativo si consumo.
   double get importeFirmado => tipo.isCredit ? importe : -importe;
+
+  String get displayPedido {
+    final ref = pedidoReferencia?.trim();
+    if (ref != null && ref.isNotEmpty) return ref;
+    if (pedidoId != null) return 'Pedido $pedidoId';
+    return '';
+  }
+
+  String get displayCliente {
+    final code = clienteCodigo?.trim() ?? '';
+    final name = clienteNombre?.trim() ?? '';
+    if (code.isEmpty) return name;
+    if (name.isEmpty) return code;
+    return '$code - $name';
+  }
 }
 
 /// Punto histórico mensual (acumulado/consumido por mes).
@@ -227,4 +279,46 @@ class BolsaMonthlyPoint {
   final double acumulado;
   final double consumido;
   final double saldoDisponible;
+}
+
+class BolsaGroupedSummary {
+  BolsaGroupedSummary({
+    required this.ejercicio,
+    required this.mes,
+    required this.vendedores,
+    required this.saldoDisponible,
+    required this.consumido,
+    required this.acumulado,
+  });
+
+  factory BolsaGroupedSummary.fromJson(Map<String, dynamic> json) {
+    double n(dynamic v) =>
+        v is num ? v.toDouble() : double.tryParse(v?.toString() ?? '') ?? 0;
+    int i(dynamic v) =>
+        v is num ? v.toInt() : int.tryParse(v?.toString() ?? '') ?? 0;
+    final totals = json['totals'] is Map
+        ? Map<String, dynamic>.from(json['totals'] as Map)
+        : const <String, dynamic>{};
+    final rawVendedores = json['vendedores'] as List? ?? const [];
+    return BolsaGroupedSummary(
+      ejercicio: i(json['ejercicio']),
+      mes: i(json['mes']),
+      vendedores: rawVendedores
+          .map(
+            (item) =>
+                BolsaStatus.fromJson(Map<String, dynamic>.from(item as Map)),
+          )
+          .toList(growable: false),
+      saldoDisponible: n(totals['saldoDisponible']),
+      consumido: n(totals['consumido']),
+      acumulado: n(totals['acumulado']),
+    );
+  }
+
+  final int ejercicio;
+  final int mes;
+  final List<BolsaStatus> vendedores;
+  final double saldoDisponible;
+  final double consumido;
+  final double acumulado;
 }

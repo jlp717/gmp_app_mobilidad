@@ -131,6 +131,7 @@ class CobroPendiente {
     this.descripcion = '',
     this.appPaymentApplied = 0,
     this.cobradoPorRepartidor = false,
+    this.provisional = false,
   });
 
   factory CobroPendiente.fromJson(Map<String, dynamic> json) {
@@ -183,6 +184,7 @@ class CobroPendiente {
       cobradoPorRepartidor: json['cobradoPorRepartidor'] == true ||
           json['cobradoRepartidor'] == true ||
           json['responsabilidad']?.toString().toUpperCase() == 'REPARTIDOR',
+      provisional: json['provisional'] == true,
     );
   }
   final String id;
@@ -204,8 +206,22 @@ class CobroPendiente {
 
   /// True cuando el cobro pendiente es responsabilidad del repartidor, no del comercial.
   final bool cobradoPorRepartidor;
+  final bool provisional;
 
   bool get isVencido => estado == EstadoCobro.vencido;
+  bool get isPedidoAppProvisional =>
+      provisional || tipo == TipoCobro.pedidoApp;
+
+  String get paymentReference {
+    final source = docKey?['source']?.toString().trim().toUpperCase();
+    final ref = referencia.trim();
+    if (source == 'PEDIDOS_CAB' && ref.isNotEmpty) {
+      final pedidoId = docKey?['id']?.toString().trim() ?? '';
+      if (pedidoId.isNotEmpty) return 'PEDIDO:$pedidoId:$ref';
+    }
+    if (source == 'CVC' && ref.isNotEmpty) return 'CVC:$ref';
+    return ref.isNotEmpty ? ref : id;
+  }
 
   bool get isSettledByRepartidor =>
       cobradoPorRepartidor ||

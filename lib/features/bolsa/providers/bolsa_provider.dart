@@ -19,26 +19,44 @@ final bolsaProvider = ChangeNotifierProvider<BolsaProvider>(
 
 class BolsaProvider with ChangeNotifier {
   BolsaStatus? _status;
+  BolsaGroupedSummary? _groupedSummary;
   List<BolsaMovimiento> _movements = [];
   List<BolsaMonthlyPoint> _history = [];
   bool _isLoading = false;
   String? _error;
   String? _currentVendor;
+  bool _isGroupedView = false;
+  List<String> _groupedVendorCodes = [];
   int _loadGeneration = 0;
 
   // Filtros de movimientos
   BolsaMovimientoTipo? _tipoFilter; // null = todos
   String _searchQuery = '';
+  DateTime? _dateFromFilter;
+  DateTime? _dateToFilter;
+  String _documentFilter = '';
+  String _clientFilter = '';
 
   BolsaStatus? get status => _status;
+  BolsaGroupedSummary? get groupedSummary => _groupedSummary;
   List<BolsaMovimiento> get movements => List.unmodifiable(_movements);
   List<BolsaMonthlyPoint> get history => List.unmodifiable(_history);
   bool get isLoading => _isLoading;
   String? get error => _error;
   String? get currentVendor => _currentVendor;
-  bool get hasData => _status != null;
+  bool get isGroupedView => _isGroupedView;
+  bool get hasData => _status != null || _groupedSummary != null;
   BolsaMovimientoTipo? get tipoFilter => _tipoFilter;
   String get searchQuery => _searchQuery;
+  DateTime? get dateFromFilter => _dateFromFilter;
+  DateTime? get dateToFilter => _dateToFilter;
+  String get documentFilter => _documentFilter;
+  String get clientFilter => _clientFilter;
+  bool get hasAdvancedFilters =>
+      _dateFromFilter != null ||
+      _dateToFilter != null ||
+      _documentFilter.isNotEmpty ||
+      _clientFilter.isNotEmpty;
 
   /// Movimientos aplicando filtros activos.
   List<BolsaMovimiento> get filteredMovements {
@@ -48,7 +66,10 @@ class BolsaProvider with ChangeNotifier {
       if (q.isNotEmpty) {
         final hay = m.codigoArticulo.toLowerCase().contains(q) ||
             m.descripcion.toLowerCase().contains(q) ||
+            m.displayCliente.toLowerCase().contains(q) ||
+            m.displayPedido.toLowerCase().contains(q) ||
             (m.pedidoId?.toString().contains(q) ?? false) ||
+            (m.pedidoNumero?.toString().contains(q) ?? false) ||
             (m.lineId?.toString().contains(q) ?? false) ||
             (m.idempotencyKey?.toLowerCase().contains(q) ?? false);
         if (!hay) return false;
@@ -79,19 +100,57 @@ class BolsaProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  void clearFilters() {
-    if (_tipoFilter == null && _searchQuery.isEmpty) return;
+  Future<void> setDateRange(DateTime? from, DateTime? to) async {
+    if (_sameDate(_dateFromFilter, from) && _sameDate(_dateToFilter, to)) {
+      return;
+    }
+    _dateFromFilter = from;
+    _dateToFilter = to;
+    notifyListeners();
+    await refresh();
+  }
+
+  Future<void> setDocumentFilter(String value) async {
+    final next = value.trim();
+    if (_documentFilter == next) return;
+    _documentFilter = next;
+    notifyListeners();
+    await refresh();
+  }
+
+  Future<void> setClientFilter(String value) async {
+    final next = value.trim();
+    if (_clientFilter == next) return;
+    _clientFilter = next;
+    notifyListeners();
+    await refresh();
+  }
+
+  Future<void> clearFilters() async {
+    if (_tipoFilter == null &&
+        _searchQuery.isEmpty &&
+        !hasAdvancedFilters) {
+      return;
+    }
     _tipoFilter = null;
     _searchQuery = '';
+    _dateFromFilter = null;
+    _dateToFilter = null;
+    _documentFilter = '';
+    _clientFilter = '';
     notifyListeners();
+    await refresh();
   }
 
   void _clearVendorSelection({String? message}) {
     _loadGeneration++;
     _status = null;
+    _groupedSummary = null;
     _movements = [];
     _history = [];
     _currentVendor = null;
+    _isGroupedView = false;
+    _groupedVendorCodes = [];
     _isLoading = false;
     _error = message;
     notifyListeners();
@@ -110,12 +169,22 @@ class BolsaProvider with ChangeNotifier {
     _isLoading = true;
     _error = null;
     _currentVendor = code;
+    _isGroupedView = false;
+    _groupedSummary = null;
     final generation = ++_loadGeneration;
     notifyListeners();
     try {
       final results = await Future.wait([
         BolsaService.getStatus(code, forceRefresh: force),
-        BolsaService.getMovements(code, limit: 100, forceRefresh: force),
+        BolsaService.getMovements(
+          code,
+          limit: 150,
+          dateFrom: _dateFromFilter,
+          dateTo: _dateToFilter,
+          documentQuery: _documentFilter,
+          clientQuery: _clientFilter,
+          forceRefresh: force || hasAdvancedFilters,
+        ),
         BolsaService.getHistory(code, months: 12, forceRefresh: force),
       ]);
       if (generation != _loadGeneration || _currentVendor != code) return;
@@ -130,6 +199,49 @@ class BolsaProvider with ChangeNotifier {
       if (generation == _loadGeneration) {
         _error = e.toString();
         _debugLog('[BolsaProvider] load error: $e');
+      }
+    } finally {
+      if (generation == _loadGeneration) {
+        _isLoading = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> loadGrouped({
+    List<String>? vendedorCodes,
+    bool force = false,
+  }) async {
+    final codes = (vendedorCodes ?? const <String>[])
+        .map((code) => code.trim())
+        .where((code) => code.isNotEmpty && code.toUpperCase() != 'ALL')
+        .toList(growable: false);
+    final key = codes.join(',');
+    if (!force && _isGroupedView && _groupedSummary != null && key == _currentVendor) {
+      return;
+    }
+    _isLoading = true;
+    _error = null;
+    _currentVendor = key;
+    _groupedVendorCodes = codes;
+    _isGroupedView = true;
+    _status = null;
+    _movements = [];
+    _history = [];
+    final generation = ++_loadGeneration;
+    notifyListeners();
+    try {
+      final grouped = await BolsaService.getGroupedStatus(
+        vendedorCodes: codes,
+        forceRefresh: force,
+      );
+      if (generation != _loadGeneration || !_isGroupedView) return;
+      _groupedSummary = grouped;
+      _error = null;
+    } catch (e) {
+      if (generation == _loadGeneration) {
+        _error = e.toString();
+        _debugLog('[BolsaProvider] loadGrouped error: $e');
       }
     } finally {
       if (generation == _loadGeneration) {
@@ -162,8 +274,19 @@ class BolsaProvider with ChangeNotifier {
   }
 
   Future<void> refresh() async {
+    if (_isGroupedView) {
+      await loadGrouped(vendedorCodes: _groupedVendorCodes, force: true);
+      return;
+    }
     if (_currentVendor == null) return;
     await load(_currentVendor!, force: true);
+  }
+
+  static bool _sameDate(DateTime? left, DateTime? right) {
+    if (left == null || right == null) return left == right;
+    return left.year == right.year &&
+        left.month == right.month &&
+        left.day == right.day;
   }
 
   /// Evita duplicados si el backend reenvía el mismo movimiento (id o idempotencyKey).

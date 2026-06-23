@@ -5,6 +5,8 @@
 /// No overrideWithValue, no UnimplementedError, no null checks.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/api/api_client.dart';
@@ -41,6 +43,44 @@ String estadoFromPendingSummaryEntry(Map<String, dynamic>? data) {
   return 'AL_DIA';
 }
 
+String _queryString(Map<String, String> params) {
+  if (params.isEmpty) return '';
+  return params.entries
+      .map(
+        (e) =>
+            '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}',
+      )
+      .join('&');
+}
+
+String _endpointWithQuery(String endpoint, Map<String, String> params) {
+  final query = _queryString(params);
+  return query.isEmpty ? endpoint : '$endpoint?$query';
+}
+
+String _stableQueryKey(Map<String, String> params) {
+  final stable = Map<String, String>.from(params)..remove('_ts');
+  if (stable.isEmpty) return 'default';
+  final entries = stable.entries.toList()
+    ..sort((a, b) => a.key.compareTo(b.key));
+  return entries.map((e) => '${e.key}=${e.value}').join(':');
+}
+
+void _addNonBlankParam(
+  Map<String, String> params,
+  String key,
+  String? value,
+) {
+  final trimmed = value?.trim() ?? '';
+  if (trimmed.isNotEmpty) params[key] = trimmed;
+}
+
+void _addForceRefreshParam(Map<String, String> params, bool forceRefresh) {
+  if (forceRefresh) {
+    params['_ts'] = DateTime.now().millisecondsSinceEpoch.toString();
+  }
+}
+
 class CobrosProvider extends ChangeNotifier {
   CobrosProvider({
     required this.employeeCode,
@@ -64,6 +104,11 @@ class CobrosProvider extends ChangeNotifier {
   List<String>? _lastSummaryVendorCodes;
   double _grandTotal = 0;
   double _grandTotalVencido = 0;
+  double _cvcGrandTotal = 0;
+  double _cvcGrandTotalVencido = 0;
+  double _appAdjustmentsTotal = 0;
+  double _appOrdersTotal = 0;
+  String _summarySource = '';
   String _filtroEstado = 'todos';
   String _filtroCliente = '';
   DateTime? _filtroFecha;
@@ -83,6 +128,11 @@ class CobrosProvider extends ChangeNotifier {
   Map<String, Map<String, dynamic>> get pendingSummary => _pendingSummary;
   double get grandTotal => _grandTotal;
   double get grandTotalVencido => _grandTotalVencido;
+  double get cvcGrandTotal => _cvcGrandTotal;
+  double get cvcGrandTotalVencido => _cvcGrandTotalVencido;
+  double get appAdjustmentsTotal => _appAdjustmentsTotal;
+  double get appOrdersTotal => _appOrdersTotal;
+  String get summarySource => _summarySource;
 
   /// Numero de clientes con cualquier importe pendiente (>0).
   int get clientsWithDebt => _pendingSummary.values
@@ -342,27 +392,34 @@ class CobrosProvider extends ChangeNotifier {
     _error = null;
     notifyListeners();
     try {
-      String endpoint;
+      String baseEndpoint;
       if (vendedorCodes != null && vendedorCodes.isNotEmpty) {
         _lastSummaryVendorCode = null;
         _lastSummaryVendorCodes = List<String>.from(vendedorCodes);
-        endpoint = '/cobros/pending-summary/${vendedorCodes.join(',')}';
+        baseEndpoint = '/cobros/pending-summary/${vendedorCodes.join(',')}';
       } else if (vendedorCode != null && vendedorCode.isNotEmpty) {
         _lastSummaryVendorCode = vendedorCode;
         _lastSummaryVendorCodes = null;
-        endpoint = '/cobros/pending-summary/$vendedorCode';
+        baseEndpoint = '/cobros/pending-summary/$vendedorCode';
       } else {
         _lastSummaryVendorCode = null;
         _lastSummaryVendorCodes = null;
-        endpoint = '/cobros/pending-summary/ALL';
+        baseEndpoint = '/cobros/pending-summary/ALL';
       }
       final safeLimit = limit < 1 ? 1 : (limit > 100 ? 100 : limit);
       final safeOffset = offset < 0 ? 0 : offset;
       final safePage = page < 1 ? 1 : page;
-      endpoint = '$endpoint?limit=$safeLimit&page=$safePage&offset=$safeOffset';
+      final params = <String, String>{
+        'limit': '$safeLimit',
+        'page': '$safePage',
+        'offset': '$safeOffset',
+      };
+      _addForceRefreshParam(params, forceRefresh);
+      final endpoint = _endpointWithQuery(baseEndpoint, params);
       final response = await ApiClient.get(
         endpoint,
-        cacheKey: 'cobros:pending-summary:$endpoint',
+        cacheKey:
+            'cobros:pending-summary:$baseEndpoint:${_stableQueryKey(params)}',
         cacheTTL: const Duration(minutes: 2),
         forceRefresh: forceRefresh,
       );
@@ -373,6 +430,15 @@ class CobrosProvider extends ChangeNotifier {
         _grandTotal = (response['grandTotal'] as num?)?.toDouble() ?? 0;
         _grandTotalVencido =
             (response['grandTotalVencido'] as num?)?.toDouble() ?? 0;
+        _cvcGrandTotal =
+            (response['cvcGrandTotal'] as num?)?.toDouble() ?? 0;
+        _cvcGrandTotalVencido =
+            (response['cvcGrandTotalVencido'] as num?)?.toDouble() ?? 0;
+        _appAdjustmentsTotal =
+            (response['appAdjustmentsTotal'] as num?)?.toDouble() ?? 0;
+        _appOrdersTotal =
+            (response['appOrdersTotal'] as num?)?.toDouble() ?? 0;
+        _summarySource = (response['source'] as String?) ?? '';
         _error = null;
       } else {
         _error = 'Error al cargar resumen de pendientes';
@@ -411,6 +477,7 @@ class CobrosProvider extends ChangeNotifier {
     String? tipoDocumento,
     String? fechaDesde,
     String? fechaHasta,
+    String? vendedorCodes,
     bool forceRefresh = false,
   }) async {
     _isLoading = true;
@@ -427,15 +494,16 @@ class CobrosProvider extends ChangeNotifier {
       if (fechaHasta != null && fechaHasta.trim().isNotEmpty) {
         params['fechaHasta'] = fechaHasta.trim();
       }
-      final query = params.entries
-          .map((e) => '${Uri.encodeQueryComponent(e.key)}=${Uri.encodeQueryComponent(e.value)}')
-          .join('&');
-      final endpoint = query.isEmpty
-          ? '/cobros/$codigoCliente/pendientes'
-          : '/cobros/$codigoCliente/pendientes?$query';
+      _addNonBlankParam(params, 'vendedorCodes', vendedorCodes);
+      final networkParams = Map<String, String>.from(params);
+      _addForceRefreshParam(networkParams, forceRefresh);
+      final endpoint = _endpointWithQuery(
+        '/cobros/$codigoCliente/pendientes',
+        networkParams,
+      );
       final response = await ApiClient.get(
         endpoint,
-        cacheKey: 'cobros:pendientes:$codigoCliente:${params.entries.map((e) => '${e.key}=${e.value}').join(':')}',
+        cacheKey: 'cobros:pendientes:$codigoCliente:${_stableQueryKey(params)}',
         cacheTTL: const Duration(minutes: 1),
         forceRefresh: forceRefresh,
       );
@@ -449,6 +517,9 @@ class CobrosProvider extends ChangeNotifier {
             payload['resumen'] as Map<String, dynamic>,
           );
         }
+        _error = null;
+      } else {
+        _error = (response['error'] as String?) ?? 'Error cargando cobros';
       }
     } catch (e) {
       _error = 'Error cargando cobros: $e';
@@ -514,12 +585,17 @@ class CobrosProvider extends ChangeNotifier {
 
   Future<void> cargarHistoricoCobros(
     String codigoCliente, {
+    String? vendedorCodes,
     bool forceRefresh = false,
   }) async {
     try {
+      final params = <String, String>{};
+      _addNonBlankParam(params, 'vendedorCodes', vendedorCodes);
+      final networkParams = Map<String, String>.from(params);
+      _addForceRefreshParam(networkParams, forceRefresh);
       final response = await ApiClient.get(
-        '/cobros/$codigoCliente/historico',
-        cacheKey: 'cobros:historico:$codigoCliente',
+        _endpointWithQuery('/cobros/$codigoCliente/historico', networkParams),
+        cacheKey: 'cobros:historico:$codigoCliente:${_stableQueryKey(params)}',
         cacheTTL: const Duration(minutes: 5),
         forceRefresh: forceRefresh,
       );
@@ -541,12 +617,21 @@ class CobrosProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> verificarEstadoCliente(String codigoCliente) async {
+  Future<void> verificarEstadoCliente(
+    String codigoCliente, {
+    String? vendedorCodes,
+    bool forceRefresh = false,
+  }) async {
     try {
+      final params = <String, String>{};
+      _addNonBlankParam(params, 'vendedorCodes', vendedorCodes);
+      final networkParams = Map<String, String>.from(params);
+      _addForceRefreshParam(networkParams, forceRefresh);
       final response = await ApiClient.get(
-        '/cobros/$codigoCliente/estado',
-        cacheKey: 'cobros:estado:$codigoCliente',
+        _endpointWithQuery('/cobros/$codigoCliente/estado', networkParams),
+        cacheKey: 'cobros:estado:$codigoCliente:${_stableQueryKey(params)}',
         cacheTTL: const Duration(minutes: 1),
+        forceRefresh: forceRefresh,
       );
       if (response['success'] == true && response['estadoCliente'] != null) {
         _estadoClienteActual = EstadoCliente.fromJson(
@@ -599,6 +684,7 @@ class CobrosProvider extends ChangeNotifier {
     required TipoModoCobro tipoModo,
     String? codigoUsuario,
     String? observaciones,
+    String? vendedorCodes,
     bool reloadAfter = true,
   }) async {
     final actorCode = codigoUsuario ?? employeeCode;
@@ -630,26 +716,23 @@ class CobrosProvider extends ChangeNotifier {
         'tipoModo': tipoModo.code,
         'tipoUsuario': isRepartidor ? 'REPARTIDOR' : 'COMERCIAL',
         'codigoUsuario': actorCode,
+        if (vendedorCodes != null && vendedorCodes.trim().isNotEmpty)
+          'vendedorCodes': vendedorCodes.trim(),
         'observaciones': observaciones,
         'idempotencyToken': idempotencyToken,
       });
       if (response['success'] == true) {
-        await CacheService.invalidate('cobros:pendientes:$codigoCliente');
-        await CacheService.invalidate('cobros:estado:$codigoCliente');
+        await CacheService.invalidateByPrefix('cobros:pendientes:$codigoCliente');
+        await CacheService.invalidateByPrefix('cobros:historico:$codigoCliente');
+        await CacheService.invalidateByPrefix('cobros:estado:$codigoCliente');
         await CacheService.invalidateByPrefix('cobros:pending-summary:');
         if (reloadAfter) {
-          await cargarCobrosPendientes(codigoCliente, forceRefresh: true);
-          // Refresca el summary agregado para que la lista principal se actualice.
-          // Solo si ya teniamos un summary cargado (vendedor conocido).
-          if (_pendingSummary.isNotEmpty) {
-            // No bloqueamos el flujo de UI con await: fire-and-forget.
-            // ignore: unawaited_futures
-            cargarPendingSummary(
-              _lastSummaryVendorCode,
-              vendedorCodes: _lastSummaryVendorCodes,
-              forceRefresh: true,
-            );
-          }
+          await cargarCobrosPendientes(
+            codigoCliente,
+            vendedorCodes: vendedorCodes,
+            forceRefresh: true,
+          );
+          unawaited(refreshLoadedPendingSummary(forceRefresh: true));
         }
         _pendingCobroIdempotencyTokens.remove(attemptKey);
         return true;
@@ -666,6 +749,21 @@ class CobrosProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> refreshLoadedPendingSummary({
+    bool forceRefresh = true,
+  }) async {
+    if (_pendingSummary.isEmpty &&
+        _lastSummaryVendorCode == null &&
+        (_lastSummaryVendorCodes == null || _lastSummaryVendorCodes!.isEmpty)) {
+      return;
+    }
+    await cargarPendingSummary(
+      _lastSummaryVendorCode,
+      vendedorCodes: _lastSummaryVendorCodes,
+      forceRefresh: forceRefresh,
+    );
+  }
+
   void limpiarDatos() {
     _albaranesPendientes = [];
     _cobrosPendientes = [];
@@ -673,6 +771,14 @@ class CobrosProvider extends ChangeNotifier {
     _albaranActual = null;
     _resumenCobros = null;
     _estadoClienteActual = null;
+    _pendingSummary = {};
+    _grandTotal = 0;
+    _grandTotalVencido = 0;
+    _cvcGrandTotal = 0;
+    _cvcGrandTotalVencido = 0;
+    _appAdjustmentsTotal = 0;
+    _appOrdersTotal = 0;
+    _summarySource = '';
     _error = null;
     notifyListeners();
   }

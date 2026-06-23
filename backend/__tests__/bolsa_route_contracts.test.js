@@ -6,12 +6,14 @@ const express = require('express');
 const mockGetOrCreateBolsa = jest.fn();
 const mockGetBolsaStatus = jest.fn();
 const mockGetMovimientos = jest.fn();
+const mockGetGroupedStatus = jest.fn();
 let mockUser = { code: '01', role: 'COMERCIAL' };
 
 jest.mock('../services/bolsa-comercial.service', function() { return {
   getOrCreateBolsa: mockGetOrCreateBolsa,
   getBolsaStatus: mockGetBolsaStatus,
   getMovimientos: mockGetMovimientos,
+  getGroupedStatus: mockGetGroupedStatus,
   getHistorialMensual: jest.fn(),
   updateBolsaConfig: jest.fn(),
 }; });
@@ -99,7 +101,7 @@ describe('bolsa route validation contracts', function() {
       .get('/api/bolsa/10/movements?year=2026&month=6&limit=25');
 
     expect(res.status).toBe(200);
-    expect(mockGetMovimientos).toHaveBeenCalledWith('10', 2026, 6, 25);
+    expect(mockGetMovimientos).toHaveBeenCalledWith('10', 2026, 6, 25, expect.objectContaining({}));
     expect(mockGetOrCreateBolsa).not.toHaveBeenCalled();
     expect(res.body).toMatchObject({
       success: true,
@@ -123,6 +125,34 @@ describe('bolsa route validation contracts', function() {
         },
       ],
     });
+  });
+
+  test('GET /api/bolsa/grouped is manager-only and scoped', async function() {
+    mockUser = { code: '80', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: ['01', '02'] };
+    mockGetGroupedStatus.mockResolvedValueOnce({
+      ejercicio: 2026,
+      mes: 6,
+      vendedores: [{ vendedor: '02', saldoDisponible: 120 }],
+      totals: { saldoDisponible: 120, consumido: 0, acumulado: 120, vendedores: 1 },
+    });
+
+    const res = await request(makeApp()).get('/api/bolsa/grouped?year=2026&month=6&vendedorCodes=02');
+
+    expect(res.status).toBe(200);
+    expect(mockGetGroupedStatus).toHaveBeenCalledWith(['02'], 2026, 6);
+    expect(res.body).toMatchObject({
+      success: true,
+      vendedores: [{ vendedor: '02', saldoDisponible: 120 }],
+    });
+  });
+
+  test('GET /api/bolsa/grouped rejects non-manager users', async function() {
+    mockUser = { code: '01', role: 'COMERCIAL' };
+    const res = await request(makeApp()).get('/api/bolsa/grouped');
+
+    expect(res.status).toBe(403);
+    expect(res.body).toMatchObject({ success: false, code: 'MANAGER_REQUIRED' });
+    expect(mockGetGroupedStatus).not.toHaveBeenCalled();
   });
 });
 

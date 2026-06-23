@@ -41,7 +41,17 @@ function isManagerUser(user) {
 }
 function getVisibleVendorCodes(user) {
     const values = user && (user.vendorCodes || user.vendedorCodes);
-    return Array.isArray(values) ? values.map(normalizeVendorCode).filter(Boolean) : [];
+    return Array.isArray(values)
+        ? values.map(normalizeVendorCode).filter(code => code && code.toUpperCase() !== 'ALL')
+        : [];
+}
+function parseVendorCodesParam(value) {
+    if (!value) return [];
+    return String(value)
+        .split(',')
+        .map(normalizeVendorCode)
+        .filter(Boolean)
+        .filter(code => code.toUpperCase() !== 'ALL');
 }
 function authorizeVendorScope(req, vendedorCode) {
     const user = req.user || {};
@@ -53,8 +63,57 @@ function authorizeVendorScope(req, vendedorCode) {
     const own = getUserVendorCode(user);
     return { ok: Boolean(own && vendorCodesMatch(own, vendedorCode)) };
 }
+function authorizeManagerCodes(req, requestedCodes) {
+    const user = req.user || {};
+    if (!isManagerUser(user)) return { ok: false, code: 'MANAGER_REQUIRED' };
+    const visible = getVisibleVendorCodes(user);
+    if (visible.length === 0 || requestedCodes.length === 0) return { ok: true, codes: requestedCodes.length ? requestedCodes : visible };
+    const unauthorized = requestedCodes.some(code => !visible.some(visibleCode => vendorCodesMatch(visibleCode, code)));
+    if (unauthorized) return { ok: false, code: 'FORBIDDEN_VENDOR' };
+    return { ok: true, codes: requestedCodes };
+}
 function sendForbiddenVendor(req, res) { return res.status(403).json({ success: false, code: 'FORBIDDEN_VENDOR', error: 'No autorizado para consultar este vendedor', request_id: requestId(req) }); }
 function sendBolsaInternalError(req, res) { return res.status(500).json({ success: false, code: 'BOLSA_INTERNAL_ERROR', error: 'No se pudo procesar la bolsa comercial', request_id: requestId(req) }); }
+
+function sendManagerRequired(req, res) { return res.status(403).json({ success: false, code: 'MANAGER_REQUIRED', error: 'Solo Jefe de Ventas puede consultar la bolsa agrupada', request_id: requestId(req) }); }
+
+function parseMovementFilters(query) {
+    return {
+        tipo: query.tipo,
+        dateFrom: query.dateFrom || query.fechaDesde,
+        dateTo: query.dateTo || query.fechaHasta,
+        document: query.document || query.documento || query.pedido || query.numeroPedido || query.numeroFactura,
+        client: query.client || query.cliente || query.codigoCliente,
+    };
+}
+
+/**
+ * GET /api/bolsa/grouped
+ * Manager-only grouped month status by commercial vendor.
+ */
+router.get('/grouped', verifyToken, async (req, res) => {
+    try {
+        const requestedCodes = parseVendorCodesParam(req.query.vendedorCodes || req.query.vendedores);
+        if (requestedCodes.some(code => !isValidBolsaVendorCode(code))) {
+            return sendInvalidVendedorCode(req, res);
+        }
+        const auth = authorizeManagerCodes(req, requestedCodes);
+        if (!auth.ok) {
+            return auth.code === 'MANAGER_REQUIRED' ? sendManagerRequired(req, res) : sendForbiddenVendor(req, res);
+        }
+        const now = new Date();
+        const year = parseInt(req.query.year) || now.getFullYear();
+        const month = parseInt(req.query.month) || (now.getMonth() + 1);
+        if (year < 2020 || year > 2030 || month < 1 || month > 12) {
+            return res.status(400).json({ success: false, code: 'INVALID_PERIOD', error: 'Periodo fuera de rango', request_id: requestId(req) });
+        }
+        const grouped = await bolsaService.getGroupedStatus(auth.codes || [], year, month);
+        res.json({ success: true, ...grouped });
+    } catch (error) {
+        logger.error(`[BOLSA] GET /grouped error: ${error.message}`);
+        sendBolsaInternalError(req, res);
+    }
+});
 
 /**
  * GET /api/bolsa/:vendedorCode/status
@@ -92,11 +151,13 @@ router.get('/:vendedorCode/movements', verifyToken, async (req, res) => {
             return sendForbiddenVendor(req, res);
         }
         const now = new Date();
-        const year = parseInt(req.query.year) || now.getFullYear();
-        const month = parseInt(req.query.month) || (now.getMonth() + 1);
+        const filters = parseMovementFilters(req.query);
+        const hasDateFilter = Boolean(filters.dateFrom || filters.dateTo);
+        const year = parseInt(req.query.year) || (hasDateFilter ? undefined : now.getFullYear());
+        const month = parseInt(req.query.month) || (hasDateFilter ? undefined : (now.getMonth() + 1));
         const limit = Math.min(parseInt(req.query.limit) || 50, 200);
 
-        const movements = await bolsaService.getMovimientos(vendedorCode, year, month, limit);
+        const movements = await bolsaService.getMovimientos(vendedorCode, year, month, limit, filters);
         res.json({ success: true, movements });
     } catch (error) {
         logger.error(`[BOLSA] GET /movements error: ${error.message}`);
@@ -129,9 +190,9 @@ router.get('/:vendedorCode/history', verifyToken, async (req, res) => {
 
 /**
  * PUT /api/bolsa/:vendedorCode/config
- * Update bolsa limits (JEFE_VENTAS / ADMIN only)
+ * Update bolsa limits (JEFE_VENTAS only)
  */
-router.put('/:vendedorCode/config', verifyToken, requireRoles('JEFE_VENTAS', 'ADMIN'), async (req, res) => {
+router.put('/:vendedorCode/config', verifyToken, requireRoles('JEFE_VENTAS'), async (req, res) => {
     try {
         const vendedorCode = String(req.params.vendedorCode).trim();
         if (!isValidBolsaVendorCode(vendedorCode)) {

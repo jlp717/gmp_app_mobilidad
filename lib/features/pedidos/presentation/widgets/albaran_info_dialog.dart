@@ -3,8 +3,12 @@
 /// Shows linked delivery notes (albaranes) for an order
 library;
 
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:gmp_app_mobilidad/core/theme/app_theme.dart';
+import 'package:gmp_app_mobilidad/core/widgets/pdf_preview_screen.dart';
+import 'package:gmp_app_mobilidad/features/facturas/data/facturas_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/data/pedidos_service.dart';
 import 'package:gmp_app_mobilidad/features/pedidos/presentation/utils/pedidos_formatters.dart';
 
@@ -33,6 +37,12 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
   List<Map<String, dynamic>> _albaranes = [];
   bool _isLoading = true;
   String? _error;
+  bool _isOpeningFactura = false;
+
+  int _asInt(dynamic value) {
+    if (value is num) return value.toInt();
+    return int.tryParse(value?.toString() ?? '') ?? 0;
+  }
 
   @override
   void initState() {
@@ -40,9 +50,52 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
     _loadAlbaranes();
   }
 
-  Future<void> _loadAlbaranes() async {
+  Future<void> _openFactura(Map<String, dynamic> albaran) async {
+    final serie = (albaran['serieFactura'] ?? '').toString().trim();
+    final numero = _asInt(albaran['numeroFactura']);
+    final ejercicio = _asInt(albaran['ejercicioFactura']);
+    if (serie.isEmpty || numero <= 0 || ejercicio <= 0) return;
+
+    setState(() => _isOpeningFactura = true);
     try {
-      final albaranes = await PedidosService.getOrderAlbaran(widget.orderId);
+      final bytes = await FacturasService.downloadFacturaPdfBytes(
+        serie,
+        numero,
+        ejercicio,
+      );
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => PdfPreviewScreen(
+            pdfBytes: Uint8List.fromList(bytes),
+            title: 'Factura $serie-$numero',
+            fileName: 'Factura_${serie}_${numero}_$ejercicio.pdf',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('No se pudo abrir la factura: $e'),
+          backgroundColor: AppTheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isOpeningFactura = false);
+    }
+  }
+
+  Future<void> _loadAlbaranes() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final albaranes = await PedidosService.getOrderAlbaran(
+        widget.orderId,
+        forceRefresh: true,
+      );
       if (mounted) {
         setState(() {
           _albaranes = albaranes;
@@ -91,6 +144,10 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
                     : Column(
                         mainAxisSize: MainAxisSize.min,
                         children: _albaranes.map((a) {
+                          final facturaNum = _asInt(a['numeroFactura']);
+                          final facturaSerie =
+                              (a['serieFactura'] ?? '').toString().trim();
+                          final facturaYear = _asInt(a['ejercicioFactura']);
                           return Container(
                             margin: const EdgeInsets.only(bottom: 8),
                             padding: const EdgeInsets.all(10),
@@ -131,6 +188,26 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
                                     fontSize: 11,
                                   ),
                                 ),
+                                if (facturaNum > 0 &&
+                                    facturaSerie.isNotEmpty &&
+                                    facturaYear > 0) ...[
+                                  const SizedBox(height: 8),
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: OutlinedButton.icon(
+                                      onPressed: _isOpeningFactura
+                                          ? null
+                                          : () => _openFactura(a),
+                                      icon: const Icon(
+                                        Icons.picture_as_pdf_outlined,
+                                        size: 16,
+                                      ),
+                                      label: Text(
+                                        'Ver factura $facturaSerie-$facturaNum',
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           );
@@ -138,6 +215,11 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
                       ),
       ),
       actions: [
+        TextButton.icon(
+          onPressed: _isLoading ? null : _loadAlbaranes,
+          icon: const Icon(Icons.refresh, size: 18),
+          label: const Text('Recargar'),
+        ),
         TextButton(
           onPressed: () => Navigator.pop(context),
           child: const Text('Cerrar', style: TextStyle(color: Colors.white54)),

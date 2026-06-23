@@ -472,8 +472,36 @@ function parseIntConfig(raw, fallback) {
 }
 
 
-function resolvePedidoTerminal(vendedorCode) {
-    const primary = trimString(vendedorCode).split(',')[0].trim();
+function primaryPedidoCode(value) {
+    return trimString(value).split(',')[0].trim();
+}
+
+function normalizePedidoActorCode(value, fallback = '') {
+    const primary = primaryPedidoCode(value) || primaryPedidoCode(fallback);
+    if (!primary) return '';
+    if (/^\d+$/.test(primary)) return primary.padStart(2, '0').slice(-2);
+    return truncate(primary, 2);
+}
+
+function resolvePedidoActorCodes(header = {}, userId) {
+    const vendedor = normalizePedidoActorCode(header.CODIGOVENDEDOR);
+    const vendedorCobro = normalizePedidoActorCode(header.CODIGOVENDEDORCOBRO, vendedor);
+    const promotor = normalizePedidoActorCode(header.CODIGOPROMOTORPREVENTA || header.CODIGOPROMOTOR, vendedor);
+    const comercial = normalizePedidoActorCode(header.CODIGOCOMERCIAL, vendedor);
+    const vendedorUsuario = normalizePedidoActorCode(userId || header.CODIGOVENDEDORUSUARIO, vendedor);
+    const codigoUsuario = primaryPedidoCode(userId || header.CODIGOUSUARIO) || vendedorUsuario || 'APP';
+    return {
+        vendedor,
+        vendedorCobro,
+        promotor,
+        comercial,
+        vendedorUsuario,
+        codigoUsuario: truncate(codigoUsuario, 10),
+    };
+}
+
+function resolvePedidoTerminal(vendedorCode, userId) {
+    const primary = primaryPedidoCode(vendedorCode) || primaryPedidoCode(userId);
     if (/^\d{1,3}$/.test(primary)) {
         const parsed = parseInt(primary, 10);
         if (parsed >= 0 && parsed <= 999) return parsed;
@@ -1109,7 +1137,7 @@ function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCo
     const docMonth = integerValue(header.MESDOCUMENTO) || new Date().getMonth() + 1;
     const docYear = integerValue(header.ANODOCUMENTO) || integerValue(header.EJERCICIO) || new Date().getFullYear();
     const hora = integerValue(header.HORADOCUMENTO) || currentHhmmss();
-    const vendedor = truncate(header.CODIGOVENDEDOR, 2);
+    const actor = resolvePedidoActorCodes(header, userId);
     const cliente = truncate(header.CODIGOCLIENTE, 10);
     const observaciones = splitFixedText(header.OBSERVACIONES, 50, 2);
     const total = roundMoney(header.IMPORTETOTAL || header.IMPORTEBASE);
@@ -1135,7 +1163,7 @@ function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCo
         systemRef.subempresa, systemRef.ejercicio, systemRef.serie, systemRef.terminal, systemRef.numero,
         docDay, docMonth, docYear, hora,
         cliente, cliente, '',
-        vendedor, vendedor, vendedor, vendedor,
+        actor.vendedor, actor.vendedorCobro, actor.promotor, actor.comercial,
         truncate(routeCode, 4),
         truncate(header.CODIGOFORMAPAGO || '02', 2),
         integerValue(header.CODIGOTARIFA) || 1, integerValue(header.CODIGOALMACEN) || 1, 'N',
@@ -1143,7 +1171,7 @@ function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCo
         total, costo, margen,
         target.situacionPedido, target.codigoOperacion, observaciones[0], observaciones[1],
         docDay, docMonth, docYear, hora,
-        vendedor, truncate(userId || target.codigoUsuario, 10), target.codigoTipoPedido,
+        actor.vendedorUsuario, actor.codigoUsuario || target.codigoUsuario, target.codigoTipoPedido,
         deliveryPlan.date.day, deliveryPlan.date.month, deliveryPlan.date.year,
     ];
 
@@ -1153,12 +1181,12 @@ function buildDsedacCpcInsert({ target, header, systemRef, deliveryPlan, routeCo
     };
 }
 
-function buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, routeCode, saleType }) {
+function buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, routeCode, saleType, userId }) {
     const docDay = integerValue(header.DIADOCUMENTO) || new Date().getDate();
     const docMonth = integerValue(header.MESDOCUMENTO) || new Date().getMonth() + 1;
     const docYear = integerValue(header.ANODOCUMENTO) || integerValue(header.EJERCICIO) || new Date().getFullYear();
     const hora = integerValue(header.HORADOCUMENTO) || currentHhmmss();
-    const vendedor = truncate(header.CODIGOVENDEDOR, 2);
+    const actor = resolvePedidoActorCodes(header, userId);
     const cliente = truncate(header.CODIGOCLIENTE, 10);
     const effectiveSaleType = truncate(saleType || line.TIPOVENTA || header.TIPOVENTA || 'CC', 2) || 'CC';
 
@@ -1178,7 +1206,7 @@ function buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, r
         integerValue(line.SECUENCIA || line.ORDEN) || 1,
         docDay, docMonth, docYear, hora,
         cliente, cliente, '',
-        vendedor, vendedor, vendedor, vendedor,
+        actor.vendedor, actor.vendedorCobro, actor.promotor, actor.comercial,
         truncate(routeCode, 4), truncate(header.CODIGOFORMAPAGO || '02', 2),
         integerValue(header.CODIGOTARIFA) || 1, integerValue(header.CODIGOALMACEN) || 1, 'N',
         truncate(line.TIPOLINEA || 'R', 1) || 'R',
@@ -1233,7 +1261,7 @@ function buildDsedacOcpcInsert({ target, header, systemRef, userId }) {
 async function exportCommercialOrderToSystem(conn, { header, lines, deliveryPlan, routeCode, saleType, userId, vehicleCode, driverCode }) {
     const target = {
         ...getPedidosConfirmationTarget(),
-        terminal: resolvePedidoTerminal(header.CODIGOVENDEDOR),
+        terminal: resolvePedidoTerminal(header.CODIGOVENDEDOR, userId),
     };
     if (!target.shouldExportToSystem) {
         return {
@@ -1277,7 +1305,7 @@ async function exportCommercialOrderToSystem(conn, { header, lines, deliveryPlan
     }
 
     for (const line of lines || []) {
-        const lin = buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, routeCode, saleType });
+        const lin = buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, routeCode, saleType, userId });
         try {
             await conn.query(lin.sql, lin.params);
         } catch (e) {
@@ -2058,10 +2086,11 @@ function buildLocalPedidoCabInsert({
     observaciones,
     descuentoGlobal,
     origen,
+    userId,
 }) {
     const target = getPedidosConfirmationTarget();
-    const terminal = resolvePedidoTerminal(vendedorCode);
-    const vendedor = (vendedorCode || '').split(',')[0].trim().substring(0, 2);
+    const terminal = resolvePedidoTerminal(vendedorCode, userId);
+    const actor = resolvePedidoActorCodes({ CODIGOVENDEDOR: vendedorCode }, userId);
     const cliente = (clientCode || '').trim().substring(0, 10);
     const obs = (observaciones || '').substring(0, 200);
     const obsParts = splitFixedText(obs, 50, 2);
@@ -2083,17 +2112,17 @@ function buildLocalPedidoCabInsert({
     const params = [
         target.subempresa, ejercicio, numeroPedido, target.serie, terminal,
         dia, mes, ano, hora,
-        cliente, (clientName || '').substring(0, 60), vendedor, formaPago,
+        cliente, (clientName || '').substring(0, 60), actor.vendedor, formaPago,
         tarifa, almacen, tipoventa, obs,
         parseFloat(descuentoGlobal) || 0, origen,
         target.subempresa, ejercicio, terminal,
         cliente, cliente, '',
-        vendedor, vendedor, vendedor,
+        actor.vendedorCobro, actor.promotor, actor.comercial,
         'N', 0, 0,
         0, target.situacionPedido, target.codigoOperacion,
         obsParts[0], obsParts[1], dia, mes,
-        ano, hora, vendedor,
-        target.codigoUsuario, target.codigoTipoPedido,
+        ano, hora, actor.vendedorUsuario,
+        actor.codigoUsuario || target.codigoUsuario, target.codigoTipoPedido,
     ];
 
     return {
@@ -2161,9 +2190,12 @@ function buildLocalPedidoLineInsert({
     tipoventa,
     line,
     amounts,
+    terminal,
+    userId,
 }) {
     const target = getPedidosConfirmationTarget();
-    const vendedor = (vendedorCode || '').split(',')[0].trim().substring(0, 2);
+    const actor = resolvePedidoActorCodes({ CODIGOVENDEDOR: vendedorCode }, userId);
+    const effectiveTerminal = integerValue(terminal) || resolvePedidoTerminal(vendedorCode, userId);
     const cliente = (clientCode || '').trim().substring(0, 10);
     const columns = [
         'PEDIDO_ID', 'SECUENCIA', 'CODIGOARTICULO', 'DESCRIPCION',
@@ -2192,11 +2224,11 @@ function buildLocalPedidoLineInsert({
         Math.round(amounts.pctMargen * 100) / 100,
         amounts.descuentoLinea,
         line.tipoLinea || 'R', line.tipoventa || tipoventa, line.claseLinea || 'VT', sequence,
-        target.subempresa, ejercicio, target.serie, target.terminal,
+        target.subempresa, ejercicio, target.serie, effectiveTerminal,
         numeroPedido, sequence, dia, mes,
         ano, hora, cliente,
-        cliente, '', vendedor,
-        vendedor, vendedor, vendedor,
+        cliente, '', actor.vendedor,
+        actor.vendedorCobro, actor.promotor, actor.comercial,
         formaPago, tarifa, almacen, 'N',
         cajaUnidadFlag(amounts.unidadMedida), parseFloat(line.precioTarifa) || 0, '',
     ];
@@ -2284,6 +2316,7 @@ async function createOrder({
     origen = 'A',
     idempotencyKey,
     clientRequestId,
+    userId,
 }) {
     const serviceT0 = Date.now();
     const lineCount = Array.isArray(lines) ? lines.length : 0;
@@ -2332,6 +2365,7 @@ async function createOrder({
 
     const nextOrderT0 = Date.now();
     const numeroPedido = await getNextOrderNumber(ejercicio);
+    const terminal = resolvePedidoTerminal(vendedorCode, userId);
     logger.info(`[PEDIDOS] createOrder stage=getNextOrderNumber lineCount=${lineCount} durationMs=${Date.now() - nextOrderT0}`);
 
     // Insert header; ORIGEN column may not exist in older installs
@@ -2355,6 +2389,7 @@ async function createOrder({
             observaciones,
             descuentoGlobal,
             origen,
+            userId,
         }));
         await queryWithParams(cabSql, cabParams, false);
     } catch (cabErr) {
@@ -2469,6 +2504,8 @@ async function createOrder({
                 tipoventa,
                 line,
                 amounts,
+                terminal,
+                userId,
             });
 
             try {
@@ -2565,7 +2602,7 @@ async function createOrder({
 // GET ORDERS
 // ============================================================================
 
-async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo, search, minAmount, maxAmount, sortBy, sortOrder, limit = 20, offset = 0 }) {
+async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo, search, minAmount, maxAmount, sortBy, sortOrder, limit = 20, offset = 0, forceRefresh = false }) {
     if (!vendedorCodes) throw new Error('vendedorCodes is required');
 
     const isAll = vendedorCodes.trim().toUpperCase() === 'ALL';
@@ -2596,6 +2633,11 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
             TRIM(C.RUTA) AS RUTA,
             TRIM(C.DIASREPARTO) AS DIASREPARTO,
             TRIM(C.REPARTO_VALIDADO_SN) AS REPARTO_VALIDADO_SN,
+            TRIM(C.TARGET_SCHEMA) AS TARGET_SCHEMA,
+            TRIM(C.SYNC_STATUS) AS SYNC_STATUS,
+            TRIM(C.SYSTEM_SUBEMPRESAPEDIDO) AS SYSTEM_SUBEMPRESAPEDIDO,
+            C.SYSTEM_EJERCICIOPEDIDO, TRIM(C.SYSTEM_SERIEPEDIDO) AS SYSTEM_SERIEPEDIDO,
+            C.SYSTEM_TERMINALPEDIDO, C.SYSTEM_NUMEROPEDIDO,
             C.CREATED_AT, C.UPDATED_AT,
             COALESCE(LC.LINE_COUNT, 0) AS LINE_COUNT
         FROM ${ERP_SCHEMA}.PEDIDOS_CAB C
@@ -2705,12 +2747,14 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
     const cacheKey = `pedidos:orders:${vendedorCodes || 'ALL'}:${status || ''}:${year || ''}:${month || ''}:${dateFrom || ''}:${dateTo || ''}:${search || ''}:${minAmount || ''}:${maxAmount || ''}:${sortBy || 'fecha'}:${sortOrder || 'DESC'}:${safeLimit}:${safeOffset}`;
 
     try {
-        const rows = await cachedQuery(
-            (q) => queryWithParams(q, params),
-            sql,
-            cacheKey,
-            TTL.SHORT
-        );
+        const rows = forceRefresh
+            ? await queryWithParams(sql, params)
+            : await cachedQuery(
+                (q) => queryWithParams(q, params),
+                sql,
+                cacheKey,
+                TTL.SHORT
+            );
         if (!rows || rows.length === 0) {
             return { orders: [], count: 0 };
         }
@@ -2723,11 +2767,22 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
             const mm = hora.substring(2, 4);
             const numPedido = String(r.NUMEROPEDIDO).padStart(6, '0');
             const fechaReparto = r.FECHAREPARTO ? parseDeliveryDate(r.FECHAREPARTO) : null;
+            const localNumeroPedidoFormatted = formatPedidoNumeroAcisa(r.SERIEPEDIDO, r.TERMINAL ?? r.TERMINALPEDIDO, r.NUMEROPEDIDO);
+            const hasSystemRef = integerValue(r.SYSTEM_NUMEROPEDIDO) > 0;
+            const systemNumeroPedidoFormatted = hasSystemRef
+                ? formatPedidoNumeroAcisa(r.SYSTEM_SERIEPEDIDO || r.SERIEPEDIDO, r.SYSTEM_TERMINALPEDIDO, r.SYSTEM_NUMEROPEDIDO)
+                : '';
             return {
                 id: r.ID,
                 ejercicio: r.EJERCICIO,
                 numeroPedido: r.NUMEROPEDIDO,
-                numeroPedidoFormatted: formatPedidoNumeroAcisa(r.SERIEPEDIDO, r.TERMINAL ?? r.TERMINALPEDIDO, r.NUMEROPEDIDO),
+                numeroPedidoFormatted: systemNumeroPedidoFormatted || localNumeroPedidoFormatted,
+                localNumeroPedidoFormatted,
+                systemNumeroPedidoFormatted,
+                targetSchema: r.TARGET_SCHEMA || 'JAVIER',
+                syncStatus: r.SYNC_STATUS || 'LOCAL',
+                systemNumeroPedido: integerValue(r.SYSTEM_NUMEROPEDIDO),
+                systemTerminalPedido: integerValue(r.SYSTEM_TERMINALPEDIDO),
                 serie: r.SERIEPEDIDO,
                 fecha: `${dia}/${mes}/${ano}`,
                 fechaFormatted: `${dia}/${mes}/${ano} ${hh}:${mm}`,
@@ -2879,6 +2934,11 @@ async function getOrderDetail(orderId, options = {}) {
             TRIM(RUTA) AS RUTA,
             TRIM(DIASREPARTO) AS DIASREPARTO,
             TRIM(REPARTO_VALIDADO_SN) AS REPARTO_VALIDADO_SN,
+            TRIM(TARGET_SCHEMA) AS TARGET_SCHEMA,
+            TRIM(SYNC_STATUS) AS SYNC_STATUS,
+            TRIM(SYSTEM_SUBEMPRESAPEDIDO) AS SYSTEM_SUBEMPRESAPEDIDO,
+            SYSTEM_EJERCICIOPEDIDO, TRIM(SYSTEM_SERIEPEDIDO) AS SYSTEM_SERIEPEDIDO,
+            SYSTEM_TERMINALPEDIDO, SYSTEM_NUMEROPEDIDO,
             CREATED_AT, UPDATED_AT
         FROM ${ERP_SCHEMA}.PEDIDOS_CAB
         WHERE ID = ?`;
@@ -2914,6 +2974,11 @@ async function getOrderDetail(orderId, options = {}) {
 
         const cab = cabRows[0];
         const fechaReparto = cab.FECHAREPARTO ? parseDeliveryDate(cab.FECHAREPARTO) : null;
+        const localNumeroPedidoFormatted = formatPedidoNumeroAcisa(cab.SERIEPEDIDO, cab.TERMINAL, cab.NUMEROPEDIDO);
+        const hasSystemRef = integerValue(cab.SYSTEM_NUMEROPEDIDO) > 0;
+        const systemNumeroPedidoFormatted = hasSystemRef
+            ? formatPedidoNumeroAcisa(cab.SYSTEM_SERIEPEDIDO || cab.SERIEPEDIDO, cab.SYSTEM_TERMINALPEDIDO, cab.SYSTEM_NUMEROPEDIDO)
+            : '';
         const bolsaByLine = new Map();
         for (const movement of bolsaMovements) {
             const key = movement.lineId === null || movement.lineId === undefined ? '' : String(movement.lineId);
@@ -2927,6 +2992,13 @@ async function getOrderDetail(orderId, options = {}) {
                 id: cab.ID,
                 ejercicio: cab.EJERCICIO,
                 numeroPedido: cab.NUMEROPEDIDO,
+                numeroPedidoFormatted: systemNumeroPedidoFormatted || localNumeroPedidoFormatted,
+                localNumeroPedidoFormatted,
+                systemNumeroPedidoFormatted,
+                targetSchema: cab.TARGET_SCHEMA || 'JAVIER',
+                syncStatus: cab.SYNC_STATUS || 'LOCAL',
+                systemNumeroPedido: integerValue(cab.SYSTEM_NUMEROPEDIDO),
+                systemTerminalPedido: integerValue(cab.SYSTEM_TERMINALPEDIDO),
                 serie: cab.SERIEPEDIDO,
                 terminal: cab.TERMINAL,
                 fecha: `${String(cab.DIADOCUMENTO).padStart(2, '0')}/${String(cab.MESDOCUMENTO).padStart(2, '0')}/${cab.ANODOCUMENTO}`,
@@ -3935,39 +4007,78 @@ async function getOrderAlbaran(orderId) {
     if (isNaN(id)) throw new Error('Invalid orderId');
 
     const orderRows = await queryWithParams(
-        `SELECT CODIGOCLIENTE, DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO, NUMEROPEDIDO
+        `SELECT CODIGOCLIENTE, DIADOCUMENTO, MESDOCUMENTO, ANODOCUMENTO,
+                EJERCICIO, SERIEPEDIDO, TERMINAL, NUMEROPEDIDO,
+                SYSTEM_SUBEMPRESAPEDIDO, SYSTEM_EJERCICIOPEDIDO, SYSTEM_SERIEPEDIDO,
+                SYSTEM_TERMINALPEDIDO, SYSTEM_NUMEROPEDIDO
          FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE ID = ?`,
         [id]
     );
     if (!orderRows || orderRows.length === 0) throw new Error('Pedido no encontrado');
 
     const order = orderRows[0];
-    const clientCode = (order.CODIGOCLIENTE || '').trim();
+    const systemNumero = integerValue(order.SYSTEM_NUMEROPEDIDO);
+    const pedidoRef = {
+        subempresa: truncate(order.SYSTEM_SUBEMPRESAPEDIDO || getPedidosConfirmationTarget().subempresa, 3),
+        ejercicio: systemNumero > 0 ? integerValue(order.SYSTEM_EJERCICIOPEDIDO) : integerValue(order.EJERCICIO),
+        serie: truncate(systemNumero > 0 ? order.SYSTEM_SERIEPEDIDO : order.SERIEPEDIDO, 1) || 'P',
+        terminal: systemNumero > 0 ? integerValue(order.SYSTEM_TERMINALPEDIDO) : integerValue(order.TERMINAL),
+        numero: systemNumero > 0 ? systemNumero : integerValue(order.NUMEROPEDIDO),
+    };
 
     const albaranSql = `
-        SELECT TRIM(C.NUMEROALBARAN) AS NUMEROALBARAN,
-               TRIM(C.SERIEALBARAN) AS SERIEALBARAN,
-               C.DIADOCUMENTO, C.MESDOCUMENTO, C.ANODOCUMENTO,
-               TRIM(C.CODIGOCLIENTE) AS CODIGOCLIENTE,
-               C.IMPORTEALBARAN,
-               TRIM(C.SITUACIONALBARAN) AS SITUACION,
-               TRIM(C.ESTADOENVIO) AS ESTADOENVIO
-        FROM DSEDAC.CAC C
-        WHERE TRIM(C.CODIGOCLIENTE) = ?
-          AND C.ANODOCUMENTO = ?
-          AND C.ELIMINADOSN <> 'N'
-        ORDER BY C.ANODOCUMENTO DESC, C.MESDOCUMENTO DESC, C.DIADOCUMENTO DESC
-        FETCH FIRST 3 ROWS ONLY`;
+        SELECT COALESCE(C.NUMEROALBARAN, P.NUMEROALBARAN) AS NUMEROALBARAN,
+               TRIM(COALESCE(C.SERIEALBARAN, P.SERIEALBARAN)) AS SERIEALBARAN,
+               COALESCE(C.TERMINALALBARAN, P.TERMINALALBARAN) AS TERMINALALBARAN,
+               COALESCE(C.EJERCICIOALBARAN, P.EJERCICIOALBARAN) AS EJERCICIOALBARAN,
+               COALESCE(C.DIADOCUMENTO, P.DIADOCUMENTO) AS DIADOCUMENTO,
+               COALESCE(C.MESDOCUMENTO, P.MESDOCUMENTO) AS MESDOCUMENTO,
+               COALESCE(C.ANODOCUMENTO, P.ANODOCUMENTO) AS ANODOCUMENTO,
+               TRIM(COALESCE(C.CODIGOCLIENTE, P.CODIGOCLIENTEALBARAN)) AS CODIGOCLIENTE,
+               COALESCE(C.IMPORTEALBARAN, P.IMPORTETOTAL, 0) AS IMPORTEALBARAN,
+               TRIM(COALESCE(C.SITUACIONALBARAN, P.SITUACIONPEDIDO, '')) AS SITUACION,
+               TRIM(COALESCE(C.ESTADOENVIO, '')) AS ESTADOENVIO,
+               COALESCE(C.NUMEROFACTURA, 0) AS NUMEROFACTURA,
+               TRIM(COALESCE(C.SERIEFACTURA, '')) AS SERIEFACTURA,
+               COALESCE(C.EJERCICIOFACTURA, 0) AS EJERCICIOFACTURA
+          FROM DSEDAC.CPC P
+          LEFT JOIN DSEDAC.CAC C
+            ON C.EJERCICIOALBARAN = P.EJERCICIOALBARAN
+           AND TRIM(C.SERIEALBARAN) = TRIM(P.SERIEALBARAN)
+           AND C.TERMINALALBARAN = P.TERMINALALBARAN
+           AND C.NUMEROALBARAN = P.NUMEROALBARAN
+         WHERE TRIM(P.SUBEMPRESAPEDIDO) = ?
+           AND P.EJERCICIOPEDIDO = ?
+           AND TRIM(P.SERIEPEDIDO) = ?
+           AND P.TERMINALPEDIDO = ?
+           AND P.NUMEROPEDIDO = ?
+         ORDER BY COALESCE(C.ANODOCUMENTO, P.ANODOCUMENTO) DESC,
+                  COALESCE(C.MESDOCUMENTO, P.MESDOCUMENTO) DESC,
+                  COALESCE(C.DIADOCUMENTO, P.DIADOCUMENTO) DESC
+         FETCH FIRST 5 ROWS ONLY`;
 
     try {
-        const rows = await queryWithParams(albaranSql, [clientCode, order.ANODOCUMENTO]);
-        return (rows || []).map(r => ({
+        const rows = await queryWithParams(albaranSql, [
+            pedidoRef.subempresa,
+            pedidoRef.ejercicio,
+            pedidoRef.serie,
+            pedidoRef.terminal,
+            pedidoRef.numero,
+        ]);
+        return (rows || [])
+            .filter(r => integerValue(r.NUMEROALBARAN) > 0)
+            .map(r => ({
             numeroAlbaran: r.NUMEROALBARAN,
             serie: r.SERIEALBARAN,
+            terminal: integerValue(r.TERMINALALBARAN),
+            ejercicio: integerValue(r.EJERCICIOALBARAN),
             fecha: `${String(r.DIADOCUMENTO).padStart(2, '0')}/${String(r.MESDOCUMENTO).padStart(2, '0')}/${r.ANODOCUMENTO}`,
             situacion: (r.SITUACION || '').trim(),
             estadoEnvio: (r.ESTADOENVIO || '').trim(),
             importe: parseFloat(r.IMPORTEALBARAN) || 0,
+            numeroFactura: integerValue(r.NUMEROFACTURA),
+            serieFactura: (r.SERIEFACTURA || '').trim(),
+            ejercicioFactura: integerValue(r.EJERCICIOFACTURA),
         }));
     } catch (error) {
         logger.warn(`[PEDIDOS] getOrderAlbaran: ${error.message}`);

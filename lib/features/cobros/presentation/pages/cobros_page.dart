@@ -51,10 +51,23 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
   CobrosProvider get _provider =>
       ref.read(cobrosProvider(CobrosParams(employeeCode: widget.employeeCode)));
 
+  String _fallbackVendorCode(AuthState? authState) {
+    final employee = widget.employeeCode.trim();
+    if (employee.isNotEmpty && employee.toUpperCase() != 'ALL') {
+      return employee;
+    }
+    final vendedor = authState?.user?.vendedorCode?.trim() ?? '';
+    if (vendedor.isNotEmpty && vendedor.toUpperCase() != 'ALL') {
+      return vendedor;
+    }
+    return authState?.user?.code.trim() ?? '';
+  }
+
   String _resolvedVendorCodes() {
     final selectedVendor = ref.read(selectedVendorProvider);
     final authState = ref.read(authProvider).value;
     final authVendorCodes = authState?.vendedorCodes ?? const <String>[];
+    final fallbackVendor = _fallbackVendorCode(authState);
 
     if (hasCommercial80VendorScope(
       userCode: authState?.user?.code,
@@ -64,11 +77,14 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         userCode: authState?.user?.code,
         authVendorCodes: authVendorCodes,
         selectedVendor: selectedVendor,
-        fallbackVendorCodes: widget.employeeCode,
+        fallbackVendorCodes: fallbackVendor,
       );
     }
 
-    return selectedVendor ?? widget.employeeCode;
+    if (selectedVendor != null && selectedVendor.isNotEmpty) {
+      return selectedVendor;
+    }
+    return fallbackVendor;
   }
 
   @override
@@ -132,6 +148,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     final authState = ref.read(authProvider).value;
     final allVendorCodes = authState?.vendedorCodes ?? [];
     final scopedVendorCodes = _resolvedVendorCodes();
+    final fallbackVendor = _fallbackVendorCode(authState);
 
     try {
       if (hasCommercial80VendorScope(
@@ -160,10 +177,15 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
           selectedVendor,
           forceRefresh: forceRefresh,
         );
-      } else if (allVendorCodes.isNotEmpty) {
+      } else if (allVendorCodes.isNotEmpty && widget.isJefeVentas) {
         await _provider.cargarPendingSummary(
           null,
           vendedorCodes: allVendorCodes,
+          forceRefresh: forceRefresh,
+        );
+      } else if (fallbackVendor.isNotEmpty) {
+        await _provider.cargarPendingSummary(
+          fallbackVendor,
           forceRefresh: forceRefresh,
         );
       } else {
@@ -366,6 +388,11 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     String fmtMoney(num v) => _moneyFormat.format(v);
     final tienePendiente = cobros.grandTotal > 0;
     final tieneVencido = cobros.grandTotalVencido > 0;
+    final sourceLabel = cobros.summarySource == 'CVC+PEDIDOS_CAB'
+        ? 'ERP CVC + pedidos app sin factura/albaran'
+        : 'ERP CVC';
+    final hasAppLayer =
+        cobros.appAdjustmentsTotal > 0 || cobros.appOrdersTotal > 0;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
@@ -441,7 +468,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
               ),
               const SizedBox(width: 4),
               Text(
-                'Deuda comercial real (ERP · CVC)',
+                'Fuente: $sourceLabel',
                 style: TextStyle(
                   fontSize: 9,
                   color: Colors.white.withValues(alpha: 0.35),
@@ -450,6 +477,17 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
               ),
             ],
           ),
+          if (hasAppLayer) ...[
+            const SizedBox(height: 3),
+            Text(
+              'App: ${fmtMoney(cobros.appOrdersTotal)} provisional'
+              ' - ${fmtMoney(cobros.appAdjustmentsTotal)} ya descontado',
+              style: TextStyle(
+                fontSize: 9,
+                color: Colors.white.withValues(alpha: 0.4),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -775,6 +813,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                 codigoCliente: code,
                 nombreCliente: name,
                 employeeCode: widget.employeeCode,
+                vendedorCodes: _resolvedVendorCodes(),
               ),
             ),
           );

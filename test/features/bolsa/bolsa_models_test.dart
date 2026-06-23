@@ -44,6 +44,12 @@ void main() {
         'cantidad': '4.5',
         'unidadMedida': 'kg',
         'idempotencyKey': 'pedido-9001-linea-3',
+        'vendedor': '02',
+        'clienteCodigo': '4300007781',
+        'clienteNombre': 'CHIRINGUITO MARINERO PURIAS',
+        'pedidoReferencia': 'P-095-000002',
+        'systemPedidoReferencia': 'P-095-000002',
+        'syncStatus': 'SISTEMA',
       });
 
       expect(movimiento.tipo, BolsaMovimientoTipo.consumo);
@@ -54,6 +60,32 @@ void main() {
       expect(movimiento.cantidad, 4.5);
       expect(movimiento.unidadMedida, 'kg');
       expect(movimiento.idempotencyKey, 'pedido-9001-linea-3');
+      expect(movimiento.vendedor, '02');
+      expect(movimiento.displayPedido, 'P-095-000002');
+      expect(movimiento.displayCliente, contains('CHIRINGUITO'));
+      expect(movimiento.syncStatus, 'SISTEMA');
+    });
+  });
+  group('BolsaGroupedSummary.fromJson', () {
+    test('parses grouped commercial totals', () {
+      final summary = BolsaGroupedSummary.fromJson({
+        'ejercicio': 2026,
+        'mes': 6,
+        'vendedores': [
+          {'vendedor': '01', 'ejercicio': 2026, 'mes': 6, 'saldoDisponible': 50},
+          {'vendedor': '02', 'ejercicio': 2026, 'mes': 6, 'saldoDisponible': 75},
+        ],
+        'totals': {
+          'saldoDisponible': 125,
+          'consumido': 10,
+          'acumulado': 135,
+        },
+      });
+
+      expect(summary.vendedores, hasLength(2));
+      expect(summary.saldoDisponible, 125);
+      expect(summary.consumido, 10);
+      expect(summary.acumulado, 135);
     });
   });
   group('BolsaProvider vendor selection hygiene', () {

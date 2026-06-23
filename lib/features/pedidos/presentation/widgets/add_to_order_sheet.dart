@@ -1455,6 +1455,7 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
       unidades,
       _selectedUnit,
       price,
+      allowPartial: true,
     );
 
     if (errorFromAdd != null) {

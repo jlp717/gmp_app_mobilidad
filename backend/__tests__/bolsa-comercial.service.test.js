@@ -217,16 +217,13 @@ describe('BolsaComercial Service', () => {
     describe('getMovimientos', () => {
         test('should return mapped movements', async () => {
             mockQuery
-                .mockResolvedValueOnce([{
-                    ID: 1, CODIGOVENDEDOR: '10  ', EJERCICIO: 2026, MES: 5,
-                    LIMITE_PCT: 3, SALDO_DISPONIBLE: 100,
-                    CONSUMIDO: 0, ACUMULADO: 0
-                }])
                 .mockResolvedValueOnce([
                     { ID: 1, TIPO: 'ACUMULACION  ', IMPORTE: 50, SALDO_ANTERIOR: 100, SALDO_POSTERIOR: 150,
                       CODIGO_ARTICULO: '', DESCRIPCION: 'test', PEDIDO_ID: 42, CREATED_AT: '2026-06-09T23:36:39.000Z',
                       LINEA_ID: 7, PRECIO_MINIMO_CONGELADO: 10, PRECIO_VENTA: 12, CANTIDAD: 3,
-                      UNIDAD_MEDIDA: 'CAJAS  ', IDEMPOTENCY_KEY: 'pedido-42-line-7-over-min  ' }
+                      UNIDAD_MEDIDA: 'CAJAS  ', IDEMPOTENCY_KEY: 'pedido-42-line-7-over-min  ',
+                      CODIGOVENDEDOR: '10', CODIGOCLIENTE: 'C001', NOMBRECLIENTE: 'Cliente Test',
+                      SERIEPEDIDO: 'P', TERMINAL: 95, NUMEROPEDIDO: 2 }
                 ]);
 
             const movs = await bolsaService.getMovimientos('10', 2026, 5);
@@ -243,16 +240,15 @@ describe('BolsaComercial Service', () => {
                 idempotencyKey: 'pedido-42-line-7-over-min',
                 pedidoId: 42,
                 fecha: '2026-06-09T23:36:39.000Z',
+                vendedor: '10',
+                clienteCodigo: 'C001',
+                clienteNombre: 'Cliente Test',
+                pedidoReferencia: 'P-095-000002',
             });
         });
 
         test('should serialize movement fecha as ISO string and numeric pedidoId/lineId', async () => {
             mockQuery
-                .mockResolvedValueOnce([{
-                    ID: 1, CODIGOVENDEDOR: '10  ', EJERCICIO: 2026, MES: 5,
-                    LIMITE_PCT: 3, SALDO_DISPONIBLE: 100,
-                    CONSUMIDO: 0, ACUMULADO: 0
-                }])
                 .mockResolvedValueOnce([
                     { ID: 2, TIPO: 'CONSUMO  ', IMPORTE: 3, SALDO_ANTERIOR: 100, SALDO_POSTERIOR: 97,
                       CODIGO_ARTICULO: 'ART-1', DESCRIPCION: 'under min', PEDIDO_ID: '42', CREATED_AT: '2026-06-09 23:36:39',
@@ -269,6 +265,40 @@ describe('BolsaComercial Service', () => {
                 importe: 3,
             });
             expect(movs[0].fecha).toMatch(/^2026-06-09T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+        });
+
+        test('should pass advanced movement filters into SQL safely', async () => {
+            mockQuery.mockResolvedValueOnce([]);
+
+            await bolsaService.getMovimientos('10', undefined, undefined, 25, {
+                dateFrom: '2026-06-01',
+                dateTo: '2026-06-30',
+                document: 'P-095-000002',
+                client: 'Galera',
+            });
+
+            const [sql, params] = mockQuery.mock.calls[0];
+            expect(sql).toMatch(/M\.CREATED_AT >= \?/);
+            expect(sql).toMatch(/M\.CREATED_AT <= \?/);
+            expect(sql).toMatch(/UPPER\(TRIM\(C\.NOMBRECLIENTE\)\) LIKE \?/);
+            expect(sql).toMatch(/EXISTS \(SELECT 1 FROM DSEDAC\.CPC P/);
+            expect(params).toEqual(expect.arrayContaining(['10', '2026-06-01 00:00:00.000', '2026-06-30 23:59:59.999', '%GALERA%', 25]));
+        });
+    });
+
+    describe('getGroupedStatus', () => {
+        test('should return grouped totals by commercial vendor', async () => {
+            mockQuery.mockResolvedValueOnce([
+                { ID: 1, CODIGOVENDEDOR: '01 ', EJERCICIO: 2026, MES: 6, LIMITE_PCT: 3, LIMITE_IMPORTE: 0, SALDO_DISPONIBLE: 100, CONSUMIDO: 20, ACUMULADO: 120 },
+                { ID: 2, CODIGOVENDEDOR: '02 ', EJERCICIO: 2026, MES: 6, LIMITE_PCT: 3, LIMITE_IMPORTE: 0, SALDO_DISPONIBLE: 50, CONSUMIDO: 10, ACUMULADO: 60 },
+            ]);
+
+            const result = await bolsaService.getGroupedStatus(['01', '02'], 2026, 6);
+
+            expect(result.vendedores).toHaveLength(2);
+            expect(result.totals).toMatchObject({ saldoDisponible: 150, consumido: 30, acumulado: 180, vendedores: 2 });
+            expect(mockQuery.mock.calls[0][0]).toMatch(/TRIM\(CODIGOVENDEDOR\) IN \(\?, \?\)/);
+            expect(mockQuery.mock.calls[0][1]).toEqual([2026, 6, '01', '02']);
         });
     });
 

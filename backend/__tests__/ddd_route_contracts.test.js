@@ -17,6 +17,7 @@ const mockPedidosService = {
   deleteOrderLine: jest.fn(),
   createOrder: jest.fn(),
   extractIdempotencyKeyFromRequest: jest.fn(() => null),
+  ensurePedidoIdempotencyKeyFromRequest: jest.fn(() => 'test-idempotency-key'),
   confirmOrder: jest.fn(),
   updateOrderStatus: jest.fn(),
   cancelOrder: jest.fn(),
@@ -783,7 +784,7 @@ describe('DDD clients/commissions cache scope contracts', () => {
 
     const cacheKeys = performanceCache.getOrFetch.mock.calls.map(function (call) { return call[0]; });
     expect(cacheKeys).toEqual(expect.arrayContaining([
-      expect.stringContaining('ddd:clients:v1:scope:v2:role=JEFE_VENTAS:user=80:visible=01:canSeeMargin=1'),
+      expect.stringContaining('ddd:clients:v2:scope:v2:role=JEFE_VENTAS:user=80:visible=01:canSeeMargin=1'),
       expect.stringContaining('ddd:commissions:v2:scope:v2:role=JEFE_VENTAS:user=80:visible=01:canSeeMargin=1'),
     ]));
   });
@@ -806,6 +807,44 @@ describe('DDD cobros route contracts', () => {
     expect(res.body.cobros).toEqual([{ id: 'c1', referencia: 'M-1' }]);
     expect(res.body.resumen.totalPendiente).toBe(42);
     expect(res.body.resumen.total).toBe(42);
+  });
+
+  test('GET /:codigoCliente/pendientes forwards filters and bypasses cache on force refresh', async () => {
+    mockCobrosRepo.getPendientes.mockResolvedValue({
+      cobros: [],
+      resumen: { totalPendiente: 0 },
+    });
+
+    const res = await request(makeApp(createCobrosRoutes(), {
+      id: '98',
+      code: '98',
+      role: 'JEFE_VENTAS',
+      isJefeVentas: true,
+      vendorCodes: ['01', '02'],
+    }))
+      .get('/C001/pendientes')
+      .query({
+        vendedorCodes: '01,02',
+        tipoDocumento: 'FAC',
+        fechaDesde: '2026-06-01',
+        fechaHasta: '2026-06-30',
+        _ts: '123',
+      });
+
+    expect(res.status).toBe(200);
+    expect(mockCobrosRepo.getPendientes).toHaveBeenCalledWith(
+      'C001',
+      expect.objectContaining({
+        userId: '98',
+        userRole: 'JEFE_VENTAS',
+        vendedorCodes: ['01', '02'],
+        tipoDocumento: 'FAC',
+        fechaDesde: '2026-06-01',
+        fechaHasta: '2026-06-30',
+      }),
+    );
+    expect(mockCache.set).not.toHaveBeenCalled();
+    expect(res.headers['cache-control']).toBe('no-store');
   });
 
   test('GET /:codigoCliente/pendientes masks generic repository SQL and ODBC errors', async () => {
