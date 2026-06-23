@@ -105,6 +105,27 @@ describe('legacy cobros route DB2 contracts', () => {
     expect(cvcSql).not.toMatch(/CVIMCO|CVIMVT|CVCDCL/i);
   });
 
+  test('GET /:cliente/pendientes maps UI document aliases and filters on CVC vencimiento', async () => {
+    mockQueryWithParams.mockImplementation(async (sql, params) => {
+      if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
+      if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
+        expect(params).toEqual(['C001', 'COB', 20260601, 20260630]);
+        return [];
+      }
+      return [];
+    });
+
+    const res = await request(makeApp())
+      .get('/C001/pendientes')
+      .query({ tipoDocumento: 'FAC', fechaDesde: '2026-06-01', fechaHasta: '2026-06-30' });
+
+    expect(res.status).toBe(200);
+    const cvcSql = mockQueryWithParams.mock.calls.find(([sql]) => /FROM\s+DSEDAC\.CVC\s+C/i.test(sql))[0];
+    expect(cvcSql).toMatch(/TRIM\(C\.TIPODOCUMENTO\)\s+IN\s+\(\?\)/i);
+    expect(cvcSql).toMatch(/C\.ANOVENCIMIENTO\s*\*\s*10000\s*\+\s*C\.MESVENCIMIENTO\s*\*\s*100\s*\+\s*C\.DIAVENCIMIENTO\)\s*>=\s*\?/i);
+    expect(cvcSql).toMatch(/C\.ANOVENCIMIENTO\s*\*\s*10000\s*\+\s*C\.MESVENCIMIENTO\s*\*\s*100\s*\+\s*C\.DIAVENCIMIENTO\)\s*<=\s*\?/i);
+  });
+
   test('GET /:cliente/estado sums real CVC pending amount without CV aliases', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (mockVendorClientScopeHit(sql)) return [{ OK: 1 }];
@@ -461,6 +482,32 @@ describe('legacy cobros vendor-scope fallback without clientCodes', () => {
       message: 'Servicio de cobros no disponible: tabla de cobros no configurada',
     });
     expect(mockQuery.mock.calls.some(([sql]) => /CREATE\s+TABLE/i.test(String(sql)))).toBe(false);
+  });
+
+  test('Db2CobrosRepository getPendientes applies due-date filters on CVC vencimiento', async () => {
+    const { Db2CobrosRepository } = require('../src/modules/cobros/infrastructure/db2-cobros-repository');
+    let cvcSql = '';
+    let cvcParams = [];
+    mockQuery.mockResolvedValue([]);
+    mockQueryWithParams.mockImplementation(async (sql, params) => {
+      if (/FROM\s+DSEDAC\.CVC\s+C/i.test(sql)) {
+        cvcSql = sql;
+        cvcParams = params;
+      }
+      return [];
+    });
+
+    const repo = new Db2CobrosRepository();
+    await repo.getPendientes('C001', {
+      tipoDocumento: 'FAC',
+      fechaDesde: '2026-06-01',
+      fechaHasta: '2026-06-30',
+    });
+
+    expect(cvcParams.slice(0, 4)).toEqual(['C001', 'COB', 20260601, 20260630]);
+    expect(cvcSql).toMatch(/TRIM\(C\.TIPODOCUMENTO\)\s+IN\s+\(\?\)/i);
+    expect(cvcSql).toMatch(/C\.ANOVENCIMIENTO\s*\*\s*10000\s*\+\s*C\.MESVENCIMIENTO\s*\*\s*100\s*\+\s*C\.DIAVENCIMIENTO\)\s*>=\s*\?/i);
+    expect(cvcSql).toMatch(/C\.ANOVENCIMIENTO\s*\*\s*10000\s*\+\s*C\.MESVENCIMIENTO\s*\*\s*100\s*\+\s*C\.DIAVENCIMIENTO\)\s*<=\s*\?/i);
   });
 
   test('POST /:cliente/registrar rejects cross-client payment before JAVIER.COBROS insert', async () => {

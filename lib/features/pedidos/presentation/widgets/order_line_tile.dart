@@ -460,17 +460,25 @@ class OrderLineTile extends StatelessWidget {
                           ),
                         ),
                       ),
-                      if (belowMinPrice) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          'Bajo mín. ${PedidosFormatters.money(line.precioMinimo, decimals: 3)}',
-                          style: const TextStyle(
-                            color: AppTheme.error,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                          ),
+                      if (belowMinPrice)
+                        Consumer(
+                          builder: (ctx, ref, _) {
+                            final visible =
+                                ref.watch(pedidosProvider).isMarginVisible;
+                            if (!visible) return const SizedBox.shrink();
+                            return Padding(
+                              padding: const EdgeInsets.only(top: 4),
+                              child: Text(
+                                'Bajo mín. ${PedidosFormatters.money(line.precioMinimo, decimals: 3)}',
+                                style: const TextStyle(
+                                  color: AppTheme.error,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            );
+                          },
                         ),
-                      ],
                     ],
                   ],
                 ),

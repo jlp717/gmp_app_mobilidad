@@ -12,7 +12,11 @@ const logger = require('../middleware/logger');
 const { v4: uuidv4 } = require('uuid');
 const { db2QualifiedTable, db2InsertSql } = require('../utils/db2-identifiers');
 const { getDb2WriteSchema } = require('../utils/db2-schemas');
-const { buildCvcVendorScopeFilter, buildClientVendorParamFilter } = require('../utils/common');
+const {
+    buildCvcVendorScopeFilter,
+    buildClientVendorParamFilter,
+    normalizeCvcTipoDocumentoFilter,
+} = require('../utils/common');
 const crypto = require('crypto');
 
 const APP_SCHEMA = getDb2WriteSchema();
@@ -429,6 +433,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         const tipoDocumento = req.query.tipoDocumento
             ? String(req.query.tipoDocumento).trim().toUpperCase()
             : '';
+        const tipoDocumentoCodes = normalizeCvcTipoDocumentoFilter(tipoDocumento);
         const fechaDesde = req.query.fechaDesde ? String(req.query.fechaDesde).trim() : '';
         const fechaHasta = req.query.fechaHasta ? String(req.query.fechaHasta).trim() : '';
 
@@ -464,16 +469,16 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
         // is unavailable in an old environment.
         const sqlParams = [codigoCliente];
         let docFilterSql = '';
-        if (tipoDocumento) {
-            docFilterSql += ' AND TRIM(C.TIPODOCUMENTO) = ?';
-            sqlParams.push(tipoDocumento);
+        if (tipoDocumentoCodes.length > 0) {
+            docFilterSql += ` AND TRIM(C.TIPODOCUMENTO) IN (${tipoDocumentoCodes.map(() => '?').join(',')})`;
+            sqlParams.push(...tipoDocumentoCodes);
         }
         if (desdeInt != null) {
-            docFilterSql += ' AND (C.ANOEMISION * 10000 + C.MESEMISION * 100 + C.DIAEMISION) >= ?';
+            docFilterSql += ' AND (C.ANOVENCIMIENTO * 10000 + C.MESVENCIMIENTO * 100 + C.DIAVENCIMIENTO) >= ?';
             sqlParams.push(desdeInt);
         }
         if (hastaInt != null) {
-            docFilterSql += ' AND (C.ANOEMISION * 10000 + C.MESEMISION * 100 + C.DIAEMISION) <= ?';
+            docFilterSql += ' AND (C.ANOVENCIMIENTO * 10000 + C.MESVENCIMIENTO * 100 + C.DIAVENCIMIENTO) <= ?';
             sqlParams.push(hastaInt);
         }
 
@@ -503,7 +508,7 @@ router.get('/:codigoCliente/pendientes', async (req, res) => {
             ORDER BY C.ANOVENCIMIENTO ASC, C.MESVENCIMIENTO ASC, C.DIAVENCIMIENTO ASC
             FETCH FIRST 100 ROWS ONLY`;
 
-        const cacheKey = `cobros:pendientes:cvc:${codigoCliente}:${tipoDocumento}:${fechaDesde}:${fechaHasta}`;
+        const cacheKey = `cobros:pendientes:cvc:${codigoCliente}:${tipoDocumentoCodes.join(',')}:${fechaDesde}:${fechaHasta}`;
         let resultado;
         try {
             resultado = await cachedQuery(

@@ -1105,7 +1105,9 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                               ),
                             ),
                             // Minimum price for selected unit
-                            if (minPriceForSelected > 0)
+                            if (ref.watch(pedidosProvider
+                                    .select((p) => p.isMarginVisible)) &&
+                                minPriceForSelected > 0)
                               Text(
                                 'Precio minimo: ${PedidosFormatters.money(minPriceForSelected, decimals: 3)} €/$selectedLabel',
                                 style: TextStyle(
@@ -1249,7 +1251,9 @@ class _AddToOrderBodyState extends ConsumerState<_AddToOrderBody> {
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    if (product.precioMinimo > 0)
+                    if (ref.watch(
+                            pedidosProvider.select((p) => p.isMarginVisible)) &&
+                        product.precioMinimo > 0)
                       Text(
                         'Min: ${PedidosFormatters.money(product.minimumPriceForUnit(_selectedUnit), decimals: 3)} €/${Product.unitLabel(_selectedUnit)}',
                         style: TextStyle(

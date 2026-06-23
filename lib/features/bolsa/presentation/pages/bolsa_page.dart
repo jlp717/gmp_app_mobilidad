@@ -5,6 +5,8 @@
 /// editar el límite mensual.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gmp_app_mobilidad/core/providers/auth_notifier.dart';
@@ -23,6 +25,23 @@ final NumberFormat _bolsaMoneyFormat =
     NumberFormat.currency(locale: 'es_ES', symbol: '€');
 
 String _bolsaMoney(double value) => _bolsaMoneyFormat.format(value);
+
+class _MonthNames {
+  static const full = [
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre',
+  ];
+}
 
 class BolsaPage extends ConsumerStatefulWidget {
   const BolsaPage({super.key});
@@ -93,10 +112,10 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
     final canEdit = user?.isJefeVentas == true;
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
         title: const Text('Bolsa Comercial'),
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.inkSurface,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -111,20 +130,23 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          // Selector "Ver como" para que JEFE_VENTAS pueda inspeccionar la
-          // bolsa de cada comercial. Para COMERCIAL no se renderiza (forceShow
-          // es false y isJefeVentas es false).
-          if (user?.isJefeVentas == true)
-            const GlobalVendorSelector(isJefeVentas: true),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: provider.refresh,
-              child: _buildBody(provider),
+      body: DecoratedBox(
+        decoration: AppTheme.appBackground(),
+        child: Column(
+          children: [
+            // Selector "Ver como" para que JEFE_VENTAS pueda inspeccionar la
+            // bolsa de cada comercial. Para COMERCIAL no se renderiza (forceShow
+            // es false y isJefeVentas es false).
+            if (user?.isJefeVentas == true)
+              const GlobalVendorSelector(isJefeVentas: true),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: provider.refresh,
+                child: _buildBody(provider),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -142,6 +164,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
       if (grouped != null) {
         return _GroupedBolsaView(
           summary: grouped,
+          provider: provider,
           onSelectVendor: (code) {
             ref.read(filterProvider.notifier).setVendor(code);
             _loadIfNeeded();
@@ -150,25 +173,12 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
       }
       return _EmptyVendorView();
     }
-    final months = const [
-      'Ene',
-      'Feb',
-      'Mar',
-      'Abr',
-      'May',
-      'Jun',
-      'Jul',
-      'Ago',
-      'Sep',
-      'Oct',
-      'Nov',
-      'Dic',
-    ];
+    final months = _MonthNames.full;
     final filtered = provider.filteredMovements;
     final monthLabel = months[(status.mes - 1).clamp(0, 11)];
     final hasChart = provider.history.isNotEmpty;
     // Header: summary, gap, progress, [chart block], gap, title, filters, gap
-    const headerBase = 7;
+    const headerBase = 8;
     final headerCount = headerBase + (hasChart ? 2 : 0);
     final bodyCount = provider.movements.isEmpty
         ? 1
@@ -186,6 +196,7 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
           if (index == slot++) {
             return _BolsaSummaryCard(status: status, monthLabel: monthLabel);
           }
+          if (index == slot++) return _BolsaPeriodSelector(provider: provider);
           if (index == slot++) return const SizedBox(height: 16);
           if (index == slot++) return _ProgressBar(status: status);
           if (hasChart) {
@@ -275,7 +286,10 @@ class _BolsaPageState extends ConsumerState<BolsaPage> {
               ),
             );
           }
-          return _MovimientoTile(movimiento: filtered[bodyIndex]);
+          return _MovimientoTile(
+            movimiento: filtered[bodyIndex],
+            canSeeMargin: canEdit,
+          );
         }
 
         return const SizedBox(height: 32);
@@ -378,17 +392,12 @@ class _BolsaSummaryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppTheme.neonBlue.withValues(alpha: 0.18),
-            AppTheme.neonPurple.withValues(alpha: 0.10),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppTheme.neonBlue.withValues(alpha: 0.35)),
+      decoration: AppTheme.premiumPanel(
+        accentColor: status.isDeficit
+            ? AppTheme.error
+            : status.isLow
+                ? AppTheme.accentAmber
+                : AppTheme.neonGreen,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -448,13 +457,22 @@ class _BolsaSummaryCard extends StatelessWidget {
               Expanded(
                 child: _MetricBox(
                   label: 'Límite',
-                  value:
-                      '${status.limitePct.toStringAsFixed(1).replaceAll('.', ',')}%',
+                  value: _bolsaMoney(status.presupuestoPeriodo),
                   color: AppTheme.neonBlue,
-                  icon: Icons.percent,
+                  icon: Icons.account_balance,
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Neto del periodo: ${status.netoPeriodo >= 0 ? '+' : '-'}${_bolsaMoney(status.netoPeriodo.abs())}',
+            style: TextStyle(
+              color:
+                  status.netoPeriodo >= 0 ? AppTheme.neonGreen : AppTheme.error,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ],
       ),
@@ -462,63 +480,175 @@ class _BolsaSummaryCard extends StatelessWidget {
   }
 }
 
+class _BolsaPeriodSelector extends StatelessWidget {
+  const _BolsaPeriodSelector({required this.provider});
+
+  final BolsaProvider provider;
+
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final years = List<int>.generate(5, (index) => now.year - 3 + index);
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 2,
+            child: _PeriodDropdown<int>(
+              value: provider.selectedMonth,
+              items: List<int>.generate(12, (index) => index + 1),
+              itemLabel: (month) => _MonthNames.full[(month - 1).clamp(0, 11)],
+              icon: Icons.calendar_month,
+              onChanged: provider.isLoading
+                  ? null
+                  : (month) {
+                      if (month == null) return;
+                      unawaited(provider.setPeriod(
+                        year: provider.selectedYear,
+                        month: month,
+                      ));
+                    },
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: _PeriodDropdown<int>(
+              value: provider.selectedYear,
+              items: years,
+              itemLabel: (year) => year.toString(),
+              icon: Icons.event,
+              onChanged: provider.isLoading
+                  ? null
+                  : (year) {
+                      if (year == null) return;
+                      unawaited(provider.setPeriod(
+                        year: year,
+                        month: provider.selectedMonth,
+                      ));
+                    },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PeriodDropdown<T> extends StatelessWidget {
+  const _PeriodDropdown({
+    required this.value,
+    required this.items,
+    required this.itemLabel,
+    required this.icon,
+    required this.onChanged,
+  });
+
+  final T value;
+  final List<T> items;
+  final String Function(T value) itemLabel;
+  final IconData icon;
+  final ValueChanged<T?>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return DropdownButtonFormField<T>(
+      value: value,
+      isExpanded: true,
+      dropdownColor: AppTheme.darkSurface,
+      iconEnabledColor: Colors.white70,
+      decoration: InputDecoration(
+        isDense: true,
+        prefixIcon: Icon(icon, color: AppTheme.neonBlue, size: 17),
+        filled: true,
+        fillColor: AppTheme.darkSurface,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+      ),
+      style: const TextStyle(color: Colors.white, fontSize: 12),
+      items: items
+          .map(
+            (item) => DropdownMenuItem<T>(
+              value: item,
+              child: Text(itemLabel(item), overflow: TextOverflow.ellipsis),
+            ),
+          )
+          .toList(growable: false),
+      onChanged: onChanged,
+    );
+  }
+}
+
 class _GroupedBolsaView extends StatelessWidget {
   const _GroupedBolsaView({
     required this.summary,
+    required this.provider,
     required this.onSelectVendor,
   });
 
   final BolsaGroupedSummary summary;
+  final BolsaProvider provider;
   final void Function(String vendedorCode) onSelectVendor;
 
   @override
   Widget build(BuildContext context) {
     final vendedores = summary.vendedores;
     return ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: vendedores.isEmpty ? 4 : vendedores.length + 3,
-        itemBuilder: (context, index) {
-          if (index == 0) {
-            return _GroupedSummaryCard(summary: summary);
-          }
-          if (index == 1) return const SizedBox(height: 16);
-          if (index == 2) {
-            return Padding(
-              padding: const EdgeInsets.only(left: 4, bottom: 8),
-              child: Text(
-                'Distribucion por comercial',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: Responsive.fontSize(
-                    context,
-                    small: 14,
-                    large: 16,
-                  ),
-                  fontWeight: FontWeight.bold,
+      padding: const EdgeInsets.all(16),
+      itemCount: vendedores.isEmpty ? 6 : vendedores.length + 5,
+      itemBuilder: (context, index) {
+        if (index == 0) {
+          return _BolsaPeriodSelector(provider: provider);
+        }
+        if (index == 1) return const SizedBox(height: 16);
+        if (index == 2) {
+          return _GroupedSummaryCard(summary: summary);
+        }
+        if (index == 3) return const SizedBox(height: 16);
+        if (index == 4) {
+          return Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            child: Text(
+              'Distribucion por comercial',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: Responsive.fontSize(
+                  context,
+                  small: 14,
+                  large: 16,
                 ),
+                fontWeight: FontWeight.bold,
               ),
-            );
-          }
-          if (vendedores.isEmpty) {
-            return Container(
-              padding: const EdgeInsets.all(20),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppTheme.darkSurface,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Text(
-                'No hay movimientos de bolsa este mes',
-                style: TextStyle(color: Colors.white54),
-              ),
-            );
-          }
-          final status = vendedores[index - 3];
-          return _GroupedVendorTile(
-            status: status,
-            onTap: () => onSelectVendor(status.vendedor),
+            ),
           );
-        },
+        }
+        if (vendedores.isEmpty) {
+          return Container(
+            padding: const EdgeInsets.all(20),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: AppTheme.darkSurface,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Text(
+              'No hay movimientos de bolsa este mes',
+              style: TextStyle(color: Colors.white54),
+            ),
+          );
+        }
+        final status = vendedores[index - 5];
+        return _GroupedVendorTile(
+          status: status,
+          onTap: () => onSelectVendor(status.vendedor),
+        );
+      },
     );
   }
 }
@@ -630,8 +760,10 @@ class _GroupedVendorTile extends StatelessWidget {
           ),
         ),
         subtitle: Text(
-          'Acum. ${_bolsaMoney(status.acumulado)} · Cons. ${_bolsaMoney(status.consumido)}',
+          'Acum. ${_bolsaMoney(status.acumulado)} · Cons. ${_bolsaMoney(status.consumido)} · Uso ${status.porcentajeConsumido.toStringAsFixed(1).replaceAll('.', ',')}%',
           style: const TextStyle(color: Colors.white54, fontSize: 11),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
         ),
         trailing: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -671,8 +803,8 @@ class _MetricBox extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(10),
+        color: AppTheme.inkSurface.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Column(
@@ -717,6 +849,13 @@ class _ProgressBar extends StatelessWidget {
           child: Text(
             'Consumo del periodo: ${status.porcentajeConsumido.toStringAsFixed(1).replaceAll('.', ',')}%',
             style: const TextStyle(color: Colors.white70, fontSize: 12),
+          ),
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 4, bottom: 6),
+          child: Text(
+            '${_bolsaMoney(status.consumido)} usados sobre ${_bolsaMoney(status.presupuestoPeriodo)}',
+            style: const TextStyle(color: Colors.white38, fontSize: 11),
           ),
         ),
         ClipRRect(
@@ -1023,8 +1162,7 @@ class _FilterTextField extends StatelessWidget {
         ),
         filled: true,
         fillColor: AppTheme.darkSurface,
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.10)),
@@ -1045,8 +1183,12 @@ class _FilterTextField extends StatelessWidget {
 }
 
 class _MovimientoTile extends StatelessWidget {
-  const _MovimientoTile({required this.movimiento});
+  const _MovimientoTile({
+    required this.movimiento,
+    required this.canSeeMargin,
+  });
   final BolsaMovimiento movimiento;
+  final bool canSeeMargin;
 
   @override
   Widget build(BuildContext context) {
@@ -1065,11 +1207,13 @@ class _MovimientoTile extends StatelessWidget {
     final clienteLabel = movimiento.displayCliente;
 
     return Card(
-      color: AppTheme.darkSurface,
+      color: AppTheme.softPanel,
+      elevation: 0,
+      surfaceTintColor: Colors.transparent,
       margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(color: color.withValues(alpha: 0.2), width: 0.5),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        side: BorderSide(color: color.withValues(alpha: 0.24), width: 0.8),
       ),
       child: ListTile(
         isThreeLine: extraDetail != null || movimiento.descripcion.isNotEmpty,
@@ -1153,11 +1297,12 @@ class _MovimientoTile extends StatelessWidget {
       if (movimiento.displayPedido.isNotEmpty) movimiento.displayPedido,
       if (movimiento.lineId != null) 'Línea ${movimiento.lineId}',
       if (movimiento.cantidad != null) 'Cant. ${_formatQuantityWithUnit()}',
-      if (movimiento.precioMinimoCongelado != null)
+      if (canSeeMargin && movimiento.precioMinimoCongelado != null)
         'Mín. ${_formatMoney(movimiento.precioMinimoCongelado!)}',
-      if (movimiento.precioVenta != null)
+      if (canSeeMargin && movimiento.precioVenta != null)
         'Venta ${_formatMoney(movimiento.precioVenta!)}',
-      if (movimiento.precioMinimoCongelado != null &&
+      if (canSeeMargin &&
+          movimiento.precioMinimoCongelado != null &&
           movimiento.precioVenta != null &&
           movimiento.cantidad != null)
         _formatCalculation(),

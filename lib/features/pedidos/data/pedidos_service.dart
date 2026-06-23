@@ -902,6 +902,7 @@ class OrderLine {
     this.importeCosto = 0,
     this.importeMargen = 0,
     this.porcentajeMargen = 0,
+    this.codigoIva = '2',
     this.lineDiscountPct = 0,
     this.ivaRate = 0.21,
     this.unidadesFraccion = 0,
@@ -916,6 +917,9 @@ class OrderLine {
   factory OrderLine.fromJson(Map<String, dynamic> json) {
     final rawMovements = json['bolsaMovements'] as List? ?? const [];
     final rawImpact = json['bolsaImpact'];
+    final codigoIva =
+        (json['codigoIva'] ?? json['CODIGOIVA'] ?? '2').toString().trim();
+    final rawIvaRate = json['ivaRate'] ?? json['IVARATE'] ?? json['TIPOIVA'];
     return OrderLine(
       id: json['id'] != null ? _toInt(json['id']) : null,
       codigoArticulo: (json['codigoArticulo'] ?? json['CODIGOARTICULO'] ?? '')
@@ -942,10 +946,10 @@ class OrderLine {
       importeMargen: _toDouble(json['importeMargen'] ?? json['IMPORTEMARGEN']),
       porcentajeMargen:
           _toDouble(json['porcentajeMargen'] ?? json['PORCENTAJEMARGEN']),
-      ivaRate: _toDouble(
-        json['ivaRate'] ?? json['IVARATE'] ?? json['TIPOIVA'],
-        fallback: 0.21,
-      ),
+      codigoIva: codigoIva.isEmpty ? '2' : codigoIva,
+      ivaRate: rawIvaRate == null
+          ? ivaRateFromCode(codigoIva)
+          : normalizeIvaRate(rawIvaRate, fallback: ivaRateFromCode(codigoIva)),
       unidadesFraccion:
           _toDouble(json['unidadesFraccion'] ?? json['UNIDADESFRACCION']),
       claseLinea:
@@ -986,6 +990,7 @@ class OrderLine {
   double importeCosto;
   double importeMargen;
   double porcentajeMargen;
+  String codigoIva;
   double ivaRate; // e.g. 0.21, 0.10, 0.04, 0.0
   double unidadesFraccion; // Support for dual-field unit logic
   String claseLinea;
@@ -1009,6 +1014,7 @@ class OrderLine {
         'precioTarifa': precioTarifa,
         'precioTarifaCliente': precioTarifaCliente,
         'precioMinimo': precioMinimo,
+        'codigoIva': codigoIva,
         'ivaRate': ivaRate,
         'claseLinea': claseLinea,
         'tipoLinea': tipoLinea,
@@ -1631,6 +1637,7 @@ class PedidosService {
     String? family,
     String? marca,
     String? prefamily,
+    bool includeIva = false,
     int limit = 50,
     int offset = 0,
     bool forceRefresh = false,
@@ -1639,6 +1646,7 @@ class PedidosService {
       'vendedorCodes': vendedorCodes,
       'limit': limit.toString(),
       'offset': offset.toString(),
+      'includeIva': includeIva ? 'true' : 'false',
     };
     if (search != null && search.isNotEmpty) params['search'] = search;
     if (clientCode != null && clientCode.isNotEmpty) {
@@ -1658,6 +1666,7 @@ class PedidosService {
       family ?? '',
       marca ?? '',
       prefamily ?? '',
+      includeIva ? 'iva' : 'base',
       limit,
       offset,
     ].join(':');
@@ -1682,6 +1691,7 @@ class PedidosService {
   static Future<ProductDetail> getProductDetail(
     String code, {
     String? clientCode,
+    bool includeIva = false,
   }) async {
     final trimmedCode = code.trim();
     if (trimmedCode.isEmpty) {
@@ -1689,12 +1699,14 @@ class PedidosService {
     }
     final params = <String, dynamic>{};
     if (clientCode != null) params['clientCode'] = clientCode;
+    params['includeIva'] = includeIva ? 'true' : 'false';
 
     try {
       final response = await ApiClient.get(
         '$_base/products/$trimmedCode',
         queryParameters: params,
-        cacheKey: 'pedidos:detail:$trimmedCode:${clientCode ?? ''}',
+        cacheKey:
+            'pedidos:detail:$trimmedCode:${clientCode ?? ''}:${includeIva ? 'iva' : 'base'}',
         cacheTTL: const Duration(minutes: 10),
       );
       final detail = ProductDetail.fromJson(response);
@@ -1829,8 +1841,7 @@ class PedidosService {
         payload,
         syncType: 'create_order',
       );
-      // Invalidate orders cache
-      CacheService.invalidateByPrefix('pedidos:orders:');
+      await invalidateOrderMutationCaches();
       return _normalizeOrderResponse(response);
     } catch (e) {
       _debugLog('[PedidosService] Error createOrder: $e');
@@ -2038,6 +2049,30 @@ class PedidosService {
     await CacheService.invalidateByPrefix('pedidos:albaran:');
   }
 
+  static Future<void> invalidateOrderMutationCaches({int? orderId}) async {
+    final futures = <Future<void>>[
+      CacheService.invalidateByPrefix('pedidos:orders:'),
+      CacheService.invalidateByPrefix('pedidos:stats:'),
+      CacheService.invalidateByPrefix('pedidos:yoy:'),
+      CacheService.invalidateByPrefix('pedidos:delivery:'),
+      CacheService.invalidateByPrefix('cobros:pending-summary:'),
+      CacheService.invalidateByPrefix('cobros:pendientes:'),
+      CacheService.invalidateByPrefix('cobros:estado:'),
+      CacheService.invalidateByPrefix('bolsa:status:'),
+      CacheService.invalidateByPrefix('bolsa:movements:'),
+      CacheService.invalidateByPrefix('bolsa:history:'),
+      CacheService.invalidateByPrefix('bolsa:grouped:'),
+    ];
+    if (orderId != null) {
+      futures.add(CacheService.invalidate('pedidos:order:$orderId'));
+      futures.add(CacheService.invalidate('pedidos:albaran:$orderId'));
+    } else {
+      futures.add(CacheService.invalidateByPrefix('pedidos:order:'));
+      futures.add(CacheService.invalidateByPrefix('pedidos:albaran:'));
+    }
+    await Future.wait(futures);
+  }
+
   static Future<void> addLine(int orderId, OrderLine line) async {
     try {
       await OfflineAwareApi.put(
@@ -2112,16 +2147,7 @@ class PedidosService {
         '$_base/$orderId/confirm',
         data: data,
       );
-      await Future.wait([
-        CacheService.invalidate('pedidos:order:$orderId'),
-        CacheService.invalidate('pedidos:albaran:$orderId'),
-        CacheService.invalidateByPrefix('pedidos:orders:'),
-        CacheService.invalidateByPrefix('pedidos:delivery:'),
-        CacheService.invalidateByPrefix('bolsa:status:'),
-        CacheService.invalidateByPrefix('bolsa:movements:'),
-        CacheService.invalidateByPrefix('bolsa:history:'),
-        CacheService.invalidateByPrefix('bolsa:grouped:'),
-      ]);
+      await invalidateOrderMutationCaches(orderId: orderId);
       return _normalizeOrderResponse(response);
     } on OfflineException {
       // Offline: return optimistic result (queued)
@@ -2158,35 +2184,15 @@ class PedidosService {
     }
   }
 
-  static Future<void> cancelOrder(int orderId) async {
+  static Future<void> deleteDraftOrder(int orderId) async {
     try {
       await OfflineAwareApi.put(
         '$_base/$orderId/cancel',
-        syncType: 'cancel_order',
+        syncType: 'delete_draft_order',
       );
-      CacheService.invalidate('pedidos:order:$orderId');
-      CacheService.invalidateByPrefix('pedidos:orders:');
+      await invalidateOrderMutationCaches(orderId: orderId);
     } catch (e) {
-      _debugLog('[PedidosService] Error cancelOrder: $e');
-      rethrow;
-    }
-  }
-
-  static Future<Map<String, dynamic>> updateOrderStatus(
-    int orderId,
-    String status,
-  ) async {
-    try {
-      final response = await OfflineAwareApi.put(
-        '$_base/$orderId/status',
-        data: {'status': status},
-        syncType: 'update_order_status',
-      );
-      CacheService.invalidate('pedidos:order:$orderId');
-      CacheService.invalidateByPrefix('pedidos:orders:');
-      return response;
-    } catch (e) {
-      _debugLog('[PedidosService] Error updateOrderStatus: $e');
+      _debugLog('[PedidosService] Error deleteDraftOrder: $e');
       rethrow;
     }
   }
@@ -2308,6 +2314,24 @@ double ivaRateFromCode(String? code) {
   final normalized = (code ?? '').trim();
   if (normalized.isEmpty || normalized == '0') return kIvaRateDefault;
   return kIvaRatesByCode[normalized] ?? kIvaRateDefault;
+}
+
+double normalizeIvaRate(dynamic value, {double fallback = kIvaRateDefault}) {
+  if (value == null) return fallback;
+  final raw = value is num
+      ? value.toDouble()
+      : double.tryParse(value.toString().replaceAll(',', '.'));
+  if (raw == null || raw < 0) return fallback;
+  return raw > 1 ? raw / 100 : raw;
+}
+
+String ivaPercentLabel(dynamic value) {
+  final rate = normalizeIvaRate(value, fallback: 0);
+  final pct = rate * 100;
+  if ((pct - pct.roundToDouble()).abs() < 0.001) {
+    return '${pct.round()}%';
+  }
+  return '${pct.toStringAsFixed(1)}%';
 }
 
 String ivaLabelFromCode(String? code) {

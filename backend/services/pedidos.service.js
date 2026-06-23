@@ -23,8 +23,8 @@ const DELETE_STOCK_RESERVE_BY_PEDIDO_SQL = ERP_SCHEMA === 'DSEDAC'
     ? 'DELETE FROM DSEDAC.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?'
     : 'DELETE FROM JAVIER.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?';
 const SELECT_ORDER_VENDOR_FOR_AUTH_SQL = ERP_SCHEMA === 'DSEDAC'
-    ? 'SELECT ID, TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR FROM DSEDAC.PEDIDOS_CAB WHERE ID = ?'
-    : 'SELECT ID, TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR FROM JAVIER.PEDIDOS_CAB WHERE ID = ?';
+    ? 'SELECT ID, TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR, TRIM(CODIGOCLIENTEALBARAN) AS CODIGOCLIENTE FROM DSEDAC.PEDIDOS_CAB WHERE ID = ?'
+    : "SELECT ID, TRIM(CODIGOVENDEDOR) AS CODIGOVENDEDOR, TRIM(COALESCE(NULLIF(CODIGOCLIENTE, ''), CODIGOCLIENTEALBARAN)) AS CODIGOCLIENTE FROM JAVIER.PEDIDOS_CAB WHERE ID = ?";
 const logger = require('../middleware/logger');
 const { cachedQuery, invalidateOnMutation } = require('./query-optimizer');
 const { redisCache, TTL } = require('./redis-cache');
@@ -146,6 +146,7 @@ CREATE TABLE ${ERP_SCHEMA}.PEDIDOS_LIN (
     TIPOVENTA CHAR(2) DEFAULT 'CC',
     CLASELINEA CHAR(2) DEFAULT 'VT',
     ORDEN NUMERIC(4) DEFAULT 0,
+    CODIGOIVA CHAR(1) DEFAULT '2',
     CREATED_AT TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )`;
 
@@ -216,20 +217,107 @@ function resolveIvaFromCodigo(codigoIva) {
     return { codigoIva: '2', ivaRate: 0.21 };
 }
 
+function parseBooleanFlag(value) {
+    if (value === true || value === 1) return true;
+    const normalized = String(value || '').trim().toLowerCase();
+    return ['1', 'true', 'yes', 'si', 's'].includes(normalized);
+}
+
+function roundPrice(value) {
+    const number = parseFloat(value);
+    if (!Number.isFinite(number)) return 0;
+    return Math.round(number * 10000) / 10000;
+}
+
+function priceWithIva(value, ivaRate) {
+    return roundPrice(roundPrice(value) * (1 + normalizeIvaRateValue(ivaRate, 0.21)));
+}
+
+function applyProductPriceView(product, includeIva = false) {
+    if (!product) return product;
+    const view = { ...product };
+    const iva = resolveIvaFromCodigo(view.codigoIva || view.CODIGOIVA);
+    view.codigoIva = iva.codigoIva;
+    view.ivaRate = iva.ivaRate;
+    view.includeIva = parseBooleanFlag(includeIva);
+
+    const priceFields = ['precioTarifa1', 'precioMinimo', 'precioCliente', 'precioTarifaCliente'];
+    for (const field of priceFields) {
+        const base = view[field];
+        if (base === null || base === undefined) continue;
+        const sinIva = roundPrice(base);
+        const conIva = priceWithIva(sinIva, iva.ivaRate);
+        view[`${field}SinIva`] = sinIva;
+        view[`${field}ConIva`] = conIva;
+        if (view.includeIva) view[field] = conIva;
+    }
+
+    if (Array.isArray(view.tariffs)) {
+        view.tariffs = view.tariffs.map((tariff) => {
+            const next = { ...tariff };
+            const price = roundPrice(next.price);
+            next.priceSinIva = price;
+            next.priceConIva = priceWithIva(price, iva.ivaRate);
+            if (next.precioUnitario !== undefined && next.precioUnitario !== null) {
+                const unit = roundPrice(next.precioUnitario);
+                next.precioUnitarioSinIva = unit;
+                next.precioUnitarioConIva = priceWithIva(unit, iva.ivaRate);
+            }
+            if (view.includeIva) {
+                next.price = next.priceConIva;
+                if (next.precioUnitarioConIva !== undefined) {
+                    next.precioUnitario = next.precioUnitarioConIva;
+                }
+            }
+            return next;
+        });
+    }
+
+    return view;
+}
+
+function normalizeIvaRateValue(value, fallback = 0.21) {
+    if (value === null || value === undefined || value === '') return fallback;
+    const parsed = parseFloat(value);
+    if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+    return parsed > 1 ? parsed / 100 : parsed;
+}
+
+function codigoIvaFromRate(rate) {
+    const normalized = normalizeIvaRateValue(rate, null);
+    if (normalized === null) return null;
+    const found = Object.entries(IVA_RATE_BY_CODE)
+        .find(([, ivaRate]) => Math.abs(ivaRate - normalized) < 0.0001);
+    return found ? found[0] : null;
+}
+
+function resolveIvaFromLine(line = {}, fallbackCode = '2') {
+    const explicitCode = trimString(line.codigoIva ?? line.CODIGOIVA);
+    if (explicitCode) return resolveIvaFromCodigo(explicitCode);
+
+    const rawRate = line.ivaRate ?? line.IVARATE ?? line.TIPOIVA;
+    if (rawRate !== undefined && rawRate !== null && rawRate !== '') {
+        const rate = normalizeIvaRateValue(rawRate, 0.21);
+        const code = codigoIvaFromRate(rate) || fallbackCode || '2';
+        return { codigoIva: code, ivaRate: rate };
+    }
+
+    return resolveIvaFromCodigo(fallbackCode);
+}
+
 function generatePedidoIdempotencyKey() {
     return crypto.randomBytes(12).toString('hex');
 }
 
 function normalizePedidoIdempotencyKey(rawToken) {
     const token = String(rawToken || '').trim();
-    if (!/^[A-Za-z0-9_.:-]{8,128}$/.test(token)) {
-        const err = new Error('idempotencyKey/clientRequestId requerido (8-128 chars [A-Za-z0-9_.:-])');
+    if (!/^[A-Za-z0-9]{8,28}$/.test(token)) {
+        const err = new Error('idempotencyKey/clientRequestId requerido (8-28 chars [A-Za-z0-9])');
         err.code = 'INVALID_IDEMPOTENCY_KEY';
         err.status = 400;
         throw err;
     }
-    if (token.length <= 64) return token;
-    return crypto.createHash('sha256').update(token).digest('hex');
+    return token;
 }
 
 function extractIdempotencyKeyFromRequest(req) {
@@ -391,37 +479,39 @@ class OrderStateError extends Error {
     }
 }
 
-const STORAGE_ORDER_STATE = Object.freeze({
-    PENDIENTE_APROBACION: 'PEND_APROB',
-});
-
-const VALID_ORDER_STATES = ['BORRADOR', 'PENDIENTE_APROBACION', 'CONFIRMANDO', 'CONFIRMADO', 'ENVIADO', 'ANULADO'];
+const VALID_ORDER_STATES = ['BORRADOR', 'CONFIRMANDO', 'CONFIRMADO'];
 const MAX_ORDER_LINES = 200;
 const CREATE_ORDER_LINE_CONCURRENCY = 4;
+const PEDIDOS_ERP_TERMINAL = 93;
 
 const ORDER_TRANSITIONS = {
-    BORRADOR: new Set(['PENDIENTE_APROBACION', 'CONFIRMADO', 'ANULADO']),
-    PENDIENTE_APROBACION: new Set(['CONFIRMADO', 'BORRADOR', 'ANULADO']),
+    BORRADOR: new Set(['CONFIRMADO']),
     CONFIRMANDO: new Set(['CONFIRMADO', 'BORRADOR']),
-    CONFIRMADO: new Set(['ENVIADO', 'ANULADO']),
-    ENVIADO: new Set(),
-    ANULADO: new Set(),
+    CONFIRMADO: new Set(),
 };
 
 function canonicalOrderStatus(status) {
     const normalized = trimString(status).toUpperCase();
-    if (normalized === STORAGE_ORDER_STATE.PENDIENTE_APROBACION) return 'PENDIENTE_APROBACION';
-    // Map legacy PENDIENTE (w/o _APROBACION) to BORRADOR; PENDIENTE_APROBACION is its own state
-    if (normalized === 'PENDIENTE') return 'BORRADOR';
+    if (['PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION'].includes(normalized)) return 'BORRADOR';
+    if (['ENVIADO', 'ENTREGADO', 'FACTURADO'].includes(normalized)) return 'CONFIRMADO';
     return VALID_ORDER_STATES.includes(normalized) ? normalized : 'BORRADOR';
 }
 
+function publicOrderStatus(status) {
+    const normalized = canonicalOrderStatus(status);
+    if (normalized === 'CONFIRMADO') return 'CONFIRMADO';
+    return 'BORRADOR';
+}
+
 function storedOrderStatus(status) {
-    const canonical = canonicalOrderStatus(status);
-    return STORAGE_ORDER_STATE[canonical] || canonical;
+    return canonicalOrderStatus(status);
 }
 
 function isOrderTransitionAllowed(fromStatus, toStatus) {
+    const rawFrom = trimString(fromStatus).toUpperCase();
+    const rawTo = trimString(toStatus).toUpperCase();
+    if (['ENVIADO', 'ENTREGADO', 'FACTURADO', 'ANULADO'].includes(rawFrom)) return false;
+    if (rawTo !== 'BORRADOR' && rawTo !== 'CONFIRMADO') return false;
     const from = canonicalOrderStatus(fromStatus);
     const to = canonicalOrderStatus(toStatus);
     return ORDER_TRANSITIONS[from]?.has(to) === true;
@@ -436,7 +526,11 @@ async function getOrderVendorForAuth(orderId) {
         false
     );
     if (!rows || rows.length === 0) return null;
-    return { id: rows[0].ID || id, vendedorCode: trimString(rows[0].CODIGOVENDEDOR) };
+    return {
+        id: rows[0].ID || id,
+        vendedorCode: trimString(rows[0].CODIGOVENDEDOR),
+        clientCode: trimString(rows[0].CODIGOCLIENTE),
+    };
 }
 
 async function getOrderStatusForUpdate(orderId) {
@@ -466,12 +560,6 @@ function pedidosSchemaName(raw) {
     return db2Schema(raw || 'JAVIER', 'PEDIDOS_CONFIRMATION_SCHEMA');
 }
 
-function parseIntConfig(raw, fallback) {
-    const parsed = parseInt(raw, 10);
-    return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-
 function primaryPedidoCode(value) {
     return trimString(value).split(',')[0].trim();
 }
@@ -500,13 +588,8 @@ function resolvePedidoActorCodes(header = {}, userId) {
     };
 }
 
-function resolvePedidoTerminal(vendedorCode, userId) {
-    const primary = primaryPedidoCode(vendedorCode) || primaryPedidoCode(userId);
-    if (/^\d{1,3}$/.test(primary)) {
-        const parsed = parseInt(primary, 10);
-        if (parsed >= 0 && parsed <= 999) return parsed;
-    }
-    return parseIntConfig(process.env.PEDIDOS_SYSTEM_TERMINAL, 10);
+function resolvePedidoTerminal() {
+    return PEDIDOS_ERP_TERMINAL;
 }
 
 function formatPedidoNumeroAcisa(serie, terminal, numeroPedido) {
@@ -536,7 +619,7 @@ function getPedidosConfirmationTarget() {
     const exportSchema = 'DSEDAC';
     const subempresa = trimString(process.env.PEDIDOS_SYSTEM_SUBEMPRESA || 'GMP').substring(0, 3) || 'GMP';
     const serie = trimString(process.env.PEDIDOS_SYSTEM_SERIE || 'P').substring(0, 1) || 'P';
-    const terminal = parseIntConfig(process.env.PEDIDOS_SYSTEM_TERMINAL, 10);
+    const terminal = PEDIDOS_ERP_TERMINAL;
     return {
         schema,
         requestedSchema,
@@ -1189,6 +1272,7 @@ function buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, r
     const actor = resolvePedidoActorCodes(header, userId);
     const cliente = truncate(header.CODIGOCLIENTE, 10);
     const effectiveSaleType = truncate(saleType || line.TIPOVENTA || header.TIPOVENTA || 'CC', 2) || 'CC';
+    const iva = resolveIvaFromLine(line);
 
     const columns = [
         'SUBEMPRESAPEDIDO', 'EJERCICIOPEDIDO', 'SERIEPEDIDO', 'TERMINALPEDIDO', 'NUMEROPEDIDO',
@@ -1197,6 +1281,7 @@ function buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, r
         'CODIGOVENDEDOR', 'CODIGOVENDEDORCOBRO', 'CODIGOPROMOTORPREVENTA', 'CODIGOCOMERCIAL',
         'CODIGORUTA', 'CODIGOFORMAPAGO', 'CODIGOTARIFA', 'CODIGOALMACEN', 'RECARGOSN',
         'TIPOLINEA', 'TIPOVENTA', 'CLASELINEA', 'CODIGOARTICULO', 'DESCRIPCION',
+        'CODIGOIVA',
         'CANTIDADENVASES', 'CANTIDADUNIDADES', 'PRECIOVENTA', 'IMPORTEVENTA',
         'PRECIOCOSTO', 'IMPORTECOSTO', 'CAJASUNIDADES', 'PRECIOTARIFACLIENTE',
         'PRECIOTARIFA01', 'CODIGOESTADO',
@@ -1214,6 +1299,7 @@ function buildDsedacLpcInsert({ target, header, line, systemRef, deliveryPlan, r
         truncate(line.CLASELINEA || 'VT', 2) || 'VT',
         truncate(line.CODIGOARTICULO, 10),
         truncate(line.DESCRIPCION, 40),
+        iva.codigoIva,
         numberValue(line.CANTIDADENVASES),
         numberValue(line.CANTIDADUNIDADES),
         numberValue(line.PRECIOVENTA),
@@ -1454,6 +1540,7 @@ async function initPedidosTables() {
             { table: 'PEDIDOS_CAB', name: 'SYSTEM_NUMEROPEDIDO', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_CAB ADD COLUMN SYSTEM_NUMEROPEDIDO NUMERIC(6) DEFAULT 0` },
             { table: 'PEDIDOS_LIN', name: 'DESCUENTO_LINEA', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_LIN ADD COLUMN DESCUENTO_LINEA DECIMAL(5,2) DEFAULT 0` },
             { table: 'PEDIDOS_LIN', name: 'UNIDADESFRACCION', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_LIN ADD COLUMN UNIDADESFRACCION NUMERIC(10,5) DEFAULT 0` },
+            { table: 'PEDIDOS_LIN', name: 'CODIGOIVA', ddl: `ALTER TABLE ${ERP_SCHEMA}.PEDIDOS_LIN ADD COLUMN CODIGOIVA CHAR(1) DEFAULT '2'` },
         ];
 
         for (const col of additiveColumns) {
@@ -1478,7 +1565,7 @@ async function initPedidosTables() {
 // PRODUCTS
 // ============================================================================
 
-async function getProducts({ search, clientCode, family, marca, prefamily, limit = 50, offset = 0 }) {
+async function getProducts({ search, clientCode, family, marca, prefamily, includeIva = false, limit = 50, offset = 0 }) {
     const params = [];
     let where = "WHERE A.ANOBAJA = 0 AND TRIM(A.CODIGOARTICULO) <> ''";
 
@@ -1561,6 +1648,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, limit
             COALESCE(S.UNIDADES_DISP, 0) - COALESCE(RES.RES_UNI, 0) AS stockUnidades,
             COALESCE(T1.PRECIOTARIFA, 0) AS precioTarifa1,
             COALESCE(T2.PRECIOTARIFA, 0) AS precioMinimo,
+            COALESCE(CT.CODIGOTARIFA, 1) AS codigoTarifaCliente,
             COALESCE(TC.PRECIOTARIFA, 0) AS precioCliente,
             COALESCE(LC.PRECIOCOSTO, 0) AS precioCosto,
             TRIM(COALESCE(NULLIF(TRIM(A.CODIGOIVA), ''), '2')) AS codigoIva,
@@ -1603,13 +1691,14 @@ async function getProducts({ search, clientCode, family, marca, prefamily, limit
         ) RES ON A.CODIGOARTICULO = RES.CODIGOARTICULO
         LEFT JOIN DSEDAC.ARA T1 ON A.CODIGOARTICULO = T1.CODIGOARTICULO AND T1.CODIGOTARIFA = 1
         LEFT JOIN DSEDAC.ARA T2 ON A.CODIGOARTICULO = T2.CODIGOARTICULO AND T2.CODIGOTARIFA = 2
+        LEFT JOIN (
+            SELECT COALESCE(CODIGOTARIFA, 1) AS CODIGOTARIFA
+            FROM DSEDAC.CLC
+            WHERE TRIM(CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
+            FETCH FIRST 1 ROW ONLY
+        ) CT ON 1 = 1
         LEFT JOIN DSEDAC.ARA TC ON A.CODIGOARTICULO = TC.CODIGOARTICULO
-            AND TC.CODIGOTARIFA = (
-                SELECT CLC.CODIGOTARIFA
-                FROM DSEDAC.CLC CLC
-                WHERE TRIM(CLC.CODIGOCLIENTE) = CAST(? AS VARCHAR(10))
-                FETCH FIRST 1 ROW ONLY
-            )
+            AND TC.CODIGOTARIFA = CT.CODIGOTARIFA
         LEFT JOIN (
             SELECT TRIM(CODIGOARTICULO) AS CA, PRECIOCOSTO,
                 ROW_NUMBER() OVER (PARTITION BY TRIM(CODIGOARTICULO) ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC) AS RN
@@ -1650,7 +1739,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, limit
                 unitType = 'caja'; // Solo cajas
             }
 
-            return {
+            const product = {
                 code: (r.CODE || '').trim(),
                 name: (r.NAME || '').trim(),
                 brand: (r.BRAND || '').trim(),
@@ -1665,7 +1754,9 @@ async function getProducts({ search, clientCode, family, marca, prefamily, limit
                 stockUnidades: parseFloat(r.STOCKUNIDADES) || 0,
                 precioTarifa1: parseFloat(r.PRECIOTARIFA1) || 0,
                 precioMinimo: parseFloat(r.PRECIOMINIMO) || 0,
+                codigoTarifaCliente: parseInt(r.CODIGOTARIFACLIENTE, 10) || 1,
                 precioCliente: parseFloat(r.PRECIOCLIENTE) || 0,
+                precioTarifaCliente: parseFloat(r.PRECIOCLIENTE) || 0,
                 precioCosto: parseFloat(r.PRECIOCOSTO) || 0,
                 ...resolveIvaFromCodigo((r.CODIGOIVA || '2').toString().trim()),
                 formato: (r.FORMATO || '').trim(),
@@ -1677,6 +1768,7 @@ async function getProducts({ search, clientCode, family, marca, prefamily, limit
                 hasPurchased: hasPurchased === 1,
                 yoyChange: salesPY > 0 ? ((salesTY - salesPY) / salesPY * 100) : (salesTY > 0 ? 100 : 0),
             };
+            return applyProductPriceView(product, includeIva);
         });
     } catch (error) {
         logger.error(`[PEDIDOS] getProducts error: ${error.message}`);
@@ -1688,13 +1780,14 @@ async function getProducts({ search, clientCode, family, marca, prefamily, limit
 // PRODUCT DETAIL (with Circuit Breaker protection)
 // ============================================================================
 
-async function getProductDetail(code, clientCode) {
+async function getProductDetail(code, clientCode, options = {}) {
     const trimCode = truncate(code, 10);
     const trimClient = clientCode ? truncate(clientCode, 10) : undefined;
+    const includeIva = parseBooleanFlag(options.includeIva);
     const cacheKey = `product:detail:${trimCode}:${trimClient || 'all'}`;
 
     const cached = await redisCache.get('route', cacheKey);
-    if (cached) return cached;
+    if (cached) return applyProductPriceView(cached, includeIva);
 
     try {
         const result = await productsBreaker.execute(
@@ -1703,10 +1796,11 @@ async function getProductDetail(code, clientCode) {
         );
         
         if (result) await redisCache.set('route', cacheKey, result, TTL.MEDIUM);
-        return result;
+        return applyProductPriceView(result, includeIva);
     } catch (error) {
         logger.error(`[PEDIDOS] getProductDetail CB error: ${error.message}`);
-        return getProductDetailRaw(trimCode, trimClient);
+        const result = await getProductDetailRaw(trimCode, trimClient);
+        return applyProductPriceView(result, includeIva);
     }
 }
 
@@ -2197,13 +2291,14 @@ function buildLocalPedidoLineInsert({
     const actor = resolvePedidoActorCodes({ CODIGOVENDEDOR: vendedorCode }, userId);
     const effectiveTerminal = integerValue(terminal) || resolvePedidoTerminal(vendedorCode, userId);
     const cliente = (clientCode || '').trim().substring(0, 10);
+    const iva = resolveIvaFromLine(line);
     const columns = [
         'PEDIDO_ID', 'SECUENCIA', 'CODIGOARTICULO', 'DESCRIPCION',
         'CANTIDADENVASES', 'CANTIDADUNIDADES', 'UNIDADMEDIDA', 'UNIDADESCAJA',
         'PRECIOVENTA', 'PRECIOCOSTO', 'PRECIOTARIFA', 'PRECIOTARIFACLIENTE',
         'PRECIOMINIMO', 'IMPORTEVENTA', 'IMPORTECOSTO', 'IMPORTEMARGEN',
         'PORCENTAJEMARGEN', 'DESCUENTO_LINEA', 'TIPOLINEA', 'TIPOVENTA',
-        'CLASELINEA', 'ORDEN',
+        'CLASELINEA', 'ORDEN', 'CODIGOIVA',
         'SUBEMPRESAPEDIDO', 'EJERCICIOPEDIDO', 'SERIEPEDIDO', 'TERMINALPEDIDO',
         'NUMEROPEDIDO', 'SECUENCIAPEDIDO', 'DIADOCUMENTO', 'MESDOCUMENTO',
         'ANODOCUMENTO', 'HORADOCUMENTO', 'CODIGOCLIENTEALBARAN',
@@ -2223,7 +2318,7 @@ function buildLocalPedidoLineInsert({
         amounts.importeVenta, amounts.importeCosto, amounts.importeMargen,
         Math.round(amounts.pctMargen * 100) / 100,
         amounts.descuentoLinea,
-        line.tipoLinea || 'R', line.tipoventa || tipoventa, line.claseLinea || 'VT', sequence,
+        line.tipoLinea || 'R', line.tipoventa || tipoventa, line.claseLinea || 'VT', sequence, iva.codigoIva,
         target.subempresa, ejercicio, target.serie, effectiveTerminal,
         numeroPedido, sequence, dia, mes,
         ano, hora, cliente,
@@ -2246,13 +2341,14 @@ function buildLegacyPedidoLineInsert({
     line,
     amounts,
 }) {
+    const iva = resolveIvaFromLine(line);
     const columns = [
         'PEDIDO_ID', 'SECUENCIA', 'CODIGOARTICULO', 'DESCRIPCION',
         'CANTIDADENVASES', 'CANTIDADUNIDADES', 'UNIDADMEDIDA', 'UNIDADESCAJA',
         'PRECIOVENTA', 'PRECIOCOSTO', 'PRECIOTARIFA', 'PRECIOTARIFACLIENTE',
         'PRECIOMINIMO', 'IMPORTEVENTA', 'IMPORTECOSTO', 'IMPORTEMARGEN',
         'PORCENTAJEMARGEN', 'DESCUENTO_LINEA', 'TIPOLINEA', 'TIPOVENTA',
-        'CLASELINEA', 'ORDEN',
+        'CLASELINEA', 'ORDEN', 'CODIGOIVA',
     ];
     const params = [
         pedidoId, sequence,
@@ -2265,7 +2361,7 @@ function buildLegacyPedidoLineInsert({
         amounts.importeVenta, amounts.importeCosto, amounts.importeMargen,
         Math.round(amounts.pctMargen * 100) / 100,
         amounts.descuentoLinea,
-        line.tipoLinea || 'R', line.tipoventa || tipoventa, line.claseLinea || 'VT', sequence,
+        line.tipoLinea || 'R', line.tipoventa || tipoventa, line.claseLinea || 'VT', sequence, iva.codigoIva,
     ];
 
     return {
@@ -2300,6 +2396,32 @@ async function getClientTariffsForLines(clientCode, lines) {
         logger.warn(`[PEDIDOS] Client tariff prefetch skipped: ${error.message}`);
     }
     return tariffsByCode;
+}
+
+async function getArticleIvaCodesForLines(lines) {
+    const articleCodes = [...new Set((lines || [])
+        .map(line => truncate(line.codigoArticulo || line.CODIGOARTICULO, 10))
+        .filter(Boolean))];
+    const ivaByCode = new Map();
+    if (articleCodes.length === 0) return ivaByCode;
+
+    const placeholders = articleCodes.map(() => '?').join(',');
+    const sql = `
+        SELECT TRIM(CODIGOARTICULO) AS CODIGOARTICULO,
+               TRIM(COALESCE(NULLIF(TRIM(CODIGOIVA), ''), '2')) AS CODIGOIVA
+          FROM DSEDAC.ART
+         WHERE TRIM(CODIGOARTICULO) IN (${placeholders})`;
+
+    try {
+        const rows = await queryWithParams(sql, articleCodes, false);
+        for (const row of rows || []) {
+            const code = truncate(row.CODIGOARTICULO, 10);
+            if (code) ivaByCode.set(code, trimString(row.CODIGOIVA) || '2');
+        }
+    } catch (error) {
+        logger.warn(`[PEDIDOS] Article IVA prefetch skipped: ${error.message}`);
+    }
+    return ivaByCode;
 }
 
 async function createOrder({
@@ -2433,18 +2555,31 @@ async function createOrder({
     if (!pedidoId) throw new Error('Failed to retrieve created order ID');
 
     const tariffT0 = Date.now();
-    const clientTariffs = await getClientTariffsForLines(clientCode, lines);
-    logger.info(`[PEDIDOS] createOrder stage=tariff_prefetch pedidoId=${pedidoId} lineCount=${lineCount} durationMs=${Date.now() - tariffT0}`);
+    const [clientTariffs, articleIvaCodes] = await Promise.all([
+        getClientTariffsForLines(clientCode, lines),
+        getArticleIvaCodesForLines(lines),
+    ]);
+    logger.info(`[PEDIDOS] createOrder stage=line_defaults_prefetch pedidoId=${pedidoId} lineCount=${lineCount} durationMs=${Date.now() - tariffT0}`);
     const lineContexts = lines.map((ln, index) => {
         const articleCode = truncate(ln.codigoArticulo || ln.CODIGOARTICULO, 10);
         const clientTariff = clientTariffs.get(articleCode) || 0;
+        const productIvaCode = articleIvaCodes.get(articleCode);
+        const iva = productIvaCode
+            ? resolveIvaFromCodigo(productIvaCode)
+            : resolveIvaFromLine(ln);
         const line = clientTariff > 0
             ? {
                 ...ln,
                 precioTarifa: ln.precioTarifa ?? clientTariff,
                 precioTarifaCliente: ln.precioTarifaCliente ?? clientTariff,
+                codigoIva: iva.codigoIva,
+                ivaRate: iva.ivaRate,
             }
-            : ln;
+            : {
+                ...ln,
+                codigoIva: iva.codigoIva,
+                ivaRate: iva.ivaRate,
+            };
         let cantidadEnvases = parseFloat(line.cantidadEnvases) || 0;
         let cantidadUnidades = parseFloat(line.cantidadUnidades) || parseFloat(line.cantidad) || 0;
         let unidadesCaja = parseFloat(line.unidadesCaja) || 1;
@@ -2639,7 +2774,9 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
             C.SYSTEM_EJERCICIOPEDIDO, TRIM(C.SYSTEM_SERIEPEDIDO) AS SYSTEM_SERIEPEDIDO,
             C.SYSTEM_TERMINALPEDIDO, C.SYSTEM_NUMEROPEDIDO,
             C.CREATED_AT, C.UPDATED_AT,
-            COALESCE(LC.LINE_COUNT, 0) AS LINE_COUNT
+            COALESCE(LC.LINE_COUNT, 0) AS LINE_COUNT,
+            COALESCE(BM.BOLSA_MOV_COUNT, 0) AS BOLSA_MOV_COUNT,
+            COALESCE(BM.BOLSA_NETO, 0) AS BOLSA_NETO
         FROM ${ERP_SCHEMA}.PEDIDOS_CAB C
         LEFT JOIN (
             SELECT PEDIDO_ID,
@@ -2649,6 +2786,14 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
             FROM ${ERP_SCHEMA}.PEDIDOS_LIN
             GROUP BY PEDIDO_ID
         ) LC ON C.ID = LC.PEDIDO_ID
+        LEFT JOIN (
+            SELECT PEDIDO_ID,
+                   COUNT(*) AS BOLSA_MOV_COUNT,
+                   COALESCE(SUM(IMPORTE), 0) AS BOLSA_NETO
+              FROM JAVIER.MOVIMIENTOS_BOLSA
+             WHERE PEDIDO_ID IS NOT NULL
+             GROUP BY PEDIDO_ID
+        ) BM ON C.ID = BM.PEDIDO_ID
         WHERE 1=1`;
 
     const params = [];
@@ -2668,8 +2813,12 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
     }
 
     if (status) {
-        sql += ` AND TRIM(C.ESTADO) = ?`;
-        params.push(storedOrderStatus(status));
+        const requestedStatus = publicOrderStatus(status);
+        if (requestedStatus === 'CONFIRMADO') {
+            sql += ` AND TRIM(C.ESTADO) IN ('CONFIRMADO', 'ENVIADO', 'ENTREGADO', 'FACTURADO')`;
+        } else {
+            sql += ` AND TRIM(C.ESTADO) IN ('BORRADOR', 'CONFIRMANDO', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION')`;
+        }
     }
 
     // Date range filters
@@ -2790,7 +2939,7 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
                 clienteName: r.NOMBRECLIENTE || `Cliente ${r.CODIGOCLIENTE}`,
                 vendedorCode: r.CODIGOVENDEDOR,
                 tipoventa: r.TIPOVENTA,
-                estado: canonicalOrderStatus(r.ESTADO),
+                estado: publicOrderStatus(r.ESTADO),
                 // Req #7: prioriza el total calculado desde lineas si IMPORTETOTAL
                 // esta a 0 (tipico en borradores sin recalcular cabecera).
                 total: parseFloat(r.IMPORTE_CALCULADO) || parseFloat(r.IMPORTETOTAL) || 0,
@@ -2815,6 +2964,8 @@ async function getOrders({ vendedorCodes, status, year, month, dateFrom, dateTo,
                 diasReparto: r.DIASREPARTO || '',
                 repartoValidado: (r.REPARTO_VALIDADO_SN || '').trim() === 'S',
                 lineCount: parseInt(r.LINE_COUNT) || 0,
+                bolsaGenerada: (parseInt(r.BOLSA_MOV_COUNT, 10) || 0) > 0,
+                bolsaNeto: roundMoney(parseFloat(r.BOLSA_NETO) || 0),
                 createdAt: r.CREATED_AT,
                 updatedAt: r.UPDATED_AT,
             };
@@ -2954,6 +3105,7 @@ async function getOrderDetail(orderId, options = {}) {
             TRIM(TIPOLINEA) AS TIPOLINEA,
             TRIM(TIPOVENTA) AS TIPOVENTA,
             TRIM(CLASELINEA) AS CLASELINEA,
+            TRIM(COALESCE(CODIGOIVA, '2')) AS CODIGOIVA,
             ORDEN, CREATED_AT
         FROM ${ERP_SCHEMA}.PEDIDOS_LIN
         WHERE PEDIDO_ID = ?
@@ -3010,7 +3162,7 @@ async function getOrderDetail(orderId, options = {}) {
                 tarifa: cab.CODIGOTARIFA,
                 almacen: cab.CODIGOALMACEN,
                 tipoventa: cab.TIPOVENTA,
-                estado: canonicalOrderStatus(cab.ESTADO),
+                estado: publicOrderStatus(cab.ESTADO),
                 total: parseFloat(cab.IMPORTETOTAL) || 0,
                 base: parseFloat(cab.IMPORTEBASE) || 0,
                 iva: parseFloat(cab.IMPORTEIVA) || 0,
@@ -3051,6 +3203,8 @@ async function getOrderDetail(orderId, options = {}) {
                     importeCosto: parseFloat(l.IMPORTECOSTO) || 0,
                     importeMargen: parseFloat(l.IMPORTEMARGEN) || 0,
                     porcentajeMargen: parseFloat(l.PORCENTAJEMARGEN) || 0,
+                    codigoIva: (l.CODIGOIVA || '2').toString().trim(),
+                    ...resolveIvaFromCodigo((l.CODIGOIVA || '2').toString().trim()),
                     tipoLinea: l.TIPOLINEA,
                     tipoventa: l.TIPOVENTA,
                     claseLinea: l.CLASELINEA,
@@ -3103,6 +3257,24 @@ function calculateLineImporte({ unidadMedida, cantidadEnvases, cantidadUnidades,
     return Math.round(importe * 100) / 100;
 }
 
+function assertPrecioWithinClientTariff({ precioVenta, tariffPrice, userRole, articleCode }) {
+    const salePrice = parseFloat(precioVenta) || 0;
+    const tariff = parseFloat(tariffPrice) || 0;
+    if (salePrice <= 0 || tariff <= 0) return true;
+
+    const role = String(userRole || '').trim().toUpperCase();
+    if (role === 'JEFE_VENTAS' || role === 'ADMIN') return true;
+
+    const deviation = Math.abs(salePrice - tariff) / tariff;
+    if (deviation > 0.5) {
+        const err = new Error(`Precio de ${articleCode || 'articulo'} se desvia mas del 50% respecto a tarifa cliente`);
+        err.code = 'PRICE_TARIFF_DEVIATION';
+        err.status = 409;
+        throw err;
+    }
+    return true;
+}
+
 // ============================================================================
 // ADD / UPDATE / DELETE LINE
 // ============================================================================
@@ -3137,6 +3309,10 @@ async function addOrderLine(pedidoId, lineData) {
     const precioCosto = parseFloat(lineData.precioCosto) || 0;
     const unidadesCaja = parseFloat(lineData.unidadesCaja) || 1;
     const unidadMedida = lineData.unidadMedida || 'CAJAS';
+    const articleIvaCodes = await getArticleIvaCodesForLines([lineData]);
+    const iva = articleIvaCodes.has(codigoArticulo)
+        ? resolveIvaFromCodigo(articleIvaCodes.get(codigoArticulo))
+        : resolveIvaFromLine(lineData);
 
     // P1-A: Use shared calculator for consistent importe across add/create
     const importeVenta = calculateLineImporte({ unidadMedida, cantidadEnvases, cantidadUnidades, unidadesCaja, precioVenta: precio });
@@ -3152,8 +3328,8 @@ async function addOrderLine(pedidoId, lineData) {
             PRECIOVENTA, PRECIOCOSTO, PRECIOTARIFA, PRECIOTARIFACLIENTE, PRECIOMINIMO,
             IMPORTEVENTA, IMPORTECOSTO, IMPORTEMARGEN, PORCENTAJEMARGEN,
             DESCUENTO_LINEA,
-            TIPOLINEA, TIPOVENTA, CLASELINEA, ORDEN
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
+            TIPOLINEA, TIPOVENTA, CLASELINEA, ORDEN, CODIGOIVA
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
 
     const params = [
         id, nextSeq,
@@ -3166,7 +3342,7 @@ async function addOrderLine(pedidoId, lineData) {
         importeVenta, importeCosto, importeMargen,
         Math.round(pctMargen * 100) / 100,
         descuentoLinea,
-        lineData.tipoLinea || 'R', lineData.tipoventa || 'CC', claseLinea, nextSeq
+        lineData.tipoLinea || 'R', lineData.tipoventa || 'CC', claseLinea, nextSeq, iva.codigoIva
     ];
 
     await queryWithParams(sql, params, false);
@@ -3194,7 +3370,7 @@ async function updateOrderLine(lineId, {
 
     // Fetch current line to get pedidoId and defaults
     const currentRows = await queryWithParams(
-        `SELECT PEDIDO_ID, CANTIDADENVASES, CANTIDADUNIDADES, PRECIOVENTA, PRECIOCOSTO, UNIDADMEDIDA, UNIDADESCAJA, CLASELINEA FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE ID = ?`,
+        `SELECT PEDIDO_ID, CANTIDADENVASES, CANTIDADUNIDADES, PRECIOVENTA, PRECIOCOSTO, UNIDADMEDIDA, UNIDADESCAJA, CLASELINEA, TRIM(COALESCE(CODIGOIVA, '2')) AS CODIGOIVA FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE ID = ?`,
         [id]
     );
     if (!currentRows || currentRows.length === 0) throw new Error('Line not found');
@@ -3280,6 +3456,14 @@ async function recalculateOrderTotals(pedidoId) {
         `SELECT 
             COALESCE(SUM(L.IMPORTEVENTA), 0) as RAW_BASE,
             COALESCE(SUM(L.IMPORTECOSTO), 0) as RAW_COSTO,
+            COALESCE(SUM(CASE
+                WHEN COALESCE(NULLIF(TRIM(L.CODIGOIVA), ''), '2') = '1' THEN L.IMPORTEVENTA * 0.10
+                WHEN COALESCE(NULLIF(TRIM(L.CODIGOIVA), ''), '2') = '2' THEN L.IMPORTEVENTA * 0.21
+                WHEN COALESCE(NULLIF(TRIM(L.CODIGOIVA), ''), '2') = '3' THEN L.IMPORTEVENTA * 0.04
+                WHEN COALESCE(NULLIF(TRIM(L.CODIGOIVA), ''), '2') = '4' THEN 0
+                WHEN COALESCE(NULLIF(TRIM(L.CODIGOIVA), ''), '2') = '5' THEN L.IMPORTEVENTA * 0.10
+                ELSE L.IMPORTEVENTA * 0.21
+            END), 0) as RAW_IVA,
             COALESCE(MAX(C.DESCUENTO_GLOBAL), 0) as DESCUENTO_GLOBAL
          FROM ${ERP_SCHEMA}.PEDIDOS_CAB C
          LEFT JOIN ${ERP_SCHEMA}.PEDIDOS_LIN L ON L.PEDIDO_ID = C.ID
@@ -3288,14 +3472,18 @@ async function recalculateOrderTotals(pedidoId) {
     );
     const rawBase = parseFloat(rows[0]?.RAW_BASE) || 0;
     const rawCosto = parseFloat(rows[0]?.RAW_COSTO) || 0;
+    const rawIva = parseFloat(rows[0]?.RAW_IVA) || 0;
     const descuentoGlobal = parseFloat(rows[0]?.DESCUENTO_GLOBAL) || 0;
     const discountFactor = 1 - (descuentoGlobal / 100);
-    const importeBase = roundMoney(rawBase);
+    const importeBaseBruta = roundMoney(rawBase);
+    const importeBase = roundMoney(rawBase * discountFactor);
+    const importeIva = roundMoney(rawIva * discountFactor);
     const importeCosto = roundMoney(rawCosto);
-    const importeTotal = roundMoney(rawBase * discountFactor);
-    const importeMargen = roundMoney(importeTotal - rawCosto);
+    const importeTotal = roundMoney(importeBase + importeIva);
+    const importeMargen = roundMoney(importeBase - rawCosto);
 
     assertMoneyFitsWriteSchema(importeBase, 'IMPORTEBASE', `pedido ${id}`);
+    assertMoneyFitsWriteSchema(importeIva, 'IMPORTEIVA', `pedido ${id}`);
     assertMoneyFitsWriteSchema(importeCosto, 'IMPORTECOSTO', `pedido ${id}`);
     assertMoneyFitsWriteSchema(importeTotal, 'IMPORTETOTAL', `pedido ${id}`);
     assertMoneyFitsWriteSchema(importeMargen, 'IMPORTEMARGEN', `pedido ${id}`);
@@ -3306,10 +3494,10 @@ async function recalculateOrderTotals(pedidoId) {
             IMPORTECOSTO = ?,
             IMPORTETOTAL = ?,
             IMPORTEMARGEN = ?,
-            IMPORTEIVA = 0,
+            IMPORTEIVA = ?,
             UPDATED_AT = CURRENT_TIMESTAMP
         WHERE ID = ?`,
-        [importeBase, importeCosto, importeTotal, importeMargen, id], false
+        [importeBase, importeCosto, importeTotal, importeMargen, importeIva, id], false
     );
 
     try {
@@ -3319,7 +3507,7 @@ async function recalculateOrderTotals(pedidoId) {
                 IMPORTEBASEIMPONIBLE1 = ?,
                 IMPORTEBRUTO = ?
              WHERE ID = ?`,
-            [importeBase, importeTotal, importeBase, id], false
+            [importeBaseBruta, importeBase, importeBaseBruta, id], false
         );
     } catch (erpColumnErr) {
         if (!isColumnNotFound(erpColumnErr)) throw erpColumnErr;
@@ -3379,7 +3567,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
     const currentState = canonicalOrderStatus(currentRows[0].ESTADO);
 
     // Si rowsAffected es 0 y el estado NO es CONFIRMANDO de este request,
-    // significa que otro proceso lo tomo (CONFIRMADO/ENVIADO) o estaba en
+    // significa que otro proceso lo tomo (CONFIRMADO) o estaba en
     // estado invalido. Algunos drivers ODBC no reportan rowsAffected, por
     // eso confiamos en el estado leido.
     if (rowsAffected === 0) {
@@ -3390,7 +3578,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
             throw err;
         }
         if (currentState !== 'BORRADOR') {
-            const err = new Error(`Solo se pueden confirmar pedidos en estado BORRADOR o PENDIENTE_APROBACION (estado actual: ${currentState})`);
+            const err = new Error(`Solo se pueden confirmar pedidos en estado BORRADOR (estado actual: ${currentState})`);
             err.code = 'PEDIDO_INVALID_STATE';
             err.status = 409;
             throw err;
@@ -3450,6 +3638,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
                 TRIM(TIPOLINEA) AS TIPOLINEA,
                 TRIM(TIPOVENTA) AS TIPOVENTA,
                 TRIM(CLASELINEA) AS CLASELINEA,
+                TRIM(COALESCE(CODIGOIVA, '2')) AS CODIGOIVA,
                 ORDEN
          FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE PEDIDO_ID = ?`, [id]);
 
@@ -3627,7 +3816,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
         logger.warn(`[PEDIDOS] Failed to invalidate cache: ${e.message}`);
     }
 
-    const order = await getOrderDetail(id);
+    let order = await getOrderDetail(id);
 
     // AUD: Audit log for order confirmation
     try {
@@ -3671,6 +3860,7 @@ async function confirmOrder(orderId, saleType, options = {}) {
             if (acumulacionAmount) {
                 await bolsaService.acumularBolsa(vendedorCode, id, acumulacionAmount, acumulacionMovements.length ? acumulacionMovements : undefined);
             }
+            order = await getOrderDetail(id);
         } catch (bolsaErr) {
             logger.error('[PEDIDOS] Bolsa movement failed for confirmed order #' + id + ': ' + bolsaErr.message);
             if (!target.shouldExportToSystem) {
@@ -3715,113 +3905,109 @@ async function cancelOrder(orderId, options = {}) {
     const id = parseInt(orderId);
     if (isNaN(id)) throw new Error('Invalid orderId');
 
-    // STATE GUARD: Get current state before cancelling
     const currentRows = await queryWithParams(
         `SELECT ESTADO, CODIGOCLIENTE, IMPORTETOTAL FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE ID = ?`,
         [id], false
     );
-    
+
     if (!currentRows || currentRows.length === 0) {
         throw new OrderStateError('ORDER_NOT_FOUND', 'Pedido no encontrado', 404);
     }
-    
+
     const currentState = canonicalOrderStatus(currentRows[0].ESTADO);
-    
-    // Prevent double-cancel
-    if (currentState === 'ANULADO') {
-        throw new OrderStateError('PEDIDO_ALREADY_ANULADO', 'El pedido ya está anulado', 409);
-    }
-    
-    // Prevent cancelling shipped orders
-    if (currentState === 'ENVIADO') {
-        throw new OrderStateError('PEDIDO_INVALID_STATE', 'No se puede anular un pedido que ya ha sido enviado', 409);
-    }
-    
-    // Only allow cancelling BORRADOR or CONFIRMADO orders
-    if (!['BORRADOR', 'CONFIRMADO'].includes(currentState)) {
-        throw new OrderStateError('PEDIDO_INVALID_STATE', `No se puede anular un pedido en estado: ${currentState}`, 409);
+
+    if (currentState === 'CONFIRMADO') {
+        throw new OrderStateError(
+            'PEDIDO_MANAGED_BY_ERP',
+            'El pedido confirmado ya lo gestiona el ERP',
+            409,
+        );
     }
 
-    // Get order info for audit before cancelling
-    let orderBefore;
-    try { orderBefore = await getOrderDetail(id); } catch (e) { /* ok */ }
+    if (currentState !== 'BORRADOR') {
+        throw new OrderStateError(
+            'PEDIDO_INVALID_STATE',
+            `Solo se pueden eliminar borradores (estado actual: ${currentState})`,
+            409,
+        );
+    }
 
-    const cancelResult = await queryWithParams(
-        `UPDATE ${ERP_SCHEMA}.PEDIDOS_CAB
-            SET ESTADO = 'ANULADO', UPDATED_AT = CURRENT_TIMESTAMP
+    const draftStateExists = `EXISTS (
+              SELECT 1 FROM ${ERP_SCHEMA}.PEDIDOS_CAB C
+               WHERE C.ID = ?
+                 AND TRIM(C.ESTADO) IN ('BORRADOR', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION')
+            )`;
+
+    await queryWithParams(
+        `DELETE FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ? AND ${draftStateExists}`,
+        [id, id],
+        false,
+    )
+        .catch(e => logger.warn(`[PEDIDOS] Stock reservation cleanup for draft #${id}: ${e.message}`));
+    await queryWithParams(
+        `DELETE FROM ${ERP_SCHEMA}.PEDIDOS_LIN WHERE PEDIDO_ID = ? AND ${draftStateExists}`,
+        [id, id],
+        false,
+    );
+
+    const deleteResult = await queryWithParams(
+        `DELETE FROM ${ERP_SCHEMA}.PEDIDOS_CAB
           WHERE ID = ?
-            AND ESTADO IN ('BORRADOR', 'CONFIRMADO')`,
+            AND TRIM(ESTADO) IN ('BORRADOR', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION')`,
         [id], false
     );
-    const cancelRowsAffected = (cancelResult && typeof cancelResult.count === 'number')
-        ? cancelResult.count
-        : (typeof cancelResult === 'number' ? cancelResult : null);
+    const deleteRowsAffected = (deleteResult && typeof deleteResult.count === 'number')
+        ? deleteResult.count
+        : (typeof deleteResult === 'number' ? deleteResult : null);
 
-    if (cancelRowsAffected === 0) {
+    if (deleteRowsAffected === 0) {
         const conflictRows = await queryWithParams(
             `SELECT ESTADO, CODIGOCLIENTE, IMPORTETOTAL FROM ${ERP_SCHEMA}.PEDIDOS_CAB WHERE ID = ?`,
             [id], false
         );
         if (!conflictRows || conflictRows.length === 0) {
-            throw new OrderStateError('ORDER_NOT_FOUND', 'Pedido no encontrado', 404);
+            return { id, deleted: true, estado: 'BORRADOR' };
         }
         const conflictState = canonicalOrderStatus(conflictRows[0].ESTADO);
-        if (conflictState === 'ANULADO') {
-            throw new OrderStateError('PEDIDO_ALREADY_ANULADO', 'El pedido ya está anulado', 409);
-        }
-        if (conflictState === 'ENVIADO') {
-            throw new OrderStateError('PEDIDO_INVALID_STATE', 'No se puede anular un pedido que ya ha sido enviado', 409);
-        }
         throw new OrderStateError(
             'PEDIDO_STATE_CONFLICT',
-            `No se pudo anular el pedido porque cambió de estado durante la operación (estado actual: ${conflictState})`,
+            `No se pudo eliminar el borrador porque cambio de estado durante la operacion (estado actual: ${conflictState})`,
             409,
         );
     }
 
-    // Release stock reservations (only if order was CONFIRMADO)
-    const releasedCodes = [];
-    if (currentState === 'CONFIRMADO') {
-        try {
-            const reservations = await queryWithParams(
-                `SELECT CODIGOARTICULO FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [id]
-            );
-            releasedCodes.push(...reservations.map(r => (r.CODIGOARTICULO || '').trim()).filter(Boolean));
-            await queryWithParams(`DELETE FROM ${ERP_SCHEMA}.PEDIDOS_STOCK_RESERVE WHERE PEDIDO_ID = ?`, [id], false);
-            logger.info(`[PEDIDOS] Stock reservations released for cancelled order #${id}`);
-        } catch (e) {
-            logger.warn(`[PEDIDOS] Stock reservation release error: ${e.message}`);
-        }
-    }
-
-    // P4-A: Invalidate stock and product cache for released products
     try {
         if (redisCache && typeof redisCache.invalidatePattern === 'function') {
-            // Las claves de cachedQuery viven bajo "gmp:query:query:pedidos:..."
-            // (namespace "query" + prefijo "query" del CacheKeyGenerator).
             await redisCache.invalidatePattern('query:query:pedidos:*');
         }
     } catch (e) {
         logger.warn(`[PEDIDOS] Failed to invalidate cache: ${e.message}`);
     }
 
-    // AUD: Audit log for cancellation
     try {
-        logger.info(`[AUDIT] âŒ ORDER_CANCELLED #${id} | Client:${currentRows[0].CODIGOCLIENTE || '?'} | Total:${currentRows[0].IMPORTETOTAL || 0} | From:${currentState} | By:${options.userId || 'SYSTEM'}`);
+        logger.info(`[AUDIT] ORDER_DRAFT_DELETED #${id} | Client:${currentRows[0].CODIGOCLIENTE || '?'} | Total:${currentRows[0].IMPORTETOTAL || 0} | By:${options.userId || 'SYSTEM'}`);
     } catch (auditErr) { /* silent */ }
 
-    return getOrderDetail(id);
+    return { id, deleted: true, estado: 'BORRADOR' };
 }
-
 // ============================================================================
-// ORDER STATUS UPDATE (for Pendiente Aprobacion)
+// ORDER STATUS UPDATE
 // ============================================================================
 
 async function updateOrderStatus(orderId, newStatus, options = {}) {
     const id = parseInt(orderId);
     if (isNaN(id)) throw new Error('Invalid orderId');
 
-    const requestedStatus = canonicalOrderStatus(newStatus);
+    const rawRequestedStatus = trimString(newStatus).toUpperCase();
+    if (rawRequestedStatus !== 'CONFIRMADO') {
+        throw new OrderStateError(
+            'INVALID_ORDER_STATUS',
+            `Estado no valido: ${newStatus}`,
+            400,
+        );
+    }
+
+    const requestedStatus = canonicalOrderStatus(rawRequestedStatus);
     if (!ORDER_TRANSITIONS[requestedStatus]) {
         throw new OrderStateError(
             'INVALID_ORDER_STATUS',
@@ -3964,7 +4150,7 @@ async function getOrderStats(vendedorCodes, dateFrom, dateTo) {
         const stats = statsRows[0] || {};
         const byStatus = {};
         for (const s of (statusRows || [])) {
-            const status = canonicalOrderStatus(s.ESTADO);
+            const status = publicOrderStatus(s.ESTADO);
             byStatus[status] = (byStatus[status] || 0) + (parseInt(s.CNT) || 0);
         }
 
@@ -5559,6 +5745,7 @@ module.exports = {
     generatePedidoIdempotencyKey,
     normalizePedidoIdempotencyKey,
     resolveIvaFromCodigo,
+    applyProductPriceView,
     buildCreateOrderPayloadHash,
     getProducts,
     searchProducts,
@@ -5596,6 +5783,7 @@ module.exports = {
     getSimilarProducts,
     searchProductsWithStock,
     calculateLineImporte,
+    assertPrecioWithinClientTariff,
     isOrderTransitionAllowed,
     canonicalOrderStatus,
     storedOrderStatus,

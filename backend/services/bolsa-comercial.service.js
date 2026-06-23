@@ -86,6 +86,7 @@ const BOLSA_HISTORIAL_MENSUAL_SQL = [
     'FROM JAVIER.BOLSA_COMERCIAL',
     'WHERE TRIM(CODIGOVENDEDOR) = ?',
     'AND (EJERCICIO > ? OR (EJERCICIO = ? AND MES >= ?))',
+    'AND (EJERCICIO < ? OR (EJERCICIO = ? AND MES <= ?))',
     'ORDER BY EJERCICIO ASC, MES ASC',
 ].join(' ');
 const BOLSA_GROUPED_STATUS_BASE_SQL = [
@@ -768,20 +769,26 @@ async function getMovimientos(vendedorCode, year, month, limit = 50, filters = {
 
 // -- Get historical monthly summary (last N months) -------------------
 
-async function getHistorialMensual(vendedorCode, months = 12) {
+async function getHistorialMensual(vendedorCode, months = 12, anchorYear, anchorMonth) {
     const code = String(vendedorCode || '').trim();
     const n = Math.min(Math.max(parseInt(months) || 12, 1), 36);
 
-    // Calcular rango: hoy hacia atras N meses (incluido el actual)
     const now = new Date();
-    const cutoff = new Date(now.getFullYear(), now.getMonth() - (n - 1), 1);
+    const parsedYear = parseInt(anchorYear, 10);
+    const parsedMonth = parseInt(anchorMonth, 10);
+    const endYear = Number.isFinite(parsedYear) ? parsedYear : now.getFullYear();
+    const endMonth = Number.isFinite(parsedMonth) ? parsedMonth : now.getMonth() + 1;
+    const boundedMonth = Math.min(Math.max(endMonth, 1), 12);
+
+    // Calcular rango: mes ancla hacia atras N meses (incluido el mes ancla)
+    const cutoff = new Date(endYear, boundedMonth - n, 1);
     const cutoffYear = cutoff.getFullYear();
     const cutoffMonth = cutoff.getMonth() + 1;
 
     // Filas existentes en BOLSA_COMERCIAL para ese rango
     const rows = await queryWithParams(
         BOLSA_HISTORIAL_MENSUAL_SQL,
-        [code, cutoffYear, cutoffYear, cutoffMonth]
+        [code, cutoffYear, cutoffYear, cutoffMonth, endYear, endYear, boundedMonth]
     );
 
     // Map por "YYYY-MM" para combinar luego

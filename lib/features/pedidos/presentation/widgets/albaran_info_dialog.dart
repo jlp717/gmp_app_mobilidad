@@ -207,6 +207,15 @@ class _AlbaranInfoBodyState extends State<_AlbaranInfoBody> {
                                       ),
                                     ),
                                   ),
+                                ] else ...[
+                                  const SizedBox(height: 8),
+                                  const Text(
+                                    'Factura pendiente de generar en ERP',
+                                    style: TextStyle(
+                                      color: Colors.white38,
+                                      fontSize: 11,
+                                    ),
+                                  ),
                                 ],
                               ],
                             ),

@@ -9,10 +9,15 @@ class AppColors {
   // BASE COLORS — Deep Space Foundation (V2 refined)
   // ============================================================================
 
-  static const Color darkBase = Color(0xFF0A0E1A);
-  static const Color darkSurface = Color(0xFF111827);
-  static const Color darkCard = Color(0xFF1F2937);
-  static const Color borderColor = Color(0xFF374151);
+  static const Color darkBase = Color(0xFF070A0F);
+  static const Color darkSurface = Color(0xFF0D141B);
+  static const Color darkCard = Color(0xFF151E27);
+  static const Color borderColor = Color(0xFF2A3644);
+
+  static const Color inkSurface = Color(0xFF0A1118);
+  static const Color raisedSurface = Color(0xFF182331);
+  static const Color softPanel = Color(0xFF101923);
+  static const Color mutedPanel = Color(0xFF202A36);
 
   // Aliases for compatibility
   static const Color backgroundColor = darkBase;
@@ -31,6 +36,11 @@ class AppColors {
   static const Color neonTeal = Color(0xFF14B8A6);
   static const Color neonElectric = Color(0xFF60A5FA);
   static const Color holoBlue = Color(0xFF2563EB);
+
+  static const Color accentMint = Color(0xFF5EEAD4);
+  static const Color accentAmber = Color(0xFFFBBF24);
+  static const Color accentRose = Color(0xFFFB7185);
+  static const Color accentIndigo = Color(0xFF818CF8);
 
   // Advanced accents
   static const Color quantumRed = Color(0xFFFF4466);
@@ -200,8 +210,28 @@ class AppColors {
     end: Alignment.bottomRight,
     colors: [
       Color(0xFF3B82F6),
-      Color(0xFF8B5CF6),
-      Color(0xFFEC4899),
+      Color(0xFF14B8A6),
+      Color(0xFFF59E0B),
+    ],
+  );
+
+  static const LinearGradient appShellGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFF070A0F),
+      Color(0xFF0B1415),
+      Color(0xFF101923),
+    ],
+    stops: [0.0, 0.55, 1.0],
+  );
+
+  static const LinearGradient panelGradient = LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [
+      Color(0xFF182331),
+      Color(0xFF101923),
     ],
   );
 
@@ -258,8 +288,8 @@ class AppColors {
   // LEGACY COLORS — Kept for compatibility with older code
   // ============================================================================
 
-  static const Color surfaceVariant = Color(0xFF111827);
-  static const Color outlineVariant = Color(0xFF374151);
+  static const Color surfaceVariant = darkSurface;
+  static const Color outlineVariant = borderColor;
   static const Color inverseSurface = Color(0xFFF9FAFB);
   static const Color inversePrimary = Color(0xFF0A0E1A);
 }

@@ -106,10 +106,8 @@ class Db2PedidosRepository extends PedidosRepository {
     const sql = `
       SELECT
         COUNT(*) as TOTAL,
-        SUM(CASE WHEN ESTADO = 'BORRADOR' THEN 1 ELSE 0 END) as BORRADORES,
-        SUM(CASE WHEN ESTADO = 'CONFIRMADO' THEN 1 ELSE 0 END) as CONFIRMADOS,
-        SUM(CASE WHEN ESTADO = 'ENVIADO' THEN 1 ELSE 0 END) as ENVIADOS,
-        SUM(CASE WHEN ESTADO = 'ANULADO' THEN 1 ELSE 0 END) as ANULADOS
+        SUM(CASE WHEN TRIM(ESTADO) IN ('BORRADOR', 'CONFIRMANDO', 'PENDIENTE', 'PEND_APROB', 'PENDIENTE_APROBACION') THEN 1 ELSE 0 END) as BORRADORES,
+        SUM(CASE WHEN TRIM(ESTADO) IN ('CONFIRMADO', 'ENVIADO', 'ENTREGADO', 'FACTURADO') THEN 1 ELSE 0 END) as CONFIRMADOS
       FROM JAVIER.PEDIDOS_CAB
       WHERE CODIGOVENDEDOR = ?
     `;
@@ -149,12 +147,12 @@ class Db2PedidosRepository extends PedidosRepository {
 
   async updateOrderStatus({ orderId, estado, userId }) {
     const pedidosService = require('../../../../services/pedidos.service');
-    return await pedidosService.updateOrderStatus(parseInt(orderId), estado);
+    return await pedidosService.updateOrderStatus(parseInt(orderId), estado, { userId });
   }
 
   async deleteOrder({ orderId, userId }) {
     const pedidosService = require('../../../../services/pedidos.service');
-    return await pedidosService.cancelOrder(parseInt(orderId));
+    return await pedidosService.cancelOrder(parseInt(orderId), { userId });
   }
 }
 

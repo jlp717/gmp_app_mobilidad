@@ -46,10 +46,18 @@ class BolsaStatus {
   final double consumido;
   final double acumulado;
 
-  /// Porcentaje del límite consumido (0-100).
+  double get presupuestoPeriodo {
+    if (limiteImporte > 0) return limiteImporte;
+    final inferred = saldoDisponible + consumido - acumulado;
+    if (inferred > 0) return inferred;
+    return acumulado > 0 ? acumulado : 0;
+  }
+
+  double get netoPeriodo => acumulado - consumido;
+
+  /// Porcentaje del presupuesto mensual consumido (0-100).
   double get porcentajeConsumido {
-    final base =
-        (limiteImporte > 0) ? limiteImporte : (acumulado > 0 ? acumulado : 0);
+    final base = presupuestoPeriodo;
     if (base <= 0) return 0;
     return (consumido / base * 100).clamp(0, 100).toDouble();
   }

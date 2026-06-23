@@ -2124,9 +2124,10 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                             style: TextStyle(
                               fontSize: compact ? 7 : 8,
                               fontWeight: FontWeight.w600,
-                              color: sales.abs() < 0.01 && prevSales.abs() < 0.01
-                                  ? AppTheme.textSecondary
-                                  : trendColor,
+                              color:
+                                  sales.abs() < 0.01 && prevSales.abs() < 0.01
+                                      ? AppTheme.textSecondary
+                                      : trendColor,
                             ),
                           ),
                         ),
@@ -2632,7 +2633,12 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             children: [
               // Product thumbnail
               GestureDetector(
-                onTap: () => _showFullscreenImage(context, imageUrl, name),
+                onTap: () => _showFullscreenImage(
+                  context,
+                  imageUrl,
+                  name,
+                  code,
+                ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(6),
                   child: Container(
@@ -2645,13 +2651,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       productName: name,
                       width: 44,
                       height: 44,
-                      headers: {
-                        'Accept': 'image/*',
-                        if (ApiClient.dio.options.headers['Authorization'] !=
-                            null)
-                          'Authorization': ApiClient
-                              .dio.options.headers['Authorization'] as String,
-                      },
+                      headers: ApiClient.authHeaders,
                       showCodeOnFallback: false,
                     ),
                   ),
@@ -3095,7 +3095,12 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
             children: [
               // Product thumbnail
               GestureDetector(
-                onTap: () => _showFullscreenImage(context, imageUrl, name),
+                onTap: () => _showFullscreenImage(
+                  context,
+                  imageUrl,
+                  name,
+                  code,
+                ),
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(6),
                   child: Container(
@@ -3108,13 +3113,7 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
                       productName: name,
                       width: 48,
                       height: 48,
-                      headers: {
-                        'Accept': 'image/*',
-                        if (ApiClient.dio.options.headers['Authorization'] !=
-                            null)
-                          'Authorization': ApiClient
-                              .dio.options.headers['Authorization'] as String,
-                      },
+                      headers: ApiClient.authHeaders,
                       showCodeOnFallback: false,
                     ),
                   ),
@@ -3588,17 +3587,14 @@ class _EnhancedClientMatrixPageState extends State<EnhancedClientMatrixPage> {
     BuildContext ctx,
     String imageUrl,
     String productName,
+    String productCode,
   ) {
     FullscreenImageViewer.show(
       ctx,
       imageUrl: imageUrl,
       productName: productName,
-      headers: {
-        'Accept': 'image/*',
-        if (ApiClient.dio.options.headers['Authorization'] != null)
-          'Authorization':
-              ApiClient.dio.options.headers['Authorization'] as String,
-      },
+      productCode: productCode,
+      headers: ApiClient.authHeaders,
     );
   }
 

@@ -61,6 +61,70 @@ function resolveClientsVendedorCodes(req, requested) {
   return { ok: true, vendedorCodes: codes.join(',') };
 }
 
+function boundedInt(value, min, max, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function normalizeClientSearch(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[%_]/g, '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .slice(0, 80)
+    .toUpperCase();
+}
+
+function normalizeClientCodes(value, max = 20) {
+  return String(value || '')
+    .split(',')
+    .map(code => code.trim().replace(/[^a-zA-Z0-9]/g, ''))
+    .filter(Boolean)
+    .slice(0, max);
+}
+
+function buildChunkedClientCodeFilter(column, codes) {
+  const cleanCodes = (Array.isArray(codes) ? codes : [])
+    .map(code => String(code || '').trim().replace(/[^a-zA-Z0-9]/g, ''))
+    .filter(Boolean);
+  if (!cleanCodes.length) return { clause: '', count: 0, chunks: 0 };
+
+  const CHUNK_SIZE = 1000;
+  const chunks = [];
+  for (let i = 0; i < cleanCodes.length; i += CHUNK_SIZE) {
+    const chunk = cleanCodes.slice(i, i + CHUNK_SIZE).map(code => `'${code}'`).join(',');
+    chunks.push(`${column} IN (${chunk})`);
+  }
+  return { clause: `AND (${chunks.join(' OR ')})`, count: cleanCodes.length, chunks: chunks.length };
+}
+
+function buildVendedorParamFilter(vendedorCodes, columnExpr) {
+  const codes = vendorCodeArrayForClientScope(vendedorCodes);
+  if (!codes.length) return { clause: '', params: [] };
+
+  const hasUnknown = codes.some(code => code.toUpperCase() === 'UNK');
+  const vendorCodes = codes.filter(code => code.toUpperCase() !== 'UNK');
+  const clauses = [];
+  const params = [];
+
+  if (vendorCodes.length > 0) {
+    clauses.push(`TRIM(${columnExpr}) IN (${vendorCodes.map(() => '?').join(',')})`);
+    params.push(...vendorCodes);
+  }
+  if (hasUnknown) {
+    clauses.push(`(${columnExpr} IS NULL OR TRIM(${columnExpr}) = '')`);
+  }
+
+  return clauses.length ? { clause: `AND (${clauses.join(' OR ')})`, params } : { clause: '', params: [] };
+}
+
+function isForceRefreshRequest(req) {
+  return req?.query?.forceRefresh != null ||
+    req?.query?.refresh != null ||
+    req?.query?._ts != null;
+}
+
 // =============================================================================
 // CLIENTS LIST (OPTIMIZED v2 - 2026-02-02)
 // =============================================================================
@@ -72,37 +136,34 @@ const getClientsHandler = async (req, res) => {
     if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
     vendedorCodes = scoped.vendedorCodes;
     const vendedorFilter = buildVendedorFilterLACLAE(vendedorCodes);
-    const isSearchQuery = !!search;
+    const safeLimit = boundedInt(limit, 1, 200, 100);
+    const safeOffset = boundedInt(offset, 0, 100000, 0);
+    const safeSearch = normalizeClientSearch(search);
+    const isSearchQuery = safeSearch.length > 0;
+    const queryParams = [];
 
-    let safeSearch = '';
     let searchFilter = '';
-    if (search) {
-      safeSearch = sanitizeForSQL(search.trim()).toUpperCase();
-      searchFilter = `AND(UPPER(C.NOMBRECLIENTE) LIKE '%${safeSearch}%'
-                      OR UPPER(C.NOMBREALTERNATIVO) LIKE '%${safeSearch}%'
-                      OR C.CODIGOCLIENTE LIKE '%${safeSearch}%'
-                      OR UPPER(C.POBLACION) LIKE '%${safeSearch}%'
-                      OR C.NIF LIKE '%${safeSearch}%')`;
+    if (safeSearch) {
+      const likeSearch = `%${safeSearch}%`;
+      searchFilter = `AND(UPPER(C.NOMBRECLIENTE) LIKE ?
+                      OR UPPER(C.NOMBREALTERNATIVO) LIKE ?
+                      OR UPPER(C.CODIGOCLIENTE) LIKE ?
+                      OR UPPER(C.POBLACION) LIKE ?
+                      OR UPPER(C.NIF) LIKE ?)`;
+      queryParams.push(likeSearch, likeSearch, likeSearch, likeSearch, likeSearch);
     }
 
     // OPTIMIZATION v3: Pre-compute allowed client codes from in-memory cache
     // This eliminates expensive NOT EXISTS and subquery route filters
     let clientCodesFilter = '';
-    if (vendedorCodes && !search) {
+    if (vendedorCodes && !safeSearch) {
       const { getClientCodesFromCache } = require('../services/laclae');
       const cachedClientCodes = getClientCodesFromCache(vendedorCodes);
 
       if (cachedClientCodes && cachedClientCodes.length > 0) {
-        // Use chunked IN clauses to handle unlimited client codes
-        // DB2 IN clause has a practical limit, so we chunk into groups of 1000
-        const CHUNK_SIZE = 1000;
-        const chunks = [];
-        for (let i = 0; i < cachedClientCodes.length; i += CHUNK_SIZE) {
-          const chunk = cachedClientCodes.slice(i, i + CHUNK_SIZE).map(c => `'${c}'`).join(',');
-          chunks.push(`C.CODIGOCLIENTE IN (${chunk})`);
-        }
-        clientCodesFilter = `AND (${chunks.join(' OR ')})`;
-        logger.info(`[CLIENTS] Using cached client codes: ${cachedClientCodes.length} clients (${chunks.length} chunks) for vendor ${vendedorCodes}`);
+        const built = buildChunkedClientCodeFilter('C.CODIGOCLIENTE', cachedClientCodes);
+        clientCodesFilter = built.clause;
+        logger.info(`[CLIENTS] Using cached client codes: ${built.count} clients (${built.chunks} chunks) for vendor ${vendedorCodes}`);
       }
     }
 
@@ -114,7 +175,7 @@ const getClientsHandler = async (req, res) => {
         : buildLaclaeBoundedClientCodesSql(vendedorCodes);
 
     // Generate Cache Key (v5 = optimized with pre-filtered client codes)
-    const cacheKey = `clients:list:v6:${vendedorCodes || 'ALL'}:${safeSearch || 'none'}:${limit}:${offset}`;
+    const cacheKey = `clients:list:v7:${vendedorCodes || 'ALL'}:${safeSearch || 'none'}:${safeLimit}:${safeOffset}`;
     // OPTIMIZATION: Longer TTL for ALL vendors (JEFE_VENTAS default)
     const isAllVendors = !vendedorCodes || vendedorCodes === 'ALL';
     const cacheTTL = isSearchQuery ? TTL.MEDIUM : (isAllVendors ? TTL.LONG : TTL.MEDIUM);
@@ -125,7 +186,8 @@ const getClientsHandler = async (req, res) => {
 
     // v6: single LACLAE CTE (one pass for stats + last vendor) — cert target p95 < 3s
     const laclaeScopeFilter = laclaeBoundedFilter || vendedorFilter.replace(/L\./g, '');
-    const clients = await cachedQuery(query, `
+    const clientQuery = (sql, params = []) => queryWithParams(sql, params, false);
+    const clients = await cachedQuery(clientQuery, `
       WITH LACLAE_SCOPED AS (
         SELECT LCCDCL, LCIMVT, LCIMCT, LCAADC, LCMMDC, LCDDDC, LCCDVD
           FROM DSED.LACLAE
@@ -181,9 +243,15 @@ const getClientsHandler = async (req, res) => {
         ${clientCodesFilter || vendorScopedCliFilter}
         ${searchFilter}
       ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
-      OFFSET ${parseInt(offset)} ROWS
-      FETCH FIRST ${parseInt(limit)} ROWS ONLY
-    `, cacheKey, cacheTTL);
+      OFFSET ${safeOffset} ROWS
+      FETCH FIRST ${safeLimit} ROWS ONLY
+    `, {
+      cacheKey,
+      ttl: cacheTTL,
+      queryType: 'clients-list',
+      params: { vendedorCodes: vendedorCodes || 'ALL', search: safeSearch || null, limit: safeLimit, offset: safeOffset },
+      skipCache: isForceRefreshRequest(req),
+    }, queryParams);
 
     const queryDuration = Date.now() - queryStart;
     logger.info(`[CLIENTS] Query completed: ${clients.length} rows in ${queryDuration}ms`);
@@ -270,7 +338,7 @@ const getClientsHandler = async (req, res) => {
           deliveryDaysShort: deliveryDaysShort
         };
       }),
-      hasMore: clients.length === parseInt(limit)
+      hasMore: clients.length === safeLimit
     });
 
     const totalDuration = Date.now() - startTime;
@@ -354,17 +422,22 @@ router.get('/compare', verifyToken, async (req, res) => {
       });
     }
 
-    // Sanitize input for IN clause
-    const clientCodes = codes.split(',')
-      .map(c => `'${sanitizeForSQL(c.trim())}'`)
-      .join(',');
+    const clientCodes = normalizeClientCodes(codes, 10);
+    if (!clientCodes.length) {
+      return res.status(400).json({
+        success: false,
+        code: 'INVALID_CLIENT_COMPARE_PARAMS',
+        error: 'Se requieren codigos de cliente validos',
+      });
+    }
+    const clientPlaceholders = clientCodes.map(() => '?').join(',');
 
     const now = getCurrentDate();
     const year = now.getFullYear();
-    const vendedorFilter = buildVendedorFilter(vendedorCodes, 'L');
+    const vendedorFilter = buildVendedorParamFilter(vendedorCodes, 'L.CODIGOVENDEDOR');
 
     // Get comparison data for each client
-    const comparison = await query(`
+    const comparison = await queryWithParams(`
       SELECT
         L.CODIGOCLIENTEALBARAN as code,
         MIN(C.NOMBRECLIENTE) as name,
@@ -379,32 +452,32 @@ router.get('/compare', verifyToken, async (req, res) => {
         MAX(L.ANODOCUMENTO * 100 + L.MESDOCUMENTO) as lastPurchase
       FROM DSEDAC.LINDTO L
       LEFT JOIN DSEDAC.CLI C ON L.CODIGOCLIENTEALBARAN = C.CODIGOCLIENTE
-      WHERE L.CODIGOCLIENTEALBARAN IN(${clientCodes})
-        AND L.ANODOCUMENTO >= ${MIN_YEAR}
+      WHERE L.CODIGOCLIENTEALBARAN IN(${clientPlaceholders})
+        AND L.ANODOCUMENTO >= ?
         AND L.TIPOVENTA IN ('CC', 'VC')
         AND L.TIPOLINEA IN ('AB', 'VT') -- Added Golden Logic
         AND L.SERIEALBARAN NOT IN ('N', 'Z')
-        ${vendedorFilter}
+        ${vendedorFilter.clause}
       GROUP BY L.CODIGOCLIENTEALBARAN
-    `);
+    `, [...clientCodes, MIN_YEAR, ...vendedorFilter.params], false);
 
     // Get monthly breakdown for each client
-    const monthlyBreakdown = await query(`
+    const monthlyBreakdown = await queryWithParams(`
       SELECT
-        CODIGOCLIENTEALBARAN as code,
-        ANODOCUMENTO as year,
-        MESDOCUMENTO as month,
-        SUM(IMPORTEVENTA) as sales
-      FROM DSEDAC.LINDTO
-      WHERE CODIGOCLIENTEALBARAN IN(${clientCodes})
-        AND ANODOCUMENTO >= ${year - 1}
-        AND TIPOVENTA IN ('CC', 'VC')
-        AND TIPOLINEA IN ('AB', 'VT')
-        AND SERIEALBARAN NOT IN ('N', 'Z')
-        ${vendedorFilter}
-      GROUP BY CODIGOCLIENTEALBARAN, ANODOCUMENTO, MESDOCUMENTO
-      ORDER BY ANODOCUMENTO, MESDOCUMENTO
-    `);
+        L.CODIGOCLIENTEALBARAN as code,
+        L.ANODOCUMENTO as year,
+        L.MESDOCUMENTO as month,
+        SUM(L.IMPORTEVENTA) as sales
+      FROM DSEDAC.LINDTO L
+      WHERE L.CODIGOCLIENTEALBARAN IN(${clientPlaceholders})
+        AND L.ANODOCUMENTO >= ?
+        AND L.TIPOVENTA IN ('CC', 'VC')
+        AND L.TIPOLINEA IN ('AB', 'VT')
+        AND L.SERIEALBARAN NOT IN ('N', 'Z')
+        ${vendedorFilter.clause}
+      GROUP BY L.CODIGOCLIENTEALBARAN, L.ANODOCUMENTO, L.MESDOCUMENTO
+      ORDER BY L.ANODOCUMENTO, L.MESDOCUMENTO
+    `, [...clientCodes, year - 1, ...vendedorFilter.params], false);
 
     const clientsData = comparison.map(c => ({
       code: c.CODE?.trim(),
@@ -748,31 +821,43 @@ router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
     const scoped = resolveClientsVendedorCodes(req, vendedorCodes);
     if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
     vendedorCodes = scoped.vendedorCodes;
-    const vendedorFilter = buildVendedorFilter(vendedorCodes);
     const clientCode = code.trim();
     const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
+    if (!safeClientCode) {
+      return res.status(400).json({ success: false, code: 'INVALID_CLIENT_CODE', error: 'Codigo de cliente invalido' });
+    }
     const safeFamily1 = family1?.replace(/[^a-zA-Z0-9]/g, '') || '';
     const safeFamily2 = family2 ? family2.replace(/[^a-zA-Z0-9]/g, '') : null;
     const safeFamily3 = family3 ? family3.replace(/[^a-zA-Z0-9]/g, '') : null;
-    const level = parseInt(groupLevel) || 1;
+    const parsedLevel = Number.parseInt(groupLevel, 10);
+    const level = [1, 2, 3, 13].includes(parsedLevel) ? parsedLevel : 1;
+    const safeLimit = boundedInt(limit, 1, 300, 100);
+    const vendedorFilter = buildVendedorParamFilter(vendedorCodes, 'L.CODIGOVENDEDOR');
 
-    let whereClause = `L.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND L.ANODOCUMENTO >= ${MIN_YEAR}
-      AND L.TIPOVENTA IN ('CC', 'VC')
-      AND L.TIPOLINEA IN ('AB', 'VT')
-      AND L.SERIEALBARAN NOT IN ('N', 'Z')
-      ${vendedorFilter}`;
+    const whereParts = [
+      'L.CODIGOCLIENTEALBARAN = ?',
+      'L.ANODOCUMENTO >= ?',
+      "L.TIPOVENTA IN ('CC', 'VC')",
+      "L.TIPOLINEA IN ('AB', 'VT')",
+      "L.SERIEALBARAN NOT IN ('N', 'Z')",
+    ];
+    const params = [safeClientCode, MIN_YEAR, ...vendedorFilter.params];
+    if (vendedorFilter.clause) whereParts.push(vendedorFilter.clause.replace(/^AND\s+/i, ''));
 
     if (level === 1 || level === 13) {
-      whereClause += ` AND TRIM(A.CODIGOFAMILIA) = '${safeFamily1}'`;
+      whereParts.push('TRIM(A.CODIGOFAMILIA) = ?');
+      params.push(safeFamily1);
     }
     if ((level >= 2 || level === 13) && safeFamily2) {
-      whereClause += ` AND COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') = '${safeFamily2}'`;
+      whereParts.push("COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') = ?");
+      params.push(safeFamily2);
     }
     if ((level >= 3 || level === 13) && safeFamily3) {
-      whereClause += ` AND COALESCE(NULLIF(TRIM(A.CODIGOPREFAMILIA), ''), 'General') = '${safeFamily3}'`;
+      whereParts.push("COALESCE(NULLIF(TRIM(A.CODIGOPREFAMILIA), ''), 'General') = ?");
+      params.push(safeFamily3);
     }
 
-    const products = await query(`
+    const products = await queryWithParams(`
       SELECT L.ANODOCUMENTO as year, L.MESDOCUMENTO as month, L.DIADOCUMENTO as day,
         L.CODIGOARTICULO as productCode,
         COALESCE(NULLIF(TRIM(A.DESCRIPCIONARTICULO), ''), TRIM(L.DESCRIPCION), 'Sin descripción') as productName,
@@ -781,11 +866,11 @@ router.get('/:code/sales-history/family', verifyToken, async (req, res) => {
         L.CODIGOVENDEDOR as vendedor
       FROM DSEDAC.LINDTO L
       LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-      WHERE ${whereClause}
+      WHERE ${whereParts.join(' AND ')}
       GROUP BY L.ANODOCUMENTO, L.MESDOCUMENTO, L.DIADOCUMENTO, L.CODIGOARTICULO, A.DESCRIPCIONARTICULO, L.DESCRIPCION, L.CODIGOVENDEDOR
       ORDER BY L.ANODOCUMENTO DESC, L.MESDOCUMENTO DESC, L.DIADOCUMENTO DESC
-      FETCH FIRST ${parseInt(limit)} ROWS ONLY
-    `);
+      FETCH FIRST ${safeLimit} ROWS ONLY
+    `, params, false);
 
     res.json({
       products: products.map(p => ({
@@ -816,17 +901,23 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
     const scoped = resolveClientsVendedorCodes(req, vendedorCodes);
     if (!scoped.ok) return res.status(scoped.status).json(scoped.body);
     vendedorCodes = scoped.vendedorCodes;
-    const vendedorFilter = buildVendedorFilter(vendedorCodes);
     const clientCode = code.trim();
     const safeClientCode = clientCode.replace(/[^a-zA-Z0-9]/g, '');
-    const familyLevel = parseInt(groupByFamily) || 0;
+    if (!safeClientCode) {
+      return res.status(400).json({ success: false, code: 'INVALID_CLIENT_CODE', error: 'Codigo de cliente invalido' });
+    }
+    const parsedFamilyLevel = Number.parseInt(groupByFamily, 10) || 0;
+    const familyLevel = [0, 1, 2, 3, 13].includes(parsedFamilyLevel) ? parsedFamilyLevel : 0;
+    const safeLimit = boundedInt(limit, 1, 300, 50);
+    const safeOffset = boundedInt(offset, 0, 100000, 0);
+    const vendedorFilter = buildVendedorParamFilter(vendedorCodes, 'CODIGOVENDEDOR');
 
     let sales;
     let hasMore = false;
 
     if (familyLevel === 0) {
       // No grouping - return individual products
-      sales = await query(`
+      sales = await queryWithParams(`
         SELECT ANODOCUMENTO as year, MESDOCUMENTO as month, DIADOCUMENTO as day,
     CODIGOARTICULO as productCode,
     COALESCE(DESCRIPCION, 'Sin descripción') as productName,
@@ -834,16 +925,16 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
     IMPORTEVENTA as amount, IMPORTEMARGENREAL as margin,
     CODIGOVENDEDOR as vendedor
         FROM DSEDAC.LINDTO
-        WHERE CODIGOCLIENTEALBARAN = '${safeClientCode}' AND ANODOCUMENTO >= ${MIN_YEAR}
+        WHERE CODIGOCLIENTEALBARAN = ? AND ANODOCUMENTO >= ?
           AND TIPOVENTA IN ('CC', 'VC')
           AND TIPOLINEA IN ('AB', 'VT')
           AND SERIEALBARAN NOT IN ('N', 'Z')
-          ${vendedorFilter}
+          ${vendedorFilter.clause}
         ORDER BY ANODOCUMENTO DESC, MESDOCUMENTO DESC, DIADOCUMENTO DESC
-        OFFSET ${parseInt(offset)} ROWS
-        FETCH FIRST ${parseInt(limit)} ROWS ONLY
-      `);
-      hasMore = sales.length === parseInt(limit);
+        OFFSET ${safeOffset} ROWS
+        FETCH FIRST ${safeLimit} ROWS ONLY
+      `, [safeClientCode, MIN_YEAR, ...vendedorFilter.params], false);
+      hasMore = sales.length === safeLimit;
 
       res.json({
         history: sales.map(s => ({
@@ -869,21 +960,22 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
         familyGroupBy.push('A.CODIGOFAMILIA');
       }
       if (familyLevel >= 2 && (familyLevel !== 13)) {
-        familySelects.push('COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ""), "General") as family2');
+        familySelects.push("COALESCE(NULLIF(TRIM(A.CODIGOSUBFAMILIA), ''), 'General') as family2");
         familyGroupBy.push('A.CODIGOSUBFAMILIA');
       }
       if (familyLevel >= 3 && (familyLevel !== 13)) {
-        familySelects.push('COALESCE(NULLIF(TRIM(A.CODIGOPREFAMILIA), ""), "General") as family3');
+        familySelects.push("COALESCE(NULLIF(TRIM(A.CODIGOPREFAMILIA), ''), 'General') as family3");
         familyGroupBy.push('A.CODIGOPREFAMILIA');
       }
       if (familyLevel === 13) {
-        familySelects.push('COALESCE(NULLIF(TRIM(A.CODIGOPREFAMILIA), ""), "General") as family3');
+        familySelects.push("COALESCE(NULLIF(TRIM(A.CODIGOPREFAMILIA), ''), 'General') as family3");
         familyGroupBy.push('A.CODIGOPREFAMILIA');
       }
 
       const groupByClause = familyGroupBy.join(', ');
 
-      sales = await query(`
+      const groupedVendorFilter = buildVendedorParamFilter(vendedorCodes, 'L.CODIGOVENDEDOR');
+      sales = await queryWithParams(`
         SELECT ${familySelects.join(', ')},
           SUM(CANTIDADENVASES) as boxes,
           SUM(CANTIDADUNIDADES) as units,
@@ -892,15 +984,15 @@ router.get('/:code/sales-history', verifyToken, async (req, res) => {
           COUNT(DISTINCT CODIGOARTICULO) as productCount
         FROM DSEDAC.LINDTO L
         LEFT JOIN DSEDAC.ART A ON L.CODIGOARTICULO = A.CODIGOARTICULO
-        WHERE L.CODIGOCLIENTEALBARAN = '${safeClientCode}' AND L.ANODOCUMENTO >= ${MIN_YEAR}
+        WHERE L.CODIGOCLIENTEALBARAN = ? AND L.ANODOCUMENTO >= ?
           AND L.TIPOVENTA IN ('CC', 'VC')
           AND L.TIPOLINEA IN ('AB', 'VT')
           AND L.SERIEALBARAN NOT IN ('N', 'Z')
-          ${vendedorFilter}
+          ${groupedVendorFilter.clause}
         GROUP BY ${groupByClause}
         ORDER BY amount DESC
-        FETCH FIRST ${parseInt(limit)} ROWS ONLY
-      `);
+        FETCH FIRST ${safeLimit} ROWS ONLY
+      `, [safeClientCode, MIN_YEAR, ...groupedVendorFilter.params], false);
 
       res.json({
         history: sales.map(s => {

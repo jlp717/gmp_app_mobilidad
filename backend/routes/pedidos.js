@@ -127,6 +127,12 @@ function parseFloatSafe(value, defaultVal) {
     return isNaN(parsed) ? defaultVal : parsed;
 }
 
+function parseBooleanFlag(value) {
+    if (value === true || value === 1) return true;
+    const normalized = String(value || '').trim().toLowerCase();
+    return ['1', 'true', 'yes', 'si', 's'].includes(normalized);
+}
+
 function buildUpdatePedidoEstadoSql() {
     return [
         'UPDATE',
@@ -333,6 +339,7 @@ router.get('/products', async (req, res) => {
         const search = req.query.search ? sanitizeForSQL(req.query.search) : undefined;
         const limit = parseIntSafe(req.query.limit, 50);
         const offset = parseIntSafe(req.query.offset, 0);
+        const includeIva = parseBooleanFlag(req.query.includeIva);
 
         const result = await pedidosService.searchProducts({
             vendedorCodes: clientAccess.vendorCodes.length > 0 ? clientAccess.vendorCodes.join(',') : vendedorCodes,
@@ -342,6 +349,7 @@ router.get('/products', async (req, res) => {
             marca: marca ? String(marca).trim() : undefined,
             // Req #14: filtro Nestlé / otras prefamilias.
             prefamily: prefamily ? String(prefamily).trim() : undefined,
+            includeIva,
             limit,
             offset
         });
@@ -375,7 +383,9 @@ router.get('/products/:code', async (req, res) => {
             }
         }
 
-        const product = await pedidosService.getProductDetail(code, clientCode);
+        const product = await pedidosService.getProductDetail(code, clientCode, {
+            includeIva: parseBooleanFlag(req.query.includeIva),
+        });
 
         if (!product) {
             return res.status(404).json({ success: false, error: 'Product not found' });
@@ -413,7 +423,7 @@ router.post('/products/stock-batch', async (req, res) => {
     try {
         const rawCodes = Array.isArray(req.body?.codes) ? req.body.codes : [];
         const codes = [...new Set(rawCodes
-            .map(code => String(code || '').trim())
+            .map(code => String(code || '').trim().substring(0, 10))
             .filter(Boolean))]
             .slice(0, 200);
         const almacen = parseIntSafe(req.body?.almacen, 1);
@@ -1179,10 +1189,8 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
             GROUP BY L.LCAADC, L.LCMMDC
             ORDER BY L.LCAADC ASC, L.LCMMDC ASC
         `;
-        const monthlyData = await queryWithParams(
-            monthlyQuery,
-            [clientCode, startYear, 'CC', 'VC', 'AB', 'VT', ...laclaeVendorFilter.params],
-        );
+        const vendorScopeKey = vendorScope.codes.length > 0 ? vendorScope.codes.join(',') : 'ALL';
+        const monthlyParams = [clientCode, startYear, 'CC', 'VC', 'AB', 'VT', ...laclaeVendorFilter.params];
 
         const topProductsQuery = `
             SELECT TRIM(L.LCCDRF) AS CODE, TRIM(A.DESCRIPCIONARTICULO) AS NAME,
@@ -1196,10 +1204,7 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
             ORDER BY TOTAL_SALES DESC
             FETCH FIRST 20 ROWS ONLY
         `;
-        const topProductsData = await queryWithParams(
-            topProductsQuery,
-            [clientCode, currentYear - 1, 'CC', 'VC', 'AB', 'VT', ...laclaeVendorFilter.params],
-        );
+        const topProductsParams = [clientCode, currentYear - 1, 'CC', 'VC', 'AB', 'VT', ...laclaeVendorFilter.params];
 
         const returnsQuery = `
             SELECT L.LCAADC AS YEAR, L.LCMMDC AS MONTH,
@@ -1214,10 +1219,27 @@ router.get('/client-evolution/:clientCode', async (req, res) => {
             ORDER BY YEAR DESC, MONTH DESC, AMOUNT DESC
             FETCH FIRST 50 ROWS ONLY
         `;
-        const returnsData = await queryWithParams(
-            returnsQuery,
-            [clientCode, startYear, ...laclaeVendorFilter.params],
-        );
+        const returnsParams = [clientCode, startYear, ...laclaeVendorFilter.params];
+        const [monthlyData, topProductsData, returnsData] = await Promise.all([
+            cachedQuery(
+                (sql) => queryWithParams(sql, monthlyParams),
+                monthlyQuery,
+                `pedidos:client-evolution:v2:monthly:${clientCode}:${vendorScopeKey}:${startYear}:${currentYear}`,
+                TTL.MEDIUM,
+            ),
+            cachedQuery(
+                (sql) => queryWithParams(sql, topProductsParams),
+                topProductsQuery,
+                `pedidos:client-evolution:v2:top:${clientCode}:${vendorScopeKey}:${currentYear}`,
+                TTL.MEDIUM,
+            ),
+            cachedQuery(
+                (sql) => queryWithParams(sql, returnsParams),
+                returnsQuery,
+                `pedidos:client-evolution:v2:returns:${clientCode}:${vendorScopeKey}:${startYear}:${currentYear}`,
+                TTL.MEDIUM,
+            ),
+        ]);
 
         res.json({
             success: true,
@@ -1596,7 +1618,7 @@ router.put('/:id/confirm', async (req, res) => {
 
 /**
  * DELETE /api/pedidos/:id
- * Cancel an order (only BORRADOR or CONFIRMADO, not ENVIADO)
+ * Delete a draft order. Confirmed orders are managed by ERP.
  */
 router.delete('/:id', async (req, res) => {
     try {
@@ -1610,14 +1632,14 @@ router.delete('/:id', async (req, res) => {
             return res.status(ownership.status).json(ownership.body);
         }
 
-        await pedidosService.cancelOrder(id);
+        await pedidosService.cancelOrder(id, { userId: req.user?.code || 'SYSTEM' });
 
         res.json({ success: true });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in DELETE /${req.params.id}: ${error.message}`);
-        const status = error.message.includes('not found') ? 404
-            : error.message.includes('ENVIADO') ? 409
-            : 500;
+        const status = Number.isInteger(error.status) ? error.status
+            : error.message.includes('not found') ? 404
+                : 500;
         res.status(status).json({ success: false, error: error.message });
     }
 });
@@ -1659,8 +1681,8 @@ router.put('/:id/cancel', async (req, res) => {
         res.json({ success: true });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/cancel: ${error.message}`);
-        const status = error.message.includes('not found') ? 404
-            : error.message.includes('ENVIADO') ? 409 : 500;
+        const status = Number.isInteger(error.status) ? error.status
+            : error.message.includes('not found') ? 404 : 500;
         res.status(status).json({ success: false, error: error.message });
     }
 });
@@ -1688,8 +1710,9 @@ router.put('/:id/status', async (req, res) => {
         res.json({ success: true, order: result });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in PUT /${req.params.id}/status: ${error.message}`);
-        const status = error.message.includes('not found') ? 404
-            : error.message.includes('no válido') ? 400 : 500;
+        const status = Number.isInteger(error.status) ? error.status
+            : error.message.includes('not found') ? 404
+                : error.message.includes('no valido') ? 400 : 500;
         res.status(status).json({ success: false, error: error.message });
     }
 });
@@ -1717,7 +1740,6 @@ router.post('/acciones-rapidas', async (req, res) => {
         const reqEnvases = parseFloat(cantidadEnvases) || 0;
         const reqUnidades = parseFloat(cantidadUnidades) || 0;
         const stockWarnings = [];
-        let outOfStock = false;
 
         if (unit === 'CAJAS' && reqEnvases > 0) {
             const available = parseFloat(stock?.envases) || 0;
@@ -1728,7 +1750,6 @@ router.post('/acciones-rapidas', async (req, res) => {
                     available,
                     unit: 'envases',
                 });
-                if (available <= 0) outOfStock = true;
             }
         } else if (reqUnidades > 0) {
             const available = parseFloat(stock?.unidades) || 0;
@@ -1739,10 +1760,8 @@ router.post('/acciones-rapidas', async (req, res) => {
                     available,
                     unit: 'unidades',
                 });
-                if (available <= 0) outOfStock = true;
             }
         } else if ((parseFloat(stock?.envases) || 0) <= 0 && (parseFloat(stock?.unidades) || 0) <= 0) {
-            outOfStock = true;
             stockWarnings.push({
                 product: code,
                 requested: 1,
@@ -1752,17 +1771,30 @@ router.post('/acciones-rapidas', async (req, res) => {
         }
 
         let alternatives = [];
-        if (outOfStock) {
+        if (stockWarnings.length > 0) {
             alternatives = await pedidosService.getSimilarProducts(code);
+            const safeAlternatives = (alternatives || []).map(product => stripMarginFromProduct(product, req.user));
+            return res.status(409).json({
+                success: false,
+                error: 'STOCK_INSUFICIENTE',
+                code: 'STOCK_INSUFICIENTE',
+                message: 'Stock insuficiente para la accion rapida',
+                codigoArticulo: code,
+                stock,
+                sufficient: false,
+                stockWarnings,
+                alternativa: safeAlternatives[0] || null,
+                alternatives: safeAlternatives,
+            });
         }
 
         res.json({
             success: true,
             codigoArticulo: code,
             stock,
-            sufficient: stockWarnings.length === 0,
-            stockWarnings,
-            alternatives,
+            sufficient: true,
+            stockWarnings: [],
+            alternatives: [],
         });
     } catch (error) {
         logger.error(`[PEDIDOS] Error in POST /acciones-rapidas: ${error.message}`);
@@ -1833,19 +1865,15 @@ router.get('/debug/estados', debugMiddleware, (req, res) => {
     res.json({
         estados: {
             BORRADOR: 'Estado inicial. Pedido creado en la app pero sin confirmar.',
-            PENDIENTE_APROBACION: 'Pedido pendiente de aprobacion antes de confirmarlo.',
-            CONFIRMANDO: 'Estado tecnico temporal mientras se valida stock y se confirma.',
-            CONFIRMADO: 'Pedido confirmado por el comercial. Listo para proceso de almacén.',
-            ENVIADO: 'Pedido enviado/entregado. Se marca externamente (CPC/albarán generado).',
-            ANULADO: 'Pedido anulado/cancelado.'
+            CONFIRMADO: 'Pedido confirmado por el comercial. Listo para proceso de almacen.',
         },
         transiciones: {
-            'BORRADOR -> CONFIRMADO': 'Usuario confirma en detalle del pedido (botón)',
-            'BORRADOR -> PENDIENTE_APROBACION -> CONFIRMADO': 'Flujo con aprobacion previa antes de validar stock y confirmar',
-            'CONFIRMADO -> ENVIADO': 'Se marcaexternamente cuando se genera albarán',
-            'BORRADOR/CONFIRMADO -> ANULADO': 'Usuario cancela el pedido'
+            'BORRADOR -> CONFIRMADO': 'Usuario confirma el pedido',
         },
-        valoresPermitidos: ['BORRADOR', 'PENDIENTE_APROBACION', 'CONFIRMANDO', 'CONFIRMADO', 'ENVIADO', 'ANULADO']
+        interno: {
+            CONFIRMANDO: 'Estado tecnico temporal no visible para usuarios.',
+        },
+        valoresPermitidos: ['BORRADOR', 'CONFIRMADO']
     });
 });
 
@@ -1857,19 +1885,20 @@ router.get('/debug/estados', debugMiddleware, (req, res) => {
 router.post('/debug/set-estado', debugMiddleware, async (req, res) => {
     try {
         const { orderId, estado } = req.body;
-        const estadosValidos = ['BORRADOR', 'PENDIENTE_APROBACION', 'CONFIRMADO', 'ENVIADO', 'ANULADO'];
+        const estadosValidos = ['BORRADOR', 'CONFIRMADO'];
         
         if (!orderId) {
             return res.status(400).json({ success: false, error: 'Falta orderId' });
         }
-        const canonicalEstado = pedidosService.canonicalOrderStatus(estado);
-        if (!estado || !estadosValidos.includes(canonicalEstado)) {
-            return res.status(400).json({ 
-                success: false, 
-                error: `Estado inválido. Valores: ${estadosValidos.join(', ')}` 
+        const requestedEstado = String(estado || '').trim().toUpperCase();
+        if (!estadosValidos.includes(requestedEstado)) {
+            return res.status(400).json({
+                success: false,
+                error: `Estado invalido. Valores: ${estadosValidos.join(', ')}`
             });
         }
 
+        const canonicalEstado = pedidosService.canonicalOrderStatus(requestedEstado);
         const storedEstado = pedidosService.storedOrderStatus(canonicalEstado);
         await queryWithParams(
             buildUpdatePedidoEstadoSql(),

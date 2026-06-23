@@ -53,8 +53,7 @@ void main() {
         expect(find.text('Confirmado'), findsOneWidget);
       });
 
-      testWidgets('CONFIRMANDO status displays as Pendiente ERP',
-          (tester) async {
+      testWidgets('CONFIRMANDO status displays as Borrador', (tester) async {
         await tester.pumpWidget(
           const MaterialApp(
             home: Scaffold(
@@ -63,10 +62,10 @@ void main() {
           ),
         );
 
-        expect(find.text('Pendiente ERP'), findsOneWidget);
+        expect(find.text('Borrador'), findsOneWidget);
       });
 
-      testWidgets('ANULADO status displays correct label', (tester) async {
+      testWidgets('ANULADO status displays as Borrador', (tester) async {
         await tester.pumpWidget(
           const MaterialApp(
             home: Scaffold(
@@ -75,7 +74,7 @@ void main() {
           ),
         );
 
-        expect(find.text('Anulado'), findsOneWidget);
+        expect(find.text('Borrador'), findsOneWidget);
       });
 
       testWidgets('Lowercase status is handled correctly', (tester) async {
@@ -259,14 +258,14 @@ void main() {
       expect(theme.label, 'Confirmado');
     });
 
-    test('getTheme maps CONFIRMANDO to Pendiente ERP', () {
+    test('getTheme maps CONFIRMANDO to Borrador', () {
       final theme = OrderStatusConfig.getTheme('CONFIRMANDO');
-      expect(theme.label, 'Pendiente ERP');
+      expect(theme.label, 'Borrador');
     });
 
-    test('getTheme returns correct theme for ANULADO', () {
+    test('getTheme maps ANULADO to Borrador', () {
       final theme = OrderStatusConfig.getTheme('ANULADO');
-      expect(theme.label, 'Anulado');
+      expect(theme.label, 'Borrador');
     });
 
     test('getTheme maps unknown status to Borrador', () {
@@ -279,17 +278,17 @@ void main() {
       expect(OrderStatusConfig.getColor('CONFIRMADO'), const Color(0xFF22C55E));
       expect(OrderStatusConfig.getColor('ENVIADO'), const Color(0xFF22C55E));
       expect(OrderStatusConfig.getColor('PENDIENTE_APROBACION'),
-          const Color(0xFF3B82F6));
-      expect(OrderStatusConfig.getColor('ANULADO'), const Color(0xFFEF4444));
+          const Color(0xFFF97316));
+      expect(OrderStatusConfig.getColor('ANULADO'), const Color(0xFFF97316));
     });
 
     test('getIcon returns correct icon for each status', () {
       expect(OrderStatusConfig.getIcon('BORRADOR'), Icons.edit_note);
       expect(OrderStatusConfig.getIcon('CONFIRMADO'), Icons.check_circle);
       expect(OrderStatusConfig.getIcon('ENVIADO'), Icons.check_circle);
-      expect(OrderStatusConfig.getIcon('PENDIENTE_APROBACION'),
-          Icons.hourglass_top);
-      expect(OrderStatusConfig.getIcon('ANULADO'), Icons.cancel);
+      expect(
+          OrderStatusConfig.getIcon('PENDIENTE_APROBACION'), Icons.edit_note);
+      expect(OrderStatusConfig.getIcon('ANULADO'), Icons.edit_note);
     });
 
     test('getLabel returns simplified commercial labels', () {
@@ -297,8 +296,8 @@ void main() {
       expect(OrderStatusConfig.getLabel('CONFIRMADO'), 'Confirmado');
       expect(OrderStatusConfig.getLabel('ENVIADO'), 'Confirmado');
       expect(OrderStatusConfig.getLabel('FACTURADO'), 'Confirmado');
-      expect(OrderStatusConfig.getLabel('CONFIRMANDO'), 'Pendiente ERP');
-      expect(OrderStatusConfig.getLabel('ANULADO'), 'Anulado');
+      expect(OrderStatusConfig.getLabel('CONFIRMANDO'), 'Borrador');
+      expect(OrderStatusConfig.getLabel('ANULADO'), 'Borrador');
     });
   });
 }

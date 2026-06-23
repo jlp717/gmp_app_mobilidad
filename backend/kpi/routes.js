@@ -12,6 +12,59 @@ const { transformAlert } = require('./services/alert_transformer');
 const logger = require('../middleware/logger');
 
 const router = Router();
+const vendorClientSetCache = new Map();
+const VENDOR_CLIENT_SET_TTL_MS = 10 * 60 * 1000;
+
+function normalizeVendorCodes(value) {
+  return String(value || '')
+    .split(',')
+    .map(c => c.trim())
+    .filter(c => c && /^[A-Z0-9]+$/i.test(c));
+}
+
+function getVendorClientSetCache(key) {
+  const cached = vendorClientSetCache.get(key);
+  if (!cached) return null;
+  if (Date.now() - cached.ts > VENDOR_CLIENT_SET_TTL_MS) {
+    vendorClientSetCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setVendorClientSetCache(key, value) {
+  vendorClientSetCache.set(key, { value, ts: Date.now() });
+  if (vendorClientSetCache.size > 500) {
+    const now = Date.now();
+    for (const [entryKey, entry] of vendorClientSetCache) {
+      if (now - entry.ts > VENDOR_CLIENT_SET_TTL_MS) vendorClientSetCache.delete(entryKey);
+    }
+  }
+}
+
+async function getVendorClientSet(vendorCodes, mode = 'current') {
+  const codes = normalizeVendorCodes(vendorCodes).sort();
+  if (codes.length === 0) return new Set();
+  const cacheKey = `${mode}:${codes.join(',')}`;
+  const cached = getVendorClientSetCache(cacheKey);
+  if (cached) return cached;
+
+  const placeholders = codes.map(() => '?').join(',');
+  const yearClause = mode === 'recent'
+    ? 'LCAADC >= YEAR(CURRENT_DATE) - 1'
+    : 'LCAADC = YEAR(CURRENT_DATE)';
+  const vendorQuery = `
+    SELECT DISTINCT TRIM(LCCDCL) AS CLIENT_CODE
+    FROM DSED.LACLAE
+    WHERE TRIM(LCCDVD) IN (${placeholders})
+      AND ${yearClause}
+      AND LCTPVT IN ('CC','VC') AND LCCLLN IN ('AB','VT')
+  `;
+  const vendorClientsResult = await kpiQuery(vendorQuery, codes);
+  const result = new Set(vendorClientsResult.rows.map(r => (r.CLIENT_CODE || '').trim()).filter(Boolean));
+  setVendorClientSetCache(cacheKey, result);
+  return result;
+}
 
 // Métricas middleware en todas las rutas KPI
 router.use(metricsMiddleware);
@@ -226,18 +279,9 @@ router.get('/alerts/clients', async (req, res) => {
     // Vendor filter: only apply for a small set of codes (1 comercial or a few)
     // If > 15 codes, it's a jefe seeing "all" â†’ skip the expensive LACLAE query
     if (vendorCodesStr && vendorCodesStr !== 'ALL') {
-      const codes = vendorCodesStr.split(',').map(c => c.trim()).filter(Boolean);
+      const codes = normalizeVendorCodes(vendorCodesStr);
       if (codes.length > 0 && codes.length <= 15) {
-        const placeholders = codes.map(() => '?').join(',');
-        const vendorQuery = `
-          SELECT DISTINCT TRIM(LCCDCL) AS CLIENT_CODE
-          FROM DSED.LACLAE
-          WHERE TRIM(LCCDVD) IN (${placeholders})
-            AND LCAADC >= YEAR(CURRENT_DATE) - 1
-            AND LCTPVT IN ('CC','VC') AND LCCLLN IN ('AB','VT')
-        `;
-        const vendorClientsResult = await kpiQuery(vendorQuery, codes);
-        const validCodes = new Set(vendorClientsResult.rows.map(r => r.CLIENT_CODE.trim()));
+        const validCodes = await getVendorClientSet(codes, 'recent');
         clientCodes = clientCodes.filter(c => validCodes.has(c));
       }
       // else: > 15 codes = jefe with all vendors, no filtering needed
@@ -509,21 +553,11 @@ router.get('/dashboard', async (req, res) => {
 
     // 2. Vendor filter: restrict to this vendor's clients
     if (vendorCode && vendorCode !== 'ALL') {
-      const vendorCodes = String(vendorCode)
-        .split(',')
-        .map(c => c.trim())
-        .filter(c => c && /^[A-Z0-9]+$/i.test(c));
+      const vendorCodes = normalizeVendorCodes(vendorCode);
       if (vendorCodes.length === 0) {
         return res.status(400).json({ success: false, error: 'vendorCode invalido' });
       }
-      const placeholders = vendorCodes.map(() => '?').join(',');
-      const vendorClientsQuery = `
-        SELECT DISTINCT TRIM(LCCDCL) AS CLIENT_CODE
-        FROM DSED.LACLAE
-        WHERE TRIM(LCCDVD) IN (${placeholders}) AND LCAADC = YEAR(CURRENT_DATE)
-          AND LCTPVT IN ('CC','VC') AND LCCLLN IN ('AB','VT')`;
-      const vendorClientsResult = await kpiQuery(vendorClientsQuery, vendorCodes);
-      const validCodes = new Set(vendorClientsResult.rows.map(r => r.CLIENT_CODE.trim()));
+      const validCodes = await getVendorClientSet(vendorCodes, 'current');
 
       logger.info(`[kpi:dashboard] LACLAE clients for vendor ${vendorCodes.join(',')}: ${validCodes.size}, sample: ${[...validCodes].slice(0, 5).join(', ')}`);
 

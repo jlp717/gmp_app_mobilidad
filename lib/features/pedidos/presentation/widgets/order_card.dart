@@ -17,7 +17,6 @@ class OrderCard extends StatelessWidget {
     required this.onTap,
     super.key,
     this.onDuplicate,
-    this.onCancel,
     this.onViewAlbaran,
     this.onResend,
     this.onDelete,
@@ -26,7 +25,6 @@ class OrderCard extends StatelessWidget {
   final OrderSummary order;
   final VoidCallback onTap;
   final VoidCallback? onDuplicate;
-  final VoidCallback? onCancel;
   final VoidCallback? onViewAlbaran;
   final VoidCallback? onResend;
   final VoidCallback? onDelete;
@@ -191,7 +189,6 @@ class OrderCard extends StatelessWidget {
                 _buildBolsaChip(displayEstado),
                 // Actions row (if available)
                 if (onDuplicate != null ||
-                    onCancel != null ||
                     onViewAlbaran != null ||
                     onResend != null ||
                     onDelete != null)
@@ -230,14 +227,6 @@ class OrderCard extends StatelessWidget {
                             'Albarán',
                             AppTheme.neonPurple,
                             onViewAlbaran!,
-                          ),
-                        if (onCancel != null)
-                          _actionChip(
-                            context,
-                            Icons.cancel_outlined,
-                            'Anular',
-                            AppTheme.error,
-                            onCancel!,
                           ),
                       ],
                     ),
@@ -319,14 +308,6 @@ class OrderCard extends StatelessWidget {
         Colors.white38,
       );
     }
-    if (displayEstado == 'ANULADO') {
-      return _bolsaStatusChip(
-        Icons.block,
-        'Bolsa: no aplica',
-        Colors.white38,
-      );
-    }
-
     final generada = order.bolsaGenerada;
     if (generada == true) {
       final neto = order.bolsaNeto;

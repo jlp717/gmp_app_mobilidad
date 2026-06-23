@@ -102,6 +102,7 @@ jest.mock('../routes/entregas', () => require('express').Router());
 
 const legacyRouter = require('../routes/pedidos');
 const { createPedidosRoutes } = require('../src/shared/routes/ddd-adapters');
+const { cachedQuery: mockCachedQuery } = require('../services/query-optimizer');
 
 function makeLegacyApp(user = { code: '01', role: 'COMERCIAL' }) {
   const app = express();
@@ -122,6 +123,7 @@ function makeDddApp(user = { id: '01', code: '01', role: 'COMERCIAL' }) {
 describe('DB2 22001 param length: legacy pedidos routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCachedQuery.mockImplementation((runner, sql) => runner(sql));
     mockLegacySearch.mockResolvedValue({ products: [], count: 0 });
     mockLegacyDetail.mockResolvedValue({ code: EXPECTED_ARTICLE, name: 'Prod' });
     mockQueryWithParams.mockResolvedValue([{ OK: 1 }]);
@@ -162,7 +164,11 @@ describe('DB2 22001 param length: legacy pedidos routes', () => {
     const [scopeSql, scopeParams] = mockQueryWithParams.mock.calls[0];
     expect(scopeParams[0]).toBe(EXPECTED_CLIENT);
     expectDb2SafeBind(scopeSql, scopeParams[0], 10);
-    expect(mockLegacyDetail).toHaveBeenCalledWith('ART001', EXPECTED_CLIENT);
+    expect(mockLegacyDetail).toHaveBeenCalledWith(
+      'ART001',
+      EXPECTED_CLIENT,
+      expect.objectContaining({ includeIva: false }),
+    );
   });
 
   test('GET /products/:code truncates long article path before getProductDetail', async () => {
@@ -171,7 +177,11 @@ describe('DB2 22001 param length: legacy pedidos routes', () => {
       .query({ vendedorCodes: '01', clientCode: 'C001' });
 
     expect(res.status).toBe(200);
-    expect(mockLegacyDetail).toHaveBeenCalledWith(EXPECTED_ARTICLE, 'C001');
+    expect(mockLegacyDetail).toHaveBeenCalledWith(
+      EXPECTED_ARTICLE,
+      'C001',
+      expect.objectContaining({ includeIva: false }),
+    );
   });
 
   test('GET /client-evolution/:clientCode truncates long path client in all DB binds', async () => {
@@ -204,6 +214,7 @@ describe('DB2 22001 param length: legacy pedidos routes', () => {
 describe('DB2 22001 param length: DDD pedidos routes', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockCachedQuery.mockImplementation((runner, sql) => runner(sql));
     mockDddCache.get.mockResolvedValue(null);
     mockDddRepo.searchProducts.mockResolvedValue({ products: [], count: 0 });
     mockDddRepo.getProductDetail.mockResolvedValue({ code: EXPECTED_ARTICLE, name: 'Prod' });

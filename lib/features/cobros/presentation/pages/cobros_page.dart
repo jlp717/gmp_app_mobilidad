@@ -251,69 +251,72 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     final search = _searchController.text.trim();
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
-      body: RefreshIndicator(
-        onRefresh: _onRefresh,
-        color: AppTheme.neonBlue,
-        child: Column(
-          children: [
-            _buildHeader(),
-            GlobalVendorSelector(
-              isJefeVentas: widget.isJefeVentas,
-              forceShow: widget.forceShowVendorSelector,
-            ),
-            // Loading state para pendingSummary
-            if (_isLoadingSummary)
-              const Expanded(
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (_loadError != null)
-              Expanded(
-                child: Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.error_outline,
-                          color: AppTheme.error,
-                          size: 48,
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          _loadError!,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: AppTheme.error),
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton.icon(
-                          onPressed: _onRefresh,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Reintentar'),
-                        ),
-                      ],
+      backgroundColor: Colors.transparent,
+      body: DecoratedBox(
+        decoration: AppTheme.appBackground(),
+        child: RefreshIndicator(
+          onRefresh: _onRefresh,
+          color: AppTheme.neonBlue,
+          child: Column(
+            children: [
+              _buildHeader(),
+              GlobalVendorSelector(
+                isJefeVentas: widget.isJefeVentas,
+                forceShow: widget.forceShowVendorSelector,
+              ),
+              // Loading state para pendingSummary
+              if (_isLoadingSummary)
+                const Expanded(
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (_loadError != null)
+                Expanded(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.error_outline,
+                            color: AppTheme.error,
+                            size: 48,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            _loadError!,
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: AppTheme.error),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            onPressed: _onRefresh,
+                            icon: const Icon(Icons.refresh),
+                            label: const Text('Reintentar'),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
+                )
+              else ...[
+                _buildSummaryCard(cobros),
+                _buildSearchArea(),
+                _buildEstadoFilterChips(),
+                Expanded(
+                  child: visibleClients.isEmpty && !_isSearchingClients
+                      ? _buildNoClientsState(cobros, search)
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          itemCount: visibleClients.length,
+                          itemBuilder: (context, index) {
+                            return _buildClientCobroCard(visibleClients[index]);
+                          },
+                        ),
                 ),
-              )
-            else ...[
-              _buildSummaryCard(cobros),
-              _buildSearchArea(),
-              _buildEstadoFilterChips(),
-              Expanded(
-                child: visibleClients.isEmpty && !_isSearchingClients
-                    ? _buildNoClientsState(cobros, search)
-                    : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: visibleClients.length,
-                        itemBuilder: (context, index) {
-                          return _buildClientCobroCard(visibleClients[index]);
-                        },
-                      ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -393,27 +396,20 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         : 'ERP CVC';
     final hasAppLayer =
         cobros.appAdjustmentsTotal > 0 || cobros.appOrdersTotal > 0;
+    final clientesCartera = cobros.portfolioClientCount > 0
+        ? cobros.portfolioClientCount
+        : cobros.clientsWithDebt;
+    final clientesVencidos = cobros.portfolioVencidoClientCount > 0
+        ? cobros.portfolioVencidoClientCount
+        : cobros.clientsWithVencido;
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(12, 8, 12, 4),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            (tieneVencido ? Colors.redAccent : AppTheme.neonBlue)
-                .withValues(alpha: 0.12),
-            AppTheme.darkSurface.withValues(alpha: 0.6),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: (tieneVencido
-                  ? Colors.redAccent
-                  : (tienePendiente ? Colors.amber : AppTheme.neonGreen))
-              .withValues(alpha: 0.3),
-        ),
+      margin: const EdgeInsets.fromLTRB(16, 12, 16, 6),
+      padding: const EdgeInsets.all(14),
+      decoration: AppTheme.premiumPanel(
+        accentColor: tieneVencido
+            ? AppTheme.error
+            : (tienePendiente ? AppTheme.accentAmber : AppTheme.neonGreen),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -449,8 +445,8 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
               Expanded(
                 child: _summaryItem(
                   'Clientes',
-                  '${cobros.clientsWithDebt}'
-                      '${cobros.clientsWithVencido > 0 ? ' (${cobros.clientsWithVencido}v)' : ''}',
+                  '$clientesCartera'
+                      '${clientesVencidos > 0 ? ' (${clientesVencidos}v)' : ''}',
                   Icons.people_outline,
                   AppTheme.neonBlue,
                 ),
@@ -480,12 +476,13 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
           if (hasAppLayer) ...[
             const SizedBox(height: 3),
             Text(
-              'App: ${fmtMoney(cobros.appOrdersTotal)} provisional'
-              ' - ${fmtMoney(cobros.appAdjustmentsTotal)} ya descontado',
+              'ERP bruto: ${fmtMoney(cobros.cvcGrandTotal)} · App provisional: ${fmtMoney(cobros.appOrdersTotal)} · App ya descontado: ${fmtMoney(cobros.appAdjustmentsTotal)}',
               style: TextStyle(
                 fontSize: 9,
                 color: Colors.white.withValues(alpha: 0.4),
               ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ],
@@ -546,9 +543,9 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface.withValues(alpha: 0.4),
+        color: AppTheme.inkSurface.withValues(alpha: 0.58),
         border: Border(
-          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+          bottom: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
         ),
       ),
       child: SingleChildScrollView(
@@ -567,7 +564,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                 label: Text(f.label),
                 selected: selected,
                 onSelected: (_) => setState(() => _estadoFilter = f.value),
-                backgroundColor: AppTheme.darkCard,
+                backgroundColor: AppTheme.softPanel,
                 selectedColor: f.color.withValues(alpha: 0.25),
                 labelStyle: TextStyle(
                   color: selected ? Colors.white : Colors.white70,
@@ -595,17 +592,35 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
         Responsive.padding(context, small: 10, large: 16),
       ),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceColor,
+        gradient: AppTheme.panelGradient,
         border: Border(
-          bottom: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.2)),
+          bottom: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.18)),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.22),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          const Icon(
-            Icons.account_balance_wallet,
-            color: AppTheme.neonBlue,
-            size: 28,
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: AppTheme.neonBlue.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+              border: Border.all(
+                color: AppTheme.neonBlue.withValues(alpha: 0.28),
+              ),
+            ),
+            child: const Icon(
+              Icons.account_balance_wallet,
+              color: AppTheme.neonBlue,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           Text(
@@ -652,7 +667,7 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
                     const BorderSide(color: AppTheme.neonBlue, width: 2),
               ),
               filled: true,
-              fillColor: AppTheme.surfaceColor,
+              fillColor: AppTheme.softPanel,
               suffixIcon: _isSearchingClients
                   ? const SizedBox(
                       width: 48,
@@ -797,12 +812,14 @@ class _CobrosPageState extends ConsumerState<CobrosPage> {
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
-      color: AppTheme.surfaceColor,
+      elevation: 0,
+      color: AppTheme.softPanel,
+      surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
         side: pending > 0
             ? BorderSide(color: badgeColor.withValues(alpha: 0.45))
-            : BorderSide.none,
+            : BorderSide(color: AppTheme.borderColor.withValues(alpha: 0.32)),
       ),
       child: InkWell(
         onTap: () {

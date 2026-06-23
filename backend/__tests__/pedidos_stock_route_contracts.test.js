@@ -13,11 +13,15 @@ function expectDb2SafeBind(sql, bind, maxLen) {
 const mockGetStockBatch = jest.fn();
 const mockSearchProducts = jest.fn();
 const mockGetProductDetail = jest.fn();
+const mockGetProductStock = jest.fn();
+const mockGetSimilarProducts = jest.fn();
 
 jest.mock('../services/pedidos.service', () => ({
   getStockBatch: mockGetStockBatch,
   searchProducts: mockSearchProducts,
   getProductDetail: (...args) => mockGetProductDetail(...args),
+  getProductStock: mockGetProductStock,
+  getSimilarProducts: mockGetSimilarProducts,
 }));
 
 jest.mock('../middleware/auth', () => ({
@@ -46,6 +50,7 @@ jest.mock('../middleware/logger', () => ({
 
 const pedidosRouter = require('../routes/pedidos');
 const { queryWithParams: mockQueryWithParams } = require('../config/db');
+const { cachedQuery: mockCachedQuery } = require('../services/query-optimizer');
 
 function makeApp(user = { code: '01', role: 'COMERCIAL' }) {
   const app = express();
@@ -60,6 +65,7 @@ function makeApp(user = { code: '01', role: 'COMERCIAL' }) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockCachedQuery.mockImplementation((runner, sql) => runner(sql));
 });
 
 describe('pedidos stock batch route contract', () => {
@@ -146,6 +152,20 @@ describe('pedidos products route contract', () => {
     });
   });
 
+  test('GET /products forwards includeIva flag to catalog search', async () => {
+    mockSearchProducts.mockResolvedValueOnce({ products: [], count: 0 });
+    mockQueryWithParams.mockResolvedValue([{ OK: 1 }]);
+
+    const res = await request(makeApp())
+      .get('/products')
+      .query({ vendedorCodes: '01', clientCode: '4300001091', includeIva: 'true' });
+
+    expect(res.status).toBe(200);
+    expect(mockSearchProducts).toHaveBeenCalledWith(
+      expect.objectContaining({ includeIva: true }),
+    );
+  });
+
   test('GET /products/:code truncates long article path before getProductDetail', async () => {
     mockGetProductDetail.mockResolvedValueOnce({ code: 'ART0012345', name: 'Prod' });
     mockQueryWithParams.mockResolvedValue([{ OK: 1 }]);
@@ -156,7 +176,86 @@ describe('pedidos products route contract', () => {
       .query({ vendedorCodes: '01', clientCode: 'C001' });
 
     expect(res.status).toBe(200);
-    expect(mockGetProductDetail).toHaveBeenCalledWith('ART0012345', 'C001');
+    expect(mockGetProductDetail).toHaveBeenCalledWith(
+      'ART0012345',
+      'C001',
+      expect.objectContaining({ includeIva: false }),
+    );
+  });
+
+  test('GET /products/:code forwards includeIva flag to product detail', async () => {
+    mockGetProductDetail.mockResolvedValueOnce({ code: 'ART001', name: 'Prod' });
+    mockQueryWithParams.mockResolvedValue([{ OK: 1 }]);
+
+    const res = await request(makeApp())
+      .get('/products/ART001')
+      .query({ vendedorCodes: '01', clientCode: 'C001', includeIva: '1' });
+
+    expect(res.status).toBe(200);
+    expect(mockGetProductDetail).toHaveBeenCalledWith(
+      'ART001',
+      'C001',
+      expect.objectContaining({ includeIva: true }),
+    );
+  });
+});
+
+describe('pedidos quick actions stock alternatives contract', () => {
+  test('POST /acciones-rapidas returns typed stock error with alternativa when out of stock', async () => {
+    mockGetProductStock.mockResolvedValueOnce({ envases: 0, unidades: 0 });
+    mockGetSimilarProducts.mockResolvedValueOnce([
+      { code: 'ALT001', name: 'Alternativa', precioCosto: 4, precioMinimo: 8 },
+    ]);
+
+    const res = await request(makeApp())
+      .post('/acciones-rapidas')
+      .send({ codigoArticulo: 'ART001', cantidadEnvases: 1, unidadMedida: 'CAJAS' });
+
+    expect(res.status).toBe(409);
+    expect(mockGetSimilarProducts).toHaveBeenCalledWith('ART001');
+    expect(res.body).toMatchObject({
+      success: false,
+      error: 'STOCK_INSUFICIENTE',
+      code: 'STOCK_INSUFICIENTE',
+      sufficient: false,
+      alternativa: { code: 'ALT001', name: 'Alternativa' },
+    });
+    expect(res.body.alternativa).not.toHaveProperty('precioCosto');
+    expect(res.body.alternativa).not.toHaveProperty('precioMinimo');
+  });
+
+  test('POST /acciones-rapidas returns alternatives when requested quantity exceeds partial stock', async () => {
+    mockGetProductStock.mockResolvedValueOnce({ envases: 1, unidades: 12 });
+    mockGetSimilarProducts.mockResolvedValueOnce([{ code: 'ALT002', name: 'Parcial' }]);
+
+    const res = await request(makeApp())
+      .post('/acciones-rapidas')
+      .send({ codigoArticulo: 'ART002', cantidadEnvases: 2, unidadMedida: 'CAJAS' });
+
+    expect(res.status).toBe(409);
+    expect(mockGetSimilarProducts).toHaveBeenCalledWith('ART002');
+    expect(res.body.stockWarnings).toEqual([
+      { product: 'ART002', requested: 2, available: 1, unit: 'envases' },
+    ]);
+    expect(res.body.alternativa).toMatchObject({ code: 'ALT002' });
+  });
+
+  test('POST /acciones-rapidas returns success and skips alternatives when stock is sufficient', async () => {
+    mockGetProductStock.mockResolvedValueOnce({ envases: 3, unidades: 36 });
+
+    const res = await request(makeApp())
+      .post('/acciones-rapidas')
+      .send({ codigoArticulo: 'ART003', cantidadEnvases: 1, unidadMedida: 'CAJAS' });
+
+    expect(res.status).toBe(200);
+    expect(mockGetSimilarProducts).not.toHaveBeenCalled();
+    expect(res.body).toMatchObject({
+      success: true,
+      codigoArticulo: 'ART003',
+      sufficient: true,
+      stockWarnings: [],
+      alternatives: [],
+    });
   });
 });
 

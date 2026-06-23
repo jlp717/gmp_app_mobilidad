@@ -14,19 +14,19 @@ class BolsaMonthlyChart extends StatelessWidget {
 
   final List<BolsaMonthlyPoint> history;
 
-  static const _monthsAbbr = [
-    'E',
-    'F',
-    'M',
-    'A',
-    'M',
-    'J',
-    'J',
-    'A',
-    'S',
-    'O',
-    'N',
-    'D',
+  static const _months = [
+    'Enero',
+    'Febrero',
+    'Marzo',
+    'Abril',
+    'Mayo',
+    'Junio',
+    'Julio',
+    'Agosto',
+    'Septiembre',
+    'Octubre',
+    'Noviembre',
+    'Diciembre',
   ];
 
   @override
@@ -87,63 +87,68 @@ class BolsaMonthlyChart extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           SizedBox(
-            height: 110,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: history.map((p) {
-                final isCurrent = '${p.ejercicio}-${p.mes}' == currentKey;
-                final acumH = (p.acumulado / maxVal) * 90;
-                final consH = (p.consumido / maxVal) * 90;
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 1),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        // Importes mini-tooltips (solo si hay algo)
-                        if (p.acumulado > 0 || p.consumido > 0)
+            height: 128,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: history.map((p) {
+                  final isCurrent = '${p.ejercicio}-${p.mes}' == currentKey;
+                  final acumH = (p.acumulado / maxVal) * 86;
+                  final consH = (p.consumido / maxVal) * 86;
+                  return SizedBox(
+                    width: 72,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 3),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          if (p.acumulado > 0 || p.consumido > 0)
+                            Text(
+                              _kFormat(p.acumulado),
+                              style: TextStyle(
+                                fontSize: 8,
+                                color: Colors.white.withValues(alpha: 0.45),
+                              ),
+                            ),
+                          const SizedBox(height: 2),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              _bar(
+                                height: acumH,
+                                color: AppTheme.neonGreen,
+                                glow: isCurrent,
+                              ),
+                              const SizedBox(width: 2),
+                              _bar(
+                                height: consH,
+                                color: AppTheme.warning,
+                                glow: isCurrent,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 5),
                           Text(
-                            _kFormat(p.acumulado),
+                            _months[(p.mes - 1).clamp(0, 11)],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
-                              fontSize: 7,
-                              color: Colors.white.withValues(alpha: 0.45),
+                              fontSize: 10,
+                              fontWeight:
+                                  isCurrent ? FontWeight.w800 : FontWeight.w500,
+                              color: isCurrent
+                                  ? AppTheme.neonBlue
+                                  : Colors.white.withValues(alpha: 0.55),
                             ),
                           ),
-                        const SizedBox(height: 1),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            _bar(
-                              height: acumH,
-                              color: AppTheme.neonGreen,
-                              glow: isCurrent,
-                            ),
-                            const SizedBox(width: 1),
-                            _bar(
-                              height: consH,
-                              color: AppTheme.warning,
-                              glow: isCurrent,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          _monthsAbbr[(p.mes - 1).clamp(0, 11)],
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight:
-                                isCurrent ? FontWeight.w800 : FontWeight.w500,
-                            color: isCurrent
-                                ? AppTheme.neonBlue
-                                : Colors.white.withValues(alpha: 0.55),
-                          ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                );
-              }).toList(),
+                  );
+                }).toList(),
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -169,7 +174,7 @@ class BolsaMonthlyChart extends StatelessWidget {
       {required double height, required Color color, bool glow = false}) {
     final h = height.isFinite && height > 0 ? height : 0.0;
     return Container(
-      width: 6,
+      width: 7,
       height: h,
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.85),

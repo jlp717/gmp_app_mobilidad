@@ -219,7 +219,7 @@ describe('demo regression: getProducts ODBC 22001 client binds', () => {
 describe('demo regression: clients list query shape', () => {
   function readClientListSql(filePath) {
     const src = fs.readFileSync(filePath, 'utf8');
-    const match = src.match(/const clients = await cachedQuery\(query, `([\s\S]*?)`, cacheKey/);
+    const match = src.match(/const clients = await cachedQuery\([\s\S]*?, `([\s\S]*?)`,\s*(?:cacheKey|\{)/);
     if (!match) throw new Error(`Client list SQL template not found in ${filePath}`);
     return match[1];
   }
@@ -374,7 +374,7 @@ describe('demo regression: pedidos offline idempotency replay', () => {
 
     const result = await pedidosService.createOrder({
       ...baseCreatePayload,
-      clientRequestId: 'offline-sync-key-demo-001',
+      clientRequestId: 'offlinesynckeydemo001',
     });
 
     expect(result.idempotent).toBe(true);

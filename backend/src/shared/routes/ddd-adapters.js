@@ -44,6 +44,7 @@ const {
   buildLaclaeBoundedClientCodesSql,
   lookupClientAssignedVendorCodes,
   sanitizeCodeListForParams,
+  normalizeCvcTipoDocumentoFilter,
 } = require('../../../utils/common');
 const { getClientCodesFromCache } = require('../../../services/laclae');
 
@@ -98,6 +99,36 @@ function isForceRefreshRequest(req) {
     req?.query?._ts != null;
 }
 
+function boundedInt(value, min, max, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
+function normalizeSearchTerm(value) {
+  return String(value || '')
+    .trim()
+    .replace(/[%_]/g, '')
+    .replace(/[\u0000-\u001f\u007f]/g, '')
+    .slice(0, 80)
+    .toUpperCase();
+}
+
+function buildChunkedClientCodeFilter(column, codes) {
+  const cleanCodes = (Array.isArray(codes) ? codes : [])
+    .map(code => String(code || '').trim().replace(/[^a-zA-Z0-9]/g, ''))
+    .filter(Boolean);
+  if (!cleanCodes.length) return '';
+
+  const CHUNK_SIZE = 1000;
+  const chunks = [];
+  for (let i = 0; i < cleanCodes.length; i += CHUNK_SIZE) {
+    const chunk = cleanCodes.slice(i, i + CHUNK_SIZE).map(code => `'${code}'`).join(',');
+    chunks.push(`${column} IN (${chunk})`);
+  }
+  return `AND (${chunks.join(' OR ')})`;
+}
+
 // Cache helper with performance optimization for ALL queries
 async function withCache(cache, key, ttlMs, fetchFn, res, req) {
   if (isForceRefreshRequest(req)) {
@@ -134,6 +165,17 @@ function invalidateOrderListCaches(cache) {
   cache.invalidatePattern('ddd:history:');
   cache.invalidatePattern('ddd:stats:');
   cache.invalidatePattern('ddd:orders-stats:');
+}
+
+function invalidateCommercialOrderCaches(cache, orderContext = {}) {
+  invalidateOrderListCaches(cache);
+  cache.invalidatePattern('ddd:cobros:pending-summary:');
+  const clientCode = String(orderContext.clientCode || '').trim();
+  if (clientCode) {
+    cache.invalidatePattern(`ddd:cobros:pendientes:${clientCode}:`);
+    cache.invalidatePattern(`ddd:cobros:estado:${clientCode}:`);
+    cache.invalidatePattern(`ddd:cobros:historico:${clientCode}:`);
+  }
 }
 
 function normalizeOrderResponse(result) {
@@ -243,6 +285,7 @@ function statusFromPedidoError(error, fallbackStatus = 500) {
     case 'PEDIDO_ALREADY_CONFIRMING':
     case 'PEDIDO_INVALID_STATE':
     case 'PEDIDO_ALREADY_ANULADO':
+    case 'PEDIDO_MANAGED_BY_ERP':
       return 409;
     default:
       return fallbackStatus;
@@ -1028,37 +1071,46 @@ function createPedidosRoutes() {
       const reqEnvases = parseFloat(cantidadEnvases) || 0;
       const reqUnidades = parseFloat(cantidadUnidades) || 0;
       const stockWarnings = [];
-      let outOfStock = false;
 
       if (unit === 'CAJAS' && reqEnvases > 0) {
         const available = parseFloat(stock?.envases) || 0;
         if (reqEnvases > available) {
           stockWarnings.push({ product: code, requested: reqEnvases, available, unit: 'envases' });
-          if (available <= 0) outOfStock = true;
         }
       } else if (reqUnidades > 0) {
         const available = parseFloat(stock?.unidades) || 0;
         if (reqUnidades > available) {
           stockWarnings.push({ product: code, requested: reqUnidades, available, unit: 'unidades' });
-          if (available <= 0) outOfStock = true;
         }
       } else if ((parseFloat(stock?.envases) || 0) <= 0 && (parseFloat(stock?.unidades) || 0) <= 0) {
-        outOfStock = true;
         stockWarnings.push({ product: code, requested: 1, available: 0, unit: 'envases' });
       }
 
       let alternatives = [];
-      if (outOfStock) {
+      if (stockWarnings.length > 0) {
         alternatives = await pedidosService.getSimilarProducts(code);
+        const safeAlternatives = (alternatives || []).map((product) => stripMarginFromProduct(product, req.user));
+        return res.status(409).json({
+          success: false,
+          error: 'STOCK_INSUFICIENTE',
+          code: 'STOCK_INSUFICIENTE',
+          message: 'Stock insuficiente para la accion rapida',
+          codigoArticulo: code,
+          stock,
+          sufficient: false,
+          stockWarnings,
+          alternativa: safeAlternatives[0] || null,
+          alternatives: safeAlternatives,
+        });
       }
 
       res.json({
         success: true,
         codigoArticulo: code,
         stock,
-        sufficient: stockWarnings.length === 0,
-        stockWarnings,
-        alternatives: (alternatives || []).map((product) => stripMarginFromProduct(product, req.user)),
+        sufficient: true,
+        stockWarnings: [],
+        alternatives: [],
       });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in POST /acciones-rapidas: ${error.message}`);
@@ -1639,9 +1691,7 @@ function createPedidosRoutes() {
 
       // Invalidate related caches
       cache.invalidatePattern(`ddd:products:`);
-      cache.invalidatePattern(`ddd:orders-list:${userId}`);
-      cache.invalidatePattern(`ddd:history:${userId}`);
-      cache.invalidatePattern(`ddd:stats:${userId}`);
+      invalidateCommercialOrderCaches(cache, { clientCode: clientAccess.clientCode });
 
       const normalized = normalizeOrderResponse(result);
       if (result.idempotent) {
@@ -1711,10 +1761,7 @@ function createPedidosRoutes() {
         return res.status(409).json(payload);
       }
 
-      // Invalidate related caches
-      cache.invalidatePattern(`ddd:orders-list:${userId}`);
-      cache.invalidatePattern(`ddd:history:${userId}`);
-      cache.invalidatePattern(`ddd:stats:${userId}`);
+      invalidateCommercialOrderCaches(cache, { clientCode: ownership.ownership?.clientCode });
 
       const normalized = normalizeOrderResponse(result);
       res.json({ success: true, ...normalized });
@@ -1803,8 +1850,9 @@ function createPedidosRoutes() {
       const ownership = await authorizePedidoMutation(req, id, 'cambiar estado de');
       if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
 
-      const result = await repo.updateOrderStatus({ orderId: id, estado: nextEstado, userId: userId || req.user?.code });
-      invalidateOrderListCaches(cache);
+      const pedidosService = require('../../../services/pedidos.service');
+      const result = await pedidosService.updateOrderStatus(parseInt(id), nextEstado, { userId: userId || req.user?.code });
+      invalidateCommercialOrderCaches(cache, { clientCode: ownership.ownership?.clientCode });
       const normalized = normalizeOrderResponse(result);
       res.json({ success: true, ...normalized });
     } catch (error) {
@@ -1825,15 +1873,15 @@ function createPedidosRoutes() {
       if (isNaN(numericId)) {
         return res.status(400).json({ success: false, error: 'Invalid order ID' });
       }
-      const ownership = await authorizePedidoMutation(req, numericId, 'anular');
+      const ownership = await authorizePedidoMutation(req, numericId, 'eliminar borrador');
       if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
       const pedidosService = require('../../../services/pedidos.service');
       const result = await pedidosService.cancelOrder(numericId, { userId: req.user?.code });
-      invalidateOrderListCaches(cache);
+      invalidateCommercialOrderCaches(cache, { clientCode: ownership.ownership?.clientCode });
       res.json({ success: true, order: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in PUT /:id/cancel: ${error.message}`);
-      return sendPedidosMutationError(res, error, { fallbackMessage: 'Error interno al anular pedido', fallbackCode: 'PEDIDO_CANCEL_ERROR' });
+      return sendPedidosMutationError(res, error, { fallbackMessage: 'Error interno al eliminar borrador', fallbackCode: 'PEDIDO_DELETE_DRAFT_ERROR' });
     }
   });
 
@@ -1893,7 +1941,7 @@ function createPedidosRoutes() {
       if (!ownership.ok) return res.status(ownership.status).json(ownership.body);
 
       const result = await repo.deleteOrder({ orderId: id, userId });
-      invalidateOrderListCaches(cache);
+      invalidateCommercialOrderCaches(cache, { clientCode: ownership.ownership?.clientCode });
       res.json({ success: true, order: result });
     } catch (error) {
       logger.error(`[DDD-PEDIDOS] Error in DELETE /:id: ${error.message}`);
@@ -1974,7 +2022,7 @@ function createCobrosRoutes() {
   };
 
   const cobrosQueryFilters = (query = {}) => ({
-    tipoDocumento: String(query.tipoDocumento || '').trim(),
+    tipoDocumento: normalizeCvcTipoDocumentoFilter(query.tipoDocumento).join(','),
     fechaDesde: String(query.fechaDesde || '').trim(),
     fechaHasta: String(query.fechaHasta || '').trim(),
   });
@@ -2469,35 +2517,33 @@ function createClientsRoutes() {
       if (!vendorScope.ok) return res.status(403).json(dddForbiddenBody('FORBIDDEN_VENDOR', vendorScope.error));
       vendedorCodes = vendorScope.codes.length > 0 ? vendorScope.codes.join(',') : 'ALL';
       const isAllQuery = vendedorCodes === 'ALL' || !vendedorCodes;
+      const safeLimit = boundedInt(limit, 1, 200, 100);
+      const safeOffset = boundedInt(offset, 0, 100000, 0);
+      const safeSearch = normalizeSearchTerm(search);
       const cacheScope = buildCacheSecurityScope(req, { includeMargin: true });
-      const cacheKey = `ddd:clients:v2:${cacheScope}:${vendedorCodes || 'all'}:${search || 'none'}:${limit}:${offset}`;
+      const cacheKey = `ddd:clients:v3:${cacheScope}:${vendedorCodes || 'all'}:${safeSearch || 'none'}:${safeLimit}:${safeOffset}`;
       const role = req?.user?.role || 'COMERCIAL';
       const ttlSec = performanceCache.getTTL(role, isAllQuery);
 
-      const result = await performanceCache.getOrFetch(cacheKey, async () => {
+      const fetchClients = async () => {
         const vendorFilter = buildVendedorFilterLACLAE(vendedorCodes);
         let clientCodesFilter = '';
-        if (vendedorCodes && !search && vendedorCodes !== 'ALL') {
+        if (vendedorCodes && !safeSearch && vendedorCodes !== 'ALL') {
           const cachedClientCodes = getClientCodesFromCache(vendedorCodes);
           if (cachedClientCodes && cachedClientCodes.length > 0) {
-            const CHUNK_SIZE = 1000;
-            const chunks = [];
-            for (let i = 0; i < cachedClientCodes.length; i += CHUNK_SIZE) {
-              const chunk = cachedClientCodes.slice(i, i + CHUNK_SIZE).map(c => `'${c}'`).join(',');
-              chunks.push(`C.CODIGOCLIENTE IN (${chunk})`);
-            }
-            clientCodesFilter = `AND (${chunks.join(' OR ')})`;
+            clientCodesFilter = buildChunkedClientCodeFilter('C.CODIGOCLIENTE', cachedClientCodes);
           }
         }
 
-        let safeSearch = '';
         let searchFilter = '';
-        if (search) {
-          safeSearch = sanitizeForSQL(search.trim()).toUpperCase();
-          searchFilter = `AND(UPPER(C.NOMBRECLIENTE) LIKE '%${safeSearch}%'
-                          OR UPPER(C.NOMBREALTERNATIVO) LIKE '%${safeSearch}%'
-                          OR C.CODIGOCLIENTE LIKE '%${safeSearch}%'
-                          OR UPPER(C.POBLACION) LIKE '%${safeSearch}%')`;
+        const queryParams = [];
+        if (safeSearch) {
+          const likeSearch = `%${safeSearch}%`;
+          searchFilter = `AND(UPPER(C.NOMBRECLIENTE) LIKE ?
+                          OR UPPER(C.NOMBREALTERNATIVO) LIKE ?
+                          OR UPPER(C.CODIGOCLIENTE) LIKE ?
+                          OR UPPER(C.POBLACION) LIKE ?)`;
+          queryParams.push(likeSearch, likeSearch, likeSearch, likeSearch);
         }
 
         const vendorScopedCliFilter = clientCodesFilter
@@ -2508,7 +2554,7 @@ function createClientsRoutes() {
           : buildLaclaeBoundedClientCodesSql(vendedorCodes);
         const laclaeScopeFilter = laclaeBoundedFilter || vendorFilter.replace(/L\./g, '');
 
-        const clients = await cachedQuery(query, `
+        const clients = await cachedQuery((sql, params = []) => queryWithParams(sql, params, false), `
           WITH LACLAE_SCOPED AS (
             SELECT LCCDCL, LCIMVT, LCIMCT, LCAADC, LCMMDC, LCDDDC, LCCDVD
               FROM DSED.LACLAE
@@ -2553,8 +2599,14 @@ function createClientsRoutes() {
           LEFT JOIN DSEDAC.VDD V ON LV.LAST_VENDOR = V.CODIGOVENDEDOR
           WHERE C.ANOBAJA = 0 ${clientCodesFilter || vendorScopedCliFilter} ${searchFilter}
           ORDER BY COALESCE(S.TOTAL_PURCHASES, 0) DESC
-          OFFSET ${parseInt(offset)} ROWS FETCH FIRST ${parseInt(limit)} ROWS ONLY
-        `, cacheKey, RedisTTL.LONG);
+          OFFSET ${safeOffset} ROWS FETCH FIRST ${safeLimit} ROWS ONLY
+        `, {
+          cacheKey,
+          ttl: RedisTTL.LONG,
+          queryType: 'ddd-clients-list',
+          params: { vendedorCodes: vendedorCodes || 'ALL', search: safeSearch || null, limit: safeLimit, offset: safeOffset },
+          skipCache: isForceRefreshRequest(req),
+        }, queryParams);
 
         const normalized = clients.map(c => ({
           code: (c.code ?? c.CODE ?? '').toString().trim(),
@@ -2577,7 +2629,16 @@ function createClientsRoutes() {
           vendorCode: (c.vendorCode ?? c.VENDORCODE ?? '').toString().trim(),
         }));
         return { success: true, clients: normalized, count: normalized.length, isAllQuery };
-      }, ttlSec);
+      };
+
+      if (isForceRefreshRequest(req)) {
+        res.set('Cache-Control', 'no-store');
+        res.set('X-Cache-Source', 'bypass');
+        res.set('X-Query-Type', isAllQuery ? 'ALL-OPTIMIZED' : 'standard');
+        return res.json(await fetchClients());
+      }
+
+      const result = await performanceCache.getOrFetch(cacheKey, fetchClients, ttlSec);
 
       res.set('X-Cache-Source', result.source);
       res.set('X-Query-Type', isAllQuery ? 'ALL-OPTIMIZED' : 'standard');

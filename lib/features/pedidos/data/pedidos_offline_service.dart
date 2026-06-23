@@ -44,6 +44,16 @@ class PedidosOfflineService {
     return sha256.convert(utf8.encode(seed)).bytes;
   }
 
+  static bool _isValidClientRequestId(String? value) {
+    final token = value?.trim() ?? '';
+    return RegExp(r'^[A-Za-z0-9]{8,28}$').hasMatch(token);
+  }
+
+  static String _clientRequestIdForSyncKey(String syncKey) {
+    final digest = sha256.convert(utf8.encode(syncKey)).toString();
+    return 'po${digest.substring(0, 22)}';
+  }
+
   // ── Draft Orders ──
 
   /// Save current cart as a draft
@@ -146,7 +156,7 @@ class PedidosOfflineService {
       "vendedorCode": vendedorCode,
       "saleType": saleType,
       "lines": lineJson,
-      "clientRequestId": "pedido_offline_$key",
+      "clientRequestId": _clientRequestIdForSyncKey(key),
       "queuedAt": DateTime.now().toIso8601String(),
       "status": "pending",
       "attempts": 0,
@@ -347,10 +357,8 @@ class PedidosOfflineService {
     final data = Map.from(item);
     data.remove("syncKey");
     final existingRequestId = data["clientRequestId"]?.toString().trim();
-    if (existingRequestId == null) {
-      data["clientRequestId"] = "pedido_offline_$syncKey";
-    } else if (existingRequestId.isEmpty) {
-      data["clientRequestId"] = "pedido_offline_$syncKey";
+    if (!_isValidClientRequestId(existingRequestId)) {
+      data["clientRequestId"] = _clientRequestIdForSyncKey(syncKey);
     }
     data["status"] = "pending";
     data["attempts"] = _asInt(data["attempts"]);
@@ -377,9 +385,9 @@ class PedidosOfflineService {
     data["attempts"] = attempts;
     data["error"] = error.toString();
     data["failedAt"] = DateTime.now().toIso8601String();
-    data.putIfAbsent("clientRequestId", () {
-      return "pedido_offline_$syncKey";
-    });
+    if (!_isValidClientRequestId(data["clientRequestId"]?.toString())) {
+      data["clientRequestId"] = _clientRequestIdForSyncKey(syncKey);
+    }
     await box.put(syncKey, jsonEncode(data));
     debugPrint("[PedidosOffline] Sync failed for $syncKey: $error");
     return {

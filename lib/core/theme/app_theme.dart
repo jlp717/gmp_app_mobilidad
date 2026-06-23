@@ -13,16 +13,16 @@ class AppTheme {
   // ============================================================================
 
   /// Small radius — chips, badges, tags
-  static const double radiusSm = 12.0;
+  static const double radiusSm = 8.0;
 
   /// Medium radius — buttons, inputs, small cards
-  static const double radiusMd = 16.0;
+  static const double radiusMd = 12.0;
 
   /// Large radius — cards, modals, panels
-  static const double radiusLg = 24.0;
+  static const double radiusLg = 18.0;
 
   /// Extra large radius — hero cards, login panel
-  static const double radiusXl = 28.0;
+  static const double radiusXl = 22.0;
 
   /// Full pill — pills, avatars
   static const double radiusFull = 9999.0;
@@ -35,6 +35,10 @@ class AppTheme {
   static const Color darkSurface = AppColors.darkSurface;
   static const Color darkCard = AppColors.darkCard;
   static const Color borderColor = AppColors.borderColor;
+  static const Color inkSurface = AppColors.inkSurface;
+  static const Color raisedSurface = AppColors.raisedSurface;
+  static const Color softPanel = AppColors.softPanel;
+  static const Color mutedPanel = AppColors.mutedPanel;
 
   static const Color surfaceColor = AppColors.surfaceColor;
 
@@ -47,6 +51,10 @@ class AppTheme {
   static const Color neonTeal = AppColors.neonTeal;
   static const Color neonElectric = AppColors.neonElectric;
   static const Color holoBlue = AppColors.holoBlue;
+  static const Color accentMint = AppColors.accentMint;
+  static const Color accentAmber = AppColors.accentAmber;
+  static const Color accentRose = AppColors.accentRose;
+  static const Color accentIndigo = AppColors.accentIndigo;
 
   static const Color glowIntense = AppColors.glowIntense;
   static const Color glowMedium = AppColors.glowMedium;
@@ -82,14 +90,16 @@ class AppTheme {
   static const LinearGradient scannerGradient = AppColors.scannerGradient;
   static const LinearGradient loginGradient = AppColors.loginGradient;
   static const LinearGradient brandGradient = AppColors.brandGradient;
+  static const LinearGradient appShellGradient = AppColors.appShellGradient;
+  static const LinearGradient panelGradient = AppColors.panelGradient;
 
   /// Card gradient for delivery cards
   static LinearGradient get cardGradient => LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
         colors: [
-          darkSurface,
-          darkCard.withValues(alpha: 0.8),
+          raisedSurface,
+          softPanel,
         ],
       );
 
@@ -134,6 +144,7 @@ class AppTheme {
         onPrimary: darkBase,
         onSecondary: darkBase,
         onError: textPrimary,
+        onSurface: textPrimary,
       ),
 
       // Typography - Inter (more modern than Roboto)
@@ -204,31 +215,32 @@ class AppTheme {
 
       // Card Theme — V2.5: premium shadow, frosted border, dark surface
       cardTheme: CardThemeData(
-        color: darkCard,
-        elevation: 3,
-        shadowColor: Colors.black.withValues(alpha: 0.25),
+        color: raisedSurface,
+        elevation: 1,
+        shadowColor: Colors.black.withValues(alpha: 0.32),
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusLg),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.04)),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.07)),
         ),
         clipBehavior: Clip.antiAlias,
       ),
 
       // App Bar Theme — V2.5: subtle bottom glow, premium icons
       appBarTheme: AppBarTheme(
-        backgroundColor: darkSurface,
+        backgroundColor: inkSurface,
         elevation: 0,
         scrolledUnderElevation: 1,
-        shadowColor: neonBlue.withValues(alpha: 0.05),
+        shadowColor: neonBlue.withValues(alpha: 0.08),
+        surfaceTintColor: Colors.transparent,
         centerTitle: false,
         iconTheme: const IconThemeData(color: neonBlue),
         actionsIconTheme: const IconThemeData(color: neonBlue),
         titleTextStyle: const TextStyle(
           color: textPrimary,
           fontSize: 18,
-          fontWeight: FontWeight.w600,
-          letterSpacing: -0.3,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0,
         ),
         toolbarTextStyle: const TextStyle(
           color: textSecondary,
@@ -249,11 +261,11 @@ class AppTheme {
           foregroundColor: darkBase,
           disabledBackgroundColor: darkCard,
           disabledForegroundColor: textTertiary,
-          elevation: 2,
-          shadowColor: neonBlue.withValues(alpha: 0.3),
+          elevation: 0,
+          shadowColor: neonBlue.withValues(alpha: 0.18),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(radiusMd)),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           animationDuration: const Duration(milliseconds: 200),
           enableFeedback: true,
         ),
@@ -263,10 +275,10 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: neonBlue,
-          side: BorderSide(color: neonBlue.withValues(alpha: 0.5)),
+          side: BorderSide(color: neonBlue.withValues(alpha: 0.34)),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(radiusMd)),
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           animationDuration: const Duration(milliseconds: 200),
         ),
       ),
@@ -284,16 +296,16 @@ class AppTheme {
       // Input Theme — V2.5: glow focus, premium radius
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: darkSurface,
+        fillColor: softPanel,
         contentPadding:
             const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMd),
-          borderSide: BorderSide(color: borderColor.withValues(alpha: 0.5)),
+          borderSide: BorderSide(color: borderColor.withValues(alpha: 0.75)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMd),
-          borderSide: BorderSide(color: borderColor.withValues(alpha: 0.3)),
+          borderSide: BorderSide(color: borderColor.withValues(alpha: 0.55)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(radiusMd),
@@ -356,10 +368,10 @@ class AppTheme {
 
       // Dialog Theme — V2.5: generous radius, premium shadow, subtle glow
       dialogTheme: DialogThemeData(
-        backgroundColor: darkCard,
+        backgroundColor: raisedSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusLg),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
         ),
         elevation: 12,
         shadowColor: Colors.black.withValues(alpha: 0.5),
@@ -369,10 +381,10 @@ class AppTheme {
 
       // Bottom Sheet Theme — V2.5: frosted top, elevated
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: darkCard,
+        backgroundColor: raisedSurface,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.vertical(top: Radius.circular(radiusXl)),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.04)),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
         ),
         elevation: 12,
         shadowColor: Colors.black.withValues(alpha: 0.4),
@@ -385,7 +397,7 @@ class AppTheme {
 
       // Snackbar Theme — V2.5: floating pill, premium
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: darkCard,
+        backgroundColor: raisedSurface,
         contentTextStyle: const TextStyle(color: textPrimary, fontSize: 14),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusMd),
@@ -395,6 +407,68 @@ class AppTheme {
         elevation: 8,
         width: 440,
       ),
+
+      dividerTheme: DividerThemeData(
+        color: borderColor.withValues(alpha: 0.45),
+        thickness: 1,
+        space: 1,
+      ),
+
+      chipTheme: ChipThemeData(
+        backgroundColor: softPanel,
+        selectedColor: neonBlue.withValues(alpha: 0.18),
+        disabledColor: mutedPanel.withValues(alpha: 0.55),
+        labelStyle: const TextStyle(color: textSecondary, fontSize: 12),
+        secondaryLabelStyle: const TextStyle(color: textPrimary, fontSize: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        side: BorderSide(color: borderColor.withValues(alpha: 0.55)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusSm),
+        ),
+      ),
+
+      listTileTheme: ListTileThemeData(
+        iconColor: textSecondary,
+        textColor: textPrimary,
+        tileColor: Colors.transparent,
+        selectedTileColor: neonBlue.withValues(alpha: 0.12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusMd),
+        ),
+      ),
+
+      popupMenuTheme: PopupMenuThemeData(
+        color: raisedSurface,
+        surfaceTintColor: Colors.transparent,
+        elevation: 10,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusMd),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+      ),
+
+      iconButtonTheme: IconButtonThemeData(
+        style: ButtonStyle(
+          foregroundColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.disabled)) return textTertiary;
+            return neonBlue;
+          }),
+          overlayColor: WidgetStateProperty.all(
+            neonBlue.withValues(alpha: 0.10),
+          ),
+          shape: WidgetStateProperty.all(
+            RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(radiusMd),
+            ),
+          ),
+        ),
+      ),
+
+      progressIndicatorTheme: const ProgressIndicatorThemeData(
+        color: neonBlue,
+        linearTrackColor: mutedPanel,
+        circularTrackColor: mutedPanel,
+      ),
     );
   }
 
@@ -402,9 +476,37 @@ class AppTheme {
   // CUSTOM DECORATIONS — V2 Premium
   // ============================================================================
 
+  static BoxDecoration appBackground() => const BoxDecoration(
+        gradient: appShellGradient,
+      );
+
+  static BoxDecoration premiumPanel({
+    Color? accentColor,
+    double radius = radiusLg,
+    double opacity = 1,
+  }) {
+    final accent = accentColor ?? neonBlue;
+    return BoxDecoration(
+      gradient: panelGradient,
+      borderRadius: BorderRadius.circular(radius),
+      border: Border.all(color: accent.withValues(alpha: 0.16)),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(alpha: 0.26 * opacity),
+          blurRadius: 22,
+          offset: const Offset(0, 12),
+        ),
+        BoxShadow(
+          color: accent.withValues(alpha: 0.045 * opacity),
+          blurRadius: 28,
+        ),
+      ],
+    );
+  }
+
   /// Glassmorphism — V2: softer, more refined
   static BoxDecoration glassMorphism({Color? color}) => BoxDecoration(
-        color: (color ?? darkCard).withValues(alpha: 0.6),
+        color: (color ?? raisedSurface).withValues(alpha: 0.72),
         borderRadius: BorderRadius.circular(radiusLg),
         border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         boxShadow: [
@@ -417,7 +519,7 @@ class AppTheme {
 
   /// Neon glow — V2: subtler, more premium
   static BoxDecoration neonGlow({required Color color}) => BoxDecoration(
-        color: darkCard,
+        color: raisedSurface,
         borderRadius: BorderRadius.circular(radiusLg),
         border: Border.all(color: color.withValues(alpha: 0.4)),
         boxShadow: [

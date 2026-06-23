@@ -151,18 +151,10 @@ class _OrderFiltersBarState extends State<OrderFiltersBar> {
                 _statusChip('Borrador', 'BORRADOR', const Color(0xFFF97316)),
                 const SizedBox(width: 6),
                 _statusChip(
-                  'Pendiente ERP',
-                  'PENDIENTE_APROBACION',
-                  const Color(0xFF3B82F6),
-                ),
-                const SizedBox(width: 6),
-                _statusChip(
                   'Confirmado',
                   'CONFIRMADO',
                   const Color(0xFF22C55E),
                 ),
-                const SizedBox(width: 6),
-                _statusChip('Anulado', 'ANULADO', const Color(0xFFEF4444)),
               ],
             ),
           ),

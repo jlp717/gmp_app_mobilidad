@@ -5,7 +5,7 @@ const logger = require('../middleware/logger');
 const { verifyToken } = require('../middleware/auth');
 const { query, queryWithParams } = require('../config/db');
 const { cachedQuery } = require('../services/query-optimizer');
-const { TTL } = require('../services/redis-cache');
+const { TTL, redisCache } = require('../services/redis-cache');
 const {
     getCurrentDate,
     buildVendedorFilter,
@@ -24,6 +24,7 @@ const {
 } = require('../utils/common');
 
 const DASHBOARD_CACHE_VERSION = 'v20260602-b-sales-all';
+const VOLATILE_CACHE_QUERY_KEYS = new Set(['forcerefresh', 'refresh', '_ts', 't', 'cachebust', 'cachebuster']);
 
 function clampInt(value, defaultValue, min, max) {
     const parsed = parseInt(value, 10);
@@ -34,6 +35,7 @@ function clampInt(value, defaultValue, min, max) {
 function canonicalQueryKey(query, overrides = {}) {
     const merged = { ...(query || {}), ...overrides };
     return Object.keys(merged)
+        .filter((key) => !VOLATILE_CACHE_QUERY_KEYS.has(String(key).toLowerCase()))
         .sort()
         .map((key) => `${key}=${String(merged[key] ?? '')}`)
         .join('&');
@@ -44,6 +46,12 @@ function hashValues(values) {
         .sort()
         .join(',');
     return crypto.createHash('sha1').update(normalized).digest('hex').slice(0, 16);
+}
+
+function isDashboardForceRefresh(req) {
+    return req?.query?.forceRefresh != null ||
+        req?.query?.refresh != null ||
+        req?.query?._ts != null;
 }
 
 const DASHBOARD_FAMILY_DISTINCT_SQL = Object.freeze({
@@ -164,6 +172,16 @@ router.get('/metrics', verifyToken, async (req, res) => {
         const isAllVendors = !vendedorCodes || vendedorCodes === 'ALL';
         const currentTTL = isAllVendors ? TTL.MEDIUM : TTL.SHORT;
         const prevTTL = TTL.LONG;
+        const responseCacheKey = `${cacheKey}:response`;
+
+        if (!isDashboardForceRefresh(req)) {
+            const cachedResponse = await redisCache.get('dashboard', responseCacheKey);
+            if (cachedResponse) {
+                res.set('X-Cache-Hit', 'true');
+                res.set('X-Cache-Scope', vendedorCodes || 'ALL');
+                return res.json(cachedResponse);
+            }
+        }
 
         const vendedorResult = buildVendedorFilterParameterized(vendedorCodes);
         const currentDataSql = `
@@ -283,6 +301,9 @@ router.get('/metrics', verifyToken, async (req, res) => {
             }
         };
 
+        await redisCache.set('dashboard', responseCacheKey, responseData, currentTTL);
+        res.set('X-Cache-Hit', 'false');
+        res.set('X-Cache-Scope', vendedorCodes || 'ALL');
         res.json(responseData);
 
     } catch (error) {
@@ -304,10 +325,10 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
             userCode: req.user?.code || req.user?.id || ''
         })}`;
 
-        const { redisCache } = require('../services/redis-cache');
-        const cachedResult = await redisCache.get('matrix', cacheKey);
+        const cachedResult = isDashboardForceRefresh(req) ? null : await redisCache.get('matrix', cacheKey);
         if (cachedResult) {
             logger.info(`⚡ Cache hit: matrix-data`);
+            res.set('X-Cache-Hit', 'true');
             return res.json(cachedResult);
         }
 
@@ -595,6 +616,7 @@ router.get('/matrix-data', verifyToken, async (req, res) => {
         const responseStub = { rows: finalData, hierarchy, periods: [], year: selectedYear };
 
         await redisCache.set('matrix', cacheKey, responseStub, TTL.MEDIUM);
+        res.set('X-Cache-Hit', 'false');
         res.json(responseStub);
 
     } catch (error) {

@@ -26,6 +26,7 @@ class ProductCard extends StatefulWidget {
     this.cartQty = 0,
     this.cartQtySuffix = 'c',
     this.onQuickAdd,
+    this.isMarginVisible = false,
   });
   final Product product;
   final VoidCallback onTap;
@@ -36,6 +37,7 @@ class ProductCard extends StatefulWidget {
   final double cartQty;
   final String cartQtySuffix;
   final VoidCallback? onQuickAdd;
+  final bool isMarginVisible;
 
   @override
   State<ProductCard> createState() => _ProductCardState();
@@ -99,22 +101,25 @@ class _ProductCardState extends State<ProductCard> {
 
     return Card(
       color: inCart
-          ? AppTheme.darkCard.withValues(alpha: 0.92)
-          : AppTheme.darkCard,
-      margin: const EdgeInsets.only(bottom: 6),
+          ? AppTheme.raisedSurface.withValues(alpha: 0.98)
+          : AppTheme.softPanel,
+      elevation: inCart ? 2 : 0,
+      shadowColor: AppTheme.neonGreen.withValues(alpha: 0.12),
+      surfaceTintColor: Colors.transparent,
+      margin: const EdgeInsets.only(bottom: 8),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         side: BorderSide(
           color: inCart
               ? AppTheme.neonGreen
               : widget.promo != null
                   ? promoColor
-                  : AppTheme.borderColor.withValues(alpha: 0.3),
+                  : AppTheme.borderColor.withValues(alpha: 0.42),
           width: inCart ? 1.5 : (widget.promo != null ? 1.5 : 1.0),
         ),
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
         onTap: widget.onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -456,7 +461,8 @@ class _ProductCardState extends State<ProductCard> {
                     ],
                   ),
                   // Minimum price reference (per primary sale unit)
-                  if (widget.product.precioMinimo > 0 &&
+                  if (widget.isMarginVisible &&
+                      widget.product.precioMinimo > 0 &&
                       minPrimaryPrice != displayPrice)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
@@ -507,44 +513,49 @@ class _ProductCardState extends State<ProductCard> {
               ),
               // Quick add button
               if (widget.onQuickAdd != null) ...[
-                const SizedBox(width: 4),
-                GestureDetector(
-                  onTap: widget.onQuickAdd,
-                  child: SizedBox(
-                    width: 42,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: AppTheme.neonBlue.withValues(alpha: 0.15),
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: AppTheme.neonBlue.withValues(alpha: 0.4),
-                            ),
-                          ),
-                          child: const Icon(
-                            Icons.add,
-                            color: AppTheme.neonBlue,
-                            size: 18,
+                const SizedBox(width: 8),
+                Tooltip(
+                  message: 'Añadir al carrito',
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: widget.onQuickAdd,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusFull),
+                      child: Container(
+                        constraints: const BoxConstraints(minWidth: 72),
+                        height: 36,
+                        padding: const EdgeInsets.symmetric(horizontal: 10),
+                        decoration: BoxDecoration(
+                          color: AppTheme.neonBlue.withValues(alpha: 0.14),
+                          borderRadius:
+                              BorderRadius.circular(AppTheme.radiusFull),
+                          border: Border.all(
+                            color: AppTheme.neonBlue.withValues(alpha: 0.38),
                           ),
                         ),
-                        const SizedBox(height: 2),
-                        const FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            'Anadir',
-                            maxLines: 1,
-                            style: TextStyle(
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.add_shopping_cart_rounded,
                               color: AppTheme.neonBlue,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
+                              size: 16,
                             ),
-                          ),
+                            SizedBox(width: 5),
+                            Text(
+                              'Añadir',
+                              maxLines: 1,
+                              overflow: TextOverflow.clip,
+                              style: TextStyle(
+                                color: AppTheme.neonBlue,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),

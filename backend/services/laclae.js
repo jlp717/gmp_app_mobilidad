@@ -518,7 +518,7 @@ function getVendedoresFromCache() {
 // P7: Get aggregated active VISIT days for vendor(s) - handles single or comma-separated
 function getVendorActiveDaysFromCache(vendedorCode) {
     if (!laclaeCacheReady || !vendedorCode) {
-        logger.warn(`getVendorActiveDaysFromCache: cache not ready or no vendedorCode`);
+        logger.debug(`getVendorActiveDaysFromCache: cache not ready or no vendedorCode`);
         return [];
     }
 
@@ -538,12 +538,12 @@ function getVendorActiveDaysFromCache(vendedorCode) {
     });
 
     if (daysSet.size === 0 && codes.length > 0) {
-        logger.warn(`Vendors [${codes.join(',')}] not in LACLAE cache. Available: ${Object.keys(laclaeCache).slice(0, 10).join(', ')}...`);
+        logger.debug(`Vendors [${codes.join(',')}] not in LACLAE cache. Available: ${Object.keys(laclaeCache).slice(0, 10).join(', ')}...`);
         return [];
     }
 
     const result = Array.from(daysSet);
-    logger.info(`📅 Vendors [${codes.join(',')}] visit days: ${result.join(', ')} (${totalClients} clients)`);
+    logger.debug(`Vendors [${codes.join(',')}] visit days: ${result.join(', ')} (${totalClients} clients)`);
     return result; // Returns ['lunes', 'martes'...]
 }
 

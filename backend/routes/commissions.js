@@ -1508,11 +1508,22 @@ router.get('/summary', verifyToken, async (req, res) => {
                 ? `comm:summary:${COMMISSIONS_CACHE_VERSION}:${allScope}:${years.join(',')}`
                 : `comm:summary:${COMMISSIONS_CACHE_VERSION}:GROUP:${groupHash}:${years.join(',')}`)
             : null;
+        const singleSummaryCacheKey = !isGroupedRequest
+            ? `comm:summary:${COMMISSIONS_CACHE_VERSION}:SINGLE:${safeVendorCode}:${years.join(',')}`
+            : null;
 
         if (aggregatedCacheKey && !shouldForceRefresh) {
             const cachedResult = await redisCache.get('route', aggregatedCacheKey);
             if (cachedResult) {
                 logger.info(`[COMMISSIONS] ⚡ Cache HIT for grouped summary (${aggregatedCacheKey})`);
+                return res.json({ success: true, ...cachedResult });
+            }
+        }
+
+        if (singleSummaryCacheKey && !shouldForceRefresh) {
+            const cachedResult = await redisCache.get('route', singleSummaryCacheKey);
+            if (cachedResult) {
+                logger.info(`[COMMISSIONS] Cache HIT for vendor summary (${singleSummaryCacheKey})`);
                 return res.json({ success: true, ...cachedResult });
             }
         }
@@ -1863,6 +1874,10 @@ router.get('/summary', verifyToken, async (req, res) => {
             await redisCache.set('route', aggregatedCacheKey, aggregatedResult, 900);
             logger.info(`[COMMISSIONS] Cached grouped summary for 15min (${aggregatedCacheKey})`);
         }
+        if (singleSummaryCacheKey && aggregatedResult) {
+            await redisCache.set('route', singleSummaryCacheKey, aggregatedResult, 300);
+            logger.debug(`[COMMISSIONS] Cached vendor summary for 5min (${singleSummaryCacheKey})`);
+        }
 
         // Apply pagination to breakdown when vendor=ALL or grouped request
         let paginatedResult = { ...aggregatedResult };
@@ -2006,6 +2021,7 @@ router.post('/pay', verifyToken, async (req, res) => {
         // INVALIDATE CACHE: Clear summary cache for this vendor/year so next request fetches fresh data
         try {
             await invalidateCachePattern(`comm:summary:${vendedorCode.trim()}:${year}`);
+            await invalidateCachePattern(`comm:summary:${COMMISSIONS_CACHE_VERSION}:SINGLE:${vendedorCode.trim()}:*`);
             await invalidateCachePattern(`comm:summary:${COMMISSIONS_CACHE_VERSION}:ALL:*`);
             await invalidateCachePattern(`comm:summary:${COMMISSIONS_CACHE_VERSION}:GROUP:*`);
             await invalidateCachePattern('comm:summary:ALL:*');

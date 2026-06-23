@@ -43,6 +43,7 @@ const pedidosService = require('../services/pedidos.service');
 function mockSuccessfulConfirmationQueries({
   vehicleCode = '02',
   driverCode = '57',
+  vendedorCode = '57',
   includeLine = false,
 } = {}) {
   const orderLine = {
@@ -67,6 +68,7 @@ function mockSuccessfulConfirmationQueries({
     TIPOLINEA: 'R',
     TIPOVENTA: 'CC',
     CLASELINEA: 'VT',
+    CODIGOIVA: '1',
     ORDEN: 1,
   };
 
@@ -85,7 +87,7 @@ function mockSuccessfulConfirmationQueries({
         HORADOCUMENTO: 100800,
         CODIGOCLIENTE: '4300010363',
         NOMBRECLIENTE: 'SUSHI LORCA, S.L.',
-        CODIGOVENDEDOR: '57',
+        CODIGOVENDEDOR: vendedorCode,
         CODIGOFORMAPAGO: '02',
         CODIGOTARIFA: 1,
         CODIGOALMACEN: 1,
@@ -128,7 +130,7 @@ function mockSuccessfulConfirmationQueries({
         HORADOCUMENTO: 100800,
         CODIGOCLIENTE: '4300010363',
         NOMBRECLIENTE: 'SUSHI LORCA, S.L.',
-        CODIGOVENDEDOR: '57',
+        CODIGOVENDEDOR: vendedorCode,
         CODIGOFORMAPAGO: '02',
         CODIGOTARIFA: 1,
         CODIGOALMACEN: 1,
@@ -152,6 +154,18 @@ function mockSuccessfulConfirmationQueries({
     }
     return [];
   });
+}
+
+function paramsByInsertColumn(insertCall) {
+  const [sql, params] = insertCall;
+  const match = sql.match(/\(([^)]+)\)\s+VALUES/i);
+  if (!match) return {};
+  return Object.fromEntries(
+    match[1]
+      .split(',')
+      .map((column) => column.trim())
+      .map((column, index) => [column, params[index]]),
+  );
 }
 
 beforeEach(() => {
@@ -290,14 +304,15 @@ describe('pedidos reparto confirmation contract', () => {
     expect(cpcInsert[0]).toContain('SUBEMPRESAPEDIDO');
     expect(cpcInsert[0]).toContain('EJERCICIOPEDIDO');
     expect(cpcInsert[0]).toContain('DIASERVICIO');
-    // resolvePedidoTerminal derives terminal from CODIGOVENDEDOR header (57), not PEDIDOS_SYSTEM_TERMINAL
-    expect(cpcInsert[1]).toEqual(expect.arrayContaining(['GMP', 2026, 'P', 57, 778]));
+    // FI-11: pedido ERP fixed format P-093-XXXXXX, independent of vendor/env terminal.
+    expect(cpcInsert[1]).toEqual(expect.arrayContaining(['GMP', 2026, 'P', 93, 778]));
 
     expect(lpcInsert).toBeDefined();
     expect(lpcInsert[0]).toContain('SECUENCIAPEDIDO');
     expect(lpcInsert[0]).toContain('CODIGOARTICULO');
+    expect(lpcInsert[0]).toContain('CODIGOIVA');
     expect(lpcInsert[0]).toContain('IMPORTEVENTA');
-    expect(lpcInsert[1]).toEqual(expect.arrayContaining(['ART001', 2, 20]));
+    expect(lpcInsert[1]).toEqual(expect.arrayContaining(['ART001', '1', 2, 20]));
 
     const localUpdate = mockConnQuery.mock.calls.find(([sql]) =>
       /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO\s*=\s*'CONFIRMADO'/i.test(sql),
@@ -305,7 +320,7 @@ describe('pedidos reparto confirmation contract', () => {
     expect(localUpdate).toBeDefined();
     expect(localUpdate[0]).toContain('TARGET_SCHEMA = ?');
     expect(localUpdate[0]).toContain('SYSTEM_NUMEROPEDIDO = ?');
-    expect(localUpdate[1]).toEqual(expect.arrayContaining(['DSEDAC', 'SYNCED', 2026, 'P', 57, 778]));
+    expect(localUpdate[1]).toEqual(expect.arrayContaining(['DSEDAC', 'SYNCED', 2026, 'P', 93, 778]));
     expect(mockConnQuery.mock.calls.some(([sql]) => /SET TRANSACTION ISOLATION LEVEL READ COMMITTED/i.test(sql))).toBe(true);
     expect(mockConnQuery.mock.calls.some(([sql]) => /^COMMIT$/i.test(sql))).toBe(true);
   });
@@ -348,5 +363,56 @@ describe('pedidos reparto confirmation contract', () => {
     expect(cpcInsert[0]).not.toContain('CODIGOREPARTIDOR');
     expect(cpcInsert[0]).toContain('CODIGORUTA');
     expect(cpcInsert[1]).toEqual(expect.arrayContaining(['R9']));
+  });
+
+  test('DSEDAC export keeps ERP terminal separate from seller actor columns', async () => {
+    process.env.PEDIDOS_CONFIRMATION_SCHEMA = 'JAVIER';
+    process.env.PEDIDOS_EXPORT_TO_SYSTEM = 'true';
+    process.env.PEDIDOS_DSEDAC_STORAGE_APPROVED = 'true';
+    process.env.PEDIDOS_DSEDAC_EXPORT_APPROVED = 'true';
+    process.env.PEDIDOS_SYSTEM_TERMINAL = '95';
+    mockGetClientDays.mockReturnValue({
+      deliveryDays: ['martes', 'jueves'],
+      deliveryDaysShort: 'MJ',
+    });
+    mockSuccessfulConfirmationQueries({
+      includeLine: true,
+      vendedorCode: '02',
+      vehicleCode: '11',
+      driverCode: '95',
+    });
+    mockConnQuery.mockImplementation(async (sql) => {
+      if (/MAX\(NUMEROPEDIDO\)/i.test(sql)) return [{ NEXT_NUMERO: 780 }];
+      return [];
+    });
+    mockPool = {
+      connect: jest.fn().mockResolvedValue({
+        query: (...args) => mockConnQuery(...args),
+        close: mockConnClose,
+      }),
+    };
+
+    await pedidosService.confirmOrder(42, 'CC', { deliveryDate: '2026-05-05' });
+
+    const cpcInsert = mockConnQuery.mock.calls.find(([sql]) =>
+      /INSERT\s+INTO\s+DSEDAC\.CPC/i.test(sql),
+    );
+    const lpcInsert = mockConnQuery.mock.calls.find(([sql]) =>
+      /INSERT\s+INTO\s+DSEDAC\.LPC/i.test(sql),
+    );
+    expect(cpcInsert).toBeDefined();
+    expect(lpcInsert).toBeDefined();
+
+    const cpc = paramsByInsertColumn(cpcInsert);
+    const lpc = paramsByInsertColumn(lpcInsert);
+    for (const row of [cpc, lpc]) {
+      expect(row.TERMINALPEDIDO).toBe(93);
+      expect(row.CODIGOVENDEDOR).toBe('02');
+      expect(row.CODIGOVENDEDORCOBRO).toBe('02');
+      expect(row.CODIGOPROMOTORPREVENTA).toBe('02');
+      expect(row.CODIGOCOMERCIAL).toBe('02');
+    }
+    expect(cpc.CODIGOVENDEDORUSUARIO).toBe('02');
+    expect(cpc.CODIGOUSUARIO).toBe('02');
   });
 });

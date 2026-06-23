@@ -282,8 +282,6 @@ class AnalyticsDashboard extends StatelessWidget {
     final statuses = {
       'BORRADOR': (AppTheme.neonBlue, Icons.edit_note),
       'CONFIRMADO': (AppTheme.neonGreen, Icons.check_circle),
-      'ENVIADO': (AppTheme.neonPurple, Icons.local_shipping),
-      'ANULADO': (AppTheme.error, Icons.cancel),
     };
 
     return Row(

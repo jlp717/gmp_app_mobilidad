@@ -668,9 +668,9 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppTheme.darkBase,
+      backgroundColor: Colors.transparent,
       appBar: AppBar(
-        backgroundColor: AppTheme.darkSurface,
+        backgroundColor: AppTheme.inkSurface,
         toolbarHeight: 52,
         title: Text(
           'Pedidos',
@@ -863,9 +863,26 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         ],
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: AppTheme.neonBlue,
-          labelColor: AppTheme.neonBlue,
-          unselectedLabelColor: Colors.white54,
+          indicatorSize: TabBarIndicatorSize.tab,
+          indicator: BoxDecoration(
+            color: AppTheme.neonBlue.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+            border: Border.all(
+              color: AppTheme.neonBlue.withValues(alpha: 0.30),
+            ),
+          ),
+          labelColor: Colors.white,
+          unselectedLabelColor: AppTheme.textSecondary,
+          labelStyle: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+          unselectedLabelStyle: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          ),
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+          dividerColor: Colors.transparent,
           tabs: const [
             Tab(
               height: 40,
@@ -881,26 +898,29 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
           ],
         ),
       ),
-      body: Column(
-        children: [
-          // "Ver como" vendor selector for JEFE_VENTAS — visible on BOTH tabs
-          if (widget.isJefeVentas || widget.forceShowVendorSelector)
-            GlobalVendorSelector(
-              isJefeVentas: true,
-              forceShow: widget.forceShowVendorSelector,
+      body: DecoratedBox(
+        decoration: AppTheme.appBackground(),
+        child: Column(
+          children: [
+            // "Ver como" vendor selector for JEFE_VENTAS — visible on BOTH tabs
+            if (widget.isJefeVentas || widget.forceShowVendorSelector)
+              GlobalVendorSelector(
+                isJefeVentas: true,
+                forceShow: widget.forceShowVendorSelector,
+              ),
+            Expanded(
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildNuevoPedidoTab(),
+                  _buildMisPedidosTab(),
+                  _buildEvolucionTab(),
+                  _buildDevolucionesTab(),
+                ],
+              ),
             ),
-          Expanded(
-            child: TabBarView(
-              controller: _tabController,
-              children: [
-                _buildNuevoPedidoTab(),
-                _buildMisPedidosTab(),
-                _buildEvolucionTab(),
-                _buildDevolucionesTab(),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -919,27 +939,42 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
   Widget _buildTabletLayout() {
     final provider = ref.watch(pedidosProvider);
-    return Row(
-      children: [
-        // Left: catalog
-        Expanded(
-          flex: 3,
-          child: _buildCatalogPanel(),
-        ),
-        // Divider
-        Container(
-          width: 1,
-          color: AppTheme.borderColor.withValues(alpha: 0.3),
-        ),
-        // Right: order summary
-        Expanded(
-          flex: 2,
-          child: OrderSummaryWidget(
-            vendedorCode: _activeOrderVendedorCode,
-            onOrderConfirmed: _handleOrderConfirmed,
+    return Padding(
+      padding: const EdgeInsets.all(14),
+      child: Row(
+        children: [
+          // Left: catalog
+          Expanded(
+            flex: 3,
+            child: Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: AppTheme.premiumPanel(
+                accentColor: provider.hasClient
+                    ? AppTheme.neonBlue
+                    : AppTheme.mutedPanel,
+              ),
+              child: _buildCatalogPanel(),
+            ),
           ),
-        ),
-      ],
+          const SizedBox(width: 14),
+          // Right: order summary
+          Expanded(
+            flex: 2,
+            child: Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: AppTheme.premiumPanel(
+                accentColor: provider.hasLines
+                    ? AppTheme.neonGreen
+                    : AppTheme.accentAmber,
+              ),
+              child: OrderSummaryWidget(
+                vendedorCode: _activeOrderVendedorCode,
+                onOrderConfirmed: _handleOrderConfirmed,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -962,66 +997,114 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
             bottom: 16,
             right: 16,
             left: lineCount > 0 ? null : 16,
-            child: FloatingActionButton.extended(
-              heroTag: 'cart_fab',
-              onPressed: () => _showCartSheet(),
-              backgroundColor: AppTheme.neonBlue,
-              foregroundColor: AppTheme.darkBase,
-              icon: SizedBox(
-                width: 30,
-                height: 30,
-                child: Stack(
-                  clipBehavior: Clip.none,
-                  alignment: Alignment.center,
-                  children: [
-                    Icon(
-                      lineCount > 0
-                          ? Icons.shopping_cart_outlined
-                          : Icons.receipt_outlined,
-                      size: 22,
-                    ),
-                    if (lineCount > 0)
-                      Positioned(
-                        right: -4,
-                        top: -4,
-                        child: Container(
-                          constraints: const BoxConstraints(
-                            minWidth: 16,
-                            minHeight: 16,
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 4,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppTheme.darkBase,
-                            border: Border.all(
-                              color: AppTheme.neonBlue,
-                              width: 1.5,
-                            ),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            cartLabel,
-                            style: const TextStyle(
-                              color: AppTheme.neonBlue,
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                              height: 1.1,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              label: Text(
-                PedidosFormatters.money(cartTotal),
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
+            child: _buildCartActionButton(
+              expanded: lineCount == 0,
+              lineCount: lineCount,
+              cartLabel: cartLabel,
+              cartTotal: cartTotal,
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildCartActionButton({
+    required bool expanded,
+    required int lineCount,
+    required String cartLabel,
+    required double cartTotal,
+  }) {
+    final priceText = Text(
+      PedidosFormatters.money(cartTotal),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        color: AppTheme.darkBase,
+        fontWeight: FontWeight.bold,
+      ),
+    );
+
+    return Material(
+      color: AppTheme.neonBlue,
+      elevation: 6,
+      shadowColor: AppTheme.neonBlue.withValues(alpha: 0.28),
+      borderRadius: BorderRadius.circular(18),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: _showCartSheet,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 56, minWidth: 88),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            child: Row(
+              mainAxisSize: expanded ? MainAxisSize.max : MainAxisSize.min,
+              mainAxisAlignment:
+                  expanded ? MainAxisAlignment.center : MainAxisAlignment.start,
+              children: [
+                _buildCartActionIcon(lineCount, cartLabel),
+                const SizedBox(width: 10),
+                if (expanded) Flexible(child: priceText) else priceText,
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCartActionIcon(int lineCount, String cartLabel) {
+    final hasLines = lineCount > 0;
+    return SizedBox(
+      width: hasLines ? 42 : 30,
+      height: 34,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Align(
+            alignment: hasLines ? Alignment.centerLeft : Alignment.center,
+            child: Icon(
+              hasLines ? Icons.shopping_cart_outlined : Icons.receipt_outlined,
+              color: AppTheme.darkBase,
+              size: 24,
+            ),
+          ),
+          if (hasLines)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: Container(
+                constraints: const BoxConstraints(
+                  minWidth: 18,
+                  minHeight: 18,
+                  maxWidth: 52,
+                ),
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.darkBase,
+                  border: Border.all(
+                    color: AppTheme.neonBlue,
+                    width: 1.5,
+                  ),
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                alignment: Alignment.center,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    cartLabel,
+                    maxLines: 1,
+                    style: const TextStyle(
+                      color: AppTheme.neonBlue,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                      height: 1,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
@@ -1544,6 +1627,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               : 0,
           cartQty: cartQty,
           cartQtySuffix: cartQtySuffix,
+          isMarginVisible: provider.isMarginVisible,
           onQuickAdd: () async {
             unawaited(HapticFeedback.lightImpact());
             final messenger = ScaffoldMessenger.of(context);
@@ -2481,9 +2565,6 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
               ref.watch(pedidosProvider.select((p) => p.isMarginVisible)),
           onTap: () => _showOrderDetail(order),
           onDuplicate: () => _duplicateOrder(order),
-          onCancel: order.estado != 'ANULADO' && order.estado != 'BORRADOR'
-              ? () => _cancelOrder(order)
-              : null,
           onViewAlbaran:
               OrderStatusConfig.canonicalDisplayStatus(order.estado) ==
                       'CONFIRMADO'
@@ -2500,7 +2581,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
   Future<void> _showOrderDetail(OrderSummary order) async {
     final result = await OrderDetailSheet.show(context, orderId: order.id);
-    if (result == 'cancelled' && mounted) {
+    if (result == 'deleted' && mounted) {
       await _loadOrdersWithFilters(
         ref.read(pedidosProvider),
         forceRefresh: true,
@@ -2535,7 +2616,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
 
   Future<void> _showOrderDetailById(int orderId) async {
     final result = await OrderDetailSheet.show(context, orderId: orderId);
-    if (result == 'cancelled' && mounted) {
+    if (result == 'deleted' && mounted) {
       await _loadOrdersWithFilters(
         ref.read(pedidosProvider),
         forceRefresh: true,
@@ -2590,8 +2671,8 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cerrar',
-                style: TextStyle(color: Colors.white54)),
+            child:
+                const Text('Cerrar', style: TextStyle(color: Colors.white54)),
           ),
           if (orderId != null)
             FilledButton.icon(
@@ -2631,67 +2712,6 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
         backgroundColor: AppTheme.neonBlue,
       ),
     );
-  }
-
-  Future<void> _cancelOrder(OrderSummary order) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppTheme.darkSurface,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: AppTheme.error, size: 22),
-            SizedBox(width: 8),
-            Text('Anular pedido', style: TextStyle(color: Colors.white)),
-          ],
-        ),
-        content: Text(
-          '¿Seguro que quieres anular el pedido #${order.numeroPedidoFormatted}?',
-          style: const TextStyle(color: Colors.white70),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child:
-                const Text('Cancelar', style: TextStyle(color: Colors.white54)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child:
-                const Text('Anular', style: TextStyle(color: AppTheme.error)),
-          ),
-        ],
-      ),
-    );
-    // Nota: antes era `confirm ?? false && mounted`, que por precedencia se
-    // evaluaba como `confirm ?? (false && mounted)` y nunca comprobaba mounted.
-    if ((confirm ?? false) && mounted) {
-      try {
-        await ref.read(pedidosProvider).cancelExistingOrder(order.id);
-        await _loadOrdersWithFilters(
-          ref.read(pedidosProvider),
-          forceRefresh: true,
-        );
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Pedido anulado'),
-              backgroundColor: AppTheme.error,
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Error al anular: $e'),
-              backgroundColor: AppTheme.error,
-            ),
-          );
-        }
-      }
-    }
   }
 
   Future<void> _confirmBorrador(OrderSummary order) async {
@@ -2800,7 +2820,7 @@ class _PedidosPageState extends ConsumerState<PedidosPage>
     );
     if ((confirm ?? false) && mounted) {
       try {
-        await ref.read(pedidosProvider).cancelExistingOrder(order.id);
+        await ref.read(pedidosProvider).deleteDraftOrder(order.id);
         await _loadOrdersWithFilters(ref.read(pedidosProvider));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

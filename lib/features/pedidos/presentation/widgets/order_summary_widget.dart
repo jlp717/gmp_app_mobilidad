@@ -320,9 +320,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
         : margin >= 5
             ? Colors.orange
             : AppTheme.error;
-    final totalShown = provider.globalDiscountPct > 0
-        ? provider.totalConDescuento
-        : provider.totalImporte;
+    final totalShown = provider.totalConIva;
 
     if (!_discountFocusNode.hasFocus) {
       final discountText = provider.globalDiscountPct > 0
@@ -509,7 +507,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                   ),
                   ...provider.ivaBreakdown.entries.map(
                     (e) => Text(
-                      'IVA ${(e.key * 100).toStringAsFixed(0)}%: ${PedidosFormatters.money(e.value)}',
+                      'IVA ${e.key}%: ${PedidosFormatters.money(e.value)}',
                       style: const TextStyle(
                         color: Colors.white38,
                         fontSize: 10,
@@ -1060,7 +1058,7 @@ class _OrderSummaryWidgetState extends ConsumerState<OrderSummaryWidget> {
                     ],
                   ),
                 ],
-                if (line.precioMinimo > 0)
+                if (provider.isMarginVisible && line.precioMinimo > 0)
                   Padding(
                     padding: const EdgeInsets.only(top: 6),
                     child: Text(

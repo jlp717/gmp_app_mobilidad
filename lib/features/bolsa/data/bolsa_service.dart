@@ -14,6 +14,8 @@ class BolsaService {
   /// GET /api/bolsa/:vendedorCode/status
   static Future<BolsaStatus> getStatus(
     String vendedorCode, {
+    int? year,
+    int? month,
     bool forceRefresh = false,
   }) async {
     final code = vendedorCode.trim();
@@ -21,13 +23,15 @@ class BolsaService {
       throw ArgumentError('vendedorCode is required');
     }
     final params = <String, dynamic>{};
+    if (year != null) params['year'] = year.toString();
+    if (month != null) params['month'] = month.toString();
     if (forceRefresh) {
       params['_ts'] = DateTime.now().millisecondsSinceEpoch.toString();
     }
     final response = await ApiClient.get(
       '$_base/$code/status',
       queryParameters: params,
-      cacheKey: 'bolsa:status:$code',
+      cacheKey: 'bolsa:status:$code:${year ?? 'current'}:${month ?? 'current'}',
       cacheTTL: CacheService.realtimeTTL,
       forceRefresh: forceRefresh,
     );
@@ -106,11 +110,15 @@ class BolsaService {
   static Future<List<BolsaMonthlyPoint>> getHistory(
     String vendedorCode, {
     int months = 12,
+    int? year,
+    int? month,
     bool forceRefresh = false,
   }) async {
     final code = vendedorCode.trim();
     if (code.isEmpty) return [];
     final params = <String, dynamic>{'months': months.toString()};
+    if (year != null) params['year'] = year.toString();
+    if (month != null) params['month'] = month.toString();
     if (forceRefresh) {
       params['_ts'] = DateTime.now().millisecondsSinceEpoch.toString();
     }
@@ -118,7 +126,8 @@ class BolsaService {
       final response = await ApiClient.get(
         '$_base/$code/history',
         queryParameters: params,
-        cacheKey: 'bolsa:history:$code:$months',
+        cacheKey:
+            'bolsa:history:$code:$months:${year ?? 'current'}:${month ?? 'current'}',
         cacheTTL: CacheService.shortTTL,
         forceRefresh: forceRefresh,
       );

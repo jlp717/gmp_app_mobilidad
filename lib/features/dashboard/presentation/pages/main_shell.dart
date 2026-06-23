@@ -429,14 +429,25 @@ class _MainShellState extends ConsumerState<MainShell> {
     return Scaffold(
       backgroundColor: Colors.transparent,
       drawer: _buildPhoneDrawer(user, isJefeVentas),
-      body: SafeArea(
-        child: _buildCurrentPage(isJefeVentas),
+      body: DecoratedBox(
+        decoration: AppTheme.appBackground(),
+        child: SafeArea(
+          child: _buildCurrentPage(isJefeVentas),
+        ),
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: AppTheme.surfaceColor,
+          gradient: AppTheme.panelGradient,
           border: Border(
-              top: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+            top: BorderSide(color: AppTheme.neonBlue.withValues(alpha: 0.16)),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.34),
+              blurRadius: 18,
+              offset: const Offset(0, -8),
+            ),
+          ],
         ),
         child: SafeArea(
           top: false,
@@ -489,8 +500,21 @@ class _MainShellState extends ConsumerState<MainShell> {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 4),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        margin: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? item.color.withValues(alpha: 0.13)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+          border: Border.all(
+            color: isSelected
+                ? item.color.withValues(alpha: 0.28)
+                : Colors.transparent,
+          ),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -619,7 +643,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   /// Drawer for phone layout with user info, mode switcher, and actions
   Widget _buildPhoneDrawer(UserModel user, bool isJefeVentas) {
     return Drawer(
-      backgroundColor: AppTheme.surfaceColor,
+      backgroundColor: AppTheme.inkSurface,
       width: MediaQuery.of(context).size.width * 0.72,
       child: SafeArea(
         child: Column(
@@ -667,110 +691,121 @@ class _MainShellState extends ConsumerState<MainShell> {
     final sidebarW = Responsive.sidebarWidth(context);
 
     return Scaffold(
-      body: SafeArea(
-        child: Row(
-          children: [
-            // Sidebar Navigation
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeInOut,
-              width: _isNavExpanded ? sidebarW : 0,
-              child: _isNavExpanded
-                  ? Container(
-                      decoration: BoxDecoration(
-                        color: AppTheme.surfaceColor,
-                        border: Border(
-                          right: BorderSide(
-                            color: Colors.white.withValues(alpha: 0.05),
+      backgroundColor: Colors.transparent,
+      body: DecoratedBox(
+        decoration: AppTheme.appBackground(),
+        child: SafeArea(
+          child: Row(
+            children: [
+              // Sidebar Navigation
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeInOut,
+                width: _isNavExpanded ? sidebarW : 0,
+                child: _isNavExpanded
+                    ? Container(
+                        decoration: BoxDecoration(
+                          gradient: AppTheme.panelGradient,
+                          border: Border(
+                            right: BorderSide(
+                              color: AppTheme.neonBlue.withValues(alpha: 0.14),
+                            ),
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.30),
+                              blurRadius: 20,
+                              offset: const Offset(8, 0),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          children: [
+                            const SizedBox(height: 16),
+                            _buildUserAvatar(user, isJefeVentas),
+                            const SizedBox(height: 16),
+
+                            // Mode switcher for Jefe
+                            if (isJefeVentas) _buildModeSwitcher(),
+
+                            const SizedBox(height: 16),
+
+                            Expanded(
+                              child: ListView.builder(
+                                padding:
+                                    const EdgeInsets.symmetric(horizontal: 8),
+                                itemCount: navItems.length,
+                                itemBuilder: (context, index) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: _buildNavItem(
+                                      item: navItems[index],
+                                      isSelected: safeIndex == index,
+                                      onTap: () =>
+                                          setState(() => _currentIndex = index),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+
+                            const Divider(height: 1, color: Colors.white10),
+                            Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Column(
+                                children: [
+                                  _buildCollapseButton(),
+                                  const SizedBox(height: 8),
+                                  _buildLogoutButton(),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : null,
+              ),
+
+              // Expand button when sidebar is collapsed
+              if (!_isNavExpanded)
+                GestureDetector(
+                  onTap: () => setState(() => _isNavExpanded = true),
+                  child: Container(
+                    width: 24,
+                    decoration: BoxDecoration(
+                      color: AppTheme.inkSurface,
+                      border: Border(
+                        right: BorderSide(
+                          color: AppTheme.neonBlue.withValues(alpha: 0.12),
                         ),
                       ),
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 16),
-                          _buildUserAvatar(user, isJefeVentas),
-                          const SizedBox(height: 16),
-
-                          // Mode switcher for Jefe
-                          if (isJefeVentas) _buildModeSwitcher(),
-
-                          const SizedBox(height: 16),
-
-                          Expanded(
-                            child: ListView.builder(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 8),
-                              itemCount: navItems.length,
-                              itemBuilder: (context, index) {
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 8),
-                                  child: _buildNavItem(
-                                    item: navItems[index],
-                                    isSelected: safeIndex == index,
-                                    onTap: () =>
-                                        setState(() => _currentIndex = index),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-
-                          const Divider(height: 1, color: Colors.white10),
-                          Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              children: [
-                                _buildCollapseButton(),
-                                const SizedBox(height: 8),
-                                _buildLogoutButton(),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  : null,
-            ),
-
-            // Expand button when sidebar is collapsed
-            if (!_isNavExpanded)
-              GestureDetector(
-                onTap: () => setState(() => _isNavExpanded = true),
-                child: Container(
-                  width: 24,
-                  decoration: BoxDecoration(
-                    color: AppTheme.surfaceColor,
-                    border: Border(
-                      right: BorderSide(
-                        color: Colors.white.withValues(alpha: 0.05),
-                      ),
                     ),
-                  ),
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        vertical: 20,
-                        horizontal: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppTheme.neonBlue.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.chevron_right_rounded,
-                        color: AppTheme.neonBlue,
-                        size: 16,
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          vertical: 20,
+                          horizontal: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.neonBlue.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Icon(
+                          Icons.chevron_right_rounded,
+                          color: AppTheme.neonBlue,
+                          size: 16,
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
 
-            // Main Content
-            Expanded(
-              child: _buildCurrentPage(isJefeVentas),
-            ),
-          ],
+              // Main Content
+              Expanded(
+                child: _buildCurrentPage(isJefeVentas),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1015,49 +1050,68 @@ class _MainShellState extends ConsumerState<MainShell> {
             EdgeInsets.symmetric(vertical: isSmall ? 8 : 12, horizontal: 4),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-          color: isSelected
-              ? item.color.withValues(alpha: 0.12)
-              : Colors.transparent,
-          border: isSelected
-              ? Border.all(color: item.color.withValues(alpha: 0.25))
-              : null,
+          gradient: isSelected ? AppTheme.panelGradient : null,
+          color: isSelected ? null : Colors.transparent,
+          border: Border.all(
+            color: isSelected
+                ? item.color.withValues(alpha: 0.34)
+                : Colors.white.withValues(alpha: 0.03),
+          ),
           boxShadow: isSelected
               ? [
                   BoxShadow(
-                    color: item.color.withValues(alpha: 0.08),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
+                    color: item.color.withValues(alpha: 0.14),
+                    blurRadius: 14,
+                    offset: const Offset(0, 5),
                   ),
                 ]
               : [],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+        child: Stack(
+          alignment: Alignment.center,
           children: [
-            AnimatedScale(
-              scale: isSelected ? 1.1 : 1.0,
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOutCubic,
-              child: Icon(
-                isSelected ? item.selectedIcon : item.icon,
-                color: isSelected ? item.color : AppTheme.textSecondary,
-                size: isSmall ? 20 : 24,
+            if (isSelected)
+              Positioned(
+                left: 0,
+                top: 8,
+                bottom: 8,
+                child: Container(
+                  width: 3,
+                  decoration: BoxDecoration(
+                    color: item.color,
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
-            AnimatedDefaultTextStyle(
-              duration: const Duration(milliseconds: 200),
-              style: TextStyle(
-                fontSize: isSmall ? 8 : 10,
-                color: isSelected ? item.color : AppTheme.textSecondary,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
-              ),
-              child: Text(
-                item.label,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedScale(
+                  scale: isSelected ? 1.1 : 1.0,
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOutCubic,
+                  child: Icon(
+                    isSelected ? item.selectedIcon : item.icon,
+                    color: isSelected ? item.color : AppTheme.textSecondary,
+                    size: isSmall ? 20 : 24,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                AnimatedDefaultTextStyle(
+                  duration: const Duration(milliseconds: 200),
+                  style: TextStyle(
+                    fontSize: isSmall ? 8 : 10,
+                    color: isSelected ? item.color : AppTheme.textSecondary,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                  child: Text(
+                    item.label,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ],
         ),

@@ -3,7 +3,7 @@ const express = require('express');
 
 const mockQuery = jest.fn();
 const mockQueryWithParams = jest.fn();
-const mockCachedQuery = jest.fn((fn, sql) => fn(sql));
+const mockCachedQuery = jest.fn((fn, sql, _options, ...args) => fn(sql, ...args));
 let mockUser = { code: '01', role: 'COMERCIAL' };
 
 jest.mock('../config/db', () => ({
@@ -75,7 +75,7 @@ describe('clients route access-control contracts', () => {
 
   test('GET /api/clients/compare reaches static compare route before /:code', async () => {
     mockUser = { code: '80', role: 'JEFE_VENTAS', isJefeVentas: true };
-    mockQuery.mockImplementation(async (sql) => {
+    mockQueryWithParams.mockImplementation(async (sql) => {
       if (/COUNT\(DISTINCT L\.CODIGOARTICULO\)/i.test(sql)) {
         return [{
           CODE: 'C001',
@@ -99,11 +99,13 @@ describe('clients route access-control contracts', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.clients[0]).toMatchObject({ code: 'C001', name: 'Cliente Uno' });
-    expect(mockQuery).toHaveBeenCalledTimes(2);
-    expect(mockQueryWithParams).not.toHaveBeenCalled();
-    const firstSql = mockQuery.mock.calls[0][0];
+    expect(mockQuery).not.toHaveBeenCalled();
+    expect(mockQueryWithParams).toHaveBeenCalledTimes(2);
+    const firstSql = mockQueryWithParams.mock.calls[0][0];
+    const firstParams = mockQueryWithParams.mock.calls[0][1];
     expect(firstSql).toMatch(/FROM\s+DSEDAC\.LINDTO\s+L/i);
-    expect(firstSql).toContain("L.CODIGOCLIENTEALBARAN IN('C001','C002')");
+    expect(firstSql).toContain('L.CODIGOCLIENTEALBARAN IN(?,?)');
+    expect(firstParams).toEqual(expect.arrayContaining(['C001', 'C002']));
   });
 });
 
@@ -156,15 +158,18 @@ describe('clients route regression contracts', () => {
   });
 
   test('GET /api/clients/:code/sales-history/family does not query invalid DSEDAC.ART.DESCRIPCION', async () => {
-    mockQuery.mockResolvedValue([]);
+    mockQueryWithParams.mockResolvedValue([]);
 
     const res = await request(makeApp())
       .get('/api/clients/C001/sales-history/family?vendedorCodes=01&family1=01&groupLevel=1');
 
     expect(res.status).toBe(200);
-    const familySql = mockQuery.mock.calls[0][0];
+    const familySql = mockQueryWithParams.mock.calls[0][0];
+    const familyParams = mockQueryWithParams.mock.calls[0][1];
     expect(familySql).toMatch(/LEFT\s+JOIN\s+DSEDAC\.ART\s+A/i);
     expect(familySql).toMatch(/DESCRIPCIONARTICULO|L\.DESCRIPCION/i);
     expect(familySql).not.toMatch(/\bA\.DESCRIPCION\b/i);
+    expect(familySql).toMatch(/L\.CODIGOCLIENTEALBARAN\s*=\s*\?/i);
+    expect(familyParams).toEqual(expect.arrayContaining(['C001', '01']));
   });
 });

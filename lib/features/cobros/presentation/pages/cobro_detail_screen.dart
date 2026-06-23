@@ -83,9 +83,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
 
   static const _tipoDocumentoOptions = <String?, String>{
     null: 'Todos',
-    'FAC': 'Factura',
-    'ALB': 'Albarán',
-    'CAC': 'Albarán cobro',
+    'COB': 'Factura directa',
+    'CAC': 'Albarán',
   };
 
   String? _formatDate(DateTime? value) {
@@ -151,7 +150,8 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
             value: _tipoDocumento,
             dropdownColor: AppTheme.darkSurface,
             style: const TextStyle(color: Colors.white, fontSize: 13),
-            hint: const Text('Tipo documento', style: TextStyle(color: Colors.white54)),
+            hint: const Text('Tipo documento',
+                style: TextStyle(color: Colors.white54)),
             items: _tipoDocumentoOptions.entries
                 .map(
                   (e) => DropdownMenuItem<String?>(
@@ -170,7 +170,7 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
             icon: const Icon(Icons.calendar_today, size: 16),
             label: Text(
               _fechaDesde == null
-                  ? 'Desde'
+                  ? 'Vence desde'
                   : DateFormat('dd/MM/yy').format(_fechaDesde!),
             ),
           ),
@@ -179,11 +179,13 @@ class _CobroDetailScreenState extends ConsumerState<CobroDetailScreen> {
             icon: const Icon(Icons.event, size: 16),
             label: Text(
               _fechaHasta == null
-                  ? 'Hasta'
+                  ? 'Vence hasta'
                   : DateFormat('dd/MM/yy').format(_fechaHasta!),
             ),
           ),
-          if (_tipoDocumento != null || _fechaDesde != null || _fechaHasta != null)
+          if (_tipoDocumento != null ||
+              _fechaDesde != null ||
+              _fechaHasta != null)
             TextButton(
               onPressed: () async {
                 setState(() {

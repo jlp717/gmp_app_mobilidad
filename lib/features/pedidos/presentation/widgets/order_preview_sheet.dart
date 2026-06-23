@@ -86,8 +86,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     final lines = provider.lines;
     final hasDiscount = provider.globalDiscountPct > 0;
     final margin = provider.porcentajeMargen;
-    final total =
-        hasDiscount ? provider.totalConDescuento : provider.totalImporte;
+    final total = provider.totalConIva;
 
     return Dialog(
       backgroundColor: AppTheme.darkBase,
@@ -719,7 +718,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
     final lineTotal = hasDiscount
         ? line.importeVenta * (1 - provider.globalDiscountPct / 100)
         : line.importeVenta;
-    final bolsaDelta = line.precioMinimo > 0
+    final bolsaDelta = provider.isMarginVisible && line.precioMinimo > 0
         ? double.parse(
             ((effectivePrice - line.precioMinimo) * line.billingQuantity)
                 .toStringAsFixed(2),
@@ -868,7 +867,8 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           const SizedBox(height: 4),
           _buildTotalRow('IVA', PedidosFormatters.money(provider.totalIva)),
 
-          if (provider.estimatedBolsaImpact.hasImpact) ...[
+          if (provider.isMarginVisible &&
+              provider.estimatedBolsaImpact.hasImpact) ...[
             const SizedBox(height: 8),
             const Divider(color: AppTheme.borderColor, height: 1),
             const SizedBox(height: 8),
@@ -1008,7 +1008,7 @@ class _OrderPreviewSheetState extends State<_OrderPreviewSheet>
           _buildSectionLabel('DESGLOSE IVA'),
           const SizedBox(height: 6),
           ...breakdown.entries.map((e) {
-            final pct = (e.key * 100).toStringAsFixed(0);
+            final pct = e.key.toString();
             return Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),
               child: Row(

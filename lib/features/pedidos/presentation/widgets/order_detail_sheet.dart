@@ -60,7 +60,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   OrderDetail? _detail;
   bool _isLoading = true;
   String? _error;
-  bool _isCancelling = false;
+  bool _isDeleting = false;
   bool _isConfirming = false;
 
   @override
@@ -145,7 +145,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
     return '${ApiConfig.baseUrl}/products/${Uri.encodeComponent(trimmed)}/image';
   }
 
-  Future<void> _cancelOrder() async {
+  Future<void> _deleteDraftOrder() async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -153,13 +153,13 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Row(
           children: [
-            Icon(Icons.cancel_outlined, color: AppTheme.error, size: 22),
+            Icon(Icons.delete_outline, color: AppTheme.error, size: 22),
             SizedBox(width: 8),
-            Text('Anular pedido', style: TextStyle(color: Colors.white)),
+            Text('Eliminar borrador', style: TextStyle(color: Colors.white)),
           ],
         ),
         content: const Text(
-          'Esta accion no se puede deshacer. ¿Deseas anular este pedido?',
+          'Esta accion no se puede deshacer. Deseas eliminar este borrador?',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -170,7 +170,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text(
-              'Si, anular',
+              'Si, eliminar',
               style: TextStyle(color: AppTheme.error),
             ),
           ),
@@ -180,15 +180,13 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
 
     if (confirm != true) return;
 
-    setState(() => _isCancelling = true);
+    setState(() => _isDeleting = true);
     try {
-      await ref
-          .read(pedidosProvider.notifier)
-          .cancelExistingOrder(widget.orderId);
-      if (mounted) Navigator.pop(context, 'cancelled');
+      await ref.read(pedidosProvider.notifier).deleteDraftOrder(widget.orderId);
+      if (mounted) Navigator.pop(context, 'deleted');
     } catch (e) {
       if (mounted) {
-        setState(() => _isCancelling = false);
+        setState(() => _isDeleting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e'), backgroundColor: AppTheme.error),
         );
@@ -333,9 +331,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                 ),
         ),
         // Actions
-        if (header.estado == 'BORRADOR' ||
-            header.estado == 'PENDIENTE_APROBACION' ||
-            header.estado == 'CONFIRMADO')
+        if (header.estado == 'BORRADOR' || header.estado == 'CONFIRMADO')
           _buildActions(header),
       ],
     );
@@ -430,6 +426,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
   }
 
   Widget _buildLineTile(OrderLine line, int number) {
+    final showMargin = ref.watch(pedidosProvider).isMarginVisible;
     final marginColor = line.porcentajeMargen >= 15
         ? AppTheme.neonGreen
         : line.porcentajeMargen >= 5
@@ -549,17 +546,11 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                       ),
                     ),
                     // Req #2: margen solo visible para JEFE_VENTAS/ADMIN.
-                    Consumer(
-                      builder: (ctx, ref, _) {
-                        final visible =
-                            ref.watch(pedidosProvider).isMarginVisible;
-                        if (!visible) return const SizedBox.shrink();
-                        return Text(
-                          '${line.porcentajeMargen.toStringAsFixed(1)}% mg',
-                          style: TextStyle(color: marginColor, fontSize: 11),
-                        );
-                      },
-                    ),
+                    if (showMargin)
+                      Text(
+                        '${line.porcentajeMargen.toStringAsFixed(1)}% mg',
+                        style: TextStyle(color: marginColor, fontSize: 11),
+                      ),
                   ],
                 ),
               ],
@@ -576,7 +567,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                   'Tarifa: ${PedidosFormatters.money(line.precioTarifa, decimals: 3)}',
                   style: const TextStyle(color: Colors.white38, fontSize: 11),
                 ),
-                if (line.precioMinimo > 0) ...[
+                if (showMargin && line.precioMinimo > 0) ...[
                   const SizedBox(width: 12),
                   Text(
                     'Min: ${PedidosFormatters.money(line.precioMinimo, decimals: 3)}',
@@ -590,7 +581,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                 ],
               ],
             ),
-            if (line.bolsaImpact.hasImpact) ...[
+            if (showMargin && line.bolsaImpact.hasImpact) ...[
               const SizedBox(height: 8),
               _buildLineBolsaImpact(line),
             ],
@@ -852,7 +843,7 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             tooltip: 'Clonar pedido',
           ),
           const Spacer(),
-          // Confirm button — solo borradores reales; PENDIENTE_APROBACION ya está en ERP
+          // Confirm button
           if (header.estado == 'BORRADOR') ...[
             Expanded(
               child: ElevatedButton.icon(
@@ -881,12 +872,11 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
             ),
             const SizedBox(width: 8),
           ],
-          // Cancel button
-          if (header.estado == 'BORRADOR' || header.estado == 'CONFIRMADO')
+          if (header.estado == 'BORRADOR')
             Expanded(
               child: OutlinedButton.icon(
-                onPressed: _isCancelling ? null : _cancelOrder,
-                icon: _isCancelling
+                onPressed: _isDeleting ? null : _deleteDraftOrder,
+                icon: _isDeleting
                     ? const SizedBox(
                         width: 16,
                         height: 16,
@@ -895,8 +885,8 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
                           color: AppTheme.error,
                         ),
                       )
-                    : const Icon(Icons.cancel_outlined),
-                label: Text(_isCancelling ? 'Anulando...' : 'Anular'),
+                    : const Icon(Icons.delete_outline),
+                label: Text(_isDeleting ? 'Eliminando...' : 'Eliminar'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppTheme.error,
                   side: const BorderSide(color: AppTheme.error),
@@ -914,20 +904,11 @@ class _OrderDetailBodyState extends ConsumerState<_OrderDetailBody> {
 
   Color _statusColor(String status) {
     switch (status) {
-      case 'BORRADOR':
-        return Colors.orange;
-      case 'PENDIENTE_APROBACION':
-        return AppTheme.neonBlue;
-      case 'CONFIRMANDO':
-        return AppTheme.neonBlue;
       case 'CONFIRMADO':
-        return AppTheme.neonBlue;
-      case 'ENVIADO':
         return AppTheme.neonGreen;
-      case 'ANULADO':
-        return AppTheme.error;
+      case 'BORRADOR':
       default:
-        return Colors.white54;
+        return Colors.orange;
     }
   }
 

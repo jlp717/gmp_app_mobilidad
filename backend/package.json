@@ -35,6 +35,8 @@
     "pedidos:inventory-reparto": "node scripts/truck_route_driver_inventory.js",
     "pedidos:inventory-system": "node scripts/pedidos_system_inventory.js",
     "db2:align-javier-dsedac": "node scripts/compare-javier-dsedac-alignment.js",
+    "db2:align-pedidos-schema": "node scripts/generate-pedidos-schema-align-sql.js",
+    "db2:audit-commercial-cobros": "node scripts/audit-commercial-cobros-readonly.js",
     "db2:align-javier-dsedac:additive": "node scripts/align-javier-dsedac-additive.js",
     "db2:align-javier-dsedac:apply": "node scripts/align-javier-dsedac-additive.js --apply",
     "finance:verify-schema": "node scripts/verify-repartidor-finance-schema.js",

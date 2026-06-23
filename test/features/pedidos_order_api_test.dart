@@ -95,7 +95,7 @@ void main() {
         type: 'pedido_create',
         endpoint: '/pedidos',
         method: 'POST',
-        payload: const {'clientRequestId': 'req-1'},
+        payload: const {'clientRequestId': 'req00001'},
         attempts: 5,
         lastError: 'timeout',
         failedAt: failedAt,

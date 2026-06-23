@@ -5,6 +5,7 @@
 library;
 
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -58,12 +59,12 @@ String orderConfirmationStatusForProvider(Map<String, dynamic>? result) {
   return rawStatus?.toString().trim().toUpperCase() ?? '';
 }
 
-/// Returns true only after the backend leaves the order confirmed or shipped.
+/// Returns true only after the backend leaves the order confirmed.
 bool isConfirmedOrderResultForProvider(Map<String, dynamic>? result) {
   if (result == null || result['blocked'] == true) return false;
 
   final status = orderConfirmationStatusForProvider(result);
-  return status == 'CONFIRMADO' || status == 'ENVIADO';
+  return status == 'CONFIRMADO';
 }
 
 final pedidosProvider = ChangeNotifierProvider<PedidosProvider>(
@@ -147,6 +148,9 @@ class PedidosProvider with ChangeNotifier {
   DateTime? _lastAutoSaved;
   bool _isDirty = false;
   String? _activeCheckoutClientRequestId;
+  static final Random _checkoutRequestRandom = Random.secure();
+  static const String _checkoutRequestAlphabet =
+      '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 
   // ── Stock Filter ──
   bool _onlyWithStock = false;
@@ -235,14 +239,12 @@ class PedidosProvider with ChangeNotifier {
     return _productMetadataByCode[key];
   }
 
-  String _newCheckoutClientRequestId(String vendedorCode) {
-    final vendor =
-        vendedorCode.trim().isEmpty ? 'unknown' : vendedorCode.trim();
-    final client = (_clientCode ?? '').trim().isEmpty
-        ? 'unknown'
-        : (_clientCode ?? '').trim();
-    final stamp = DateTime.now().toUtc().microsecondsSinceEpoch;
-    return 'pedido_${vendor}_${client}_$stamp';
+  String _newCheckoutClientRequestId(String _) {
+    return List.generate(
+      24,
+      (_) => _checkoutRequestAlphabet[
+          _checkoutRequestRandom.nextInt(_checkoutRequestAlphabet.length)],
+    ).join();
   }
 
   // ── Getters ──
@@ -410,15 +412,19 @@ class PedidosProvider with ChangeNotifier {
   }
 
   double get totalBase {
+    return totalConDescuento;
+  }
+
+  double get totalIva {
     var sum = 0.0;
     for (final l in _lines) {
       final saleAfterDiscount = l.importeVenta * _discountFactor;
-      sum += saleAfterDiscount / (1 + l.ivaRate);
+      sum += saleAfterDiscount * normalizeIvaRate(l.ivaRate, fallback: 0);
     }
     return sum;
   }
 
-  double get totalIva => totalConDescuento - totalBase;
+  double get totalConIva => totalBase + totalIva;
 
   double get totalCosto {
     if (_cacheValid && _cachedTotalCosto != null) return _cachedTotalCosto!;
@@ -514,9 +520,11 @@ class PedidosProvider with ChangeNotifier {
   Map<int, double> get ivaBreakdown {
     final breakdown = <int, double>{};
     for (final line in _lines) {
-      final ivaPct = (line.ivaRate * 100).round();
+      final rate = normalizeIvaRate(line.ivaRate, fallback: 0);
+      final ivaPct = (rate * 100).round();
       final saleAfterDiscount = line.importeVenta * _discountFactor;
-      breakdown[ivaPct] = (breakdown[ivaPct] ?? 0) + saleAfterDiscount;
+      final ivaAmount = saleAfterDiscount * rate;
+      breakdown[ivaPct] = (breakdown[ivaPct] ?? 0) + ivaAmount;
     }
     return breakdown;
   }
@@ -857,6 +865,8 @@ class PedidosProvider with ChangeNotifier {
       line.precioTarifa = product.precioTarifa1;
       line.precioTarifaCliente = product.precioCliente;
       line.precioMinimo = product.minimumPriceForUnit(unit);
+      line.codigoIva = product.codigoIva;
+      line.ivaRate = ivaRateFromCode(product.codigoIva);
       line.recalculate();
       _lastQtyByProduct[_qtyKey(product.code)] =
           lineUnit == 'CAJAS' ? line.cantidadEnvases : line.cantidadUnidades;
@@ -880,6 +890,7 @@ class PedidosProvider with ChangeNotifier {
         precioTarifa: product.precioTarifa1,
         precioTarifaCliente: product.precioCliente,
         precioMinimo: product.minimumPriceForUnit(unit),
+        codigoIva: product.codigoIva,
         ivaRate: ivaRate,
       );
       line.recalculate();
@@ -1086,6 +1097,7 @@ class PedidosProvider with ChangeNotifier {
         precioTarifa: line.precioTarifa,
         precioTarifaCliente: line.precioTarifaCliente,
         precioMinimo: line.precioMinimo,
+        codigoIva: line.codigoIva,
         ivaRate: line.ivaRate,
         claseLinea: line.claseLinea,
         tipoLinea: line.tipoLinea,
@@ -1203,6 +1215,7 @@ class PedidosProvider with ChangeNotifier {
         precioTarifa: tariff,
         precioTarifaCliente: clientTariff,
         precioMinimo: minPrice,
+        codigoIva: sourceProduct?.codigoIva ?? saleLine.codigoIva,
         ivaRate: saleLine.ivaRate,
         claseLinea: 'SC',
         tipoLinea: 'G',
@@ -1360,7 +1373,7 @@ class PedidosProvider with ChangeNotifier {
 
   static bool _isGroupedOrderStatusFilter(String? status) {
     if (status == null || status.isEmpty) return false;
-    return status == 'CONFIRMADO' || status == 'PENDIENTE_APROBACION';
+    return status == 'CONFIRMADO';
   }
 
   static List<OrderSummary> _filterOrdersByGroupedStatus(
@@ -1368,15 +1381,10 @@ class PedidosProvider with ChangeNotifier {
     String status,
   ) {
     switch (status.toUpperCase()) {
-      case 'PENDIENTE_APROBACION':
-        return orders.where((o) {
-          final e = o.estado.toUpperCase();
-          return e == 'PENDIENTE_APROBACION' || e == 'CONFIRMANDO';
-        }).toList(growable: false);
       case 'CONFIRMADO':
         return orders.where((o) {
           final e = o.estado.toUpperCase();
-          return e == 'CONFIRMADO' || e == 'ENVIADO' || e == 'FACTURADO';
+          return e == 'CONFIRMADO';
         }).toList(growable: false);
       default:
         return orders
@@ -1513,28 +1521,11 @@ class PedidosProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> cancelExistingOrder(int orderId) async {
-    await PedidosService.cancelOrder(orderId);
+  Future<void> deleteDraftOrder(int orderId) async {
+    await PedidosService.deleteDraftOrder(orderId);
 
-    // Update local state instantly
-    final idx = _orders.indexWhere((o) => o.id == orderId);
-    if (idx != -1) {
-      final o = _orders[idx];
-      _orders[idx] = OrderSummary(
-        id: o.id,
-        numeroPedido: o.numeroPedido,
-        clienteCode: o.clienteCode,
-        clienteName: o.clienteName,
-        vendedorCode: o.vendedorCode,
-        fecha: o.fecha,
-        estado: 'ANULADO',
-        tipoVenta: o.tipoVenta,
-        total: o.total,
-        margen: o.margen,
-        lineCount: o.lineCount,
-      );
-      notifyListeners();
-    }
+    _orders.removeWhere((o) => o.id == orderId);
+    notifyListeners();
     await refreshOrdersAndStats();
   }
 
@@ -1582,54 +1573,6 @@ class PedidosProvider with ChangeNotifier {
     await refreshOrdersAndStats();
     _onOrderMutation?.call();
     return result;
-  }
-
-  Future<void> setOrderPendingApproval(int orderId) async {
-    await PedidosService.updateOrderStatus(orderId, 'PENDIENTE_APROBACION');
-
-    final idx = _orders.indexWhere((o) => o.id == orderId);
-    if (idx != -1) {
-      final o = _orders[idx];
-      _orders[idx] = OrderSummary(
-        id: o.id,
-        numeroPedido: o.numeroPedido,
-        clienteCode: o.clienteCode,
-        clienteName: o.clienteName,
-        vendedorCode: o.vendedorCode,
-        fecha: o.fecha,
-        estado: 'PENDIENTE_APROBACION',
-        tipoVenta: o.tipoVenta,
-        total: o.total,
-        margen: o.margen,
-        lineCount: o.lineCount,
-      );
-      notifyListeners();
-    }
-    await refreshOrdersAndStats();
-  }
-
-  Future<void> sendOrder(int orderId) async {
-    await PedidosService.updateOrderStatus(orderId, 'ENVIADO');
-
-    final idx = _orders.indexWhere((o) => o.id == orderId);
-    if (idx != -1) {
-      final o = _orders[idx];
-      _orders[idx] = OrderSummary(
-        id: o.id,
-        numeroPedido: o.numeroPedido,
-        clienteCode: o.clienteCode,
-        clienteName: o.clienteName,
-        vendedorCode: o.vendedorCode,
-        fecha: o.fecha,
-        estado: 'ENVIADO',
-        tipoVenta: o.tipoVenta,
-        total: o.total,
-        margen: o.margen,
-        lineCount: o.lineCount,
-      );
-      notifyListeners();
-    }
-    await refreshOrdersAndStats();
   }
 
   // ── Recommendations ──
@@ -1913,6 +1856,7 @@ class PedidosProvider with ChangeNotifier {
           precioTarifa: product.precioTarifa1,
           precioTarifaCliente: product.precioCliente,
           precioMinimo: product.precioMinimo,
+          codigoIva: product.codigoIva,
           ivaRate: ivaRate,
         );
         line.recalculate();

@@ -90,13 +90,21 @@ function mockRepoPendingSummaryDb({
   pageRepartidor = [],
 } = {}) {
   const aggregate = aggregateRows == null
-    ? [{ GRAND_TOTAL: pageRows.reduce((sum, row) => sum + (parseFloat(row.TOTAL_PENDIENTE) || 0), 0), GRAND_TOTAL_VENCIDO: pageRows.reduce((sum, row) => sum + (parseFloat(row.TOTAL_VENCIDO) || 0), 0), CLIENT_COUNT: new Set(pageRows.map((row) => String(row.CLIENTE || '').trim()).filter(Boolean)).size }]
+    ? [{ GRAND_TOTAL: pageRows.reduce((sum, row) => sum + (parseFloat(row.TOTAL_PENDIENTE) || 0), 0), GRAND_TOTAL_VENCIDO: pageRows.reduce((sum, row) => sum + (parseFloat(row.TOTAL_VENCIDO) || 0), 0), CLIENT_COUNT: new Set(pageRows.map((row) => String(row.CLIENTE || '').trim()).filter(Boolean)).size, VENCIDO_CLIENT_COUNT: new Set(pageRows.filter((row) => (parseFloat(row.TOTAL_VENCIDO) || 0) > 0).map((row) => String(row.CLIENTE || '').trim()).filter(Boolean)).size }]
     : aggregateRows;
   const routeSql = async (sql) => {
     if (/WITH\s+PAGE_DOCS/i.test(sql)) {
       if (/\.COBROS/i.test(sql)) return pageCobros;
       if (/REPARTIDOR_COBROS/i.test(sql)) return pageRepartidor;
       return [];
+    }
+    if (/WITH\s+CVC_DOCS/i.test(sql)) {
+      return aggregate.map((row) => ({
+        ...row,
+        CVC_GRAND_TOTAL: row.CVC_GRAND_TOTAL ?? row.GRAND_TOTAL ?? 0,
+        CVC_GRAND_TOTAL_VENCIDO: row.CVC_GRAND_TOTAL_VENCIDO ?? row.GRAND_TOTAL_VENCIDO ?? 0,
+        VENCIDO_CLIENT_COUNT: row.VENCIDO_CLIENT_COUNT ?? ((parseFloat(row.GRAND_TOTAL_VENCIDO) || 0) > 0 ? (row.CLIENT_COUNT || 0) : 0),
+      }));
     }
     if (/CVC_GRAND_TOTAL/i.test(sql)) {
       const row = aggregate[0] || {};
@@ -105,7 +113,6 @@ function mockRepoPendingSummaryDb({
         CVC_GRAND_TOTAL_VENCIDO: row.GRAND_TOTAL_VENCIDO ?? row.CVC_GRAND_TOTAL_VENCIDO ?? 0,
       }];
     }
-    if (/WITH\s+CVC_DOCS/i.test(sql)) return aggregate;
     if (/OFFSET\s+\d+\s+ROWS/i.test(sql)) return pageRows;
     return [];
   };
@@ -164,6 +171,7 @@ describe('commercial cobros hardening', () => {
       appAdjustmentsTotal: 0,
       appOrdersTotal: 0,
       clientCount: 1,
+      vencidoClientCount: 1,
       source: 'CVC',
       pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 2 },
     });
@@ -193,7 +201,8 @@ describe('commercial cobros hardening', () => {
     expect(pageAdjustmentSql).toBeTruthy();
     const totalsSql = findRepoSqlCall((candidate) => /WITH\s+CVC_DOCS/i.test(candidate));
     expect(totalsSql).toBeTruthy();
-    expect(totalsSql).toMatch(/COUNT\(DISTINCT CLIENTE\)/i);
+    expect(totalsSql).toMatch(/COUNT\(DISTINCT CASE WHEN NET_TOTAL > 0 THEN CLIENTE ELSE NULL END\)\s+AS\s+CLIENT_COUNT/i);
+    expect(totalsSql).toMatch(/VENCIDO_CLIENT_COUNT/i);
     expect(totalsSql).not.toMatch(/ORDER BY\s+TOTAL_PENDIENTE/i);
   });
 
@@ -267,6 +276,7 @@ describe('commercial cobros hardening', () => {
       appAdjustmentsTotal: 0,
       appOrdersTotal: 0,
       clientCount: 1,
+      vencidoClientCount: 1,
       source: 'CVC',
       pagination: { limit: 100, page: 1, offset: 0, returnedDocuments: 2 },
     });
@@ -328,7 +338,8 @@ describe('commercial cobros hardening', () => {
     expect(result.clientCount).toBe(2);
     const totalsSql = findRepoSqlCall((candidate) => /WITH\s+CVC_DOCS/i.test(candidate));
     expect(totalsSql).toMatch(/SELECT\s+COALESCE\(SUM\(NET_TOTAL\),\s*0\)\s+AS\s+GRAND_TOTAL/i);
-    expect(totalsSql).toMatch(/COUNT\(DISTINCT CLIENTE\)\s+AS\s+CLIENT_COUNT/i);
+    expect(totalsSql).toMatch(/COUNT\(DISTINCT CASE WHEN NET_TOTAL > 0 THEN CLIENTE ELSE NULL END\)\s+AS\s+CLIENT_COUNT/i);
+    expect(totalsSql).toMatch(/CVC_GRAND_TOTAL/i);
   });
 
   test('getPendingSummary treats documents due today as vencido', async () => {
@@ -392,8 +403,9 @@ describe('commercial cobros hardening', () => {
 
     const [sql, params] = mockQueryWithParams.mock.calls.find(([candidate]) => /OFFSET\s+\d+\s+ROWS/i.test(candidate));
     expect(sql).toMatch(/FROM\s+DSEDAC\.CVC\s+CVC/i);
-    expect(sql).toMatch(/EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+DSEDAC\.CLP\s+CLP/i);
-    expect(sql).toMatch(/TRIM\(CLP\.CODIGOCLIENTE\)\s*=\s*TRIM\(CVC\.CODIGOCLIENTEALBARAN\)/i);
+    expect(sql).toMatch(/TRIM\(CVC\.CODIGOCLIENTEALBARAN\)\s+IN\s*\(/i);
+    expect(sql).toMatch(/SELECT\s+TRIM\(CLP\.CODIGOCLIENTE\)\s+FROM\s+DSEDAC\.CLP\s+CLP/i);
+    expect(sql).toMatch(/UNION\s+SELECT\s+DISTINCT\s+TRIM\(LAC\.LCCDCL\)/i);
     expect(sql).toMatch(/TRIM\(CLP\.VENDEDORCOMERCIAL\)\s+IN\s*\(/i);
     expect(sql).not.toMatch(/LEFT\s+JOIN\s+DSEDAC\.CLP/i);
     expect(params).toEqual(['01', '1', '02', '2', '01', '1', '02', '2']);

@@ -658,14 +658,14 @@ void main() {
       expect(shouldClearCartAfterConfirmation(result), isFalse);
     });
 
-    test('treats only confirmed or sent states as successful confirmation', () {
+    test('treats only confirmed state as successful confirmation', () {
       expect(
         isConfirmedOrderResultForProvider({'estado': 'CONFIRMADO'}),
         isTrue,
       );
       expect(
         isConfirmedOrderResultForProvider({'estado': 'ENVIADO'}),
-        isTrue,
+        isFalse,
       );
       expect(
         isConfirmedOrderResultForProvider({'estado': 'BORRADOR'}),
@@ -755,7 +755,8 @@ void main() {
       expect(api.confirmedDriverCode, '88');
       expect(api.confirmedRouteCode, 'R9');
       expect(api.createdClientRequestId, isNotNull);
-      expect(api.createdClientRequestId, startsWith('pedido_57_4300010363_'));
+      expect(
+          api.createdClientRequestId, matches(RegExp(r'^[A-Za-z0-9]{8,28}$')));
     });
     test('reports queued create as pending and does not confirm offline draft',
         () async {
@@ -783,7 +784,8 @@ void main() {
       expect(isConfirmedOrderResultForProvider(result), isFalse);
       expect(api.createOrderCalls, 1);
       expect(api.confirmOrderCalls, 0);
-      expect(api.createdClientRequestId, startsWith('pedido_57_4300010363_'));
+      expect(
+          api.createdClientRequestId, matches(RegExp(r'^[A-Za-z0-9]{8,28}$')));
       expect(provider.lines, hasLength(1));
     });
 
@@ -865,7 +867,7 @@ void main() {
       );
       var allRequestIdsPreserved = true;
       for (final id in requestIds) {
-        if (id.toString().startsWith("pedido_offline_sync_")) {
+        if (RegExp(r'^[A-Za-z0-9]{8,28}$').hasMatch(id.toString())) {
         } else {
           allRequestIdsPreserved = false;
         }
@@ -914,7 +916,7 @@ void main() {
       expect(failed["status"], "failed");
       expect(failed["error"].toString(), contains("no confirmado"));
       expect(failed["clientRequestId"].toString(),
-          startsWith("pedido_offline_sync_"));
+          matches(RegExp(r'^[A-Za-z0-9]{8,28}$')));
 
       final syncKey = failed["syncKey"].toString();
       expect(await PedidosOfflineService.retryFailedSync(syncKey), isTrue);

@@ -92,6 +92,33 @@ const REQUIRED_PRODUCTION_TABLES = [
   { feature: 'CLIENTES', table: `${ERP_SCHEMA}.CLP`, purpose: 'vendedor/riesgo cliente' },
 ];
 
+const REQUIRED_APP_ONLY_TABLES = [
+  {
+    feature: 'BOLSA_COMERCIAL',
+    table: `${APP_SCHEMA}.BOLSA_COMERCIAL`,
+    purpose: 'saldo mensual por vendedor; vive solo en JAVIER por diseno',
+    severity: 'BLOCK',
+  },
+  {
+    feature: 'BOLSA_COMERCIAL',
+    table: `${APP_SCHEMA}.MOVIMIENTOS_BOLSA`,
+    purpose: 'ledger idempotente de movimientos de bolsa; vive solo en JAVIER por diseno',
+    severity: 'BLOCK',
+  },
+  {
+    feature: 'PEDIDOS_COMERCIAL',
+    table: `${APP_SCHEMA}.PEDIDOS_SEQ`,
+    purpose: 'secuencia app-side de pedidos',
+    severity: 'REVIEW',
+  },
+  {
+    feature: 'PEDIDOS_COMERCIAL',
+    table: `${APP_SCHEMA}.PEDIDOS_STOCK_RESERVE`,
+    purpose: 'reservas app-side de stock',
+    severity: 'REVIEW',
+  },
+];
+
 
 const ACCEPTED_SEMANTIC_TYPE_MISMATCHES = [
   {
@@ -290,6 +317,9 @@ function compareColumnSets(pair, testColumns, productionColumns) {
 }
 function classifyPair(pair, diff, tableStatus) {
   if (!tableStatus.test.exists || !tableStatus.production.exists) return 'BLOCK';
+  if (tableStatus.test.type !== tableStatus.production.type) {
+    return pair.severity === 'BLOCK' ? 'BLOCK' : 'REVIEW';
+  }
   if (diff.missingInTest.length > 0 || diff.typeMismatches.length > 0) {
     return pair.severity === 'BLOCK' ? 'BLOCK' : 'REVIEW';
   }
@@ -319,6 +349,7 @@ async function auditPair(connection, pair) {
       ...pair,
       status: 'BLOCK',
       tableStatus,
+      tableTypeMismatch: null,
       diff: null,
       migrationSuggestions: [],
     };
@@ -328,11 +359,15 @@ async function auditPair(connection, pair) {
   const productionColumns = await getColumns(connection, production.schema, production.table);
   const diff = compareColumnSets(pair, testColumns, productionColumns);
   const status = classifyPair(pair, diff, tableStatus);
+  const tableTypeMismatch = tableStatus.test.type !== tableStatus.production.type
+    ? { test: tableStatus.test.type, production: tableStatus.production.type }
+    : null;
 
   return {
     ...pair,
     status,
     tableStatus,
+    tableTypeMismatch,
     diff,
     migrationSuggestions: buildMigrationSuggestions(pair, diff),
   };
@@ -347,6 +382,19 @@ async function auditProductionTable(connection, item) {
     status: tableStatus.exists ? 'OK' : 'BLOCK',
     tableStatus,
     columnCount: columns.length,
+  };
+}
+
+async function auditAppOnlyTable(connection, item) {
+  const table = splitQualifiedName(item.table);
+  const tableStatus = await getTableInfo(connection, table.schema, table.table);
+  const columns = tableStatus.exists ? await getColumns(connection, table.schema, table.table) : [];
+  return {
+    ...item,
+    status: tableStatus.exists ? 'OK' : item.severity,
+    tableStatus,
+    columnCount: columns.length,
+    columns,
   };
 }
 
@@ -371,6 +419,7 @@ function renderMarkdown(report) {
     `- Review: ${report.summary.review}`,
     `- Block: ${report.summary.block}`,
     `- Required production tables: ${report.summary.productionTablesOk}/${report.summary.productionTablesTotal}`,
+    `- Required app-only tables: ${report.summary.appOnlyTablesOk || 0}/${report.summary.appOnlyTablesTotal || 0}`,
     `- Accepted semantic/type mismatches: ${report.summary.acceptedSemanticTypeMismatches || 0}`,
     '',
     '## Pair Results',
@@ -396,8 +445,13 @@ function renderMarkdown(report) {
       '',
       `Status: ${pair.status}`,
       `Reason: ${pair.reason}`,
+      `Table types: test=${pair.tableStatus?.test?.type || 'missing'}, production=${pair.tableStatus?.production?.type || 'missing'}`,
       '',
     );
+
+    if (pair.tableTypeMismatch) {
+      lines.push(`Table type mismatch: test=${pair.tableTypeMismatch.test}, production=${pair.tableTypeMismatch.production}`, '');
+    }
 
     if (!pair.diff) {
       lines.push(
@@ -448,6 +502,54 @@ function renderMarkdown(report) {
     lines.push(`| ${item.feature} | ${item.table} | ${item.purpose} | ${item.status} | ${item.columnCount} |`);
   }
 
+  lines.push('', '## Required App-Only Tables', '');
+  lines.push('| Feature | Table | Purpose | Status | Columns |');
+  lines.push('|---|---|---|---|---|');
+  for (const item of report.appOnlyTables || []) {
+    lines.push(`| ${item.feature} | ${item.table} | ${item.purpose} | ${item.status} | ${item.columnCount} |`);
+  }
+
+  return `${lines.join('\n')}\n`;
+}
+
+function renderSqlPlan(report) {
+  const lines = [
+    '-- JAVIER vs DSEDAC alignment review plan',
+    `-- Generated: ${report.timestamp}`,
+    `-- App schema: ${report.appSchema}`,
+    `-- ERP schema: ${report.erpSchema}`,
+    '-- This file is generated for review only. It was not executed.',
+    '-- Run DDL only after staging verification, QA/AppSec/SRE gates, and explicit production approval.',
+    '',
+  ];
+
+  if (report.error) {
+    lines.push(`-- BLOCK: ${report.error}`, '');
+    return `${lines.join('\n')}\n`;
+  }
+
+  for (const pair of report.pairs || []) {
+    lines.push(`-- ${pair.feature}: ${pair.test} -> ${pair.production}`);
+    lines.push(`-- Status: ${pair.status}`);
+    if (pair.tableTypeMismatch) {
+      lines.push(`-- TABLE TYPE MISMATCH: test=${pair.tableTypeMismatch.test}, production=${pair.tableTypeMismatch.production}`);
+    }
+    for (const mismatch of pair.diff?.typeMismatches || []) {
+      lines.push(`-- TYPE REVIEW: ${mismatch.column}: test=${mismatch.test}, production=${mismatch.production}`);
+    }
+    if (pair.migrationSuggestions?.length) {
+      lines.push(...pair.migrationSuggestions);
+    } else {
+      lines.push('-- No additive DDL suggestion for this pair.');
+    }
+    lines.push('');
+  }
+
+  lines.push('-- App-only tables intentionally remain in JAVIER and are not mirrored to DSEDAC.');
+  for (const item of report.appOnlyTables || []) {
+    lines.push(`-- ${item.status}: ${item.table} (${item.purpose}) columns=${item.columnCount || 0}`);
+  }
+
   return `${lines.join('\n')}\n`;
 }
 
@@ -464,6 +566,7 @@ async function writeFailedReport(error) {
     odbcErrors: error.odbcErrors || [],
     pairs: [],
     productionTables: [],
+    appOnlyTables: [],
     summary: {
       pairsTotal: TABLE_PAIRS.length,
       ok: 0,
@@ -471,13 +574,17 @@ async function writeFailedReport(error) {
       block: TABLE_PAIRS.length,
       productionTablesOk: 0,
       productionTablesTotal: REQUIRED_PRODUCTION_TABLES.length,
+      appOnlyTablesOk: 0,
+      appOnlyTablesTotal: REQUIRED_APP_ONLY_TABLES.length,
     },
   };
   const jsonPath = path.join(OUTPUT_DIR, `javier-dsedac-alignment-${stamp}.json`);
   const mdPath = path.join(OUTPUT_DIR, `javier-dsedac-alignment-${stamp}.md`);
+  const sqlPath = path.join(OUTPUT_DIR, `javier-dsedac-alignment-plan-${stamp}.sql`);
   await fs.writeFile(jsonPath, JSON.stringify(report, null, 2), 'utf8');
   await fs.writeFile(mdPath, renderMarkdown(report), 'utf8');
-  return { report, jsonPath, mdPath };
+  await fs.writeFile(sqlPath, renderSqlPlan(report), 'utf8');
+  return { report, jsonPath, mdPath, sqlPath };
 }
 
 async function main() {
@@ -497,6 +604,11 @@ async function main() {
       productionTables.push(await auditProductionTable(connection, item));
     }
 
+    const appOnlyTables = [];
+    for (const item of REQUIRED_APP_ONLY_TABLES) {
+      appOnlyTables.push(await auditAppOnlyTable(connection, item));
+    }
+
     const summary = {
       pairsTotal: pairs.length,
       ok: pairs.filter(pair => pair.status === 'OK').length,
@@ -504,6 +616,10 @@ async function main() {
       block: pairs.filter(pair => pair.status === 'BLOCK').length,
       productionTablesOk: productionTables.filter(item => item.status === 'OK').length,
       productionTablesTotal: productionTables.length,
+      appOnlyTablesOk: appOnlyTables.filter(item => item.status === 'OK').length,
+      appOnlyTablesReview: appOnlyTables.filter(item => item.status === 'REVIEW').length,
+      appOnlyTablesBlock: appOnlyTables.filter(item => item.status === 'BLOCK').length,
+      appOnlyTablesTotal: appOnlyTables.length,
       acceptedSemanticTypeMismatches: pairs.reduce((total, pair) =>
         total + (pair.diff?.acceptedSemanticTypeMismatches?.length || 0), 0),
     };
@@ -512,21 +628,30 @@ async function main() {
       timestamp,
       appSchema: APP_SCHEMA,
       erpSchema: ERP_SCHEMA,
-      status: summary.block > 0 ? 'BLOCK' : summary.review > 0 ? 'REVIEW' : 'OK',
+      status: summary.block > 0 || summary.appOnlyTablesBlock > 0
+        ? 'BLOCK'
+        : summary.review > 0 || summary.appOnlyTablesReview > 0
+          ? 'REVIEW'
+          : 'OK',
       pairs,
       productionTables,
+      appOnlyTables,
       summary,
     };
 
     const jsonPath = path.join(OUTPUT_DIR, `javier-dsedac-alignment-${stamp}.json`);
     const mdPath = path.join(OUTPUT_DIR, `javier-dsedac-alignment-${stamp}.md`);
+    const sqlPath = path.join(OUTPUT_DIR, `javier-dsedac-alignment-plan-${stamp}.sql`);
     await fs.writeFile(jsonPath, JSON.stringify(report, null, 2), 'utf8');
     await fs.writeFile(mdPath, renderMarkdown(report), 'utf8');
+    await fs.writeFile(sqlPath, renderSqlPlan(report), 'utf8');
 
     console.log(`[javier-dsedac-alignment] status=${report.status}`);
     console.log(`[javier-dsedac-alignment] pairs ok/review/block=${summary.ok}/${summary.review}/${summary.block}`);
+    console.log(`[javier-dsedac-alignment] app-only ok/review/block=${summary.appOnlyTablesOk}/${summary.appOnlyTablesReview}/${summary.appOnlyTablesBlock}`);
     console.log(`[javier-dsedac-alignment] wrote ${jsonPath}`);
     console.log(`[javier-dsedac-alignment] wrote ${mdPath}`);
+    console.log(`[javier-dsedac-alignment] wrote ${sqlPath}`);
 
     if (report.status === 'BLOCK') process.exitCode = 2;
   } finally {
@@ -535,10 +660,11 @@ async function main() {
 }
 
 main().catch(async error => {
-  const { jsonPath, mdPath } = await writeFailedReport(error);
+  const { jsonPath, mdPath, sqlPath } = await writeFailedReport(error);
   console.error(`[javier-dsedac-alignment] BLOCK: ${error.message}`);
   if (error.odbcErrors) console.error(JSON.stringify(error.odbcErrors, null, 2));
   console.error(`[javier-dsedac-alignment] wrote ${jsonPath}`);
   console.error(`[javier-dsedac-alignment] wrote ${mdPath}`);
+  console.error(`[javier-dsedac-alignment] wrote ${sqlPath}`);
   process.exit(1);
 });

@@ -89,11 +89,23 @@ function sanitizeCode(code) {
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp']);
 const PDF_EXTENSION = 'pdf';
 
+function parseBoundedInt(value, fallback, min, max) {
+  const parsed = parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(Math.max(parsed, min), max);
+}
+
+const HTTP_DIR_TIMEOUT_MS = parseBoundedInt(process.env.PRODUCT_IMAGES_DIR_TIMEOUT_MS, 2500, 250, 5000);
+const HTTP_FILE_TIMEOUT_MS = parseBoundedInt(process.env.PRODUCT_IMAGES_FILE_TIMEOUT_MS, 2500, 250, 6000);
+const HTTP_IMAGE_DISCOVERY_BUDGET_MS = parseBoundedInt(process.env.PRODUCT_IMAGES_DISCOVERY_BUDGET_MS, 3500, 500, 8000);
+const HTTP_IMAGE_MAX_SUBDIRS = parseBoundedInt(process.env.PRODUCT_IMAGES_MAX_SUBDIRS, 3, 0, 20);
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // IN-MEMORY CACHE (avoids repeated directory listings)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 const cache = new Map();
+const inFlight = new Map();
 const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 function getCached(key) {
@@ -113,6 +125,19 @@ function setCache(key, value) {
   }
 }
 
+function dedupeInFlight(key, factory) {
+  if (inFlight.has(key)) return inFlight.get(key);
+  const promise = Promise.resolve()
+    .then(factory)
+    .finally(() => inFlight.delete(key));
+  inFlight.set(key, promise);
+  return promise;
+}
+
+function setNegativeAssetCache(res) {
+  res.set('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400');
+}
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // APACHE DIRECTORY LISTING PARSER
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -121,42 +146,46 @@ function setCache(key, value) {
  * Fetch and parse Apache directory listing.
  * Returns array of filenames (with trailing / for subdirs).
  */
-async function listHttpDirectory(urlPath) {
+async function listHttpDirectory(urlPath, options = {}) {
   const cacheKey = `dir:${urlPath}`;
   const cached = getCached(cacheKey);
   if (cached !== undefined) return cached;
+  const timeoutMs = parseBoundedInt(options.timeoutMs, HTTP_DIR_TIMEOUT_MS, 250, HTTP_DIR_TIMEOUT_MS);
+  const cacheTimeouts = options.cacheTimeouts !== false;
 
-  const url = `${IMAGES_HTTP_URL}/${urlPath}`;
-  try {
-    const response = await axios.get(url, {
-      timeout: 8000,
-      responseType: 'text',
-      validateStatus: (s) => s < 500,
-    });
-    if (response.status !== 200) {
-      setCache(cacheKey, null);
+  return dedupeInFlight(`${cacheKey}:timeout:${timeoutMs}`, async () => {
+    const url = `${IMAGES_HTTP_URL}/${urlPath}`;
+    try {
+      const response = await axios.get(url, {
+        timeout: timeoutMs,
+        responseType: 'text',
+        validateStatus: (s) => s < 500,
+      });
+      if (response.status !== 200) {
+        setCache(cacheKey, null);
+        return null;
+      }
+      const html = response.data;
+      const links = [];
+      const regex = /<a\s+href="([^"]+)"[^>]*>/gi;
+      let match;
+      while ((match = regex.exec(html)) !== null) {
+        const href = match[1];
+        if (href === '/' || href === '../' || href.startsWith('?') || href.startsWith('/')) continue;
+        try {
+          links.push(decodeURIComponent(href));
+        } catch {
+          links.push(href);
+        }
+      }
+      setCache(cacheKey, links);
+      return links;
+    } catch (err) {
+      logger.warn(`[products] Dir listing error for ${url}: ${err.code || err.message}`);
+      if (cacheTimeouts || err.code !== 'ECONNABORTED') setCache(cacheKey, null);
       return null;
     }
-    const html = response.data;
-    const links = [];
-    const regex = /<a\s+href="([^"]+)"[^>]*>/gi;
-    let match;
-    while ((match = regex.exec(html)) !== null) {
-      const href = match[1];
-      if (href === '/' || href === '../' || href.startsWith('?') || href.startsWith('/')) continue;
-      try {
-        links.push(decodeURIComponent(href));
-      } catch {
-        links.push(href);
-      }
-    }
-    setCache(cacheKey, links);
-    return links;
-  } catch (err) {
-    logger.warn(`[products] Dir listing error for ${url}: ${err.code || err.message}`);
-    setCache(cacheKey, null);
-    return null;
-  }
+  });
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -172,7 +201,10 @@ async function findImageHttp(code) {
   const cached = getCached(cacheKey);
   if (cached !== undefined) return cached;
 
-  const items = await listHttpDirectory(`${code}/`);
+  return dedupeInFlight(cacheKey, async () => {
+  const deadline = Date.now() + HTTP_IMAGE_DISCOVERY_BUDGET_MS;
+  const remainingDirTimeout = () => Math.max(250, Math.min(HTTP_DIR_TIMEOUT_MS, deadline - Date.now()));
+  const items = await listHttpDirectory(`${code}/`, { timeoutMs: remainingDirTimeout() });
   if (!items) { setCache(cacheKey, null); return null; }
 
   // Filter to image files only (root level)
@@ -204,9 +236,17 @@ async function findImageHttp(code) {
   const subdirs = items.filter(f => f.endsWith('/'));
   const fotosDirs = subdirs.filter(f => f.toUpperCase().startsWith('FOTO'));
   const otherSubDirs = subdirs.filter(f => !f.toUpperCase().startsWith('FOTO'));
-  for (const dirEntry of [...fotosDirs, ...otherSubDirs]) {
+  const scanDirs = [...fotosDirs, ...otherSubDirs].slice(0, HTTP_IMAGE_MAX_SUBDIRS);
+  for (const dirEntry of scanDirs) {
+    if (Date.now() >= deadline) {
+      logger.warn(`[products] Image discovery budget exhausted for ${code}`);
+      break;
+    }
     const dirName = dirEntry.replace(/\/$/, '');
-    const subItems = await listHttpDirectory(`${code}/${encodeURIComponent(dirName)}/`);
+    const subItems = await listHttpDirectory(`${code}/${encodeURIComponent(dirName)}/`, {
+      timeoutMs: remainingDirTimeout(),
+      cacheTimeouts: false,
+    });
     if (!subItems) continue;
     const subImages = subItems.filter(f => {
       if (f.endsWith('/')) return false;
@@ -222,6 +262,7 @@ async function findImageHttp(code) {
 
   setCache(cacheKey, null);
   return null;
+  });
 }
 
 /**
@@ -233,6 +274,7 @@ async function findFichaHttp(code) {
   const cached = getCached(cacheKey);
   if (cached !== undefined) return cached;
 
+  return dedupeInFlight(cacheKey, async () => {
   // First, list the product folder to find ficha subdirs
   const items = await listHttpDirectory(`${code}/`);
   if (!items) { setCache(cacheKey, null); return null; }
@@ -286,30 +328,34 @@ async function findFichaHttp(code) {
 
   setCache(cacheKey, null);
   return null;
+  });
 }
 
 /**
  * Fetch a file by its discovered HTTP path.
  */
 async function fetchFileHttp(relativePath) {
-  const url = `${IMAGES_HTTP_URL}/${relativePath}`;
-  try {
-    const response = await axios.get(url, {
-      responseType: 'arraybuffer',
-      timeout: 15000,
-      validateStatus: (s) => s < 500,
-    });
-    if (response.status === 200) {
-      return {
-        data: Buffer.from(response.data),
-        contentType: response.headers['content-type'] || 'application/octet-stream',
-      };
+  const cacheKey = `fetch:${relativePath}`;
+  return dedupeInFlight(cacheKey, async () => {
+    const url = `${IMAGES_HTTP_URL}/${relativePath}`;
+    try {
+      const response = await axios.get(url, {
+        responseType: 'arraybuffer',
+        timeout: HTTP_FILE_TIMEOUT_MS,
+        validateStatus: (s) => s < 500,
+      });
+      if (response.status === 200) {
+        return {
+          data: Buffer.from(response.data),
+          contentType: response.headers['content-type'] || 'application/octet-stream',
+        };
+      }
+      return null;
+    } catch (err) {
+      logger.warn(`[products] HTTP fetch error: ${url}: ${err.code || err.message}`);
+      return null;
     }
-    return null;
-  } catch (err) {
-    logger.warn(`[products] HTTP fetch error: ${url}: ${err.code || err.message}`);
-    return null;
-  }
+  });
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -499,6 +545,7 @@ router.get('/:code/image', async (req, res) => {
   }
 
   logger.warn(`[products] Image not found for ${code} (mode=${accessMode})`);
+  setNegativeAssetCache(res);
   return res.status(404).json({ error: 'Image not found', productCode: code });
 });
 
@@ -532,6 +579,7 @@ router.get('/:code/ficha', async (req, res) => {
   }
 
   logger.warn(`[products] Ficha not found for ${code} (mode=${accessMode})`);
+  setNegativeAssetCache(res);
   return res.status(404).json({ error: 'Datasheet not found', productCode: code });
 });
 

@@ -77,6 +77,14 @@ function sendBolsaInternalError(req, res) { return res.status(500).json({ succes
 
 function sendManagerRequired(req, res) { return res.status(403).json({ success: false, code: 'MANAGER_REQUIRED', error: 'Solo Jefe de Ventas puede consultar la bolsa agrupada', request_id: requestId(req) }); }
 
+function stripMarginFieldsFromMovement(movement) {
+    if (!movement || typeof movement !== 'object') return movement;
+    const sanitized = { ...movement };
+    delete sanitized.precioMinimoCongelado;
+    delete sanitized.precioVenta;
+    return sanitized;
+}
+
 function parseMovementFilters(query) {
     return {
         tipo: query.tipo,
@@ -85,6 +93,15 @@ function parseMovementFilters(query) {
         document: query.document || query.documento || query.pedido || query.numeroPedido || query.numeroFactura,
         client: query.client || query.cliente || query.codigoCliente,
     };
+}
+
+function parsePeriod(query, now = new Date()) {
+    const year = parseInt(query.year) || now.getFullYear();
+    const month = parseInt(query.month) || (now.getMonth() + 1);
+    if (year < 2020 || year > 2030 || month < 1 || month > 12) {
+        return { ok: false, year, month };
+    }
+    return { ok: true, year, month };
 }
 
 /**
@@ -101,13 +118,11 @@ router.get('/grouped', verifyToken, async (req, res) => {
         if (!auth.ok) {
             return auth.code === 'MANAGER_REQUIRED' ? sendManagerRequired(req, res) : sendForbiddenVendor(req, res);
         }
-        const now = new Date();
-        const year = parseInt(req.query.year) || now.getFullYear();
-        const month = parseInt(req.query.month) || (now.getMonth() + 1);
-        if (year < 2020 || year > 2030 || month < 1 || month > 12) {
+        const period = parsePeriod(req.query);
+        if (!period.ok) {
             return res.status(400).json({ success: false, code: 'INVALID_PERIOD', error: 'Periodo fuera de rango', request_id: requestId(req) });
         }
-        const grouped = await bolsaService.getGroupedStatus(auth.codes || [], year, month);
+        const grouped = await bolsaService.getGroupedStatus(auth.codes || [], period.year, period.month);
         res.json({ success: true, ...grouped });
     } catch (error) {
         logger.error(`[BOLSA] GET /grouped error: ${error.message}`);
@@ -128,11 +143,14 @@ router.get('/:vendedorCode/status', verifyToken, async (req, res) => {
         if (!authorizeVendorScope(req, vendedorCode).ok) {
             return sendForbiddenVendor(req, res);
         }
-        const now = new Date();
+        const period = parsePeriod(req.query);
+        if (!period.ok) {
+            return res.status(400).json({ success: false, code: 'INVALID_PERIOD', error: 'Periodo fuera de rango', request_id: requestId(req) });
+        }
         const bolsa = await bolsaService.getBolsaStatus(
             vendedorCode,
-            now.getFullYear(),
-            now.getMonth() + 1
+            period.year,
+            period.month
         );
         res.json({ success: true, bolsa });
     } catch (error) {
@@ -158,7 +176,10 @@ router.get('/:vendedorCode/movements', verifyToken, async (req, res) => {
         const limit = Math.min(parseInt(req.query.limit) || 50, 200);
 
         const movements = await bolsaService.getMovimientos(vendedorCode, year, month, limit, filters);
-        res.json({ success: true, movements });
+        const visibleMovements = isManagerUser(req.user)
+            ? movements
+            : (movements || []).map(stripMarginFieldsFromMovement);
+        res.json({ success: true, movements: visibleMovements });
     } catch (error) {
         logger.error(`[BOLSA] GET /movements error: ${error.message}`);
         sendBolsaInternalError(req, res);
@@ -180,7 +201,11 @@ router.get('/:vendedorCode/history', verifyToken, async (req, res) => {
             return sendForbiddenVendor(req, res);
         }
         const months = parseInt(req.query.months) || 12;
-        const history = await bolsaService.getHistorialMensual(vendedorCode, months);
+        const period = parsePeriod(req.query);
+        if (!period.ok) {
+            return res.status(400).json({ success: false, code: 'INVALID_PERIOD', error: 'Periodo fuera de rango', request_id: requestId(req) });
+        }
+        const history = await bolsaService.getHistorialMensual(vendedorCode, months, period.year, period.month);
         res.json({ success: true, ...history });
     } catch (error) {
         logger.error(`[BOLSA] GET /history error: ${error.message}`);

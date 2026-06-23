@@ -50,6 +50,38 @@ beforeEach(() => {
   });
 });
 
+describe('pedidos IVA price view', () => {
+  test('applyProductPriceView returns base and IVA prices and switches display fields', () => {
+    const base = {
+      code: 'ART001',
+      codigoIva: '2',
+      ivaRate: 0.21,
+      precioTarifa1: 10,
+      precioCliente: 9.5,
+      precioMinimo: 8,
+      precioTarifaCliente: 9.5,
+      precioCosto: 4,
+      tariffs: [{ code: 1, price: 10, precioUnitario: 2.5 }],
+    };
+
+    const withoutIva = pedidosService.applyProductPriceView(base, false);
+    expect(withoutIva.includeIva).toBe(false);
+    expect(withoutIva.precioTarifa1).toBe(10);
+    expect(withoutIva.precioTarifa1ConIva).toBe(12.1);
+    expect(withoutIva.precioClienteConIva).toBe(11.495);
+    expect(withoutIva.precioCosto).toBe(4);
+
+    const withIva = pedidosService.applyProductPriceView(base, true);
+    expect(withIva.includeIva).toBe(true);
+    expect(withIva.precioTarifa1).toBe(12.1);
+    expect(withIva.precioCliente).toBe(11.495);
+    expect(withIva.precioTarifa1SinIva).toBe(10);
+    expect(withIva.tariffs[0].price).toBe(12.1);
+    expect(withIva.tariffs[0].precioUnitario).toBe(3.025);
+    expect(base.precioTarifa1).toBe(10);
+  });
+});
+
 describe('pedidos product catalog contract', () => {
   test('getProducts uses LACLAE purchase history and orders least purchased first', async () => {
     let capturedSql = '';
@@ -126,6 +158,52 @@ describe('pedidos product catalog contract', () => {
     expect(String(clientBind).length).toBeLessThanOrEqual(10);
     expect(capturedParams).not.toContain(longClient);
     expectDb2SafeBind(capturedSql, clientBind, 10);
+  });
+
+  test('getProducts exposes client tariff code and price from CLC/ARA', async () => {
+    let capturedSql = '';
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      capturedSql = sql;
+      return [
+        {
+          CODE: '0104',
+          NAME: 'Producto tarifa cliente',
+          BRAND: '',
+          FAMILY: '',
+          EAN: '',
+          UNITSPERBOX: 1,
+          UNITSFRACTION: 0,
+          UNITSRETRACTIL: 0,
+          UNITMEASURE: '',
+          WEIGHT: 0,
+          STOCKENVASES: 1,
+          STOCKUNIDADES: 0,
+          PRECIOTARIFA1: 16.478,
+          PRECIOMINIMO: 14.618,
+          CODIGOTARIFACLIENTE: 2,
+          PRECIOCLIENTE: 14.618,
+          PRECIOCOSTO: 10,
+          CODIGOIVA: '2',
+          FORMATO: '',
+          PRODUCTOPESADO: '',
+          SALESTHISYEAR: 0,
+          SALESPREVYEAR: 0,
+          HASPURCHASED: 0,
+        },
+      ];
+    });
+
+    const result = await pedidosService.getProducts({ clientCode: '4300001035', search: '0104', limit: 20, offset: 0 });
+
+    expect(capturedSql).toContain('COALESCE(CT.CODIGOTARIFA, 1) AS codigoTarifaCliente');
+    expect(capturedSql).toContain('TC.CODIGOTARIFA = CT.CODIGOTARIFA');
+    expect(result[0]).toMatchObject({
+      code: '0104',
+      precioTarifa1: 16.478,
+      codigoTarifaCliente: 2,
+      precioCliente: 14.618,
+      precioTarifaCliente: 14.618,
+    });
   });
 });
 
@@ -214,6 +292,7 @@ describe('pedidos create order persistence contract', () => {
         TIPOLINEA: 'R',
         TIPOVENTA: 'CC',
         CLASELINEA: 'VT',
+        CODIGOIVA: '2',
         ORDEN: 1,
       },
     };
@@ -231,7 +310,7 @@ describe('pedidos create order persistence contract', () => {
       if (/SELECT\s+ID\s+FROM\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) return [{ ID: 42 }];
       if (/INSERT\s+INTO\s+JAVIER\.PEDIDOS_LIN/i.test(sql)) return [];
       if (/SELECT\s+COALESCE\(SUM\(L\.IMPORTEVENTA\)/i.test(sql)) {
-        return [{ RAW_BASE: 30, RAW_COSTO: 12, DESCUENTO_GLOBAL: 10 }];
+        return [{ RAW_BASE: 30, RAW_COSTO: 12, RAW_IVA: 6.3, DESCUENTO_GLOBAL: 10 }];
       }
       if (/UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+IMPORTEBASE/i.test(sql)) {
         if (failTotalsUpdate) throw new Error('numeric overflow');
@@ -260,7 +339,7 @@ describe('pedidos create order persistence contract', () => {
     );
     expect(updateCall).toBeDefined();
     expect(updateCall[0]).not.toMatch(/ROUND\(/i);
-    expect(updateCall[1]).toEqual([30, 12, 27, 15, 42]);
+    expect(updateCall[1]).toEqual([27, 12, 32.67, 15, 5.67, 42]);
   });
 
   test('createOrder attempts ERP-compatible header columns in JAVIER test schema', async () => {
@@ -283,6 +362,7 @@ describe('pedidos create order persistence contract', () => {
     expect(headerCall[0]).toContain('CODIGOVENDEDORCOBRO');
     expect(headerCall[0]).toContain('IMPORTEBASEIMPONIBLEBRUTA1');
     expect(headerCall[1]).toContain('GMP');
+    expect(headerCall[1]).toEqual(expect.arrayContaining(['P', 93]));
     expect(headerCall[1]).toContain('C001');
     expect(headerCall[1]).toContain('01');
   });
@@ -313,9 +393,55 @@ describe('pedidos create order persistence contract', () => {
     expect(lineCall[0]).toContain('EJERCICIOPEDIDO');
     expect(lineCall[0]).toContain('SECUENCIAPEDIDO');
     expect(lineCall[0]).toContain('CODIGOCLIENTEFACTURA');
+    expect(lineCall[0]).toContain('CODIGOIVA');
     expect(lineCall[1][8]).toBe(9);
     expect(lineCall[1][13]).toBe(18);
     expect(lineCall[1][17]).toBe(10);
+  });
+
+  test('createOrder persists product CODIGOIVA from DSEDAC.ART on lines', async () => {
+    const rows = mockCreatedOrderReads();
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/FROM\s+DSEDAC\.CLC/i.test(sql) && /DSEDAC\.ARA/i.test(sql)) {
+        return [{ CODIGOARTICULO: 'ART001', PRECIOTARIFA: 10 }];
+      }
+      if (/FROM\s+DSEDAC\.ART/i.test(sql) && /CODIGOIVA/i.test(sql)) {
+        return [{ CODIGOARTICULO: 'ART001', CODIGOIVA: '1' }];
+      }
+      if (/UPDATE\s+JAVIER\.PEDIDOS_SEQ\s+SET\s+ULTIMO_NUMERO/i.test(sql)) return [];
+      if (/SELECT\s+ULTIMO_NUMERO\s+FROM\s+JAVIER\.PEDIDOS_SEQ/i.test(sql)) return [{ ULTIMO_NUMERO: 100 }];
+      if (/INSERT\s+INTO\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) return [];
+      if (/SELECT\s+ID\s+FROM\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) return [{ ID: 42 }];
+      if (/INSERT\s+INTO\s+JAVIER\.PEDIDOS_LIN/i.test(sql)) return [];
+      if (/SELECT\s+COALESCE\(SUM\(L\.IMPORTEVENTA\)/i.test(sql)) {
+        return [{ RAW_BASE: 30, RAW_COSTO: 12, RAW_IVA: 3, DESCUENTO_GLOBAL: 0 }];
+      }
+      if (/UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+IMPORTEBASE/i.test(sql)) return [];
+      if (/SELECT\s+ID,\s+EJERCICIO,\s+NUMEROPEDIDO/i.test(sql)) return [rows.cab];
+      if (/SELECT\s+ID,\s+PEDIDO_ID,\s+SECUENCIA/i.test(sql)) return [{ ...rows.lin, CODIGOIVA: '1' }];
+      return [];
+    });
+
+    await pedidosService.createOrder({
+      clientCode: 'C001',
+      clientName: 'Cliente',
+      vendedorCode: '01',
+      lines: [{
+        codigoArticulo: 'ART001',
+        descripcion: 'Producto',
+        cantidadEnvases: 3,
+        precio: 10,
+        precioCosto: 4,
+        ivaRate: 0.21,
+      }],
+    });
+
+    const lineCall = mockQueryWithParams.mock.calls.find(([sql]) =>
+      /INSERT\s+INTO\s+JAVIER\.PEDIDOS_LIN/i.test(sql),
+    );
+    expect(lineCall).toBeDefined();
+    expect(lineCall[0]).toContain('CODIGOIVA');
+    expect(lineCall[1][22]).toBe('1');
   });
 
   test('createOrder keeps envase input with cajas quantity from inserting zero line totals', async () => {
@@ -401,6 +527,20 @@ describe('pedidos create order persistence contract', () => {
         idempotencyKey: 'pedido-42-line-1-over-min',
       }),
     ]);
+  });
+
+  test('getOrderDetail exposes only public order statuses', async () => {
+    const rows = mockCreatedOrderReads();
+    mockQueryWithParams.mockImplementation(async (sql) => {
+      if (/FROM\s+JAVIER\.PEDIDOS_CAB\s+WHERE\s+ID/i.test(sql)) return [{ ...rows.cab, ESTADO: 'ENVIADO' }];
+      if (/FROM\s+JAVIER\.PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) return [rows.lin];
+      if (/FROM\s+JAVIER\.MOVIMIENTOS_BOLSA/i.test(sql)) return [];
+      return [];
+    });
+
+    const detail = await pedidosService.getOrderDetail(42);
+
+    expect(detail.header.estado).toBe('CONFIRMADO');
   });
 
   test('createOrder final detail preserves empty bolsa shape without MOVIMIENTOS_BOLSA read', async () => {
@@ -633,21 +773,22 @@ describe('pedidos line amount contract', () => {
 describe('pedidos state machine contract', () => {
   test('allows only explicit lifecycle transitions', () => {
     expect(pedidosService.isOrderTransitionAllowed('BORRADOR', 'CONFIRMADO')).toBe(true);
-    expect(pedidosService.isOrderTransitionAllowed('BORRADOR', 'PENDIENTE_APROBACION')).toBe(true);
-    expect(pedidosService.isOrderTransitionAllowed('BORRADOR', 'PEND_APROB')).toBe(true);
+    expect(pedidosService.isOrderTransitionAllowed('BORRADOR', 'PENDIENTE_APROBACION')).toBe(false);
+    expect(pedidosService.isOrderTransitionAllowed('BORRADOR', 'PEND_APROB')).toBe(false);
     expect(pedidosService.isOrderTransitionAllowed('PENDIENTE_APROBACION', 'CONFIRMADO')).toBe(true);
     expect(pedidosService.isOrderTransitionAllowed('PEND_APROB', 'CONFIRMADO')).toBe(true);
     expect(pedidosService.isOrderTransitionAllowed('CONFIRMANDO', 'CONFIRMADO')).toBe(true);
     expect(pedidosService.isOrderTransitionAllowed('CONFIRMANDO', 'BORRADOR')).toBe(true);
-    expect(pedidosService.isOrderTransitionAllowed('CONFIRMADO', 'ENVIADO')).toBe(true);
+    expect(pedidosService.isOrderTransitionAllowed('CONFIRMADO', 'ENVIADO')).toBe(false);
     expect(pedidosService.isOrderTransitionAllowed('CONFIRMADO', 'BORRADOR')).toBe(false);
     expect(pedidosService.isOrderTransitionAllowed('ENVIADO', 'ANULADO')).toBe(false);
     expect(pedidosService.isOrderTransitionAllowed('ANULADO', 'CONFIRMADO')).toBe(false);
   });
 
-  test('stores approval status with DB2-safe length and exposes canonical API state', () => {
-    expect(pedidosService.storedOrderStatus('PENDIENTE_APROBACION')).toBe('PEND_APROB');
-    expect(pedidosService.canonicalOrderStatus('PEND_APROB')).toBe('PENDIENTE_APROBACION');
+  test('stores only app-visible statuses and collapses legacy states on read', () => {
+    expect(pedidosService.storedOrderStatus('PENDIENTE_APROBACION')).toBe('BORRADOR');
+    expect(pedidosService.canonicalOrderStatus('PEND_APROB')).toBe('BORRADOR');
+    expect(pedidosService.canonicalOrderStatus('ENVIADO')).toBe('CONFIRMADO');
   });
 
   test('addOrderLine rejects orders outside BORRADOR before insert', async () => {
@@ -667,7 +808,7 @@ describe('pedidos state machine contract', () => {
     expect(mockQueryWithParams.mock.calls.some(([sql]) => /INSERT\s+INTO\s+JAVIER\.PEDIDOS_LIN/i.test(sql))).toBe(false);
   });
 
-  test('updateOrderStatus rejects forbidden transitions', async () => {
+  test('updateOrderStatus rejects non-confirmed target statuses', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (/SELECT\s+TRIM\(ESTADO\)\s+AS\s+ESTADO\s+FROM\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) {
         return [{ ESTADO: 'CONFIRMADO' }];
@@ -677,7 +818,7 @@ describe('pedidos state machine contract', () => {
 
     await expect(
       pedidosService.updateOrderStatus(42, 'BORRADOR', { userId: '01' }),
-    ).rejects.toMatchObject({ code: 'INVALID_ORDER_TRANSITION' });
+    ).rejects.toMatchObject({ code: 'INVALID_ORDER_STATUS' });
 
     expect(mockQueryWithParams.mock.calls.some(([sql]) => /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO/i.test(sql))).toBe(false);
   });
@@ -697,39 +838,28 @@ describe('pedidos mutation service error contract', () => {
     expect(mockQueryWithParams.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.PEDIDOS_LIN/i.test(sql))).toBe(false);
   });
 
-  test('cancelOrder uses CAS conditional update and reports terminal-state conflict', async () => {
-    let stateReadCount = 0;
+  test('cancelOrder deletes draft rows without writing a third status', async () => {
     mockQueryWithParams.mockImplementation(async (sql) => {
       if (/SELECT\s+ESTADO,\s+CODIGOCLIENTE,\s+IMPORTETOTAL\s+FROM\s+JAVIER\.PEDIDOS_CAB\s+WHERE\s+ID\s+=\s+\?/i.test(sql)) {
-        stateReadCount += 1;
-        return stateReadCount === 1
-          ? [{ ESTADO: 'BORRADOR', CODIGOCLIENTE: 'C001', IMPORTETOTAL: '100.00' }]
-          : [{ ESTADO: 'CONFIRMADO', CODIGOCLIENTE: 'C001', IMPORTETOTAL: '100.00' }];
+        return [{ ESTADO: 'BORRADOR', CODIGOCLIENTE: 'C001', IMPORTETOTAL: '100.00' }];
       }
-      if (/UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO\s+=\s+'ANULADO'/i.test(sql)) {
-        return { count: 0 };
+      if (/DELETE\s+FROM\s+JAVIER\.PEDIDOS_CAB/i.test(sql)) {
+        return { count: 1 };
       }
       return [];
     });
 
-    await expect(pedidosService.cancelOrder(42)).rejects.toMatchObject({
-      code: 'PEDIDO_STATE_CONFLICT',
-      status: 409,
-    });
+    const result = await pedidosService.cancelOrder(42);
 
-    const updateCall = mockQueryWithParams.mock.calls.find(([sql]) => /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO\s+=\s+'ANULADO'/i.test(sql));
-    expect(updateCall).toBeDefined();
-    expect(updateCall[0]).toMatch(/WHERE\s+ID\s+=\s+\?\s+AND\s+ESTADO\s+IN\s+\('BORRADOR',\s*'CONFIRMADO'\)/i);
-    expect(updateCall[1]).toEqual([42]);
+    expect(result).toMatchObject({ id: 42, deleted: true, estado: 'BORRADOR' });
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /UPDATE\s+JAVIER\.PEDIDOS_CAB\s+SET\s+ESTADO/i.test(sql))).toBe(false);
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql))).toBe(true);
+    expect(mockQueryWithParams.mock.calls.some(([sql]) => /DELETE\s+FROM\s+JAVIER\.PEDIDOS_CAB/i.test(sql))).toBe(true);
   });
 
-  test('cancelOrder returns typed errors for already ANULADO and ENVIADO states', async () => {
-    mockQueryWithParams.mockResolvedValueOnce([{ ESTADO: 'ANULADO' }]);
-    await expect(pedidosService.cancelOrder(42)).rejects.toMatchObject({ code: 'PEDIDO_ALREADY_ANULADO', status: 409 });
-
-    mockQueryWithParams.mockReset();
-    mockQueryWithParams.mockResolvedValueOnce([{ ESTADO: 'ENVIADO' }]);
-    await expect(pedidosService.cancelOrder(42)).rejects.toMatchObject({ code: 'PEDIDO_INVALID_STATE', status: 409 });
+  test('cancelOrder rejects confirmed orders because ERP manages later lifecycle', async () => {
+    mockQueryWithParams.mockResolvedValueOnce([{ ESTADO: 'CONFIRMADO' }]);
+    await expect(pedidosService.cancelOrder(42)).rejects.toMatchObject({ code: 'PEDIDO_MANAGED_BY_ERP', status: 409 });
   });
 });
 

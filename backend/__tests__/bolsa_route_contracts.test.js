@@ -127,6 +127,36 @@ describe('bolsa route validation contracts', function() {
     });
   });
 
+  test('GET /api/bolsa/:vendedorCode/movements strips margin fields for commercial users', async function() {
+    mockUser = { code: '10', role: 'COMERCIAL' };
+    mockGetMovimientos.mockResolvedValueOnce([{
+      id: 1,
+      tipo: 'ACUMULACION',
+      importe: 6,
+      saldoAnterior: 300,
+      saldoPosterior: 306,
+      precioMinimoCongelado: 10,
+      precioVenta: 12,
+      cantidad: 3,
+      unidadMedida: 'CAJAS',
+    }]);
+
+    const res = await request(makeApp())
+      .get('/api/bolsa/10/movements?year=2026&month=6');
+
+    expect(res.status).toBe(200);
+    expect(res.body.movements[0]).not.toHaveProperty('precioMinimoCongelado');
+    expect(res.body.movements[0]).not.toHaveProperty('precioVenta');
+    expect(res.body.movements[0]).toMatchObject({
+      id: 1,
+      tipo: 'ACUMULACION',
+      importe: 6,
+      saldoAnterior: 300,
+      saldoPosterior: 306,
+      cantidad: 3,
+    });
+  });
+
   test('GET /api/bolsa/grouped is manager-only and scoped', async function() {
     mockUser = { code: '80', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: ['01', '02'] };
     mockGetGroupedStatus.mockResolvedValueOnce({

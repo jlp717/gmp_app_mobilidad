@@ -9,7 +9,12 @@ const { query, queryWithParams } = require('../../../../config/db');
 const logger = require('../../../../middleware/logger');
 const { db2QualifiedTable, db2InsertSql } = require('../../../../utils/db2-identifiers');
 const { getDb2WriteSchema } = require('../../../../utils/db2-schemas');
-const { buildCvcVendorScopeFilter, getVendorColumnExpr, MIN_YEAR } = require('../../../../utils/common');
+const {
+  buildCvcVendorScopeFilter,
+  getVendorColumnExpr,
+  MIN_YEAR,
+  normalizeCvcTipoDocumentoFilter,
+} = require('../../../../utils/common');
 
 const APP_SCHEMA = getDb2WriteSchema();
 const COBROS_TABLE = db2QualifiedTable(APP_SCHEMA, 'COBROS');
@@ -381,19 +386,19 @@ function parseYmdInt(isoDate) {
 function buildCobrosDocumentFilters(filters = {}, alias = 'C') {
   const clauses = [];
   const params = [];
-  const tipoDocumento = trim(filters.tipoDocumento).toUpperCase();
-  if (tipoDocumento) {
-    clauses.push(`AND TRIM(${alias}.TIPODOCUMENTO) = ?`);
-    params.push(tipoDocumento);
+  const tipoDocumentoCodes = normalizeCvcTipoDocumentoFilter(filters.tipoDocumento);
+  if (tipoDocumentoCodes.length > 0) {
+    clauses.push(`AND TRIM(${alias}.TIPODOCUMENTO) IN (${tipoDocumentoCodes.map(() => '?').join(',')})`);
+    params.push(...tipoDocumentoCodes);
   }
   const desde = parseYmdInt(filters.fechaDesde);
   if (desde != null) {
-    clauses.push(`AND (${alias}.ANOEMISION * 10000 + ${alias}.MESEMISION * 100 + ${alias}.DIAEMISION) >= ?`);
+    clauses.push(`AND (${alias}.ANOVENCIMIENTO * 10000 + ${alias}.MESVENCIMIENTO * 100 + ${alias}.DIAVENCIMIENTO) >= ?`);
     params.push(desde);
   }
   const hasta = parseYmdInt(filters.fechaHasta);
   if (hasta != null) {
-    clauses.push(`AND (${alias}.ANOEMISION * 10000 + ${alias}.MESEMISION * 100 + ${alias}.DIAEMISION) <= ?`);
+    clauses.push(`AND (${alias}.ANOVENCIMIENTO * 10000 + ${alias}.MESVENCIMIENTO * 100 + ${alias}.DIAVENCIMIENTO) <= ?`);
     params.push(hasta);
   }
   return { clause: clauses.length ? '\n          ' + clauses.join('\n          ') : '', params };
@@ -747,10 +752,10 @@ class Db2CobrosRepository extends CobrosRepository {
       WITH APP_DOCS AS (
         SELECT
           TRIM(PC.CODIGOCLIENTE) AS CLIENTE,
-          MIN(TRIM(PC.NOMBRECLIENTE)) AS NOMBRE,
+          COALESCE(NULLIF(TRIM(PC.NOMBRECLIENTE), ''), TRIM(PC.CODIGOCLIENTE)) AS NOMBRE,
           PC.ID AS PEDIDO_ID,
           TRIM(PC.SERIEPEDIDO) || '-' || TRIM(CAST(PC.NUMEROPEDIDO AS VARCHAR(20))) AS DOC_KEY,
-          COALESCE(MAX(PC.IMPORTETOTAL), 0) AS IMPORTE_TOTAL
+          COALESCE(PC.IMPORTETOTAL, 0) AS IMPORTE_TOTAL
         FROM ${APP_SCHEMA}.PEDIDOS_CAB PC
         WHERE PC.ESTADO IN ('CONFIRMADO', 'ENVIADO')
           AND PC.IMPORTETOTAL > 0
@@ -759,7 +764,6 @@ class Db2CobrosRepository extends CobrosRepository {
           ${generatedFilter}
           ${appDateFilters.clause}
           ${vendorAccess.clause}
-        GROUP BY TRIM(PC.CODIGOCLIENTE), PC.ID, TRIM(PC.SERIEPEDIDO), PC.NUMEROPEDIDO
       ), APP_PAID AS (
         SELECT D.CLIENTE, D.PEDIDO_ID, D.DOC_KEY, D.NOMBRE, D.IMPORTE_TOTAL,
                COALESCE(SUM(C.IMPORTE), 0) AS IMPORTE_COBRADO
@@ -893,7 +897,7 @@ class Db2CobrosRepository extends CobrosRepository {
                    <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
                     THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
          FROM DSEDAC.CVC CVC
-         WHERE CVC.IMPORTEPENDIENTE <> 0
+         WHERE CVC.IMPORTEPENDIENTE > 0.01
            AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
            ${emptyClientFilter}
            ${vendorClause}
@@ -930,6 +934,9 @@ class Db2CobrosRepository extends CobrosRepository {
            AND R.NUMERO_DOCUMENTO = D.NUMERO_DOCUMENTO
       ), DOC_NET AS (
         SELECT CLIENTE,
+               TOTAL_PENDIENTE,
+               TOTAL_VENCIDO,
+               PAID,
                CASE WHEN TOTAL_PENDIENTE - PAID > 0 THEN TOTAL_PENDIENTE - PAID ELSE 0 END AS NET_TOTAL,
                CASE
                  WHEN TOTAL_VENCIDO <= 0 OR TOTAL_VENCIDO - PAID <= 0 OR TOTAL_PENDIENTE - PAID <= 0 THEN 0
@@ -940,9 +947,11 @@ class Db2CobrosRepository extends CobrosRepository {
       )
       SELECT COALESCE(SUM(NET_TOTAL), 0) AS GRAND_TOTAL,
              COALESCE(SUM(NET_VENCIDO), 0) AS GRAND_TOTAL_VENCIDO,
-             COUNT(DISTINCT CLIENTE) AS CLIENT_COUNT
+             COALESCE(SUM(TOTAL_PENDIENTE), 0) AS CVC_GRAND_TOTAL,
+             COALESCE(SUM(TOTAL_VENCIDO), 0) AS CVC_GRAND_TOTAL_VENCIDO,
+             COUNT(DISTINCT CASE WHEN NET_TOTAL > 0 THEN CLIENTE ELSE NULL END) AS CLIENT_COUNT,
+             COUNT(DISTINCT CASE WHEN NET_VENCIDO > 0 THEN CLIENTE ELSE NULL END) AS VENCIDO_CLIENT_COUNT
         FROM DOC_NET
-       WHERE NET_TOTAL > 0
     `;
 
     const pageSql = `
@@ -957,7 +966,7 @@ class Db2CobrosRepository extends CobrosRepository {
        FROM DSEDAC.CVC CVC
        LEFT JOIN DSEDAC.CLI CLI
          ON TRIM(CLI.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
-       WHERE CVC.IMPORTEPENDIENTE <> 0
+       WHERE CVC.IMPORTEPENDIENTE > 0.01
          AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
          ${emptyClientFilter}
          ${vendorClause}
@@ -970,26 +979,9 @@ class Db2CobrosRepository extends CobrosRepository {
       ? (sql) => queryWithParams(sql, queryParams, [])
       : (sql) => query(sql, false);
 
-    const cvcRawSql = `
-      SELECT COALESCE(SUM(T.TOTAL_PENDIENTE), 0) AS CVC_GRAND_TOTAL,
-             COALESCE(SUM(T.TOTAL_VENCIDO), 0) AS CVC_GRAND_TOTAL_VENCIDO
-        FROM (
-          SELECT SUM(CVC.IMPORTEPENDIENTE) AS TOTAL_PENDIENTE,
-                 SUM(CASE WHEN (CVC.ANOVENCIMIENTO * 10000 + CVC.MESVENCIMIENTO * 100 + CVC.DIAVENCIMIENTO)
-                     <= (YEAR(CURRENT_DATE) * 10000 + MONTH(CURRENT_DATE) * 100 + DAY(CURRENT_DATE))
-                      THEN CVC.IMPORTEPENDIENTE ELSE 0 END) AS TOTAL_VENCIDO
-            FROM DSEDAC.CVC CVC
-           WHERE CVC.IMPORTEPENDIENTE <> 0
-             AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
-             ${emptyClientFilter}
-             ${vendorClause}
-           GROUP BY TRIM(CVC.CODIGOCLIENTEALBARAN), TRIM(CVC.SERIEDOCUMENTO), CVC.NUMERODOCUMENTO
-        ) T`;
-
-    const [rows, totalRows, cvcRawRows] = await Promise.all([
+    const [rows, totalRows] = await Promise.all([
       runQuery(pageSql),
       runQuery(totalsSql),
-      runQuery(cvcRawSql),
     ]);
 
     const pageAdjustments = await this.getAppSideCobrosByDocForSummary(rows || []);
@@ -1046,20 +1038,18 @@ class Db2CobrosRepository extends CobrosRepository {
     }
 
     const totals = totalRows?.[0] || {};
-    const cvcRaw = cvcRawRows?.[0] || {};
     const cvcNetTotal = parseFloat(totals.GRAND_TOTAL) || 0;
     const cvcNetVencido = parseFloat(totals.GRAND_TOTAL_VENCIDO) || 0;
     const appOrdersTotal = parseFloat(appOrderSummary.grandTotal) || 0;
     const grandTotal = cvcNetTotal + appOrdersTotal;
     const grandTotalVencido = cvcNetVencido + (parseFloat(appOrderSummary.grandTotalVencido) || 0);
-    const cvcGrandTotal = parseFloat(cvcRaw.CVC_GRAND_TOTAL) || 0;
-    const cvcGrandTotalVencido = parseFloat(cvcRaw.CVC_GRAND_TOTAL_VENCIDO) || 0;
+    const cvcGrandTotal = parseFloat(totals.CVC_GRAND_TOTAL ?? totals.GRAND_TOTAL) || 0;
+    const cvcGrandTotalVencido = parseFloat(totals.CVC_GRAND_TOTAL_VENCIDO ?? totals.GRAND_TOTAL_VENCIDO) || 0;
     const appAdjustmentsTotal = Math.max(0, cvcGrandTotal - cvcNetTotal);
     const cvcClientCount = parseInt(totals.CLIENT_COUNT, 10) || 0;
-    const appOnlyClientCount = Object.keys(appOrderSummary.summary || {})
-      .filter((code) => !summary[code])
-      .length;
-    const mergedClientCount = cvcClientCount + appOnlyClientCount;
+    const cvcVencidoClientCount = parseInt(totals.VENCIDO_CLIENT_COUNT, 10) || 0;
+    const appClientCount = parseInt(appOrderSummary.clientCount, 10) || 0;
+    const mergedClientCount = Math.max(cvcClientCount, appClientCount, Object.keys(summary).length);
 
     return {
       summary,
@@ -1070,6 +1060,7 @@ class Db2CobrosRepository extends CobrosRepository {
       appAdjustmentsTotal: Math.round(appAdjustmentsTotal * 100) / 100,
       appOrdersTotal: Math.round(appOrdersTotal * 100) / 100,
       clientCount: mergedClientCount,
+      vencidoClientCount: cvcVencidoClientCount,
       source: appOrdersTotal > 0 ? 'CVC+PEDIDOS_CAB' : 'CVC',
       pagination: {
         limit: safeLimit,
@@ -1159,9 +1150,9 @@ class Db2CobrosRepository extends CobrosRepository {
           FROM ${APP_SCHEMA}.COBROS C
          WHERE EXISTS (
            SELECT 1
-             FROM DSEDAC.CVC CVC
+            FROM DSEDAC.CVC CVC
             WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGO_CLIENTE)
-              AND CVC.IMPORTEPENDIENTE <> 0
+              AND CVC.IMPORTEPENDIENTE > 0.01
               AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
               ${vendorClause}
          )
@@ -1189,7 +1180,7 @@ class Db2CobrosRepository extends CobrosRepository {
             WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(R.CODIGOCLIENTEALBARAN)
               AND TRIM(CVC.SERIEDOCUMENTO) = TRIM(R.SERIEDOCUMENTO)
               AND TRIM(CAST(CVC.NUMERODOCUMENTO AS VARCHAR(20))) = TRIM(CAST(R.NUMERODOCUMENTO AS VARCHAR(20)))
-              AND CVC.IMPORTEPENDIENTE <> 0
+              AND CVC.IMPORTEPENDIENTE > 0.01
               AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
               ${vendorClause}
          )
@@ -1220,9 +1211,9 @@ class Db2CobrosRepository extends CobrosRepository {
           FROM ${APP_SCHEMA}.COBROS C
          WHERE EXISTS (
            SELECT 1
-             FROM DSEDAC.CVC CVC
+            FROM DSEDAC.CVC CVC
             WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(C.CODIGO_CLIENTE)
-              AND CVC.IMPORTEPENDIENTE <> 0
+              AND CVC.IMPORTEPENDIENTE > 0.01
               AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
               ${vendorClause}
          )
@@ -1242,9 +1233,9 @@ class Db2CobrosRepository extends CobrosRepository {
           FROM ${APP_SCHEMA}.REPARTIDOR_COBROS R
          WHERE EXISTS (
            SELECT 1
-             FROM DSEDAC.CVC CVC
+            FROM DSEDAC.CVC CVC
             WHERE TRIM(CVC.CODIGOCLIENTEALBARAN) = TRIM(R.CODIGOCLIENTEALBARAN)
-              AND CVC.IMPORTEPENDIENTE <> 0
+              AND CVC.IMPORTEPENDIENTE > 0.01
               AND (CVC.ANULADOSN IS NULL OR CVC.ANULADOSN <> 'S')
               ${vendorClause}
          )

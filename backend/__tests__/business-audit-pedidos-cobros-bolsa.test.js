@@ -26,7 +26,7 @@ describe('Business audit — pedidos / promos / bolsa', () => {
         bolsaService = require('../services/bolsa-comercial.service');
     });
 
-    test('getActivePromotions exposes active PMR gift promotions', async () => {
+    test('getActivePromotions exposes all active PMR gift promotions', async () => {
         mockQuery.mockImplementation(async (sql, params) => {
             const table = String(params?.[1] || '').toUpperCase();
             const schema = String(params?.[0] || '').toUpperCase();
@@ -35,27 +35,45 @@ describe('Business audit — pedidos / promos / bolsa', () => {
             }
             if (String(sql || '').includes('SYSCOLUMNS')) return [];
             if (String(sql || '').includes('FROM DSEDAC.PMR')) {
-                return [{
-                    PROMO_CODE: 'PROMO01',
-                    PROMO_NAME: 'Regalo muestra',
-                    CANTIDADMINIMAPROMOCION: 2,
-                    CANTIDADMAXIMAREGALO: 1,
-                    PROMOCIONACUMULATIVASN: 'S',
-                }];
+                return [
+                    {
+                        PROMO_CODE: 'PROMO01',
+                        PROMO_NAME: 'Regalo muestra',
+                        CANTIDADMINIMAPROMOCION: 2,
+                        CANTIDADMAXIMAREGALO: 1,
+                        PROMOCIONACUMULATIVASN: 'S',
+                    },
+                    {
+                        PROMO_CODE: 'PROMO02',
+                        PROMO_NAME: 'Regalo segunda promo',
+                        CANTIDADMINIMAPROMOCION: 5,
+                        CANTIDADMAXIMAREGALO: 2,
+                        PROMOCIONACUMULATIVASN: 'N',
+                    },
+                ];
             }
             return [];
         });
 
         const result = await pedidosService.getActivePromotions('4300001091');
 
-        expect(result).toEqual([expect.objectContaining({
+        expect(result).toHaveLength(2);
+        expect(result).toEqual(expect.arrayContaining([expect.objectContaining({
             code: 'PROMO01',
             name: 'Regalo muestra',
             promoType: 'GIFT',
             minQty: 2,
             giftQty: 1,
             cumulative: true,
-        })]);
+        })]));
+        expect(result).toEqual(expect.arrayContaining([expect.objectContaining({
+            code: 'PROMO02',
+            name: 'Regalo segunda promo',
+            promoType: 'GIFT',
+            minQty: 5,
+            giftQty: 2,
+            cumulative: false,
+        })]));
     });
 
     test('getActivePromotions returns empty list when active PMR has no rows', async () => {
@@ -94,7 +112,7 @@ describe('Business audit — pedidos / promos / bolsa', () => {
 
     test('canonicalOrderStatus maps internal CONFIRMANDO for user-facing simplification', () => {
         expect(pedidosService.canonicalOrderStatus('CONFIRMANDO')).toBe('CONFIRMANDO');
-        expect(pedidosService.canonicalOrderStatus('PEND_APROB')).toBe('PENDIENTE_APROBACION');
+        expect(pedidosService.canonicalOrderStatus('PEND_APROB')).toBe('BORRADOR');
         expect(pedidosService.canonicalOrderStatus('BORRADOR')).toBe('BORRADOR');
     });
 });

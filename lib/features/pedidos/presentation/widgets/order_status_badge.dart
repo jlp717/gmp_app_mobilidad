@@ -20,7 +20,7 @@ class OrderTheme {
 }
 
 class OrderStatusConfig {
-  /// Estados visibles para comerciales: Borrador, Pendiente ERP, Confirmado (+ Anulado).
+  /// Estados visibles para comerciales: Borrador y Confirmado.
   static const Map<String, OrderTheme> themes = {
     'BORRADOR': OrderTheme(
       primary: Color(0xFFF97316),
@@ -28,41 +28,27 @@ class OrderStatusConfig {
       icon: Icons.edit_note,
       label: 'Borrador',
     ),
-    'PENDIENTE_APROBACION': OrderTheme(
-      primary: Color(0xFF3B82F6),
-      gradient: [Color(0xFF1E293B), Color(0xFF0C1A3A)],
-      icon: Icons.hourglass_top,
-      label: 'Pendiente ERP',
-    ),
     'CONFIRMADO': OrderTheme(
       primary: Color(0xFF22C55E),
       gradient: [Color(0xFF1E293B), Color(0xFF0A2E1A)],
       icon: Icons.check_circle,
       label: 'Confirmado',
     ),
-    'ANULADO': OrderTheme(
-      primary: Color(0xFFEF4444),
-      gradient: [Color(0xFF1E293B), Color(0xFF2E0A0A)],
-      icon: Icons.cancel,
-      label: 'Anulado',
-    ),
   };
 
-  /// Colapsa estados intermedios/legacy a los 3 estados comerciales + anulado.
+  /// Colapsa estados intermedios/legacy a los 2 estados comerciales.
   static String canonicalDisplayStatus(String? estado) {
     switch ((estado ?? '').trim().toUpperCase()) {
-      case 'PENDIENTE_APROBACION':
-      case 'PEND_APROB':
-      case 'CONFIRMANDO':
-        return 'PENDIENTE_APROBACION';
       case 'CONFIRMADO':
       case 'ENVIADO':
       case 'FACTURADO':
         return 'CONFIRMADO';
-      case 'ANULADO':
-        return 'ANULADO';
       case 'BORRADOR':
       case 'PENDIENTE':
+      case 'PENDIENTE_APROBACION':
+      case 'PEND_APROB':
+      case 'CONFIRMANDO':
+      case 'ANULADO':
         return 'BORRADOR';
       default:
         return 'BORRADOR';

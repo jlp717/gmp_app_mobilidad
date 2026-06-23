@@ -280,37 +280,56 @@ function expandVendorCodesForSql(vendorCodes) {
  * Vendor scope for CVC debt queries — aligned with clients list (CLP + LACLAE).
  * Fixes summary=0 when CLP.VENDEDORCOMERCIAL is empty but LACLAE has sales history.
  */
+function normalizeCvcTipoDocumentoFilter(value) {
+    const values = Array.isArray(value) ? value : String(value || '').split(',');
+    const out = new Set();
+    for (const rawValue of values) {
+        const raw = String(rawValue || '').trim();
+        if (!raw) continue;
+        const code = raw
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toUpperCase()
+            .replace(/[^A-Z0-9_]/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_|_$/g, '');
+        if (!code || code === 'ALL' || code === 'TODOS' || code === 'TODO') continue;
+        if (['CAC', 'ALB', 'ALBARAN', 'ALBARAN_COBRO'].includes(code)) {
+            out.add('CAC');
+        } else if (['COB', 'FAC', 'FACTURA', 'FACTURA_DIRECTA'].includes(code)) {
+            out.add('COB');
+        } else if (/^[A-Z0-9]{1,10}$/.test(code)) {
+            out.add(code);
+        }
+    }
+    return [...out];
+}
+
 function buildCvcVendorScopeFilter(vendorCodes) {
     const codes = expandVendorCodesForSql(vendorCodes);
     if (codes.length === 0) {
         return { clause: '', params: [] };
     }
 
-    // Always use CLP + LACLAE semi-join for CVC debt scope. The LACLAE client-code
-    // cache can be a strict subset of CLP-assigned clients and under-report portfolio
-    // totals (cert audit: API ~261k vs DB2 ~359k for vendor 02).
+    // Build the visible client set once instead of probing CLP and LACLAE for
+    // every CVC row. This keeps the same scope while avoiding expensive
+    // correlated EXISTS checks on production-sized pending-debt portfolios.
     const laclaeVendorCol = getVendorColumnExpr('LAC');
     const placeholders = codes.map(() => '?').join(',');
     return {
-        clause: `AND (
-            EXISTS (
-                SELECT 1
-                  FROM DSEDAC.CLP CLP
-                 WHERE TRIM(CLP.CODIGOCLIENTE) = TRIM(CVC.CODIGOCLIENTEALBARAN)
-                   AND TRIM(CLP.VENDEDORCOMERCIAL) IN (${placeholders})
-            )
-            OR EXISTS (
-                SELECT 1
-                  FROM DSED.LACLAE LAC
-                 WHERE TRIM(LAC.LCCDCL) = TRIM(CVC.CODIGOCLIENTEALBARAN)
-                   AND LAC.LCAADC >= ${MIN_YEAR}
-                   AND LAC.TPDC = 'LAC'
-                   AND LAC.LCTPVT IN ('CC', 'VC')
-                   AND LAC.LCCLLN IN ('AB', 'VT')
-                   AND LAC.LCSRAB NOT IN ('N', 'Z')
-                   AND TRIM(${laclaeVendorCol}) IN (${placeholders})
-                FETCH FIRST 1 ROW ONLY
-            )
+        clause: `AND TRIM(CVC.CODIGOCLIENTEALBARAN) IN (
+            SELECT TRIM(CLP.CODIGOCLIENTE)
+              FROM DSEDAC.CLP CLP
+             WHERE TRIM(CLP.VENDEDORCOMERCIAL) IN (${placeholders})
+            UNION
+            SELECT DISTINCT TRIM(LAC.LCCDCL)
+              FROM DSED.LACLAE LAC
+             WHERE LAC.LCAADC >= ${MIN_YEAR}
+               AND LAC.TPDC = 'LAC'
+               AND LAC.LCTPVT IN ('CC', 'VC')
+               AND LAC.LCCLLN IN ('AB', 'VT')
+               AND LAC.LCSRAB NOT IN ('N', 'Z')
+               AND TRIM(${laclaeVendorCol}) IN (${placeholders})
         )`,
         params: [...codes, ...codes],
     };
@@ -619,6 +638,14 @@ async function getVendorName(vendorCode) {
 const _bSalesCache = new Map();
 const _bSalesCacheTTL = 10 * 60 * 1000; // 10 minutes
 
+function setBoundedBSalesCache(cacheKey, data) {
+    _bSalesCache.set(cacheKey, { data, ts: Date.now() });
+    if (_bSalesCache.size > 500) {
+        const oldest = _bSalesCache.keys().next().value;
+        _bSalesCache.delete(oldest);
+    }
+}
+
 function normalizeSalesVendorCode(vendorCode) {
     const raw = String(vendorCode || '').trim();
     if (!raw) return '';
@@ -657,6 +684,13 @@ async function getBSalesByVendor(year, vendorCodes = []) {
 
     const parsedCodes = parseSalesVendorCodes(vendorCodes);
     const codeVariants = [...new Set(parsedCodes.flatMap(getSalesVendorCodeVariants))];
+    const scopeKey = codeVariants.length
+        ? codeVariants.map(normalizeSalesVendorCode).sort().join(',')
+        : 'ALL';
+    const cacheKey = `byVendor:${safeYear}:${scopeKey}`;
+    const cached = _bSalesCache.get(cacheKey);
+    if (cached && Date.now() - cached.ts < _bSalesCacheTTL) return cached.data;
+
     const params = [safeYear];
     let vendorFilter = '';
 
@@ -683,6 +717,7 @@ async function getBSalesByVendor(year, vendorCodes = []) {
             if (!byVendor[code]) byVendor[code] = {};
             byVendor[code][month] = (byVendor[code][month] || 0) + amount;
         });
+        setBoundedBSalesCache(cacheKey, byVendor);
         return byVendor;
     } catch (e) {
         logger.debug(`getBSalesByVendor: table may not exist for ${year}: ${e.message}`);
@@ -714,12 +749,7 @@ async function getBSales(vendorCode, year) {
     try {
         const byVendor = await getBSalesByVendor(year, [rawCode]);
         const monthlyMap = byVendor[normalizeSalesVendorCode(rawCode)] || {};
-        _bSalesCache.set(cacheKey, { data: monthlyMap, ts: Date.now() });
-        // Limit cache size
-        if (_bSalesCache.size > 500) {
-            const oldest = _bSalesCache.keys().next().value;
-            _bSalesCache.delete(oldest);
-        }
+        setBoundedBSalesCache(cacheKey, monthlyMap);
         return monthlyMap;
     } catch (e) {
         // Table might not exist - return empty
@@ -756,6 +786,7 @@ module.exports = {
     buildClientListVendorSqlFilter,
     buildCvcVendorScopeFilter,
     expandVendorCodesForSql,
+    normalizeCvcTipoDocumentoFilter,
     buildLaclaeBoundedClientCodesSql,
     lookupClientAssignedVendorCodes,
     getBSales,

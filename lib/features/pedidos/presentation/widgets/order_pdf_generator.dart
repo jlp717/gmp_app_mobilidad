@@ -14,7 +14,7 @@ class OrderPdfGenerator {
   static const _ultraLight = '#f8f9fa';
 
   static Future<void> generateAndShare(BuildContext context, OrderDetail order,
-      {bool isMarginVisible = true}) async {
+      {bool isMarginVisible = false}) async {
     final pdf = pw.Document();
     final header = order.header;
     final lines = order.lines;
@@ -293,7 +293,7 @@ class OrderPdfGenerator {
   }
 
   static pw.Widget _buildTotals(OrderSummary header, List<OrderLine> lines,
-      {bool isMarginVisible = true}) {
+      {bool isMarginVisible = false}) {
     final totalVenta = lines.fold<double>(0, (s, l) => s + l.importeVenta);
     final totalMargen = lines.fold<double>(0, (s, l) => s + l.importeMargen);
     final pctMargen = totalVenta > 0 ? (totalMargen / totalVenta * 100) : 0;
@@ -361,31 +361,21 @@ class OrderPdfGenerator {
 
   static PdfColor _statusColor(String status) {
     switch (status.toUpperCase()) {
-      case 'BORRADOR':
-        return PdfColor.fromHex('#2196F3');
       case 'CONFIRMADO':
         return PdfColor.fromHex('#4CAF50');
-      case 'ENVIADO':
-        return PdfColor.fromHex('#9C27B0');
-      case 'ANULADO':
-        return PdfColor.fromHex('#F44336');
+      case 'BORRADOR':
       default:
-        return PdfColors.grey;
+        return PdfColor.fromHex('#2196F3');
     }
   }
 
   static String _statusLabel(String status) {
     switch (status.toUpperCase()) {
-      case 'BORRADOR':
-        return 'BORRADOR';
       case 'CONFIRMADO':
         return 'CONFIRMADO';
-      case 'ENVIADO':
-        return 'ENVIADO';
-      case 'ANULADO':
-        return 'ANULADO';
+      case 'BORRADOR':
       default:
-        return status;
+        return 'BORRADOR';
     }
   }
 

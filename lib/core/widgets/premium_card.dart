@@ -47,20 +47,13 @@ class PremiumCard extends StatelessWidget {
     return Container(
       margin: margin ?? const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
-        color: glassmorphism ? AppTheme.darkCard.withValues(alpha: 0.6) : null,
-        gradient: glassmorphism
-            ? null
-            : LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  AppTheme.darkCard,
-                  AppTheme.darkCard.withValues(alpha: 0.85),
-                ],
-              ),
+        color: glassmorphism
+            ? AppTheme.raisedSurface.withValues(alpha: 0.70)
+            : null,
+        gradient: glassmorphism ? null : AppTheme.panelGradient,
         borderRadius: BorderRadius.circular(borderRadius ?? AppTheme.radiusLg),
         border: Border.all(
-          color: color.withValues(alpha: 0.15),
+          color: color.withValues(alpha: 0.18),
           width: 1,
         ),
         boxShadow: [

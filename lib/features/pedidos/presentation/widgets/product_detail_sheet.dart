@@ -26,7 +26,7 @@ class ProductDetailSheet extends StatefulWidget {
     super.key,
     this.clientCode,
     this.clientName,
-    this.isMarginVisible = true,
+    this.isMarginVisible = false,
   });
   final String productCode;
   final String productName;
@@ -40,7 +40,7 @@ class ProductDetailSheet extends StatefulWidget {
     required String productName,
     String? clientCode,
     String? clientName,
-    bool isMarginVisible = true,
+    bool isMarginVisible = false,
   }) {
     return showModalBottomSheet(
       context: context,

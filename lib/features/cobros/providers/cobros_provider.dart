@@ -108,6 +108,8 @@ class CobrosProvider extends ChangeNotifier {
   double _cvcGrandTotalVencido = 0;
   double _appAdjustmentsTotal = 0;
   double _appOrdersTotal = 0;
+  int _portfolioClientCount = 0;
+  int _portfolioVencidoClientCount = 0;
   String _summarySource = '';
   String _filtroEstado = 'todos';
   String _filtroCliente = '';
@@ -132,6 +134,8 @@ class CobrosProvider extends ChangeNotifier {
   double get cvcGrandTotalVencido => _cvcGrandTotalVencido;
   double get appAdjustmentsTotal => _appAdjustmentsTotal;
   double get appOrdersTotal => _appOrdersTotal;
+  int get portfolioClientCount => _portfolioClientCount;
+  int get portfolioVencidoClientCount => _portfolioVencidoClientCount;
   String get summarySource => _summarySource;
 
   /// Numero de clientes con cualquier importe pendiente (>0).
@@ -430,14 +434,17 @@ class CobrosProvider extends ChangeNotifier {
         _grandTotal = (response['grandTotal'] as num?)?.toDouble() ?? 0;
         _grandTotalVencido =
             (response['grandTotalVencido'] as num?)?.toDouble() ?? 0;
-        _cvcGrandTotal =
-            (response['cvcGrandTotal'] as num?)?.toDouble() ?? 0;
+        _cvcGrandTotal = (response['cvcGrandTotal'] as num?)?.toDouble() ?? 0;
         _cvcGrandTotalVencido =
             (response['cvcGrandTotalVencido'] as num?)?.toDouble() ?? 0;
         _appAdjustmentsTotal =
             (response['appAdjustmentsTotal'] as num?)?.toDouble() ?? 0;
-        _appOrdersTotal =
-            (response['appOrdersTotal'] as num?)?.toDouble() ?? 0;
+        _appOrdersTotal = (response['appOrdersTotal'] as num?)?.toDouble() ?? 0;
+        _portfolioClientCount = (response['clientCount'] as num?)?.toInt() ??
+            _pendingSummary.length;
+        _portfolioVencidoClientCount =
+            (response['vencidoClientCount'] as num?)?.toInt() ??
+                clientsWithVencido;
         _summarySource = (response['source'] as String?) ?? '';
         _error = null;
       } else {
@@ -722,8 +729,10 @@ class CobrosProvider extends ChangeNotifier {
         'idempotencyToken': idempotencyToken,
       });
       if (response['success'] == true) {
-        await CacheService.invalidateByPrefix('cobros:pendientes:$codigoCliente');
-        await CacheService.invalidateByPrefix('cobros:historico:$codigoCliente');
+        await CacheService.invalidateByPrefix(
+            'cobros:pendientes:$codigoCliente');
+        await CacheService.invalidateByPrefix(
+            'cobros:historico:$codigoCliente');
         await CacheService.invalidateByPrefix('cobros:estado:$codigoCliente');
         await CacheService.invalidateByPrefix('cobros:pending-summary:');
         if (reloadAfter) {
@@ -778,6 +787,8 @@ class CobrosProvider extends ChangeNotifier {
     _cvcGrandTotalVencido = 0;
     _appAdjustmentsTotal = 0;
     _appOrdersTotal = 0;
+    _portfolioClientCount = 0;
+    _portfolioVencidoClientCount = 0;
     _summarySource = '';
     _error = null;
     notifyListeners();

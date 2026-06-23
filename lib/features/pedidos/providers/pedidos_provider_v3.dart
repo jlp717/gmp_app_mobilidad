@@ -173,23 +173,29 @@ class PedidosProviderV3 with ChangeNotifier {
   double get totalConDescuento => totalImporte - totalDescuento;
 
   double get totalBase {
-    var sum = 0;
+    return totalConDescuento;
+  }
+
+  double get totalIva {
+    var sum = 0.0;
     for (final l in _lines) {
       final saleAfterDiscount = l.importeVenta * _discountFactor;
-      sum += saleAfterDiscount / (1 + l.ivaRate);
+      sum += saleAfterDiscount * normalizeIvaRate(l.ivaRate, fallback: 0);
     }
     return sum;
   }
 
-  double get totalIva => totalConDescuento - totalBase;
+  double get totalConIva => totalBase + totalIva;
 
-  Map<double, double> get ivaBreakdown {
-    final map = <double, double>{};
+  Map<int, double> get ivaBreakdown {
+    final map = <int, double>{};
     for (final l in _lines) {
-      if (l.ivaRate > 0) {
+      final rate = normalizeIvaRate(l.ivaRate, fallback: 0);
+      if (rate > 0) {
+        final ivaPct = (rate * 100).round();
         final saleAfterDiscount = l.importeVenta * _discountFactor;
-        final iva = saleAfterDiscount - (saleAfterDiscount / (1 + l.ivaRate));
-        map[l.ivaRate] = (map[l.ivaRate] ?? 0) + iva;
+        final iva = saleAfterDiscount * rate;
+        map[ivaPct] = (map[ivaPct] ?? 0) + iva;
       }
     }
     return map;
@@ -632,6 +638,8 @@ class PedidosProviderV3 with ChangeNotifier {
         }
       }
       line.precioVenta = precioVenta;
+      line.codigoIva = product.codigoIva;
+      line.ivaRate = ivaRateFromCode(product.codigoIva);
       line.recalculate();
       _lastQtyByProduct[_qtyKey(product.code)] =
           lineUnit == 'CAJAS' ? line.cantidadEnvases : line.cantidadUnidades;
@@ -657,6 +665,7 @@ class PedidosProviderV3 with ChangeNotifier {
         precioTarifa: product.precioTarifa1,
         precioTarifaCliente: product.precioCliente,
         precioMinimo: product.precioMinimo,
+        codigoIva: product.codigoIva,
         ivaRate: ivaRate,
       );
       line.recalculate();
@@ -791,6 +800,7 @@ class PedidosProviderV3 with ChangeNotifier {
         precioTarifa: line.precioTarifa,
         precioTarifaCliente: line.precioTarifaCliente,
         precioMinimo: line.precioMinimo,
+        codigoIva: line.codigoIva,
         ivaRate: line.ivaRate,
       );
       copy.recalculate();

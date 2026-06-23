@@ -28,6 +28,8 @@ class BolsaProvider with ChangeNotifier {
   bool _isGroupedView = false;
   List<String> _groupedVendorCodes = [];
   int _loadGeneration = 0;
+  int _selectedYear = DateTime.now().year;
+  int _selectedMonth = DateTime.now().month;
 
   // Filtros de movimientos
   BolsaMovimientoTipo? _tipoFilter; // null = todos
@@ -46,6 +48,8 @@ class BolsaProvider with ChangeNotifier {
   String? get currentVendor => _currentVendor;
   bool get isGroupedView => _isGroupedView;
   bool get hasData => _status != null || _groupedSummary != null;
+  int get selectedYear => _selectedYear;
+  int get selectedMonth => _selectedMonth;
   BolsaMovimientoTipo? get tipoFilter => _tipoFilter;
   String get searchQuery => _searchQuery;
   DateTime? get dateFromFilter => _dateFromFilter;
@@ -127,9 +131,7 @@ class BolsaProvider with ChangeNotifier {
   }
 
   Future<void> clearFilters() async {
-    if (_tipoFilter == null &&
-        _searchQuery.isEmpty &&
-        !hasAdvancedFilters) {
+    if (_tipoFilter == null && _searchQuery.isEmpty && !hasAdvancedFilters) {
       return;
     }
     _tipoFilter = null;
@@ -175,17 +177,30 @@ class BolsaProvider with ChangeNotifier {
     notifyListeners();
     try {
       final results = await Future.wait([
-        BolsaService.getStatus(code, forceRefresh: force),
+        BolsaService.getStatus(
+          code,
+          year: _selectedYear,
+          month: _selectedMonth,
+          forceRefresh: force,
+        ),
         BolsaService.getMovements(
           code,
           limit: 150,
+          year: _selectedYear,
+          month: _selectedMonth,
           dateFrom: _dateFromFilter,
           dateTo: _dateToFilter,
           documentQuery: _documentFilter,
           clientQuery: _clientFilter,
           forceRefresh: force || hasAdvancedFilters,
         ),
-        BolsaService.getHistory(code, months: 12, forceRefresh: force),
+        BolsaService.getHistory(
+          code,
+          months: 12,
+          year: _selectedYear,
+          month: _selectedMonth,
+          forceRefresh: force,
+        ),
       ]);
       if (generation != _loadGeneration || _currentVendor != code) return;
       _status = results[0] as BolsaStatus;
@@ -217,7 +232,10 @@ class BolsaProvider with ChangeNotifier {
         .where((code) => code.isNotEmpty && code.toUpperCase() != 'ALL')
         .toList(growable: false);
     final key = codes.join(',');
-    if (!force && _isGroupedView && _groupedSummary != null && key == _currentVendor) {
+    if (!force &&
+        _isGroupedView &&
+        _groupedSummary != null &&
+        key == _currentVendor) {
       return;
     }
     _isLoading = true;
@@ -232,6 +250,8 @@ class BolsaProvider with ChangeNotifier {
     notifyListeners();
     try {
       final grouped = await BolsaService.getGroupedStatus(
+        year: _selectedYear,
+        month: _selectedMonth,
         vendedorCodes: codes,
         forceRefresh: force,
       );
@@ -262,6 +282,8 @@ class BolsaProvider with ChangeNotifier {
         code,
         limitePct: limitePct,
         limiteImporte: limiteImporte,
+        year: _selectedYear,
+        month: _selectedMonth,
       );
       _status = updated;
       notifyListeners();
@@ -280,6 +302,18 @@ class BolsaProvider with ChangeNotifier {
     }
     if (_currentVendor == null) return;
     await load(_currentVendor!, force: true);
+  }
+
+  Future<void> setPeriod({required int year, required int month}) async {
+    final boundedMonth = month.clamp(1, 12).toInt();
+    final boundedYear = year.clamp(2020, 2030).toInt();
+    if (_selectedYear == boundedYear && _selectedMonth == boundedMonth) {
+      return;
+    }
+    _selectedYear = boundedYear;
+    _selectedMonth = boundedMonth;
+    notifyListeners();
+    await refresh();
   }
 
   static bool _sameDate(DateTime? left, DateTime? right) {

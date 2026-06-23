@@ -179,7 +179,7 @@ describe('pedidos create idempotency', () => {
 
     const result = await pedidosService.createOrder({
       ...baseCreatePayload,
-      clientRequestId: 'offline-sync-key-001',
+      clientRequestId: 'offlinesynckey001',
     });
 
     expect(result.idempotent).toBe(true);
@@ -196,7 +196,7 @@ describe('pedidos create idempotency', () => {
     await expect(pedidosService.createOrder({
       ...baseCreatePayload,
       lines: [{ ...baseLine, cantidadEnvases: 2 }],
-      clientRequestId: 'offline-sync-key-001',
+      clientRequestId: 'offlinesynckey001',
     })).rejects.toMatchObject({ code: 'IDEMPOTENCY_CONFLICT' });
   });
 
@@ -206,8 +206,8 @@ describe('pedidos create idempotency', () => {
     const request = require('supertest');
     const express = require('express');
     const mockService = {
-      ensurePedidoIdempotencyKeyFromRequest: jest.fn().mockReturnValue('offline-sync-key-002'),
-      extractIdempotencyKeyFromRequest: jest.fn().mockReturnValue('offline-sync-key-002'),
+      ensurePedidoIdempotencyKeyFromRequest: jest.fn().mockReturnValue('offlinesynckey002'),
+      extractIdempotencyKeyFromRequest: jest.fn().mockReturnValue('offlinesynckey002'),
       createOrder: jest.fn().mockResolvedValue({
         header: { id: 88, estado: 'BORRADOR' },
         lines: [{ id: 1 }],
@@ -236,7 +236,7 @@ describe('pedidos create idempotency', () => {
 
     const res = await request(app)
       .post('/api/pedidos/create')
-      .set('Idempotency-Key', 'offline-sync-key-002')
+      .set('Idempotency-Key', 'offlinesynckey002')
       .send({
         clientCode: 'C001',
         vendedorCode: '01',
@@ -246,7 +246,7 @@ describe('pedidos create idempotency', () => {
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ success: true, idempotent: true });
     expect(mockService.createOrder).toHaveBeenCalledWith(
-      expect.objectContaining({ idempotencyKey: 'offline-sync-key-002' }),
+      expect.objectContaining({ idempotencyKey: 'offlinesynckey002' }),
     );
   });
 
@@ -255,7 +255,7 @@ describe('pedidos create idempotency', () => {
 
     const result = await pedidosService.createOrder({
       ...baseCreatePayload,
-      clientRequestId: 'offline-sync-key-003',
+      clientRequestId: 'offlinesynckey003',
     });
 
     expect(result.idempotent).toBeUndefined();

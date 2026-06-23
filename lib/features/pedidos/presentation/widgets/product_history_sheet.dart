@@ -21,7 +21,7 @@ class ProductHistorySheet extends StatefulWidget {
     required this.clientCode,
     required this.clientName,
     super.key,
-    this.isMarginVisible = true,
+    this.isMarginVisible = false,
   });
   final String productCode;
   final String productName;
@@ -35,7 +35,7 @@ class ProductHistorySheet extends StatefulWidget {
     required String productName,
     required String clientCode,
     required String clientName,
-    bool isMarginVisible = true,
+    bool isMarginVisible = false,
   }) {
     if (productCode.trim().isEmpty || clientCode.trim().isEmpty) {
       return Future.value();

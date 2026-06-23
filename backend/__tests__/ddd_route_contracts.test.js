@@ -28,6 +28,8 @@ const mockPedidosService = {
   addOrderLine: jest.fn(),
   getDeliveryOptions: jest.fn(),
   getComplementaryProducts: jest.fn(),
+  getProductStock: jest.fn(),
+  getSimilarProducts: jest.fn(),
 };
 const mockPedidosRepo = {
   searchProducts: jest.fn(),
@@ -414,6 +416,29 @@ describe('DDD pedidos route contracts', () => {
     expect(new Set(cacheKeys).size).toBe(cacheKeys.length);
   });
 
+  test('POST /acciones-rapidas returns typed stock error with alternativa', async () => {
+    mockPedidosService.getProductStock.mockResolvedValueOnce({ envases: 0, unidades: 0 });
+    mockPedidosService.getSimilarProducts.mockResolvedValueOnce([
+      { code: 'ALT001', name: 'Alternativa', precioCosto: 4, precioMinimo: 8 },
+    ]);
+
+    const res = await request(makeApp(createPedidosRoutes()))
+      .post('/acciones-rapidas')
+      .send({ codigoArticulo: 'ART001', cantidadEnvases: 1, unidadMedida: 'CAJAS' });
+
+    expect(res.status).toBe(409);
+    expect(mockPedidosService.getSimilarProducts).toHaveBeenCalledWith('ART001');
+    expect(res.body).toMatchObject({
+      success: false,
+      error: 'STOCK_INSUFICIENTE',
+      code: 'STOCK_INSUFICIENTE',
+      sufficient: false,
+      alternativa: { code: 'ALT001', name: 'Alternativa' },
+    });
+    expect(res.body.alternativa).not.toHaveProperty('precioCosto');
+    expect(res.body.alternativa).not.toHaveProperty('precioMinimo');
+  });
+
   test('GET /:id rejects cross-vendor commercial ownership', async () => {
     mockPedidosService.getOrderVendorForAuth.mockResolvedValueOnce({ vendedorCode: '99' });
 
@@ -595,18 +620,18 @@ describe('DDD pedidos route contracts', () => {
     expect(res.body).toMatchObject({ success: false, code: 'LINE_NOT_FOUND' });
   });
 
-  test('PUT /:id/cancel preserves already-anulado typed service error', async () => {
-    const alreadyAnulado = new Error('El pedido ya está anulado');
-    alreadyAnulado.code = 'PEDIDO_ALREADY_ANULADO';
-    alreadyAnulado.status = 409;
-    mockPedidosService.cancelOrder.mockRejectedValueOnce(alreadyAnulado);
+  test('PUT /:id/cancel preserves ERP-managed typed service error', async () => {
+    const managedByErp = new Error('El pedido confirmado ya lo gestiona el ERP');
+    managedByErp.code = 'PEDIDO_MANAGED_BY_ERP';
+    managedByErp.status = 409;
+    mockPedidosService.cancelOrder.mockRejectedValueOnce(managedByErp);
 
     const res = await request(makeApp(createPedidosRoutes()))
       .put('/22/cancel')
       .send({});
 
     expect(res.status).toBe(409);
-    expect(res.body).toMatchObject({ success: false, code: 'PEDIDO_ALREADY_ANULADO', error: 'El pedido ya está anulado' });
+    expect(res.body).toMatchObject({ success: false, code: 'PEDIDO_MANAGED_BY_ERP', error: 'El pedido confirmado ya lo gestiona el ERP' });
   });
 
   test('PUT /:id/confirm rejects invalid saleType and cross-vendor commercial ownership', async () => {
@@ -784,9 +809,26 @@ describe('DDD clients/commissions cache scope contracts', () => {
 
     const cacheKeys = performanceCache.getOrFetch.mock.calls.map(function (call) { return call[0]; });
     expect(cacheKeys).toEqual(expect.arrayContaining([
-      expect.stringContaining('ddd:clients:v2:scope:v2:role=JEFE_VENTAS:user=80:visible=01:canSeeMargin=1'),
+      expect.stringContaining('ddd:clients:v3:scope:v2:role=JEFE_VENTAS:user=80:visible=01:canSeeMargin=1'),
       expect.stringContaining('ddd:commissions:v2:scope:v2:role=JEFE_VENTAS:user=80:visible=01:canSeeMargin=1'),
     ]));
+  });
+
+  test('GET / bypasses performance and Redis cache on force refresh', async () => {
+    const { cachedQuery } = require('../services/query-optimizer');
+    const { performanceCache } = require('../src/core/infrastructure/cache/performance-cache');
+    cachedQuery.mockResolvedValueOnce([]);
+    const managerUser = { id: '80', code: '80', role: 'JEFE_VENTAS', isJefeVentas: true, vendorCodes: ['01'] };
+
+    const res = await request(makeApp(createClientsRoutes(), managerUser))
+      .get('/')
+      .query({ vendedorCodes: 'ALL', limit: 10, offset: 0, forceRefresh: '1' });
+
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.headers['x-cache-source']).toBe('bypass');
+    expect(performanceCache.getOrFetch).not.toHaveBeenCalled();
+    expect(cachedQuery.mock.calls[0][2]).toEqual(expect.objectContaining({ skipCache: true }));
   });
 });
 
@@ -838,7 +880,7 @@ describe('DDD cobros route contracts', () => {
         userId: '98',
         userRole: 'JEFE_VENTAS',
         vendedorCodes: ['01', '02'],
-        tipoDocumento: 'FAC',
+        tipoDocumento: 'COB',
         fechaDesde: '2026-06-01',
         fechaHasta: '2026-06-30',
       }),

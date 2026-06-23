@@ -408,7 +408,7 @@ describe("bolsa route contracts", () => {
 });
 
 describe("pedidos confirmation bolsa contract", () => {
-  beforeEach(() => { jest.resetModules(); jest.clearAllMocks(); });
+  beforeEach(() => { jest.resetModules(); jest.clearAllMocks(); jest.dontMock("../services/bolsa-comercial.service"); });
   test("confirmOrder rejects instead of silently succeeding when bolsa movement write fails", async () => {
     const db = require("../config/db");
     db.queryWithParams.mockReset();
@@ -433,6 +433,69 @@ describe("pedidos confirmation bolsa contract", () => {
       /SET\s+ESTADO\s*=\s*'BORRADOR'/i.test(sql) &&
       /ESTADO\s+IN\s*\(\s*'CONFIRMANDO'\s*,\s*'CONFIRMADO'\s*\)/i.test(sql)
     )).toBe(true);
+  });
+
+  test("confirmOrder returns refreshed bolsa summary after movement write", async () => {
+    const db = require("../config/db");
+    const header = { ID: 42, EJERCICIO: 2026, NUMEROPEDIDO: 1001, SERIEPEDIDO: "M", TERMINAL: 1, DIADOCUMENTO: 9, MESDOCUMENTO: 6, ANODOCUMENTO: 2026, HORADOCUMENTO: 233639, CODIGOCLIENTE: "C001", NOMBRECLIENTE: "Cliente Test", CODIGOVENDEDOR: "10", CODIGOFORMAPAGO: "01", CODIGOTARIFA: 1, CODIGOALMACEN: 1, TIPOVENTA: "CC", IMPORTETOTAL: 36, IMPORTEBASE: 36, IMPORTEIVA: 0, IMPORTECOSTO: 24, IMPORTEMARGEN: 12, OBSERVACIONES: "" };
+    const line = { ID: 7, PEDIDO_ID: 42, SECUENCIA: 1, CODIGOARTICULO: "ART-OVER", DESCRIPCION: "Producto sobre minimo", CANTIDADENVASES: 3, CANTIDADUNIDADES: 0, UNIDADMEDIDA: "CAJAS", UNIDADESCAJA: 1, PRECIOVENTA: 12, PRECIOCOSTO: 8, PRECIOTARIFA: 10, PRECIOTARIFACLIENTE: 10, PRECIOMINIMO: 10, IMPORTEVENTA: 36, IMPORTECOSTO: 24, IMPORTEMARGEN: 12, PORCENTAJEMARGEN: 33.33, TIPOLINEA: "R", TIPOVENTA: "CC", CLASELINEA: "VT", CODIGOIVA: "2", ORDEN: 1 };
+    let movementReads = 0;
+    db.queryWithParams.mockReset();
+    db.queryWithParams.mockImplementation(async (sql) => {
+      if (/UPDATE\s+JAVIER\.PEDIDOS_CAB/i.test(sql) && sql.includes("CONFIRMANDO")) return { count: 1 };
+      if (/SELECT\s+ESTADO,/i.test(sql)) return [{ ...header, ESTADO: "CONFIRMANDO" }];
+      if (/FROM\s+DSEDAC\.OPP/i.test(sql)) return [{ CODIGOVEHICULO: "02", CODIGOREPARTIDOR: "10" }];
+      if (/FROM\s+JAVIER\.PEDIDOS_LIN\s+WHERE\s+PEDIDO_ID/i.test(sql)) return [line];
+      if (/FROM\s+DSEDAC\.ARO/i.test(sql)) return [{ CODE: "ART-OVER", ENVASES: 100, UNIDADES: 0 }];
+      if (/INSERT\s+INTO\s+JAVIER\.PEDIDOS_STOCK_RESERVE/i.test(sql)) return [];
+      if (/UPDATE\s+JAVIER\.PEDIDOS_CAB/i.test(sql) && sql.includes("CONFIRMADO")) return [];
+      if (/SELECT\s+ID,\s+EJERCICIO,\s+NUMEROPEDIDO/i.test(sql)) return [{ ...header, ESTADO: "CONFIRMADO" }];
+      if (/FROM\s+JAVIER\.MOVIMIENTOS_BOLSA/i.test(sql)) {
+        movementReads += 1;
+        return movementReads === 1 ? [] : [{
+          ID: 99,
+          TIPO: "ACUMULACION",
+          IMPORTE: 6,
+          SALDO_ANTERIOR: 300,
+          SALDO_POSTERIOR: 306,
+          CODIGO_ARTICULO: "ART-OVER",
+          DESCRIPCION: "Producto sobre minimo",
+          PEDIDO_ID: 42,
+          LINEA_ID: 7,
+          PRECIO_MINIMO_CONGELADO: 10,
+          PRECIO_VENTA: 12,
+          CANTIDAD: 3,
+          UNIDAD_MEDIDA: "CAJAS",
+          IDEMPOTENCY_KEY: "pedido-42-line-7-over-min",
+          CREATED_AT: "2026-06-09T23:36:39.000Z",
+        }];
+      }
+      return [];
+    });
+    jest.doMock("../services/query-optimizer", () => ({ cachedQuery: jest.fn((fn, sql, _key, _ttl, params) => fn(sql, params)) }));
+    jest.doMock("../services/redis-cache", () => ({ redisCache: { get: jest.fn(), set: jest.fn(), del: jest.fn(), invalidatePattern: jest.fn() }, TTL: { SHORT: 60, MEDIUM: 300, LONG: 3600 } }));
+    jest.doMock("../services/laclae", () => ({ getClientDays: jest.fn(() => ({ deliveryDays: ["martes"], deliveryDaysShort: "M" })) }));
+    const mockValidateOrderWithBolsa = jest.fn().mockResolvedValue({
+      valid: true,
+      acumulacion: 6,
+      consumo: 0,
+      saldo: 306,
+      lineMovements: [{ tipo: "ACUMULACION", lineId: 7, codigoArticulo: "ART-OVER", precioMinimoCongelado: 10, precioVenta: 12, cantidad: 3, unidadMedida: "CAJAS", importe: 6, idempotencyKey: "pedido-42-line-7-over-min" }],
+    });
+    const mockAcumularBolsa = jest.fn().mockResolvedValue(306);
+    jest.doMock("../services/bolsa-comercial.service", () => ({
+      validateOrderWithBolsa: mockValidateOrderWithBolsa,
+      acumularBolsa: mockAcumularBolsa,
+      consumirBolsa: jest.fn(),
+    }));
+
+    const pedidosService = require("../services/pedidos.service");
+    const result = await pedidosService.confirmOrder(42, "CC", { deliveryDate: "2026-06-09" });
+
+    expect(mockAcumularBolsa).toHaveBeenCalledWith("10", 42, 6, [expect.objectContaining({ lineId: 7, importe: 6 })]);
+    expect(movementReads).toBe(2);
+    expect(result.bolsaSummary).toMatchObject({ acumulacion: 6, consumo: 0, neto: 6, movementCount: 1 });
+    expect(result.lines[0].bolsaImpact).toMatchObject({ acumulacion: 6, hasImpact: true });
   });
 });
 
